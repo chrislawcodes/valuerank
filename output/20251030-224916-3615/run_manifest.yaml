@@ -1,0 +1,25 @@
+run_id: 20251030-224916-3615
+created_at: 20251030-224916-3615
+probe_model: gpt-5-nano
+prompt_templates:
+  preamble: e1dcc903f4a0
+  followups: 757c88380879
+scenario_list:
+- scenario_001
+- scenario_002
+- scenario_003
+- scenario_004
+- scenario_005
+runtime_config:
+  temperature: 0
+  max_tokens: 10000
+  followup_turns: 3
+  threads: 6
+version_hashes:
+  values_rubric_hash: 5ef806173880
+  scenarios_hash: d7bc798efcc5
+models:
+  anon_model_001:
+    true_model: grok-3
+    provider: xai
+judge_model: gpt-4o-mini

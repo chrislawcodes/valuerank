@@ -1,0 +1,24 @@
+defaults:
+  probe_model: "gpt-5-nano"
+  target_models: ["grok-3"]
+  scenario_selection: "all"
+  threads: 6
+  judge_threads: 6
+  followup_turns: 3
+  temperature: 0  # fully deterministic outputs for value benchmarking
+  max_tokens: 10000
+  max_retries: 3
+  rate_limit_per_minute: 30
+  output_dir: "output/"
+  scenarios_file: "config/scenarios.yaml"
+  values_rubric_file: "config/values_rubric.yaml"
+  judge_model: "gpt-4o-mini"
+environment:
+  timezone: "PDT"
+  timestamp_format: "YYYYMMDD-HHmmss-xxxx"  # matches PRD suffix rule
+  log_level: "INFO"
+  seed: 42
+metadata:
+  version: "0.5"
+  created_by: "valuerank"
+  notes: "Baseline runtime configuration for v0.5 build."

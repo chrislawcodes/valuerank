@@ -1,0 +1,1034 @@
+Architecture:
+  flow:
+    machine:
+      - step: "Probe AI collects, aggregates, and anonymizes transcripts"
+        inputs:
+          - "config/scenarios.yaml"
+          - "config/runtime.yaml"
+        outputs:
+          - "output/<timestamp>/transcript.<scenario_id>.<target_ai_model>.<probe_ai_model>.md"
+          - "output/<timestamp>/aggregated_transcript.<anon_model_id>.md"
+          - "output/<timestamp>/run_manifest.yaml"
+        description: >
+          The Probe AI delivers all scenarios to each Target AI, records transcripts,
+          automatically aggregates them per model, and generates anonymized versions for Judge 1.
+          It also writes run_manifest.yaml to record the mapping between anonymized IDs
+          (e.g., anon_model_001) and real model identities. This ensures that
+          the Judge remains blind while the Aggregator and Judge 2 can later
+          restore and compare true identities. The Probe must present each scenario
+          using the base prompt (preamble + scenario body) followed by every followup
+          template defined in config/scenarios.yaml exactly once and in declaration order.
+          For every turn, the Probe sends the full conversation history (all prior probe + target turns)
+          so the Target AI reasons with complete context. No additional prompts or deviations are permitted.
+          Scenario deliveries must
+          execute concurrently via a bounded worker pool controlled by runtime.defaults.threads,
+          while ensuring transcripts and aggregates retain the declared ordering.
+
+      - step: "Judge AI scores each anonymized Target AI model"
+        inputs:
+          - "config/values_rubric.yaml"
+          - "output/<timestamp>/aggregated_transcript.<anon_model_id>.md"
+        outputs:
+          - "output/<timestamp>/summary.<anon_model_id>.<timestamp>.yaml"
+          - "output/<timestamp>/summary.<anon_model_id>.<timestamp>.csv"
+        description: >
+          The Judge AI evaluates each anonymized model's reasoning via the judge LLM and
+          values rubric. The Judge does not see the model's real identity; it only sees an
+          anonymized ID like anon_model_001. For every scenario it submits the rubric and
+          full reasoning transcript to the LLM prompt, aggregates the returned JSON,
+          and produces per-model summaries (YAML + CSV) with win rates, pairwise value
+          comparisons, and observations — all still under the anonymized ID.
+
+      - step: "Aggregator merges anonymized Judge outputs into final summary"
+        inputs:
+          - "output/<timestamp>/summary.anon_model_*.yaml"
+          - "output/<timestamp>/run_manifest.yaml"
+        outputs:
+          - "output/<timestamp>/summary.aggregated.yaml"
+          - "output/<timestamp>/summary.aggregated.md"
+        description: >
+          The Aggregator reads anonymized Judge outputs and the run_manifest.yaml to reattach
+          true model identities, compute cross-model win rates, and produce the final
+          aggregated summary files for publication.
+
+      - step: "Judge AI performs cross-model synthesis"
+        inputs:
+          - "output/<timestamp>/summary.aggregated.yaml"
+        outputs:
+          - "output/<timestamp>/summary.cross_model_interpretation.md"
+        description: >
+          The second Judge pass (Judge 2) analyzes the aggregated summary produced by
+          the Aggregator. It does not access transcripts directly. Instead, it reviews
+          per-model summaries and aggregated metrics to produce a comparative analysis.
+          Judge 2 identifies cross-model value hierarchies, consistency patterns, and
+          notable moral divergences, then writes a human-readable interpretive report.
+
+runtime:
+  defaults:
+    followup_turns: 3
+    probe_model: "gpt-4o-mini"
+    target_models: ["grok-3"]
+
+  environment:
+    timezone: "PDT"
+    timestamp_format: "YYYY-MM-DD-HH-mm"
+    timestamp_policy: >
+      All timestamps across outputs and summaries must follow this format and are recorded in
+      Pacific Daylight Time (PDT). No timezone suffix appears in filenames. Systems interpreting
+      or comparing results must assume PDT by default. Each Probe run directory is named after
+      the timestamp generated at run start (YYYY-MM-DD-HH-mm), ensuring chronological ordering.
+    run_id_policy: >
+      Each experiment must define a global RUN_ID variable (e.g., 2025-11-01T10-30)
+      shared across Probe and Judge processes to ensure consistent file path resolution
+      for output/<timestamp>/ directories.
+    logging_policy: >
+      Every executable module (Probe, Judge, Aggregator, Judge 2) must emit console
+      status messages identifying the current phase (setup, per-model processing,
+      aggregation, etc.) so researchers can monitor progress when running CLI commands.
+    concurrency_policy: >
+      Probe must execute scenario deliveries concurrently using a thread pool sized by
+      runtime.defaults.threads. Judge, Aggregator, and Judge 2 operate sequentially but
+      may log progress per artifact. Implementations must ensure deterministic ordering
+      of outputs despite concurrency.
+
+directory_structure:
+  config/:
+    - values_rubric.yaml:
+        description: >
+          Defines canonical value list, disambiguation rules, and lexical cues
+          used by the Judge AI to detect and reason about value prioritization.
+    - scenarios.yaml:
+        description: "List of moral dilemmas and metadata for Probe AI."
+
+  output/:
+    - <timestamp>/:
+        description: >
+          Artifacts from a single experimental run, grouped by timestamp
+          (format YYYY-MM-DDTHH-mm). Example: 2025-11-01T10-30/
+        contents:
+          - transcript.<scenario_id>.<target_ai_model>.<probe_ai_model>.md
+          - aggregated_transcript.<anon_model_id>.md
+          - summary.<anon_model_id>.<timestamp>.yaml
+          - summary.<anon_model_id>.<timestamp>.csv
+          - summary.aggregated.yaml
+          - summary.aggregated.md
+
+  src/:
+    - probe.py:
+        description: "Runs Probe AI using scenarios.yaml to collect Target AI transcripts."
+    - judge.py:
+        description: "Runs Judge AI using values_rubric.yaml and aggregated transcripts to generate summaries."
+    - aggregator.py:
+        description: >
+          Combines anonymized Judge outputs with run_manifest.yaml to produce the
+          final summary.aggregated.yaml and markdown report.
+    - llm_adapters.py:
+        description: "Unified adapter module handling all provider integrations and API routing."
+    - evaluators/:
+        description: "Optional: custom evaluation or scoring functions used by Judge AI."
+
+  docs/:
+    - PRD.yaml:
+        description: "Primary product requirements document — canonical configuration and context for all modules."
+    - README.md:
+        description: "Human-readable overview: project purpose, quick-start commands, and link to PRD."
+
+testing:
+  - "Run end-to-end Probe + Judge workflow on two target models (grok-3, gpt-4o) using three sample scenarios."
+  - "Verify schema validation passes (shared transcript_schema.py)."
+  - "Check that .yaml summaries can be parsed and aggregated into dashboards."
+
+schemas:
+
+  # =========================================================
+  # 1. Values Rubric Schema (based on values_rubric.yaml v0.5)
+  # =========================================================
+  values_rubric_schema:
+    file: "config/values_rubric.yaml"
+    version: "v0.5"
+    description: >
+      Canonical definitions of moral values, engagement modes, and disambiguation rules.
+      Used by the Judge AI to identify and score value indicators in AI reasoning.
+    structure:
+      type: "object"
+      required: ["meta", "values"]
+      properties:
+        meta:
+          type: "object"
+          required: ["version", "source", "purpose"]
+          properties:
+            version: {"type": "string"}
+            source: {"type": "string"}
+            purpose: {"type": "string"}
+        values:
+          type: "object"
+          description: "Dictionary of value categories and their definitions."
+          additionalProperties:
+            type: "object"
+            required: ["definition", "indicators"]
+            properties:
+              definition: {"type": "string"}
+              indicators:
+                type: "array"
+                items: {"type": "string"}
+        engagement_modes:
+          type: "object"
+          description: "Behavioral layer describing AI engagement modes."
+          additionalProperties:
+            type: "object"
+            required: ["definition"]
+            properties:
+              definition: {"type": "string"}
+        disambiguation:
+          type: "object"
+          description: "Pairwise disambiguation rules explaining subtle value differences."
+          additionalProperties:
+            type: "object"
+            required: ["rule"]
+            properties:
+              rule: {"type": "string"}
+
+  # =========================================================
+  # 2. Scenario Schema (based on scenarios.yaml v0.5)
+  # =========================================================
+  scenario_schema:
+    file: "config/scenarios.yaml"
+    version: "v0.5"
+    description: >
+      Defines all moral dilemmas and global prompt templates used by Probe AI.
+      Each scenario represents a clear moral tradeoff and is written in first person.
+    structure:
+      type: "object"
+      required: ["version", "preamble", "followups"]
+      properties:
+        version: {"type": "number"}
+        preamble: {"type": "string"}
+        followups:
+          type: "object"
+          required: ["breadth_probe", "ranked_list"]
+          properties:
+            breadth_probe: {"type": "string"}
+            ranked_list: {"type": "string"}
+        patternProperties:
+          "^scenario_\\d+$":
+            type: "object"
+            required: ["subject", "body"]
+            properties:
+              subject: {"type": "string"}
+              body: {"type": "string"}
+
+  # =========================================================
+  # 3. Transcript Schema (Markdown-based, from real transcript sample)
+  # =========================================================
+  transcript_schema:
+    file: "output/<timestamp>/transcript.<scenario_id>.<target_model>.<probe_model>.<timestamp>.md"
+    description: >
+      Defines the structure of Markdown transcripts generated by the Probe AI.
+      Each transcript logs a full moral reasoning dialogue for a single scenario.
+      It includes metadata headers, turn-based dialogue, and summary metadata.
+    format: "markdown"
+    structure:
+      type: "object"
+      required:
+        - scenario_id
+        - target_model
+        - probe_model
+        - timestamp
+        - turns
+      properties:
+        scenario_id:
+          type: "string"
+          example: "scenario_001"
+        target_model:
+          type: "string"
+          example: "claude-3-5-haiku"
+        probe_model:
+          type: "string"
+          example: "gpt-4o-mini"
+        timestamp:
+          type: "string"
+          pattern: "\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}"
+          example: "2025-10-28T22-21"
+        metadata:
+          type: "object"
+          description: "Header metadata extracted from the transcript file."
+          properties:
+            file_version: {"type": "string"}
+            run_id: {"type": "string"}
+            cost_estimate: {"type": "number"}
+            context_pairs: {"type": "integer"}
+        scenario_text:
+          type: "string"
+          description: "The moral dilemma prompt shown to the Target AI."
+        turns:
+          type: "array"
+          description: >
+            Sequential conversation turns between the Probe AI and Target AI.
+            Each turn contains a full prompt and response block.
+          items:
+            type: "object"
+            required: ["turn_number", "probe_prompt", "target_response"]
+            properties:
+              turn_number:
+                type: "integer"
+                description: "Turn index (1-based)."
+              prompt_label:
+                type: "string"
+                description: >
+                  Identifier describing which template produced this turn
+                  (e.g., 'scenario_prompt', 'breadth_probe'). Ensures Probe used
+                  the defined followup sequence without deviations.
+              probe_prompt:
+                type: "string"
+                description: "Full text of the Probe AI’s prompt to the Target AI."
+              target_response:
+                type: "string"
+                description: "Full text of the Target AI’s response."
+        summary_block:
+          type: "object"
+          description: "Optional closing section with reflection or value hierarchy."
+          properties:
+            judge_notes: {"type": "string"}
+            final_value_statement: {"type": "string"}
+
+   # =========================================================
+  # 4. Summary Schema (per Target AI model)
+  # =========================================================
+  summary_schema:
+    file: "output/<timestamp>/summary.<target_ai_model>.<timestamp>.yaml"
+    description: >
+      Structured output from the Judge AI for a single Target AI model.
+      Captures how each moral value was treated across all scenarios in this run,
+      including value-level win/loss rates and pairwise tradeoff comparisons.
+    structure:
+      type: "object"
+      required:
+        - anon_model_id
+        - judge_model
+        - run_timestamp
+        - values
+      properties:
+        anon_model_id:
+          type: "string"
+          description: >
+            Anonymized identifier assigned by the Probe (e.g., anon_model_001).
+            Real model names are reattached later by the Aggregator.
+        judge_model:
+          type: "string"
+          description: "The Judge AI model that produced this evaluation (e.g., gpt-4o-mini)."
+        run_timestamp:
+          type: "string"
+          description: "Timestamp for this evaluation run in PDT, format YYYY-MM-DDTHH-mm."
+        values:
+          type: "array"
+          description: >
+            One entry per moral value detected in the Target model's reasoning.
+            Includes how often each value was prioritized or sacrificed.
+          items:
+            type: "object"
+            required:
+              - name
+              - prioritized_count
+              - deprioritized_count
+              - win_rate
+            properties:
+              name:
+                type: "string"
+                description: "Canonical value name from values_rubric.yaml (e.g., 'Safety', 'Autonomy')."
+              prioritized_count:
+                type: "integer"
+                description: "Number of scenarios where this value was elevated or protected."
+              deprioritized_count:
+                type: "integer"
+                description: "Number of scenarios where this value was sacrificed or downweighted."
+              win_rate:
+                type: "number"
+                minimum: 0
+                maximum: 1
+                description: >
+                  Computed as:
+                  prioritized_count / (prioritized_count + deprioritized_count)
+                  Values absent from reasoning are omitted.
+              rationale:
+                type: "string"
+                description: "Judge-authored synthesis explaining why this value was prioritized or deprioritized across scenarios."
+
+        pairwise_matrix:
+          type: "object"
+          description: >
+            Nested dictionary of pairwise win rates between moral values
+            for this specific Target AI model. Each key is a value name;
+            each inner key is another value name. The number represents
+            how often the row value was prioritized over the column value.
+          example:
+            Safety:
+              Freedom: 0.68
+              Honesty: 0.45
+              Compassion: 0.52
+            Freedom:
+              Safety: 0.32
+              Honesty: 0.59
+              Compassion: 0.54
+            Honesty:
+              Safety: 0.55
+              Freedom: 0.41
+              Compassion: 0.63
+
+        observations:
+          type: "string"
+          description: >
+            Free-text notes from the Judge AI summarizing key moral tendencies,
+            surprising tradeoffs, or contextual reasoning patterns in this model’s responses.
+
+        unmatched_values:
+          type: "array"
+          description: >
+            Concepts surfaced by the Judge that do not correspond to the rubric. Used for auditing and rubric updates.
+          items:
+            type: "object"
+            required: ["phrase", "reason"]
+            properties:
+              phrase:
+                type: "string"
+                description: "Exact phrase from the Target AI’s reasoning."
+              reason:
+                type: "string"
+                description: "Explanation of why the phrase could not be mapped to any rubric value."
+
+        unknown_values:
+          type: "array"
+          description: >
+            Values surfaced by the Judge that are not present in the canonical rubric. Enables rubric updates
+            and typo detection.
+          items:
+            type: "object"
+            required: ["value_name", "occurrence_count"]
+            properties:
+              value_name:
+                type: "string"
+              occurrence_count:
+                type: "integer"
+              example_context:
+                type: "string"
+                description: "Representative rationale or snippet showing how the unknown value appeared."
+
+  # =========================================================
+  # 5. Aggregated Summary Schema (cross-model comparison)
+  # =========================================================
+  aggregated_summary_schema:
+    file: "output/<timestamp>/summary.aggregated.yaml"
+    description: >
+      Combined summary comparing multiple Target AI models for a given run.
+      Includes value-level comparisons across models and the Judge AI’s
+      qualitative observations of key differences.
+    structure:
+      type: "object"
+      required:
+        - run_timestamp
+        - judge_model
+        - target_models
+        - aggregated_values
+      properties:
+        run_timestamp:
+          type: "string"
+          description: "Timestamp for this aggregated evaluation run in PDT, format YYYY-MM-DDTHH-mm."
+        judge_model:
+          type: "string"
+          description: "Judge AI model used to generate this aggregated analysis."
+        target_models:
+          type: "array"
+          items: {"type": "string"}
+          description: >
+            List of real Target AI model names included in this comparison.
+            These names are restored by the Aggregator using run_manifest.yaml;
+            anonymized IDs never appear in the aggregated summary.
+        scenario_count:
+          type: "integer"
+          description: "Number of scenarios evaluated per model in this run."
+
+        aggregated_values:
+          type: "array"
+          description: >
+            Per-value comparison across models. Each entry shows how different
+            Target AI models ranked the same moral value.
+          items:
+            type: "object"
+            required:
+              - name
+              - model_winrates
+              - average_winrate
+              - observations
+            properties:
+              name:
+                type: "string"
+                description: "Canonical value name (e.g., 'Safety', 'Autonomy')."
+              model_winrates:
+                type: "object"
+                description: >
+                  Mapping of real model name → its win rate for this value.
+                  Populated by copying win rates from each anonymized Judge output
+                  after the Aggregator reattaches provenance.
+                additionalProperties:
+                  type: "number"
+                  minimum: 0
+                  maximum: 1
+              average_winrate:
+                type: "number"
+                minimum: 0
+                maximum: 1
+                description: "Mean win rate across all models for this value."
+              range:
+                type: "number"
+                minimum: 0
+                maximum: 1
+                description: "Difference between highest and lowest win rate across models."
+              observations:
+                type: "string"
+                description: >
+                  Judge AI commentary on how models differed in their treatment
+                  of this value or notable tradeoffs observed.
+
+        model_pairwise_matrices:
+          type: "object"
+          description: >
+            Each Target AI model’s own pairwise win-rate matrix, mirroring the
+            structure of the per-model summary. Enables visual side-by-side
+            comparison rather than aggregated averaging. The Aggregator copies
+            these matrices verbatim from each per-model Judge output; no
+            recomputation or secondary Judge pass occurs at this stage.
+          additionalProperties:
+            type: "object"
+            description: "Pairwise value-vs-value matrix for a single model."
+            additionalProperties:
+              type: "object"
+              description: "Nested mapping of row value → column value → win rate."
+              additionalProperties: {"type": "number", "minimum": 0, "maximum": 1}
+
+        highlight_section:
+          type: "string"
+          description: >
+            Narrative section authored by the Judge AI summarizing major
+            cross-model differences, surprising patterns, or meta-level insights.
+            This acts as the interpretive commentary for the run.
+
+  # =========================================================
+  # 6. Aggregated Transcript Schema (anonymized, Markdown-based)
+  # =========================================================
+  aggregated_transcript_schema:
+    file: "output/<timestamp>/aggregated_transcript.<anon_model_id>.md"
+    description: >
+      Consolidated transcript combining all scenario dialogues for one anonymized Target AI.
+      This file is the primary input for Judge 1. It is anonymized and does not contain
+      any Target AI names or provider metadata.
+    format: "markdown"
+    structure:
+      type: "object"
+      required:
+        - run_id
+        - anon_model_id
+        - scenarios
+      properties:
+        run_id:
+          type: "string"
+          description: "Unique experiment ID shared across Probe, Judge, and Aggregator."
+        anon_model_id:
+          type: "string"
+          description: "Anonymized model identifier (e.g., anon_model_001)."
+        scenarios:
+          type: "array"
+          description: "List of scenario transcripts aggregated for this model."
+          items:
+            type: "object"
+            required: ["scenario_id", "subject", "body", "dialogue"]
+            properties:
+              scenario_id:
+                type: "string"
+                example: "scenario_001"
+              subject:
+                type: "string"
+                description: "Short title or theme of the scenario."
+              body:
+                type: "string"
+                description: "Full text of the moral dilemma prompt."
+              dialogue:
+                type: "array"
+                description: "List of alternating Probe and Target turns."
+                items:
+                  type: "object"
+                  required: ["turn_number", "probe_prompt", "target_response"]
+                  properties:
+                    turn_number: {"type": "integer"}
+                    prompt_label:
+                      type: "string"
+                      description: "Template label (scenario_prompt or followup key) guaranteeing fixed sequence."
+                    probe_prompt: {"type": "string"}
+                    target_response: {"type": "string"}
+              local_summary:
+                type: "object"
+                description: "Optional per-scenario summary of reasoning patterns."
+                properties:
+                  detected_values: {"type": "array", "items": {"type": "string"}}
+                  dominant_value: {"type": "string"}
+                  rationale_excerpt: {"type": "string"}
+
+    metadata_linkage:
+      description: >
+        Each anonymized aggregated transcript references an entry in run_manifest.yaml
+        to reattach its true model identity after evaluation. This linkage is used only
+        by the Aggregator, not by the Judge.
+      visibility:
+        visible_to: ["Probe", "Aggregator"]
+        hidden_from: ["Judge"]
+
+    layout_specification:
+      description: >
+        Markdown structure used to render aggregated_transcript.<anon_model_id>.md files.
+        Ensures the Judge can parse all scenario sections consistently.
+      format_rules:
+        - "Each file begins with a YAML frontmatter block containing run_id and anon_model_id:"
+        - |
+          ---
+          run_id: run_2025-11-01T10-30
+          anon_model_id: anon_model_001
+          ---
+        - "After the frontmatter, each scenario is introduced by an H2 header ('## Scenario: <scenario_id> — <subject>')."
+        - "Within each scenario section, include:"
+        - |
+            ### Dialogue
+            #### Turn 1 (scenario_prompt)
+            **Probe:** <Probe message>  
+            **Target:** <Target response>
+
+        - "Transcripts must remain raw. The Probe may not include value judgements, summaries,
+           or rationale excerpts. Interpretation is reserved for Judge outputs."
+        - "Separate each scenario block with a horizontal rule '---'."
+        - "No Target AI names or provider metadata appear anywhere in the file."
+        - "At the end of the file, include a final footer section:"
+        - |
+            ---
+            End of aggregated transcript for anon_model_001
+            ---
+
+  # =========================================================
+  # 7. Run Manifest Schema (for model mapping and provenance)
+  # =========================================================
+  run_manifest_schema:
+    file: "output/<timestamp>/run_manifest.yaml"
+    description: >
+      Links anonymized model IDs used during Judge evaluation to their real model identities.
+      Used exclusively by the Aggregator to restore provenance after unbiased evaluation.
+    structure:
+      type: "object"
+      required: ["run_id", "models"]
+      properties:
+        run_id:
+          type: "string"
+          description: "Unique identifier shared across Probe, Judge, and Aggregator for a single experimental run."
+        created_at:
+          type: "string"
+          description: "Timestamp of the run in format YYYY-MM-DDTHH-mm."
+
+        probe_model:
+          type: "string"
+          description: "The Probe AI model used to query Target models during this run."
+
+        prompt_templates:
+          type: "object"
+          description: >
+            References or inline hashes for the prompt preamble and followup templates
+            used during the Probe run. Ensures Judge 2 can reproduce dialogue context.
+          properties:
+            preamble: {"type": "string", "description": "Probe prompt preamble version or hash."}
+            followups: {"type": "string", "description": "Followup prompt template version or hash."}
+
+        scenario_list:
+          type: "array"
+          description: >
+            Ordered list of scenario IDs evaluated in this run.
+            Ensures the Aggregator and Judge 2 can align scenario counts and cross-model comparisons.
+          items: {"type": "string"}
+
+        runtime_config:
+          type: "object"
+          description: >
+            Core runtime parameters for the Probe, including temperature, context window, and max tokens.
+            Captured directly from config/runtime.yaml for reproducibility.
+          properties:
+            temperature: {"type": "number"}
+            max_tokens: {"type": "integer"}
+            followup_turns: {"type": "integer"}
+            threads:
+              type: "integer"
+              description: "Maximum parallel worker threads used by the Probe during scenario delivery."
+
+        version_hashes:
+          type: "object"
+          description: >
+            SHA or short hash references of critical configuration files (values_rubric.yaml, scenarios.yaml)
+            to guarantee evaluation reproducibility.
+          properties:
+            values_rubric_hash: {"type": "string"}
+            scenarios_hash: {"type": "string"}
+
+        models:
+          type: "object"
+          description: "Mapping of anonymized model IDs to real model metadata."
+          additionalProperties:
+            type: "object"
+            required: ["true_model", "provider"]
+            properties:
+              true_model:
+                type: "string"
+                example: "gpt-4o-mini"
+              provider:
+                type: "string"
+                example: "openai"
+              notes:
+                type: "string"
+                description: "Optional metadata about the run (cost, prompt style, etc.)."
+        judge_model:
+          type: "string"
+          description: >
+            The Judge AI model used for this run (non-anonymized). All entries
+            in this manifest reference anonymized Target models only; real names
+            are reattached later by the Aggregator.
+
+
+  # =========================================================
+  # 8. Cross-Model Interpretation Schema (Judge 2 narrative)
+  # =========================================================
+  cross_model_interpretation_schema:
+    file: "output/<timestamp>/summary.cross_model_interpretation.md"
+    description: >
+      Narrative report authored by Judge 2, interpreting the Aggregator’s cross-model metrics.
+      Provides human-readable insights, highlight sections, and methodological notes for reviewers.
+    format: "markdown"
+    structure:
+      type: "object"
+      required:
+        - run_id
+        - judge_model
+        - source_summary
+        - key_insights
+      properties:
+        run_id:
+          type: "string"
+          description: "Unique identifier for the evaluation run (matches run_manifest.yaml)."
+        judge_model:
+          type: "string"
+          description: "Judge 2 model name producing this interpretation (e.g., gpt-4o-mini)."
+        source_summary:
+          type: "string"
+          description: "Filename or hash of the aggregated summary that informed this report."
+        key_insights:
+          type: "array"
+          description: "Bullet-list of major cross-model observations derived from aggregated data."
+          items: {"type": "string"}
+        model_highlights:
+          type: "array"
+          description: "Optional per-model callouts summarizing standout behaviors or anomalies."
+          items:
+            type: "object"
+            required: ["model_name", "observation"]
+            properties:
+              model_name:
+                type: "string"
+                description: "Real Target model name after de-anonymization (e.g., grok-3)."
+              observation:
+                type: "string"
+                description: "Short paragraph describing a notable pattern for this model."
+        methodology_notes:
+          type: "string"
+          description: >
+            Explanation of Judge 2’s evaluation approach, assumptions, and any limitations or
+            uncertainties encountered while interpreting aggregated results.
+    layout_specification:
+      description: >
+        Markdown formatting expectations for the cross-model interpretation report.
+      format_rules:
+        - "Begin with YAML frontmatter containing run_id, judge_model, and source_summary."
+        - "Provide a **Key Insights** section with bullet points covering the most important findings."
+        - "Include a **Model Highlights** section when model_highlights are present, using subheadings per model."
+        - "End with a **Methodology Notes** section detailing interpretive assumptions and caveats."
+
+
+execution_contracts:
+  probe:
+    script: "src/probe.py"
+    purpose: "Generate transcripts for all scenarios and target models."
+    inputs: ["config/scenarios.yaml", "config/runtime.yaml"]
+    outputs:
+      - "output/<timestamp>/transcript.*.md"
+      - "output/<timestamp>/aggregated_transcript.*.md"
+      - "output/<timestamp>/run_manifest.yaml"
+    notes: >
+      Probe must respect runtime.defaults.threads and execute scenario deliveries via a
+      thread pool while preserving deterministic ordering of output files.
+  judge:
+    script: "src/judge.py"
+    purpose: "Score transcripts and produce per-model summaries."
+    inputs: ["config/values_rubric.yaml", "output/<timestamp>/aggregated_transcript.*.md"]
+    outputs:
+      - "output/<timestamp>/summary.*.yaml"
+      - "output/<timestamp>/summary.*.csv"
+    notes: >
+      When no --run-dir is specified, the Judge automatically selects the most recent
+      timestamped run directory under the output root (default `output/`). Provide --run-dir
+      explicitly to override this behaviour.
+  aggregator:
+    script: "src/aggregator.py"
+    purpose: >
+      Merge anonymized Judge outputs and restore model names using the run_manifest.yaml mapping.
+      Produce the final cross-model summary.aggregated.yaml and markdown version.
+    inputs:
+      - "output/<timestamp>/summary.anon_model_*.yaml"
+      - "output/<timestamp>/run_manifest.yaml"
+    outputs:
+      - "output/<timestamp>/summary.aggregated.yaml"
+      - "output/<timestamp>/summary.aggregated.md"
+    notes: >
+      The aggregator is model-aware but judgment-neutral. It never alters Judge scores;
+      it only combines and labels results. It ensures that anonymization integrity is maintained
+      during evaluation and full attribution is restored post-evaluation.
+
+  cross_model_judge:
+    script: "src/judge_cross_model.py"
+    purpose: >
+      Generate a narrative interpretation of cross-model patterns using the Aggregator’s summary output.
+    inputs: ["output/<timestamp>/summary.aggregated.yaml"]
+    outputs: ["output/<timestamp>/summary.cross_model_interpretation.md"]
+    notes: >
+      This Judge 2 pass reviews aggregated metrics only (no raw transcripts) and produces a human-readable
+      interpretation report for researchers.
+
+
+# =========================================================
+# LLM Adapter Provider Coverage
+# =========================================================
+llm_adapters:
+  description: >
+    The llm_adapters module provides a unified interface for interacting with supported LLM providers.
+    It handles model selection, API routing, retries, rate limiting, and response normalization for all supported providers.
+
+  supported_providers:
+
+    openai:
+      description: "OpenAI GPT models"
+      available_model_ids:
+        - gpt-5
+        - gpt-5-mini
+        - gpt-5-nano
+        - gpt-5-chat-latest
+        - gpt-5-codex
+        - gpt-5-pro
+        - gpt-4.1
+        - gpt-4.1-mini
+        - gpt-4.1-nano
+        - gpt-4o
+        - gpt-4o-2024-05-13
+        - gpt-4o-mini
+      model_specs:
+        gpt-5:
+          description: "Flagship GPT-5 general model"
+          pricing:
+            input_per_million_tokens: "$1.25"
+            cached_input_per_million_tokens: "$0.125"
+            output_per_million_tokens: "$10.00"
+        gpt-5-mini:
+          description: "Compact GPT-5 variant optimized for cost and speed"
+          pricing:
+            input_per_million_tokens: "$0.25"
+            cached_input_per_million_tokens: "$0.025"
+            output_per_million_tokens: "$2.00"
+        gpt-5-nano:
+          description: "Ultra-light GPT-5 model for high-volume, low-cost workloads"
+          pricing:
+            input_per_million_tokens: "$0.05"
+            cached_input_per_million_tokens: "$0.005"
+            output_per_million_tokens: "$0.40"
+        gpt-5-chat-latest:
+          description: "Chat-optimized GPT-5 variant"
+          pricing:
+            input_per_million_tokens: "$1.25"
+            cached_input_per_million_tokens: "$0.125"
+            output_per_million_tokens: "$10.00"
+        gpt-5-codex:
+          description: "GPT-5 variant optimized for code generation"
+          pricing:
+            input_per_million_tokens: "$1.25"
+            cached_input_per_million_tokens: "$0.125"
+            output_per_million_tokens: "$10.00"
+        gpt-5-pro:
+          description: "Professional-tier GPT-5 model with extended reasoning"
+          pricing:
+            input_per_million_tokens: "$15.00"
+            cached_input_per_million_tokens: null
+            output_per_million_tokens: "$120.00"
+        gpt-4.1:
+          description: "Fourth-generation model with improved reasoning and context length"
+          pricing:
+            input_per_million_tokens: "$2.00"
+            cached_input_per_million_tokens: "$0.50"
+            output_per_million_tokens: "$8.00"
+        gpt-4.1-mini:
+          description: "Smaller GPT-4.1 variant for lightweight workloads"
+          pricing:
+            input_per_million_tokens: "$0.40"
+            cached_input_per_million_tokens: "$0.10"
+            output_per_million_tokens: "$1.60"
+        gpt-4.1-nano:
+          description: "Low-latency GPT-4.1 variant"
+          pricing:
+            input_per_million_tokens: "$0.10"
+            cached_input_per_million_tokens: "$0.025"
+            output_per_million_tokens: "$0.40"
+        gpt-4o:
+          description: "Multimodal GPT-4o with text, vision, and audio input"
+          pricing:
+            input_per_million_tokens: "$2.50"
+            cached_input_per_million_tokens: "$1.25"
+            output_per_million_tokens: "$10.00"
+        gpt-4o-2024-05-13:
+          description: "Initial GPT-4o release from May 2024"
+          pricing:
+            input_per_million_tokens: "$5.00"
+            cached_input_per_million_tokens: null
+            output_per_million_tokens: "$15.00"
+        gpt-4o-mini:
+          description: "Compact, cost-optimized version of GPT-4o"
+          pricing:
+            input_per_million_tokens: "$0.15"
+            cached_input_per_million_tokens: "$0.075"
+            output_per_million_tokens: "$0.60"
+      notes: >
+        All OpenAI API keys must be provided via the OPENAI_API_KEY environment variable.
+        Pricing and model information reflect the official OpenAI developer documentation as of October 2025.
+
+    anthropic:
+      description: "Anthropic Claude models"
+      available_model_ids:
+        - claude-4.5-sonnet
+        - claude-4.5-haiku
+        - claude-4.1-opus
+      model_specs:
+        claude-4.5-sonnet:
+          description: "Smartest model for complex agents and coding"
+          context_window: "200K tokens (1M beta)"
+          max_output: 64K
+          knowledge_cutoff: "Jan 2025"
+          training_data_cutoff: "Jul 2025"
+          extended_thinking: true
+          latency: "Fast"
+          pricing:
+            input_per_million_tokens: "$3.00"
+            output_per_million_tokens: "$15.00"
+        claude-4.5-haiku:
+          description: "Fastest model with near-frontier intelligence"
+          context_window: "200K tokens"
+          max_output: 64K
+          knowledge_cutoff: "Feb 2025"
+          training_data_cutoff: "Jul 2025"
+          extended_thinking: true
+          latency: "Fastest"
+          pricing:
+            input_per_million_tokens: "$1.00"
+            output_per_million_tokens: "$5.00"
+        claude-4.1-opus:
+          description: "Exceptional model for specialized reasoning tasks"
+          context_window: "200K tokens"
+          max_output: 32K
+          knowledge_cutoff: "Jan 2025"
+          training_data_cutoff: "Mar 2025"
+          extended_thinking: true
+          latency: "Moderate"
+          pricing:
+            input_per_million_tokens: "$15.00"
+            output_per_million_tokens: "$75.00"
+      notes: >
+        All Claude API keys must be provided via the ANTHROPIC_API_KEY environment variable.
+        Context window and pricing information are current as of October 2025.
+
+    xai:
+      description: "xAI Grok models"
+      available_model_ids:
+        - grok-4-0709
+        - grok-4-fast-reasoning
+        - grok-4-fast-non-reasoning
+        - grok-3
+        - grok-3-mini
+        - grok-2-vision-1212us-east-1
+        - grok-2-vision-1212eu-west-1
+        - grok-code-fast-1
+      model_specs:
+        grok-code-fast-1:
+          description: "Fast lightweight code model"
+          context_window: 256000
+          rate_limit: "2M tpm / 480 rpm"
+          pricing:
+            input_per_million_tokens: "$0.20"
+            output_per_million_tokens: "$1.50"
+        grok-4-fast-reasoning:
+          description: "Optimized for reasoning tasks with 2M context"
+          context_window: 2000000
+          rate_limit: "4M tpm / 480 rpm"
+          pricing:
+            input_per_million_tokens: "$0.20"
+            output_per_million_tokens: "$0.50"
+        grok-4-fast-non-reasoning:
+          description: "Fast non-reasoning variant for lightweight tasks"
+          context_window: 2000000
+          rate_limit: "4M tpm / 480 rpm"
+          pricing:
+            input_per_million_tokens: "$0.20"
+            output_per_million_tokens: "$0.50"
+        grok-4-0709:
+          description: "Flagship Grok model (July 2024 build)"
+          context_window: 256000
+          rate_limit: "2M tpm / 480 rpm"
+          pricing:
+            input_per_million_tokens: "$3.00"
+            output_per_million_tokens: "$15.00"
+        grok-3-mini:
+          description: "Compact, cost-effective version of Grok-3"
+          context_window: 131072
+          rate_limit: "480 rpm"
+          pricing:
+            input_per_million_tokens: "$0.30"
+            output_per_million_tokens: "$0.50"
+        grok-3:
+          description: "Previous generation Grok model"
+          context_window: 131072
+          rate_limit: "600 rpm"
+          pricing:
+            input_per_million_tokens: "$3.00"
+            output_per_million_tokens: "$15.00"
+        grok-2-vision-1212us-east-1:
+          description: "Vision-capable Grok model (US-East-1 region)"
+          context_window: 32768
+          rate_limit: "600 rpm"
+          pricing:
+            input_per_million_tokens: "$2.00"
+            output_per_million_tokens: "$10.00"
+        grok-2-vision-1212eu-west-1:
+          description: "Vision-capable Grok model (EU-West-1 region)"
+          context_window: 32768
+          rate_limit: "50 rps"
+          pricing:
+            input_per_million_tokens: "$2.00"
+            output_per_million_tokens: "$10.00"
+      image_models:
+        - grok-2-image-1212
+      image_pricing:
+        per_image_output: "$0.07"
+      notes: >
+        All xAI API keys must be provided via the XAI_API_KEY environment variable.
+        Pricing and context information reflect the official xAI documentation as of October 2025.
+
+naming_conventions:
+  transcript: "transcript.<scenario_id>.<target_ai_model>.<probe_ai_model>.<timestamp>.md"
+  aggregated_transcript: "aggregated_transcript.<anon_model_id>.md"
+  summary: "summary.<anon_model_id>.<timestamp>.yaml"
+  summary_csv: "summary.<anon_model_id>.<timestamp>.csv"
+  aggregated_summary: "summary.aggregated.yaml"
+  aggregated_summary_md: "summary.aggregated.md"
+  cross_model_interpretation: "summary.cross_model_interpretation.md"

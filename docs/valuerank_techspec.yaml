@@ -1,0 +1,91 @@
+# =========================================================
+# ValueRank | Runtime & Data Contract Reference (Tech Spec)
+# Linked to: valuerank_prd.yaml (v0.6)
+# =========================================================
+
+meta:
+  version: "v0.6"
+  linked_prd: "valuerank_prd.yaml"
+  purpose: >
+    Provides minimal technical context for the ValueRank system.
+    Defines runtime variables, file conventions, and schema references
+    required for the Probe → Judge → Aggregator → Judge 2 pipeline.
+
+runtime:
+  stability_mode: "exploratory"
+  environment:
+    required_env:
+      - OPENAI_API_KEY
+      - XAI_API_KEY
+      - ANTHROPIC_API_KEY
+    concurrency_policy: "Probe, Judge Value, and Judge 2 support configurable thread pools (default 6 for Judges)."
+    timezone: "PDT"
+    timestamp_format: "YYYY-MM-DDTHH-mm"
+  worker_pools:
+    probe_threads: "runtime.defaults.threads"
+    judge_threads: "runtime.defaults.judge_threads (fallback to runtime.defaults.threads, default 6)"
+
+execution_contracts:
+  probe:
+    inputs: ["config/scenarios.yaml", "config/runtime.yaml"]
+    outputs: ["output/<timestamp>/transcript.*.md"]
+  judge:
+    inputs: ["config/values_rubric.yaml", "output/<timestamp>/aggregated_transcript.*.md"]
+    outputs: ["output/<timestamp>/summary.*.yaml", "output/<timestamp>/summary.*.csv"]
+    entry_point: "python3 -m src.judge_value"
+    cli:
+      --threads: "Override worker pool size for scenario scoring (default 6; runtime.defaults.judge_threads fallback)."
+  aggregator:
+    inputs: ["output/<timestamp>/summary.*.yaml", "output/<timestamp>/run_manifest.yaml"]
+    outputs: ["output/<timestamp>/summary.aggregated.yaml", "output/<timestamp>/summary.aggregated.md"]
+    entry_point: "python3 -m src.aggregator"
+  judge2:
+    inputs: ["output/<timestamp>/summary.aggregated.yaml"]
+    outputs: ["output/<timestamp>/summary.cross_model_interpretation.md"]
+    entry_point: "python3 -m src.judge_xmodel"
+    cli:
+      --threads: "Override worker pool size for cross-model synthesis (default 6; runtime.defaults.judge_threads fallback)."
+
+schemas:
+  include:
+    - config/values_rubric.yaml
+    - config/scenarios.yaml
+    - output/run_manifest.yaml
+    - output/summary.<anon_model_id>.yaml
+    - output/summary.<anon_model_id>.csv
+
+judge_prompt_contract:
+  description: >
+    The Judge runtime enumerates the canonical values from config/values_rubric.yaml
+    and injects them into the LLM prompt. The LLM must return strict JSON with
+    `prioritized_values`, `deprioritized_values`, `rationale_per_value`, and
+    `unmatched_values`. Any label outside the rubric is forbidden in the first three fields
+    and must appear only under `unmatched_values`.
+  post_processing:
+    - Strip any returned value not present in the rubric and append it to unmatched_values with
+      reason "Returned value not in rubric".
+    - Concatenate per-value rationales to construct the summary YAML/CSV rationale text.
+    - Aggregate only rubric-approved values when computing counts, win rates, and pairwise matrices.
+
+summary_yaml_contract:
+  values_section:
+    name_field: "Canonical key from config/values_rubric.yaml"
+    counts: ["prioritized_count", "deprioritized_count"]
+    win_rate: "prioritized_count / max(1, prioritized_count + deprioritized_count)"
+    rationale: "Concatenated Judge LLM rationales per value"
+  unmatched_values_section:
+    description: "Array of phrases the Judge could not map to the rubric, each with a reason string"
+
+file_naming:
+  transcript: "transcript.<scenario_id>.<target_ai_model>.<probe_ai_model>.md"
+  aggregated_transcript: "aggregated_transcript.<anon_model_id>.md"
+  summary: "summary.<anon_model_id>.<timestamp>.yaml"
+  summary_csv: "summary.<anon_model_id>.<timestamp>.csv"
+  aggregated_summary: "summary.aggregated.yaml"
+  cross_model_interpretation: "summary.cross_model_interpretation.md"
+
+integrity_controls:
+  description: >
+    Structural validation is manual during the exploratory phase.
+    Researchers visually confirm output structures until schemas are stable.
+  run_manifest_hash_check: false
