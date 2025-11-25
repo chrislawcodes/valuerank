@@ -6,6 +6,8 @@ defaults:
     - "anthropic:claude-sonnet-4-5"
     - "deepseek:deepseek-chat"
     - "mistral:mistral-large-latest"
+  summary_model: "gpt-5"
+  summary_threads: 10
   scenario_selection: "all"
   threads: 12
   judge_threads: 6

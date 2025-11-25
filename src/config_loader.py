@@ -40,6 +40,10 @@ class RuntimeConfig:
         return self.defaults.get("judge_model", "mock-judge")
 
     @property
+    def summary_model(self) -> str:
+        return self.defaults.get("summary_model", "gpt-5")
+
+    @property
     def output_dir(self) -> Path:
         output = self.defaults.get("output_dir", "output")
         return Path(output)
@@ -65,6 +69,15 @@ class RuntimeConfig:
             workers = int(raw_value)
         except (TypeError, ValueError):
             raise ValueError("runtime.defaults.judge_threads must be an integer.")
+        return max(1, workers)
+
+    @property
+    def summary_thread_workers(self) -> int:
+        raw_value = self.defaults.get("summary_threads", self.defaults.get("threads", 6))
+        try:
+            workers = int(raw_value)
+        except (TypeError, ValueError):
+            raise ValueError("runtime.defaults.summary_threads must be an integer.")
         return max(1, workers)
 
 

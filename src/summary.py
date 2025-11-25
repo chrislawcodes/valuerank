@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 import yaml
 
+from .config_loader import load_runtime_config
 from .llm_adapters import AdapterHTTPError, MockLLMAdapter, REGISTRY, normalize_model_name
 
 
@@ -48,8 +49,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workers",
         type=int,
-        default=DEFAULT_WORKERS,
-        help=f"Number of concurrent worker threads for LLM calls (default={DEFAULT_WORKERS}).",
+        default=None,
+        help="Number of concurrent worker threads for LLM calls (default from runtime or 6).",
+    )
+    parser.add_argument(
+        "--summary-model",
+        dest="summary_model",
+        help="Override the summary LLM model id (default from runtime or gpt-5).",
+    )
+    parser.add_argument(
+        "--runtime",
+        dest="runtime",
+        default="config/runtime.yaml",
+        help="Path to runtime.yaml for default summary settings (optional).",
     )
     return parser.parse_args()
 
@@ -366,7 +378,27 @@ def write_csv(run_dir: Path, run_id: str, rows: List[Dict[str, object]], variabl
 
 def main() -> None:
     args = parse_args()
-    workers = max(1, int(args.workers or DEFAULT_WORKERS))
+    runtime_cfg = None
+    if args.runtime:
+        runtime_path = Path(args.runtime)
+        if runtime_path.exists():
+            try:
+                runtime_cfg = load_runtime_config(runtime_path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[summary] Warning: failed to load runtime config {runtime_path}: {exc}")
+        else:
+            print(f"[summary] Warning: runtime config not found at {runtime_path}; using built-in defaults.")
+
+    workers = args.workers
+    if workers is None:
+        if runtime_cfg:
+            workers = runtime_cfg.summary_thread_workers
+        else:
+            workers = DEFAULT_WORKERS
+    workers = max(1, int(workers))
+    global SUMMARY_MODEL
+    summary_model = args.summary_model or (runtime_cfg.summary_model if runtime_cfg else SUMMARY_MODEL)
+    SUMMARY_MODEL = summary_model
     run_dir, run_id = resolve_run_directory(args.run_dir)
     print(f"[summary] Using run directory: {run_dir}")
 
