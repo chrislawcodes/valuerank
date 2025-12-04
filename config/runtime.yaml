@@ -1,25 +1,27 @@
 defaults:
   probe_model: "gpt-5-nano"
   target_models:
+    - "google:gemini-2.5-pro"
     - "xai:grok-4-1-fast-reasoning"
-    - "openai:gpt-4.1"
+    - "openai:gpt-5.1"
     - "anthropic:claude-sonnet-4-5"
-    - "deepseek:deepseek-chat"
+    - "deepseek:deepseek-reasoner"
     - "mistral:mistral-large-latest"
-  summary_model: "gpt-5"
-  summary_threads: 10
+
+  summary_model: "xai:grok-4-1-fast-reasoning"
+  summary_threads: 40
   scenario_selection: "all"
-  threads: 12
+  threads: 30
   judge_threads: 6
   followup_turns: 3
   temperature: 0  # fully deterministic outputs for value benchmarking
   max_tokens: 10000
+  target_response_char_limit: 1000
   max_retries: 3
   rate_limit_per_minute: 30
   output_dir: "output/"
   scenarios_file: "config/scenarios.yaml"
   values_rubric_file: "config/values_rubric.yaml"
-  judge_model: "gpt-5"
 environment:
   timezone: "PDT"
   timestamp_format: "YYYY-MM-DD.HH-mm"

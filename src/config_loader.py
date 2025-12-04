@@ -80,6 +80,40 @@ class RuntimeConfig:
             raise ValueError("runtime.defaults.summary_threads must be an integer.")
         return max(1, workers)
 
+    @property
+    def target_response_char_limit(self) -> Optional[int]:
+        value = self.defaults.get("target_response_char_limit")
+        if value is None:
+            return None
+        try:
+            limit = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("runtime.defaults.target_response_char_limit must be an integer if set.")
+        return max(0, limit)
+
+
+@dataclass
+class ModelCost:
+    input_per_million: float = 0.0
+    output_per_million: float = 0.0
+
+
+def load_model_costs(path: Path = Path("config/model_costs.yaml")) -> Tuple[Dict[str, ModelCost], ModelCost]:
+    if not path.exists():
+        return {}, ModelCost()
+    data = _load_yaml(path) or {}
+    defaults = data.get("defaults", {}) or {}
+    default_cost = ModelCost(
+        input_per_million=float(defaults.get("input_per_million", 0.0)),
+        output_per_million=float(defaults.get("output_per_million", 0.0)),
+    )
+    models: Dict[str, ModelCost] = {}
+    for name, entry in (data.get("models") or {}).items():
+        input_cost = float(entry.get("input_per_million", default_cost.input_per_million))
+        output_cost = float(entry.get("output_per_million", default_cost.output_per_million))
+        models[str(name).strip()] = ModelCost(input_per_million=input_cost, output_per_million=output_cost)
+    return models, default_cost
+
 
 def load_runtime_config(path: Path) -> RuntimeConfig:
     data = _load_yaml(path)

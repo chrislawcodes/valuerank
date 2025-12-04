@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
@@ -110,3 +111,34 @@ def save_json(path: Path, data: Dict) -> None:
 
 def transcript_path(output_root: Path, run_id: str, scenario_id: str, model_id: str) -> Path:
     return output_root / run_id / f"transcript.{scenario_id}.{model_id}.{run_id}.md"
+
+
+def estimate_token_count(text: str) -> int:
+    if text is None:
+        return 0
+    stripped = str(text).strip()
+    if not stripped:
+        return 0
+    return max(1, math.ceil(len(stripped) / 4))
+
+
+def _normalize_message_content(content: str) -> str:
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            else:
+                parts.append(str(item))
+        return "\n".join(parts)
+    return str(content)
+
+
+def estimate_messages_token_count(messages: List[Dict[str, str]]) -> int:
+    chunks: List[str] = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = _normalize_message_content(message.get("content", ""))
+        chunks.append(f"{role}: {content}")
+    combined = "\n".join(chunks)
+    return estimate_token_count(combined)

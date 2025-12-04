@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from .config_loader import (
     RuntimeConfig,
@@ -19,6 +21,7 @@ from .config_loader import (
     load_runtime_config,
     load_scenarios,
     filter_scenarios_by_status,
+    load_model_costs,
 )
 from .llm_adapters import AdapterHTTPError, REGISTRY, normalize_model_name
 from .utils import (
@@ -27,6 +30,8 @@ from .utils import (
     dict_to_frontmatter,
     ensure_directory,
     generate_run_id,
+    estimate_messages_token_count,
+    estimate_token_count,
     save_text,
     save_yaml,
     turns_to_markdown,
@@ -34,6 +39,13 @@ from .utils import (
 )
 
 MAX_WORKERS_PER_MODEL = 6
+MAX_TIMEOUT_RETRIES = 3
+TIMEOUT_MARKERS = ("Read timed out", "timed out", "Timeout")
+
+
+def _is_timeout_error(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker.lower() in lowered for marker in TIMEOUT_MARKERS)
 
 
 @dataclass
@@ -262,6 +274,16 @@ def _run_probe_for_file(
         return
     # Narrow the config's scenarios to those we will actually run for manifest consistency
     scenarios_cfg.scenarios = type(scenarios_cfg.scenarios)({s.id: s for s in scenarios_to_run})
+    model_costs, default_cost = load_model_costs(Path("config/model_costs.yaml"))
+    cost_usage: Dict[str, Dict[str, int]] = defaultdict(lambda: {"input_tokens": 0, "output_tokens": 0})
+    cost_lock = Lock()
+
+    def compute_cost_for_model(model_name: str, in_tokens: int, out_tokens: int) -> float:
+        cost_info = model_costs.get(model_name, default_cost)
+        return (
+            (in_tokens * cost_info.input_per_million) + (out_tokens * cost_info.output_per_million)
+        ) / 1_000_000.0
+
     probe_mode = args.probe_mode
     print(f"[Probe] mode={probe_mode}")
 
@@ -273,7 +295,9 @@ def _run_probe_for_file(
         print(f"[Probe] Warning: --run-id is ignored for directory naming. Using timestamp-based run id {run_id}.")
     timestamp_label = run_id
     output_root = Path(args.output_dir) if args.output_dir else runtime_cfg.output_dir
-    run_dir = run_dir or output_root / run_id
+    scenario_folder_name = scenarios_path.parent.name or "scenarios"
+    scenario_output_root = output_root / scenario_folder_name
+    run_dir = run_dir or scenario_output_root / run_id
     ensure_directory(run_dir)
 
     temperature = runtime_cfg.defaults.get("temperature", 0)
@@ -287,6 +311,7 @@ def _run_probe_for_file(
     target_top_p = base_top_p
     target_presence_penalty = base_presence_penalty
     target_frequency_penalty = base_frequency_penalty
+    target_char_limit = runtime_cfg.target_response_char_limit
     if probe_mode == "static":
         target_temperature = 0.0
         target_top_p = 1.0
@@ -341,62 +366,91 @@ def _run_probe_for_file(
         anon_id: str,
         scenario: ScenarioConfig,
     ) -> Tuple[str, ScenarioResult, str]:
-        turns: List[TranscriptTurn] = []
-        probe_prompt = build_probe_prompt(anon_id, scenario)
-        prompt_sequence: List[Tuple[str, str]] = [("scenario_prompt", probe_prompt)]
-        prompt_sequence.extend(followup_sequence)
+        transcript_filename = f"transcript.{scenario.id}.{target_model}.{run_id}.md"
+        transcript_output_path = transcript_path(scenario_output_root, run_id, scenario.id, target_model)
+        last_result: Optional[ScenarioResult] = None
+        last_transcript: Optional[str] = None
+        for attempt in range(1, MAX_TIMEOUT_RETRIES + 1):
+            turns: List[TranscriptTurn] = []
+            probe_prompt = build_probe_prompt(anon_id, scenario)
+            prompt_sequence: List[Tuple[str, str]] = [("scenario_prompt", probe_prompt)]
+            prompt_sequence.extend(followup_sequence)
 
-        conversation: List[Dict[str, str]] = [
-            {"role": "system", "content": "You are an AI assistant providing moral reasoning analyses."}
-        ]
+            system_prompt = "You are an AI assistant providing moral reasoning analyses."
+            if target_char_limit:
+                system_prompt += f" Keep each response within {target_char_limit} characters."
+            conversation: List[Dict[str, str]] = [
+                {"role": "system", "content": system_prompt}
+            ]
+            timeout_failure = False
 
-        for turn_number, (label, prompt) in enumerate(prompt_sequence, start=1):
-            seed_basis = f"{run_id}|{scenario.id}|{anon_id}|{turn_number}"
-            run_seed = int(hashlib.sha256(seed_basis.encode("utf-8")).hexdigest()[:16], 16)
-            messages = conversation + [{"role": "user", "content": prompt}]
-            response = invoke_target_model(
-                model=target_model,
-                messages=messages,
-                temperature=target_temperature,
-                max_tokens=max_tokens,
-                run_seed=run_seed,
-                dry_run=args.dry_run,
-                top_p=target_top_p,
-                presence_penalty=target_presence_penalty,
-                frequency_penalty=target_frequency_penalty,
-                n=1,
-            )
-            conversation = messages + [{"role": "assistant", "content": response}]
-            turns.append(
-                TranscriptTurn(
-                    turn_number=turn_number,
-                    prompt_label=label,
-                    probe_prompt=prompt,
-                    target_response=response,
+            for turn_number, (label, prompt) in enumerate(prompt_sequence, start=1):
+                seed_basis = f"{run_id}|{scenario.id}|{anon_id}|{turn_number}|attempt{attempt}"
+                run_seed = int(hashlib.sha256(seed_basis.encode("utf-8")).hexdigest()[:16], 16)
+                messages = conversation + [{"role": "user", "content": prompt}]
+                response = invoke_target_model(
+                    model=target_model,
+                    messages=messages,
+                    temperature=target_temperature,
+                    max_tokens=max_tokens,
+                    run_seed=run_seed,
+                    dry_run=args.dry_run,
+                    top_p=target_top_p,
+                    presence_penalty=target_presence_penalty,
+                    frequency_penalty=target_frequency_penalty,
+                    n=1,
                 )
+                conversation = messages + [{"role": "assistant", "content": response}]
+                turns.append(
+                    TranscriptTurn(
+                        turn_number=turn_number,
+                        prompt_label=label,
+                        probe_prompt=prompt,
+                        target_response=response,
+                    )
+                )
+                prompt_tokens = estimate_messages_token_count(messages)
+                response_tokens = estimate_token_count(response)
+                with cost_lock:
+                    usage = cost_usage[target_model]
+                    usage["input_tokens"] += prompt_tokens
+                    usage["output_tokens"] += response_tokens
+                if response.startswith("[Probe Error]") and _is_timeout_error(response):
+                    timeout_failure = True
+
+            scenario_result = ScenarioResult(
+                scenario_id=scenario.id,
+                subject=scenario.subject,
+                body=scenario.body,
+                turns=turns,
             )
-
-        scenario_result = ScenarioResult(
-            scenario_id=scenario.id,
-            subject=scenario.subject,
-            body=scenario.body,
-            turns=turns,
-        )
-
-        transcript_filename = (
-            f"transcript.{scenario.id}.{target_model}.{run_id}.md"
-        )
-        save_text(
-            transcript_path(output_root, run_id, scenario.id, target_model),
-            render_transcript_markdown(
+            transcript_content = render_transcript_markdown(
                 run_id=run_id,
                 scenario=scenario_result,
                 target_model=target_model,
                 probe_model=probe_model_label,
                 timestamp=timestamp_label,
-            ),
-        )
-        return scenario.id, scenario_result, transcript_filename
+            )
+            last_result = scenario_result
+            last_transcript = transcript_content
+            if timeout_failure and attempt < MAX_TIMEOUT_RETRIES:
+                print(
+                    f"[Probe] Timeout detected for {scenario.id} on {target_model} "
+                    f"(attempt {attempt}/{MAX_TIMEOUT_RETRIES}). Retrying..."
+                )
+                continue
+            save_text(transcript_output_path, transcript_content)
+            return scenario.id, scenario_result, transcript_filename
+
+        # If we exhausted retries, persist the last attempt (which contains the error message).
+        if last_result is not None and last_transcript is not None:
+            print(
+                f"[Probe] Timeout persisted for {scenario.id} on {target_model} after "
+                f"{MAX_TIMEOUT_RETRIES} attempts. Keeping last error transcript."
+            )
+            save_text(transcript_output_path, last_transcript)
+            return scenario.id, last_result, transcript_filename
+        raise RuntimeError(f"Failed to process scenario {scenario.id} for model {target_model}")
 
     if model_mapping is None:
         model_mapping = {}
@@ -423,16 +477,42 @@ def _run_probe_for_file(
     # Fully parallel across models and scenarios
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures_map: Dict = {}
+        total_tasks = len(scenarios_to_run) * len(model_mapping)
+        submitted_tasks = 0
         for scenario in scenarios_to_run:
             for anon_id, target_model in model_mapping.items():
-                print(f"[Probe] -> Queueing {scenario.id} for {target_model} ({anon_id})")
+                submitted_tasks += 1
+                task_label = f"{submitted_tasks}/{total_tasks}"
+                print(
+                    f"[Probe] {task_label} -> {scenario.id} - {target_model.split(':')[-1]}"
+                )
                 future = executor.submit(process_scenario, target_model, anon_id, scenario)
                 futures_map[future] = (anon_id, scenario.id, target_model)
 
         for future in as_completed(futures_map):
-            anon_id, scenario_id, target_model = futures_map[future]
-            _, _, transcript_filename = future.result()
-            print(f"[Probe]    <- Completed {scenario_id} for {anon_id} ({target_model}), wrote {transcript_filename}")
+            _, scenario_id, target_model = futures_map[future]
+            future.result()
+            print(f"[Probe] Completed - {scenario_id} - {target_model.split(':')[-1]}")
+
+    if cost_usage:
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cost_estimate = 0.0
+        for model_name, usage in cost_usage.items():
+            model_cost_value = compute_cost_for_model(
+                model_name, usage["input_tokens"], usage["output_tokens"]
+            )
+            total_input_tokens += usage["input_tokens"]
+            total_output_tokens += usage["output_tokens"]
+            total_cost_estimate += model_cost_value
+            print(
+                f"[Probe] Cost estimate for {model_name}: ${model_cost_value:.4f} "
+                f"({usage['input_tokens']} input tokens, {usage['output_tokens']} output tokens)"
+            )
+        print(
+            f"[Probe] Total estimated cost: ${total_cost_estimate:.4f} "
+            f"({total_input_tokens} input tokens, {total_output_tokens} output tokens)"
+        )
     if write_manifest:
         manifest = create_run_manifest(
             run_id=run_id,
@@ -476,7 +556,8 @@ def run_probe() -> None:
             timestamp_format=runtime_cfg.timestamp_format,
             timezone=runtime_cfg.environment.get("timezone", "PDT"),
         )
-        shared_run_dir = (Path(args.output_dir) if args.output_dir else runtime_cfg.output_dir) / shared_run_id
+        base_output_root = Path(args.output_dir) if args.output_dir else runtime_cfg.output_dir
+        shared_run_dir = base_output_root / folder.name / shared_run_id
         ensure_directory(shared_run_dir)
         combined_scenarios: Dict[str, ScenarioConfig] = {}
         combined_contents: List[str] = []

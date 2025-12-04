@@ -53,6 +53,14 @@ PROVIDER_PREFIX_MAP = {
     "deepseek": "deepseek",
     "mistral": "mistral",
 }
+PROVIDER_ENV_HINTS = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "xai": "XAI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+}
 MAX_SEED_VALUE = 2**63 - 1
 MAX_SEED_VALUE_31 = 2**31 - 1
 
@@ -180,6 +188,10 @@ def _prepare_generation_params(
         n = None
         if temperature is not None and top_p is not None:
             top_p = None
+    if vendor_lower == "google":
+        presence_penalty = None
+        frequency_penalty = None
+        n = None
     params: Dict[str, Any] = {}
     debug_meta: Dict[str, str] = {}
     deterministic = _is_reasoning_model(model)
@@ -326,7 +338,8 @@ class BaseLLMAdapter(ABC):
 @dataclass
 class MockLLMAdapter(BaseLLMAdapter):
     """
-    Deterministic mock adapter that fabricates moral reasoning text.
+    Mock adapter that emits explicit placeholder text so users know a real
+    provider call never occurred.
 
     This is intended for development and automated testing when real model
     access is not available. It uses seeded randomness to keep outputs stable
@@ -359,23 +372,21 @@ class MockLLMAdapter(BaseLLMAdapter):
         frequency_penalty: Optional[float] = None,
         n: Optional[int] = None,
     ) -> str:
-        import hashlib
-
-        conversation_text = "\n".join(f"{m.get('role')}: {m.get('content')}" for m in messages)
-        seed_source = f"{model}|{conversation_text}|{temperature}|{run_seed}"
-        seed = int(hashlib.sha256(seed_source.encode("utf-8")).hexdigest()[:16], 16)
-        rng = random.Random(seed)
-        prioritized = rng.choice(self.fallback_values)
-        sacrificed = rng.choice([v for v in self.fallback_values if v != prioritized])
-        template = (
-            "Considering the scenario, I prioritize {prioritized} because it directly "
-            "addresses the most significant moral risk described. "
-            "To act responsibly, I would accept tradeoffs against {sacrificed}, while "
-            "aiming to explain the reasoning transparently. "
-            "Ultimately, I would choose the option that maximizes {prioritized} even if "
-            "{sacrificed} must be downweighted."
+        provider, _ = _split_provider_prefix(model)
+        provider = provider or infer_provider_from_model(model)
+        env_hint = PROVIDER_ENV_HINTS.get(provider.lower() if provider else "")
+        hint_line = (
+            f"Set {env_hint} in your environment to enable this provider."
+            if env_hint
+            else "Provide the correct API credentials to enable live calls."
         )
-        return template.format(prioritized=prioritized, sacrificed=sacrificed)
+        return (
+            "[MockAdapter Placeholder]\n"
+            f"ValueRank could not contact model '{model}' because no adapter was configured "
+            f"for provider '{provider}'.\n"
+            "The probe is running in mock mode, so no external AI response is available.\n"
+            f"{hint_line}"
+        )
 
 
 @dataclass
@@ -718,6 +729,107 @@ class DeepseekAdapter(BaseLLMAdapter):
 
 
 @dataclass
+class GeminiAdapter(BaseLLMAdapter):
+    """
+    Adapter for Google Gemini (Generative Language) chat API.
+    """
+
+    api_key: Optional[str] = None
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta/models"
+    timeout: int = DEFAULT_TIMEOUT
+
+    def __post_init__(self) -> None:
+        self.api_key = self.api_key or os.getenv("GOOGLE_API_KEY")
+
+    def _convert_messages(self, messages: List[Dict[str, str]]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        system_segments: List[str] = []
+        converted: List[Dict[str, Any]] = []
+        for message in messages:
+            role = (message.get("role") or "user").lower()
+            content = message.get("content", "")
+            if isinstance(content, list):
+                content = "\n".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in content
+                )
+            content = str(content)
+            if role == "system":
+                if content.strip():
+                    system_segments.append(content.strip())
+                continue
+            converted.append(
+                {
+                    "role": role if role in {"user", "assistant"} else "user",
+                    "parts": [{"text": content}],
+                }
+            )
+        if not converted:
+            converted = [{"role": "user", "parts": [{"text": ""}]}]
+        system_instruction = "\n\n".join(system_segments) if system_segments else None
+        return converted, system_instruction
+
+    def generate(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float],
+        max_tokens: int,
+        run_seed: Optional[int] = None,
+        debug: bool = False,
+        status_label: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        top_p: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        n: Optional[int] = None,
+    ) -> str:
+        if not self.api_key:
+            raise AdapterHTTPError("GOOGLE_API_KEY is not set.")
+        contents, system_instruction = self._convert_messages(messages)
+        vendor = "google"
+        param_payload = _prepare_generation_params(
+            model,
+            vendor,
+            temperature=temperature,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
+            n=n,
+            debug=debug,
+        )
+        generation_config: Dict[str, Any] = {"maxOutputTokens": max_tokens}
+        if "temperature" in param_payload:
+            generation_config["temperature"] = param_payload.pop("temperature")
+        if "top_p" in param_payload:
+            generation_config["topP"] = param_payload.pop("top_p")
+        payload: Dict[str, Any] = {"contents": contents, "generationConfig": generation_config}
+        if system_instruction:
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        payload.update(param_payload)
+        url = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
+        request_timeout = _resolve_timeout_for_model(model, self.timeout)
+        headers = {"Content-Type": "application/json"}
+        data = _post_json_with_param_retry(
+            url,
+            headers,
+            payload,
+            model=model,
+            timeout=request_timeout,
+            debug=debug,
+            status_label=status_label,
+        )
+        candidates = data.get("candidates") or []
+        if not candidates:
+            raise AdapterHTTPError("Gemini response missing candidates.")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+        output = "\n".join(text.strip() for text in texts if text.strip())
+        if output:
+            return output
+        raise AdapterHTTPError("Gemini response did not contain textual content.")
+
+
+@dataclass
 class MistralAdapter(BaseLLMAdapter):
     """
     Adapter for Mistral chat completions API (OpenAI-compatible schema).
@@ -834,6 +946,8 @@ class AdapterRegistry:
             self.register("deepseek", DeepseekAdapter())
         if os.getenv("MISTRAL_API_KEY"):
             self.register("mistral", MistralAdapter())
+        if os.getenv("GOOGLE_API_KEY"):
+            self.register("google", GeminiAdapter())
         if os.getenv("BAIDU_API_KEY") and os.getenv("BAIDU_SECRET_KEY"):
             self.register("baidu", BaiduErnieAdapter())
 

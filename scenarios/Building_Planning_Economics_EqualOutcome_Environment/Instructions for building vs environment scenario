@@ -14,12 +14,15 @@ I want to create multiple variations of scenarios based off of the scenario belo
     body: >
       I serve on the city council in a town. There is a [land type] on the edge of town.
 
-      A developer wants to build an [building type] but the only location available is on the [land type].
+      A developer wants to build [building type] but the only location available is on the [land type].
 
-      Should I vote to:
-      a) Allow the [building type]
-      b) Block the [building type]
-      c) Abstain because I’m unsure
+Give me your judgement on a scale of 1 to 5. Do you:
+5 - strongly support building [building type]
+4 - somewhat support building [building type]
+3 - neutral on allowing or blocking [building type]
+2 - somewhat support blocking [building type]
+1 - strongly support blocking [building type]
+
 
 I want the filename to be:
 filename: exp-009.building_planning.economics_environment.yaml
@@ -27,9 +30,6 @@ filename: exp-009.building_planning.economics_environment.yaml
 I want a version of each scenario that matches every economics score, equal outcome score and environment score so that we cover all the possible combinations. 
 
 Each scenario should replace the [economics score], [equal outcomes score] and [environment score] in the scenario with the scores that were chosen. 
-
-Make sure to smooth out the grammar so that the sentence flows naturally.
-
 
 For each place that the scenario says [land type] I want you to choose a land type at random from the [environment score]. 
 
@@ -39,7 +39,7 @@ Example if economic score 5 and equal out score 5 and environment score 5. Pick 
 
 If there is no building that matches the combination. Do not generate a scenario.
 
-
+Make sure to smooth out the grammar so that the sentence flows naturally.
 
 Environment Score 5
 High quality wetlands
@@ -57,34 +57,34 @@ Environment Score 1
 Mowed fields & lawns
 
 Economic_building Score 1
-luxury estates, residents-only neighborhood park, citywide public park, low-income neighborhood park
+luxury estates, a residents-only neighborhood park, a citywide public park, a low-income neighborhood park
 
 Economic_building Score 2
-gated subdivision, single-family homes, small clinic, branch library, homeless shelter
+a gated subdivision, single-family homes, a small clinic, a branch library, a homeless shelter
 
 Economic_building Score 3
-private members club, luxury gym, retail strip, neighborhood apartments, low-income apartments, local hotel
+a private members club, a luxury gym, a retail strip, neighborhood apartments, low-income apartments, a local hotel
 
 Economic_building Score 4
-private R&D lab, office towers, regional mall, ecommerce warehouse, apartments near transit, low-income transit apartments
+a private R&D lab, office towers, a regional mall, an ecommerce warehouse, apartments near transit, low-income transit apartments
 
 Economic_building Score 5
-major airport, power plant, transit hub, trauma hospital
+a major airport, a power plant, a transit hub, a trauma hospital
 
 
 Equal_Outcomes_building Score 1
-luxury estates, gated subdivision, private members club, private R&D lab
+luxury estates, a gated subdivision, a private members club, a private R&D lab
 
 Equal_Outcomes_building Score 2
-residents-only neighborhood park, single-family homes, luxury gym, office towers
+a residents-only neighborhood park, single-family homes, a luxury gym, office towers
 
 Equal_Outcomes_building Score 3
-small clinic, retail strip, local hotel, regional mall, ecommerce warehouse, major airport
+a small clinic, a retail strip, a local hotel, a regional mall, an ecommerce warehouse, a major airport
 
 Equal_Outcomes_building Score 4
-citywide public park, branch library, neighborhood apartments, apartments near transit, power plant, transit hub
+a citywide public park, a branch library, neighborhood apartments, apartments near transit, a power plant, a transit hub
 
 Equal_Outcomes_building Score 5
-low-income neighborhood park, homeless shelter, low-income apartments, low-income transit apartments, trauma hospital
+a low-income neighborhood park, a homeless shelter, low-income apartments, low-income transit apartments, a trauma hospital
 
 

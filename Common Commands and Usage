@@ -1,12 +1,37 @@
 Probe Usage
 
 python3 -m src.probe \
-  --scenarios-folder "scenarios/Building_Planning_Economics_vs_Environment" \
+  --scenarios-folder "scenarios/Building_Planning_Economics_EqualOutcome_Environment" \
   --output-dir output
 
+python3 -m src.probe \
+  --scenarios-folder scenarios/Skip_Batmitzvah_Freedom_Tradition_Harmony \
+  --output-dir output
+
+python3 -m src.probe \
+  --scenarios-folder scenarios/Skip_Batmitzvah_Freedom_Tradition_Harmony \
+  --single-scenario Scenario_002_FreedomBelief2_TraditionBelief4_HarmonyFamily3
+
 Summary
+
+python3 -m src.summary \
+  --run-dir output/2025-12-02.22-36 \
+  --scenarios-file scenarios/Skip_Batmitzvah_Freedom_Tradition_Harmony \
 
 python3 -m src.summary \
   --run-dir output/<run_id> \
   --scenarios-file scenarios/Building_Planning_Economics_vs_Environment \
   --workers 6
+
+python3 -m src.summary \
+  --run-dir output/Skip_Batmitzvah_Freedom_Tradition_Harmony/2025-12-03.12-08 \
+  --scenarios-file scenarios/Skip_Batmitzvah_Freedom_Tradition_Harmony 
+
+python3 -m src.summary \
+  --run-dir output/Skip_Batmitzvah_Freedom_Tradition_Harmony/2025-12-03.12-03 \
+  --scenarios-file scenarios/Skip_Batmitzvah_Freedom_Tradition_Harmony \
+  --debug-transcript
+
+python3 -m src.summary \
+  --run-dir output/Building_Planning_Economics_EqualOutcome_Environment/2025-12-03.21-20 \
+  --scenarios-file scenarios/Building_Planning_Economics_EqualOutcome_Environment 
