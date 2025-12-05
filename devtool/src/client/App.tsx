@@ -3,7 +3,8 @@ import { ScenarioList, type ScenarioListHandle } from './components/ScenarioList
 import { ScenarioEditor } from './components/ScenarioEditor';
 import { PipelineRunner } from './components/PipelineRunner';
 import { ScenarioGenerator } from './components/ScenarioGenerator';
-import { FileText, Terminal, Settings } from 'lucide-react';
+import { Analyze } from './components/Analyze';
+import { FileText, Terminal, Settings, BarChart3 } from 'lucide-react';
 
 type EditorMode = 'yaml' | 'definition' | 'new-definition' | 'none';
 
@@ -14,7 +15,7 @@ interface EditorState {
 }
 
 function App() {
-  const [view, setView] = useState<'editor' | 'runner' | 'settings'>('editor');
+  const [view, setView] = useState<'editor' | 'runner' | 'analyze' | 'settings'>('editor');
   const [editorState, setEditorState] = useState<EditorState>({
     mode: 'none',
     folder: '',
@@ -85,6 +86,17 @@ function App() {
           >
             <Terminal size={18} />
             Runner
+          </button>
+          <button
+            onClick={() => setView('analyze')}
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+              view === 'analyze'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <BarChart3 size={18} />
+            Analyze
           </button>
           <button
             onClick={() => setView('settings')}
@@ -160,6 +172,12 @@ function App() {
         {view === 'runner' && (
           <main className="flex-1">
             <PipelineRunner scenariosFolder={editorState.folder} />
+          </main>
+        )}
+
+        {view === 'analyze' && (
+          <main className="flex-1">
+            <Analyze />
           </main>
         )}
 

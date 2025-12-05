@@ -256,3 +256,39 @@ export const generator = {
     return () => eventSource.close();
   },
 };
+
+// Analysis API
+export interface AnalysisRun {
+  name: string;
+  csvFiles: string[];
+}
+
+export interface CSVData {
+  headers: string[];
+  rows: Record<string, string>[];
+  models: string[];
+  scenarios: string[];
+  dimensionColumns: string[];
+  totalRows: number;
+}
+
+export interface AggregateData {
+  models: string[];
+  scenarios: string[];
+  dimensionColumns: string[];
+  totalRows: number;
+  modelDecisionDist: Record<string, Record<string, number>>;
+  modelAvgDecision: Record<string, number>;
+  modelVariance: Record<string, number>;
+  modelScenarioMatrix: Record<string, Record<string, number>>;
+}
+
+export const analysis = {
+  getRuns: () => fetchJson<{ runs: AnalysisRun[] }>(`${API_BASE}/analysis/runs`),
+
+  getCSV: (runPath: string, csvFile: string) =>
+    fetchJson<CSVData>(`${API_BASE}/analysis/csv/${runPath}/${csvFile}`),
+
+  getAggregate: (runPath: string) =>
+    fetchJson<AggregateData>(`${API_BASE}/analysis/aggregate/${runPath}`),
+};
