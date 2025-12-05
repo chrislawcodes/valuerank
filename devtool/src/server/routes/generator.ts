@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import fs from 'fs/promises';
+import { watch, type FSWatcher } from 'fs';
 import path from 'path';
 import { parseScenarioMd, serializeScenarioMd, buildGenerationPrompt, type ScenarioDefinition } from '../utils/scenarioMd.js';
 
 const router = Router();
+
+// Track active file watchers to clean up on disconnect
+const activeWatchers = new Map<string, FSWatcher>();
 
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const SCENARIOS_DIR = path.join(PROJECT_ROOT, 'scenarios');
@@ -287,6 +291,83 @@ router.get('/providers', async (_req, res) => {
     .map((p) => p.name);
 
   res.json({ available });
+});
+
+// GET /api/generator/watch/:folder/:name - Watch a definition file for changes (SSE)
+router.get('/watch/:folder/:name', async (req, res) => {
+  const { folder, name } = req.params;
+  const mdPath = path.join(SCENARIOS_DIR, folder, `${name}.md`);
+  const watcherId = `${folder}/${name}-${Date.now()}`;
+
+  // Set up SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Send initial connection event
+  res.write(`event: connected\ndata: ${JSON.stringify({ path: mdPath })}\n\n`);
+
+  // Track last modification time to debounce rapid changes
+  let lastMtime = 0;
+  let debounceTimeout: NodeJS.Timeout | null = null;
+
+  const checkAndNotify = async () => {
+    try {
+      const stats = await fs.stat(mdPath);
+      const mtime = stats.mtimeMs;
+
+      // Only notify if modification time actually changed
+      if (mtime > lastMtime) {
+        lastMtime = mtime;
+
+        // Read the updated content
+        const content = await fs.readFile(mdPath, 'utf-8');
+        const definition = parseScenarioMd(content);
+
+        res.write(`event: change\ndata: ${JSON.stringify({ definition, mtime })}\n\n`);
+      }
+    } catch (error) {
+      // File might have been deleted
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+    }
+  };
+
+  // Set up file watcher
+  let watcher: FSWatcher;
+  try {
+    watcher = watch(mdPath, { persistent: false }, (_eventType) => {
+      // Debounce to avoid multiple events for single save
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
+      debounceTimeout = setTimeout(checkAndNotify, 100);
+    });
+
+    activeWatchers.set(watcherId, watcher);
+  } catch (error) {
+    res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed to watch file: ${error}` })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Clean up on disconnect
+  req.on('close', () => {
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+    }
+    watcher.close();
+    activeWatchers.delete(watcherId);
+  });
+
+  // Send keepalive every 30 seconds
+  const keepalive = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(keepalive);
+  });
 });
 
 export default router;

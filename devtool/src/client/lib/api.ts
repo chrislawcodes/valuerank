@@ -181,4 +181,39 @@ export const generator = {
     }),
 
   getProviders: () => fetchJson<{ available: string[] }>(`${API_BASE}/generator/providers`),
+
+  // Watch a definition file for changes (SSE)
+  watchDefinition: (
+    folder: string,
+    name: string,
+    onConnected: () => void,
+    onChange: (definition: ScenarioDefinition) => void,
+    onError?: (error: string) => void
+  ) => {
+    const url = `${API_BASE}/generator/watch/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`;
+    const eventSource = new EventSource(url);
+
+    eventSource.addEventListener('connected', () => {
+      onConnected();
+    });
+
+    eventSource.addEventListener('change', (e) => {
+      const data = JSON.parse(e.data);
+      onChange(data.definition);
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      if (e instanceof MessageEvent) {
+        const data = JSON.parse(e.data);
+        onError?.(data.error);
+      }
+    });
+
+    eventSource.onerror = () => {
+      // Connection error - EventSource will auto-reconnect
+    };
+
+    // Return cleanup function
+    return () => eventSource.close();
+  },
 };

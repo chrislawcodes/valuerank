@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { generator, config, type CanonicalDimension } from '../lib/api';
+import { generator, config, type CanonicalDimension, type ScenarioDefinition } from '../lib/api';
 import {
   GeneratorHeader,
   DimensionEditor,
   YamlPreview,
   DEFAULT_DEFINITION,
-  type ScenarioDefinition,
   type Dimension,
 } from './generator';
+import { FileConflictModal } from './Modal';
 
 interface ScenarioGeneratorProps {
   folder: string;
@@ -32,15 +32,24 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   const [expandedDimensions, setExpandedDimensions] = useState<Set<number>>(new Set([0]));
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null);
 
+  // File watcher state
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [pendingExternalDefinition, setPendingExternalDefinition] = useState<ScenarioDefinition | null>(null);
+
   // Use ref to access latest definition in callbacks without stale closures
   const definitionRef = useRef(definition);
   definitionRef.current = definition;
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const isEditingRef = useRef(isEditing);
+  isEditingRef.current = isEditing;
   const isUnsavedRef = useRef(isUnsaved);
   isUnsavedRef.current = isUnsaved;
   const originalNameRef = useRef(originalName);
   originalNameRef.current = originalName;
+
+  // Track if we just saved to ignore our own file change events
+  const justSavedRef = useRef(false);
 
   useEffect(() => {
     if (!isNew) {
@@ -48,6 +57,42 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
     }
     loadValues();
   }, [folder, name, isNew]);
+
+  // Set up file watcher for non-new files
+  useEffect(() => {
+    if (isNew || !originalName) return;
+
+    const cleanup = generator.watchDefinition(
+      folder,
+      originalName,
+      () => {
+        // Connected - no action needed
+      },
+      (externalDefinition) => {
+        // File changed on disk
+        // Ignore if we just saved (our own change)
+        if (justSavedRef.current) {
+          justSavedRef.current = false;
+          return;
+        }
+
+        // If user is editing or has unsaved changes, show conflict modal
+        if (isDirtyRef.current || isEditingRef.current) {
+          setPendingExternalDefinition(externalDefinition);
+          setShowConflictModal(true);
+        } else {
+          // No local changes, just reload
+          setDefinition(externalDefinition);
+          setExpandedDimensions(new Set(externalDefinition.dimensions.map((_, i) => i)));
+        }
+      },
+      (error) => {
+        console.error('File watcher error:', error);
+      }
+    );
+
+    return cleanup;
+  }, [folder, originalName, isNew]);
 
   const loadDefinition = async () => {
     try {
@@ -88,6 +133,9 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
       setSaving(true);
       setError(null);
 
+      // Mark that we're about to save so we ignore our own file change event
+      justSavedRef.current = true;
+
       if (origName !== def.name && !unsaved) {
         await generator.renameDefinition(folder, origName, def.name);
         setOriginalName(def.name);
@@ -104,6 +152,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
       setIsDirty(false);
       onSaved?.();
     } catch (e) {
+      justSavedRef.current = false; // Reset on error
       setError(`Failed to save: ${e}`);
       throw e;
     } finally {
@@ -246,6 +295,23 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   // Handle focus on any input
   const handleInputFocus = () => {
     setIsEditing(true);
+  };
+
+  // File conflict handlers
+  const handleKeepLocalChanges = () => {
+    // User chose to keep local changes, dismiss the pending external changes
+    setPendingExternalDefinition(null);
+  };
+
+  const handleLoadExternalChanges = () => {
+    // User chose to load external changes, discard local changes
+    if (pendingExternalDefinition) {
+      setDefinition(pendingExternalDefinition);
+      setExpandedDimensions(new Set(pendingExternalDefinition.dimensions.map((_, i) => i)));
+      setIsDirty(false);
+      setIsEditing(false);
+      setPendingExternalDefinition(null);
+    }
   };
 
   const toggleDimension = (index: number) => {
@@ -426,6 +492,14 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
         {/* Right Panel - YAML Preview */}
         <YamlPreview name={definition.name} generating={generating} yaml={generatedYaml} />
       </div>
+
+      {/* File Conflict Modal */}
+      <FileConflictModal
+        isOpen={showConflictModal}
+        onClose={() => setShowConflictModal(false)}
+        onKeepLocal={handleKeepLocalChanges}
+        onLoadExternal={handleLoadExternalChanges}
+      />
     </div>
   );
 }
