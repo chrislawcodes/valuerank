@@ -21,6 +21,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, List, Tuple, Set
 
 import requests
+from dotenv import load_dotenv
+
+# Load .env file from project root (if it exists)
+load_dotenv()
 
 
 DEFAULT_TIMEOUT = 60
