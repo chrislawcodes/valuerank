@@ -74,3 +74,31 @@ pip install -r requirements.txt
 # Configure config/runtime.yaml with target_models and judge_model
 # Run pipeline stages as needed
 ```
+
+## DevTool (GUI)
+Web-based GUI for authoring scenarios and running the pipeline.
+
+**Tech Stack**: React + TypeScript + Vite (client), Express + TypeScript (server)
+
+**Structure**:
+```
+devtool/
+├── src/client/          # React UI (port 5173)
+│   ├── App.tsx          # Main layout: Editor, Runner, Settings tabs
+│   └── components/      # ScenarioEditor, ScenarioGenerator, PipelineRunner
+└── src/server/          # Express API (port 3030)
+    └── routes/
+        ├── scenarios.ts # CRUD for scenario YAML files
+        ├── generator.ts # LLM-powered scenario generation from .md definitions
+        └── runner.ts    # Spawns Python pipeline processes (SSE output)
+```
+
+**Key Concepts**:
+- `.md` files = scenario **definitions** (template + dimensions for AI generation)
+- `.yaml` files = **scenarios** (actual dilemmas sent to models)
+
+**Running**:
+```bash
+cd devtool && npm install && npm run dev
+# Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in .env
+```
