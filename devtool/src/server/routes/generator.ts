@@ -143,6 +143,8 @@ router.get('/definition/:folder/:name', async (req, res) => {
     const mdPath = path.join(SCENARIOS_DIR, folder, `${name}.md`);
     const content = await fs.readFile(mdPath, 'utf-8');
     const definition = parseScenarioMd(content);
+    // Always use the filename as the source of truth for the name
+    definition.name = name;
     res.json(definition);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -327,9 +329,13 @@ router.get('/watch/:folder/:name', async (req, res) => {
 
         res.write(`event: change\ndata: ${JSON.stringify({ definition, mtime })}\n\n`);
       }
-    } catch (error) {
-      // File might have been deleted
-      res.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+    } catch (error: unknown) {
+      // Check if file was deleted
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        res.write(`event: deleted\ndata: ${JSON.stringify({ path: mdPath })}\n\n`);
+      } else {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: String(error) })}\n\n`);
+      }
     }
   };
 

@@ -10,7 +10,6 @@ interface GeneratorHeaderProps {
   onNameChange: (name: string) => void;
   onSave: () => void;
   onGenerate: () => void;
-  onClose?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
 }
@@ -24,7 +23,6 @@ export function GeneratorHeader({
   onNameChange,
   onSave,
   onGenerate,
-  onClose,
   onFocus,
   onBlur,
 }: GeneratorHeaderProps) {
@@ -94,11 +92,6 @@ export function GeneratorHeader({
           <Wand2 size={16} />
           {generating ? 'Generating...' : 'Generate YAML'}
         </button>
-        {onClose && (
-          <button onClick={onClose} className="px-3 py-2 text-gray-600 hover:bg-gray-100 rounded">
-            Close
-          </button>
-        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import path from 'path';
 import fs from 'fs/promises';
+import { watch, type FSWatcher } from 'fs';
 import { readYamlFile, writeYamlFile, listYamlFiles, listDirectories } from '../utils/yaml.js';
 
 const router = Router();
@@ -8,6 +9,9 @@ const router = Router();
 // Base path to scenarios directory (relative to project root)
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const SCENARIOS_DIR = path.join(PROJECT_ROOT, 'scenarios');
+
+// Track active directory watchers
+const activeWatchers = new Map<string, FSWatcher[]>();
 
 export interface Scenario {
   base_id: string;
@@ -128,6 +132,85 @@ router.post('/folder', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Failed to create folder', details: String(error) });
   }
+});
+
+// GET /api/scenarios/watch - Watch scenarios directory for changes (SSE)
+router.get('/watch', async (req, res) => {
+  const watcherId = `scenarios-${Date.now()}`;
+
+  // Set up SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Send initial connection event
+  res.write(`event: connected\ndata: ${JSON.stringify({ path: SCENARIOS_DIR })}\n\n`);
+
+  const watchers: FSWatcher[] = [];
+  let debounceTimeout: NodeJS.Timeout | null = null;
+
+  const notifyChange = (folder: string | null, eventType: string) => {
+    // Debounce to avoid multiple events for rapid changes
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+    }
+    debounceTimeout = setTimeout(() => {
+      res.write(`event: change\ndata: ${JSON.stringify({ folder, eventType })}\n\n`);
+    }, 150);
+  };
+
+  // Watch the main scenarios directory for new folders
+  try {
+    const mainWatcher = watch(SCENARIOS_DIR, { persistent: false }, (eventType, filename) => {
+      if (filename) {
+        notifyChange(null, eventType); // null folder means root-level change (new folder)
+      }
+    });
+    watchers.push(mainWatcher);
+
+    // Watch each subfolder for file changes
+    const folders = await listDirectories(SCENARIOS_DIR);
+    for (const folder of folders) {
+      try {
+        const folderPath = path.join(SCENARIOS_DIR, folder);
+        const folderWatcher = watch(folderPath, { persistent: false }, (eventType, filename) => {
+          if (filename && (filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))) {
+            notifyChange(folder, eventType);
+          }
+        });
+        watchers.push(folderWatcher);
+      } catch (e) {
+        // Folder might not exist, skip
+      }
+    }
+
+    activeWatchers.set(watcherId, watchers);
+  } catch (error) {
+    res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed to watch directory: ${error}` })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Clean up on disconnect
+  req.on('close', () => {
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+    }
+    for (const watcher of watchers) {
+      watcher.close();
+    }
+    activeWatchers.delete(watcherId);
+  });
+
+  // Send keepalive every 30 seconds
+  const keepalive = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(keepalive);
+  });
 });
 
 export default router;

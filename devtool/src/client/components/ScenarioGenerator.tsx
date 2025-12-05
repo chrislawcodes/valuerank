@@ -86,13 +86,17 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
           setExpandedDimensions(new Set(externalDefinition.dimensions.map((_, i) => i)));
         }
       },
+      () => {
+        // File was deleted - navigate back to root
+        onClose?.();
+      },
       (error) => {
         console.error('File watcher error:', error);
       }
     );
 
     return cleanup;
-  }, [folder, originalName, isNew]);
+  }, [folder, originalName, isNew, onClose]);
 
   const loadDefinition = async () => {
     try {
@@ -341,7 +345,6 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
         onNameChange={(newName) => updateDefinition({ name: newName })}
         onSave={handleSave}
         onGenerate={handleGenerate}
-        onClose={onClose}
         onBlur={handleInputBlur}
         onFocus={handleInputFocus}
       />

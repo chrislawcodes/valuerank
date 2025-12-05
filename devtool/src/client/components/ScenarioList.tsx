@@ -1,4 +1,4 @@
-import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { scenarios } from '../lib/api';
 import { FolderOpen, FileText, ChevronRight, ChevronDown, Plus, Wand2 } from 'lucide-react';
 
@@ -30,8 +30,37 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Track expanded folders to know which ones to refresh
+    const expandedFoldersRef = useRef(expandedFolders);
+    expandedFoldersRef.current = expandedFolders;
+
     useEffect(() => {
       loadFolders();
+    }, []);
+
+    // Set up directory watcher
+    useEffect(() => {
+      const cleanup = scenarios.watchDirectory(
+        () => {
+          // Connected - no action needed
+        },
+        (changedFolder) => {
+          if (changedFolder === null) {
+            // Root-level change (new folder added/removed)
+            loadFolders();
+          } else {
+            // File change in a specific folder - refresh if expanded
+            if (expandedFoldersRef.current.has(changedFolder)) {
+              loadFolderContents(changedFolder);
+            }
+          }
+        },
+        (error) => {
+          console.error('Directory watcher error:', error);
+        }
+      );
+
+      return cleanup;
     }, []);
 
     const loadFolders = async () => {

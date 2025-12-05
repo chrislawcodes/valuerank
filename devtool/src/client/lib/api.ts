@@ -61,6 +61,39 @@ export const scenarios = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+
+  // Watch scenarios directory for changes (SSE)
+  watchDirectory: (
+    onConnected: () => void,
+    onChange: (folder: string | null) => void,
+    onError?: (error: string) => void
+  ) => {
+    const url = `${API_BASE}/scenarios/watch`;
+    const eventSource = new EventSource(url);
+
+    eventSource.addEventListener('connected', () => {
+      onConnected();
+    });
+
+    eventSource.addEventListener('change', (e) => {
+      const data = JSON.parse(e.data);
+      onChange(data.folder);
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      if (e instanceof MessageEvent) {
+        const data = JSON.parse(e.data);
+        onError?.(data.error);
+      }
+    });
+
+    eventSource.onerror = () => {
+      // Connection error - EventSource will auto-reconnect
+    };
+
+    // Return cleanup function
+    return () => eventSource.close();
+  },
 };
 
 // Canonical dimension types
@@ -188,6 +221,7 @@ export const generator = {
     name: string,
     onConnected: () => void,
     onChange: (definition: ScenarioDefinition) => void,
+    onDeleted?: () => void,
     onError?: (error: string) => void
   ) => {
     const url = `${API_BASE}/generator/watch/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`;
@@ -200,6 +234,11 @@ export const generator = {
     eventSource.addEventListener('change', (e) => {
       const data = JSON.parse(e.data);
       onChange(data.definition);
+    });
+
+    eventSource.addEventListener('deleted', () => {
+      onDeleted?.();
+      eventSource.close();
     });
 
     eventSource.addEventListener('error', (e) => {
