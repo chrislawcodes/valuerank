@@ -281,6 +281,7 @@ export interface AggregateData {
   modelAvgDecision: Record<string, number>;
   modelVariance: Record<string, number>;
   modelScenarioMatrix: Record<string, Record<string, number>>;
+  rawRows?: Record<string, string>[];
 }
 
 export const analysis = {

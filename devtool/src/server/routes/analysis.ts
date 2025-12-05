@@ -248,6 +248,7 @@ router.get('/aggregate/*', async (req, res) => {
       modelAvgDecision,
       modelVariance,
       modelScenarioMatrix,
+      rawRows: allRows,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to aggregate data', details: String(error) });
