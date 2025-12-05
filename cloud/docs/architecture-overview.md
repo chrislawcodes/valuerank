@@ -205,11 +205,15 @@ We could literally use Git (or libgit2) for definitions:
 
 ```
 PostgreSQL Tables:
-├── definitions      # Versioned scenario definitions (with parent_id for forking)
-├── runs            # Pipeline runs linked to definition versions
-├── transcripts     # Raw dialogue (high volume)
-├── users           # User accounts
-└── rubrics         # Values rubric versions (reference data)
+├── definitions          # Versioned scenario definitions (with parent_id for forking)
+├── runs                 # Pipeline runs linked to definition versions
+├── transcripts          # Raw dialogue (high volume)
+├── analysis_results     # Cached deep analysis (PCA, correlations, outliers)
+├── experiments          # Group related runs for comparison
+├── run_comparisons      # Delta analysis between two runs
+├── run_scenario_selection  # Track which scenarios included in sampled runs
+├── users                # User accounts
+└── rubrics              # Values rubric versions (reference data)
 ```
 
 ### Key Queries Enabled
@@ -312,6 +316,9 @@ Since the primary workload is **long-running AI tasks** (minutes to hours), we n
 ```
 - probe:scenario      # Send single scenario to single model
 - summarize:run       # Generate natural language summary
+- analyze:basic       # Fast aggregation (~500ms)
+- analyze:deep        # Heavy statistical analysis (10-30s)
+- analyze:compare     # Cross-run comparison
 ```
 
 **Queue Management API:**
@@ -371,6 +378,215 @@ async function startRun(runConfig) {
 }
 ```
 
+### Analysis Processing
+
+The DevTool's deep analysis is computationally heavy (10-30s) and includes:
+- PCA for model positioning
+- Outlier detection (Mahalanobis, Isolation Forest, Jackknife)
+- Pearson correlations across dimensions
+- Inter-model agreement matrices
+- LLM-generated narrative summaries
+
+**Architecture for Heavy Analysis:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Analysis Pipeline                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐ │
+│   │ Basic    │───▶│ Cache    │───▶│ Return cached result │ │
+│   │ Analysis │    │ Check    │    └──────────────────────┘ │
+│   │ Request  │    └────┬─────┘                              │
+│   └──────────┘         │ miss                               │
+│                        ▼                                     │
+│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐ │
+│   │ Deep     │───▶│ Queue    │───▶│ Python Worker        │ │
+│   │ Analysis │    │ Job      │    │ (dedicated compute)  │ │
+│   │ Request  │    └──────────┘    └──────────┬───────────┘ │
+│   └──────────┘                               │              │
+│                                              ▼              │
+│                                    ┌──────────────────────┐ │
+│                                    │ Store in analysis    │ │
+│                                    │ results table        │ │
+│                                    └──────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Analysis Results Table:**
+
+```sql
+CREATE TABLE analysis_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id UUID REFERENCES runs(id) NOT NULL,
+  analysis_type TEXT NOT NULL,  -- 'basic', 'deep', 'comparison'
+
+  -- Cache invalidation
+  input_hash TEXT NOT NULL,     -- Hash of transcripts used
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Results (JSONB for flexibility)
+  basic_stats JSONB,            -- Per-model mean/std/min/max
+  dimension_analysis JSONB,     -- Variance by dimension
+  correlations JSONB,           -- Dimension × model correlations
+  inter_model_agreement JSONB,  -- Pairwise model correlations
+  outlier_detection JSONB,      -- Multi-method outlier flags
+  pca_coordinates JSONB,        -- 2D model positioning
+  insights JSONB,               -- Auto-generated findings
+  llm_summary TEXT,             -- Natural language narrative
+
+  UNIQUE(run_id, analysis_type, input_hash)
+);
+```
+
+**Caching Strategy:**
+- Hash transcript content to detect changes
+- Return cached results if hash matches
+- Auto-invalidate when new transcripts added to run
+- Allow manual re-analysis trigger
+
+---
+
+### Run Comparison & Experimentation
+
+A key workflow is running experiments where you change one variable and compare results:
+
+```
+Experiment: "How does model selection affect safety scores?"
+
+  run_A (baseline)           run_B (experiment)
+  ├── definition: v1.2       ├── definition: v1.2      ← same
+  ├── models: [gpt-4, claude]├── models: [gpt-4, gemini] ← changed
+  ├── scenarios: 100%        ├── scenarios: 100%       ← same
+  └── results: {...}         └── results: {...}
+                    ↓
+            comparison_result:
+            - gemini vs claude delta
+            - which scenarios diverged most
+            - statistical significance
+```
+
+**Run Relationships Schema:**
+
+```sql
+-- Track what changed between runs
+ALTER TABLE runs ADD COLUMN experiment_id UUID REFERENCES experiments(id);
+ALTER TABLE runs ADD COLUMN parent_run_id UUID REFERENCES runs(id);
+ALTER TABLE runs ADD COLUMN run_type TEXT DEFAULT 'full';  -- 'full', 'sample', 'rerun'
+ALTER TABLE runs ADD COLUMN sample_percentage INTEGER;     -- NULL for full runs
+ALTER TABLE runs ADD COLUMN sample_seed INTEGER;           -- For reproducibility
+
+CREATE TABLE experiments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  hypothesis TEXT,                    -- "Gemini will score higher on safety"
+  controlled_variables JSONB,         -- What stays the same
+  independent_variable JSONB,         -- What we're changing
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES users(id)
+);
+
+CREATE TABLE run_comparisons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  experiment_id UUID REFERENCES experiments(id),
+  baseline_run_id UUID REFERENCES runs(id) NOT NULL,
+  comparison_run_id UUID REFERENCES runs(id) NOT NULL,
+
+  -- Comparison results
+  delta_by_model JSONB,               -- Per-model score differences
+  delta_by_scenario JSONB,            -- Per-scenario differences
+  most_divergent_scenarios JSONB,     -- Ranked by variance
+  statistical_tests JSONB,            -- t-test, Mann-Whitney, etc.
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(baseline_run_id, comparison_run_id)
+);
+```
+
+**Comparison API:**
+
+```
+POST /api/runs/compare
+  body: { baseline_run_id, comparison_run_id }
+  → Queues analyze:compare job
+  → Returns comparison_id
+
+GET /api/runs/:id/comparisons
+  → List all comparisons involving this run
+
+GET /api/comparisons/:id
+  → Get comparison results (delta analysis)
+
+POST /api/experiments
+  body: { name, hypothesis, baseline_run_id }
+  → Create experiment container
+
+POST /api/experiments/:id/runs
+  body: { changes: { models: [...] } }
+  → Create variant run within experiment
+```
+
+### Partial / Sampled Runs
+
+For cost control and rapid iteration, support running only a percentage of scenarios:
+
+**Use Cases:**
+- **10% test run**: Quick sanity check before full run (~$5 vs ~$50)
+- **Progressive rollout**: Start with 10%, expand to 50%, then 100%
+- **A/B sampling**: Same scenarios, different models
+
+**Implementation:**
+
+```sql
+-- Already added to runs table above:
+-- sample_percentage INTEGER
+-- sample_seed INTEGER
+
+-- Track which scenarios were included
+CREATE TABLE run_scenario_selection (
+  run_id UUID REFERENCES runs(id),
+  scenario_id TEXT NOT NULL,
+  included BOOLEAN NOT NULL,
+  PRIMARY KEY (run_id, scenario_id)
+);
+```
+
+**Sampling Logic:**
+
+```python
+def select_scenarios(all_scenarios: list, percentage: int, seed: int) -> list:
+    """Deterministic sampling for reproducibility."""
+    import random
+    random.seed(seed)
+
+    n = max(1, len(all_scenarios) * percentage // 100)
+    return random.sample(all_scenarios, n)
+
+# Same seed + same percentage = same scenarios selected
+# Allows apples-to-apples comparison across sampled runs
+```
+
+**Run Creation with Sampling:**
+
+```
+POST /api/queue/runs
+  body: {
+    definition_id: "...",
+    models: ["gpt-4", "claude-3"],
+    sample_percentage: 10,        # Optional: default 100
+    sample_seed: 42               # Optional: random if not provided
+  }
+```
+
+**Extrapolation Warning:**
+
+When viewing results from sampled runs, UI should clearly indicate:
+- "Based on 10% sample (12 of 120 scenarios)"
+- Statistical confidence intervals for extrapolated metrics
+- Option to "Expand to full run" (queues remaining 90%)
+
 ---
 
 ## Tier 3: Front-end
@@ -386,7 +602,11 @@ The existing DevTool provides a solid foundation. Key additions for Cloud:
 3. **Queue Controls**: Pause/resume/cancel buttons
 4. **Real-time Progress**: WebSocket-driven updates
 5. **Transcript Viewer**: Browse and search transcripts
-6. **Multi-tenancy**: Workspace/organization support (future)
+6. **Deep Analysis**: PCA visualization, outlier detection, correlation matrices
+7. **Run Comparison**: Side-by-side delta analysis, divergence highlighting
+8. **Experiment Management**: Create experiments, track hypothesis, group related runs
+9. **Sampled Runs**: Configure sample %, view confidence intervals, expand to full
+10. **Multi-tenancy**: Workspace/organization support (future)
 
 ### Component Architecture
 
@@ -404,7 +624,22 @@ src/
 │   │   ├── RunDashboard.tsx        # NEW: List all runs
 │   │   ├── RunProgress.tsx         # NEW: Real-time progress
 │   │   ├── RunControls.tsx         # NEW: Pause/resume/cancel
+│   │   ├── RunConfig.tsx           # NEW: Sample %, model selection
 │   │   └── TranscriptViewer.tsx    # NEW: Browse transcripts
+│   ├── analysis/
+│   │   ├── DeepAnalysis.tsx        # Port from DevTool + enhancements
+│   │   ├── PCAVisualization.tsx    # Model positioning chart
+│   │   ├── CorrelationMatrix.tsx   # Dimension × model heatmap
+│   │   ├── OutlierDetection.tsx    # Multi-method outlier display
+│   │   └── InsightsList.tsx        # Auto-generated findings
+│   ├── comparison/
+│   │   ├── RunComparison.tsx       # Side-by-side delta view
+│   │   ├── DeltaChart.tsx          # Visualize differences
+│   │   └── DivergenceTable.tsx     # Most divergent scenarios
+│   ├── experiments/
+│   │   ├── ExperimentList.tsx      # All experiments
+│   │   ├── ExperimentDetail.tsx    # Runs within experiment
+│   │   └── HypothesisTracker.tsx   # Track experiment outcomes
 │   ├── queue/
 │   │   ├── QueueStatus.tsx         # NEW: Global queue stats
 │   │   └── QueueControls.tsx       # NEW: Global pause/resume
