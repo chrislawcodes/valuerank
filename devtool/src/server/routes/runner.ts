@@ -10,7 +10,7 @@ const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const runningProcesses = new Map<string, ChildProcess>();
 
 interface RunRequest {
-  command: 'probe' | 'judge' | 'aggregator' | 'summary';
+  command: 'probe' | 'summary';
   args?: Record<string, string>;
 }
 
@@ -20,8 +20,6 @@ router.post('/start', (req, res) => {
 
   const moduleMap: Record<string, string> = {
     probe: 'src.probe',
-    judge: 'src.judge_value',
-    aggregator: 'src.aggregator',
     summary: 'src.summary',
   };
 

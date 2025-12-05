@@ -6,7 +6,7 @@ interface PipelineRunnerProps {
   scenariosFolder?: string;
 }
 
-type Command = 'probe' | 'judge' | 'aggregator' | 'summary';
+type Command = 'probe' | 'summary';
 
 interface CommandConfig {
   name: string;
@@ -23,22 +23,6 @@ const COMMANDS: CommandConfig[] = [
     args: [
       { key: 'scenarios-folder', label: 'Scenarios Folder', placeholder: 'scenarios/User Preference', required: true },
       { key: 'output-dir', label: 'Output Directory', placeholder: 'output' },
-    ],
-  },
-  {
-    name: 'Judge',
-    command: 'judge',
-    description: 'Analyze AI reasoning against values rubric',
-    args: [
-      { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true },
-    ],
-  },
-  {
-    name: 'Aggregator',
-    command: 'aggregator',
-    description: 'Merge multi-model results',
-    args: [
-      { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true },
     ],
   },
   {

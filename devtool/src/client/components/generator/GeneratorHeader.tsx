@@ -14,6 +14,24 @@ interface GeneratorHeaderProps {
   onBlur?: () => void;
 }
 
+const EXP_PREFIX = 'exp-';
+
+// Ensure name has the required exp- prefix
+function ensureExpPrefix(name: string): string {
+  if (name.startsWith(EXP_PREFIX)) {
+    return name;
+  }
+  return EXP_PREFIX + name;
+}
+
+// Get the editable part of the name (after exp-)
+function getEditablePart(name: string): string {
+  if (name.startsWith(EXP_PREFIX)) {
+    return name.slice(EXP_PREFIX.length);
+  }
+  return name;
+}
+
 export function GeneratorHeader({
   name,
   folder,
@@ -27,18 +45,19 @@ export function GeneratorHeader({
   onBlur,
 }: GeneratorHeaderProps) {
   const [editing, setEditing] = useState(false);
-  const [tempName, setTempName] = useState(name);
+  const [tempName, setTempName] = useState(getEditablePart(name));
 
   const handleCommit = () => {
-    if (tempName && tempName !== name) {
-      onNameChange(tempName);
+    const fullName = ensureExpPrefix(tempName);
+    if (fullName && fullName !== name) {
+      onNameChange(fullName);
     }
     setEditing(false);
     onBlur?.();
   };
 
   const startEditing = () => {
-    setTempName(name);
+    setTempName(getEditablePart(name));
     setEditing(true);
     onFocus?.();
   };
@@ -50,6 +69,7 @@ export function GeneratorHeader({
         <div>
           {editing ? (
             <div className="flex items-center gap-2">
+              <span className="text-lg font-semibold text-gray-400">{EXP_PREFIX}</span>
               <input
                 type="text"
                 value={tempName}
@@ -59,13 +79,14 @@ export function GeneratorHeader({
                 className="px-2 py-1 border border-gray-300 rounded text-lg font-semibold"
                 autoFocus
               />
+              <span className="text-lg font-semibold text-gray-400">.md</span>
               <button onClick={handleCommit} className="p-1 hover:bg-gray-100 rounded">
                 <Check size={16} className="text-green-600" />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-lg">{name}.md</h2>
+              <h2 className="font-semibold text-lg">{ensureExpPrefix(name)}.md</h2>
               <button onClick={startEditing} className="p-1 hover:bg-gray-100 rounded">
                 <Pencil size={14} className="text-gray-400" />
               </button>

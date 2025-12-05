@@ -35,8 +35,8 @@ function App() {
   };
 
   const handleCreateNew = (folder: string) => {
-    // Generate default name based on folder
-    const baseName = `${folder}-scenario`;
+    // Generate default name with exp- prefix (required for summary script)
+    const baseName = `exp-${folder}.new`;
     setEditorState({
       mode: 'new-definition',
       folder,

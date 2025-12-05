@@ -17,6 +17,10 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const [expandedScenarios, setExpandedScenarios] = useState<Set<string>>(new Set());
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Shared metadata (same for all scenarios)
+  const [sharedBaseId, setSharedBaseId] = useState('scenario_001');
+  const [sharedCategory, setSharedCategory] = useState('');
+
   useEffect(() => {
     loadScenario();
     loadValues();
@@ -29,6 +33,14 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
       setData(fileData);
       // Expand all scenarios by default
       setExpandedScenarios(new Set(Object.keys(fileData.scenarios)));
+
+      // Extract shared metadata from first scenario
+      const firstScenario = Object.values(fileData.scenarios)[0];
+      if (firstScenario) {
+        setSharedBaseId(firstScenario.base_id || 'scenario_001');
+        setSharedCategory(firstScenario.category || '');
+      }
+
       setHasChanges(false);
       setError(null);
     } catch (e) {
@@ -64,6 +76,30 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const updatePreamble = (preamble: string) => {
     if (!data) return;
     setData({ ...data, preamble });
+    setHasChanges(true);
+  };
+
+  const updateSharedBaseId = (base_id: string) => {
+    if (!data) return;
+    setSharedBaseId(base_id);
+    // Update all scenarios
+    const updatedScenarios = { ...data.scenarios };
+    for (const key of Object.keys(updatedScenarios)) {
+      updatedScenarios[key] = { ...updatedScenarios[key], base_id };
+    }
+    setData({ ...data, scenarios: updatedScenarios });
+    setHasChanges(true);
+  };
+
+  const updateSharedCategory = (category: string) => {
+    if (!data) return;
+    setSharedCategory(category);
+    // Update all scenarios
+    const updatedScenarios = { ...data.scenarios };
+    for (const key of Object.keys(updatedScenarios)) {
+      updatedScenarios[key] = { ...updatedScenarios[key], category };
+    }
+    setData({ ...data, scenarios: updatedScenarios });
     setHasChanges(true);
   };
 
@@ -113,8 +149,8 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
       scenarios: {
         ...data.scenarios,
         [newKey]: {
-          base_id: `scenario_${String(baseNum).padStart(3, '0')}`,
-          category: 'Value1_vs_Value2',
+          base_id: sharedBaseId,
+          category: sharedCategory,
           subject: 'New Scenario',
           body: 'Enter scenario description here...',
         },
@@ -198,6 +234,42 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
           />
         </div>
 
+        {/* Shared Metadata */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Shared Metadata
+            <span className="text-gray-400 font-normal ml-2">
+              (Applied to all scenarios)
+            </span>
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Base ID
+              </label>
+              <input
+                type="text"
+                value={sharedBaseId}
+                onChange={(e) => updateSharedBaseId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                placeholder="scenario_001"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">
+                Category
+              </label>
+              <input
+                type="text"
+                value={sharedCategory}
+                onChange={(e) => updateSharedCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                placeholder="Value1_vs_Value2"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Scenarios */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -234,9 +306,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{scenario.subject}</div>
-                    <div className="text-xs text-gray-500">
-                      {key} · {scenario.category}
-                    </div>
+                    <div className="text-xs text-gray-500">{key}</div>
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <button
@@ -259,36 +329,6 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
                 {/* Scenario Body */}
                 {isExpanded && (
                   <div className="p-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">
-                          Base ID
-                        </label>
-                        <input
-                          type="text"
-                          value={scenario.base_id}
-                          onChange={(e) =>
-                            updateScenario(key, { base_id: e.target.value })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-600 mb-1">
-                          Category
-                        </label>
-                        <input
-                          type="text"
-                          value={scenario.category}
-                          onChange={(e) =>
-                            updateScenario(key, { category: e.target.value })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                          placeholder="Value1_vs_Value2"
-                        />
-                      </div>
-                    </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-600 mb-1">
                         Subject
