@@ -4,8 +4,10 @@ import {
   GeneratorHeader,
   DimensionEditor,
   YamlPreview,
+  TemplateEditor,
   DEFAULT_DEFINITION,
   type Dimension,
+  type TemplateEditorHandle,
 } from './generator';
 import { FileConflictModal } from './Modal';
 
@@ -35,6 +37,9 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   // File watcher state
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [pendingExternalDefinition, setPendingExternalDefinition] = useState<ScenarioDefinition | null>(null);
+
+  // Template editor ref for inserting at cursor
+  const templateEditorRef = useRef<TemplateEditorHandle>(null);
 
   // Use ref to access latest definition in callbacks without stale closures
   const definitionRef = useRef(definition);
@@ -408,21 +413,24 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Scenario Template
-              <span className="text-gray-400 font-normal ml-2">(Use [dimension_name] placeholders)</span>
+              <span className="text-gray-400 font-normal ml-2">
+                (Use [dimension_name] placeholders - type [ for autocomplete)
+              </span>
             </label>
-            <textarea
+            <TemplateEditor
+              ref={templateEditorRef}
               value={definition.template}
-              onChange={(e) => updateDefinition({ template: e.target.value })}
+              dimensions={definition.dimensions.map((d) => d.name)}
+              onChange={(template) => updateDefinition({ template })}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
-              className="w-full h-40 p-3 border border-gray-300 rounded font-mono text-sm resize-y"
             />
             <div className="mt-2 flex flex-wrap gap-1">
               {definition.dimensions.map((d) => (
                 <span
                   key={d.name}
                   className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs cursor-pointer hover:bg-purple-200"
-                  onClick={() => updateDefinition({ template: definition.template + `[${d.name.toLowerCase()}]` })}
+                  onClick={() => templateEditorRef.current?.insertAtCursor(`[${d.name.toLowerCase()}]`)}
                 >
                   [{d.name.toLowerCase()}]
                 </span>

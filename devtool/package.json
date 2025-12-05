@@ -10,6 +10,7 @@
     "start": "node dist/server/index.js"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "js-yaml": "^4.1.0"
