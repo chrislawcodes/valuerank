@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { runner } from '../lib/api';
+import { runner, scenarios } from '../lib/api';
 import { Play, Square, Terminal, X } from 'lucide-react';
 
 interface PipelineRunnerProps {
@@ -8,11 +8,19 @@ interface PipelineRunnerProps {
 
 type Command = 'probe' | 'summary';
 
+interface ArgConfig {
+  key: string;
+  label: string;
+  placeholder: string;
+  required?: boolean;
+  type?: 'text' | 'run-dir' | 'scenarios-folder';
+}
+
 interface CommandConfig {
   name: string;
   command: Command;
   description: string;
-  args: { key: string; label: string; placeholder: string; required?: boolean }[];
+  args: ArgConfig[];
 }
 
 const COMMANDS: CommandConfig[] = [
@@ -21,7 +29,7 @@ const COMMANDS: CommandConfig[] = [
     command: 'probe',
     description: 'Deliver scenarios to target AI models and record transcripts',
     args: [
-      { key: 'scenarios-folder', label: 'Scenarios Folder', placeholder: 'scenarios/User Preference', required: true },
+      { key: 'scenarios-folder', label: 'Scenarios Folder', placeholder: 'scenarios/User Preference', required: true, type: 'scenarios-folder' },
       { key: 'output-dir', label: 'Output Directory', placeholder: 'output' },
     ],
   },
@@ -30,8 +38,8 @@ const COMMANDS: CommandConfig[] = [
     command: 'summary',
     description: 'Generate natural language summaries',
     args: [
-      { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true },
-      { key: 'scenarios-file', label: 'Scenarios File', placeholder: 'scenarios/folder' },
+      { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true, type: 'run-dir' },
+      { key: 'scenarios-file', label: 'Scenarios Folder', placeholder: 'scenarios/folder', type: 'scenarios-folder' },
     ],
   },
 ];
@@ -43,11 +51,13 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [runs, setRuns] = useState<string[]>([]);
+  const [folders, setFolders] = useState<string[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     loadRuns();
+    loadFolders();
   }, []);
 
   useEffect(() => {
@@ -71,6 +81,15 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       setRuns(runs);
     } catch (e) {
       console.error('Failed to load runs:', e);
+    }
+  };
+
+  const loadFolders = async () => {
+    try {
+      const { folders } = await scenarios.getFolders();
+      setFolders(folders);
+    } catch (e) {
+      console.error('Failed to load folders:', e);
     }
   };
 
@@ -159,7 +178,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                 {arg.label}
                 {arg.required && <span className="text-red-400 ml-1">*</span>}
               </label>
-              {arg.key === 'run-dir' && runs.length > 0 ? (
+              {arg.type === 'run-dir' ? (
                 <select
                   value={argValues[arg.key] || ''}
                   onChange={(e) =>
@@ -171,6 +190,21 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   {runs.map((run) => (
                     <option key={run} value={`output/${run}`}>
                       {run}
+                    </option>
+                  ))}
+                </select>
+              ) : arg.type === 'scenarios-folder' ? (
+                <select
+                  value={argValues[arg.key] || ''}
+                  onChange={(e) =>
+                    setArgValues((prev) => ({ ...prev, [arg.key]: e.target.value }))
+                  }
+                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm"
+                >
+                  <option value="">Select a folder...</option>
+                  {folders.map((folder) => (
+                    <option key={folder} value={`scenarios/${folder}`}>
+                      {folder}
                     </option>
                   ))}
                 </select>
