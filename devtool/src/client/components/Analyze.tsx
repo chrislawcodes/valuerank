@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -13,9 +13,135 @@ import {
   Line,
 } from 'recharts';
 import { analysis, type AggregateData, type AnalysisRun } from '../lib/api';
-import { FolderOpen, BarChart3, TrendingUp, Grid3X3, RefreshCw } from 'lucide-react';
+import { FolderOpen, BarChart3, TrendingUp, Grid3X3, RefreshCw, Upload, X } from 'lucide-react';
 
 type VisualizationType = 'decision-dist' | 'model-variance' | 'scenario-heatmap';
+type DataSource = 'server' | 'file';
+
+// Parse CSV line handling quoted values
+function parseCSVLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  values.push(current.trim());
+
+  return values;
+}
+
+// Parse CSV content and compute aggregate data
+function parseCSVToAggregate(content: string): AggregateData {
+  const lines = content.split('\n').filter(line => line.trim());
+  if (lines.length === 0) {
+    return {
+      models: [],
+      scenarios: [],
+      dimensionColumns: [],
+      totalRows: 0,
+      modelDecisionDist: {},
+      modelAvgDecision: {},
+      modelVariance: {},
+      modelScenarioMatrix: {},
+    };
+  }
+
+  const headers = parseCSVLine(lines[0]);
+  const rows = lines.slice(1).map(line => {
+    const values = parseCSVLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((header, i) => {
+      row[header] = values[i] || '';
+    });
+    return row;
+  });
+
+  // Extract unique values
+  const models = [...new Set(rows.map(r => r['AI Model Name']).filter(Boolean))];
+  const scenarios = [...new Set(rows.map(r => r['Scenario']).filter(Boolean))];
+  const knownColumns = ['Scenario', 'AI Model Name', 'Decision Code', 'Decision Text'];
+  const dimensionColumns = headers.filter(h => !knownColumns.includes(h));
+
+  // Decision distribution by model
+  const modelDecisionDist: Record<string, Record<string, number>> = {};
+  for (const model of models) {
+    modelDecisionDist[model] = {};
+    for (let i = 1; i <= 5; i++) {
+      modelDecisionDist[model][String(i)] = 0;
+    }
+  }
+
+  for (const row of rows) {
+    const model = row['AI Model Name'];
+    const decision = row['Decision Code'];
+    if (model && decision && modelDecisionDist[model]) {
+      modelDecisionDist[model][decision] = (modelDecisionDist[model][decision] || 0) + 1;
+    }
+  }
+
+  // Average decision by model
+  const modelAvgDecision: Record<string, number> = {};
+  for (const model of models) {
+    const modelRows = rows.filter(r => r['AI Model Name'] === model);
+    const decisions = modelRows.map(r => parseInt(r['Decision Code'])).filter(d => !isNaN(d));
+    modelAvgDecision[model] = decisions.length > 0
+      ? decisions.reduce((a, b) => a + b, 0) / decisions.length
+      : 0;
+  }
+
+  // Model decision variance
+  const modelVariance: Record<string, number> = {};
+  for (const model of models) {
+    const avg = modelAvgDecision[model];
+    const modelRows = rows.filter(r => r['AI Model Name'] === model);
+    const decisions = modelRows.map(r => parseInt(r['Decision Code'])).filter(d => !isNaN(d));
+    if (decisions.length > 0) {
+      const variance = decisions.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / decisions.length;
+      modelVariance[model] = Math.sqrt(variance);
+    } else {
+      modelVariance[model] = 0;
+    }
+  }
+
+  // Cross-scenario comparison
+  const modelScenarioMatrix: Record<string, Record<string, number>> = {};
+  for (const model of models) {
+    modelScenarioMatrix[model] = {};
+    for (const scenario of scenarios) {
+      const scenarioRows = rows.filter(r => r['AI Model Name'] === model && r['Scenario'] === scenario);
+      const decisions = scenarioRows.map(r => parseInt(r['Decision Code'])).filter(d => !isNaN(d));
+      modelScenarioMatrix[model][scenario] = decisions.length > 0
+        ? decisions.reduce((a, b) => a + b, 0) / decisions.length
+        : 0;
+    }
+  }
+
+  return {
+    models,
+    scenarios,
+    dimensionColumns,
+    totalRows: rows.length,
+    modelDecisionDist,
+    modelAvgDecision,
+    modelVariance,
+    modelScenarioMatrix,
+  };
+}
 
 const MODEL_COLORS = [
   '#3b82f6', // blue
@@ -36,17 +162,22 @@ export function Analyze() {
   const [error, setError] = useState<string | null>(null);
   const [activeViz, setActiveViz] = useState<VisualizationType>('decision-dist');
 
+  // Drag and drop state
+  const [dataSource, setDataSource] = useState<DataSource>('server');
+  const [isDragging, setIsDragging] = useState(false);
+  const [droppedFileName, setDroppedFileName] = useState<string | null>(null);
+
   // Load available runs
   useEffect(() => {
     loadRuns();
   }, []);
 
-  // Load data when run is selected
+  // Load data when run is selected (only if using server source)
   useEffect(() => {
-    if (selectedRun) {
+    if (selectedRun && dataSource === 'server') {
       loadData(selectedRun);
     }
-  }, [selectedRun]);
+  }, [selectedRun, dataSource]);
 
   const loadRuns = async () => {
     try {
@@ -74,6 +205,74 @@ export function Analyze() {
     }
   };
 
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    const file = files[0];
+    if (!file.name.endsWith('.csv')) {
+      setError('Please drop a CSV file');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const aggregatedData = parseCSVToAggregate(content);
+
+        if (aggregatedData.models.length === 0) {
+          setError('No valid data found in CSV. Ensure it has "AI Model Name" and "Decision Code" columns.');
+          setData(null);
+        } else {
+          setData(aggregatedData);
+          setDataSource('file');
+          setDroppedFileName(file.name);
+        }
+      } catch (err) {
+        setError('Failed to parse CSV: ' + String(err));
+        setData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.onerror = () => {
+      setError('Failed to read file');
+      setLoading(false);
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const clearDroppedFile = useCallback(() => {
+    setDataSource('server');
+    setDroppedFileName(null);
+    if (selectedRun) {
+      loadData(selectedRun);
+    } else {
+      setData(null);
+    }
+  }, [selectedRun]);
+
   const vizOptions: { id: VisualizationType; label: string; icon: React.ReactNode }[] = [
     { id: 'decision-dist', label: 'Decision Distribution', icon: <BarChart3 size={16} /> },
     { id: 'model-variance', label: 'Model Consistency', icon: <TrendingUp size={16} /> },
@@ -81,36 +280,67 @@ export function Analyze() {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div
+      className="h-full flex flex-col bg-gray-50 relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-blue-500/10 border-4 border-dashed border-blue-500 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl p-8 text-center">
+            <Upload size={48} className="mx-auto mb-4 text-blue-500" />
+            <p className="text-xl font-semibold text-gray-900">Drop CSV file here</p>
+            <p className="text-sm text-gray-500 mt-2">Release to analyze the data</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold text-gray-900">Analysis</h2>
 
-            {/* Run Selector */}
-            <div className="flex items-center gap-2">
-              <FolderOpen size={16} className="text-gray-400" />
-              <select
-                value={selectedRun}
-                onChange={(e) => setSelectedRun(e.target.value)}
-                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {runs.length === 0 && <option value="">No runs available</option>}
-                {runs.map((run) => (
-                  <option key={run.name} value={run.name}>
-                    {run.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => loadRuns()}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                title="Refresh runs"
-              >
-                <RefreshCw size={16} />
-              </button>
-            </div>
+            {/* Data Source Indicator */}
+            {dataSource === 'file' && droppedFileName ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md text-sm">
+                <Upload size={14} />
+                <span className="font-medium">{droppedFileName}</span>
+                <button
+                  onClick={clearDroppedFile}
+                  className="ml-1 p-0.5 hover:bg-purple-200 rounded"
+                  title="Clear and return to server runs"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              /* Run Selector */
+              <div className="flex items-center gap-2">
+                <FolderOpen size={16} className="text-gray-400" />
+                <select
+                  value={selectedRun}
+                  onChange={(e) => setSelectedRun(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {runs.length === 0 && <option value="">No runs available</option>}
+                  {runs.map((run) => (
+                    <option key={run.name} value={run.name}>
+                      {run.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => loadRuns()}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                  title="Refresh runs"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Data Summary */}
@@ -162,8 +392,9 @@ export function Analyze() {
         {!loading && !data && !error && (
           <div className="flex items-center justify-center h-64 text-gray-400">
             <div className="text-center">
-              <BarChart3 size={48} className="mx-auto mb-4 opacity-50" />
-              <p>Select a run to analyze</p>
+              <Upload size={48} className="mx-auto mb-4 opacity-50" />
+              <p className="text-lg mb-2">Drop a CSV file here to analyze</p>
+              <p className="text-sm">or select a run from the dropdown above</p>
             </div>
           </div>
         )}
