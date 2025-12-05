@@ -8,6 +8,7 @@ Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evalu
 |----------|-------------|
 | [Database Design](./database-design.md) | PostgreSQL schema, versioning, queries |
 | [API & Queue System](./api-queue-system.md) | BullMQ, workers, analysis processing |
+| [Authentication](./authentication.md) | Users, roles, API keys, OAuth |
 | [Frontend Design](./frontend-design.md) | React components, UI flows |
 | [MCP Interface](./mcp-interface.md) | AI agent access, tools, resources |
 | [Deployment](./deployment.md) | Infrastructure, export, open questions |
@@ -24,6 +25,8 @@ Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evalu
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐│
 │  │   Frontend   │────▶│     API      │◀────│    MCP Server        ││
 │  │   (React)    │     │  (Express)   │     │  (AI Agent Access)   ││
+│  │              │     │              │     │                      ││
+│  │  JWT Auth    │     │  Auth Layer  │     │  API Key Auth        ││
 │  └──────────────┘     └──────┬───────┘     └──────────────────────┘│
 │                              │                                       │
 │              ┌───────────────┴───────────────┐                      │
@@ -32,8 +35,8 @@ Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evalu
 │       │  PostgreSQL  │                │   Workers    │              │
 │       │  (Railway)   │◀───────────────│  (Python)    │              │
 │       │  + PgBoss    │    queue       └──────┬───────┘              │
-│       └──────────────┘                       │                      │
-│                                              ▼                      │
+│       │  + Users     │                       │                      │
+│       └──────────────┘                       ▼                      │
 │                                       ┌──────────────┐              │
 │                                       │ LLM Providers│              │
 │                                       │ (OpenAI, etc)│              │
@@ -64,6 +67,13 @@ Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evalu
 - Expose processed data (summaries, stats), not raw transcripts
 - Token-budget-aware responses (<5KB per tool)
 - See: [MCP Interface](./mcp-interface.md)
+
+### Authentication
+- **Three roles**: Admin, Editor (scenario authoring), Viewer (results only)
+- **Phase 1**: Email + password with JWT tokens
+- **Phase 2**: OAuth (Google) for convenience
+- **MCP**: API key authentication with scopes
+- See: [Authentication](./authentication.md)
 
 ### Frontend: React + TypeScript + Vite
 - **Why**: Reuse DevTool components, familiar stack
