@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { analysis, type AnalysisRun } from '../lib/api';
-import { FolderOpen, BarChart3, TrendingUp, Grid3X3, RefreshCw, Upload, X, GitBranch } from 'lucide-react';
+import { analysis, type AnalysisRun, type DeepAnalysisResult } from '../lib/api';
+import { FolderOpen, BarChart3, TrendingUp, Grid3X3, RefreshCw, Upload, X, GitBranch, Microscope } from 'lucide-react';
 import {
   type VisualizationType,
   type DataSource,
@@ -10,6 +10,7 @@ import {
   ModelVariance,
   ScenarioHeatmap,
   DimensionAnalysis,
+  DeepAnalysis,
 } from './visualizations';
 
 export function Analyze() {
@@ -24,6 +25,11 @@ export function Analyze() {
   const [dataSource, setDataSource] = useState<DataSource>('server');
   const [isDragging, setIsDragging] = useState(false);
   const [droppedFileName, setDroppedFileName] = useState<string | null>(null);
+
+  // Deep analysis state
+  const [deepAnalysisData, setDeepAnalysisData] = useState<DeepAnalysisResult | null>(null);
+  const [deepAnalysisLoading, setDeepAnalysisLoading] = useState(false);
+  const [csvContentForDeepAnalysis, setCsvContentForDeepAnalysis] = useState<string | null>(null);
 
   // Load available runs
   useEffect(() => {
@@ -102,14 +108,20 @@ export function Analyze() {
         if (aggregatedData.models.length === 0) {
           setError('No valid data found in CSV. Ensure it has "AI Model Name" and "Decision Code" columns.');
           setData(null);
+          setCsvContentForDeepAnalysis(null);
         } else {
           setData(aggregatedData);
           setDataSource('file');
           setDroppedFileName(file.name);
+          // Store CSV content for deep analysis
+          setCsvContentForDeepAnalysis(content);
+          // Reset deep analysis when new file is loaded
+          setDeepAnalysisData(null);
         }
       } catch (err) {
         setError('Failed to parse CSV: ' + String(err));
         setData(null);
+        setCsvContentForDeepAnalysis(null);
       } finally {
         setLoading(false);
       }
@@ -124,6 +136,8 @@ export function Analyze() {
   const clearDroppedFile = useCallback(() => {
     setDataSource('server');
     setDroppedFileName(null);
+    setCsvContentForDeepAnalysis(null);
+    setDeepAnalysisData(null);
     if (selectedRun) {
       loadData(selectedRun);
     } else {
@@ -131,11 +145,48 @@ export function Analyze() {
     }
   }, [selectedRun]);
 
+  // Run deep analysis when switching to the Deep Analysis tab
+  const runDeepAnalysis = useCallback(async () => {
+    // Already loaded or currently loading
+    if (deepAnalysisData || deepAnalysisLoading) return;
+
+    setDeepAnalysisLoading(true);
+    setError(null);
+
+    try {
+      let result: DeepAnalysisResult;
+
+      if (dataSource === 'file' && csvContentForDeepAnalysis) {
+        // Use uploaded CSV content
+        result = await analysis.runDeepAnalysis(csvContentForDeepAnalysis);
+      } else if (dataSource === 'server' && selectedRun) {
+        // Use server run
+        result = await analysis.runDeepAnalysisOnRun(selectedRun);
+      } else {
+        throw new Error('No data source available for deep analysis');
+      }
+
+      setDeepAnalysisData(result);
+    } catch (err) {
+      setError('Failed to run deep analysis: ' + String(err));
+    } finally {
+      setDeepAnalysisLoading(false);
+    }
+  }, [dataSource, csvContentForDeepAnalysis, selectedRun, deepAnalysisData, deepAnalysisLoading]);
+
+  // Trigger deep analysis when switching to that tab
+  useEffect(() => {
+    if (activeViz === 'deep-analysis' && !deepAnalysisData && !deepAnalysisLoading) {
+      runDeepAnalysis();
+    }
+  }, [activeViz, deepAnalysisData, deepAnalysisLoading, runDeepAnalysis]);
+
   const vizOptions: { id: VisualizationType; label: string; icon: React.ReactNode }[] = [
     { id: 'decision-dist', label: 'Decision Distribution', icon: <BarChart3 size={16} /> },
     { id: 'model-variance', label: 'Model Consistency', icon: <TrendingUp size={16} /> },
     { id: 'scenario-heatmap', label: 'Scenario Comparison', icon: <Grid3X3 size={16} /> },
     { id: 'dimension-analysis', label: 'Dimension Impact', icon: <GitBranch size={16} /> },
+    { id: 'deep-analysis', label: 'Deep Analysis', icon: <Microscope size={16} /> },
   ];
 
   return (
@@ -248,7 +299,7 @@ export function Analyze() {
           </div>
         )}
 
-        {!loading && !data && !error && (
+        {!loading && !data && !error && activeViz !== 'deep-analysis' && (
           <div className="flex items-center justify-center h-64 text-gray-400">
             <div className="text-center">
               <Upload size={48} className="mx-auto mb-4 opacity-50" />
@@ -258,12 +309,41 @@ export function Analyze() {
           </div>
         )}
 
-        {!loading && data && (
+        {!loading && data && activeViz !== 'deep-analysis' && (
           <>
             {activeViz === 'decision-dist' && <DecisionDistribution data={data} />}
             {activeViz === 'model-variance' && <ModelVariance data={data} />}
             {activeViz === 'scenario-heatmap' && <ScenarioHeatmap data={data} />}
             {activeViz === 'dimension-analysis' && <DimensionAnalysis data={data} />}
+          </>
+        )}
+
+        {/* Deep Analysis Tab */}
+        {activeViz === 'deep-analysis' && (
+          <>
+            {deepAnalysisLoading && (
+              <div className="flex items-center justify-center h-64">
+                <div className="flex flex-col items-center gap-3 text-gray-500">
+                  <RefreshCw size={24} className="animate-spin" />
+                  <span>Running deep statistical analysis...</span>
+                  <span className="text-sm text-gray-400">This may take a moment</span>
+                </div>
+              </div>
+            )}
+
+            {!deepAnalysisLoading && !deepAnalysisData && !error && (
+              <div className="flex items-center justify-center h-64 text-gray-400">
+                <div className="text-center">
+                  <Microscope size={48} className="mx-auto mb-4 opacity-50" />
+                  <p className="text-lg mb-2">Load data to run deep analysis</p>
+                  <p className="text-sm">Drop a CSV file or select a run from the dropdown</p>
+                </div>
+              </div>
+            )}
+
+            {!deepAnalysisLoading && deepAnalysisData && (
+              <DeepAnalysis data={deepAnalysisData} />
+            )}
           </>
         )}
       </div>

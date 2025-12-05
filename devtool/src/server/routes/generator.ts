@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { watch, type FSWatcher } from 'fs';
 import path from 'path';
 import { parseScenarioMd, serializeScenarioMd, buildGenerationPrompt, type ScenarioDefinition } from '../utils/scenarioMd.js';
+import { callLLM, getAvailableProviders, extractYaml } from '../utils/llm.js';
 
 const router = Router();
 
@@ -11,130 +12,6 @@ const activeWatchers = new Map<string, FSWatcher>();
 
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const SCENARIOS_DIR = path.join(PROJECT_ROOT, 'scenarios');
-
-// Load API keys from environment or .env file
-async function loadEnvFile(): Promise<Record<string, string>> {
-  const env: Record<string, string> = {};
-  try {
-    const envPath = path.join(PROJECT_ROOT, '.env');
-    const content = await fs.readFile(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const eqIndex = trimmed.indexOf('=');
-        if (eqIndex > 0) {
-          const key = trimmed.slice(0, eqIndex).trim();
-          let value = trimmed.slice(eqIndex + 1).trim();
-          if ((value.startsWith('"') && value.endsWith('"')) ||
-              (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
-          }
-          env[key] = value;
-        }
-      }
-    }
-  } catch {
-    // .env file not found
-  }
-  return env;
-}
-
-interface LLMProvider {
-  name: string;
-  envKey: string;
-  generate: (prompt: string, apiKey: string) => Promise<string>;
-}
-
-const providers: LLMProvider[] = [
-  {
-    name: 'anthropic',
-    envKey: 'ANTHROPIC_API_KEY',
-    generate: async (prompt: string, apiKey: string) => {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 16000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Anthropic API error: ${error}`);
-      }
-
-      const data = await response.json();
-      return data.content[0].text;
-    },
-  },
-  {
-    name: 'openai',
-    envKey: 'OPENAI_API_KEY',
-    generate: async (prompt: string, apiKey: string) => {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 16000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`OpenAI API error: ${error}`);
-      }
-
-      const data = await response.json();
-      return data.choices[0].message.content;
-    },
-  },
-];
-
-async function callLLM(prompt: string): Promise<string> {
-  const envVars = await loadEnvFile();
-  const allEnv = { ...process.env, ...envVars };
-
-  let lastError: string | null = null;
-
-  for (const provider of providers) {
-    const apiKey = allEnv[provider.envKey];
-    if (apiKey) {
-      try {
-        console.log(`Using ${provider.name} for generation...`);
-        return await provider.generate(prompt, apiKey);
-      } catch (e) {
-        lastError = String(e);
-        console.error(`${provider.name} failed:`, e);
-      }
-    }
-  }
-
-  throw new Error(lastError || 'No LLM API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env');
-}
-
-function extractYaml(result: string): string {
-  const yamlMatch = result.match(/```ya?ml\n([\s\S]*?)\n```/);
-  if (yamlMatch) {
-    return yamlMatch[1];
-  }
-  const lines = result.split('\n');
-  const startIndex = lines.findIndex(l => l.trim().startsWith('preamble:'));
-  if (startIndex >= 0) {
-    return lines.slice(startIndex).join('\n');
-  }
-  return result;
-}
 
 // GET /api/generator/definition/:folder/:name - Get a scenario definition (.md file)
 router.get('/definition/:folder/:name', async (req, res) => {
@@ -252,7 +129,7 @@ router.post('/generate/:folder/:name', async (req, res) => {
 
     // Build the prompt and call LLM
     const prompt = buildGenerationPrompt(definition);
-    const result = await callLLM(prompt);
+    const result = await callLLM(prompt, { maxTokens: 16000 });
     const yaml = extractYaml(result);
 
     // Save the YAML file
@@ -274,7 +151,7 @@ router.post('/generate', async (req, res) => {
   }
 
   try {
-    const result = await callLLM(prompt);
+    const result = await callLLM(prompt, { maxTokens: 16000 });
     const yaml = extractYaml(result);
     res.json({ yaml });
   } catch (error) {
@@ -285,13 +162,7 @@ router.post('/generate', async (req, res) => {
 
 // GET /api/generator/providers - Check which providers are available
 router.get('/providers', async (_req, res) => {
-  const envVars = await loadEnvFile();
-  const allEnv = { ...process.env, ...envVars };
-
-  const available = providers
-    .filter((p) => !!allEnv[p.envKey])
-    .map((p) => p.name);
-
+  const available = await getAvailableProviders();
   res.json({ available });
 });
 

@@ -284,6 +284,101 @@ export interface AggregateData {
   rawRows?: Record<string, string>[];
 }
 
+// Deep Analysis Types
+export interface DeepAnalysisInsight {
+  type: string;
+  severity: 'info' | 'warning' | 'alert' | 'success';
+  title: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+export interface DeepAnalysisResult {
+  metadata: {
+    total_rows: number;
+    models: string[];
+    model_count: number;
+    scenarios: string[];
+    scenario_count: number;
+    dimensions: string[];
+    dimension_count: number;
+  };
+  basic_stats: Record<string, {
+    mean: number;
+    std: number;
+    min: number;
+    max: number;
+    median: number;
+    count: number;
+  }>;
+  dimension_analysis: {
+    per_dimension: Record<string, {
+      values: Record<string, { model_variance: number; model_count: number }>;
+      overall_variance: number;
+      drives_divergence: boolean;
+    }>;
+    ranked_by_variance: { dimension: string; variance: number }[];
+  };
+  correlations: {
+    matrix: Record<string, Record<string, {
+      correlation: number;
+      p_value: number;
+      significant: boolean;
+    }>>;
+    strongest_correlations: {
+      dimension: string;
+      model: string;
+      correlation: number;
+      significant: boolean;
+    }[];
+    most_divisive_dimensions: {
+      dimension: string;
+      correlation_spread: number;
+      mean_correlation: number;
+    }[];
+  };
+  inter_model_agreement: {
+    pairwise_agreement: Record<string, number>;
+    average_agreement: number;
+    per_scenario_disagreement: Record<string, {
+      variance: number;
+      range: number;
+      decisions: Record<string, number>;
+    }>;
+    most_contested_scenarios: {
+      scenario: string;
+      variance: number;
+      range: number;
+    }[];
+  };
+  outlier_detection: {
+    mahalanobis_distances: Record<string, number>;
+    isolation_forest: Record<string, {
+      is_outlier: boolean;
+      anomaly_score: number;
+    }>;
+    jackknife_influence: Record<string, {
+      influence_on_variance: number;
+      increases_variance: boolean;
+    }>;
+    outlier_ranking: {
+      model: string;
+      outlier_indicators: number;
+      mahalanobis_distance?: number;
+      isolation_forest?: { is_outlier: boolean; anomaly_score: number };
+      jackknife?: { influence_on_variance: number; increases_variance: boolean };
+    }[];
+  };
+  pca: {
+    model_coordinates: Record<string, { x: number; y: number }>;
+    explained_variance_ratio: number[];
+    scenario_loadings: Record<string, { pc1_loading: number; pc2_loading: number }>;
+  };
+  insights: DeepAnalysisInsight[];
+  llm_summary?: string;
+  error?: string;
+}
+
 export const analysis = {
   getRuns: () => fetchJson<{ runs: AnalysisRun[] }>(`${API_BASE}/analysis/runs`),
 
@@ -292,4 +387,17 @@ export const analysis = {
 
   getAggregate: (runPath: string) =>
     fetchJson<AggregateData>(`${API_BASE}/analysis/aggregate/${runPath}`),
+
+  // Deep analysis with uploaded CSV content
+  runDeepAnalysis: (csvContent: string) =>
+    fetchJson<DeepAnalysisResult>(`${API_BASE}/analysis/deep`, {
+      method: 'POST',
+      body: JSON.stringify({ csvContent }),
+    }),
+
+  // Deep analysis on a specific run
+  runDeepAnalysisOnRun: (runPath: string) =>
+    fetchJson<DeepAnalysisResult>(`${API_BASE}/analysis/deep/run/${runPath}`, {
+      method: 'POST',
+    }),
 };
