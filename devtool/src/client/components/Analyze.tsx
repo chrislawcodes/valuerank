@@ -60,7 +60,7 @@ export function Analyze() {
     setError(null);
     try {
       const result = await analysis.getAggregate(runPath);
-      setData(result);
+      setData({ ...result, rawRows: result.rawRows ?? [] });
     } catch (err) {
       setError('Failed to load data: ' + String(err));
       setData(null);

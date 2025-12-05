@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -10,7 +10,6 @@ import {
   BarChart as RechartsBarChart,
   Bar,
   Cell,
-  Legend,
 } from 'recharts';
 import type { DeepAnalysisResult, DeepAnalysisInsight } from '../../lib/api';
 import { MODEL_COLORS } from './constants';

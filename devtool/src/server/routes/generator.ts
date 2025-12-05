@@ -116,12 +116,47 @@ router.post('/definition/:folder/:name/rename', async (req, res) => {
   }
 });
 
+// Helper to find the next available scenario number in a folder
+async function getNextScenarioNumber(folderPath: string): Promise<string> {
+  try {
+    const files = await fs.readdir(folderPath);
+    const yamlFiles = files.filter(f => f.match(/^exp-\d+\..+\.ya?ml$/));
+
+    let maxNum = 0;
+    for (const file of yamlFiles) {
+      const match = file.match(/^exp-(\d+)\./);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+
+    return String(maxNum + 1).padStart(3, '0');
+  } catch {
+    return '001';
+  }
+}
+
+// Helper to build proper YAML filename from definition name
+function buildYamlFilename(name: string, number: string): string {
+  // Remove 'exp-' prefix if present
+  let baseName = name.replace(/^exp-/, '');
+  // Remove any existing number prefix (e.g., '001.')
+  baseName = baseName.replace(/^\d+\./, '');
+  return `exp-${number}.${baseName}.yaml`;
+}
+
 // POST /api/generator/generate/:folder/:name - Generate YAML from a scenario definition
 router.post('/generate/:folder/:name', async (req, res) => {
   try {
     const { folder, name } = req.params;
     const mdPath = path.join(SCENARIOS_DIR, folder, `${name}.md`);
-    const yamlPath = path.join(SCENARIOS_DIR, folder, `${name}.yaml`);
+
+    // Build proper YAML filename with number prefix
+    const folderPath = path.join(SCENARIOS_DIR, folder);
+    const nextNum = await getNextScenarioNumber(folderPath);
+    const yamlFilename = buildYamlFilename(name, nextNum);
+    const yamlPath = path.join(folderPath, yamlFilename);
 
     // Read the definition
     const content = await fs.readFile(mdPath, 'utf-8');
@@ -135,7 +170,7 @@ router.post('/generate/:folder/:name', async (req, res) => {
     // Save the YAML file
     await fs.writeFile(yamlPath, yaml, 'utf-8');
 
-    res.json({ success: true, yaml });
+    res.json({ success: true, yaml, filename: yamlFilename });
   } catch (error) {
     console.error('Generation error:', error);
     res.status(500).json({ error: String(error) });

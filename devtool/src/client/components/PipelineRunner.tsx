@@ -98,7 +98,13 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       setOutput([]);
       setIsRunning(true);
 
-      const result = await runner.start(selectedCommand.command, argValues);
+      // Only pass args that are defined for the current command
+      const validArgKeys = new Set(selectedCommand.args.map(a => a.key));
+      const filteredArgs = Object.fromEntries(
+        Object.entries(argValues).filter(([key]) => validArgKeys.has(key))
+      );
+
+      const result = await runner.start(selectedCommand.command, filteredArgs);
       setRunId(result.runId);
 
       setOutput((prev) => [

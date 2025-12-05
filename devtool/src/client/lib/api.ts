@@ -368,11 +368,13 @@ export interface DeepAnalysisResult {
       isolation_forest?: { is_outlier: boolean; anomaly_score: number };
       jackknife?: { influence_on_variance: number; increases_variance: boolean };
     }[];
+    error?: string;
   };
   pca: {
     model_coordinates: Record<string, { x: number; y: number }>;
     explained_variance_ratio: number[];
     scenario_loadings: Record<string, { pc1_loading: number; pc2_loading: number }>;
+    error?: string;
   };
   insights: DeepAnalysisInsight[];
   llm_summary?: string;
