@@ -10,6 +10,7 @@ import {
   type TemplateEditorHandle,
 } from './generator';
 import { FileConflictModal } from './Modal';
+import { useAvailableModels } from './ModelSelector';
 
 interface ScenarioGeneratorProps {
   folder: string;
@@ -33,6 +34,10 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   const [canonicalDimensions, setCanonicalDimensions] = useState<Record<string, CanonicalDimension>>({});
   const [expandedDimensions, setExpandedDimensions] = useState<Set<number>>(new Set([0]));
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null);
+
+  // Model selection
+  const { models: availableModels, loading: modelsLoading, defaultModel } = useAvailableModels();
+  const [selectedModel, setSelectedModel] = useState<string>('');
 
   // File watcher state
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -62,6 +67,19 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
     }
     loadValues();
   }, [folder, name, isNew]);
+
+  // Set default model when available and nothing is selected
+  useEffect(() => {
+    if (!selectedModel && defaultModel) {
+      // Check localStorage first
+      const saved = localStorage.getItem('devtool:generator:model');
+      if (saved && availableModels.some(m => m.id === saved)) {
+        setSelectedModel(saved);
+      } else {
+        setSelectedModel(defaultModel);
+      }
+    }
+  }, [defaultModel, availableModels, selectedModel]);
 
   // Set up file watcher for non-new files
   useEffect(() => {
@@ -193,7 +211,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
       setError(null);
       setGeneratedYaml(null);
 
-      const result = await generator.generate(folder, definition.name);
+      const result = await generator.generate(folder, definition.name, selectedModel);
       setGeneratedYaml(result.yaml);
       onSaved?.();
     } catch (e) {
@@ -352,6 +370,10 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
         onGenerate={handleGenerate}
         onBlur={handleInputBlur}
         onFocus={handleInputFocus}
+        availableModels={availableModels}
+        modelsLoading={modelsLoading}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
       />
 
       {error && (

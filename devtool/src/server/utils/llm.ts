@@ -111,11 +111,33 @@ const providers: LLMProviderWithGenerate[] = getGenerationProviders()
 
 /**
  * Call an LLM with the given prompt, trying available providers in order.
+ * If options.model is specified in "provider:model" format, use that specific provider and model.
  */
 export async function callLLM(prompt: string, options?: LLMOptions): Promise<string> {
   const envVars = await loadEnvFile();
   const allEnv = { ...process.env, ...envVars };
 
+  // If a specific model is provided in "provider:model" format, use that directly
+  if (options?.model && options.model.includes(':')) {
+    const [providerId, modelId] = options.model.split(':');
+    const provider = providers.find(p => p.id === providerId);
+
+    if (!provider) {
+      throw new Error(`Unknown provider: ${providerId}`);
+    }
+
+    const apiKey = allEnv[provider.envKey];
+    if (!apiKey) {
+      throw new Error(`No API key found for ${providerId}. Set ${provider.envKey} in .env`);
+    }
+
+    log.info(`Using specific model ${providerId}:${modelId} for LLM call`);
+    const result = await provider.generate(prompt, apiKey, { ...options, model: modelId });
+    log.info(`${providerId} call successful`, { responseLength: result.length });
+    return result;
+  }
+
+  // Fall back to trying available providers in order
   let lastError: string | null = null;
 
   for (const provider of providers) {

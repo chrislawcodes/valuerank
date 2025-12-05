@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { runner, scenarios } from '../lib/api';
 import { Play, Square, Terminal, X } from 'lucide-react';
+import { ModelSelector, useAvailableModels } from './ModelSelector';
 
 interface PipelineRunnerProps {
   scenariosFolder?: string;
@@ -21,6 +22,12 @@ interface CommandConfig {
   command: Command;
   description: string;
   args: ArgConfig[];
+  /** If true, show model selector for this command */
+  hasModelSelector?: boolean;
+  /** The argument key to use for the model (e.g., 'summary-model') */
+  modelArgKey?: string;
+  /** localStorage key for persisting model selection */
+  modelStorageKey?: string;
 }
 
 const COMMANDS: CommandConfig[] = [
@@ -41,6 +48,9 @@ const COMMANDS: CommandConfig[] = [
       { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true, type: 'run-dir' },
       { key: 'scenarios-file', label: 'Scenarios Folder', placeholder: 'scenarios/folder', type: 'scenarios-folder' },
     ],
+    hasModelSelector: true,
+    modelArgKey: 'summary-model',
+    modelStorageKey: 'devtool:runner:summary-model',
   },
 ];
 
@@ -54,6 +64,30 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   const [folders, setFolders] = useState<string[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Model selection for commands that support it
+  const { models: availableModels, loading: modelsLoading, defaultModel } = useAvailableModels();
+  const [selectedModel, setSelectedModel] = useState<string>('');
+
+  // Initialize model from localStorage or default
+  useEffect(() => {
+    if (selectedCommand.hasModelSelector && selectedCommand.modelStorageKey) {
+      const saved = localStorage.getItem(selectedCommand.modelStorageKey);
+      if (saved && availableModels.some(m => m.id === saved)) {
+        setSelectedModel(saved);
+      } else if (defaultModel) {
+        setSelectedModel(defaultModel);
+      }
+    }
+  }, [selectedCommand, availableModels, defaultModel]);
+
+  // Handle model change with localStorage persistence
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId);
+    if (selectedCommand.modelStorageKey) {
+      localStorage.setItem(selectedCommand.modelStorageKey, modelId);
+    }
+  };
 
   useEffect(() => {
     loadRuns();
@@ -103,6 +137,11 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       const filteredArgs = Object.fromEntries(
         Object.entries(argValues).filter(([key]) => validArgKeys.has(key))
       );
+
+      // Add model selection if this command supports it
+      if (selectedCommand.hasModelSelector && selectedCommand.modelArgKey && selectedModel) {
+        filteredArgs[selectedCommand.modelArgKey] = selectedModel;
+      }
 
       const result = await runner.start(selectedCommand.command, filteredArgs);
       setRunId(result.runId);
@@ -227,6 +266,23 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
               )}
             </div>
           ))}
+
+          {/* Model Selector (for commands that support it) */}
+          {selectedCommand.hasModelSelector && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-300 w-32 flex-shrink-0">
+                Model
+              </label>
+              <ModelSelector
+                models={availableModels}
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
+                loading={modelsLoading}
+                disabled={isRunning}
+                className="flex-1"
+              />
+            </div>
+          )}
         </div>
 
         {/* Actions */}

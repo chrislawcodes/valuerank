@@ -128,4 +128,30 @@ router.get('/llm-providers', async (_req, res) => {
   }
 });
 
+// GET /api/config/available-models - Get all available models from configured providers
+router.get('/available-models', async (_req, res) => {
+  try {
+    const envVars = await loadEnvFile();
+    const allEnv = { ...process.env, ...envVars };
+
+    // Only include models from providers that have API keys configured
+    const availableModels = LLM_PROVIDERS
+      .filter(provider => !!allEnv[provider.envKey])
+      .flatMap(provider =>
+        provider.models.map(model => ({
+          id: `${provider.id}:${model.id}`,
+          name: model.name,
+          providerId: provider.id,
+          providerName: provider.name,
+          providerIcon: provider.icon,
+          isDefault: model.isDefault,
+        }))
+      );
+
+    res.json({ models: availableModels });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get available models', details: String(error) });
+  }
+});
+
 export default router;

@@ -208,9 +208,10 @@ export const generator = {
       body: JSON.stringify({ newName }),
     }),
 
-  generate: (folder: string, name: string) =>
+  generate: (folder: string, name: string, model?: string) =>
     fetchJson<{ success: boolean; yaml: string }>(`${API_BASE}/generator/generate/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`, {
       method: 'POST',
+      body: JSON.stringify({ model }),
     }),
 
   getProviders: () => fetchJson<{ available: string[] }>(`${API_BASE}/generator/providers`),

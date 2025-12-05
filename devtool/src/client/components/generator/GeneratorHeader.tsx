@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Save, Wand2, Check, Pencil } from 'lucide-react';
+import { ModelSelector, AvailableModel } from '../ModelSelector';
 
 interface GeneratorHeaderProps {
   name: string;
@@ -12,6 +13,13 @@ interface GeneratorHeaderProps {
   onGenerate: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /** Available models for generation */
+  availableModels: AvailableModel[];
+  modelsLoading?: boolean;
+  /** Currently selected model */
+  selectedModel: string;
+  /** Callback when model selection changes */
+  onModelChange: (modelId: string) => void;
 }
 
 const EXP_PREFIX = 'exp-';
@@ -43,6 +51,10 @@ export function GeneratorHeader({
   onGenerate,
   onFocus,
   onBlur,
+  availableModels,
+  modelsLoading,
+  selectedModel,
+  onModelChange,
 }: GeneratorHeaderProps) {
   const [editing, setEditing] = useState(false);
   const [tempName, setTempName] = useState(getEditablePart(name));
@@ -105,9 +117,17 @@ export function GeneratorHeader({
           <Save size={16} />
           {saving ? 'Saving...' : 'Save'}
         </button>
+        <ModelSelector
+          models={availableModels}
+          selectedModel={selectedModel}
+          onModelChange={onModelChange}
+          loading={modelsLoading}
+          disabled={generating}
+          storageKey="devtool:generator:model"
+        />
         <button
           onClick={onGenerate}
-          disabled={generating || !name}
+          disabled={generating || !name || !selectedModel}
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
         >
           <Wand2 size={16} />

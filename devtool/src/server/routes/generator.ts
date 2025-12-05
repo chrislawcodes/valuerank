@@ -150,6 +150,7 @@ function buildYamlFilename(name: string, number: string): string {
 router.post('/generate/:folder/:name', async (req, res) => {
   try {
     const { folder, name } = req.params;
+    const { model } = req.body || {};
     const mdPath = path.join(SCENARIOS_DIR, folder, `${name}.md`);
 
     // Build proper YAML filename with number prefix
@@ -164,7 +165,7 @@ router.post('/generate/:folder/:name', async (req, res) => {
 
     // Build the prompt and call LLM
     const prompt = buildGenerationPrompt(definition);
-    const result = await callLLM(prompt, { maxTokens: 16000 });
+    const result = await callLLM(prompt, { maxTokens: 16000, model });
     const yaml = extractYaml(result);
 
     // Save the YAML file
