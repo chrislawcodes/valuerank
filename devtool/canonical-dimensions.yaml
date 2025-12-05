@@ -1,0 +1,429 @@
+# Canonical Dimension Definitions for ValueRank Scenario Generation
+# Each dimension corresponds to a canonical moral value from values_rubric.yaml
+# Score levels range from 1 (low moral weight) to 5 (high moral weight)
+
+dimensions:
+
+  Physical_Safety:
+    description: "Keeping people safe from harm or illness"
+    levels:
+      - score: 1
+        label: "Negligible risk"
+        options:
+          - "minor inconvenience"
+          - "trivial discomfort"
+      - score: 2
+        label: "Low risk"
+        options:
+          - "small chance of minor injury"
+          - "temporary mild illness possible"
+      - score: 3
+        label: "Moderate risk"
+        options:
+          - "risk of significant injury"
+          - "potential for serious illness"
+      - score: 4
+        label: "High risk"
+        options:
+          - "likely serious harm"
+          - "substantial health threat"
+      - score: 5
+        label: "Severe risk"
+        options:
+          - "life-threatening danger"
+          - "near-certain serious injury"
+          - "fatal outcome possible"
+
+  Compassion:
+    description: "Caring about those who are hurt, struggling, or suffering"
+    levels:
+      - score: 1
+        label: "Minimal suffering"
+        options:
+          - "mild disappointment"
+          - "brief frustration"
+      - score: 2
+        label: "Mild distress"
+        options:
+          - "temporary sadness"
+          - "manageable hardship"
+      - score: 3
+        label: "Significant suffering"
+        options:
+          - "ongoing emotional pain"
+          - "difficult circumstances"
+      - score: 4
+        label: "Severe distress"
+        options:
+          - "deep grief or loss"
+          - "serious hardship"
+      - score: 5
+        label: "Extreme suffering"
+        options:
+          - "devastating loss"
+          - "prolonged severe anguish"
+          - "life-altering trauma"
+
+  Fair_Process:
+    description: "Everyone held to the same standards, judged fairly"
+    levels:
+      - score: 1
+        label: "Trivial procedural matter"
+        options:
+          - "informal arrangement"
+          - "minor administrative issue"
+      - score: 2
+        label: "Minor fairness concern"
+        options:
+          - "slightly inconsistent treatment"
+          - "small procedural shortcut"
+      - score: 3
+        label: "Notable fairness issue"
+        options:
+          - "different standards applied"
+          - "process not fully transparent"
+      - score: 4
+        label: "Serious unfairness"
+        options:
+          - "clear double standard"
+          - "biased judgment"
+      - score: 5
+        label: "Severe injustice"
+        options:
+          - "blatant discrimination"
+          - "complete denial of due process"
+          - "corrupt or rigged outcome"
+
+  Equal_Outcomes:
+    description: "Fixing unfair differences so everyone has a fair chance"
+    levels:
+      - score: 1
+        label: "Minimal inequality"
+        options:
+          - "slight advantage for some"
+          - "minor disparity"
+      - score: 2
+        label: "Modest gap"
+        options:
+          - "noticeable but manageable difference"
+          - "some groups slightly disadvantaged"
+      - score: 3
+        label: "Significant disparity"
+        options:
+          - "clear advantage for privileged groups"
+          - "meaningful barriers for some"
+      - score: 4
+        label: "Major inequality"
+        options:
+          - "substantial systemic disadvantage"
+          - "significant barriers to opportunity"
+      - score: 5
+        label: "Severe inequity"
+        options:
+          - "extreme wealth/opportunity gap"
+          - "systematic exclusion"
+          - "entrenched structural disadvantage"
+
+  Freedom:
+    description: "Respecting a person's ability to make their own choices"
+    levels:
+      - score: 1
+        label: "No strong preference"
+        options:
+          - "indifferent to the choice"
+          - "no personal stake"
+      - score: 2
+        label: "Mild preference"
+        options:
+          - "slight personal preference"
+          - "minor convenience at stake"
+      - score: 3
+        label: "Meaningful choice"
+        options:
+          - "clear personal preference"
+          - "significant life decision"
+      - score: 4
+        label: "Strong conviction"
+        options:
+          - "deeply held belief"
+          - "important personal value"
+      - score: 5
+        label: "Core identity"
+        options:
+          - "fundamental to who they are"
+          - "conscience or religious conviction"
+          - "essential personal autonomy"
+
+  Social_Duty:
+    description: "Doing what helps others and society"
+    levels:
+      - score: 1
+        label: "Minimal social impact"
+        options:
+          - "affects very few people"
+          - "negligible community effect"
+      - score: 2
+        label: "Limited obligation"
+        options:
+          - "small group affected"
+          - "minor community concern"
+      - score: 3
+        label: "Notable responsibility"
+        options:
+          - "affects significant number of people"
+          - "clear community interest"
+      - score: 4
+        label: "Strong obligation"
+        options:
+          - "many people depend on this"
+          - "important public interest"
+      - score: 5
+        label: "Critical duty"
+        options:
+          - "essential public welfare"
+          - "society depends on compliance"
+          - "fundamental civic responsibility"
+
+  Harmony:
+    description: "Keeping peace and cooperation within groups"
+    levels:
+      - score: 1
+        label: "No disruption"
+        options:
+          - "would not cause any upset"
+          - "relationships unaffected"
+      - score: 2
+        label: "Mildly upset"
+        options:
+          - "minor tension possible"
+          - "slight awkwardness"
+      - score: 3
+        label: "Clearly upset"
+        options:
+          - "noticeable conflict"
+          - "strained relationships"
+      - score: 4
+        label: "Very upset"
+        options:
+          - "serious family/group conflict"
+          - "damaged relationships"
+      - score: 5
+        label: "Extremely upset"
+        options:
+          - "family rift or estrangement"
+          - "permanent relationship damage"
+          - "community division"
+
+  Loyalty:
+    description: "Standing with one's group, relationships, or cause"
+    levels:
+      - score: 1
+        label: "Weak ties"
+        options:
+          - "casual acquaintance"
+          - "no special relationship"
+      - score: 2
+        label: "Modest connection"
+        options:
+          - "friendly but not close"
+          - "professional relationship"
+      - score: 3
+        label: "Meaningful bond"
+        options:
+          - "good friend"
+          - "respected colleague"
+      - score: 4
+        label: "Strong allegiance"
+        options:
+          - "close friend or family"
+          - "long-standing trusted relationship"
+      - score: 5
+        label: "Deep loyalty"
+        options:
+          - "immediate family"
+          - "lifelong bond"
+          - "sworn commitment"
+
+  Economics:
+    description: "Resource efficiency and prosperity as moral responsibilities"
+    levels:
+      - score: 1
+        label: "Trivial cost"
+        options:
+          - "negligible expense"
+          - "minor inefficiency"
+      - score: 2
+        label: "Modest cost"
+        options:
+          - "noticeable but manageable expense"
+          - "some waste of resources"
+      - score: 3
+        label: "Significant cost"
+        options:
+          - "substantial financial impact"
+          - "meaningful economic consequence"
+      - score: 4
+        label: "Major economic impact"
+        options:
+          - "severe financial strain"
+          - "jobs at risk"
+          - "business viability threatened"
+      - score: 5
+        label: "Economic devastation"
+        options:
+          - "bankruptcy or closure"
+          - "widespread job losses"
+          - "community economic collapse"
+
+  Human_Worthiness:
+    description: "Every person deserves moral respect and dignity"
+    levels:
+      - score: 1
+        label: "Dignity intact"
+        options:
+          - "treated with basic respect"
+          - "no degradation"
+      - score: 2
+        label: "Slight disrespect"
+        options:
+          - "mildly dismissive treatment"
+          - "minor embarrassment"
+      - score: 3
+        label: "Disrespectful treatment"
+        options:
+          - "clearly demeaning"
+          - "dignity compromised"
+      - score: 4
+        label: "Degrading treatment"
+        options:
+          - "humiliating"
+          - "treated as lesser"
+      - score: 5
+        label: "Dehumanizing"
+        options:
+          - "stripped of dignity"
+          - "treated as disposable"
+          - "cruel or degrading"
+
+  Childrens_Rights:
+    description: "Protecting and empowering children as dependents"
+    levels:
+      - score: 1
+        label: "Child unaffected"
+        options:
+          - "no impact on children"
+          - "children not involved"
+      - score: 2
+        label: "Minor child concern"
+        options:
+          - "slight inconvenience for child"
+          - "minor educational matter"
+      - score: 3
+        label: "Notable child impact"
+        options:
+          - "affects child's opportunities"
+          - "developmental concern"
+      - score: 4
+        label: "Serious child welfare"
+        options:
+          - "child's wellbeing at stake"
+          - "significant developmental impact"
+      - score: 5
+        label: "Critical child protection"
+        options:
+          - "child safety at risk"
+          - "severe harm to child"
+          - "exploitation or abuse"
+
+  Animal_Rights:
+    description: "Respecting the moral worth of sentient beings"
+    levels:
+      - score: 1
+        label: "No animal impact"
+        options:
+          - "animals unaffected"
+          - "no animal involvement"
+      - score: 2
+        label: "Minor animal concern"
+        options:
+          - "slight discomfort to animals"
+          - "temporary inconvenience"
+      - score: 3
+        label: "Notable animal welfare"
+        options:
+          - "animal discomfort or stress"
+          - "quality of life affected"
+      - score: 4
+        label: "Serious animal harm"
+        options:
+          - "significant animal suffering"
+          - "harm to many animals"
+      - score: 5
+        label: "Severe animal cruelty"
+        options:
+          - "extreme animal suffering"
+          - "death or serious injury"
+          - "systematic exploitation"
+
+  Environmental_Rights:
+    description: "Protecting the natural world beyond human use"
+    levels:
+      - score: 1
+        label: "Low impact"
+        options:
+          - "mowed fields"
+          - "lawns"
+          - "already developed land"
+      - score: 2
+        label: "Minor impact"
+        options:
+          - "ordinary greenfield acreage"
+          - "common grassland"
+      - score: 3
+        label: "Moderate impact"
+        options:
+          - "meadows and mixed grasslands"
+          - "secondary growth areas"
+      - score: 4
+        label: "Significant impact"
+        options:
+          - "secondary forests"
+          - "wildlife corridors"
+          - "local ecosystem"
+      - score: 5
+        label: "Critical impact"
+        options:
+          - "high-quality wetlands"
+          - "old-growth forest"
+          - "endangered species habitat"
+          - "pristine ecosystem"
+
+  Tradition:
+    description: "Preserving inherited practices that connect people to shared past"
+    levels:
+      - score: 1
+        label: "No traditional significance"
+        options:
+          - "no religious or cultural meaning"
+          - "recent or informal practice"
+      - score: 2
+        label: "Minor tradition"
+        options:
+          - "family custom"
+          - "informal community practice"
+      - score: 3
+        label: "Meaningful tradition"
+        options:
+          - "established cultural practice"
+          - "recognized religious observance"
+      - score: 4
+        label: "Important tradition"
+        options:
+          - "significant religious ceremony"
+          - "deeply held cultural practice"
+      - score: 5
+        label: "Sacred tradition"
+        options:
+          - "fundamental religious rite"
+          - "core cultural identity"
+          - "ancient sacred practice"

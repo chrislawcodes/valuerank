@@ -63,6 +63,22 @@ export const scenarios = {
     }),
 };
 
+// Canonical dimension types
+export interface DimensionLevel {
+  score: number;
+  label: string;
+  options: string[];
+}
+
+export interface CanonicalDimension {
+  description: string;
+  levels: DimensionLevel[];
+}
+
+export interface CanonicalDimensions {
+  dimensions: Record<string, CanonicalDimension>;
+}
+
 // Config API
 export const config = {
   getRuntime: () => fetchJson<unknown>(`${API_BASE}/config/runtime`),
@@ -74,6 +90,7 @@ export const config = {
   getValuesRubric: () => fetchJson<unknown>(`${API_BASE}/config/values-rubric`),
   getValues: () => fetchJson<{ values: string[] }>(`${API_BASE}/config/values`),
   getModelCosts: () => fetchJson<unknown>(`${API_BASE}/config/model-costs`),
+  getCanonicalDimensions: () => fetchJson<CanonicalDimensions>(`${API_BASE}/config/canonical-dimensions`),
 };
 
 // Runner API

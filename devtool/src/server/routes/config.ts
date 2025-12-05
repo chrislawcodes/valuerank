@@ -6,6 +6,7 @@ const router = Router();
 
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const CONFIG_DIR = path.join(PROJECT_ROOT, 'config');
+const DEVTOOL_ROOT = process.cwd();
 
 // GET /api/config/runtime - Get runtime configuration
 router.get('/runtime', async (_req, res) => {
@@ -60,6 +61,29 @@ router.get('/values', async (_req, res) => {
     res.json({ values });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read values', details: String(error) });
+  }
+});
+
+// Canonical dimension type
+interface DimensionLevel {
+  score: number;
+  label: string;
+  options: string[];
+}
+
+interface CanonicalDimension {
+  description: string;
+  levels: DimensionLevel[];
+}
+
+// GET /api/config/canonical-dimensions - Get canonical dimension definitions
+router.get('/canonical-dimensions', async (_req, res) => {
+  try {
+    const filePath = path.join(DEVTOOL_ROOT, 'canonical-dimensions.yaml');
+    const data = await readYamlFile<{ dimensions: Record<string, CanonicalDimension> }>(filePath);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read canonical dimensions', details: String(error) });
   }
 });
 
