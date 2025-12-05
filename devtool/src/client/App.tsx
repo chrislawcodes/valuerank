@@ -1,10 +1,29 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ScenarioList, type ScenarioListHandle } from './components/ScenarioList';
 import { ScenarioEditor } from './components/ScenarioEditor';
 import { PipelineRunner } from './components/PipelineRunner';
 import { ScenarioGenerator } from './components/ScenarioGenerator';
 import { Analyze } from './components/Analyze';
-import { FileText, Terminal, Settings, BarChart3 } from 'lucide-react';
+import { FileText, Terminal, Settings, BarChart3, Check, X } from 'lucide-react';
+
+interface LLMProvider {
+  id: string;
+  name: string;
+  envKey: string;
+  icon: string;
+  configured: boolean;
+}
+
+interface DimensionLevel {
+  score: number;
+  label: string;
+  options: string[];
+}
+
+interface CanonicalDimension {
+  description: string;
+  levels: DimensionLevel[];
+}
 
 type EditorMode = 'yaml' | 'definition' | 'new-definition' | 'none';
 
@@ -22,6 +41,79 @@ function App() {
     file: '',
   });
   const scenarioListRef = useRef<ScenarioListHandle>(null);
+
+  // Settings state
+  const [llmProviders, setLlmProviders] = useState<LLMProvider[]>([]);
+  const [dimensions, setDimensions] = useState<Record<string, CanonicalDimension>>({});
+  const [selectedDimension, setSelectedDimension] = useState<string | null>(null);
+
+  // Fetch settings data when settings view is shown
+  useEffect(() => {
+    if (view === 'settings') {
+      // Fetch LLM providers
+      fetch('/api/config/llm-providers')
+        .then(res => res.json())
+        .then(data => setLlmProviders(data.providers || []))
+        .catch(console.error);
+
+      // Fetch canonical dimensions
+      fetch('/api/config/canonical-dimensions')
+        .then(res => res.json())
+        .then(data => {
+          setDimensions(data.dimensions || {});
+          // Select first dimension if none selected
+          if (!selectedDimension && data.dimensions) {
+            const keys = Object.keys(data.dimensions);
+            if (keys.length > 0) {
+              setSelectedDimension(keys[0]);
+            }
+          }
+        })
+        .catch(console.error);
+    }
+  }, [view]);
+
+  // Save dimension on blur
+  const saveDimension = async (name: string, dimension: CanonicalDimension) => {
+    try {
+      await fetch(`/api/config/canonical-dimensions/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dimension),
+      });
+    } catch (error) {
+      console.error('Failed to save dimension:', error);
+    }
+  };
+
+  const updateDimensionField = (name: string, field: keyof CanonicalDimension, value: string | DimensionLevel[]) => {
+    setDimensions(prev => ({
+      ...prev,
+      [name]: {
+        ...prev[name],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateLevelField = (dimName: string, levelIndex: number, field: keyof DimensionLevel, value: string | number | string[]) => {
+    setDimensions(prev => {
+      const dim = prev[dimName];
+      if (!dim) return prev;
+      const newLevels = [...dim.levels];
+      newLevels[levelIndex] = {
+        ...newLevels[levelIndex],
+        [field]: value,
+      };
+      return {
+        ...prev,
+        [dimName]: {
+          ...dim,
+          levels: newLevels,
+        },
+      };
+    });
+  };
 
   const handleSelectYaml = (folder: string, file: string) => {
     setEditorState({ mode: 'yaml', folder, file });
@@ -182,10 +274,130 @@ function App() {
         )}
 
         {view === 'settings' && (
-          <main className="flex-1 p-8 bg-gray-50">
-            <div className="max-w-2xl">
+          <main className="flex-1 p-8 bg-gray-50 overflow-auto">
+            <div className="max-w-5xl">
               <h2 className="text-2xl font-bold mb-6">Settings</h2>
+
+              {/* LLM API Keys Section */}
               <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="font-semibold mb-4">LLM API Keys</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configure API keys in your <code className="bg-gray-100 px-1 rounded">.env</code> file.
+                </p>
+                <div className="space-y-2">
+                  {llmProviders.map(provider => (
+                    <div
+                      key={provider.id}
+                      className="flex items-center justify-between py-2 px-3 rounded bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-5 h-5 flex-shrink-0"
+                          dangerouslySetInnerHTML={{ __html: provider.icon }}
+                        />
+                        <span className={provider.configured ? 'text-gray-900' : 'text-gray-500'}>
+                          {provider.name}
+                        </span>
+                        {provider.configured ? (
+                          <Check size={16} className="text-green-500" />
+                        ) : (
+                          <X size={16} className="text-gray-300" />
+                        )}
+                      </div>
+                      <code className="text-xs text-gray-400">{provider.envKey}</code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Canonical Dimensions Section */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+                <h3 className="font-semibold mb-4">Canonical Dimensions</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Define the moral dimensions used for scenario generation. Changes are saved automatically on blur.
+                </p>
+                <div className="flex gap-4">
+                  {/* Dimension List (Left Pane) */}
+                  <div className="w-56 flex-shrink-0 border-r border-gray-200 pr-4">
+                    <div className="space-y-1">
+                      {Object.keys(dimensions).map(name => (
+                        <button
+                          key={name}
+                          onClick={() => setSelectedDimension(name)}
+                          className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                            selectedDimension === name
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'hover:bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {name.replace(/_/g, ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dimension Editor (Right Pane) */}
+                  <div className="flex-1 min-w-0">
+                    {selectedDimension && dimensions[selectedDimension] && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Description
+                          </label>
+                          <input
+                            type="text"
+                            value={dimensions[selectedDimension].description}
+                            onChange={e => updateDimensionField(selectedDimension, 'description', e.target.value)}
+                            onBlur={() => saveDimension(selectedDimension, dimensions[selectedDimension])}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Score Levels
+                          </label>
+                          <div className="space-y-3">
+                            {dimensions[selectedDimension].levels.map((level, idx) => (
+                              <div key={idx} className="p-3 bg-gray-50 rounded-md">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-sm font-medium text-gray-500 w-16">
+                                    Score {level.score}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={level.label}
+                                    onChange={e => updateLevelField(selectedDimension, idx, 'label', e.target.value)}
+                                    onBlur={() => saveDimension(selectedDimension, dimensions[selectedDimension])}
+                                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Label"
+                                  />
+                                </div>
+                                <textarea
+                                  value={level.options.join('\n')}
+                                  onChange={e => updateLevelField(selectedDimension, idx, 'options', e.target.value.split('\n'))}
+                                  onBlur={() => saveDimension(selectedDimension, dimensions[selectedDimension])}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  rows={Math.max(2, level.options.length)}
+                                  placeholder="Options (one per line)"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {!selectedDimension && (
+                      <div className="text-gray-400 text-sm">
+                        Select a dimension to edit
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuration Files Section */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
                 <h3 className="font-semibold mb-4">Configuration Files</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
@@ -201,23 +413,9 @@ function App() {
                     <code className="bg-gray-100 px-2 py-1 rounded">config/model_costs.yaml</code>
                   </div>
                 </div>
-                <p className="text-gray-500 text-sm mt-4">
-                  Edit these files directly or use a text editor for advanced configuration.
-                </p>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-                <h3 className="font-semibold mb-4">LLM API Keys</h3>
-                <p className="text-sm text-gray-600 mb-3">
-                  The Generator requires an API key. Add one of these to your{' '}
-                  <code className="bg-gray-100 px-1 rounded">.env</code> file:
-                </p>
-                <div className="space-y-2 text-sm font-mono bg-gray-50 p-3 rounded">
-                  <div>ANTHROPIC_API_KEY=sk-ant-...</div>
-                  <div>OPENAI_API_KEY=sk-...</div>
-                </div>
-              </div>
-
+              {/* File Types Section */}
               <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
                 <h3 className="font-semibold mb-4">File Types</h3>
                 <div className="space-y-3 text-sm">
@@ -235,35 +433,6 @@ function App() {
                       models during evaluation.
                     </span>
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-                <h3 className="font-semibold mb-4">14 Canonical Values</h3>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    'Physical_Safety',
-                    'Compassion',
-                    'Fair_Process',
-                    'Equal_Outcomes',
-                    'Freedom',
-                    'Social_Duty',
-                    'Harmony',
-                    'Loyalty',
-                    'Economics',
-                    'Human_Worthiness',
-                    'Childrens_Rights',
-                    'Animal_Rights',
-                    'Environmental_Rights',
-                    'Tradition',
-                  ].map((value) => (
-                    <span
-                      key={value}
-                      className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm"
-                    >
-                      {value}
-                    </span>
-                  ))}
                 </div>
               </div>
             </div>

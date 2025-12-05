@@ -183,7 +183,7 @@ router.get('/runs', async (_req, res) => {
 router.get('/csv/*', async (req, res) => {
   try {
     // The path comes as params[0] due to wildcard
-    const fullPath = req.params[0];
+    const fullPath = (req.params as Record<string, string>)[0];
     const csvPath = path.join(PROJECT_ROOT, 'output', fullPath);
 
     // Security check - ensure we're reading from output directory
@@ -220,7 +220,7 @@ router.get('/csv/*', async (req, res) => {
 // GET /api/analysis/aggregate/:runPath - Get aggregated statistics for visualization
 router.get('/aggregate/*', async (req, res) => {
   try {
-    const runPath = req.params[0];
+    const runPath = (req.params as Record<string, string>)[0];
     const runDir = path.join(PROJECT_ROOT, 'output', runPath);
 
     // Security check
@@ -433,7 +433,7 @@ router.post('/deep', async (req, res) => {
 // POST /api/analysis/deep/run - Run deep analysis on a specific run's CSV files
 router.post('/deep/run/*', async (req, res) => {
   const reqLog = log.child('deep/run');
-  const runPath = req.params[0];
+  const runPath = (req.params as Record<string, string>)[0];
   reqLog.info('Deep analysis request for run', { runPath });
 
   try {

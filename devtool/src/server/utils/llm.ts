@@ -6,14 +6,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createLogger } from './logger.js';
+import { getGenerationProviders, type LLMProviderConfig } from '../../shared/llmProviders.js';
 
 const log = createLogger('llm');
 
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 
-interface LLMProvider {
-  name: string;
-  envKey: string;
+interface LLMProviderWithGenerate extends LLMProviderConfig {
   generate: (prompt: string, apiKey: string, options?: LLMOptions) => Promise<string>;
 }
 
@@ -50,63 +49,65 @@ export async function loadEnvFile(): Promise<Record<string, string>> {
   return env;
 }
 
-const providers: LLMProvider[] = [
-  {
-    name: 'anthropic',
-    envKey: 'ANTHROPIC_API_KEY',
-    generate: async (prompt: string, apiKey: string, options?: LLMOptions) => {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: options?.model || 'claude-sonnet-4-20250514',
-          max_tokens: options?.maxTokens || 4096,
-          temperature: options?.temperature ?? 0.7,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
+// Generate functions for each supported provider
+const generateFunctions: Record<string, (prompt: string, apiKey: string, options?: LLMOptions) => Promise<string>> = {
+  anthropic: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: options?.model || 'claude-sonnet-4-20250514',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Anthropic API error: ${error}`);
-      }
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Anthropic API error: ${error}`);
+    }
 
-      const data = await response.json();
-      return data.content[0].text;
-    },
+    const data = await response.json() as { content: Array<{ text: string }> };
+    return data.content[0].text;
   },
-  {
-    name: 'openai',
-    envKey: 'OPENAI_API_KEY',
-    generate: async (prompt: string, apiKey: string, options?: LLMOptions) => {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: options?.model || 'gpt-4o',
-          max_tokens: options?.maxTokens || 4096,
-          temperature: options?.temperature ?? 0.7,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`OpenAI API error: ${error}`);
-      }
+  openai: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options?.model || 'gpt-4o',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-      const data = await response.json();
-      return data.choices[0].message.content;
-    },
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+    return data.choices[0].message.content;
   },
-];
+};
+
+// Build providers list from shared config, adding generate functions
+const providers: LLMProviderWithGenerate[] = getGenerationProviders()
+  .filter(p => generateFunctions[p.id])
+  .map(p => ({
+    ...p,
+    generate: generateFunctions[p.id],
+  }));
 
 /**
  * Call an LLM with the given prompt, trying available providers in order.
@@ -121,13 +122,13 @@ export async function callLLM(prompt: string, options?: LLMOptions): Promise<str
     const apiKey = allEnv[provider.envKey];
     if (apiKey) {
       try {
-        log.info(`Using ${provider.name} for LLM call`);
+        log.info(`Using ${provider.id} for LLM call`);
         const result = await provider.generate(prompt, apiKey, options);
-        log.info(`${provider.name} call successful`, { responseLength: result.length });
+        log.info(`${provider.id} call successful`, { responseLength: result.length });
         return result;
       } catch (e) {
         lastError = String(e);
-        log.error(`${provider.name} failed`, { error: lastError });
+        log.error(`${provider.id} failed`, { error: lastError });
       }
     }
   }
@@ -144,7 +145,7 @@ export async function getAvailableProviders(): Promise<string[]> {
 
   return providers
     .filter((p) => !!allEnv[p.envKey])
-    .map((p) => p.name);
+    .map((p) => p.id);
 }
 
 /**

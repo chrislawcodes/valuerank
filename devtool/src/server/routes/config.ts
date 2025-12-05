@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import path from 'path';
 import { readYamlFile, writeYamlFile } from '../utils/yaml.js';
+import { loadEnvFile } from '../utils/llm.js';
+import { LLM_PROVIDERS } from '../../shared/llmProviders.js';
 
 const router = Router();
 
@@ -84,6 +86,45 @@ router.get('/canonical-dimensions', async (_req, res) => {
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read canonical dimensions', details: String(error) });
+  }
+});
+
+// PUT /api/config/canonical-dimensions/:name - Update a single canonical dimension
+router.put('/canonical-dimensions/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const filePath = path.join(DEVTOOL_ROOT, 'canonical-dimensions.yaml');
+    const data = await readYamlFile<{ dimensions: Record<string, CanonicalDimension> }>(filePath);
+
+    if (!data.dimensions) {
+      data.dimensions = {};
+    }
+
+    data.dimensions[name] = req.body;
+    await writeYamlFile(filePath, data);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update canonical dimension', details: String(error) });
+  }
+});
+
+// GET /api/config/llm-providers - Get LLM provider status (which have API keys configured)
+router.get('/llm-providers', async (_req, res) => {
+  try {
+    const envVars = await loadEnvFile();
+    const allEnv = { ...process.env, ...envVars };
+
+    const providers = LLM_PROVIDERS.map(provider => ({
+      id: provider.id,
+      name: provider.name,
+      envKey: provider.envKey,
+      icon: provider.icon,
+      configured: !!allEnv[provider.envKey],
+    }));
+
+    res.json({ providers });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check LLM providers', details: String(error) });
   }
 });
 
