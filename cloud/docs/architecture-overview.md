@@ -830,6 +830,265 @@ const tools = [
 ];
 ```
 
+### MCP Tools (Write Operations)
+
+Enable AI agents to author scenarios and trigger runs:
+
+```typescript
+const writeTools = [
+  {
+    name: "create_definition",
+    description: "Create a new scenario definition",
+    parameters: {
+      name: { type: "string", required: true },
+      folder: { type: "string", required: true },
+      parent_id: { type: "string", optional: true },  // Fork from existing
+      content: {
+        type: "object",
+        required: true,
+        properties: {
+          preamble: { type: "string", description: "Instructions for the AI being evaluated" },
+          template: { type: "string", description: "Scenario body with [placeholders]" },
+          dimensions: {
+            type: "array",
+            items: {
+              name: "string",
+              levels: [{ score: "number", label: "string", options: ["string"] }]
+            }
+          },
+          matching_rules: { type: "string", optional: true }
+        }
+      }
+    },
+    returns: { definition_id: "string", validation_warnings: ["string"] }
+  },
+
+  {
+    name: "fork_definition",
+    description: "Create a variant of an existing definition",
+    parameters: {
+      parent_id: { type: "string", required: true },
+      name: { type: "string", required: true },
+      changes: {
+        type: "object",
+        description: "Partial update - only fields to change",
+        properties: {
+          preamble: { type: "string", optional: true },
+          template: { type: "string", optional: true },
+          dimensions: { type: "array", optional: true }
+        }
+      }
+    },
+    returns: { definition_id: "string", diff_summary: "string" }
+  },
+
+  {
+    name: "validate_definition",
+    description: "Check a definition for errors without saving",
+    parameters: {
+      content: { type: "object", description: "Same structure as create_definition" }
+    },
+    returns: {
+      valid: "boolean",
+      errors: ["string"],
+      warnings: ["string"],
+      estimated_scenario_count: "number",
+      dimension_coverage: "Analysis of dimension combinations"
+    }
+  },
+
+  {
+    name: "generate_scenarios",
+    description: "Generate scenario variants from a definition",
+    parameters: {
+      definition_id: { type: "string", required: true },
+      preview_only: { type: "boolean", default: true }  // Don't save, just show
+    },
+    returns: {
+      scenario_count: "number",
+      scenarios: [{ id: "string", subject: "string", dimension_values: {} }],
+      sample_body: "Full text of first scenario (for verification)"
+    }
+  },
+
+  {
+    name: "start_run",
+    description: "Queue a new evaluation run",
+    parameters: {
+      definition_id: { type: "string", required: true },
+      models: { type: "array", items: "string", required: true },
+      sample_percentage: { type: "number", default: 100 },
+      sample_seed: { type: "number", optional: true },
+      experiment_id: { type: "string", optional: true }
+    },
+    returns: { run_id: "string", queued_tasks: "number", estimated_cost: "string" }
+  },
+
+  {
+    name: "create_experiment",
+    description: "Create an experiment to group related runs",
+    parameters: {
+      name: { type: "string", required: true },
+      hypothesis: { type: "string", required: true },
+      baseline_run_id: { type: "string", optional: true },
+      controlled_variables: { type: "object", optional: true },
+      independent_variable: { type: "object", optional: true }
+    },
+    returns: { experiment_id: "string" }
+  }
+];
+```
+
+### Context for Scenario Authoring
+
+To help an AI agent create well-formed scenarios, expose rich context:
+
+```typescript
+const authoringResources = [
+  {
+    uri: "valuerank://authoring/guide",
+    name: "Scenario Authoring Guide",
+    description: "Best practices for writing effective moral dilemmas",
+    mimeType: "text/markdown",
+    content: `
+# Scenario Authoring Guide
+
+## Structure
+- **Preamble**: Instructions that prime the AI for moral reasoning
+- **Template**: The dilemma text with [dimension_placeholders]
+- **Dimensions**: Variables that create scenario variants
+
+## Best Practices
+1. Present genuine tradeoffs (no obvious "right" answer)
+2. Make stakes concrete and relatable
+3. Avoid loaded language that biases toward one value
+4. Include 2-4 dimensions for meaningful variation
+5. Each dimension should have 3-5 levels of intensity
+
+## Example Dimension Design
+- Low/Medium/High stakes
+- Personal/Professional/Societal scope
+- Certain/Uncertain outcomes
+- Reversible/Irreversible consequences
+
+## Common Pitfalls
+- Scenarios too abstract to engage with
+- One option clearly dominant
+- Missing key context for decision-making
+- Dimensions that don't meaningfully change the dilemma
+    `
+  },
+
+  {
+    uri: "valuerank://authoring/examples",
+    name: "Example Definitions",
+    description: "Well-crafted scenario definitions to learn from",
+    mimeType: "application/json"
+    // Returns 3-5 curated examples with annotations
+  },
+
+  {
+    uri: "valuerank://authoring/value-pairs",
+    name: "Value Tension Pairs",
+    description: "Common value conflicts that make good scenarios",
+    mimeType: "application/json",
+    content: [
+      { pair: ["Physical_Safety", "Economics"], example: "Safety regulation vs business viability" },
+      { pair: ["Freedom", "Tradition"], example: "Personal choice vs cultural expectations" },
+      { pair: ["Compassion", "Fair_Process"], example: "Individual mercy vs consistent rules" },
+      { pair: ["Loyalty", "Social_Duty"], example: "Protecting in-group vs broader obligations" }
+      // ... more pairs
+    ]
+  },
+
+  {
+    uri: "valuerank://authoring/preamble-templates",
+    name: "Preamble Templates",
+    description: "Tested preamble patterns that elicit good moral reasoning",
+    mimeType: "application/json"
+  }
+];
+```
+
+### Agent Authoring Workflow
+
+Example: Agent creates a new scenario about autonomous vehicles:
+
+```
+User: "Create a scenario about self-driving cars and the trolley problem"
+
+Agent → MCP: get_resource("valuerank://authoring/guide")
+Agent → MCP: get_resource("valuerank://authoring/value-pairs")
+Agent → MCP: get_resource("valuerank://authoring/examples")
+Agent: [Studies format and best practices]
+
+Agent → MCP: validate_definition({
+  content: {
+    preamble: "Focus on the moral reasoning...",
+    template: "You are advising on AI policy. A self-driving car must choose...",
+    dimensions: [
+      { name: "victim_count", levels: [...] },
+      { name: "certainty", levels: [...] }
+    ]
+  }
+})
+← MCP: { valid: true, warnings: ["Consider adding outcome reversibility dimension"], estimated_scenario_count: 25 }
+
+Agent → MCP: create_definition({
+  name: "trolley-av-v1",
+  folder: "autonomous-vehicles",
+  content: { ... }
+})
+← MCP: { definition_id: "def_abc123", validation_warnings: [] }
+
+Agent → MCP: generate_scenarios({ definition_id: "def_abc123", preview_only: true })
+← MCP: { scenario_count: 25, scenarios: [...], sample_body: "..." }
+
+Agent: "I've created 25 scenario variants. Want me to run a 10% test?"
+
+User: "Yes, test with GPT-4 and Claude"
+
+Agent → MCP: start_run({
+  definition_id: "def_abc123",
+  models: ["openai:gpt-4", "anthropic:claude-3"],
+  sample_percentage: 10
+})
+← MCP: { run_id: "run_xyz", queued_tasks: 5, estimated_cost: "$0.50" }
+
+Agent: "Started run_xyz with 5 scenarios (10% sample). Estimated cost: $0.50"
+```
+
+### Write Operation Security
+
+```typescript
+const writeConfig = {
+  // Require explicit write scope in API key
+  requiredScopes: ["valuerank:write"],
+
+  // Rate limits for write operations (stricter than reads)
+  rateLimits: {
+    create_definition: { per_hour: 20 },
+    start_run: { per_hour: 10 },
+    fork_definition: { per_hour: 50 }
+  },
+
+  // Validation before any write
+  validation: {
+    max_dimensions: 10,
+    max_levels_per_dimension: 10,
+    max_template_length: 10000,
+    max_scenarios_per_definition: 1000
+  },
+
+  // Audit trail
+  audit: {
+    log_all_writes: true,
+    include_agent_id: true,
+    include_user_id: true
+  }
+};
+```
+
 ### MCP Resources (Data Access)
 
 Resources provide read-only access to reference data:
