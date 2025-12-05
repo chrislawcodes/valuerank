@@ -187,12 +187,12 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-gray-100">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
+      <div className="p-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-2 mb-4">
-          <Terminal size={20} className="text-green-400" />
-          <h2 className="font-semibold">Pipeline Runner</h2>
+          <Terminal size={20} className="text-green-600" />
+          <h2 className="font-semibold text-gray-900">Pipeline Runner</h2>
         </div>
 
         {/* Command Selector */}
@@ -204,7 +204,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 selectedCommand.command === cmd.command
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {cmd.name}
@@ -213,15 +213,15 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
         </div>
 
         {/* Description */}
-        <p className="text-sm text-gray-400 mb-4">{selectedCommand.description}</p>
+        <p className="text-sm text-gray-500 mb-4">{selectedCommand.description}</p>
 
         {/* Arguments */}
         <div className="space-y-3 mb-4">
           {selectedCommand.args.map((arg) => (
             <div key={arg.key} className="flex items-center gap-3">
-              <label className="text-sm text-gray-300 w-32 flex-shrink-0">
+              <label className="text-sm text-gray-700 w-32 flex-shrink-0">
                 {arg.label}
-                {arg.required && <span className="text-red-400 ml-1">*</span>}
+                {arg.required && <span className="text-red-500 ml-1">*</span>}
               </label>
               {arg.type === 'run-dir' ? (
                 <select
@@ -229,7 +229,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   onChange={(e) =>
                     setArgValues((prev) => ({ ...prev, [arg.key]: e.target.value }))
                   }
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm"
+                  className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded text-sm"
                 >
                   <option value="">Select a run...</option>
                   {runs.map((run) => (
@@ -244,7 +244,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   onChange={(e) =>
                     setArgValues((prev) => ({ ...prev, [arg.key]: e.target.value }))
                   }
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm"
+                  className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded text-sm"
                 >
                   <option value="">Select a folder...</option>
                   {folders.map((folder) => (
@@ -261,7 +261,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                     setArgValues((prev) => ({ ...prev, [arg.key]: e.target.value }))
                   }
                   placeholder={arg.placeholder}
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-sm placeholder-gray-500"
+                  className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded text-sm placeholder-gray-400"
                 />
               )}
             </div>
@@ -270,7 +270,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
           {/* Model Selector (for commands that support it) */}
           {selectedCommand.hasModelSelector && (
             <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-300 w-32 flex-shrink-0">
+              <label className="text-sm text-gray-700 w-32 flex-shrink-0">
                 Model
               </label>
               <ModelSelector
@@ -306,7 +306,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
           )}
           <button
             onClick={handleClear}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
           >
             <X size={16} />
             Clear
@@ -317,7 +317,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       {/* Output */}
       <div
         ref={outputRef}
-        className="flex-1 overflow-auto p-4 font-mono text-sm whitespace-pre-wrap"
+        className="flex-1 overflow-auto p-4 font-mono text-sm whitespace-pre-wrap bg-gray-900 text-gray-100"
       >
         {output.length === 0 ? (
           <span className="text-gray-500">Output will appear here...</span>

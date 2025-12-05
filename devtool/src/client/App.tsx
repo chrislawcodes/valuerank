@@ -6,6 +6,36 @@ import { ScenarioGenerator } from './components/ScenarioGenerator';
 import { Analyze } from './components/Analyze';
 import { FileText, Terminal, Settings, BarChart3, Check, X } from 'lucide-react';
 
+type ViewType = 'editor' | 'runner' | 'analyze' | 'settings';
+
+/** Parse URL search params to get initial state */
+function parseUrlState(): { view: ViewType; folder?: string; file?: string } {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab') as ViewType | null;
+  const folder = params.get('folder') || undefined;
+  const file = params.get('file') || undefined;
+
+  return {
+    view: tab && ['editor', 'runner', 'analyze', 'settings'].includes(tab) ? tab : 'editor',
+    folder,
+    file,
+  };
+}
+
+/** Update URL without triggering a page reload */
+function updateUrl(view: ViewType, folder?: string, file?: string) {
+  const params = new URLSearchParams();
+  params.set('tab', view);
+  if (view === 'editor' && folder) {
+    params.set('folder', folder);
+    if (file) {
+      params.set('file', file);
+    }
+  }
+  const newUrl = `${window.location.pathname}?${params.toString()}`;
+  window.history.replaceState({}, '', newUrl);
+}
+
 interface LLMProvider {
   id: string;
   name: string;
@@ -34,13 +64,33 @@ interface EditorState {
 }
 
 function App() {
-  const [view, setView] = useState<'editor' | 'runner' | 'analyze' | 'settings'>('editor');
-  const [editorState, setEditorState] = useState<EditorState>({
-    mode: 'none',
-    folder: '',
-    file: '',
+  // Initialize state from URL
+  const initialState = parseUrlState();
+  const [view, setView] = useState<ViewType>(initialState.view);
+  const [editorState, setEditorState] = useState<EditorState>(() => {
+    // If URL has folder/file, we need to determine the mode
+    if (initialState.folder && initialState.file) {
+      if (initialState.file.endsWith('.yaml') || initialState.file.endsWith('.yml')) {
+        return { mode: 'yaml', folder: initialState.folder, file: initialState.file };
+      } else if (initialState.file.endsWith('.md')) {
+        return { mode: 'definition', folder: initialState.folder, file: initialState.file.replace(/\.md$/, '') };
+      }
+      // Assume yaml if no extension
+      return { mode: 'yaml', folder: initialState.folder, file: initialState.file };
+    }
+    return { mode: 'none', folder: initialState.folder || '', file: '' };
   });
   const scenarioListRef = useRef<ScenarioListHandle>(null);
+
+  // Update URL when view or editor state changes
+  useEffect(() => {
+    const file = editorState.mode === 'yaml'
+      ? editorState.file
+      : editorState.mode === 'definition' || editorState.mode === 'new-definition'
+      ? `${editorState.file}.md`
+      : undefined;
+    updateUrl(view, editorState.folder || undefined, file);
+  }, [view, editorState]);
 
   // Settings state
   const [llmProviders, setLlmProviders] = useState<LLMProvider[]>([]);
