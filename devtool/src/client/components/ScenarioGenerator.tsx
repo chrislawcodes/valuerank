@@ -451,7 +451,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
               {definition.dimensions.map((d) => (
                 <span
                   key={d.name}
-                  className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs cursor-pointer hover:bg-purple-200"
+                  className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs cursor-pointer hover:bg-orange-200"
                   onClick={() => templateEditorRef.current?.insertAtCursor(`[${d.name.toLowerCase()}]`)}
                 >
                   [{d.name.toLowerCase()}]

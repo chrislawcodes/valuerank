@@ -3,12 +3,9 @@ import path from 'path';
 import fs from 'fs/promises';
 import { watch, type FSWatcher } from 'fs';
 import { readYamlFile, writeYamlFile, listYamlFiles, listDirectories } from '../utils/yaml.js';
+import { SCENARIOS_DIR } from '../utils/paths.js';
 
 const router = Router();
-
-// Base path to scenarios directory (relative to project root)
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
-const SCENARIOS_DIR = path.join(PROJECT_ROOT, 'scenarios');
 
 // Track active directory watchers
 const activeWatchers = new Map<string, FSWatcher[]>();

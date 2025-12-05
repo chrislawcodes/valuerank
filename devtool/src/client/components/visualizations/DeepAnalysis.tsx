@@ -539,10 +539,10 @@ function CorrelationMatrix({ data }: { data: DeepAnalysisResult }) {
             {divisive.slice(0, 5).map((item, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between p-3 bg-purple-50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-orange-50 rounded-lg"
               >
-                <span className="text-sm font-medium text-purple-800">{item.dimension}</span>
-                <div className="text-sm text-purple-600">
+                <span className="text-sm font-medium text-orange-900">{item.dimension}</span>
+                <div className="text-sm text-orange-700">
                   Spread: <span className="font-mono">{item.correlation_spread.toFixed(3)}</span>
                 </div>
               </div>
@@ -626,7 +626,7 @@ export function DeepAnalysis({ data }: DeepAnalysisProps) {
 
       {/* LLM Summary */}
       {data.llm_summary && (
-        <Section title="AI Analysis Summary" icon={<Sparkles size={20} className="text-purple-500" />}>
+        <Section title="AI Analysis Summary" icon={<Sparkles size={20} className="text-orange-600" />}>
           <div className="prose prose-sm max-w-none">
             <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
               {data.llm_summary.split('\n').map((line, i) => {
@@ -679,7 +679,7 @@ export function DeepAnalysis({ data }: DeepAnalysisProps) {
       )}
 
       {/* PCA Visualization */}
-      <Section title="Model Positioning (PCA)" icon={<Target size={20} className="text-purple-500" />}>
+      <Section title="Model Positioning (PCA)" icon={<Target size={20} className="text-orange-600" />}>
         <PCAVisualization data={data} />
       </Section>
 

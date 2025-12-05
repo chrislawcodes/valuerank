@@ -2,10 +2,9 @@ import { Router } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import { OUTPUT_DIR, PROJECT_ROOT } from '../utils/paths.js';
 
 const router = Router();
-
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 
 // Track running processes
 const runningProcesses = new Map<string, ChildProcess>();
@@ -214,7 +213,7 @@ async function discoverRunDirs(dir: string, fs: typeof import('fs/promises')): P
 router.get('/runs', async (_req, res) => {
   const fs = await import('fs/promises');
   try {
-    const outputDir = path.join(PROJECT_ROOT, 'output');
+    const outputDir = OUTPUT_DIR;
     const runPaths = await discoverRunDirs(outputDir, fs);
 
     // Convert to relative paths from output/ and sort newest first

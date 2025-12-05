@@ -215,12 +215,12 @@ export function Analyze() {
 
             {/* Data Source Indicator */}
             {dataSource === 'file' && droppedFileName ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md text-sm">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-100 text-orange-800 rounded-md text-sm">
                 <Upload size={14} />
                 <span className="font-medium">{droppedFileName}</span>
                 <button
                   onClick={clearDroppedFile}
-                  className="ml-1 p-0.5 hover:bg-purple-200 rounded"
+                  className="ml-1 p-0.5 hover:bg-orange-200 rounded"
                   title="Clear and return to server runs"
                 >
                   <X size={14} />

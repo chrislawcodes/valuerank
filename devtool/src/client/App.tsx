@@ -304,7 +304,7 @@ function App() {
                     <FileText size={48} className="mx-auto mb-4 opacity-50" />
                     <p>Select a scenario file from the sidebar</p>
                     <p className="text-sm mt-2">
-                      Click <span className="text-purple-500">+</span> on a folder to create a new scenario definition
+                      Click <span className="text-orange-600">+</span> on a folder to create a new scenario definition
                     </p>
                   </div>
                 </div>
@@ -472,7 +472,7 @@ function App() {
                 <h3 className="font-semibold mb-4">File Types</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-start gap-3">
-                    <span className="text-purple-500 font-mono">.md</span>
+                    <span className="text-orange-600 font-mono">.md</span>
                     <span className="text-gray-600">
                       Scenario definition files. These define dimensions and templates for generating
                       scenario combinations.

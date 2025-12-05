@@ -299,14 +299,14 @@ export function DimensionAnalysis({ data }: { data: ExtendedAggregateData }) {
             </div>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-4">
-            <h4 className="font-medium text-purple-800 mb-2">Most Divisive Dimensions</h4>
-            <p className="text-xs text-purple-600 mb-2">Models disagree most about these dimensions</p>
+          <div className="bg-orange-50 rounded-lg p-4">
+            <h4 className="font-medium text-orange-900 mb-2">Most Divisive Dimensions</h4>
+            <p className="text-xs text-orange-700 mb-2">Models disagree most about these dimensions</p>
             <div className="space-y-2">
               {divisiveDimensions.slice(0, 3).map((d, i) => (
                 <div key={i} className="text-sm flex items-center justify-between">
-                  <span className="text-purple-700">{d.dim}</span>
-                  <span className="font-mono text-purple-600">
+                  <span className="text-orange-800">{d.dim}</span>
+                  <span className="font-mono text-orange-700">
                     spread: {d.variance.toFixed(2)}
                   </span>
                 </div>

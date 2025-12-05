@@ -35,7 +35,7 @@ export function DimensionEditor({
         <h3 className="font-semibold text-gray-700">Dimensions ({dimensions.length})</h3>
         <button
           onClick={() => onAdd()}
-          className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+          className="flex items-center gap-1 px-3 py-1.5 text-sm bg-orange-700 text-white rounded hover:bg-orange-800"
         >
           <Plus size={14} />
           Add Dimension
@@ -129,7 +129,7 @@ export function DimensionEditor({
                 </div>
                 <button
                   onClick={() => onAddValue(dimIndex)}
-                  className="mt-2 text-sm text-purple-600 hover:text-purple-700"
+                  className="mt-2 text-sm text-orange-700 hover:text-orange-800"
                 >
                   + Add score level
                 </button>

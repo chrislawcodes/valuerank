@@ -77,7 +77,7 @@ export function GeneratorHeader({
   return (
     <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
       <div className="flex items-center gap-3">
-        <Wand2 className="text-purple-500" size={24} />
+        <Wand2 className="text-orange-600" size={24} />
         <div>
           {editing ? (
             <div className="flex items-center gap-2">
@@ -128,7 +128,7 @@ export function GeneratorHeader({
         <button
           onClick={onGenerate}
           disabled={generating || !name || !selectedModel}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-orange-700 text-white rounded hover:bg-orange-800 disabled:opacity-50"
         >
           <Wand2 size={16} />
           {generating ? 'Generating...' : 'Generate YAML'}

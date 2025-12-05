@@ -17,7 +17,7 @@ export function YamlPreview({ name, generating, yaml }: YamlPreviewProps) {
         {generating ? (
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">
-              <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <div className="animate-spin w-8 h-8 border-2 border-orange-600 border-t-transparent rounded-full mx-auto mb-4"></div>
               <p>Generating scenarios...</p>
             </div>
           </div>

@@ -4,14 +4,12 @@ import { watch, type FSWatcher } from 'fs';
 import path from 'path';
 import { parseScenarioMd, serializeScenarioMd, buildGenerationPrompt, type ScenarioDefinition } from '../utils/scenarioMd.js';
 import { callLLM, getAvailableProviders, extractYaml } from '../utils/llm.js';
+import { SCENARIOS_DIR } from '../utils/paths.js';
 
 const router = Router();
 
 // Track active file watchers to clean up on disconnect
 const activeWatchers = new Map<string, FSWatcher>();
-
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
-const SCENARIOS_DIR = path.join(PROJECT_ROOT, 'scenarios');
 
 // GET /api/generator/definition/:folder/:name - Get a scenario definition (.md file)
 router.get('/definition/:folder/:name', async (req, res) => {

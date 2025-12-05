@@ -188,14 +188,14 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                     </span>
                   </button>
                   <button
-                    className="p-1.5 hover:bg-purple-100 rounded mr-1"
+                    className="p-1.5 hover:bg-orange-100 rounded mr-1"
                     title="New scenario definition"
                     onClick={(e) => {
                       e.stopPropagation();
                       onCreateNew(folder);
                     }}
                   >
-                    <Plus size={14} className="text-purple-600" />
+                    <Plus size={14} className="text-orange-700" />
                   </button>
                 </div>
 
@@ -210,12 +210,12 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                           <button
                             className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
                               selectedFolder === folder && selectedFile === file
-                                ? 'bg-purple-100 text-purple-700'
+                                ? 'bg-orange-100 text-orange-800'
                                 : ''
                             }`}
                             onClick={() => onSelectDefinition(folder, name, false)}
                           >
-                            <Wand2 size={14} className="text-purple-500" />
+                            <Wand2 size={14} className="text-orange-600" />
                             <span className="text-sm truncate" title={file}>
                               {file}
                             </span>

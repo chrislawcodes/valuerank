@@ -4,9 +4,9 @@ import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { createLogger } from '../utils/logger.js';
 import { callLLM } from '../utils/llm.js';
+import { DEVTOOL_ROOT, OUTPUT_DIR, SCRIPTS_DIR } from '../utils/paths.js';
 
 const router = Router();
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 const log = createLogger('analysis');
 
 // Build a prompt for the LLM to summarize statistical analysis results
@@ -142,7 +142,7 @@ async function discoverAnalysisRuns(dir: string): Promise<{ path: string; name: 
         if (csvFiles.length > 0) {
           runs.push({
             path: subdir,
-            name: path.relative(path.join(PROJECT_ROOT, 'output'), subdir),
+            name: path.relative(OUTPUT_DIR, subdir),
             csvFiles,
           });
         } else {
@@ -162,8 +162,7 @@ async function discoverAnalysisRuns(dir: string): Promise<{ path: string; name: 
 // GET /api/analysis/runs - List runs that have summary CSV files
 router.get('/runs', async (_req, res) => {
   try {
-    const outputDir = path.join(PROJECT_ROOT, 'output');
-    const runs = await discoverAnalysisRuns(outputDir);
+    const runs = await discoverAnalysisRuns(OUTPUT_DIR);
 
     // Sort by name (newest first based on date format)
     runs.sort((a, b) => b.name.localeCompare(a.name));
@@ -184,11 +183,11 @@ router.get('/csv/*', async (req, res) => {
   try {
     // The path comes as params[0] due to wildcard
     const fullPath = (req.params as Record<string, string>)[0];
-    const csvPath = path.join(PROJECT_ROOT, 'output', fullPath);
+    const csvPath = path.join(OUTPUT_DIR, fullPath);
 
     // Security check - ensure we're reading from output directory
     const resolvedPath = path.resolve(csvPath);
-    const outputDir = path.resolve(path.join(PROJECT_ROOT, 'output'));
+    const outputDir = path.resolve(OUTPUT_DIR);
     if (!resolvedPath.startsWith(outputDir)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -221,11 +220,11 @@ router.get('/csv/*', async (req, res) => {
 router.get('/aggregate/*', async (req, res) => {
   try {
     const runPath = (req.params as Record<string, string>)[0];
-    const runDir = path.join(PROJECT_ROOT, 'output', runPath);
+    const runDir = path.join(OUTPUT_DIR, runPath);
 
     // Security check
     const resolvedPath = path.resolve(runDir);
-    const outputDir = path.resolve(path.join(PROJECT_ROOT, 'output'));
+    const outputDir = path.resolve(OUTPUT_DIR);
     if (!resolvedPath.startsWith(outputDir)) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -345,7 +344,7 @@ router.post('/deep', async (req, res) => {
       lines: csvContent.split('\n').length,
     });
 
-    const scriptPath = path.join(process.cwd(), 'scripts', 'deep_analysis.py');
+    const scriptPath = path.join(SCRIPTS_DIR, 'deep_analysis.py');
 
     // Check if script exists
     try {
@@ -365,7 +364,7 @@ router.post('/deep', async (req, res) => {
     // Run the Python script with CSV content piped to stdin
     const result = await new Promise<string>((resolve, reject) => {
       const python = spawn('python3', [scriptPath, '--stdin'], {
-        cwd: process.cwd(),
+        cwd: DEVTOOL_ROOT,
       });
 
       let stdout = '';
@@ -437,11 +436,11 @@ router.post('/deep/run/*', async (req, res) => {
   reqLog.info('Deep analysis request for run', { runPath });
 
   try {
-    const runDir = path.join(PROJECT_ROOT, 'output', runPath);
+    const runDir = path.join(OUTPUT_DIR, runPath);
 
     // Security check
     const resolvedPath = path.resolve(runDir);
-    const outputDir = path.resolve(path.join(PROJECT_ROOT, 'output'));
+    const outputDir = path.resolve(OUTPUT_DIR);
     if (!resolvedPath.startsWith(outputDir)) {
       reqLog.warn('Access denied - path outside output directory', { resolvedPath });
       return res.status(403).json({ error: 'Access denied' });
@@ -475,7 +474,7 @@ router.post('/deep/run/*', async (req, res) => {
 
     reqLog.info('Combined CSV data', { totalLines, totalSize: combinedCSV.length });
 
-    const scriptPath = path.join(process.cwd(), 'scripts', 'deep_analysis.py');
+    const scriptPath = path.join(SCRIPTS_DIR, 'deep_analysis.py');
 
     // Check if script exists
     try {
@@ -494,7 +493,7 @@ router.post('/deep/run/*', async (req, res) => {
     // Run the Python script
     const result = await new Promise<string>((resolve, reject) => {
       const python = spawn('python3', [scriptPath, '--stdin'], {
-        cwd: process.cwd(),
+        cwd: DEVTOOL_ROOT,
       });
 
       let stdout = '';

@@ -6,11 +6,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { createLogger } from './logger.js';
+import { PROJECT_ROOT } from './paths.js';
 import { getGenerationProviders, type LLMProviderConfig } from '../../shared/llmProviders.js';
 
 const log = createLogger('llm');
-
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 
 interface LLMProviderWithGenerate extends LLMProviderConfig {
   generate: (prompt: string, apiKey: string, options?: LLMOptions) => Promise<string>;

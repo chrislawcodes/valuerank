@@ -3,12 +3,10 @@ import path from 'path';
 import { readYamlFile, writeYamlFile } from '../utils/yaml.js';
 import { loadEnvFile } from '../utils/llm.js';
 import { LLM_PROVIDERS } from '../../shared/llmProviders.js';
+import { CONFIG_DIR, DEVTOOL_ROOT } from '../utils/paths.js';
 
 const router = Router();
 
-const PROJECT_ROOT = path.resolve(process.cwd(), '..');
-const CONFIG_DIR = path.join(PROJECT_ROOT, 'config');
-const DEVTOOL_ROOT = process.cwd();
 
 // GET /api/config/runtime - Get runtime configuration
 router.get('/runtime', async (_req, res) => {
