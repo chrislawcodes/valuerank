@@ -23,4 +23,6 @@ export default defineConfig({
   build: {
     outDir: 'dist/client',
   },
+  // Handle SPA routing - serve index.html for all non-API routes
+  appType: 'spa',
 })

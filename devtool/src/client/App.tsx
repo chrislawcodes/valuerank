@@ -8,31 +8,33 @@ import { FileText, Terminal, Settings, BarChart3, Check, X } from 'lucide-react'
 
 type ViewType = 'editor' | 'runner' | 'analyze' | 'settings';
 
-/** Parse URL search params to get initial state */
+const VALID_VIEWS: ViewType[] = ['editor', 'runner', 'analyze', 'settings'];
+
+/** Parse URL path and params to get initial state */
 function parseUrlState(): { view: ViewType; folder?: string; file?: string } {
+  // Extract view from pathname (e.g., /editor, /runner, /analyze, /settings)
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const viewFromPath = pathParts[0] as ViewType | undefined;
+  const view = viewFromPath && VALID_VIEWS.includes(viewFromPath) ? viewFromPath : 'editor';
+
   const params = new URLSearchParams(window.location.search);
-  const tab = params.get('tab') as ViewType | null;
   const folder = params.get('folder') || undefined;
   const file = params.get('file') || undefined;
 
-  return {
-    view: tab && ['editor', 'runner', 'analyze', 'settings'].includes(tab) ? tab : 'editor',
-    folder,
-    file,
-  };
+  return { view, folder, file };
 }
 
 /** Update URL without triggering a page reload */
 function updateUrl(view: ViewType, folder?: string, file?: string) {
   const params = new URLSearchParams();
-  params.set('tab', view);
   if (view === 'editor' && folder) {
     params.set('folder', folder);
     if (file) {
       params.set('file', file);
     }
   }
-  const newUrl = `${window.location.pathname}?${params.toString()}`;
+  const queryString = params.toString();
+  const newUrl = `/${view}${queryString ? `?${queryString}` : ''}`;
   window.history.replaceState({}, '', newUrl);
 }
 
