@@ -1,6 +1,6 @@
 import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
-import { scenarios } from '../lib/api';
-import { FolderOpen, FileText, ChevronRight, ChevronDown, Plus, Wand2 } from 'lucide-react';
+import { scenarios, generator } from '../lib/api';
+import { FolderOpen, FileText, ChevronRight, ChevronDown, Plus, Wand2, Trash2 } from 'lucide-react';
 
 interface FolderContents {
   files: string[];
@@ -11,6 +11,7 @@ interface ScenarioListProps {
   onSelectYaml: (folder: string, file: string) => void;
   onSelectDefinition: (folder: string, name: string, isNew: boolean) => void;
   onCreateNew: (folder: string) => void;
+  onDeleteFile?: (folder: string, file: string) => void;
   selectedFolder?: string;
   selectedFile?: string;
 }
@@ -21,7 +22,7 @@ export interface ScenarioListHandle {
 
 export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
   function ScenarioList(
-    { onSelectYaml, onSelectDefinition, onCreateNew, selectedFolder, selectedFile },
+    { onSelectYaml, onSelectDefinition, onCreateNew, onDeleteFile, selectedFolder, selectedFile },
     ref
   ) {
     const [folders, setFolders] = useState<string[]>([]);
@@ -96,6 +97,26 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
         }
       }
       setExpandedFolders(newExpanded);
+    };
+
+    const handleDeleteFile = async (folder: string, file: string, isDefinition: boolean) => {
+      const confirmed = confirm(`Are you sure you want to delete "${file}"?`);
+      if (!confirmed) return;
+
+      try {
+        if (isDefinition) {
+          const name = file.replace(/\.md$/, '');
+          await generator.deleteDefinition(folder, name);
+        } else {
+          await scenarios.deleteFile(folder, file);
+        }
+        // Notify parent that file was deleted (e.g., to clear selection if this file was selected)
+        onDeleteFile?.(folder, file);
+        // Refresh the folder contents
+        await loadFolderContents(folder);
+      } catch (e) {
+        setError(`Failed to delete file: ${e}`);
+      }
     };
 
     // Expose refresh method via ref
@@ -185,39 +206,61 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                     {contents.definitions.map((file) => {
                       const name = file.replace(/\.md$/, '');
                       return (
-                        <button
-                          key={file}
-                          className={`w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
-                            selectedFolder === folder && selectedFile === file
-                              ? 'bg-purple-100 text-purple-700'
-                              : ''
-                          }`}
-                          onClick={() => onSelectDefinition(folder, name, false)}
-                        >
-                          <Wand2 size={14} className="text-purple-500" />
-                          <span className="text-sm truncate" title={file}>
-                            {file}
-                          </span>
-                        </button>
+                        <div key={file} className="group flex items-center">
+                          <button
+                            className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
+                              selectedFolder === folder && selectedFile === file
+                                ? 'bg-purple-100 text-purple-700'
+                                : ''
+                            }`}
+                            onClick={() => onSelectDefinition(folder, name, false)}
+                          >
+                            <Wand2 size={14} className="text-purple-500" />
+                            <span className="text-sm truncate" title={file}>
+                              {file}
+                            </span>
+                          </button>
+                          <button
+                            className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded transition-opacity"
+                            title={`Delete ${file}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFile(folder, file, true);
+                            }}
+                          >
+                            <Trash2 size={14} className="text-red-500" />
+                          </button>
+                        </div>
                       );
                     })}
 
                     {/* YAML files */}
                     {contents.files.map((file) => (
-                      <button
-                        key={file}
-                        className={`w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
-                          selectedFolder === folder && selectedFile === file
-                            ? 'bg-blue-100 text-blue-700'
-                            : ''
-                        }`}
-                        onClick={() => onSelectYaml(folder, file)}
-                      >
-                        <FileText size={14} className="text-gray-400" />
-                        <span className="text-sm truncate" title={file}>
-                          {file}
-                        </span>
-                      </button>
+                      <div key={file} className="group flex items-center">
+                        <button
+                          className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
+                            selectedFolder === folder && selectedFile === file
+                              ? 'bg-blue-100 text-blue-700'
+                              : ''
+                          }`}
+                          onClick={() => onSelectYaml(folder, file)}
+                        >
+                          <FileText size={14} className="text-gray-400" />
+                          <span className="text-sm truncate" title={file}>
+                            {file}
+                          </span>
+                        </button>
+                        <button
+                          className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded transition-opacity"
+                          title={`Delete ${file}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFile(folder, file, false);
+                          }}
+                        >
+                          <Trash2 size={14} className="text-red-500" />
+                        </button>
+                      </div>
                     ))}
 
                     {contents.files.length === 0 && contents.definitions.length === 0 && (
