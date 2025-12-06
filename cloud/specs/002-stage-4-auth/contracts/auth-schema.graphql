@@ -1,0 +1,149 @@
+# Authentication Schema Extensions for GraphQL API
+#
+# These operations extend the existing GraphQL schema from Stage 3.
+# All mutations require authentication (JWT or API key) unless noted.
+
+# =============================================================================
+# Types
+# =============================================================================
+
+"""
+Authenticated user information
+"""
+type User {
+  """Unique user identifier (cuid)"""
+  id: ID!
+
+  """User's email address"""
+  email: String!
+
+  """User's display name (optional)"""
+  name: String
+
+  """When the user account was created"""
+  createdAt: DateTime!
+
+  """When the user last logged in (null if never)"""
+  lastLoginAt: DateTime
+}
+
+"""
+API key for programmatic/MCP access.
+Note: The full key is only returned once at creation time.
+"""
+type ApiKey {
+  """Unique API key identifier"""
+  id: ID!
+
+  """User-provided name for this key (e.g., "Claude Desktop")"""
+  name: String!
+
+  """Key prefix for identification (e.g., "vr_abc123")"""
+  keyPrefix: String!
+
+  """When this key was last used for authentication (null if never)"""
+  lastUsedAt: DateTime
+
+  """When this key expires (null = never expires)"""
+  expiresAt: DateTime
+
+  """When this key was created"""
+  createdAt: DateTime!
+}
+
+"""
+Result of creating a new API key.
+The full key is only available in this response - it cannot be retrieved later.
+"""
+type CreateApiKeyResult {
+  """The created API key metadata"""
+  apiKey: ApiKey!
+
+  """
+  The full API key value (e.g., "vr_a1b2c3d4...").
+  IMPORTANT: This is the only time the full key will be shown.
+  Store it securely - it cannot be retrieved later.
+  """
+  key: String!
+}
+
+# =============================================================================
+# Queries
+# =============================================================================
+
+extend type Query {
+  """
+  Get the currently authenticated user.
+  Returns null if not authenticated (for introspection support).
+  """
+  me: User
+
+  """
+  List all API keys for the current user.
+  Requires authentication.
+  """
+  apiKeys: [ApiKey!]!
+}
+
+# =============================================================================
+# Mutations
+# =============================================================================
+
+extend type Mutation {
+  """
+  Create a new API key for the current user.
+  Requires authentication.
+
+  The full key value is returned ONLY in this response.
+  Store it securely - it cannot be retrieved later.
+  """
+  createApiKey(input: CreateApiKeyInput!): CreateApiKeyResult!
+
+  """
+  Revoke (delete) an API key.
+  Requires authentication.
+  Can only revoke keys belonging to the current user.
+  """
+  revokeApiKey(id: ID!): Boolean!
+}
+
+# =============================================================================
+# Inputs
+# =============================================================================
+
+"""Input for creating a new API key"""
+input CreateApiKeyInput {
+  """
+  Human-readable name for the key (e.g., "Claude Desktop", "Cursor IDE").
+  Used to identify the key in listings.
+  """
+  name: String!
+}
+
+# =============================================================================
+# REST Endpoints (for reference)
+# =============================================================================
+#
+# POST /api/auth/login
+#   Request:  { email: string, password: string }
+#   Response: { token: string, user: User }
+#   Errors:   401 Unauthorized (invalid credentials)
+#             429 Too Many Requests (rate limited)
+#
+# GET /api/auth/me
+#   Headers:  Authorization: Bearer <token>
+#   Response: { user: User }
+#   Errors:   401 Unauthorized (no/invalid token)
+#
+# =============================================================================
+# Authentication Headers
+# =============================================================================
+#
+# JWT Authentication:
+#   Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+#
+# API Key Authentication:
+#   X-API-Key: vr_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+#
+# Either header can be used for GraphQL requests.
+# JWT is preferred for web frontend; API key for MCP/programmatic access.
