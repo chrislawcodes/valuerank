@@ -166,13 +166,13 @@
 
 ### Tests
 
-- [ ] T026 [US1] Unit tests for startRun service: `apps/api/tests/services/run/start.test.ts`
+- [X] T026 [US1] Unit tests for startRun service: `apps/api/tests/services/run/start.test.ts`
   - Test job creation count matches model × scenario
   - Test sampling with deterministic seed
   - Test validation errors (no scenarios, invalid definition)
   - Test progress initialization
 
-- [ ] T027 [US1] Integration tests for startRun mutation: `apps/api/tests/graphql/mutations/run.test.ts`
+- [X] T027 [US1] Integration tests for startRun mutation: `apps/api/tests/graphql/mutations/run.test.ts`
   - Test authenticated request succeeds
   - Test unauthenticated request fails
   - Test run and jobs created in database
