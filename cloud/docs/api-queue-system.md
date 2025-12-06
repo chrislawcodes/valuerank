@@ -566,3 +566,467 @@ When viewing results from sampled runs, UI should clearly indicate:
 - "Based on 10% sample (12 of 120 scenarios)"
 - Statistical confidence intervals for extrapolated metrics
 - Option to "Expand to full run" (queues remaining 90%)
+
+---
+
+## Data Export API
+
+Enable data scientists to export raw data for analysis in external tools (Jupyter, R, pandas, etc.).
+
+### Export Endpoints
+
+```graphql
+type Query {
+  # Bulk data export
+  exportRun(
+    id: ID!
+    format: ExportFormat!
+    includeTranscripts: Boolean = false  # Only if not expired
+  ): ExportResult!
+
+  exportRuns(
+    ids: [ID!]!
+    format: ExportFormat!
+  ): ExportResult!
+
+  # Schema for external tools
+  exportSchema: SchemaDefinition!
+}
+
+enum ExportFormat {
+  CSV          # Flat tables, one file per entity type
+  PARQUET      # Columnar format for large datasets
+  JSON_LINES   # Streaming-friendly JSON
+  ARROW        # In-memory format for direct pandas/pyarrow load
+}
+
+type ExportResult {
+  downloadUrl: String!       # Signed URL, expires in 1 hour
+  format: ExportFormat!
+  fileCount: Int!            # Number of files in archive
+  totalRows: Int!
+  sizeBytes: Int!
+  expiresAt: DateTime!
+  manifest: ExportManifest!  # Describes contents
+}
+
+type ExportManifest {
+  files: [ExportFile!]!
+  schemaVersion: String!
+  generatedAt: DateTime!
+}
+
+type ExportFile {
+  filename: String!
+  entityType: String!        # 'transcripts', 'analysis', 'scenarios'
+  rowCount: Int!
+  columns: [ColumnInfo!]!
+}
+```
+
+### Export Contents
+
+**Parquet/CSV export includes:**
+
+| File | Contents |
+|------|----------|
+| `runs.parquet` | Run metadata, timing, config |
+| `transcripts.parquet` | Per-transcript metrics (even after content expires) |
+| `transcript_content.parquet` | Full text (only if not expired, separate file) |
+| `analysis.parquet` | All analysis results with method metadata |
+| `scenarios.parquet` | Scenario definitions and dimension values |
+
+### CLI Export (Backwards Compatibility)
+
+```graphql
+type Query {
+  # Export in CLI-compatible format for fallback
+  exportCLI(runId: ID!): CLIExportResult!
+}
+
+type CLIExportResult {
+  downloadUrl: String!
+  format: String!  # Always "cli_bundle"
+  # Contains: transcripts/*.md, manifest.yaml, scenarios.yaml
+}
+```
+
+### Python Client Example
+
+```python
+import requests
+import pyarrow.parquet as pq
+
+# Export run data
+response = client.query('''
+  query { exportRun(id: "run_xyz", format: PARQUET) { downloadUrl } }
+''')
+
+# Download and load into pandas
+import pandas as pd
+df = pd.read_parquet(response['exportRun']['downloadUrl'])
+```
+
+---
+
+## Flexible Aggregation API
+
+Enable custom aggregations beyond the pre-computed Tier 1/2/3 analysis.
+
+### Aggregate Query
+
+```graphql
+type Query {
+  aggregate(input: AggregateInput!): AggregateResult!
+}
+
+input AggregateInput {
+  # Data source
+  runIds: [ID!]!
+
+  # Grouping (SQL GROUP BY equivalent)
+  groupBy: [GroupByField!]!
+
+  # Metrics to compute
+  metrics: [MetricSpec!]!
+
+  # Filtering
+  filters: AggregateFilters
+
+  # Limits
+  limit: Int = 100
+  orderBy: OrderBySpec
+}
+
+enum GroupByField {
+  MODEL
+  SCENARIO_ID
+  DEFINITION_ID
+  RUN_ID
+  # Dimension access via dot notation in dimensionPath
+}
+
+input GroupByDimension {
+  field: GroupByField!
+  dimensionPath: String  # e.g., "dimensions.severity" for nested JSONB
+}
+
+input MetricSpec {
+  field: String!         # Field to aggregate (e.g., "win_rate", "duration_ms")
+  aggregation: AggregationType!
+  alias: String          # Output field name
+}
+
+enum AggregationType {
+  COUNT
+  SUM
+  MEAN
+  MEDIAN
+  STDDEV
+  VARIANCE
+  MIN
+  MAX
+  PERCENTILE_25
+  PERCENTILE_50
+  PERCENTILE_75
+  PERCENTILE_95
+  PERCENTILE_99
+}
+
+input AggregateFilters {
+  models: [String!]
+  scenarioIds: [String!]
+  definitionIds: [ID!]
+  dimensionFilters: [DimensionFilter!]  # e.g., { path: "severity", operator: GTE, value: 3 }
+  dateRange: DateRange
+}
+
+input DimensionFilter {
+  path: String!
+  operator: FilterOperator!
+  value: JSON!
+}
+
+enum FilterOperator {
+  EQ
+  NEQ
+  GT
+  GTE
+  LT
+  LTE
+  IN
+  CONTAINS
+}
+
+type AggregateResult {
+  rows: [JSON!]!         # Array of { groupKey: value, metric1: value, ... }
+  totalGroups: Int!
+  query: AggregateInput! # Echo back for reproducibility
+  computedAt: DateTime!
+}
+```
+
+### Example Queries
+
+**Win rate by model and severity level:**
+```graphql
+query {
+  aggregate(input: {
+    runIds: ["run_xyz"]
+    groupBy: [{ field: MODEL }, { field: SCENARIO_ID, dimensionPath: "dimensions.severity" }]
+    metrics: [
+      { field: "win_rate", aggregation: MEAN, alias: "avg_win_rate" }
+      { field: "win_rate", aggregation: STDDEV, alias: "win_rate_std" }
+    ]
+  }) {
+    rows
+    totalGroups
+  }
+}
+```
+
+**Response latency percentiles by model:**
+```graphql
+query {
+  aggregate(input: {
+    runIds: ["run_xyz", "run_abc"]
+    groupBy: [{ field: MODEL }]
+    metrics: [
+      { field: "duration_ms", aggregation: PERCENTILE_50, alias: "p50_latency" }
+      { field: "duration_ms", aggregation: PERCENTILE_95, alias: "p95_latency" }
+      { field: "duration_ms", aggregation: PERCENTILE_99, alias: "p99_latency" }
+    ]
+  }) {
+    rows
+  }
+}
+```
+
+**Conditional aggregation (only high-severity scenarios):**
+```graphql
+query {
+  aggregate(input: {
+    runIds: ["run_xyz"]
+    groupBy: [{ field: MODEL }]
+    metrics: [{ field: "Physical_Safety_win_rate", aggregation: MEAN }]
+    filters: {
+      dimensionFilters: [{ path: "severity", operator: GTE, value: 4 }]
+    }
+  }) {
+    rows
+  }
+}
+```
+
+---
+
+## Statistical Methods
+
+Standardized statistical tests used across all analysis. This ensures consistent, reproducible results.
+
+### Test Selection Matrix
+
+| Comparison Type | Distribution | Sample Size | Test Used |
+|-----------------|--------------|-------------|-----------|
+| Two groups, continuous | Normal | n > 30 | Welch's t-test |
+| Two groups, continuous | Non-normal | Any | Mann-Whitney U |
+| Two groups, categorical | Any | Any | Chi-squared / Fisher's exact |
+| Multiple groups, continuous | Normal | n > 30 | ANOVA + Tukey HSD |
+| Multiple groups, continuous | Non-normal | Any | Kruskal-Wallis + Dunn's |
+| Correlation | Any | Any | Spearman's rho (rank-based) |
+| Agreement | Any | Any | Cohen's Kappa / Krippendorff's alpha |
+
+### Multiple Comparison Corrections
+
+When comparing multiple models or scenarios, p-values are adjusted:
+
+| Method | When Used | Description |
+|--------|-----------|-------------|
+| Bonferroni | Conservative, few comparisons | α / n |
+| Holm-Bonferroni | Default | Step-down Bonferroni |
+| Benjamini-Hochberg | Many comparisons | FDR control at 0.05 |
+
+**Default:** Holm-Bonferroni for pairwise model comparisons.
+
+### Effect Size Measures
+
+All comparisons include effect sizes, not just p-values:
+
+| Comparison Type | Effect Size | Interpretation |
+|-----------------|-------------|----------------|
+| Two groups | Cohen's d | 0.2 small, 0.5 medium, 0.8 large |
+| Multiple groups | η² (eta-squared) | 0.01 small, 0.06 medium, 0.14 large |
+| Correlation | r or ρ | 0.1 small, 0.3 medium, 0.5 large |
+
+### Confidence Intervals
+
+All point estimates include 95% confidence intervals:
+
+```json
+{
+  "win_rate": 0.72,
+  "confidence_interval": {
+    "lower": 0.68,
+    "upper": 0.76,
+    "level": 0.95,
+    "method": "wilson"  // Wilson score interval for proportions
+  }
+}
+```
+
+### Analysis Result Schema
+
+Every analysis result includes method documentation:
+
+```json
+{
+  "basic_stats": { ... },
+  "methods_used": {
+    "win_rate_ci": "wilson_score",
+    "model_comparison": "mann_whitney_u",
+    "p_value_correction": "holm_bonferroni",
+    "effect_size": "cohens_d",
+    "correlation": "spearman_rho",
+    "outlier_detection": "isolation_forest",
+    "alpha": 0.05
+  },
+  "code_version": "1.2.3",
+  "computed_at": "2024-12-05T10:30:00Z"
+}
+```
+
+### Reproducibility Guarantees
+
+1. **Deterministic random seeds**: All randomized methods (bootstrap, permutation tests) use reproducible seeds stored with results
+2. **Version tracking**: Analysis code version stored with every result
+3. **Input hashing**: Hash of input data stored to detect changes
+4. **Method documentation**: Every result includes the exact methods used
+
+### Statistical Warnings
+
+Analysis results include warnings when assumptions are violated:
+
+```json
+{
+  "warnings": [
+    {
+      "code": "SMALL_SAMPLE",
+      "message": "Sample size (n=8) may be insufficient for reliable inference",
+      "recommendation": "Consider running more scenarios or using bootstrap methods"
+    },
+    {
+      "code": "NON_NORMAL",
+      "message": "Data does not pass Shapiro-Wilk normality test (p=0.02)",
+      "recommendation": "Using non-parametric Mann-Whitney U instead of t-test"
+    }
+  ]
+}
+```
+
+---
+
+## Cohort Analysis API
+
+Query and compare across user-defined cohorts (model families, scenario categories, etc.).
+
+### Cohort Operations
+
+```graphql
+type Query {
+  cohort(id: ID!): Cohort
+  cohorts(type: CohortType): [Cohort!]!
+
+  # Aggregate across cohort members
+  cohortAggregate(
+    cohortId: ID!
+    runIds: [ID!]!
+    metrics: [MetricSpec!]!
+  ): AggregateResult!
+
+  # Compare two cohorts
+  compareCohorts(
+    cohortA: ID!
+    cohortB: ID!
+    runIds: [ID!]!
+  ): CohortComparison!
+}
+
+type Mutation {
+  createCohort(input: CreateCohortInput!): Cohort!
+  updateCohort(id: ID!, input: UpdateCohortInput!): Cohort!
+  deleteCohort(id: ID!): Boolean!
+}
+
+type Cohort {
+  id: ID!
+  name: String!
+  description: String
+  type: CohortType!
+  members: [String!]!           # Resolved member IDs
+  filterCriteria: JSON          # Dynamic filter if applicable
+  memberCount: Int!
+  createdAt: DateTime!
+}
+
+enum CohortType {
+  MODELS        # Group of model identifiers
+  SCENARIOS     # Group of scenario IDs
+  DEFINITIONS   # Group of definition IDs
+  RUNS          # Group of run IDs
+}
+
+type CohortComparison {
+  cohortA: Cohort!
+  cohortB: Cohort!
+  delta: JSON!
+  statisticalTest: StatisticalTestResult!
+}
+
+type StatisticalTestResult {
+  testName: String!
+  statistic: Float!
+  pValue: Float!
+  pValueCorrected: Float
+  effectSize: Float!
+  effectSizeInterpretation: String!  # "small", "medium", "large"
+  confidenceInterval: JSON
+  significant: Boolean!              # At alpha = 0.05
+}
+```
+
+### Example: Compare Model Families
+
+```graphql
+# Create cohorts
+mutation {
+  gpt4: createCohort(input: {
+    name: "GPT-4 Family"
+    type: MODELS
+    members: ["gpt-4", "gpt-4-turbo", "gpt-4o"]
+  }) { id }
+
+  claude: createCohort(input: {
+    name: "Claude Family"
+    type: MODELS
+    members: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+  }) { id }
+}
+
+# Compare cohorts
+query {
+  compareCohorts(
+    cohortA: "cohort_gpt4"
+    cohortB: "cohort_claude"
+    runIds: ["run_xyz"]
+  ) {
+    delta
+    statisticalTest {
+      testName
+      pValue
+      effectSize
+      effectSizeInterpretation
+      significant
+    }
+  }
+}
+```

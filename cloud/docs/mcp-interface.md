@@ -254,6 +254,103 @@ Get summary of a specific transcript (NOT full text).
 
 ---
 
+## Data Science Tools
+
+Tools for statistical analysis and data export (for use with AI assistants helping with analysis):
+
+### aggregate_custom
+Run custom aggregations with flexible grouping and filtering.
+
+**Parameters:**
+- `run_ids` (string[], required): Runs to aggregate over
+- `group_by` (string[], required): Fields to group by (e.g., ["model", "dimensions.severity"])
+- `metrics` (object[], required): Metrics to compute
+  - `field`: Field name (e.g., "win_rate", "duration_ms")
+  - `aggregation`: One of: count, mean, median, stddev, min, max, percentile_95
+- `filters` (object, optional): Filter criteria
+
+**Returns:**
+- `rows`: Array of grouped results
+- `total_groups`: Number of groups
+- `warnings`: Any statistical warnings
+
+**Example:**
+```json
+{
+  "run_ids": ["run_xyz"],
+  "group_by": ["model"],
+  "metrics": [
+    {"field": "duration_ms", "aggregation": "percentile_95"},
+    {"field": "Physical_Safety_win_rate", "aggregation": "mean"}
+  ]
+}
+```
+
+### compare_cohorts
+Compare two groups (model families, scenario categories) with statistical testing.
+
+**Parameters:**
+- `cohort_a` (object): First group { type: "models", members: [...] } or { cohort_id: "..." }
+- `cohort_b` (object): Second group
+- `run_ids` (string[], required): Runs to compare over
+- `metric` (string, required): Metric to compare (e.g., "Physical_Safety_win_rate")
+
+**Returns:**
+- `cohort_a_mean`: Mean for first group
+- `cohort_b_mean`: Mean for second group
+- `delta`: Difference (B - A)
+- `effect_size`: Cohen's d
+- `effect_interpretation`: "small", "medium", or "large"
+- `p_value`: Statistical significance
+- `test_used`: Name of statistical test
+- `significant`: Boolean at α=0.05
+
+### get_latency_stats
+Get response latency statistics for performance analysis.
+
+**Parameters:**
+- `run_id` (string, required)
+- `group_by` (string, optional): "model" or "scenario_id"
+
+**Returns:**
+- `overall`: { mean, median, p95, p99, min, max }
+- `by_group`: If group_by specified, breakdown per group
+- `correlation_with_output_length`: Pearson r between latency and token count
+
+### export_for_analysis
+Generate a download URL for bulk data export.
+
+**Parameters:**
+- `run_ids` (string[], required): Runs to export
+- `format` (string, required): "parquet", "csv", or "json_lines"
+- `include_transcripts` (boolean, default: false): Include full transcript text (if not expired)
+
+**Returns:**
+- `download_url`: Signed URL (expires in 1 hour)
+- `file_count`: Number of files in archive
+- `total_rows`: Total data rows
+- `size_bytes`: Approximate download size
+- `expires_at`: URL expiration time
+
+**Note:** For large exports, prefer using the GraphQL API directly. This tool is for convenience when working with an AI assistant.
+
+### get_statistical_summary
+Get comprehensive statistical summary with confidence intervals and effect sizes.
+
+**Parameters:**
+- `run_id` (string, required)
+- `baseline_run_id` (string, optional): If provided, includes comparison statistics
+
+**Returns:**
+- `per_model_stats`: { model: { mean, ci_lower, ci_upper, n } }
+- `pairwise_comparisons`: If multiple models, includes all pairwise tests
+- `effect_sizes`: Cohen's d for each comparison
+- `multiple_comparison_correction`: Method used (Holm-Bonferroni)
+- `warnings`: Statistical warnings (small sample, non-normality, etc.)
+- `methods_used`: Documentation of all statistical methods
+
+---
+
 ## Write Tools
 
 Enable AI agents to author scenarios and trigger runs:
@@ -453,7 +550,7 @@ Agent → MCP: graphql_query({
 
 ---
 
-## What NOT to Expose
+## What NOT to Expose (via MCP)
 
 To avoid overwhelming agent context windows:
 
@@ -467,6 +564,8 @@ To avoid overwhelming agent context windows:
 | Insights list | ✅ Yes | Pre-digested, high signal |
 | Statistical summaries | ✅ Yes | Aggregated metrics |
 
+**Note for Data Scientists:** If you need raw data access, use the [Data Export API](./api-queue-system.md#data-export-api) directly via GraphQL rather than MCP. The export API provides bulk Parquet/CSV downloads optimized for external analysis tools.
+
 ## Token Budget Guidelines
 
 | Tool Response | Target Size | Strategy |
@@ -476,6 +575,11 @@ To avoid overwhelming agent context windows:
 | `compare_runs` | < 3KB | Top N differences only |
 | `get_dimension_analysis` | < 2KB | Ranked list, not full matrix |
 | `get_transcript_summary` | < 1KB | Key points extraction |
+| `aggregate_custom` | < 5KB | Paginated results, limit groups |
+| `compare_cohorts` | < 2KB | Summary stats only |
+| `get_latency_stats` | < 2KB | Aggregated percentiles |
+| `get_statistical_summary` | < 5KB | All stats in one response |
+| `export_for_analysis` | < 1KB | Just returns download URL |
 
 ---
 

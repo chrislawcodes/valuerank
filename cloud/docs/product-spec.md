@@ -81,18 +81,27 @@ def_a1b2c3 (label: "baseline")
 └── def_g7h8i9 (no label, shows as "def_g7h8...")
 ```
 
-### 5. Transcript Retention: 14 Days
+### 5. Configurable Transcript Retention
 
-Full transcript content is retained for 14 days after run completion.
+Transcript content retention is **configurable per-run**, with a system default of 14 days.
 
-**After 14 days:**
-- Transcript content is deleted
-- Metadata (turn count, timestamps, model, scenario) is retained
-- Analysis results (computed from transcripts) are retained indefinitely
+**Retention options:**
+- **Default (14 days):** Content deleted after 14 days
+- **Extended (30/60/90 days):** For runs needing longer analysis windows
+- **Archive permanently:** For reproducibility-critical experiments
 
-**Rationale:** Transcripts are rarely accessed after initial analysis. This controls storage costs while preserving computed insights.
+**After content expires:**
+- Transcript text (content, turns) is deleted
+- Metadata retained permanently: turn count, word count, token counts, timing metrics
+- Extracted features retained permanently: decision, key values mentioned, sentiment
+- Analysis results retained indefinitely
 
-**Adjustment:** Can extend retention if usage patterns show need.
+**Rationale:** Balances storage costs with scientific reproducibility. Researchers can mark important runs for permanent retention while routine runs auto-expire.
+
+**Implementation:**
+- Run creation accepts `retention_days` and `archive_permanently` flags
+- UI shows retention status and expiry date
+- Bulk archive option for marking existing runs as permanent
 
 ---
 
@@ -142,12 +151,15 @@ Full transcript content is retained for 14 days after run completion.
 - Mean/std/min/max scores by model
 - Scenario-level results
 - Simple aggregation across runs
+- **95% confidence intervals** on all point estimates
 
 ### Tier 2: Correlations (Required)
 
-- Inter-model agreement (pairwise correlation)
+- Inter-model agreement (pairwise correlation using Spearman's rho)
 - Dimension impact analysis (which dimensions drive variance)
 - Most contested scenarios (highest cross-model disagreement)
+- **Effect sizes** (Cohen's d) for all pairwise comparisons
+- **Multiple comparison correction** (Holm-Bonferroni by default)
 
 ### Tier 3: Advanced (Deferred)
 
@@ -155,6 +167,31 @@ Full transcript content is retained for 14 days after run completion.
 - Statistical outlier detection (Mahalanobis, Isolation Forest)
 - Jackknife consistency analysis
 - LLM-generated narrative summaries
+
+### Data Science Workflow Support (Required)
+
+To enable analysis in external tools (Jupyter, R, pandas):
+
+| Capability | Description | Priority |
+|------------|-------------|----------|
+| **Bulk Export** | Export runs as Parquet/CSV for external analysis | Required |
+| **Flexible Aggregation** | Custom GROUP BY queries with filtering | Required |
+| **Timing Metrics** | Response latency per transcript for performance analysis | Required |
+| **Cohort Analysis** | Compare model families, scenario categories | Required |
+| **Analysis Versioning** | Track which code version produced each result | Required |
+| **Reproducibility** | Deterministic seeds, method documentation | Required |
+
+### Statistical Method Standards
+
+All analysis uses standardized, documented methods:
+
+- **Normality testing:** Shapiro-Wilk before parametric tests
+- **Default test:** Mann-Whitney U (non-parametric, robust)
+- **Multiple comparisons:** Holm-Bonferroni correction
+- **Effect sizes:** Always reported alongside p-values
+- **Warnings:** Auto-generated when assumptions violated
+
+See [API & Queue System - Statistical Methods](./api-queue-system.md#statistical-methods) for full specification.
 
 ---
 
@@ -296,7 +333,7 @@ Maintain ability to export data in CLI-compatible format.
 |------|----------|-----------|
 | Dec 2025 | Single tenant | Faster development, internal tool |
 | Dec 2025 | Server-side API keys | Enable async workers |
-| Dec 2025 | 14-day transcript retention | Cost control, rarely accessed |
+| Dec 2025 | Configurable retention (default 14 days) | Balance cost control with reproducibility |
 | Dec 2025 | Polling over WebSocket | Simpler, sufficient for UX |
 | Dec 2025 | Public visibility | Team transparency, simpler ACLs |
 | Dec 2025 | Hybrid versioning | Git-like + optional labels |
@@ -308,3 +345,10 @@ Maintain ability to export data in CLI-compatible format.
 | Dec 2025 | Code-first GraphQL (Pothos) | TypeScript-native, better IDE support |
 | Dec 2025 | JSONB schema versioning | Reserve ability to transform old data |
 | Dec 2025 | Hybrid analysis trigger | Auto for basic, on-demand for heavy - sets user expectations |
+| Dec 2025 | Bulk data export (Parquet/CSV) | Enable external DS tooling (Jupyter, pandas, R) |
+| Dec 2025 | Flexible aggregation API | Custom queries beyond pre-computed tiers |
+| Dec 2025 | Standardized statistical methods | Reproducible, comparable results across analyses |
+| Dec 2025 | Analysis versioning | Track code version, preserve last 3 versions |
+| Dec 2025 | Transcript timing metrics | Enable latency analysis, performance correlation |
+| Dec 2025 | Cohort/segment support | Compare model families, scenario categories |
+| Dec 2025 | Extracted features retention | Preserve key features even after content expires |

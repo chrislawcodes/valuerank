@@ -126,28 +126,55 @@ CREATE TABLE runs (
   run_type TEXT DEFAULT 'full',  -- 'full', 'sample', 'rerun'
   sample_percentage INTEGER,     -- NULL for full runs
   sample_seed INTEGER,           -- For reproducibility
+
+  -- Timestamps for duration analysis
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  queued_at TIMESTAMPTZ,         -- When jobs were queued
+  started_at TIMESTAMPTZ,        -- First job started processing
+  completed_at TIMESTAMPTZ,      -- All jobs finished
+
   status TEXT DEFAULT 'pending',
   config JSONB,      -- Runtime config snapshot
-  progress JSONB     -- { total, completed, failed }
+  progress JSONB,    -- { total, completed, failed }
+
+  -- Data retention settings (overrides system default)
+  retention_days INTEGER,        -- NULL = use system default (14 days)
+  archive_permanently BOOLEAN DEFAULT FALSE  -- TRUE = never delete transcripts
 );
 
--- Transcripts with 14-day content retention
--- Content is deleted after 14 days, metadata retained
+-- Transcripts with configurable content retention
+-- Content deleted after retention period, metadata retained permanently
 CREATE TABLE transcripts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id UUID REFERENCES runs(id) NOT NULL,
   scenario_id TEXT NOT NULL,
   target_model TEXT NOT NULL,
-  content TEXT,           -- Full markdown transcript (NULL after 14 days)
-  turns JSONB,            -- Structured turn data (NULL after 14 days)
-  turn_count INTEGER,     -- Retained permanently
-  word_count INTEGER,     -- Retained permanently
+  content TEXT,           -- Full markdown transcript (NULL after expiry)
+  turns JSONB,            -- Structured turn data (NULL after expiry)
+
+  -- Permanently retained metrics (for analysis after content expires)
+  turn_count INTEGER,
+  word_count INTEGER,
+  token_count INTEGER,                -- Input + output tokens
+  input_tokens INTEGER,               -- Prompt tokens
+  output_tokens INTEGER,              -- Completion tokens
+
+  -- Timing metrics (critical for latency analysis)
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  content_expires_at TIMESTAMPTZ  -- Set to created_at + 14 days
+  started_at TIMESTAMPTZ,             -- When LLM request sent
+  completed_at TIMESTAMPTZ,           -- When LLM response received
+  duration_ms INTEGER,                -- Total response time
+  time_to_first_token_ms INTEGER,     -- TTFT for streaming responses
+
+  -- Retention
+  content_expires_at TIMESTAMPTZ,     -- Set based on run.retention_days
+
+  -- Extracted features (retained permanently for reproducibility)
+  extracted_features JSONB            -- { decision, key_values_mentioned, sentiment, etc. }
 );
 
 -- Cleanup job runs daily, sets content=NULL, turns=NULL where expired
+-- extracted_features preserved for historical analysis
 -- Analysis results computed from transcripts are retained indefinitely
 
 -- Generated scenarios
@@ -159,16 +186,38 @@ CREATE TABLE scenarios (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Experiments for grouping related runs
+-- Experiments for grouping related runs (with scientific rigor)
 CREATE TABLE experiments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
+
+  -- Experiment design (pre-registration style)
   hypothesis TEXT,                    -- "Gemini will score higher on safety"
-  controlled_variables JSONB,         -- What stays the same
+  null_hypothesis TEXT,               -- "No significant difference between models"
+  dependent_variable TEXT,            -- What we're measuring (e.g., "Physical_Safety win rate")
   independent_variable JSONB,         -- What we're changing
+  controlled_variables JSONB,         -- What stays the same
+
+  -- Statistical plan (pre-registered)
+  analysis_plan JSONB,                -- { test: "mann_whitney", alpha: 0.05, correction: "bonferroni" }
+  sample_size_justification TEXT,     -- Power analysis or practical reasoning
+  minimum_detectable_effect DECIMAL,  -- Smallest effect size we care about
+
+  -- Lifecycle
+  status TEXT DEFAULT 'planned',      -- 'planned', 'running', 'analyzing', 'concluded'
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  created_by UUID REFERENCES users(id)
+  started_at TIMESTAMPTZ,
+  concluded_at TIMESTAMPTZ,
+  created_by UUID REFERENCES users(id),
+
+  -- Results (filled after analysis)
+  conclusion TEXT,                    -- 'supported', 'rejected', 'inconclusive'
+  conclusion_summary TEXT,            -- Human-readable summary
+  effect_size DECIMAL,                -- Cohen's d or similar
+  p_value DECIMAL,
+  confidence_interval JSONB,          -- { lower: 0.12, upper: 0.34 }
+  result_details JSONB                -- Full statistical output
 );
 
 -- Run comparisons
@@ -185,13 +234,24 @@ CREATE TABLE run_comparisons (
   UNIQUE(baseline_run_id, comparison_run_id)
 );
 
--- Analysis results (cached)
+-- Analysis results (versioned for reproducibility)
 CREATE TABLE analysis_results (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id UUID REFERENCES runs(id) NOT NULL,
   analysis_type TEXT NOT NULL,  -- 'basic', 'deep', 'comparison'
-  input_hash TEXT NOT NULL,     -- Hash of transcripts used
+
+  -- Versioning for reproducibility
+  input_hash TEXT NOT NULL,           -- Hash of transcripts used
+  code_version TEXT NOT NULL,         -- Git SHA or semver of analysis code
+  analysis_version INTEGER DEFAULT 1, -- Incrementing version per (run_id, analysis_type)
+
+  -- Audit trail
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES users(id),
+  superseded_by UUID REFERENCES analysis_results(id),  -- Points to newer version
+  is_current BOOLEAN DEFAULT TRUE,    -- Quick filter for latest
+
+  -- Results
   basic_stats JSONB,
   dimension_analysis JSONB,
   correlations JSONB,
@@ -200,8 +260,15 @@ CREATE TABLE analysis_results (
   pca_coordinates JSONB,
   insights JSONB,
   llm_summary TEXT,
-  UNIQUE(run_id, analysis_type, input_hash)
+
+  -- Statistical method documentation
+  methods_used JSONB                  -- { tests: ["mann_whitney"], corrections: ["bonferroni"], ... }
 );
+
+-- Index for finding current analysis
+CREATE INDEX idx_analysis_current ON analysis_results(run_id, analysis_type) WHERE is_current = TRUE;
+
+-- Keep last 3 versions per (run_id, analysis_type) - cleanup job marks older as superseded
 
 -- Track which scenarios included in sampled runs
 CREATE TABLE run_scenario_selection (
@@ -210,6 +277,23 @@ CREATE TABLE run_scenario_selection (
   included BOOLEAN NOT NULL,
   PRIMARY KEY (run_id, scenario_id)
 );
+
+-- Cohorts for segment/group analysis
+CREATE TABLE cohorts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  cohort_type TEXT NOT NULL,          -- 'models', 'scenarios', 'definitions', 'runs'
+  members JSONB NOT NULL,             -- Array of IDs or filter criteria
+  filter_criteria JSONB,              -- Dynamic membership: { model_family: "gpt-4*" }
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES users(id)
+);
+
+-- Example cohorts:
+-- { name: "GPT-4 Family", cohort_type: "models", members: ["gpt-4", "gpt-4-turbo", "gpt-4o"] }
+-- { name: "Safety Scenarios", cohort_type: "scenarios", filter_criteria: { category: "safety" } }
+-- { name: "Q4 2024 Runs", cohort_type: "runs", filter_criteria: { created_after: "2024-10-01" } }
 
 -- User accounts (simplified - internal team only)
 -- No roles (all users equal), no multi-tenancy
@@ -246,13 +330,14 @@ CREATE TABLE rubrics (
 ```
 PostgreSQL Tables:
 ├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label)
-├── runs                 # Pipeline runs linked to definition versions
-├── transcripts          # Raw dialogue (14-day content retention)
+├── runs                 # Pipeline runs with timing + configurable retention
+├── transcripts          # Raw dialogue + extracted features (configurable retention)
 ├── scenarios            # Generated scenario variants
-├── analysis_results     # Cached analysis (correlations, agreement matrices)
-├── experiments          # Group related runs for comparison
+├── analysis_results     # Versioned analysis (keeps last 3 versions for reproducibility)
+├── experiments          # Scientific experiment tracking (hypothesis, stats plan, results)
 ├── run_comparisons      # Delta analysis between two runs
 ├── run_scenario_selection  # Track which scenarios included in sampled runs
+├── cohorts              # Groupings for segment analysis (model families, scenario categories)
 ├── users                # User accounts (internal team, no roles)
 ├── api_keys             # MCP access keys for local chat integration
 └── rubrics              # Values rubric versions (reference data)
