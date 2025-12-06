@@ -164,12 +164,12 @@ This phase creates the shared auth types, error classes, and service foundations
 
 ### Implementation for User Story 7
 
-- [ ] T049 [US7] Create `apps/api/src/graphql/types/user.ts` - User GraphQL type
-- [ ] T050 [US7] Create `apps/api/src/graphql/queries/user.ts` - me query
-- [ ] T051 [US7] Add apiKeys query to `apps/api/src/graphql/queries/user.ts`
-- [ ] T052 [US7] Return only key_prefix (not full key) in apiKeys listing
-- [ ] T053 [US7] Register user queries in `apps/api/src/graphql/queries/index.ts`
-- [ ] T054 [US7] Write tests in `apps/api/tests/graphql/queries/user.test.ts`
+- [X] T049 [US7] Create `apps/api/src/graphql/types/user.ts` - User GraphQL type
+- [X] T050 [US7] Create `apps/api/src/graphql/queries/user.ts` - me query
+- [X] T051 [US7] Add apiKeys query to `apps/api/src/graphql/queries/user.ts`
+- [X] T052 [US7] Return only key_prefix (not full key) in apiKeys listing
+- [X] T053 [US7] Register user queries in `apps/api/src/graphql/queries/index.ts`
+- [X] T054 [US7] Write tests in `apps/api/tests/graphql/queries/user.test.ts`
 
 **Checkpoint**: User Story 7 complete - me and apiKeys queries work
 
