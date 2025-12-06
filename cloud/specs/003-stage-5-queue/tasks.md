@@ -14,9 +14,10 @@
 
 **Purpose**: Project initialization and dependency installation
 
-- [ ] T001 Install pg-boss dependency: `npm install pg-boss` in `apps/api`
-- [ ] T002 [P] Add pg-boss types if needed: `npm install @types/pg-boss -D`
-- [ ] T003 [P] Add queue-related environment variables to `apps/api/.env.example`
+- [X] T001 Install pg-boss dependency: `npm install pg-boss` in `apps/api`
+- [X] T002 [P] Add pg-boss types if needed: `npm install @types/pg-boss -D`
+  - Note: Types bundled with pg-boss, no separate package needed
+- [X] T003 [P] Add queue-related environment variables to `apps/api/.env.example`
 
 **Checkpoint**: Dependencies installed and ready for implementation
 
