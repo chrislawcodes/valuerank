@@ -1,18 +1,19 @@
 # Cloud ValueRank - Architecture Overview
 
-Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evaluation framework.
+Cloud ValueRank is a cloud-native version of the ValueRank AI moral values evaluation framework. It transforms the CLI pipeline into an experiment-driven platform for systematic iteration on moral dilemma scenarios.
 
 ## Documentation Index
 
 | Document | Description |
 |----------|-------------|
+| [Product Specification](./product-spec.md) | **Start here** - Product decisions, scope, priorities |
 | [Project Constitution](../CLAUDE.md) | Coding standards, file limits, testing, logging |
 | [Database Design](./database-design.md) | PostgreSQL schema, versioning, queries |
 | [API & Queue System](./api-queue-system.md) | PgBoss, workers, analysis processing |
-| [Authentication](./authentication.md) | Users, roles, API keys, OAuth |
+| [Authentication](./authentication.md) | Internal team auth, API keys |
 | [Frontend Design](./frontend-design.md) | React components, UI flows |
-| [MCP Interface](./mcp-interface.md) | AI agent access, tools, resources |
-| [Deployment](./deployment.md) | Local Docker, Railway, export |
+| [MCP Interface](./mcp-interface.md) | AI agent access for local chat integration |
+| [Deployment](./deployment.md) | Local Docker, Railway, CLI export |
 
 ---
 
@@ -26,31 +27,36 @@ Same architecture runs locally (Docker Compose) and in production (Railway).
 │            (Local: Docker Compose / Prod: Railway)                   │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐│
-│  │   Frontend   │────▶│     API      │◀────│    MCP Server        ││
-│  │  (apps/web)  │     │  (apps/api)  │     │  (AI Agent Access)   ││
-│  │              │     │              │     │                      ││
-│  │  JWT Auth    │     │  Auth Layer  │     │  API Key Auth        ││
-│  └──────────────┘     └──────┬───────┘     └──────────────────────┘│
-│                              │                                       │
-│              ┌───────────────┴───────────────┐                      │
-│              ▼                               ▼                      │
-│       ┌──────────────┐                ┌──────────────┐              │
-│       │  PostgreSQL  │                │   Workers    │              │
-│       │  + PgBoss    │◀───────────────│  (Python)    │              │
-│       │  + Users     │    queue       └──────┬───────┘              │
-│       └──────────────┘                       │                      │
-│                                              ▼                      │
-│                                       ┌──────────────┐              │
-│                                       │ LLM Providers│              │
-│                                       │ (OpenAI, etc)│              │
-│                                       └──────────────┘              │
+│  ┌──────────────┐     ┌──────────────────────────────────────────┐ │
+│  │   Frontend   │────▶│     GraphQL API (POST /graphql)          │ │
+│  │  (apps/web)  │     │     - Schema introspection for LLMs      │ │
+│  │  JWT Auth    │     │     - Single endpoint for all queries    │ │
+│  └──────────────┘     └──────────────────┬───────────────────────┘ │
+│                                          │                          │
+│  ┌──────────────┐                        │                          │
+│  │  Local LLM   │────────────────────────┤ (same endpoint)          │
+│  │  via MCP     │                        │                          │
+│  │  API Key     │                        │                          │
+│  └──────────────┘                        │                          │
+│                                          │                          │
+│              ┌───────────────────────────┴───────────────┐          │
+│              ▼                                           ▼          │
+│       ┌──────────────┐                      ┌──────────────┐        │
+│       │  PostgreSQL  │                      │   Workers    │        │
+│       │  + PgBoss    │◀─────────────────────│  (Python)    │        │
+│       │  + Users     │       queue          └──────┬───────┘        │
+│       └──────────────┘                             │                │
+│                                                    ▼                │
+│                                             ┌──────────────┐        │
+│                                             │ LLM Providers│        │
+│                                             │ (OpenAI, etc)│        │
+│                                             └──────────────┘        │
 └─────────────────────────────────────────────────────────────────────┘
 
 Monorepo (Turborepo):
-├── apps/api      → API + PgBoss queue
+├── apps/api      → GraphQL API + PgBoss queue
 ├── apps/web      → React frontend
-└── packages/db   → Shared DB client & types
+└── packages/db   → Shared DB client, types, DataLoaders
 ```
 
 ---
@@ -63,6 +69,13 @@ Monorepo (Turborepo):
 - **JSONB columns** provide schema flexibility without migrations
 - **Hosting**: Railway PostgreSQL (self-hosted, simple)
 - See: [Database Design](./database-design.md)
+
+### API: GraphQL (Yoga or Apollo)
+- **Why**: LLMs can introspect schema and construct precise queries for MCP
+- Flexible data fetching - get exactly what's needed (critical for token budgets)
+- Nested relationships in single query (definition → runs → transcripts → analysis)
+- Single endpoint simplifies auth and MCP integration
+- See: [API & Queue System](./api-queue-system.md)
 
 ### Queue: PgBoss (PostgreSQL-backed)
 - **Why**: Long-running AI tasks need pause/resume/cancel
@@ -77,11 +90,11 @@ Monorepo (Turborepo):
 - Token-budget-aware responses (<5KB per tool)
 - See: [MCP Interface](./mcp-interface.md)
 
-### Authentication
-- **Three roles**: Admin, Editor (scenario authoring), Viewer (results only)
-- **Phase 1**: Email + password with JWT tokens
-- **Phase 2**: OAuth (Google) for convenience
-- **MCP**: API key authentication with scopes
+### Authentication (Simplified for Internal Team)
+- **Single tenant**: All users share one workspace, all data visible to all users
+- **Internal team only**: No public registration, invite-based accounts
+- **Server-side LLM keys**: API keys stored server-side, enabling async workers
+- **MCP access**: API key auth for local AI chat integration
 - See: [Authentication](./authentication.md)
 
 ### Frontend: React + TypeScript + Vite
@@ -117,25 +130,30 @@ experiments (group related runs)
 
 ---
 
-## Key Features
+## Key Features (Priority Order)
 
-### Definition Versioning
-Fork definitions, track changes, compare results across versions.
+### 1. Definition Versioning (Phase 1)
+Fork definitions, track changes, compare results across versions. Git-like identity with optional user labels.
 
-### Run Comparison & Experimentation
-Change one variable (models, framing), measure the delta.
+### 2. Run Execution & Results (Phase 1)
+Queue runs, track progress (5s polling), view basic analysis and per-model scores.
 
-### Partial Runs (Sampling)
-Run 10% for quick sanity checks, expand to 100% when ready.
+### 3. Run Comparison (Phase 1)
+Side-by-side delta analysis between any two runs.
 
-### Deep Analysis
-PCA, outlier detection, correlations, LLM-generated summaries.
+### 4. Experiment Framework (Phase 2)
+Group related runs, track hypotheses, controlled variables. **Primary driver for cloud migration.**
 
-### AI Agent Access (MCP)
-External agents can query data and author new scenarios.
+### 5. AI Agent Access via MCP (Phase 3)
+Local AI chat can query data and author scenarios. Key differentiator for interactive analysis.
 
-### CLI Export
-Dump to files compatible with the original command-line tool.
+### 6. CLI Export (All Phases)
+Dump to files compatible with CLI tool. Business continuity for potential rollback.
+
+### Deferred Features
+- **Partial Runs (Sampling)**: Nice to have, not MVP
+- **Deep Analysis (PCA, outliers)**: Tier 1+2 analysis first, advanced stats later
+- **LLM-Generated Summaries**: Defer until core pipeline stable
 
 ---
 
@@ -163,7 +181,8 @@ The cloud version is based on analysis of the existing CLI tool:
 
 ## Quick Links
 
-- **Start here**: [Database Design](./database-design.md) for schema details
+- **Start here**: [Product Specification](./product-spec.md) for product decisions and scope
+- **Schema details**: [Database Design](./database-design.md) for PostgreSQL schema
 - **API details**: [API & Queue System](./api-queue-system.md) for endpoints and job types
-- **AI integration**: [MCP Interface](./mcp-interface.md) for agent access
-- **Deploy**: [Deployment](./deployment.md) for infrastructure and next steps
+- **AI integration**: [MCP Interface](./mcp-interface.md) for local chat access
+- **Deploy**: [Deployment](./deployment.md) for infrastructure and CLI export

@@ -1,10 +1,18 @@
 # Database Design
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
+>
+> See also: [Product Specification](./product-spec.md) for context on these decisions
 
 ## Recommendation: PostgreSQL + JSONB
 
 The versioning/forking requirement drives us toward PostgreSQL over pure document stores.
+
+**Key Decisions (from Product Spec):**
+- **Single tenant**: No tenant_id columns needed
+- **14-day transcript retention**: Content deleted after 14 days, metadata retained
+- **Hybrid versioning**: Git-like identity (UUIDs) with optional user labels
+- **Public visibility**: No ACLs needed, all data visible to all users
 
 ## Critical Requirement: Definition Versioning & Forking
 
@@ -85,12 +93,14 @@ SELECT * FROM definitions WHERE 'root.v1.v1_1.v1_1_1' <@ path;
 ### Core Tables
 
 ```sql
--- Definitions with version lineage
+-- Definitions with version lineage (hybrid versioning)
+-- Each definition has a unique UUID (git-like identity)
+-- Users can optionally assign labels for readability
 CREATE TABLE definitions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   parent_id UUID REFERENCES definitions(id),  -- Fork parent
   name TEXT NOT NULL,                          -- Human-readable name
-  version_label TEXT,                          -- "v1.1", "experiment-A"
+  version_label TEXT,                          -- Optional: "baseline", "softer-framing"
   created_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES users(id),
 
@@ -103,6 +113,9 @@ CREATE TABLE definitions (
   -- Computed diff from parent (for quick comparison)
   diff_from_parent JSONB
 );
+
+-- Display logic: show version_label if set, otherwise truncated UUID
+-- Example: "baseline" or "def_a1b2c3..."
 
 -- Runs linked to specific definition versions
 CREATE TABLE runs (
@@ -119,16 +132,23 @@ CREATE TABLE runs (
   progress JSONB     -- { total, completed, failed }
 );
 
--- Transcripts (high volume, could archive old ones)
+-- Transcripts with 14-day content retention
+-- Content is deleted after 14 days, metadata retained
 CREATE TABLE transcripts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id UUID REFERENCES runs(id) NOT NULL,
   scenario_id TEXT NOT NULL,
   target_model TEXT NOT NULL,
-  content TEXT,      -- Full markdown transcript
-  turns JSONB,       -- Structured turn data
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  content TEXT,           -- Full markdown transcript (NULL after 14 days)
+  turns JSONB,            -- Structured turn data (NULL after 14 days)
+  turn_count INTEGER,     -- Retained permanently
+  word_count INTEGER,     -- Retained permanently
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  content_expires_at TIMESTAMPTZ  -- Set to created_at + 14 days
 );
+
+-- Cleanup job runs daily, sets content=NULL, turns=NULL where expired
+-- Analysis results computed from transcripts are retained indefinitely
 
 -- Generated scenarios
 CREATE TABLE scenarios (
@@ -191,10 +211,24 @@ CREATE TABLE run_scenario_selection (
   PRIMARY KEY (run_id, scenario_id)
 );
 
--- User accounts
+-- User accounts (simplified - internal team only)
+-- No roles (all users equal), no multi-tenancy
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ
+);
+
+-- API keys for MCP access (local chat integration)
+CREATE TABLE api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  key_hash VARCHAR(255) NOT NULL,
+  key_prefix VARCHAR(10) NOT NULL,
+  last_used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -211,15 +245,16 @@ CREATE TABLE rubrics (
 
 ```
 PostgreSQL Tables:
-├── definitions          # Versioned scenario definitions (with parent_id for forking)
+├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label)
 ├── runs                 # Pipeline runs linked to definition versions
-├── transcripts          # Raw dialogue (high volume)
+├── transcripts          # Raw dialogue (14-day content retention)
 ├── scenarios            # Generated scenario variants
-├── analysis_results     # Cached deep analysis (PCA, correlations, outliers)
+├── analysis_results     # Cached analysis (correlations, agreement matrices)
 ├── experiments          # Group related runs for comparison
 ├── run_comparisons      # Delta analysis between two runs
 ├── run_scenario_selection  # Track which scenarios included in sampled runs
-├── users                # User accounts
+├── users                # User accounts (internal team, no roles)
+├── api_keys             # MCP access keys for local chat integration
 └── rubrics              # Values rubric versions (reference data)
 ```
 

@@ -1,10 +1,29 @@
 # MCP Interface (AI Agent Access)
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
+>
+> See also: [Product Specification](./product-spec.md) for context on these decisions
+
+## Primary Use Case: Local Chat Integration
+
+The MCP interface enables **interactive analysis via local AI chat** (Claude Desktop, Cursor, etc.):
+
+```
+User: "Which scenarios show the biggest disagreement between GPT-4 and Claude?"
+
+Local LLM → MCP → Cloud ValueRank API → Response
+
+Local LLM: "Based on run_xyz, the top 3 most contested scenarios are..."
+```
+
+**Why this matters:**
+- Researchers can explore data conversationally
+- AI can help interpret patterns and suggest hypotheses
+- Enables rapid iteration on scenario design
 
 ## Design Philosophy
 
-Expose processed/aggregated data via MCP so external AI agents can:
+Expose processed/aggregated data via MCP so local AI agents can:
 - Query runs, experiments, and analysis results
 - Perform their own reasoning on top of our computed metrics
 - Avoid being swamped with raw transcript tokens
@@ -15,31 +34,113 @@ Expose processed/aggregated data via MCP so external AI agents can:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    External AI Agent                         │
-│              (Claude, GPT, custom agent)                     │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ MCP Protocol
-                      ▼
+│                 User's Local Machine                         │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │   Claude Desktop / Cursor / Local LLM Client          │  │
+│  │   (uses user's own LLM API key)                       │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                         │ MCP Protocol                      │
+│  ┌──────────────────────▼───────────────────────────────┐  │
+│  │   MCP Client (configured with ValueRank API key)      │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+└─────────────────────────┼───────────────────────────────────┘
+                          │ HTTPS + API Key
+                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  MCP Server (TypeScript)                     │
+│                  Cloud ValueRank                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
 │  │   Tools     │  │  Resources  │  │   Prompts           │ │
 │  │ (actions)   │  │ (data)      │  │ (templates)         │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Internal API
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Cloud ValueRank API                         │
-│            (same backend as web frontend)                    │
+│                          │                                   │
+│                          ▼                                   │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              PostgreSQL (runs, definitions, results)  │  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
+
+Key: User's local LLM uses their own API key for inference.
+     MCP uses ValueRank API key for data access.
 ```
 
 ---
 
-## Read Tools
+## GraphQL Integration
 
-Tools for querying and analyzing data:
+The MCP interface is a thin wrapper around the GraphQL API. This gives LLMs two options:
+
+### Option 1: Use MCP Tools (Structured)
+
+Pre-defined tools that map to common queries:
+
+```
+MCP Tool: get_run_summary(run_id: "xyz")
+  → Executes GraphQL query internally
+  → Returns structured JSON response
+```
+
+### Option 2: Direct GraphQL Queries (Flexible)
+
+LLMs can construct custom GraphQL queries for complex analysis:
+
+```
+MCP Tool: graphql_query(query: "...", variables: {...})
+  → Executes arbitrary GraphQL query
+  → Returns raw response
+```
+
+**Why both?**
+- MCP tools provide guardrails and token-budget-aware responses
+- Direct GraphQL enables ad-hoc exploration when needed
+- LLMs can introspect the schema to discover available data
+
+### Schema Introspection
+
+LLMs can query the schema to understand available data:
+
+```graphql
+query IntrospectSchema {
+  __schema {
+    types { name fields { name type { name } } }
+  }
+}
+```
+
+---
+
+## MCP Tools (Structured Access)
+
+### graphql_query (Power User Tool)
+
+Execute arbitrary GraphQL queries for flexible data access.
+
+**Parameters:**
+- `query` (string, required): GraphQL query string
+- `variables` (object, optional): Query variables
+
+**Returns:** Raw GraphQL response
+
+**Example:**
+```graphql
+# Find scenarios where GPT-4 and Claude disagree most
+query {
+  run(id: "xyz") {
+    analysis {
+      mostContestedScenarios(limit: 10) {
+        scenarioId
+        variance
+        scores { model value }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Pre-defined Tools
+
+Tools for common queries with token-budget-aware responses:
 
 ### list_definitions
 List all scenario definitions with version info.
@@ -277,14 +378,42 @@ Full definition content (template, dimensions).
 
 ---
 
-## Agent Authoring Workflow Example
+## Agent Workflow Examples
+
+### Example 1: Interactive Analysis via GraphQL
+
+```
+User: "Which scenarios show the biggest disagreement between GPT-4 and Claude in run xyz?"
+
+Agent → MCP: graphql_query({
+  query: """
+    query {
+      run(id: "xyz") {
+        analysis {
+          mostContestedScenarios(limit: 5) {
+            scenarioId
+            variance
+            scores { model value }
+          }
+        }
+      }
+    }
+  """
+})
+← MCP: { run: { analysis: { mostContestedScenarios: [...] } } }
+
+Agent: "The top 5 most contested scenarios are:
+1. scenario_12 (variance: 0.45) - GPT-4: 0.8, Claude: 0.3
+2. ..."
+```
+
+### Example 2: Authoring Workflow
 
 ```
 User: "Create a scenario about self-driving cars and the trolley problem"
 
 Agent → MCP: get_resource("valuerank://authoring/guide")
 Agent → MCP: get_resource("valuerank://authoring/value-pairs")
-Agent → MCP: get_resource("valuerank://authoring/examples")
 Agent: [Studies format and best practices]
 
 Agent → MCP: validate_definition({
@@ -297,30 +426,29 @@ Agent → MCP: validate_definition({
     ]
   }
 })
-← MCP: { valid: true, warnings: ["Consider adding outcome reversibility dimension"], estimated_scenario_count: 25 }
+← MCP: { valid: true, warnings: ["Consider adding outcome reversibility dimension"] }
 
 Agent → MCP: create_definition({
   name: "trolley-av-v1",
   folder: "autonomous-vehicles",
   content: { ... }
 })
-← MCP: { definition_id: "def_abc123", validation_warnings: [] }
-
-Agent → MCP: generate_scenarios({ definition_id: "def_abc123", preview_only: true })
-← MCP: { scenario_count: 25, scenarios: [...], sample_body: "..." }
-
-Agent: "I've created 25 scenario variants. Want me to run a 10% test?"
-
-User: "Yes, test with GPT-4 and Claude"
+← MCP: { definition_id: "def_abc123" }
 
 Agent → MCP: start_run({
   definition_id: "def_abc123",
-  models: ["openai:gpt-4", "anthropic:claude-3"],
-  sample_percentage: 10
+  models: ["openai:gpt-4", "anthropic:claude-3"]
 })
-← MCP: { run_id: "run_xyz", queued_tasks: 5, estimated_cost: "$0.50" }
+← MCP: { run_id: "run_xyz", queued_tasks: 50 }
 
-Agent: "Started run_xyz with 5 scenarios (10% sample). Estimated cost: $0.50"
+Agent: "Started run_xyz. I'll check back when it's complete."
+
+# Later...
+Agent → MCP: graphql_query({
+  query: """
+    query { run(id: "run_xyz") { status progress { completed total } } }
+  """
+})
 ```
 
 ---
@@ -354,27 +482,30 @@ To avoid overwhelming agent context windows:
 ## Security
 
 ### Authentication
+
+Users generate API keys via the web UI (see [Authentication](./authentication.md)):
+
 ```typescript
-auth: {
-  type: "api_key",
-  header: "X-ValueRank-API-Key"
+// MCP client config (user's machine)
+{
+  "mcpServers": {
+    "valuerank": {
+      "url": "https://valuerank.example.com/mcp",
+      "headers": {
+        "X-API-Key": "vr_abc123..."  // Generated in web UI
+      }
+    }
+  }
 }
 ```
 
-### Rate Limits (Read)
-```typescript
-rateLimits: {
-  requests_per_minute: 60,
-  tokens_per_minute: 100000
-}
-```
+### Rate Limits (Internal Team)
 
-### Rate Limits (Write)
+Light rate limiting since this is an internal tool:
+
 ```typescript
 rateLimits: {
-  create_definition: { per_hour: 20 },
-  start_run: { per_hour: 10 },
-  fork_definition: { per_hour: 50 }
+  requests_per_minute: 120,  // Higher for internal team
 }
 ```
 
@@ -392,7 +523,6 @@ validation: {
 ```typescript
 audit: {
   log_all_writes: true,
-  include_agent_id: true,
   include_user_id: true
 }
 ```

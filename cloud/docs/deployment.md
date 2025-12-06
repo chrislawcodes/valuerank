@@ -1,6 +1,8 @@
 # Deployment & Operations
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
+>
+> See also: [Product Specification](./product-spec.md) for context on these decisions
 
 ## Local Development
 
@@ -45,11 +47,27 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # Python workers run in separate container
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql://valuerank:valuerank@postgres:5432/valuerank
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
 ```
 
-PgBoss runs inside the API process (no separate container needed) - it just uses PostgreSQL tables for job storage.
+**Worker architecture:**
+- Python workers run in separate container
+- Poll PgBoss queue for jobs via direct PostgreSQL connection
+- Write results (transcripts, analysis) directly to database
+- Enables reuse of existing Python pipeline code
 
 ### Quick Start
 
@@ -203,16 +221,20 @@ For 100 runs/month with ~50 scenarios × 6 models each:
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. **Multi-tenancy**: Do we need separate workspaces/organizations from day one?
-2. **API Keys**: Where do users store their LLM API keys? (Server-side vs client-side)
-3. **Cost Tracking**: Do we track and display LLM costs per run?
-4. **Persistence of Transcripts**: How long do we retain full transcript data?
-5. **Export/Import**: Do users need to export runs to local files?
-6. **Version Labeling**: Auto-increment (v1, v1.1, v1.1.1) or user-defined labels?
-7. **Fork Visibility**: Can users fork from others' definitions, or only their own?
-8. **Diff Display**: How do we visualize changes between definition versions in the UI?
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Multi-tenancy | **No** - Single tenant | Internal team tool, no need for isolation |
+| LLM API Keys | **Server-side** | Enables async workers, simpler UX |
+| Cost Tracking | **Defer** | Nice to have, not MVP |
+| Transcript Retention | **14 days** | Rarely accessed after analysis |
+| Export/Import | **Yes** - CLI compatibility | Business continuity, potential rollback |
+| Version Labeling | **Hybrid** | Git-like UUID + optional user labels |
+| Fork Visibility | **Public** | All data visible to all users |
+| Diff Display | **Defer to implementation** | Basic side-by-side diff initially |
+
+See [Product Specification](./product-spec.md) for full context.
 
 ---
 

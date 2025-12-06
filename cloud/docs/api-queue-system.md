@@ -1,6 +1,8 @@
 # API & Queue System
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
+>
+> See also: [Product Specification](./product-spec.md) for context on these decisions
 
 ## Overview
 
@@ -8,38 +10,51 @@ Since the primary workload is **long-running AI tasks** (minutes to hours), we n
 
 1. **Task Queue**: Durable, persistent queue for AI operations
 2. **Workers**: Processes that execute tasks (call LLMs, process responses)
-3. **Progress Tracking**: Real-time updates to clients
+3. **Progress Tracking**: Polling-based updates to clients (5-second intervals)
 4. **Queue Management**: Pause, resume, cancel, retry capabilities
 
 ## Recommended Stack
 
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
+| **API** | GraphQL (Yoga or Apollo) | Flexible queries for MCP, schema introspection for LLMs |
 | **Queue** | PgBoss (PostgreSQL) | Same DB as app data, no Redis needed, transactional |
-| **Workers** | Node.js or Python workers | Match existing LLM adapter code |
-| **API** | Express or Fastify | Lightweight, WebSocket support |
-| **Real-time** | WebSockets or SSE | Progress updates to UI |
+| **Workers** | Python workers (separate container) | Reuse existing pipeline code, AI tooling flexibility |
+| **Progress** | HTTP polling (5s intervals) | Simpler than WebSockets, sufficient for UX |
+
+### Why GraphQL over REST
+
+1. **MCP/LLM integration** - LLMs can introspect the schema and construct precise queries
+2. **Flexible data fetching** - Get exactly what's needed, no over-fetching (critical for token budgets)
+3. **Nested relationships** - Definition → runs → transcripts → analysis in one query
+4. **Single endpoint** - Simpler auth, simpler MCP integration
+5. **Schema as contract** - Strong typing, auto-generated TypeScript types
 
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│   API       │
-│   (React)   │◀────│   Server    │
-└─────────────┘     └──────┬──────┘
-                           │
-            ┌──────────────┼──────────────┐
-            ▼              ▼              ▼
-      ┌───────────┐  ┌─────────┐    ┌─────────┐
-      │ PostgreSQL│  │ Worker  │    │ Worker  │
-      │ + PgBoss  │◀─│   1     │    │   2     │
-      └───────────┘  └────┬────┘    └────┬────┘
-                          │              │
-                          ▼              ▼
-                    ┌─────────────────────┐
-                    │   LLM Providers     │
-                    │ (OpenAI, Anthropic) │
-                    └─────────────────────┘
+┌─────────────┐     ┌─────────────────────────────────┐
+│   Frontend  │────▶│   GraphQL API (Yoga/Apollo)     │
+│   (React)   │◀────│   POST /graphql                 │
+└─────────────┘     └──────────────┬──────────────────┘
+                                   │
+┌─────────────┐                    │
+│  Local LLM  │────────────────────┤  (same endpoint)
+│  via MCP    │                    │
+└─────────────┘                    │
+                                   │
+            ┌──────────────────────┼──────────────┐
+            ▼                      ▼              ▼
+      ┌───────────┐  ┌─────────────────┐  ┌───────────────────────┐
+      │ PostgreSQL│  │   DataLoaders   │  │   Python Workers      │
+      │ + PgBoss  │◀─│   (N+1 prevention)│ │   (separate container)│
+      └───────────┘  └─────────────────┘  └──────────┬────────────┘
+                                                      │
+                                                      ▼
+                                          ┌─────────────────────┐
+                                          │   LLM Providers     │
+                                          │ (OpenAI, Anthropic) │
+                                          └─────────────────────┘
 ```
 
 ## Job Types
@@ -52,29 +67,165 @@ Since the primary workload is **long-running AI tasks** (minutes to hours), we n
 - analyze:compare     # Cross-run comparison
 ```
 
-## Queue Management API
+## GraphQL Schema (Core Types)
 
-```
-POST /api/queue/runs              # Start a new run (enqueue all tasks)
-GET  /api/queue/runs/:id          # Get run status and progress
-POST /api/queue/runs/:id/pause    # Pause all tasks for run
-POST /api/queue/runs/:id/resume   # Resume paused run
-POST /api/queue/runs/:id/cancel   # Cancel and remove pending tasks
-DELETE /api/queue/runs/:id        # Delete run and all associated data
+```graphql
+type Query {
+  # Definitions
+  definition(id: ID!): Definition
+  definitions(folder: String, includeChildren: Boolean): [Definition!]!
 
-GET  /api/queue/status            # Global queue stats
-POST /api/queue/pause             # Pause entire queue (all runs)
-POST /api/queue/resume            # Resume entire queue
+  # Runs
+  run(id: ID!): Run
+  runs(definitionId: ID, experimentId: ID, status: RunStatus, limit: Int): [Run!]!
+
+  # Experiments
+  experiment(id: ID!): Experiment
+  experiments(limit: Int): [Experiment!]!
+
+  # Queue status
+  queueStatus: QueueStatus!
+}
+
+type Mutation {
+  # Definitions
+  createDefinition(input: CreateDefinitionInput!): Definition!
+  forkDefinition(parentId: ID!, name: String!, changes: JSON): Definition!
+
+  # Runs
+  startRun(input: StartRunInput!): Run!
+  pauseRun(id: ID!): Run!
+  resumeRun(id: ID!): Run!
+  cancelRun(id: ID!): Run!
+
+  # Experiments
+  createExperiment(input: CreateExperimentInput!): Experiment!
+
+  # Queue
+  pauseQueue: QueueStatus!
+  resumeQueue: QueueStatus!
+}
+
+type Definition {
+  id: ID!
+  name: String!
+  versionLabel: String
+  parentId: ID
+  parent: Definition
+  children: [Definition!]!
+  content: JSON!
+  createdAt: DateTime!
+  runs: [Run!]!
+}
+
+type Run {
+  id: ID!
+  status: RunStatus!
+  definition: Definition!
+  experiment: Experiment
+  config: JSON!
+  progress: RunProgress!
+  transcripts(model: String, limit: Int): [Transcript!]!
+  analysis: Analysis
+  createdAt: DateTime!
+}
+
+type RunProgress {
+  total: Int!
+  completed: Int!
+  failed: Int!
+}
+
+type Analysis {
+  basicStats: JSON!
+  modelAgreement: JSON!
+  dimensionAnalysis: JSON
+  mostContestedScenarios(limit: Int): [ContestedScenario!]!
+}
 ```
 
-## WebSocket Events
+## Example Queries
 
+**Get run with nested data (single request):**
+```graphql
+query GetRunDetails($id: ID!) {
+  run(id: $id) {
+    status
+    progress { total completed failed }
+    definition { name versionLabel }
+    experiment { name hypothesis }
+    analysis {
+      modelAgreement
+      mostContestedScenarios(limit: 5) {
+        scenarioId
+        variance
+      }
+    }
+  }
+}
 ```
-ws://api/runs/:id/progress
-  → { type: "task_complete", scenario_id, model, progress: "45/120" }
-  → { type: "task_failed", scenario_id, model, error: "..." }
-  → { type: "run_complete" }
+
+**MCP-style flexible query:**
+```graphql
+query MCPAnalysis($runId: ID!, $model: String!) {
+  run(id: $runId) {
+    transcripts(model: $model, limit: 10) {
+      scenarioId
+      turnCount
+      wordCount
+    }
+    analysis {
+      basicStats
+      dimensionAnalysis
+    }
+  }
+}
 ```
+
+## Queue Operations (Mutations)
+
+```graphql
+# Start a new run
+mutation StartRun($input: StartRunInput!) {
+  startRun(input: $input) {
+    id
+    status
+    progress { total }
+  }
+}
+
+# Pause/resume/cancel
+mutation PauseRun($id: ID!) {
+  pauseRun(id: $id) { id status }
+}
+```
+
+## Progress Polling
+
+Frontend polls for updates every 5 seconds using GraphQL:
+
+```graphql
+query PollRunProgress($id: ID!) {
+  run(id: $id) {
+    id
+    status
+    progress { total completed failed }
+    recentTasks(limit: 5) {
+      scenarioId
+      model
+      status
+      error
+    }
+    updatedAt
+  }
+}
+```
+
+**Why polling over subscriptions:**
+- Simpler implementation (no WebSocket connection management)
+- Easier debugging (standard HTTP POST)
+- Sufficient for progress updates (5s latency acceptable)
+- Can add GraphQL subscriptions later if UX demands real-time
 
 ## PgBoss Implementation
 
@@ -193,27 +344,42 @@ Experiment: "How does model selection affect safety scores?"
             - statistical significance
 ```
 
-### Comparison API
+### Comparison API (GraphQL)
 
-```
-POST /api/runs/compare
-  body: { baseline_run_id, comparison_run_id }
-  → Queues analyze:compare job
-  → Returns comparison_id
+```graphql
+type Query {
+  comparison(id: ID!): RunComparison
+  comparisons(runId: ID): [RunComparison!]!
+}
 
-GET /api/runs/:id/comparisons
-  → List all comparisons involving this run
+type Mutation {
+  compareRuns(baselineRunId: ID!, comparisonRunId: ID!): RunComparison!
+}
 
-GET /api/comparisons/:id
-  → Get comparison results (delta analysis)
+type RunComparison {
+  id: ID!
+  baselineRun: Run!
+  comparisonRun: Run!
+  deltaByModel: JSON!
+  mostChangedScenarios(limit: Int): [ScenarioDelta!]!
+  statisticalSignificance: JSON
+  whatChanged: ComparisonDiff!
+}
 
-POST /api/experiments
-  body: { name, hypothesis, baseline_run_id }
-  → Create experiment container
-
-POST /api/experiments/:id/runs
-  body: { changes: { models: [...] } }
-  → Create variant run within experiment
+# Example query
+query GetComparison($id: ID!) {
+  comparison(id: $id) {
+    baselineRun { id definition { name } }
+    comparisonRun { id definition { name } }
+    deltaByModel
+    mostChangedScenarios(limit: 5) {
+      scenarioId
+      baselineScore
+      comparisonScore
+      delta
+    }
+  }
+}
 ```
 
 ---

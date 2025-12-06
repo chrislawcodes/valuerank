@@ -1,23 +1,35 @@
 # Frontend Design
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
+>
+> See also: [Product Specification](./product-spec.md) for context on these decisions
 
 ## Recommendation: React + TypeScript + Vite
 
 The existing DevTool provides a solid foundation. Same tech stack for Cloud.
 
-## New Features Needed
+## Features by Phase
 
-1. **Authentication**: User accounts, API keys management
-2. **Run Dashboard**: List runs with status, progress bars
-3. **Queue Controls**: Pause/resume/cancel buttons
-4. **Real-time Progress**: WebSocket-driven updates
-5. **Transcript Viewer**: Browse and search transcripts
-6. **Deep Analysis**: PCA visualization, outlier detection, correlation matrices
-7. **Run Comparison**: Side-by-side delta analysis, divergence highlighting
-8. **Experiment Management**: Create experiments, track hypothesis, group related runs
-9. **Sampled Runs**: Configure sample %, view confidence intervals, expand to full
-10. **Multi-tenancy**: Workspace/organization support (future)
+### Phase 1: Core Pipeline
+1. **Simple Auth**: Login form (email/password), JWT token storage
+2. **Definition Editor**: Create/edit/fork scenario definitions
+3. **Run Dashboard**: List runs with status, progress (polling-based)
+4. **Queue Controls**: Pause/resume/cancel buttons
+5. **Results Viewer**: Basic analysis, per-model scores
+
+### Phase 2: Experimentation
+6. **Run Comparison**: Side-by-side delta analysis
+7. **Experiment Management**: Create experiments, track hypothesis
+8. **Version Tree**: Visualize definition lineage
+
+### Phase 3: AI Integration
+9. **API Key Manager**: Generate keys for MCP access
+
+### Deferred
+- ~~Real-time Progress~~: Polling (5s) is sufficient
+- ~~Deep Analysis (PCA, outliers)~~: Tier 1+2 first
+- ~~Sampled Runs~~: Nice to have
+- ~~Multi-tenancy~~: Not needed (single tenant)
 
 ## Component Architecture
 
@@ -25,24 +37,23 @@ The existing DevTool provides a solid foundation. Same tech stack for Cloud.
 src/
 ├── components/
 │   ├── auth/
-│   │   ├── LoginForm.tsx
-│   │   └── ApiKeyManager.tsx
-│   ├── scenarios/
-│   │   ├── ScenarioEditor.tsx      # (from DevTool)
-│   │   ├── ScenarioGenerator.tsx   # (from DevTool)
-│   │   └── ScenarioList.tsx
+│   │   ├── LoginForm.tsx           # Simple email/password
+│   │   └── ApiKeyManager.tsx       # Generate MCP keys
+│   ├── definitions/
+│   │   ├── DefinitionEditor.tsx    # (port from DevTool)
+│   │   ├── DefinitionList.tsx      # With version tree view
+│   │   ├── DefinitionFork.tsx      # Fork with label
+│   │   └── VersionTree.tsx         # Visualize lineage (Phase 2)
 │   ├── runs/
-│   │   ├── RunDashboard.tsx        # NEW: List all runs
-│   │   ├── RunProgress.tsx         # NEW: Real-time progress
-│   │   ├── RunControls.tsx         # NEW: Pause/resume/cancel
-│   │   ├── RunConfig.tsx           # NEW: Sample %, model selection
-│   │   └── TranscriptViewer.tsx    # NEW: Browse transcripts
+│   │   ├── RunDashboard.tsx        # List all runs
+│   │   ├── RunProgress.tsx         # Polling-based progress
+│   │   ├── RunControls.tsx         # Pause/resume/cancel
+│   │   ├── RunConfig.tsx           # Model selection
+│   │   └── ResultsViewer.tsx       # Basic analysis display
 │   ├── analysis/
-│   │   ├── DeepAnalysis.tsx        # Port from DevTool + enhancements
-│   │   ├── PCAVisualization.tsx    # Model positioning chart
-│   │   ├── CorrelationMatrix.tsx   # Dimension × model heatmap
-│   │   ├── OutlierDetection.tsx    # Multi-method outlier display
-│   │   └── InsightsList.tsx        # Auto-generated findings
+│   │   ├── BasicStats.tsx          # Tier 1: Win rates, scores
+│   │   ├── ModelAgreement.tsx      # Tier 2: Correlations
+│   │   └── DimensionImpact.tsx     # Tier 2: Which dimensions matter
 │   ├── comparison/
 │   │   ├── RunComparison.tsx       # Side-by-side delta view
 │   │   ├── DeltaChart.tsx          # Visualize differences
@@ -50,25 +61,63 @@ src/
 │   ├── experiments/
 │   │   ├── ExperimentList.tsx      # All experiments
 │   │   ├── ExperimentDetail.tsx    # Runs within experiment
-│   │   └── HypothesisTracker.tsx   # Track experiment outcomes
-│   ├── queue/
-│   │   ├── QueueStatus.tsx         # NEW: Global queue stats
-│   │   └── QueueControls.tsx       # NEW: Global pause/resume
-│   └── settings/
-│       └── RuntimeConfig.tsx       # (from DevTool)
+│   │   └── HypothesisTracker.tsx   # Track outcomes
+│   └── queue/
+│       └── QueueStatus.tsx         # Global queue stats
 ├── hooks/
-│   ├── useWebSocket.ts             # NEW: Real-time updates
-│   └── useQueue.ts                 # NEW: Queue operations
+│   ├── usePolling.ts               # Generic polling hook
+│   ├── useRunProgress.ts           # Poll run status (5s)
+│   └── useAuth.ts                  # JWT token management
 └── api/
-    └── client.ts                   # API client with auth
+    └── client.ts                   # API client with auth headers
 ```
 
 ## State Management
 
-For real-time updates and complex state, consider:
-- **Zustand** (lightweight) or **TanStack Query** (server state)
-- WebSocket integration for live updates
-- Optimistic updates for queue operations
+Recommended approach:
+- **urql** or **Apollo Client** for GraphQL queries
+- Built-in polling support (`pollInterval: 5000` for active runs)
+- Optimistic updates for mutations (pause/resume/cancel)
+- **Zustand** or React Context for UI state (current view, filters)
+
+### GraphQL Client Setup
+
+```typescript
+// api/client.ts
+import { createClient, cacheExchange, fetchExchange } from 'urql';
+
+export const client = createClient({
+  url: '/graphql',
+  exchanges: [cacheExchange, fetchExchange],
+  fetchOptions: () => ({
+    headers: { Authorization: `Bearer ${getToken()}` },
+  }),
+});
+```
+
+### Example Query Hook
+
+```typescript
+// hooks/useRunProgress.ts
+import { useQuery } from 'urql';
+
+const RUN_PROGRESS_QUERY = `
+  query RunProgress($id: ID!) {
+    run(id: $id) {
+      status
+      progress { total completed failed }
+    }
+  }
+`;
+
+export function useRunProgress(id: string, isActive: boolean) {
+  return useQuery({
+    query: RUN_PROGRESS_QUERY,
+    variables: { id },
+    pollInterval: isActive ? 5000 : undefined,
+  });
+}
+```
 
 ## Key UI Flows
 
@@ -96,15 +145,31 @@ For real-time updates and complex state, consider:
 
 ## Components from DevTool to Reuse
 
-- `ScenarioEditor` - Definition authoring
-- `ScenarioGenerator` - AI-assisted generation
-- `DeepAnalysis` - Statistical analysis views
+- `ScenarioEditor` → `DefinitionEditor` - Definition authoring
+- `ScenarioGenerator` - AI-assisted generation (if needed)
 - Chart components (Recharts-based)
 
 ## Components to Build New
 
-- Authentication (Supabase Auth integration)
-- Run management (dashboard, progress, controls)
-- Comparison views
-- Experiment management
-- Version tree visualization
+| Component | Phase | Complexity |
+|-----------|-------|------------|
+| LoginForm | 1 | Low - simple form |
+| DefinitionList | 1 | Medium - with tree view |
+| RunDashboard | 1 | Medium - list with filters |
+| RunProgress | 1 | Low - polling-based |
+| ResultsViewer | 1 | Medium - tables and charts |
+| RunComparison | 2 | Medium - side-by-side layout |
+| ExperimentList | 2 | Medium - grouping runs |
+| VersionTree | 2 | Medium - DAG visualization |
+| ApiKeyManager | 3 | Low - simple CRUD |
+
+## What We're NOT Building
+
+| Feature | Reason |
+|---------|--------|
+| WebSocket integration | Polling is sufficient |
+| Complex auth flows | Internal team, simple JWT |
+| User management UI | CLI-based for internal team |
+| PCA visualization | Defer to later phase |
+| Outlier detection UI | Defer to later phase |
+| Sampling configuration | Nice to have, not MVP |
