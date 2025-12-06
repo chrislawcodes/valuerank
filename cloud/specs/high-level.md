@@ -32,6 +32,8 @@
 
 ## Stage 2: Database Schema & Migrations [ ]
 
+> **Spec:** [stage-2-database.md](./stage-2-database.md) | **Plan:** [stage-2-plan.md](./stage-2-plan.md) | **Tasks:** [stage-2-tasks.md](./stage-2-tasks.md)
+
 **Goal:** Implement the core PostgreSQL schema with Prisma, including all tables needed for MVP.
 
 **Deliverables:**
