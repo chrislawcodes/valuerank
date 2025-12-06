@@ -178,10 +178,10 @@
 
 ### Implementation for User Story 7
 
-- [ ] T063 [US7] Add debug logging for DataLoader batch calls in apps/api/src/graphql/dataloaders/*.ts
-- [ ] T064 [US7] Write test verifying batching for runs→definitions in apps/api/tests/graphql/dataloaders/batching.test.ts
-- [ ] T065 [US7] Write test verifying batching for definitions→parent in apps/api/tests/graphql/dataloaders/batching.test.ts
-- [ ] T066 [US7] Write test verifying per-request DataLoader isolation in apps/api/tests/graphql/dataloaders/batching.test.ts
+- [X] T063 [US7] Add debug logging for DataLoader batch calls in apps/api/src/graphql/dataloaders/*.ts
+- [X] T064 [US7] Write test verifying batching for runs→definitions in apps/api/tests/graphql/dataloaders/batching.test.ts
+- [X] T065 [US7] Write test verifying batching for definitions→parent in apps/api/tests/graphql/dataloaders/batching.test.ts
+- [X] T066 [US7] Write test verifying per-request DataLoader isolation in apps/api/tests/graphql/dataloaders/batching.test.ts
 
 **Checkpoint**: US7 complete - DataLoaders batch queries, verified by tests
 
