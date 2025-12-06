@@ -1,0 +1,180 @@
+# Stage 5: Queue System GraphQL Schema Additions
+# These types extend the existing schema from Stage 3
+
+# =============================================================================
+# INPUT TYPES
+# =============================================================================
+
+input StartRunInput {
+  """Definition to run (must have scenarios)"""
+  definitionId: ID!
+
+  """List of model identifiers to evaluate (e.g., ["gpt-4", "claude-3-opus"])"""
+  models: [String!]!
+
+  """Percentage of scenarios to sample (1-100, default 100)"""
+  samplePercentage: Int
+
+  """Seed for deterministic sampling (optional, random if not provided)"""
+  sampleSeed: Int
+
+  """Run priority (default: NORMAL)"""
+  priority: RunPriority
+
+  """Optional experiment to associate this run with"""
+  experimentId: ID
+}
+
+enum RunPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+# =============================================================================
+# QUERY TYPES
+# =============================================================================
+
+"""Overall queue status for monitoring"""
+type QueueStatus {
+  """Whether the global queue is paused"""
+  isPaused: Boolean!
+
+  """Job counts by type"""
+  jobs: [JobTypeStatus!]!
+
+  """Total pending jobs across all types"""
+  totalPending: Int!
+
+  """Total actively processing jobs"""
+  totalActive: Int!
+}
+
+"""Status counts for a specific job type"""
+type JobTypeStatus {
+  """Job type identifier (e.g., "probe:scenario")"""
+  type: String!
+
+  """Jobs waiting to be processed"""
+  pending: Int!
+
+  """Jobs currently being processed"""
+  active: Int!
+
+  """Jobs completed successfully (last 24h)"""
+  completed: Int!
+
+  """Jobs that failed (last 24h)"""
+  failed: Int!
+}
+
+# =============================================================================
+# RUN TYPE EXTENSIONS
+# =============================================================================
+
+"""Progress tracking for a run"""
+type RunProgress {
+  """Total jobs for this run"""
+  total: Int!
+
+  """Successfully completed jobs"""
+  completed: Int!
+
+  """Failed jobs"""
+  failed: Int!
+
+  """Percentage complete (0-100)"""
+  percentComplete: Float!
+}
+
+"""Result of a single task (job) within a run"""
+type TaskResult {
+  """Scenario that was evaluated"""
+  scenarioId: String!
+
+  """Model that was evaluated"""
+  modelId: String!
+
+  """Current status of the task"""
+  status: TaskStatus!
+
+  """Error message if failed"""
+  error: String
+
+  """When the task completed (if finished)"""
+  completedAt: DateTime
+}
+
+enum TaskStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+# Extend existing Run type
+extend type Run {
+  """Progress tracking for this run"""
+  progress: RunProgress!
+
+  """Recent task results for monitoring"""
+  recentTasks(
+    """Maximum number of tasks to return"""
+    limit: Int = 5
+  ): [TaskResult!]!
+
+  """Estimated time remaining based on current pace"""
+  estimatedTimeRemaining: Int
+}
+
+# =============================================================================
+# QUERIES
+# =============================================================================
+
+extend type Query {
+  """Get overall queue status for monitoring"""
+  queueStatus: QueueStatus!
+}
+
+# =============================================================================
+# MUTATIONS
+# =============================================================================
+
+extend type Mutation {
+  """
+  Start a new evaluation run.
+  Creates jobs for each model-scenario combination.
+  Returns the run with initial progress.
+  """
+  startRun(input: StartRunInput!): Run!
+
+  """
+  Pause a running run.
+  In-flight jobs complete, but no new jobs are dispatched.
+  """
+  pauseRun(id: ID!): Run!
+
+  """
+  Resume a paused run.
+  Resumes dispatching pending jobs.
+  """
+  resumeRun(id: ID!): Run!
+
+  """
+  Cancel a run.
+  Removes pending jobs, preserves completed results.
+  """
+  cancelRun(id: ID!): Run!
+
+  """
+  Pause the entire queue (admin operation).
+  All job types stop processing.
+  """
+  pauseQueue: QueueStatus!
+
+  """
+  Resume the entire queue (admin operation).
+  All job types resume processing.
+  """
+  resumeQueue: QueueStatus!
+}
