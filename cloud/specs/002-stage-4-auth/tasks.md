@@ -127,13 +127,13 @@ This phase creates the shared auth types, error classes, and service foundations
 
 ### Implementation for User Story 5
 
-- [ ] T038 [US5] Extend `apps/api/src/auth/middleware.ts` - Check X-API-Key header
-- [ ] T039 [US5] Hash incoming key and lookup in database
-- [ ] T040 [US5] Check key expiry (if expires_at set)
-- [ ] T041 [US5] Update `last_used` on successful API key auth
-- [ ] T042 [US5] Load associated user and populate req.user
-- [ ] T043 [US5] Set authMethod to 'api_key' in context
-- [ ] T044 [US5] Write API key auth tests in `apps/api/tests/auth/api-key-auth.test.ts`
+- [X] T038 [US5] Extend `apps/api/src/auth/middleware.ts` - Check X-API-Key header
+- [X] T039 [US5] Hash incoming key and lookup in database
+- [X] T040 [US5] Check key expiry (if expires_at set)
+- [X] T041 [US5] Update `last_used` on successful API key auth
+- [X] T042 [US5] Load associated user and populate req.user
+- [X] T043 [US5] Set authMethod to 'api_key' in context
+- [X] T044 [US5] Write API key auth tests in `apps/api/tests/auth/api-key-auth.test.ts`
 
 **Checkpoint**: User Story 5 complete - API key authentication works
 

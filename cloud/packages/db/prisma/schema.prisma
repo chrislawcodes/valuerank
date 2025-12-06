@@ -29,7 +29,7 @@ model ApiKey {
   id        String    @id @default(cuid())
   userId    String    @map("user_id")
   name      String
-  keyHash   String    @map("key_hash")
+  keyHash   String    @unique @map("key_hash")
   keyPrefix String    @map("key_prefix") @db.VarChar(12)
   lastUsed  DateTime? @map("last_used")
   expiresAt DateTime? @map("expires_at")

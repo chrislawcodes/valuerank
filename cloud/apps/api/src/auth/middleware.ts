@@ -1,15 +1,17 @@
 /**
  * Authentication middleware
  *
- * Validates JWT tokens and populates req.user with decoded payload
- * Also handles API key authentication (to be added later)
+ * Validates JWT tokens and API keys, populates req.user with user info.
+ * Supports both Bearer token (JWT) and X-API-Key header authentication.
  */
 
 import type { Request, Response, NextFunction } from 'express';
 
 import { createLogger, AuthenticationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 
 import { verifyToken, extractBearerToken } from './services.js';
+import { hashApiKey, isValidApiKeyFormat } from './api-keys.js';
 import type { AuthUser, AuthMethod } from './types.js';
 
 const log = createLogger('auth:middleware');
@@ -26,53 +28,134 @@ declare global {
 }
 
 /**
- * Extract and validate JWT from Authorization header
+ * Extract and validate authentication from request headers
+ *
+ * Supports two authentication methods:
+ * 1. JWT via Authorization header (Bearer token)
+ * 2. API key via X-API-Key header
  *
  * Sets req.user and req.authMethod on success
- * Sets both to null if no token provided (allows unauthenticated requests through)
+ * Sets both to null if no auth provided (allows unauthenticated requests through)
  */
-export function authMiddleware(
+export async function authMiddleware(
   req: Request,
   _res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   // Initialize auth state
   req.user = null;
   req.authMethod = null;
 
-  // Get Authorization header
+  // Try JWT first (Authorization header)
   const authHeader = req.headers.authorization;
   const token = extractBearerToken(authHeader);
 
-  if (!token) {
-    // No token - allow through as unauthenticated
-    // Individual routes/resolvers can require auth if needed
-    next();
-    return;
-  }
+  if (token) {
+    try {
+      // Verify JWT (includes 30-second clock skew tolerance)
+      const payload = verifyToken(token);
 
-  try {
-    // Verify JWT (includes 30-second clock skew tolerance)
-    const payload = verifyToken(token);
+      // Populate request with user info
+      req.user = {
+        id: payload.sub,
+        email: payload.email,
+      };
+      req.authMethod = 'jwt';
 
-    // Populate request with user info
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-    };
-    req.authMethod = 'jwt';
-
-    log.debug({ userId: req.user.id }, 'JWT authentication successful');
-    next();
-  } catch (err) {
-    // Token is invalid - pass error to error handler
-    if (err instanceof AuthenticationError) {
-      next(err);
-    } else {
-      log.error({ err }, 'Unexpected error during JWT validation');
-      next(new AuthenticationError('Invalid token'));
+      log.debug({ userId: req.user.id }, 'JWT authentication successful');
+      next();
+      return;
+    } catch (err) {
+      // Token is invalid - pass error to error handler
+      if (err instanceof AuthenticationError) {
+        next(err);
+      } else {
+        log.error({ err }, 'Unexpected error during JWT validation');
+        next(new AuthenticationError('Invalid token'));
+      }
+      return;
     }
   }
+
+  // Try API key (X-API-Key header)
+  const apiKey = req.headers['x-api-key'];
+  if (typeof apiKey === 'string' && apiKey.length > 0) {
+    try {
+      const user = await validateApiKey(apiKey);
+      if (user) {
+        req.user = user;
+        req.authMethod = 'api_key';
+        log.debug({ userId: user.id }, 'API key authentication successful');
+      }
+    } catch (err) {
+      if (err instanceof AuthenticationError) {
+        next(err);
+        return;
+      }
+      log.error({ err }, 'Unexpected error during API key validation');
+      next(new AuthenticationError('Invalid API key'));
+      return;
+    }
+  }
+
+  // No auth provided - allow through as unauthenticated
+  // Individual routes/resolvers can require auth if needed
+  next();
+}
+
+/**
+ * Validate an API key and return the associated user
+ *
+ * @param key - The API key from the X-API-Key header
+ * @returns User info if valid, null if invalid
+ * @throws AuthenticationError if key is expired
+ */
+async function validateApiKey(key: string): Promise<AuthUser | null> {
+  // Validate format first
+  if (!isValidApiKeyFormat(key)) {
+    log.debug('Invalid API key format');
+    return null;
+  }
+
+  // Hash the key for lookup
+  const keyHash = hashApiKey(key);
+
+  // Find the API key record
+  const apiKeyRecord = await db.apiKey.findUnique({
+    where: { keyHash },
+    include: { user: true },
+  });
+
+  if (!apiKeyRecord) {
+    log.debug('API key not found');
+    return null;
+  }
+
+  // Check expiry
+  if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
+    log.debug({ keyId: apiKeyRecord.id }, 'API key expired');
+    throw new AuthenticationError('API key expired');
+  }
+
+  // Update last_used timestamp (fire and forget)
+  db.apiKey
+    .update({
+      where: { id: apiKeyRecord.id },
+      data: { lastUsed: new Date() },
+    })
+    .catch((err) => {
+      log.warn({ err, keyId: apiKeyRecord.id }, 'Failed to update last_used');
+    });
+
+  log.debug(
+    { keyId: apiKeyRecord.id, userId: apiKeyRecord.userId },
+    'API key validated'
+  );
+
+  return {
+    id: apiKeyRecord.user.id,
+    email: apiKeyRecord.user.email,
+  };
 }
 
 /**
