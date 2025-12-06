@@ -225,3 +225,34 @@ export async function incrementRunProgress(
 
   return updateRunProgress(id, updated);
 }
+
+// ============================================================================
+// ACCESS TRACKING
+// ============================================================================
+
+/**
+ * Update the last_accessed_at timestamp for a run.
+ * Call this on read operations to track usage.
+ */
+export async function touchRun(id: string): Promise<void> {
+  log.debug({ id }, 'Updating run access timestamp');
+
+  await db.run.update({
+    where: { id },
+    data: { lastAccessedAt: new Date() },
+  });
+}
+
+/**
+ * Update the last_accessed_at timestamp for multiple runs.
+ */
+export async function touchRuns(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  log.debug({ count: ids.length }, 'Updating run access timestamps');
+
+  await db.run.updateMany({
+    where: { id: { in: ids } },
+    data: { lastAccessedAt: new Date() },
+  });
+}

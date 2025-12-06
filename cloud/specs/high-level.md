@@ -68,7 +68,7 @@
 
 ---
 
-## Stage 2b: Transcript Versioning & Access Tracking [ ]
+## Stage 2b: Transcript Versioning & Access Tracking [x]
 
 **Goal:** Extend database schema to support model version tracking, definition snapshots, and access tracking for future pruning.
 

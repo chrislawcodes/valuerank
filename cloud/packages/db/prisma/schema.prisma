@@ -46,12 +46,13 @@ model ApiKey {
 // ============================================================================
 
 model Definition {
-  id        String   @id @default(cuid())
-  parentId  String?  @map("parent_id")
-  name      String
-  content   Json     @db.JsonB
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(cuid())
+  parentId       String?   @map("parent_id")
+  name           String
+  content        Json      @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt DateTime? @map("last_accessed_at")
 
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
@@ -64,16 +65,20 @@ model Definition {
 }
 
 model Run {
-  id           String    @id @default(cuid())
-  definitionId String    @map("definition_id")
-  experimentId String?   @map("experiment_id")
-  status       RunStatus @default(PENDING)
-  config       Json      @db.JsonB
-  progress     Json?     @db.JsonB
-  startedAt    DateTime? @map("started_at")
-  completedAt  DateTime? @map("completed_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(cuid())
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
 
   definition Definition  @relation(fields: [definitionId], references: [id])
   experiment Experiment? @relation(fields: [experimentId], references: [id])
@@ -99,22 +104,30 @@ enum RunStatus {
 }
 
 model Transcript {
-  id          String   @id @default(cuid())
-  runId       String   @map("run_id")
-  scenarioId  String?  @map("scenario_id")
-  targetModel String   @map("target_model")
-  content     Json     @db.JsonB
-  turnCount   Int      @map("turn_count")
-  tokenCount  Int      @map("token_count")
-  durationMs  Int      @map("duration_ms")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
 
   run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
   scenario Scenario? @relation(fields: [scenarioId], references: [id])
 
   @@index([runId])
   @@index([scenarioId])
-  @@index([targetModel])
+  @@index([modelId])
   @@map("transcripts")
 }
 

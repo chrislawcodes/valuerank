@@ -18,7 +18,9 @@ const log = createLogger('db:transcripts');
 export type CreateTranscriptInput = {
   runId: string;
   scenarioId?: string;
-  targetModel: string;
+  modelId: string;
+  modelVersion?: string;
+  definitionSnapshot?: Record<string, unknown>;
   content: TranscriptContent;
   turnCount: number;
   tokenCount: number;
@@ -28,7 +30,7 @@ export type CreateTranscriptInput = {
 export type TranscriptFilters = {
   runId?: string;
   scenarioId?: string;
-  targetModel?: string;
+  modelId?: string;
   limit?: number;
   offset?: number;
 };
@@ -52,15 +54,15 @@ export async function createTranscript(data: CreateTranscriptInput): Promise<Tra
   if (!data.runId) {
     throw new ValidationError('Run ID is required', { field: 'runId' });
   }
-  if (!data.targetModel) {
-    throw new ValidationError('Target model is required', { field: 'targetModel' });
+  if (!data.modelId) {
+    throw new ValidationError('Model ID is required', { field: 'modelId' });
   }
   if (!data.content) {
     throw new ValidationError('Transcript content is required', { field: 'content' });
   }
 
   log.info(
-    { runId: data.runId, targetModel: data.targetModel, turnCount: data.turnCount },
+    { runId: data.runId, modelId: data.modelId, modelVersion: data.modelVersion, turnCount: data.turnCount },
     'Creating transcript'
   );
 
@@ -68,7 +70,9 @@ export async function createTranscript(data: CreateTranscriptInput): Promise<Tra
     data: {
       runId: data.runId,
       scenarioId: data.scenarioId,
-      targetModel: data.targetModel,
+      modelId: data.modelId,
+      modelVersion: data.modelVersion,
+      definitionSnapshot: data.definitionSnapshot as unknown as Prisma.InputJsonValue,
       content: data.content as unknown as Prisma.InputJsonValue,
       turnCount: data.turnCount,
       tokenCount: data.tokenCount,
@@ -93,7 +97,9 @@ export async function createTranscripts(
     data: transcripts.map((t) => ({
       runId: t.runId,
       scenarioId: t.scenarioId,
-      targetModel: t.targetModel,
+      modelId: t.modelId,
+      modelVersion: t.modelVersion,
+      definitionSnapshot: t.definitionSnapshot as unknown as Prisma.InputJsonValue,
       content: t.content as unknown as Prisma.InputJsonValue,
       turnCount: t.turnCount,
       tokenCount: t.tokenCount,
@@ -172,7 +178,7 @@ export async function listTranscripts(filters?: TranscriptFilters): Promise<Tran
 
   if (filters?.runId) where.runId = filters.runId;
   if (filters?.scenarioId) where.scenarioId = filters.scenarioId;
-  if (filters?.targetModel) where.targetModel = filters.targetModel;
+  if (filters?.modelId) where.modelId = filters.modelId;
 
   return db.transcript.findMany({
     where,
@@ -203,7 +209,7 @@ export async function getTranscriptStatsForRun(
   const transcripts = await db.transcript.findMany({
     where: { runId },
     select: {
-      targetModel: true,
+      modelId: true,
       turnCount: true,
       tokenCount: true,
       durationMs: true,
@@ -216,7 +222,7 @@ export async function getTranscriptStatsForRun(
   let totalTurns = 0;
 
   for (const t of transcripts) {
-    modelCounts[t.targetModel] = (modelCounts[t.targetModel] ?? 0) + 1;
+    modelCounts[t.modelId] = (modelCounts[t.modelId] ?? 0) + 1;
     totalTokens += t.tokenCount;
     totalDurationMs += t.durationMs;
     totalTurns += t.turnCount;
@@ -229,4 +235,35 @@ export async function getTranscriptStatsForRun(
     avgTurns: transcripts.length > 0 ? totalTurns / transcripts.length : 0,
     modelCounts,
   };
+}
+
+// ============================================================================
+// ACCESS TRACKING
+// ============================================================================
+
+/**
+ * Update the last_accessed_at timestamp for a transcript.
+ * Call this on read operations to track usage.
+ */
+export async function touchTranscript(id: string): Promise<void> {
+  log.debug({ id }, 'Updating transcript access timestamp');
+
+  await db.transcript.update({
+    where: { id },
+    data: { lastAccessedAt: new Date() },
+  });
+}
+
+/**
+ * Update the last_accessed_at timestamp for multiple transcripts.
+ */
+export async function touchTranscripts(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  log.debug({ count: ids.length }, 'Updating transcript access timestamps');
+
+  await db.transcript.updateMany({
+    where: { id: { in: ids } },
+    data: { lastAccessedAt: new Date() },
+  });
 }

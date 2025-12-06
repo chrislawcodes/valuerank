@@ -321,3 +321,34 @@ export async function getDefinitionTreeIds(rootId: string): Promise<string[]> {
 
   return treeIds.map((row) => row.id);
 }
+
+// ============================================================================
+// ACCESS TRACKING
+// ============================================================================
+
+/**
+ * Update the last_accessed_at timestamp for a definition.
+ * Call this on read operations to track usage.
+ */
+export async function touchDefinition(id: string): Promise<void> {
+  log.debug({ id }, 'Updating definition access timestamp');
+
+  await db.definition.update({
+    where: { id },
+    data: { lastAccessedAt: new Date() },
+  });
+}
+
+/**
+ * Update the last_accessed_at timestamp for multiple definitions.
+ */
+export async function touchDefinitions(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  log.debug({ count: ids.length }, 'Updating definition access timestamps');
+
+  await db.definition.updateMany({
+    where: { id: { in: ids } },
+    data: { lastAccessedAt: new Date() },
+  });
+}
