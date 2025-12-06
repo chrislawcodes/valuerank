@@ -63,17 +63,17 @@
 
 ### Python Probe Worker
 
-- [ ] T018 [US1] Create `cloud/workers/probe.py` with stdin JSON parsing and stdout JSON output
-- [ ] T019 [US1] Implement multi-turn conversation logic in `cloud/workers/probe.py`
-- [ ] T020 [US1] Add token counting (tiktoken for OpenAI, estimate for others) to probe.py
-- [ ] T021 [US1] Add timing capture (startedAt, completedAt) to probe.py output
+- [X] T018 [US1] Create `cloud/workers/probe.py` with stdin JSON parsing and stdout JSON output
+- [X] T019 [US1] Implement multi-turn conversation logic in `cloud/workers/probe.py`
+- [X] T020 [US1] Add token counting (tiktoken for OpenAI, estimate for others) to probe.py
+- [X] T021 [US1] Add timing capture (startedAt, completedAt) to probe.py output
 
 ### Probe Worker Tests
 
-- [ ] T022 [US1] Create `cloud/workers/tests/test_probe.py` with input parsing tests
-- [ ] T023 [P] [US1] Add multi-turn conversation tests to test_probe.py
-- [ ] T024 [P] [US1] Add token counting tests to test_probe.py
-- [ ] T025 [P] [US1] Add error handling tests (LLM failures) to test_probe.py
+- [X] T022 [US1] Create `cloud/workers/tests/test_probe.py` with input parsing tests
+- [X] T023 [P] [US1] Add multi-turn conversation tests to test_probe.py
+- [X] T024 [P] [US1] Add token counting tests to test_probe.py
+- [X] T025 [P] [US1] Add error handling tests (LLM failures) to test_probe.py
 
 **Checkpoint**: User Story 1 Python side complete - probe.py works standalone via stdin/stdout
 
