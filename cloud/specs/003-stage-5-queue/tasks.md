@@ -189,36 +189,36 @@
 
 ### Progress Tracking
 
-- [ ] T028 [US2] Implement progress service: `apps/api/src/services/run/progress.ts`
+- [X] T028 [US2] Implement progress service: `apps/api/src/services/run/progress.ts`
   - updateProgress(runId, {completed?: +1, failed?: +1})
   - Use PostgreSQL JSONB operators for atomic increment
   - Update run status based on progress (RUNNING when first job, COMPLETED when all done)
   - Calculate byModel breakdown (optional)
 
-- [ ] T029 [US2] Wire progress updates into handlers: `apps/api/src/queue/handlers/probe-scenario.ts`
+- [X] T029 [US2] Wire progress updates into handlers: `apps/api/src/queue/handlers/probe-scenario.ts`
   - Call progress.incrementCompleted on success
   - Call progress.incrementFailed on failure
   - Store transcript result on success
 
 ### GraphQL Queries
 
-- [ ] T030 [US2] Implement Run.progress resolver: `apps/api/src/graphql/types/run.ts` (extend)
+- [X] T030 [US2] Implement Run.progress resolver: `apps/api/src/graphql/types/run.ts` (extend)
   - Return progress from run.progress JSONB
   - Calculate percentComplete
 
-- [ ] T031 [US2] Implement Run.recentTasks resolver: `apps/api/src/graphql/types/run.ts` (extend)
+- [X] T031 [US2] Implement Run.recentTasks resolver: `apps/api/src/graphql/types/run.ts` (extend)
   - Query recent completed/failed jobs from PgBoss archive
   - Transform to TaskResult type
   - Apply limit parameter
 
 ### Tests
 
-- [ ] T032 [US2] Unit tests for progress service: `apps/api/tests/services/run/progress.test.ts`
+- [X] T032 [US2] Unit tests for progress service: `apps/api/tests/services/run/progress.test.ts`
   - Test atomic increment
   - Test status transitions
   - Test concurrent updates
 
-- [ ] T033 [US2] Integration tests for progress polling: `apps/api/tests/graphql/queries/run-progress.test.ts`
+- [X] T033 [US2] Integration tests for progress polling: `apps/api/tests/graphql/queries/run-progress.test.ts`
   - Test progress query returns correct counts
   - Test recentTasks returns completed jobs
 

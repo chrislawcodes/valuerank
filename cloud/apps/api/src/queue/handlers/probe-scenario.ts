@@ -8,6 +8,7 @@
 import type * as PgBoss from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../types.js';
+import { incrementCompleted, incrementFailed } from '../../services/run/index.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -32,31 +33,54 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         'Processing probe:scenario job'
       );
 
-      // Simulate work with configurable delay
-      await new Promise((resolve) => setTimeout(resolve, STUB_DELAY_MS));
+      try {
+        // Simulate work with configurable delay
+        await new Promise((resolve) => setTimeout(resolve, STUB_DELAY_MS));
 
-      // Test failure injection for retry testing
-      if (modelId === FAIL_MODEL_ID) {
-        log.warn({ jobId, runId, modelId }, 'Injecting test failure');
-        throw new Error(`Test failure injected for model: ${modelId}`);
+        // Test failure injection for retry testing
+        if (modelId === FAIL_MODEL_ID) {
+          log.warn({ jobId, runId, modelId }, 'Injecting test failure');
+          throw new Error(`Test failure injected for model: ${modelId}`);
+        }
+
+        // Mock transcript data that would come from Python worker
+        // TODO: Store transcript in database (Stage 6)
+        const mockTranscript = {
+          runId,
+          scenarioId,
+          modelId,
+          turns: [
+            { role: 'system', content: 'Mock scenario prompt' },
+            { role: 'assistant', content: 'Mock model response' },
+          ],
+          completedAt: new Date().toISOString(),
+        };
+
+        // Update progress - increment completed count
+        const { progress, status } = await incrementCompleted(runId);
+
+        log.info(
+          { jobId, runId, scenarioId, modelId, progress, status },
+          'Probe job completed (stub)'
+        );
+      } catch (error) {
+        // Update progress - increment failed count
+        try {
+          const { progress, status } = await incrementFailed(runId);
+          log.error(
+            { jobId, runId, scenarioId, modelId, progress, status, err: error },
+            'Probe job failed'
+          );
+        } catch (progressError) {
+          log.error(
+            { jobId, runId, err: progressError },
+            'Failed to update progress after job failure'
+          );
+        }
+
+        // Re-throw to let PgBoss handle retry logic
+        throw error;
       }
-
-      // Mock transcript data that would come from Python worker
-      const mockTranscript = {
-        runId,
-        scenarioId,
-        modelId,
-        turns: [
-          { role: 'system', content: 'Mock scenario prompt' },
-          { role: 'assistant', content: 'Mock model response' },
-        ],
-        completedAt: new Date().toISOString(),
-      };
-
-      log.info(
-        { jobId, runId, scenarioId, modelId },
-        'Probe job completed (stub)'
-      );
     }
   };
 }
