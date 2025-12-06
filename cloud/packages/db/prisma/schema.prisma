@@ -99,6 +99,7 @@ model Run {
 enum RunStatus {
   PENDING
   RUNNING
+  PAUSED
   COMPLETED
   FAILED
   CANCELLED

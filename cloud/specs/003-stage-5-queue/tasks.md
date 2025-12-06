@@ -234,40 +234,40 @@
 
 ### Run Control Service
 
-- [ ] T034 [US3] Implement pauseRun service: `apps/api/src/services/run/control.ts`
+- [X] T034 [US3] Implement pauseRun service: `apps/api/src/services/run/control.ts`
   - Validate run is in pauseable state (PENDING, RUNNING)
   - Update run status to PAUSED
   - Mark pending jobs as paused in PgBoss (custom state handling)
 
-- [ ] T035 [US3] Implement resumeRun service: `apps/api/src/services/run/control.ts` (extend)
+- [X] T035 [US3] Implement resumeRun service: `apps/api/src/services/run/control.ts` (extend)
   - Validate run is PAUSED
   - Update run status to RUNNING
   - Resume paused jobs in PgBoss
 
-- [ ] T036 [US3] Update run service index: `apps/api/src/services/run/index.ts`
+- [X] T036 [US3] Update run service index: `apps/api/src/services/run/index.ts`
   - Export pauseRun, resumeRun
 
 ### GraphQL Mutations
 
-- [ ] T037 [US3] Create pauseRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
+- [X] T037 [US3] Create pauseRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
   - Input validation
   - Call control service
   - Return updated Run
 
-- [ ] T038 [US3] Create resumeRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
+- [X] T038 [US3] Create resumeRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
   - Input validation
   - Call control service
   - Return updated Run
 
 ### Tests
 
-- [ ] T039 [US3] Unit tests for pause/resume: `apps/api/tests/services/run/control.test.ts`
+- [X] T039 [US3] Unit tests for pause/resume: `apps/api/tests/services/run/control.test.ts`
   - Test pause from RUNNING
   - Test pause from PENDING
   - Test resume from PAUSED
   - Test error on invalid state transitions
 
-- [ ] T040 [US3] Integration tests for pause/resume mutations: `apps/api/tests/graphql/mutations/run.test.ts` (extend)
+- [X] T040 [US3] Integration tests for pause/resume mutations: `apps/api/tests/graphql/mutations/run-control.test.ts`
   - Test pause mutation
   - Test resume mutation
   - Test error responses
@@ -284,7 +284,7 @@
 
 ### Cancel Service
 
-- [ ] T041 [US4] Implement cancelRun service: `apps/api/src/services/run/control.ts` (extend)
+- [X] T041 [US4] Implement cancelRun service: `apps/api/src/services/run/control.ts` (extend)
   - Validate run not already completed/cancelled
   - Update run status to CANCELLED
   - Remove pending jobs from PgBoss queue
@@ -292,20 +292,20 @@
 
 ### GraphQL Mutation
 
-- [ ] T042 [US4] Create cancelRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
+- [X] T042 [US4] Create cancelRun mutation: `apps/api/src/graphql/mutations/run.ts` (extend)
   - Input validation
   - Call control service
   - Return updated Run
 
 ### Tests
 
-- [ ] T043 [US4] Unit tests for cancel: `apps/api/tests/services/run/control.test.ts` (extend)
+- [X] T043 [US4] Unit tests for cancel: `apps/api/tests/services/run/control.test.ts` (extend)
   - Test cancel removes pending jobs
   - Test completed jobs preserved
   - Test idempotent cancel
   - Test error on already completed
 
-- [ ] T044 [US4] Integration tests for cancel mutation: `apps/api/tests/graphql/mutations/run.test.ts` (extend)
+- [X] T044 [US4] Integration tests for cancel mutation: `apps/api/tests/graphql/mutations/run-control.test.ts` (extend)
   - Test cancel mutation
   - Test progress after cancel
 

@@ -8,7 +8,7 @@
 import type * as PgBoss from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../types.js';
-import { incrementCompleted, incrementFailed } from '../../services/run/index.js';
+import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from '../../services/run/index.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -34,6 +34,19 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
       );
 
       try {
+        // Check if run is in a terminal state (completed/cancelled) - skip processing
+        if (await isRunTerminal(runId)) {
+          log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+          return; // Complete job without doing work
+        }
+
+        // Check if run is paused - defer job for later
+        if (await isRunPaused(runId)) {
+          log.info({ jobId, runId }, 'Deferring job - run is paused');
+          // Throw a special error to trigger retry after delay
+          throw new Error('RUN_PAUSED: Job deferred because run is paused');
+        }
+
         // Simulate work with configurable delay
         await new Promise((resolve) => setTimeout(resolve, STUB_DELAY_MS));
 
@@ -64,18 +77,23 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
           'Probe job completed (stub)'
         );
       } catch (error) {
-        // Update progress - increment failed count
-        try {
-          const { progress, status } = await incrementFailed(runId);
-          log.error(
-            { jobId, runId, scenarioId, modelId, progress, status, err: error },
-            'Probe job failed'
-          );
-        } catch (progressError) {
-          log.error(
-            { jobId, runId, err: progressError },
-            'Failed to update progress after job failure'
-          );
+        // Check if this is a pause deferral (not a real failure)
+        const isPauseDeferral = error instanceof Error && error.message.startsWith('RUN_PAUSED:');
+
+        if (!isPauseDeferral) {
+          // Update progress - increment failed count (only for real failures)
+          try {
+            const { progress, status } = await incrementFailed(runId);
+            log.error(
+              { jobId, runId, scenarioId, modelId, progress, status, err: error },
+              'Probe job failed'
+            );
+          } catch (progressError) {
+            log.error(
+              { jobId, runId, err: progressError },
+              'Failed to update progress after job failure'
+            );
+          }
         }
 
         // Re-throw to let PgBoss handle retry logic

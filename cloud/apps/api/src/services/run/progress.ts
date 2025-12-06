@@ -108,7 +108,7 @@ export async function updateProgress(
 }
 
 // Valid run statuses (from Prisma enum)
-type RunStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 /**
  * Determines the appropriate run status based on progress.
@@ -120,6 +120,15 @@ function determineStatus(progress: ProgressData, currentStatus: string): RunStat
   // If run is already in a terminal state, don't change
   if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(currentStatus)) {
     return currentStatus as RunStatus;
+  }
+
+  // If run is PAUSED, keep it paused - only resumeRun can change this
+  if (currentStatus === 'PAUSED') {
+    // But if all jobs are done, transition to COMPLETED
+    if (done >= total) {
+      return 'COMPLETED';
+    }
+    return 'PAUSED';
   }
 
   // If all jobs are done

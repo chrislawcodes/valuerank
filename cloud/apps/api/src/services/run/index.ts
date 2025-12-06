@@ -15,3 +15,11 @@ export {
   calculatePercentComplete,
 } from './progress.js';
 export type { ProgressUpdate, ProgressData } from './progress.js';
+
+export {
+  pauseRun,
+  resumeRun,
+  cancelRun,
+  isRunPaused,
+  isRunTerminal,
+} from './control.js';

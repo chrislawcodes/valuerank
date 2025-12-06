@@ -7,7 +7,12 @@
 import { builder } from '../builder.js';
 import { AuthenticationError } from '@valuerank/shared';
 import { RunRef } from '../types/refs.js';
-import { startRun as startRunService } from '../../services/run/index.js';
+import {
+  startRun as startRunService,
+  pauseRun as pauseRunService,
+  resumeRun as resumeRunService,
+  cancelRun as cancelRunService,
+} from '../../services/run/index.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
 
 // StartRunPayload - return type for startRun mutation
@@ -102,6 +107,125 @@ builder.mutationField('startRun', (t) =>
       );
 
       return result;
+    },
+  })
+);
+
+// pauseRun mutation
+builder.mutationField('pauseRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Pause a running evaluation.
+
+      Jobs currently being processed will complete, but no new jobs
+      will be started until the run is resumed.
+
+      Requires authentication. Run must be in PENDING or RUNNING state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to pause',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Pausing run via GraphQL');
+
+      const result = await pauseRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run paused');
+
+      // Fetch full run for resolver
+      const run = await ctx.loaders.run.load(result.id);
+      if (!run) {
+        throw new Error(`Run not found: ${result.id}`);
+      }
+      return run;
+    },
+  })
+);
+
+// resumeRun mutation
+builder.mutationField('resumeRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Resume a paused evaluation.
+
+      Jobs will begin processing again from where they left off.
+
+      Requires authentication. Run must be in PAUSED state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to resume',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Resuming run via GraphQL');
+
+      const result = await resumeRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run resumed');
+
+      // Fetch full run for resolver
+      const run = await ctx.loaders.run.load(result.id);
+      if (!run) {
+        throw new Error(`Run not found: ${result.id}`);
+      }
+      return run;
+    },
+  })
+);
+
+// cancelRun mutation
+builder.mutationField('cancelRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Cancel an evaluation run.
+
+      Jobs currently being processed will complete, but all pending jobs
+      will be removed from the queue. Completed results are preserved.
+
+      Requires authentication. Run must be in PENDING, RUNNING, or PAUSED state.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to cancel',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Cancelling run via GraphQL');
+
+      const result = await cancelRunService(runId);
+
+      ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run cancelled');
+
+      // Fetch full run for resolver
+      const run = await ctx.loaders.run.load(result.id);
+      if (!run) {
+        throw new Error(`Run not found: ${result.id}`);
+      }
+      return run;
     },
   })
 );
