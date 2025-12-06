@@ -1,5 +1,4 @@
-// Re-export all GraphQL mutation definitions
-// Mutations are registered with builder by importing them
+// Import all GraphQL mutation definitions to register them with builder
+// Mutations are registered as a side effect of importing
 
-// Mutation files (will be added in later phases)
-// export * from './definition.js';
+import './definition.js';

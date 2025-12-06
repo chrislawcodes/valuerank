@@ -137,13 +137,13 @@
 
 ### Implementation for User Story 5
 
-- [ ] T048 [US5] Create CreateDefinitionInput input type in apps/api/src/graphql/mutations/definition.ts
-- [ ] T049 [US5] Create createDefinition mutation in apps/api/src/graphql/mutations/definition.ts
-- [ ] T050 [US5] Implement ensureSchemaVersion helper for content in apps/api/src/graphql/mutations/definition.ts
-- [ ] T051 [US5] Add input validation (name required, content must be object) in apps/api/src/graphql/mutations/definition.ts
-- [ ] T052 [US5] Write integration test for createDefinition mutation in apps/api/tests/graphql/mutations/definition.test.ts
-- [ ] T053 [US5] Test schema_version auto-added to content in apps/api/tests/graphql/mutations/definition.test.ts
-- [ ] T054 [US5] Test validation errors for invalid input in apps/api/tests/graphql/mutations/definition.test.ts
+- [X] T048 [US5] Create CreateDefinitionInput input type in apps/api/src/graphql/mutations/definition.ts
+- [X] T049 [US5] Create createDefinition mutation in apps/api/src/graphql/mutations/definition.ts
+- [X] T050 [US5] Implement ensureSchemaVersion helper for content in apps/api/src/graphql/mutations/definition.ts
+- [X] T051 [US5] Add input validation (name required, content must be object) in apps/api/src/graphql/mutations/definition.ts
+- [X] T052 [US5] Write integration test for createDefinition mutation in apps/api/tests/graphql/mutations/definition.test.ts
+- [X] T053 [US5] Test schema_version auto-added to content in apps/api/tests/graphql/mutations/definition.test.ts
+- [X] T054 [US5] Test validation errors for invalid input in apps/api/tests/graphql/mutations/definition.test.ts
 
 **Checkpoint**: US5 complete - Can create definitions via GraphQL
 
