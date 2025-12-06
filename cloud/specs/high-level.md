@@ -119,7 +119,7 @@
 
 ---
 
-## Stage 4: Authentication System [ ]
+## Stage 4: Authentication System [x]
 
 **Goal:** Implement simple JWT-based auth for web and API key auth for MCP.
 
