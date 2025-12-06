@@ -1,0 +1,107 @@
+/**
+ * Run Mutations
+ *
+ * GraphQL mutations for run management: start, pause, resume, cancel.
+ */
+
+import { builder } from '../builder.js';
+import { AuthenticationError } from '@valuerank/shared';
+import { RunRef } from '../types/refs.js';
+import { startRun as startRunService } from '../../services/run/index.js';
+import { StartRunInput } from '../types/inputs/start-run.js';
+
+// StartRunPayload - return type for startRun mutation
+const StartRunPayload = builder.objectRef<{
+  run: {
+    id: string;
+    status: string;
+    definitionId: string;
+    experimentId: string | null;
+    config: unknown;
+    progress: { total: number; completed: number; failed: number };
+    createdAt: Date;
+  };
+  jobCount: number;
+}>('StartRunPayload').implement({
+  description: 'Result of starting a new run',
+  fields: (t) => ({
+    run: t.field({
+      type: RunRef,
+      description: 'The created run',
+      resolve: async (parent, _args, ctx) => {
+        // Fetch the full run from database for the resolver
+        const run = await ctx.loaders.run.load(parent.run.id);
+        if (!run) {
+          throw new Error(`Run not found: ${parent.run.id}`);
+        }
+        return run;
+      },
+    }),
+    jobCount: t.exposeInt('jobCount', {
+      description: 'Number of jobs queued for this run',
+    }),
+  }),
+});
+
+// Input type for startRun args
+type StartRunArgs = {
+  definitionId: string | number;
+  models: string[];
+  samplePercentage?: number | null;
+  sampleSeed?: number | null;
+  priority?: string | null;
+  experimentId?: string | number | null;
+};
+
+// startRun mutation
+builder.mutationField('startRun', (t) =>
+  t.field({
+    type: StartRunPayload,
+    description: `
+      Start a new evaluation run.
+
+      Creates a run record and queues probe:scenario jobs for each model-scenario combination.
+      Requires authentication.
+
+      Returns the created run and the number of jobs queued.
+    `,
+    args: {
+      input: t.arg({
+        type: StartRunInput,
+        required: true,
+        description: 'Configuration for the new run',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      // Require authentication
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const userId = ctx.user.id;
+      const input = args.input as StartRunArgs;
+
+      ctx.log.info(
+        { userId, definitionId: input.definitionId, modelCount: input.models.length },
+        'Starting run via GraphQL'
+      );
+
+      const result = await startRunService({
+        definitionId: String(input.definitionId),
+        models: input.models,
+        samplePercentage: input.samplePercentage ?? undefined,
+        sampleSeed: input.sampleSeed ?? undefined,
+        priority: input.priority ?? 'NORMAL',
+        experimentId: input.experimentId ? String(input.experimentId) : undefined,
+        userId,
+      });
+
+      ctx.log.info(
+        { userId, runId: result.run.id, jobCount: result.jobCount },
+        'Run started successfully'
+      );
+
+      return result;
+    },
+  })
+);

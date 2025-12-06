@@ -131,9 +131,9 @@
 
 ### Run Service Implementation
 
-- [ ] T020 [US1] Create run service directory: `apps/api/src/services/run/`
+- [X] T020 [US1] Create run service directory: `apps/api/src/services/run/`
 
-- [ ] T021 [US1] Implement startRun service: `apps/api/src/services/run/start.ts`
+- [X] T021 [US1] Implement startRun service: `apps/api/src/services/run/start.ts`
   - Validate definition exists and has scenarios
   - Validate models list non-empty
   - Implement deterministic scenario sampling (samplePercentage, sampleSeed)
@@ -143,23 +143,23 @@
   - Initialize progress: {total: N, completed: 0, failed: 0}
   - Use transaction for atomicity
 
-- [ ] T022 [US1] Create run service index: `apps/api/src/services/run/index.ts`
+- [X] T022 [US1] Create run service index: `apps/api/src/services/run/index.ts`
   - Export startRun and future functions
 
 ### GraphQL Mutation
 
-- [ ] T023 [US1] Create startRun mutation: `apps/api/src/graphql/mutations/run.ts`
+- [X] T023 [US1] Create startRun mutation: `apps/api/src/graphql/mutations/run.ts`
   - Input validation with Zod
   - Call run service
   - Return Run with progress
   - Require authentication
 
-- [ ] T024 [US1] Update mutations index: `apps/api/src/graphql/mutations/index.ts`
+- [X] T024 [US1] Update mutations index: `apps/api/src/graphql/mutations/index.ts`
   - Export run mutations
 
 ### Server Integration
 
-- [ ] T025 [US1] Integrate queue startup in server: `apps/api/src/server.ts`
+- [X] T025 [US1] Integrate queue startup in server: `apps/api/src/index.ts`
   - Start PgBoss on server init
   - Start orchestrator after PgBoss ready
   - Add graceful shutdown for queue
