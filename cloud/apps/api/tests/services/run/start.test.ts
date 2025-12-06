@@ -659,4 +659,103 @@ describe('startRun service', () => {
       expect(selections.length).toBe(3);
     });
   });
+
+  describe('job priority', () => {
+    it('stores priority in run config as HIGH', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Priority Test Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        priority: 'HIGH',
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // Verify run was created with HIGH priority
+      const dbRun = await db.run.findUnique({
+        where: { id: result.run.id },
+      });
+      expect((dbRun?.config as { priority: string }).priority).toBe('HIGH');
+    });
+
+    it('stores priority in run config as NORMAL by default', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Normal Priority Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        // No priority specified, should default to NORMAL
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const dbRun = await db.run.findUnique({
+        where: { id: result.run.id },
+      });
+      expect((dbRun?.config as { priority: string }).priority).toBe('NORMAL');
+    });
+
+    it('stores priority in run config as LOW', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Low Priority Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        priority: 'LOW',
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const dbRun = await db.run.findUnique({
+        where: { id: result.run.id },
+      });
+      expect((dbRun?.config as { priority: string }).priority).toBe('LOW');
+    });
+  });
 });

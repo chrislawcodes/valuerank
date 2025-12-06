@@ -34,34 +34,65 @@ export const JobTypeStatus = builder.objectRef<{
   }),
 });
 
+// QueueTotals - aggregate counts across all job types
+export const QueueTotals = builder.objectRef<{
+  pending: number;
+  active: number;
+  completed: number;
+  failed: number;
+}>('QueueTotals').implement({
+  description: 'Aggregate job counts across all types',
+  fields: (t) => ({
+    pending: t.exposeInt('pending', {
+      description: 'Total pending jobs across all types',
+    }),
+    active: t.exposeInt('active', {
+      description: 'Total active jobs across all types',
+    }),
+    completed: t.exposeInt('completed', {
+      description: 'Total completed jobs (last 24h)',
+    }),
+    failed: t.exposeInt('failed', {
+      description: 'Total failed jobs',
+    }),
+  }),
+});
+
 // QueueStatus - overall queue health
 export const QueueStatus = builder.objectRef<{
+  isRunning: boolean;
   isPaused: boolean;
-  jobs: Array<{
+  jobTypes: Array<{
     type: string;
     pending: number;
     active: number;
     completed: number;
     failed: number;
   }>;
-  totalPending: number;
-  totalActive: number;
+  totals: {
+    pending: number;
+    active: number;
+    completed: number;
+    failed: number;
+  };
 }>('QueueStatus').implement({
   description: 'Overall queue status and statistics',
   fields: (t) => ({
+    isRunning: t.exposeBoolean('isRunning', {
+      description: 'Whether the queue workers are running',
+    }),
     isPaused: t.exposeBoolean('isPaused', {
       description: 'Whether the queue is currently paused',
     }),
-    jobs: t.field({
+    jobTypes: t.field({
       type: [JobTypeStatus],
       description: 'Job counts by type',
-      resolve: (parent) => parent.jobs,
+      resolve: (parent) => parent.jobTypes,
     }),
-    totalPending: t.exposeInt('totalPending', {
-      description: 'Total pending jobs across all types',
-    }),
-    totalActive: t.exposeInt('totalActive', {
-      description: 'Total active jobs across all types',
+    totals: t.field({
+      type: QueueTotals,
+      description: 'Aggregate counts across all job types',
+      resolve: (parent) => parent.totals,
     }),
   }),
 });

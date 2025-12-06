@@ -8,6 +8,7 @@
 import type * as PgBoss from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../types.js';
+import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from '../../services/run/index.js';
 
 const log = createLogger('queue:probe-scenario');
@@ -17,6 +18,76 @@ const STUB_DELAY_MS = parseInt(process.env.STUB_JOB_DELAY_MS ?? '100', 10);
 
 // Test failure injection: set FAIL_MODEL_ID to trigger failures
 const FAIL_MODEL_ID = process.env.FAIL_MODEL_ID ?? 'fail-test-model';
+
+// Retry limit from job options (default 3)
+const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe:scenario'].retryLimit ?? 3;
+
+/**
+ * Checks if an error is retryable.
+ *
+ * Retryable errors:
+ * - Network errors (ECONNREFUSED, ENOTFOUND, ETIMEDOUT, ECONNRESET)
+ * - Rate limit errors (HTTP 429)
+ * - Temporary server errors (HTTP 500, 502, 503, 504)
+ *
+ * Non-retryable errors:
+ * - Validation errors
+ * - Authentication errors (HTTP 401, 403)
+ * - Not found errors (HTTP 404)
+ * - Bad request errors (HTTP 400)
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true; // Unknown errors are retryable by default
+  }
+
+  const message = error.message.toLowerCase();
+
+  // Network errors - retryable
+  const networkErrorPatterns = [
+    'econnrefused',
+    'enotfound',
+    'etimedout',
+    'econnreset',
+    'socket hang up',
+    'network error',
+    'fetch failed',
+  ];
+
+  if (networkErrorPatterns.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  // HTTP status code errors
+  if (message.includes('429') || message.includes('rate limit')) {
+    return true; // Rate limit - retryable
+  }
+
+  if (/5\d{2}/.test(message)) {
+    return true; // Server errors (5xx) - retryable
+  }
+
+  // Non-retryable errors
+  const nonRetryablePatterns = [
+    'validation',
+    'invalid',
+    '401',
+    '403',
+    '404',
+    '400',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'bad request',
+  ];
+
+  if (nonRetryablePatterns.some((pattern) => message.includes(pattern))) {
+    return false;
+  }
+
+  // Default: retryable
+  return true;
+}
 
 /**
  * Creates a handler for probe:scenario jobs.
@@ -80,13 +151,30 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         // Check if this is a pause deferral (not a real failure)
         const isPauseDeferral = error instanceof Error && error.message.startsWith('RUN_PAUSED:');
 
-        if (!isPauseDeferral) {
-          // Update progress - increment failed count (only for real failures)
+        if (isPauseDeferral) {
+          // Re-throw to trigger retry later
+          throw error;
+        }
+
+        // Check if error is retryable and if we have retries left
+        const retryable = isRetryableError(error);
+        const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+        const maxRetriesReached = retryCount >= RETRY_LIMIT;
+
+        log.warn(
+          { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+          'Probe job error'
+        );
+
+        // Only increment failed count if:
+        // 1. Error is not retryable, OR
+        // 2. Max retries have been reached
+        if (!retryable || maxRetriesReached) {
           try {
             const { progress, status } = await incrementFailed(runId);
             log.error(
-              { jobId, runId, scenarioId, modelId, progress, status, err: error },
-              'Probe job failed'
+              { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+              'Probe job permanently failed'
             );
           } catch (progressError) {
             log.error(
@@ -94,6 +182,11 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
               'Failed to update progress after job failure'
             );
           }
+        } else {
+          log.info(
+            { jobId, runId, retryCount, retriesRemaining: RETRY_LIMIT - retryCount },
+            'Job will be retried'
+          );
         }
 
         // Re-throw to let PgBoss handle retry logic
