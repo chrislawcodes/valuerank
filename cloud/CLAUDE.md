@@ -1,0 +1,401 @@
+# Cloud ValueRank - Project Constitution
+
+This document defines the coding standards and architectural principles for the Cloud ValueRank project. All code contributions must adhere to these guidelines.
+
+## Core Principles
+
+1. **Small, focused files** - Easy to read, test, and maintain
+2. **Type safety** - Catch errors at compile time, not runtime
+3. **Test coverage** - Confidence to refactor and deploy
+4. **Observable** - Debug issues in production without guessing
+
+---
+
+## File Size Limits
+
+| File Type | Max Lines | Rationale |
+|-----------|-----------|-----------|
+| Route handlers | 100 | Single responsibility per route file |
+| Services/business logic | 200 | Split into smaller modules if growing |
+| Utilities | 100 | Pure functions, single purpose |
+| React components | 150 | Extract hooks/subcomponents if larger |
+| Test files | 400 | Can be longer due to setup/fixtures |
+| Type definitions | 200 | Split by domain if growing |
+
+**When a file exceeds limits:**
+1. Extract helper functions to separate modules
+2. Split into logical sub-modules
+3. Create a folder with `index.ts` re-exporting
+
+```
+# Bad: one large file
+services/runs.ts (500 lines)
+
+# Good: split by concern
+services/runs/
+├── index.ts        # Re-exports public API
+├── create.ts       # createRun logic
+├── query.ts        # listRuns, getRun
+├── analysis.ts     # runAnalysis, getResults
+└── types.ts        # Run-specific types
+```
+
+---
+
+## TypeScript Standards
+
+### No `any` Types
+
+```typescript
+// Bad
+function processData(data: any): any { ... }
+
+// Good
+function processData(data: RunConfig): ProcessedRun { ... }
+
+// If type is truly unknown, use proper typing
+function parseJson(input: string): unknown { ... }
+function handleError(err: unknown): void { ... }
+```
+
+### Strict Mode Required
+
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+### Type Inference vs Explicit Types
+
+```typescript
+// Let TypeScript infer when obvious
+const count = 0;  // inferred as number
+const items = []; // Bad - inferred as never[]
+const items: string[] = []; // Good - explicit for empty arrays
+
+// Always type function signatures
+function calculateScore(run: Run, model: string): number { ... }
+
+// Always type exported interfaces
+export interface RunConfig {
+  definitionId: string;
+  models: string[];
+  samplePercentage?: number;
+}
+```
+
+### Prefer Types Over Interfaces for Data
+
+```typescript
+// Use type for data shapes
+type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+type Run = {
+  id: string;
+  status: RunStatus;
+  createdAt: Date;
+};
+
+// Use interface for contracts/services
+interface RunService {
+  create(config: RunConfig): Promise<Run>;
+  getById(id: string): Promise<Run | null>;
+}
+```
+
+---
+
+## Testing Requirements
+
+### Coverage Targets
+
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Line coverage | 80% | 90% |
+| Branch coverage | 75% | 85% |
+| Function coverage | 80% | 90% |
+
+### Test Structure
+
+```typescript
+// tests/services/runs.test.ts
+describe('RunService', () => {
+  describe('create', () => {
+    it('creates a run with valid config', async () => { ... });
+    it('throws on invalid definition ID', async () => { ... });
+    it('queues probe jobs for each model-scenario pair', async () => { ... });
+  });
+
+  describe('getById', () => {
+    it('returns run when exists', async () => { ... });
+    it('returns null when not found', async () => { ... });
+  });
+});
+```
+
+### Test Files Location
+
+```
+apps/api/
+├── src/
+│   └── services/
+│       └── runs.ts
+└── tests/
+    └── services/
+        └── runs.test.ts
+```
+
+### What to Test
+
+- **Always test**: Business logic, data transformations, edge cases
+- **Mock**: Database, external APIs, LLM providers
+- **Integration tests**: API routes with test database
+- **Skip**: Simple getters, direct ORM pass-through
+
+---
+
+## Logging Standards
+
+### Logger Abstraction
+
+All logging goes through a centralized logger - never use `console.log` directly.
+
+```typescript
+// packages/shared/src/logger.ts
+import pino from 'pino';
+
+export const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: process.env.NODE_ENV === 'development'
+    ? { target: 'pino-pretty' }
+    : undefined,
+});
+
+export function createLogger(context: string) {
+  return logger.child({ context });
+}
+```
+
+### Usage in Services
+
+```typescript
+// services/runs.ts
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('runs');
+
+export async function createRun(config: RunConfig): Promise<Run> {
+  log.info({ definitionId: config.definitionId, models: config.models }, 'Creating run');
+
+  try {
+    const run = await db.runs.create({ ... });
+    log.info({ runId: run.id, taskCount: tasks.length }, 'Run created, tasks queued');
+    return run;
+  } catch (err) {
+    log.error({ err, config }, 'Failed to create run');
+    throw err;
+  }
+}
+```
+
+### Log Levels
+
+| Level | Use For |
+|-------|---------|
+| `error` | Exceptions, failed operations that need attention |
+| `warn` | Recoverable issues, deprecations, retry attempts |
+| `info` | Key business events (run started, completed, user action) |
+| `debug` | Detailed flow info, useful for local debugging |
+| `trace` | Very verbose, rarely used |
+
+### Structured Logging Rules
+
+```typescript
+// Always use structured data, not string interpolation
+// Bad
+log.info(`User ${userId} created run ${runId}`);
+
+// Good
+log.info({ userId, runId }, 'User created run');
+
+// Include correlation IDs for request tracing
+log.info({ requestId, runId, action: 'create' }, 'Processing request');
+
+// Log errors with full context
+log.error({ err, runId, modelId, scenarioId }, 'Probe task failed');
+```
+
+### Request Logging Middleware
+
+```typescript
+// middleware/requestLogger.ts
+export function requestLogger(req, res, next) {
+  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  req.log = logger.child({ requestId, path: req.path, method: req.method });
+
+  req.log.info('Request started');
+
+  res.on('finish', () => {
+    req.log.info({ status: res.statusCode, duration: Date.now() - start }, 'Request completed');
+  });
+
+  next();
+}
+```
+
+---
+
+## Code Organization
+
+### Import Order
+
+```typescript
+// 1. Node built-ins
+import { readFile } from 'fs/promises';
+import path from 'path';
+
+// 2. External packages
+import express from 'express';
+import { z } from 'zod';
+
+// 3. Internal packages (@valuerank/*)
+import { logger } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+
+// 4. Relative imports
+import { validateRunConfig } from './validation';
+import type { RunConfig } from './types';
+```
+
+### Folder Structure per App
+
+```
+apps/api/src/
+├── routes/           # Express route handlers
+├── services/         # Business logic
+├── middleware/       # Express middleware
+├── jobs/             # PgBoss job handlers
+├── validation/       # Zod schemas
+└── types/            # TypeScript types
+
+apps/web/src/
+├── components/       # React components
+├── hooks/            # Custom hooks
+├── pages/            # Route pages
+├── services/         # API client functions
+└── types/            # TypeScript types
+```
+
+---
+
+## Error Handling
+
+### Custom Error Classes
+
+```typescript
+// errors.ts
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public statusCode: number = 500,
+    public context?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(resource: string, id: string) {
+    super(`${resource} not found: ${id}`, 'NOT_FOUND', 404, { resource, id });
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(message: string, details: unknown) {
+    super(message, 'VALIDATION_ERROR', 400, { details });
+  }
+}
+```
+
+### Error Handling in Routes
+
+```typescript
+// Always catch and forward to error middleware
+router.post('/runs', async (req, res, next) => {
+  try {
+    const run = await runService.create(req.body);
+    res.json(run);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  req.log.error({ err }, 'Request failed');
+
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({ error: err.code, message: err.message });
+  } else {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' });
+  }
+});
+```
+
+---
+
+## Database Access
+
+### Use Prisma with Type Safety
+
+```typescript
+// Always use typed queries
+const run = await prisma.run.findUnique({
+  where: { id: runId },
+  include: { transcripts: true },
+});
+
+// Use transactions for multi-step operations
+await prisma.$transaction(async (tx) => {
+  const run = await tx.run.create({ ... });
+  await tx.job.createMany({ ... });
+  return run;
+});
+```
+
+### Query Helpers in packages/db
+
+```typescript
+// packages/db/src/queries/runs.ts
+export async function getRunWithTranscripts(id: string) {
+  return prisma.run.findUnique({
+    where: { id },
+    include: {
+      transcripts: true,
+      definition: true,
+    },
+  });
+}
+```
+
+---
+
+## Quick Reference
+
+```
+File size:      < 200 lines (400 for tests)
+any types:      NEVER (use unknown if truly unknown)
+Test coverage:  80% minimum
+Console.log:    NEVER (use logger)
+Error handling: Custom AppError classes
+Imports:        Node → External → Internal → Relative
+```

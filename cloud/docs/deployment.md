@@ -2,7 +2,90 @@
 
 > Part of [Cloud ValueRank Architecture](./architecture-overview.md)
 
-## Recommended Stack for MVP
+## Local Development
+
+Local development uses Docker Compose for services and Turborepo for the monorepo.
+
+### Monorepo Structure (Turborepo)
+
+```
+cloud/
+├── apps/
+│   ├── api/              # Express + TypeScript API server
+│   └── web/              # React frontend (Vite)
+├── packages/
+│   └── db/               # Database client, types, migrations
+├── docker/
+│   └── Dockerfile.api    # Production build (used later)
+├── docker-compose.yml    # Local services (PostgreSQL)
+├── package.json          # Workspace root
+├── turbo.json            # Turborepo config
+└── docs/                 # Architecture documentation
+```
+
+**Why Turborepo?**
+- Shared TypeScript types between API and web
+- Cached builds across packages
+- Single `npm install` at root
+- Easy to add packages (workers, shared utils)
+
+### Docker Compose (Local Services)
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: valuerank
+      POSTGRES_PASSWORD: valuerank
+      POSTGRES_DB: valuerank
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+```
+
+PgBoss runs inside the API process (no separate container needed) - it just uses PostgreSQL tables for job storage.
+
+### Quick Start
+
+```bash
+cd cloud
+
+# Start PostgreSQL
+docker-compose up -d
+
+# Install dependencies (all workspaces)
+npm install
+
+# Run migrations
+npm run db:migrate
+
+# Start dev servers (API + Web in parallel)
+npm run dev
+```
+
+### Development Scripts
+
+```bash
+npm run dev          # Start all apps in dev mode
+npm run dev:api      # Start only API
+npm run dev:web      # Start only web frontend
+npm run build        # Build all packages
+npm run db:migrate   # Run database migrations
+npm run db:studio    # Open Prisma Studio (DB browser)
+npm run test         # Run all tests
+```
+
+---
+
+## Production: Railway
+
+### Recommended Stack for MVP
 
 | Component | Service | Cost Model |
 |-----------|---------|------------|
@@ -135,9 +218,19 @@ For 100 runs/month with ~50 scenarios × 6 models each:
 
 ## Next Steps
 
-1. **Railway Setup**: Create project, provision PostgreSQL, define initial schema with versioning tables
-2. **PgBoss Prototype**: Build queue proof-of-concept with single worker
-3. **Version Tree UI**: Design component for visualizing definition lineage
-4. **API Schema**: Define OpenAPI spec for all endpoints (including fork/version operations)
-5. **Auth Strategy**: Simple API keys for MVP, JWT or external auth provider later
-6. **DevTool Migration**: Identify components to reuse vs rewrite
+### Phase 1: Local Development Setup
+1. **Turborepo Scaffold**: Create monorepo structure (`apps/api`, `apps/web`, `packages/db`)
+2. **Docker Compose**: PostgreSQL container for local dev
+3. **Database Schema**: Initial tables with Prisma migrations
+4. **PgBoss Prototype**: Queue proof-of-concept in API process
+
+### Phase 2: Core Features
+5. **API Endpoints**: CRUD for definitions, runs, scenarios
+6. **Auth Implementation**: Email/password + API keys (see [Authentication](./authentication.md))
+7. **DevTool Migration**: Port React components from existing devtool
+8. **Worker Integration**: Python worker calling existing `src/` pipeline
+
+### Phase 3: Railway Deployment
+9. **Railway Setup**: Create project, provision PostgreSQL
+10. **CI/CD**: GitHub Actions for deploy on merge
+11. **Environment Config**: Secrets, API keys, database URL
