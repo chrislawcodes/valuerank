@@ -146,4 +146,67 @@ describe('GraphQL Type Resolvers', () => {
       });
     });
   });
+
+  describe('Definition resolvers', () => {
+    it('resolves definition.scenarios relationship', async () => {
+      const query = `
+        query GetDefinitionWithScenarios($id: ID!) {
+          definition(id: $id) {
+            id
+            name
+            scenarios {
+              id
+              name
+              content
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { id: testDefinition.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definition.scenarios).toHaveLength(1);
+      expect(response.body.data.definition.scenarios[0]).toMatchObject({
+        id: testScenario.id,
+        name: 'Test Scenario',
+      });
+    });
+
+    it('returns empty scenarios array for definition without scenarios', async () => {
+      // Create a definition without scenarios
+      const emptyDef = await db.definition.create({
+        data: {
+          name: 'No Scenarios Definition',
+          content: { schema_version: 1 },
+        },
+      });
+
+      try {
+        const query = `
+          query GetDefinitionWithScenarios($id: ID!) {
+            definition(id: $id) {
+              id
+              scenarios {
+                id
+              }
+            }
+          }
+        `;
+
+        const response = await request(app)
+          .post('/graphql')
+          .send({ query, variables: { id: emptyDef.id } })
+          .expect(200);
+
+        expect(response.body.errors).toBeUndefined();
+        expect(response.body.data.definition.scenarios).toEqual([]);
+      } finally {
+        await db.definition.delete({ where: { id: emptyDef.id } });
+      }
+    });
+  });
 });
