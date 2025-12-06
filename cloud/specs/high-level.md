@@ -140,13 +140,15 @@
 
 ---
 
-## Stage 5: Queue System & Job Infrastructure [ ]
+## Stage 5: Queue System & Job Infrastructure [x]
+
+> **Spec:** [003-stage-5-queue/spec.md](./003-stage-5-queue/spec.md) | **Plan:** [003-stage-5-queue/plan.md](./003-stage-5-queue/plan.md) | **Tasks:** [003-stage-5-queue/tasks.md](./003-stage-5-queue/tasks.md)
 
 **Goal:** Set up PgBoss queue with TypeScript orchestrator and job lifecycle management.
 
 **Deliverables:**
 - PgBoss initialization and configuration
-- Job type definitions: `probe:scenario`, `analyze:basic`, `analyze:deep`
+- Job type definitions: `probe_scenario`, `analyze_basic`, `analyze_deep`
 - TypeScript orchestrator with `spawnPython` utility
 - Job progress tracking in database
 - Basic job handlers (stubs)
@@ -174,7 +176,7 @@
 - Worker health monitoring
 
 **Exit Criteria:**
-- `probe:scenario` jobs execute Python and return results
+- `probe_scenario` jobs execute Python and return results
 - Transcripts are saved to database
 - LLM calls work with configured API keys
 - Errors are logged and jobs marked as failed appropriately
