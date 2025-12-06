@@ -44,6 +44,17 @@
   - `experiments`, `run_comparisons`
   - `analysis_results`
   - `rubrics`
+  - `tags`, `definition_tags`, `run_tags`, `experiment_tags` (tagging system)
+- **Transcript versioning fields:**
+  - `model_id` and `model_version` (e.g., `gemini-1.5-pro`, `gemini-1.5-pro-002`)
+  - `definition_snapshot` (JSONB copy of definition at run time)
+  - Immutable records - never modified after creation
+- **Access tracking fields:**
+  - `last_accessed_at` on transcripts, runs, definitions
+  - Updated on read operations for future pruning analysis
+- **Retention fields (for future use):**
+  - `retention_days`, `archive_permanently` on runs
+  - Default: permanent retention
 - JSONB schema versioning pattern implemented
 - Seed script for development data
 - Database query helpers in `packages/db`
@@ -53,6 +64,37 @@
 - `npm run db:seed` populates test data
 - Recursive CTE queries work for definition ancestry
 - TypeScript types generated from Prisma
+- Transcripts capture model version information
+
+---
+
+## Stage 2b: Transcript Versioning & Access Tracking [ ]
+
+**Goal:** Extend database schema to support model version tracking, definition snapshots, and access tracking for future pruning.
+
+**Context:** These requirements were identified after Stage 2 completion. They are needed for the model version comparison use case (re-run scenarios against new model versions).
+
+**Deliverables:**
+- **Schema migration** adding new fields:
+  - `transcripts.model_id` - Provider model name (e.g., "gemini-1.5-pro")
+  - `transcripts.model_version` - Specific version (e.g., "gemini-1.5-pro-002")
+  - `transcripts.definition_snapshot` - JSONB copy of definition at run time
+  - `definitions.last_accessed_at` - Access tracking timestamp
+  - `runs.last_accessed_at` - Access tracking timestamp
+  - `transcripts.last_accessed_at` - Access tracking timestamp
+- **Update retention defaults:**
+  - `runs.archive_permanently` default to TRUE (was FALSE)
+  - `transcripts.content_expires_at` default to NULL (permanent)
+- **Query helpers** for updating `last_accessed_at` on read operations
+- **Rename** `transcripts.target_model` → `transcripts.model_id` (migration)
+
+**Exit Criteria:**
+- Migration runs successfully on existing data
+- Transcripts capture model version on creation
+- `last_accessed_at` updated on read operations
+- Existing data preserved with NULL for new optional fields
+
+**Dependencies:** Stage 2 (complete)
 
 ---
 
@@ -162,10 +204,11 @@
 
 ## Stage 8: Definition Management UI [ ]
 
-**Goal:** Build the definition library, editor, and version tree visualization.
+**Goal:** Build the definition library, editor, and version tree visualization with tag-based navigation.
 
 **Deliverables:**
-- Definition library page (folder tree + card grid)
+- Definition library page with tag-based filtering
+- Tag management (create, assign, filter by tags)
 - Definition editor with preamble, template, dimensions
 - Fork definition flow with label
 - Version tree visualization (basic lineage diagram)
@@ -174,103 +217,162 @@
 
 **Exit Criteria:**
 - Can browse, create, and edit definitions
+- Can assign and filter by tags
 - Can fork definitions and see lineage
 - Version tree shows parent/child relationships
 - Can preview generated scenarios
 
 ---
 
-## Stage 9: Run Execution Pipeline [ ]
+## Stage 9: Run Execution & Basic Export [ ]
 
-**Goal:** Complete end-to-end run execution from UI to results.
+**Goal:** Complete end-to-end run execution from UI to results, with CSV export for external analysis.
 
 **Deliverables:**
 - Run creation form (select definition, models, options)
+- **Model version selection** (specific versions like `gemini-1.5-pro-002`)
 - Run dashboard with status table
 - Polling-based progress updates (5s interval)
 - Run detail page showing per-model progress
 - Run controls (pause/resume/cancel)
-- Cost estimation display (optional)
-- Transcript storage with retention settings
+- **CSV export endpoint** for run results
+- **Basic results viewer** (scores table, per-model breakdown)
+- Transcript storage with model version capture
+- **Access tracking middleware** (updates `last_accessed_at` on reads)
+- **Re-run capability** (re-run same scenario against different model version)
 
 **Exit Criteria:**
 - Can start a run from the UI
 - Can watch progress update in real-time (polling)
 - Can pause and resume runs
 - Completed runs show in dashboard
-- Transcripts are stored and accessible
+- **Can download run results as CSV**
+- Transcripts capture model version and definition snapshot
+- Can re-run a scenario against a new model version
+
+**Phase 1 Complete:** Team can create definitions, run evaluations, and export results for external analysis.
 
 ---
 
-## Stage 10: Analysis System (Tier 1 & Tier 2) [ ]
+## Stage 10: Experiment Framework [ ]
 
-**Goal:** Implement analysis pipeline with auto-triggered basic stats and on-demand correlations.
+**Goal:** Build the organizational foundation for tracking related experiments with cost visibility.
+
+**Deliverables:**
+- Experiment creation with hypothesis tracking
+- Experiment workspace (group related definitions and runs)
+- Link runs to experiments
+- **Cost estimation** before starting a run (based on model pricing × scenario count)
+- Tag inheritance (experiments can have tags, propagate to children)
+- Experiment timeline/history view
+
+**Exit Criteria:**
+- Can create experiments with hypothesis
+- Can link definitions and runs to experiments
+- Can see estimated cost before starting a run
+- Experiments group related runs
+- Can track related scenarios (e.g., "flipped perspective" variants)
+
+**Phase 2 Complete:** Team can organize experiments and track related work systematically.
+
+---
+
+## Stage 11: Analysis System & Visualizations [ ]
+
+**Goal:** Implement automated analysis pipeline with visualizations to answer key questions about AI behavior.
 
 **Deliverables:**
 - Tier 1 auto-analysis on run completion
 - Basic stats computation (win rates, per-model scores)
 - Confidence intervals with Wilson score
-- Tier 2 on-demand analysis (correlations, dimension impact)
-- Statistical method documentation in results
+- **Score distribution visualization** (how do AIs tend to answer?)
+- **Variable impact analysis** (which dimensions drive variance?)
+- **Model comparison** (which AIs behave differently?)
 - Analysis versioning and caching (input_hash)
 - Results viewer UI (charts, tables)
 
 **Exit Criteria:**
 - Completed runs automatically have Tier 1 analysis
-- Can trigger Tier 2 analysis from UI
-- Results display with confidence intervals
+- Can see score distributions visualized
+- Can see which variables have most impact
+- Can identify outlier models
 - Analysis methods documented in output
 
 ---
 
-## Stage 11: Run Comparison & Experiments [ ]
+## Stage 12: MCP Read Tools [ ]
 
-**Goal:** Enable side-by-side comparison and experiment framework for hypothesis testing.
-
-**Deliverables:**
-- Run comparison page (side-by-side delta view)
-- Delta visualization (diverging bar chart)
-- "What Changed" diff display
-- Experiment creation with hypothesis tracking
-- Experiment workspace (Kanban-style layout)
-- Statistical testing for comparisons (effect sizes, p-values)
-- Experiment timeline visualization
-
-**Exit Criteria:**
-- Can compare any two runs side-by-side
-- Can create experiments with hypothesis
-- Experiments group related runs
-- Statistical significance shown for deltas
-
----
-
-## Stage 12: MCP Interface [ ]
-
-**Goal:** Expose data and authoring tools for AI agents via MCP protocol.
+**Goal:** Enable AI agents to query and reason over ValueRank data.
 
 **Deliverables:**
 - MCP server setup (embedded in API or sidecar)
-- Read tools: `list_definitions`, `list_runs`, `get_run_summary`, `compare_runs`
-- Write tools: `create_definition`, `fork_definition`, `start_run`
+- Read tools: `list_definitions`, `list_runs`, `get_run_summary`, `get_analysis`
 - `graphql_query` tool for ad-hoc queries
-- Authoring resources (guide, examples, value pairs)
 - Token-budget-aware response formatting
 - Rate limiting for MCP endpoints
 
 **Exit Criteria:**
 - Can query data from Claude Desktop via MCP
-- Can create definitions and start runs via MCP
+- Can retrieve run summaries and analysis results
 - Responses stay within token budget guidelines
 - API key authentication works for MCP
 
+**Phase 3 Complete:** Team has automated analysis and can use AI to reason over results.
+
 ---
 
-## Stage 13: Data Export & CLI Compatibility [ ]
+## Stage 13: Run Comparison & Delta Analysis [ ]
+
+**Goal:** Enable side-by-side comparison with statistical rigor, including cross-model-version comparisons.
+
+**Deliverables:**
+- Run comparison page (side-by-side delta view)
+- Delta visualization (diverging bar chart)
+- "What Changed" diff display
+- **Model version comparison** (same scenario, different model versions)
+- **Effect sizes** (Cohen's d for pairwise comparisons)
+- **Significance testing** (p-values with Holm-Bonferroni correction)
+- Tier 2 on-demand analysis (correlations, dimension impact)
+- Statistical method documentation in results
+
+**Use Case:** Compare `gemini-1.5-pro-001` results against `gemini-1.5-pro-002` on the same scenario to see how model updates affect value priorities.
+
+**Exit Criteria:**
+- Can compare any two runs side-by-side
+- Can compare same scenario across model versions
+- Statistical significance shown for deltas
+- Effect sizes reported alongside p-values
+- Can trigger deeper analysis on demand
+
+**Phase 4 Complete:** Team can rigorously compare and analyze differences between runs.
+
+---
+
+## Stage 14: MCP Write Tools [ ]
+
+**Goal:** Enable AI-assisted scenario authoring via MCP.
+
+**Deliverables:**
+- Write tools: `create_definition`, `fork_definition`, `start_run`
+- Authoring resources (guide, examples, value pairs)
+- `compare_runs` tool (leverages Stage 13)
+- Validation for AI-generated content
+
+**Exit Criteria:**
+- Can create definitions and start runs via MCP
+- AI can generate valid scenario definitions
+- Authoring guide helps AI produce quality scenarios
+
+**Phase 5 Complete:** AI can assist with scenario creation and experimentation.
+
+---
+
+## Stage 15: Data Export & CLI Compatibility [ ]
 
 **Goal:** Enable bulk data export and maintain CLI tool compatibility.
 
 **Deliverables:**
-- Export API endpoints (Parquet, CSV, JSON Lines)
+- Export API endpoints (Parquet, JSON Lines)
 - CLI-compatible export format (transcripts/*.md, manifest.yaml)
 - Definition markdown serializer
 - Flexible aggregation API
@@ -285,7 +387,26 @@
 
 ---
 
-## Stage 14: Production Deployment [ ]
+## Stage 16: Scale & Efficiency [ ]
+
+**Goal:** Make it cheaper to run the system at scale.
+
+**Deliverables:**
+- Batch processing for large run queues
+- Sampling/partial runs (run N% for quick tests)
+- Queue optimization for high throughput
+- Cost tracking and reporting
+
+**Exit Criteria:**
+- Can run sampled evaluations for quick iteration
+- Batch processing reduces per-run overhead
+- Can track actual vs estimated costs
+
+**Phase 6 Complete:** System can scale efficiently for larger experiments.
+
+---
+
+## Stage 17: Production Deployment [ ]
 
 **Goal:** Deploy to Railway with proper configuration, monitoring, and CI/CD.
 
@@ -311,34 +432,42 @@
 ```
 Stage 1 (Scaffolding)
     └── Stage 2 (Database)
+        ├── Stage 2b (Transcript Versioning) ─── can run in parallel with Stage 3+
         └── Stage 3 (GraphQL API)
             ├── Stage 4 (Auth)
             │   └── Stage 7 (Frontend Foundation)
-            │       └── Stage 8 (Definition UI)
-            │           └── Stage 9 (Run Execution)
-            │               └── Stage 10 (Analysis)
-            │                   └── Stage 11 (Experiments)
+            │       └── Stage 8 (Definition UI + Tags)
+            │           └── Stage 9 (Run Execution + CSV Export) ─── PHASE 1 COMPLETE
+            │               └── Stage 10 (Experiment Framework) ─── PHASE 2 COMPLETE
+            │                   └── Stage 11 (Analysis + Visualizations)
+            │                       └── Stage 12 (MCP Read) ─── PHASE 3 COMPLETE
+            │                           └── Stage 13 (Run Comparison) ─── PHASE 4 COMPLETE
+            │                               └── Stage 14 (MCP Write) ─── PHASE 5 COMPLETE
             │
             └── Stage 5 (Queue System)
                 └── Stage 6 (Python Workers)
-                    └── Stage 9 (Run Execution)
+                    └── Stage 9 (Run Execution + CSV Export)
 
-Stage 12 (MCP) depends on: Stages 3, 4, 10
-Stage 13 (Export) depends on: Stages 10, 11
-Stage 14 (Deployment) can start after Stage 9
+Stage 2b (Transcript Versioning) must complete before Stage 9
+Stage 15 (Export) depends on: Stages 9, 11
+Stage 16 (Scale) depends on: Stage 9, can be done in parallel with later stages
+Stage 17 (Deployment) can start after Stage 9
 ```
 
 ---
 
 ## Phase Summary
 
-| Phase | Stages | Focus |
-|-------|--------|-------|
-| **Foundation** | 1-4 | Infrastructure, database, API, auth |
-| **Core Pipeline** | 5-9 | Queue, workers, UI, run execution |
-| **Analysis** | 10-11 | Statistics, comparison, experiments |
-| **Integration** | 12-13 | MCP, export, CLI compatibility |
-| **Ship** | 14 | Production deployment |
+| Phase | Stages | Focus | Milestone |
+|-------|--------|-------|-----------|
+| **Foundation** | 1-4, 2b | Infrastructure, database, API, auth, transcript versioning | - |
+| **Core Pipeline** | 5-9 | Queue, workers, UI, run execution, CSV export | **Phase 1: CLI Replication** |
+| **Experimentation** | 10 | Experiment framework, cost estimation | **Phase 2: Experiment Tracking** |
+| **Analysis** | 11-12 | Auto-analysis, visualizations, MCP read | **Phase 3: Automated Analysis** |
+| **Comparison** | 13 | Run comparison, delta analysis | **Phase 4: Comparison** |
+| **AI Authoring** | 14 | MCP write tools | **Phase 5: AI-Assisted Authoring** |
+| **Scale** | 15-16 | Export, batch processing, sampling | **Phase 6: Scale & Efficiency** |
+| **Ship** | 17 | Production deployment | - |
 
 ---
 

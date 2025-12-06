@@ -10,7 +10,9 @@ The versioning/forking requirement drives us toward PostgreSQL over pure documen
 
 **Key Decisions (from Product Spec):**
 - **Single tenant**: No tenant_id columns needed
-- **14-day transcript retention**: Content deleted after 14 days, metadata retained
+- **Permanent transcript retention**: All content retained by default; retention fields preserved for future pruning
+- **Transcript versioning**: Each transcript captures model_id, model_version, and definition snapshot for reproducibility
+- **Access tracking**: `last_accessed_at` on key entities to identify unused data for future pruning
 - **Hybrid versioning**: Git-like identity (UUIDs) with optional user labels
 - **Public visibility**: No ACLs needed, all data visible to all users
 
@@ -111,7 +113,10 @@ CREATE TABLE definitions (
   path ltree,
 
   -- Computed diff from parent (for quick comparison)
-  diff_from_parent JSONB
+  diff_from_parent JSONB,
+
+  -- Access tracking for future pruning decisions
+  last_accessed_at TIMESTAMPTZ DEFAULT NOW()  -- Updated on read operations
 );
 
 -- Display logic: show version_label if set, otherwise truncated UUID
@@ -137,22 +142,34 @@ CREATE TABLE runs (
   config JSONB,      -- Runtime config snapshot
   progress JSONB,    -- { total, completed, failed }
 
-  -- Data retention settings (overrides system default)
-  retention_days INTEGER,        -- NULL = use system default (14 days)
-  archive_permanently BOOLEAN DEFAULT FALSE  -- TRUE = never delete transcripts
+  -- Data retention settings (preserved for future pruning)
+  retention_days INTEGER,        -- NULL = permanent (default)
+  archive_permanently BOOLEAN DEFAULT TRUE,  -- TRUE = never delete (default)
+
+  -- Access tracking for future pruning decisions
+  last_accessed_at TIMESTAMPTZ DEFAULT NOW()  -- Updated on read operations
 );
 
--- Transcripts with configurable content retention
--- Content deleted after retention period, metadata retained permanently
+-- Transcripts: immutable versioned records capturing full evaluation context
+-- Each transcript captures model version and definition snapshot for reproducibility
+-- Enables re-running scenarios against new model versions and comparing results
 CREATE TABLE transcripts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   run_id UUID REFERENCES runs(id) NOT NULL,
   scenario_id TEXT NOT NULL,
-  target_model TEXT NOT NULL,
-  content TEXT,           -- Full markdown transcript (NULL after expiry)
-  turns JSONB,            -- Structured turn data (NULL after expiry)
 
-  -- Permanently retained metrics (for analysis after content expires)
+  -- Model versioning (critical for cross-version comparisons)
+  model_id TEXT NOT NULL,             -- Provider model name (e.g., "gemini-1.5-pro")
+  model_version TEXT,                 -- Specific version (e.g., "gemini-1.5-pro-002")
+
+  -- Definition snapshot (captures exact definition at run time)
+  definition_snapshot JSONB,          -- Copy of definition content when run executed
+
+  -- Transcript content
+  content TEXT,           -- Full markdown transcript
+  turns JSONB,            -- Structured turn data
+
+  -- Permanently retained metrics (for analysis)
   turn_count INTEGER,
   word_count INTEGER,
   token_count INTEGER,                -- Input + output tokens
@@ -166,16 +183,20 @@ CREATE TABLE transcripts (
   duration_ms INTEGER,                -- Total response time
   time_to_first_token_ms INTEGER,     -- TTFT for streaming responses
 
-  -- Retention
-  content_expires_at TIMESTAMPTZ,     -- Set based on run.retention_days
+  -- Retention (preserved for future pruning, default: permanent)
+  content_expires_at TIMESTAMPTZ,     -- NULL = permanent retention (default)
+
+  -- Access tracking for future pruning decisions
+  last_accessed_at TIMESTAMPTZ DEFAULT NOW(),  -- Updated on read operations
 
   -- Extracted features (retained permanently for reproducibility)
   extracted_features JSONB            -- { decision, key_values_mentioned, sentiment, etc. }
 );
 
--- Cleanup job runs daily, sets content=NULL, turns=NULL where expired
--- extracted_features preserved for historical analysis
--- Analysis results computed from transcripts are retained indefinitely
+-- Transcripts are immutable - never modified after creation
+-- Model version enables comparisons like: gemini-1.5-pro-001 vs gemini-1.5-pro-002
+-- Definition snapshot ensures we know exactly what definition produced these results
+-- Use case: Google releases new Gemini → re-run scenario → compare against historical data
 
 -- Generated scenarios
 CREATE TABLE scenarios (
@@ -329,9 +350,9 @@ CREATE TABLE rubrics (
 
 ```
 PostgreSQL Tables:
-├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label)
-├── runs                 # Pipeline runs with timing + configurable retention
-├── transcripts          # Raw dialogue + extracted features (configurable retention)
+├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label) + last_accessed_at
+├── runs                 # Pipeline runs with timing + retention settings + last_accessed_at
+├── transcripts          # Immutable records: model_id, model_version, definition_snapshot + last_accessed_at
 ├── scenarios            # Generated scenario variants
 ├── analysis_results     # Versioned analysis (keeps last 3 versions for reproducibility)
 ├── experiments          # Scientific experiment tracking (hypothesis, stats plan, results)
@@ -342,6 +363,13 @@ PostgreSQL Tables:
 ├── api_keys             # MCP access keys for local chat integration
 └── rubrics              # Values rubric versions (reference data)
 ```
+
+### Access Tracking
+
+All major entities include `last_accessed_at` timestamp:
+- Updated on read operations (view, export, analysis, MCP query)
+- Enables identification of unused data for future pruning decisions
+- Helps understand usage patterns across the system
 
 ### JSONB for Flexible Parts
 

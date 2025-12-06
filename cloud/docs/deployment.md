@@ -212,12 +212,14 @@ Based on current ValueRank usage:
 
 | Data Type | Size per Run | Retention |
 |-----------|--------------|-----------|
-| Run metadata | ~10 KB | Forever |
-| Transcripts | ~500 KB - 5 MB | 90 days |
+| Run metadata | ~10 KB | Permanent |
+| Transcripts | ~500 KB - 5 MB | Permanent (default) |
+| Access tracking | Minimal | Enables future pruning |
 
 For 100 runs/month with ~50 scenarios × 6 models each:
 - Storage: ~50 GB/year (mostly transcripts)
 - Documents: ~30,000/month
+- Access tracking enables data-driven pruning decisions if storage becomes an issue
 
 ---
 
@@ -227,12 +229,13 @@ For 100 runs/month with ~50 scenarios × 6 models each:
 |----------|----------|-----------|
 | Multi-tenancy | **No** - Single tenant | Internal team tool, no need for isolation |
 | LLM API Keys | **Server-side** | Enables async workers, simpler UX |
-| Cost Tracking | **Defer** | Nice to have, not MVP |
-| Transcript Retention | **14 days** | Rarely accessed after analysis |
+| Cost Tracking | **Phase 2** | Show estimated cost before starting run |
+| Transcript Retention | **Permanent (default)** | Scientific reproducibility; access tracking enables future pruning |
 | Export/Import | **Yes** - CLI compatibility | Business continuity, potential rollback |
 | Version Labeling | **Hybrid** | Git-like UUID + optional user labels |
 | Fork Visibility | **Public** | All data visible to all users |
 | Diff Display | **Defer to implementation** | Basic side-by-side diff initially |
+| Transcript Versioning | **Yes** | Capture model_id, model_version, definition_snapshot for reproducibility |
 
 See [Product Specification](./product-spec.md) for full context.
 
@@ -240,19 +243,30 @@ See [Product Specification](./product-spec.md) for full context.
 
 ## Next Steps
 
-### Phase 1: Local Development Setup
-1. **Turborepo Scaffold**: Create monorepo structure (`apps/api`, `apps/web`, `packages/db`)
+See [High-Level Implementation Plan](../specs/high-level.md) for detailed stage breakdown.
+
+### Implementation Phase 1: Foundation (Stages 1-4)
+1. **Turborepo Scaffold**: Monorepo structure (`apps/api`, `apps/web`, `packages/db`)
 2. **Docker Compose**: PostgreSQL container for local dev
-3. **Database Schema**: Initial tables with Prisma migrations
-4. **PgBoss Prototype**: Queue proof-of-concept in API process
+3. **Database Schema**: Initial tables with Prisma migrations + transcript versioning
+4. **GraphQL API**: Pothos setup with core types
+5. **Auth Implementation**: Email/password + API keys
 
-### Phase 2: Core Features
-5. **API Endpoints**: CRUD for definitions, runs, scenarios
-6. **Auth Implementation**: Email/password + API keys (see [Authentication](./authentication.md))
-7. **DevTool Migration**: Port React components from existing devtool
-8. **Worker Integration**: Python worker calling existing `src/` pipeline
+### Implementation Phase 2: Core Pipeline (Stages 5-9)
+6. **PgBoss Queue**: Job types and TypeScript orchestrator
+7. **Python Workers**: Probe and analysis scripts
+8. **Frontend Foundation**: React UI with auth
+9. **Definition UI**: Editor, tag management, version tree
+10. **Run Execution**: Dashboard, CSV export, basic results
 
-### Phase 3: Railway Deployment
-9. **Railway Setup**: Create project, provision PostgreSQL
-10. **CI/CD**: GitHub Actions for deploy on merge
-11. **Environment Config**: Secrets, API keys, database URL
+### Implementation Phase 3: Analysis & Comparison (Stages 10-14)
+11. **Experiment Framework**: Grouping, cost estimation
+12. **Analysis System**: Auto-analysis, visualizations
+13. **MCP Read Tools**: Query data via local AI
+14. **Run Comparison**: Delta analysis, statistical testing
+15. **MCP Write Tools**: AI-assisted authoring
+
+### Implementation Phase 4: Production (Stages 15-17)
+16. **Data Export**: CLI compatibility, bulk export
+17. **Scale Features**: Batch processing, sampling
+18. **Railway Deployment**: CI/CD, monitoring

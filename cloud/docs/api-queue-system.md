@@ -298,11 +298,13 @@ await boss.start();
 await boss.work('probe:scenario', async (job) => {
   const result = await spawnPython('workers/probe.py', job.data);
 
-  // Save transcript to database
+  // Save transcript to database with model versioning
   await db.transcripts.create({
     run_id: job.data.run_id,
     scenario_id: job.data.scenario_id,
-    model: job.data.model,
+    model_id: job.data.model_id,           // e.g., "gemini-1.5-pro"
+    model_version: job.data.model_version, // e.g., "gemini-1.5-pro-002"
+    definition_snapshot: job.data.definition_snapshot, // Exact definition at run time
     content: result.transcript,
     turns: result.turns,
     turn_count: result.turn_count,

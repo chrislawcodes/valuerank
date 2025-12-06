@@ -10,25 +10,40 @@ The existing DevTool provides a solid foundation. Same tech stack for Cloud.
 
 ## Features by Phase
 
-### Phase 1: Core Pipeline
+### Phase 1: Replicate CLI in Cloud
 1. **Simple Auth**: Login form (email/password), JWT token storage
 2. **Definition Editor**: Create/edit/fork scenario definitions
-3. **Run Dashboard**: List runs with status, progress (polling-based)
-4. **Queue Controls**: Pause/resume/cancel buttons
-5. **Results Viewer**: Basic analysis, per-model scores
+3. **Tag Management**: Create, assign, and filter by tags
+4. **Run Dashboard**: List runs with status, progress (polling-based)
+5. **Queue Controls**: Pause/resume/cancel buttons
+6. **Results Viewer**: Basic scores, per-model breakdown
+7. **CSV Export**: Download run results for external analysis
 
-### Phase 2: Experimentation
-6. **Run Comparison**: Side-by-side delta analysis
-7. **Experiment Management**: Create experiments, track hypothesis
-8. **Version Tree**: Visualize definition lineage
+### Phase 2: Experimentation Foundation
+8. **Experiment Management**: Create experiments, track hypothesis
+9. **Version Tree**: Visualize definition lineage
+10. **Cost Estimation**: Show estimated cost before starting run
 
-### Phase 3: AI Integration
-9. **API Key Manager**: Generate keys for MCP access
+### Phase 3: Automated Analysis
+11. **Analysis Dashboard**: Score distributions, variable impact visualizations
+12. **Model Comparison Charts**: Visual comparison of AI behavior
+13. **API Key Manager**: Generate keys for MCP access (Read tools)
+
+### Phase 4: Run Comparison
+14. **Run Comparison**: Side-by-side delta analysis
+15. **Delta Visualization**: Diverging bar charts for value shifts
+16. **Statistical Results**: Effect sizes, significance indicators
+
+### Phase 5: AI-Assisted Authoring
+17. **MCP Write Integration**: Enable AI authoring via MCP
+
+### Phase 6: Scale & Efficiency
+18. **Sampling UI**: Configure partial/sampled runs
+19. **Batch Processing UI**: Manage large batches
 
 ### Deferred
 - ~~Real-time Progress~~: Polling (5s) is sufficient
 - ~~Deep Analysis (PCA, outliers)~~: Tier 1+2 first
-- ~~Sampled Runs~~: Nice to have
 - ~~Multi-tenancy~~: Not needed (single tenant)
 
 ## Component Architecture
@@ -154,22 +169,27 @@ export function useRunProgress(id: string, isActive: boolean) {
 | Component | Phase | Complexity |
 |-----------|-------|------------|
 | LoginForm | 1 | Low - simple form |
-| DefinitionList | 1 | Medium - with tree view |
+| DefinitionList | 1 | Medium - with tag filtering |
+| TagManager | 1 | Low - tag CRUD and assignment |
 | RunDashboard | 1 | Medium - list with filters |
 | RunProgress | 1 | Low - polling-based |
-| ResultsViewer | 1 | Medium - tables and charts |
-| RunComparison | 2 | Medium - side-by-side layout |
+| ResultsViewer | 1 | Medium - tables and basic charts |
+| CSVExport | 1 | Low - download button |
 | ExperimentList | 2 | Medium - grouping runs |
 | VersionTree | 2 | Medium - DAG visualization |
+| CostEstimator | 2 | Low - calculation display |
+| AnalysisDashboard | 3 | Medium - score distributions |
 | ApiKeyManager | 3 | Low - simple CRUD |
+| RunComparison | 4 | Medium - side-by-side layout |
+| DeltaChart | 4 | Medium - diverging bar chart |
+| SamplingConfig | 6 | Low - percentage selector |
 
-## What We're NOT Building
+## What We're NOT Building (Initially)
 
 | Feature | Reason |
 |---------|--------|
 | WebSocket integration | Polling is sufficient |
 | Complex auth flows | Internal team, simple JWT |
 | User management UI | CLI-based for internal team |
-| PCA visualization | Defer to later phase |
-| Outlier detection UI | Defer to later phase |
-| Sampling configuration | Nice to have, not MVP |
+| PCA visualization | Defer to Phase 6+ |
+| Outlier detection UI | Defer to Phase 6+ |

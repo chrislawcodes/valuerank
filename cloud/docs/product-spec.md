@@ -81,65 +81,114 @@ def_a1b2c3 (label: "baseline")
 └── def_g7h8i9 (no label, shows as "def_g7h8...")
 ```
 
-### 5. Configurable Transcript Retention
+### 5. Transcript Storage & Versioning
 
-Transcript content retention is **configurable per-run**, with a system default of 14 days.
+Transcripts are **versioned records** that capture the complete context of each evaluation, enabling re-runs against new model versions and historical comparison.
 
-**Retention options:**
-- **Default (14 days):** Content deleted after 14 days
-- **Extended (30/60/90 days):** For runs needing longer analysis windows
-- **Archive permanently:** For reproducibility-critical experiments
+**Core Requirements:**
+- Each transcript is immutable and captures: model ID, model version, scenario definition snapshot, timestamp
+- Transcripts are linked to specific model versions (e.g., `gemini-1.5-pro-001` vs `gemini-1.5-pro-002`)
+- Re-running a scenario against a new model version creates new transcripts, preserving old ones for comparison
+- Full lineage tracking: which definition version, which model version, when it ran
 
-**After content expires:**
-- Transcript text (content, turns) is deleted
-- Metadata retained permanently: turn count, word count, token counts, timing metrics
-- Extracted features retained permanently: decision, key values mentioned, sentiment
-- Analysis results retained indefinitely
+**Use Case:** Google releases new Gemini version → re-run exact scenario against new model → compare new results against historical data from previous model version.
 
-**Rationale:** Balances storage costs with scientific reproducibility. Researchers can mark important runs for permanent retention while routine runs auto-expire.
+**Default Retention: Permanent**
+
+All transcript content is retained by default. Storage costs will be monitored; if they become prohibitive, we'll implement pruning based on access patterns.
+
+**Retention Configuration (for future use):**
+- `retention_days` field preserved for future pruning implementation
+- `archive_permanently` flag to protect specific runs from any future pruning
+- Default: permanent retention (effectively `archive_permanently: true`)
+
+**Access Tracking:**
+- Track `last_accessed_at` timestamp on transcripts, runs, and definitions
+- Updated on read operations (view, export, analysis, MCP query)
+- Enables identification of unused data for future pruning decisions
+- Access logs retained for cost analysis and usage patterns
 
 **Implementation:**
-- Run creation accepts `retention_days` and `archive_permanently` flags
-- UI shows retention status and expiry date
-- Bulk archive option for marking existing runs as permanent
+- Run creation accepts `retention_days` and `archive_permanently` flags (defaults to permanent)
+- UI shows retention status
+- `last_accessed_at` updated on every read
+- Future: dashboard showing storage usage and access patterns
 
 ---
 
 ## Feature Priorities
 
-### Phase 1: Core Pipeline (Must Have)
+### Phase 1: Replicate CLI in Cloud (Must Have)
+
+**Goal:** Enable all team members to experiment without being bottlenecked. Anyone should be able to create and run a scenario to get results they can analyze.
 
 | Feature | Description | Why Critical |
 |---------|-------------|--------------|
 | Definition Authoring | Create/edit scenario definitions with versioning | Foundation for all experiments |
 | Run Execution | Queue and execute evaluation runs | Core functionality |
 | Results Viewing | View basic analysis and scores | See what happened |
-| Run Comparison | Compare two runs side-by-side | Understand deltas |
+| CSV/Data Export | Export run results as CSV for external analysis | Enable analysis in Jupyter, R, or feeding to AI tools |
+| Tag-Based Navigation | Organize and find definitions/runs via flexible tagging | More flexible than folders for versioned content |
 
-### Phase 2: Experimentation (Must Have)
+### Phase 2: Experimentation Foundation (Must Have)
+
+**Goal:** Build the organizational foundation for tracking related experiments. We can compare by hand initially, but need the structure to find and track related work.
 
 | Feature | Description | Why Critical |
 |---------|-------------|--------------|
 | Experiment Framework | Group runs, track hypotheses, controlled variables | **Primary driver for cloud migration** |
 | Forking/Branching | Create variants of definitions | Enable systematic iteration |
-| Delta Analysis | Statistical comparison of run differences | Quantify changes |
+| Cost Estimation | Show estimated cost before starting a run | Avoid expensive surprises |
 
-### Phase 3: AI Integration (High Priority)
+**User Scenarios:**
+- Explore relationship between gay marriage and religion - create scenarios varying Freedom, Tradition, Harmony
+- Swap variables (replace Tradition with Social Duty) while tracking that scenarios are related
+- Flip scenario perspective (Catholic at gay wedding vs. gay person at Catholic wedding) and track the relationship
+
+### Phase 3: Automated Analysis (High Priority)
+
+**Goal:** Automate the basic analysis users need so answers come faster. Answer key questions about AI behavior within a scenario.
+
+| Feature | Description | Why Important |
+|---------|-------------|---------------|
+| Auto-Analysis | Automatic Tier 1 analysis on run completion | Get answers immediately |
+| Score Distribution | How do AIs tend to answer? (distribution visualization) | Understand model behavior |
+| Variable Impact | What causes scores to change? (beta coefficients) | Identify influential dimensions |
+| Model Variance | How explanatory are our chosen variables? | Validate experimental design |
+| Outlier Detection | Which AIs behave differently from others? | Find interesting divergence |
+| MCP Read Tools | Query runs, summaries, experiments | Let AI reason over results |
+
+### Phase 4: Run Comparison & Delta Analysis (High Priority)
+
+**Goal:** Enable easy finding and comparing of scenario results.
+
+| Feature | Description | Why Important |
+|---------|-------------|---------------|
+| Run Comparison | Compare two runs side-by-side | Understand deltas |
+| Delta Analysis | Statistical comparison of run differences | Quantify changes |
+| Effect Sizes | Cohen's d for pairwise comparisons | Statistical rigor |
+| Significance Testing | p-values with multiple comparison correction | Avoid false positives |
+
+### Phase 5: AI-Assisted Authoring (Nice to Have)
+
+**Goal:** Make it quick and easy for AI to help write scenarios.
 
 | Feature | Description | Why Important |
 |---------|-------------|---------------|
 | MCP Interface | AI agent access to data and authoring | Interactive analysis via local chat |
-| Read Tools | Query runs, summaries, experiments | Let AI reason over results |
-| Write Tools | Create definitions, start runs | AI-assisted scenario authoring |
+| MCP Write Tools | Create definitions, start runs | AI-assisted scenario authoring |
+| Authoring Resources | Guide, examples, value pairs for AI | Quality AI-generated scenarios |
 
-### Phase 4: Enhanced Analysis (Nice to Have)
+### Phase 6: Scale & Efficiency (Nice to Have)
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Tier 2 Analysis | Correlations, inter-model agreement | Required |
-| Sampling/Partial Runs | Run 10% for quick tests | Nice to have |
-| Deep Analysis (PCA, outliers) | Advanced statistical methods | Defer |
-| LLM-Generated Summaries | Natural language insights | Defer |
+**Goal:** Make it cheaper to run the system at scale.
+
+| Feature | Description | Why Important |
+|---------|-------------|---------------|
+| Batch Processing | Queue large batches efficiently | Reduce per-run overhead |
+| Sampling/Partial Runs | Run 10% for quick tests | Fast iteration before full runs |
+| Deep Analysis (PCA, outliers) | Advanced statistical methods | Defer until needed |
+| LLM-Generated Summaries | Natural language insights | Defer until needed |
 
 ---
 
@@ -302,13 +351,22 @@ Maintain ability to export data in CLI-compatible format.
 
 ## Success Criteria
 
-### Initial Release
+### Phase 1 Complete (MVP)
 
 1. **Can create and version definitions** - With forking and lineage tracking
 2. **Can run evaluations** - Queue, execute, see progress
-3. **Can compare runs** - Side-by-side delta analysis
-4. **Can create experiments** - Group related runs, track hypotheses
-5. **Can query via MCP** - AI agents can access data
+3. **Can export results** - CSV download for external analysis
+4. **Can find work via tags** - Navigate definitions and runs flexibly
+
+### Phase 2 Complete
+
+5. **Can create experiments** - Group related runs, track hypotheses
+6. **Can see cost estimates** - Know what a run will cost before starting
+
+### Phase 3 Complete
+
+7. **Can see automated analysis** - Score distributions, variable impact
+8. **Can query via MCP** - AI agents can read data
 
 ### Quality Bar
 
@@ -352,3 +410,12 @@ Maintain ability to export data in CLI-compatible format.
 | Dec 2025 | Transcript timing metrics | Enable latency analysis, performance correlation |
 | Dec 2025 | Cohort/segment support | Compare model families, scenario categories |
 | Dec 2025 | Extracted features retention | Preserve key features even after content expires |
+| Dec 2025 | Phase restructure (6 phases) | More incremental delivery: CLI replication → experiments → analysis → comparison → AI authoring → scale |
+| Dec 2025 | CSV export in Phase 1 | Critical for unblocking team - can analyze externally immediately |
+| Dec 2025 | Tag-based navigation over folders | More flexible for versioned content with complex lineage relationships |
+| Dec 2025 | Run comparison moved to Phase 4 | Can compare manually at first; prioritize getting data out |
+| Dec 2025 | MCP split (Read P3, Write P5) | Analysis needs come before authoring automation |
+| Dec 2025 | Cost estimation in Phase 2 | Avoid expensive surprises when experimenting |
+| Dec 2025 | Transcript versioning with model version | Enable re-runs against new model versions while preserving historical comparisons |
+| Dec 2025 | Default retention: permanent | Scientific reproducibility trumps storage costs; will prune later if needed |
+| Dec 2025 | Access tracking (last_accessed_at) | Enable future pruning decisions based on actual usage patterns |

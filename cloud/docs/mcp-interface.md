@@ -110,6 +110,11 @@ query IntrospectSchema {
 
 ## MCP Tools (Structured Access)
 
+**Phase Implementation:**
+- **Phase 3**: Read tools (`list_definitions`, `list_runs`, `get_run_summary`, etc.) + `graphql_query`
+- **Phase 4**: `compare_runs` tool (leverages run comparison infrastructure)
+- **Phase 5**: Write tools (`create_definition`, `fork_definition`, `start_run`, etc.)
+
 ### graphql_query (Power User Tool)
 
 Execute arbitrary GraphQL queries for flexible data access.

@@ -147,28 +147,36 @@ experiments (group related runs)
 
 ## Key Features (Priority Order)
 
-### 1. Definition Versioning (Phase 1)
-Fork definitions, track changes, compare results across versions. Git-like identity with optional user labels.
+### Phase 1: Replicate CLI in Cloud
+- **Definition Versioning**: Fork definitions, track changes, compare results across versions. Git-like identity with optional user labels.
+- **Run Execution & Results**: Queue runs, track progress (5s polling), view basic scores.
+- **CSV Export**: Export run results for external analysis (Jupyter, R, feeding to AI tools).
+- **Tag-Based Navigation**: Organize and find definitions/runs via flexible tagging.
 
-### 2. Run Execution & Results (Phase 1)
-Queue runs, track progress (5s polling), view basic analysis and per-model scores.
+### Phase 2: Experimentation Foundation
+- **Experiment Framework**: Group related runs, track hypotheses, controlled variables. **Primary driver for cloud migration.**
+- **Cost Estimation**: Show estimated cost before starting a run.
 
-### 3. Run Comparison (Phase 1)
-Side-by-side delta analysis between any two runs.
+### Phase 3: Automated Analysis
+- **Auto-Analysis**: Tier 1 analysis triggered automatically on run completion.
+- **Visualizations**: Score distributions, variable impact, model comparison.
+- **MCP Read Tools**: Local AI chat can query data and reason over results.
 
-### 4. Experiment Framework (Phase 2)
-Group related runs, track hypotheses, controlled variables. **Primary driver for cloud migration.**
+### Phase 4: Run Comparison
+- **Run Comparison**: Side-by-side delta analysis between any two runs.
+- **Model Version Comparison**: Compare same scenario across model versions (e.g., gemini-1.5-pro-001 vs -002).
+- **Statistical Testing**: Effect sizes, p-values, significance testing.
 
-### 5. AI Agent Access via MCP (Phase 3)
-Local AI chat can query data and author scenarios. Key differentiator for interactive analysis.
+### Phase 5: AI-Assisted Authoring
+- **MCP Write Tools**: AI agents can create definitions and start runs.
+- **Authoring Resources**: Guides and examples to help AI produce quality scenarios.
 
-### 6. CLI Export (All Phases)
-Dump to files compatible with CLI tool. Business continuity for potential rollback.
+### Phase 6: Scale & Efficiency
+- **Batch Processing**: Queue large batches efficiently.
+- **Sampling/Partial Runs**: Run 10% for quick tests before full runs.
 
-### Deferred Features
-- **Partial Runs (Sampling)**: Nice to have, not MVP
-- **Deep Analysis (PCA, outliers)**: Tier 1+2 analysis first, advanced stats later
-- **LLM-Generated Summaries**: Defer until core pipeline stable
+### All Phases
+- **CLI Export**: Dump to files compatible with CLI tool. Business continuity for potential rollback.
 
 ---
 

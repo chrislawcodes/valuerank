@@ -48,7 +48,7 @@ These are known gaps. The platform is designed to enable validation studies: tes
 
 ## What's Next
 
-Phase 1 ships the core loop: author scenarios, run evaluations, compare results. Phase 2 adds experiment management for hypothesis-driven research. Phase 3 exposes the MCP interface so AI assistants can help interpret patterns.
+**Phase 1** replicates the CLI in the cloud: author scenarios, run evaluations, export CSV results for external analysis. **Phase 2** adds experiment tracking for hypothesis-driven research. **Phase 3** automates analysis with visualizations and MCP read access. **Phase 4** enables rigorous run comparison with statistical testing. **Phase 5** lets AI assistants help author scenarios. **Phase 6** adds scale features like batch processing and sampling.
 
 The goal isn't to declare "GPT-4 is 12% more compassionate than Claude." It's to build the measurement infrastructure that makes such claims possible—and falsifiable.
 
