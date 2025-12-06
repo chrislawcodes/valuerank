@@ -87,16 +87,16 @@
 
 ### TypeScript Handler Update
 
-- [ ] T026 [US2] Update `cloud/apps/api/src/queue/handlers/probe-scenario.ts` to fetch scenario from database
-- [ ] T027 [US2] Add scenario content building (preamble, prompt, followups) to probe-scenario.ts
-- [ ] T028 [US2] Replace mock transcript with `spawnPython('workers/probe.py', input)` call
-- [ ] T029 [US2] Add transcript creation logic after successful Python execution
-- [ ] T030 [US2] Add definition snapshot capture (copy definition.content to transcript)
+- [X] T026 [US2] Update `cloud/apps/api/src/queue/handlers/probe-scenario.ts` to fetch scenario from database
+- [X] T027 [US2] Add scenario content building (preamble, prompt, followups) to probe-scenario.ts
+- [X] T028 [US2] Replace mock transcript with `spawnPython('workers/probe.py', input)` call
+- [X] T029 [US2] Add transcript creation logic after successful Python execution
+- [X] T030 [US2] Add definition snapshot capture (copy definition.content to transcript)
 
 ### Transcript Service (Optional extraction)
 
-- [ ] T031 [US2] Create `cloud/apps/api/src/services/transcript/create.ts` for transcript persistence
-- [ ] T032 [P] [US2] Add transcript validation (required fields, content structure) to create.ts
+- [X] T031 [US2] Create `cloud/apps/api/src/services/transcript/create.ts` for transcript persistence
+- [X] T032 [P] [US2] Add transcript validation (required fields, content structure) to create.ts
 
 ### Integration Tests
 
