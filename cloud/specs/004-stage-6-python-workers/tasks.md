@@ -14,10 +14,10 @@
 
 **Purpose**: Initialize Python workers directory and dependencies
 
-- [ ] T001 Create `cloud/workers/` directory structure per plan.md
-- [ ] T002 Create `cloud/workers/requirements.txt` with Python dependencies
-- [ ] T003 [P] Create `cloud/workers/__init__.py` package init
-- [ ] T004 [P] Create `cloud/workers/common/__init__.py` package init
+- [X] T001 Create `cloud/workers/` directory structure per plan.md
+- [X] T002 Create `cloud/workers/requirements.txt` with Python dependencies
+- [X] T003 [P] Create `cloud/workers/__init__.py` package init
+- [X] T004 [P] Create `cloud/workers/common/__init__.py` package init
 
 **Checkpoint**: Workers directory exists with basic structure
 
@@ -31,25 +31,25 @@
 
 ### Error Handling & Logging
 
-- [ ] T005 Create `cloud/workers/common/errors.py` with WorkerError, LLMError, RetryableError classes
-- [ ] T006 [P] Create `cloud/workers/common/logging.py` with structured JSON logger (outputs to stderr)
-- [ ] T007 [P] Create `cloud/workers/common/config.py` with environment variable loading
+- [X] T005 Create `cloud/workers/common/errors.py` with WorkerError, LLMError, RetryableError classes
+- [X] T006 [P] Create `cloud/workers/common/logging.py` with structured JSON logger (outputs to stderr)
+- [X] T007 [P] Create `cloud/workers/common/config.py` with environment variable loading
 
 ### LLM Adapters
 
-- [ ] T008 Create `cloud/workers/common/llm_adapters.py` base adapter class and registry
-- [ ] T009 [P] Add OpenAI adapter to `cloud/workers/common/llm_adapters.py` (adapted from src/llm_adapters.py)
-- [ ] T010 [P] Add Anthropic adapter to `cloud/workers/common/llm_adapters.py`
-- [ ] T011 [P] Add Google Gemini adapter to `cloud/workers/common/llm_adapters.py`
-- [ ] T012 [P] Add xAI adapter to `cloud/workers/common/llm_adapters.py`
-- [ ] T013 [P] Add DeepSeek adapter to `cloud/workers/common/llm_adapters.py`
-- [ ] T014 [P] Add Mistral adapter to `cloud/workers/common/llm_adapters.py`
+- [X] T008 Create `cloud/workers/common/llm_adapters.py` base adapter class and registry
+- [X] T009 [P] Add OpenAI adapter to `cloud/workers/common/llm_adapters.py` (adapted from src/llm_adapters.py)
+- [X] T010 [P] Add Anthropic adapter to `cloud/workers/common/llm_adapters.py`
+- [X] T011 [P] Add Google Gemini adapter to `cloud/workers/common/llm_adapters.py`
+- [X] T012 [P] Add xAI adapter to `cloud/workers/common/llm_adapters.py`
+- [X] T013 [P] Add DeepSeek adapter to `cloud/workers/common/llm_adapters.py`
+- [X] T014 [P] Add Mistral adapter to `cloud/workers/common/llm_adapters.py`
 
 ### Adapter Tests
 
-- [ ] T015 Create `cloud/workers/tests/__init__.py` and `cloud/workers/tests/conftest.py` with mock fixtures
-- [ ] T016 [P] Create `cloud/workers/tests/test_errors.py` with error classification tests
-- [ ] T017 [P] Create `cloud/workers/tests/test_llm_adapters.py` with mocked HTTP tests for each provider
+- [X] T015 Create `cloud/workers/tests/__init__.py` and `cloud/workers/tests/conftest.py` with mock fixtures
+- [X] T016 [P] Create `cloud/workers/tests/test_errors.py` with error classification tests
+- [X] T017 [P] Create `cloud/workers/tests/test_llm_adapters.py` with mocked HTTP tests for each provider
 
 **Checkpoint**: Foundation ready - adapters working with mocked HTTP, error handling in place
 
