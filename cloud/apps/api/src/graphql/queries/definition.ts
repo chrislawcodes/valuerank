@@ -1,6 +1,10 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { DefinitionRef } from '../types/definition.js';
+
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 20;
 
 // Query: definition(id: ID!) - Fetch single definition by ID
 builder.queryField('definition', (t) =>
@@ -25,6 +29,51 @@ builder.queryField('definition', (t) =>
       }
 
       return definition;
+    },
+  })
+);
+
+// Query: definitions(rootOnly, limit, offset) - List definitions with filtering
+builder.queryField('definitions', (t) =>
+  t.field({
+    type: [DefinitionRef],
+    description: 'List definitions with optional filtering and pagination.',
+    args: {
+      rootOnly: t.arg.boolean({
+        required: false,
+        description: 'If true, return only root definitions (no parent)',
+      }),
+      limit: t.arg.int({
+        required: false,
+        description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
+      }),
+      offset: t.arg.int({
+        required: false,
+        description: 'Number of results to skip for pagination (default: 0)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      // Validate and apply defaults
+      const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+      const offset = args.offset ?? 0;
+
+      ctx.log.debug({ rootOnly: args.rootOnly, limit, offset }, 'Listing definitions');
+
+      // Build where clause
+      const where: Prisma.DefinitionWhereInput = {};
+      if (args.rootOnly) {
+        where.parentId = null;
+      }
+
+      const definitions = await db.definition.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      ctx.log.debug({ count: definitions.length }, 'Definitions fetched');
+      return definitions;
     },
   })
 );

@@ -74,11 +74,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Create definitions(rootOnly, limit, offset) query in apps/api/src/graphql/queries/definition.ts
-- [ ] T025 [US2] Add pagination args validation (limit max 100) in apps/api/src/graphql/queries/definition.ts
-- [ ] T026 [US2] Write integration test for definitions list query in apps/api/tests/graphql/queries/definition.test.ts
-- [ ] T027 [US2] Test pagination (limit/offset) combinations in apps/api/tests/graphql/queries/definition.test.ts
-- [ ] T028 [US2] Test rootOnly filter returns only null parentId in apps/api/tests/graphql/queries/definition.test.ts
+- [X] T024 [US2] Create definitions(rootOnly, limit, offset) query in apps/api/src/graphql/queries/definition.ts
+- [X] T025 [US2] Add pagination args validation (limit max 100) in apps/api/src/graphql/queries/definition.ts
+- [X] T026 [US2] Write integration test for definitions list query in apps/api/tests/graphql/queries/definition.test.ts
+- [X] T027 [US2] Test pagination (limit/offset) combinations in apps/api/tests/graphql/queries/definition.test.ts
+- [X] T028 [US2] Test rootOnly filter returns only null parentId in apps/api/tests/graphql/queries/definition.test.ts
 
 **Checkpoint**: US2 complete - Can list and filter definitions
 

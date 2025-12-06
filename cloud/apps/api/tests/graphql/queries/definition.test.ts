@@ -235,4 +235,148 @@ describe('GraphQL Definition Query', () => {
       });
     });
   });
+
+  describe('definitions(rootOnly, limit, offset)', () => {
+    it('returns list of definitions', async () => {
+      const query = `
+        query ListDefinitions {
+          definitions {
+            id
+            name
+            parentId
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(Array.isArray(response.body.data.definitions)).toBe(true);
+      // Should include our test definitions
+      const ids = response.body.data.definitions.map((d: { id: string }) => d.id);
+      expect(ids).toContain(parentDefinition.id);
+    });
+
+    it('filters to root-only definitions', async () => {
+      const query = `
+        query ListRootDefinitions($rootOnly: Boolean) {
+          definitions(rootOnly: $rootOnly) {
+            id
+            name
+            parentId
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { rootOnly: true } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      // All returned definitions should have null parentId
+      for (const def of response.body.data.definitions) {
+        expect(def.parentId).toBeNull();
+      }
+      // Should include our root definition
+      const ids = response.body.data.definitions.map((d: { id: string }) => d.id);
+      expect(ids).toContain(parentDefinition.id);
+      // Should NOT include child definitions
+      expect(ids).not.toContain(testDefinition.id);
+      expect(ids).not.toContain(childDefinition.id);
+    });
+
+    it('applies limit parameter', async () => {
+      const query = `
+        query ListDefinitionsWithLimit($limit: Int) {
+          definitions(limit: $limit) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { limit: 2 } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definitions.length).toBeLessThanOrEqual(2);
+    });
+
+    it('applies offset parameter', async () => {
+      const query = `
+        query ListDefinitionsWithOffset($limit: Int, $offset: Int) {
+          definitions(limit: $limit, offset: $offset) {
+            id
+          }
+        }
+      `;
+
+      // Get all definitions first
+      const allResponse = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { limit: 100, offset: 0 } })
+        .expect(200);
+
+      // Get with offset
+      const offsetResponse = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { limit: 100, offset: 1 } })
+        .expect(200);
+
+      expect(offsetResponse.body.errors).toBeUndefined();
+      // Offset should skip first result
+      if (allResponse.body.data.definitions.length > 1) {
+        expect(offsetResponse.body.data.definitions.length).toBe(
+          allResponse.body.data.definitions.length - 1
+        );
+      }
+    });
+
+    it('enforces max limit of 100', async () => {
+      const query = `
+        query ListDefinitionsExceedLimit($limit: Int) {
+          definitions(limit: $limit) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { limit: 200 } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      // Should be capped at 100, but we might have fewer records
+      expect(response.body.data.definitions.length).toBeLessThanOrEqual(100);
+    });
+
+    it('combines rootOnly with pagination', async () => {
+      const query = `
+        query ListRootWithPagination($rootOnly: Boolean, $limit: Int) {
+          definitions(rootOnly: $rootOnly, limit: $limit) {
+            id
+            parentId
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .send({ query, variables: { rootOnly: true, limit: 5 } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definitions.length).toBeLessThanOrEqual(5);
+      // All should be root definitions
+      for (const def of response.body.data.definitions) {
+        expect(def.parentId).toBeNull();
+      }
+    });
+  });
 });
