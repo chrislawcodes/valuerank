@@ -27,6 +27,6 @@ export const builder = new SchemaBuilder<{
   },
 });
 
-// Initialize Query and Mutation types
+// Initialize Query type
+// Note: Mutation type will be added in Phase 7 when mutations are implemented
 builder.queryType({});
-builder.mutationType({});

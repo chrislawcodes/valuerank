@@ -1,6 +1,7 @@
-// Re-export all GraphQL query definitions
-// Queries are registered with builder by importing them
+// Import all GraphQL query definitions to register them with builder
+// Queries are registered as a side effect of importing
 
-// Query files (will be added in later phases)
-// export * from './definition.js';
-// export * from './run.js';
+import './definition.js';
+
+// Query files to be added in later phases
+// import './run.js';

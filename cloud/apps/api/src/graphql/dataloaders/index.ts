@@ -1,7 +1,8 @@
 import DataLoader from 'dataloader';
 import type { Definition, Run, Transcript, Scenario } from '@valuerank/db';
+import { createDefinitionLoader } from './definition.js';
 
-// DataLoader types (will be implemented in later phases)
+// DataLoader types
 export interface DataLoaders {
   definition: DataLoader<string, Definition | null>;
   run: DataLoader<string, Run | null>;
@@ -10,15 +11,15 @@ export interface DataLoaders {
 }
 
 // Factory function - creates new DataLoader instances per request
-// Placeholder implementation until DataLoaders are created
+// Per-request instantiation prevents cache leakage between users
 export function createDataLoaders(): DataLoaders {
-  // Placeholder loaders that will be replaced in Phase 3+
+  // Placeholder batch function for loaders not yet implemented
   const placeholderBatchFn = async (ids: readonly string[]): Promise<(null)[]> => {
     return ids.map(() => null);
   };
 
   return {
-    definition: new DataLoader<string, Definition | null>(placeholderBatchFn),
+    definition: createDefinitionLoader(),
     run: new DataLoader<string, Run | null>(placeholderBatchFn),
     transcript: new DataLoader<string, Transcript | null>(placeholderBatchFn),
     scenario: new DataLoader<string, Scenario | null>(placeholderBatchFn),

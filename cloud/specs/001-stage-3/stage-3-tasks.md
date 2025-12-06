@@ -52,15 +52,15 @@
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Create Definition DataLoader in apps/api/src/graphql/dataloaders/definition.ts
-- [ ] T016 [US1] Create Definition type with scalar fields in apps/api/src/graphql/types/definition.ts
-- [ ] T017 [US1] Add parent field resolver using DataLoader in apps/api/src/graphql/types/definition.ts
-- [ ] T018 [US1] Add children field resolver in apps/api/src/graphql/types/definition.ts
-- [ ] T019 [US1] Add runs field resolver in apps/api/src/graphql/types/definition.ts
-- [ ] T020 [US1] Add scenarios field resolver in apps/api/src/graphql/types/definition.ts
-- [ ] T021 [US1] Create definition(id) query in apps/api/src/graphql/queries/definition.ts
-- [ ] T022 [US1] Write unit test for Definition DataLoader in apps/api/tests/graphql/dataloaders/definition.test.ts
-- [ ] T023 [US1] Write integration test for definition query in apps/api/tests/graphql/queries/definition.test.ts
+- [X] T015 [US1] Create Definition DataLoader in apps/api/src/graphql/dataloaders/definition.ts
+- [X] T016 [US1] Create Definition type with scalar fields in apps/api/src/graphql/types/definition.ts
+- [X] T017 [US1] Add parent field resolver using DataLoader in apps/api/src/graphql/types/definition.ts
+- [X] T018 [US1] Add children field resolver in apps/api/src/graphql/types/definition.ts
+- [X] T019 [US1] Add runs field resolver in apps/api/src/graphql/types/definition.ts
+- [X] T020 [US1] Add scenarios field resolver in apps/api/src/graphql/types/definition.ts
+- [X] T021 [US1] Create definition(id) query in apps/api/src/graphql/queries/definition.ts
+- [X] T022 [US1] Write unit test for Definition DataLoader in apps/api/tests/graphql/dataloaders/definition.test.ts
+- [X] T023 [US1] Write integration test for definition query in apps/api/tests/graphql/queries/definition.test.ts
 
 **Checkpoint**: US1 complete - Can query single definition with nested relationships
 
