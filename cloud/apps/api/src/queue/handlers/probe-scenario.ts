@@ -21,8 +21,97 @@ const log = createLogger('queue:probe-scenario');
 // Retry limit from job options (default 3)
 const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['probe_scenario'].retryLimit ?? 3;
 
-// Python worker path (relative to cloud/ directory)
+// Python worker paths (relative to cloud/ directory)
 const PROBE_WORKER_PATH = 'workers/probe.py';
+const HEALTH_CHECK_PATH = 'workers/health_check.py';
+
+// Health check cache - verified once per process lifetime
+let healthCheckDone = false;
+let healthCheckPromise: Promise<void> | null = null;
+
+/**
+ * Health check output structure.
+ */
+type HealthCheckOutput = {
+  success: boolean;
+  health?: {
+    pythonVersion: string;
+    packages: Record<string, string>;
+    apiKeys: Record<string, boolean>;
+    warnings: string[];
+  };
+  error?: { message: string; code: string; retryable: boolean };
+};
+
+/**
+ * Run health check on first probe job (lazy initialization).
+ * Caches result to avoid repeated checks.
+ */
+async function ensureHealthCheck(): Promise<void> {
+  // Already verified
+  if (healthCheckDone) {
+    return;
+  }
+
+  // Health check in progress - wait for it
+  if (healthCheckPromise) {
+    return healthCheckPromise;
+  }
+
+  // Start health check
+  healthCheckPromise = (async () => {
+    log.info('Running Python worker health check');
+
+    const result = await spawnPython<Record<string, never>, HealthCheckOutput>(
+      HEALTH_CHECK_PATH,
+      {},
+      { cwd: path.resolve(process.cwd(), '..'), timeout: 10000 }
+    );
+
+    if (!result.success) {
+      log.error({ error: result.error, stderr: result.stderr }, 'Health check failed');
+      throw new Error(`Python health check failed: ${result.error}`);
+    }
+
+    const output = result.data;
+    if (!output.success) {
+      log.error({ error: output.error }, 'Health check returned error');
+      throw new Error(`Python health check error: ${output.error?.message}`);
+    }
+
+    // Log health status
+    const health = output.health;
+    if (health) {
+      log.info(
+        {
+          pythonVersion: health.pythonVersion,
+          packages: Object.keys(health.packages).length,
+          apiKeys: Object.fromEntries(
+            Object.entries(health.apiKeys).filter(([, v]) => v)
+          ),
+        },
+        'Python worker health check passed'
+      );
+
+      // Log warnings
+      for (const warning of health.warnings) {
+        log.warn({ warning }, 'Python worker health warning');
+      }
+    }
+
+    healthCheckDone = true;
+  })();
+
+  return healthCheckPromise;
+}
+
+/**
+ * Reset health check cache (for testing).
+ */
+export function resetHealthCheck(): void {
+  healthCheckDone = false;
+  healthCheckPromise = null;
+}
 
 /**
  * Python worker input structure.
@@ -196,6 +285,9 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
           log.info({ jobId, runId }, 'Deferring job - run is paused');
           throw new Error('RUN_PAUSED: Job deferred because run is paused');
         }
+
+        // Run health check on first job (lazy initialization)
+        await ensureHealthCheck();
 
         // Fetch scenario and definition from database
         const scenario = await fetchScenario(scenarioId);

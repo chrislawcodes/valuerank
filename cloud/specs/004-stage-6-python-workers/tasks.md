@@ -100,10 +100,10 @@
 
 ### Integration Tests
 
-- [ ] T033 [US2] Create `cloud/apps/api/tests/queue/probe-scenario.integration.test.ts`
-- [ ] T034 [P] [US2] Add test: probe job creates transcript with correct fields
-- [ ] T035 [P] [US2] Add test: progress.completed increments after transcript save
-- [ ] T036 [P] [US2] Add test: concurrent job completions don't cause race conditions
+- [X] T033 [US2] Create `cloud/apps/api/tests/queue/probe-scenario.integration.test.ts`
+- [X] T034 [P] [US2] Add test: probe job creates transcript with correct fields
+- [X] T035 [P] [US2] Add test: progress.completed increments after transcript save
+- [X] T036 [P] [US2] Add test: concurrent job completions don't cause race conditions
 
 **Checkpoint**: User Story 2 complete - end-to-end probe jobs save transcripts to database
 
@@ -117,17 +117,17 @@
 
 ### Python Error Handling
 
-- [ ] T037 [US3] Add retry classification to `cloud/workers/common/errors.py` (RATE_LIMIT, AUTH_ERROR, TIMEOUT, etc.)
-- [ ] T038 [US3] Update probe.py error output to include `retryable: boolean` flag
-- [ ] T039 [US3] Add stderr capture for detailed error context in probe.py
+- [X] T037 [US3] Add retry classification to `cloud/workers/common/errors.py` (RATE_LIMIT, AUTH_ERROR, TIMEOUT, etc.)
+- [X] T038 [US3] Update probe.py error output to include `retryable: boolean` flag
+- [X] T039 [US3] Add stderr capture for detailed error context in probe.py
 
 ### TypeScript Error Handling
 
-- [ ] T040 [US3] Update `cloud/apps/api/src/queue/handlers/probe-scenario.ts` to use Python `retryable` flag
-- [ ] T041 [US3] Add stderr logging when Python process fails in probe-scenario.ts
-- [ ] T042 [US3] Add test: rate limit errors (429) trigger retry
-- [ ] T043 [P] [US3] Add test: auth errors (401/403) fail immediately
-- [ ] T044 [P] [US3] Add test: Python crash captured and logged
+- [X] T040 [US3] Update `cloud/apps/api/src/queue/handlers/probe-scenario.ts` to use Python `retryable` flag
+- [X] T041 [US3] Add stderr logging when Python process fails in probe-scenario.ts
+- [X] T042 [US3] Add test: rate limit errors (429) trigger retry
+- [X] T043 [P] [US3] Add test: auth errors (401/403) fail immediately
+- [X] T044 [P] [US3] Add test: Python crash captured and logged
 
 **Checkpoint**: User Story 3 complete - robust error handling with retry classification
 
@@ -139,11 +139,11 @@
 
 **Independent Test**: Start API server, check logs for worker health check results
 
-- [ ] T045 [US4] Create `cloud/workers/health_check.py` with Python version and package verification
-- [ ] T046 [US4] Add API key presence check (warning only) to health_check.py
-- [ ] T047 [US4] Add lazy health check call on first probe job in probe-scenario.ts
-- [ ] T048 [US4] Cache health check result to avoid repeated verification
-- [ ] T049 [US4] Create `cloud/workers/tests/test_health_check.py` with environment verification tests
+- [X] T045 [US4] Create `cloud/workers/health_check.py` with Python version and package verification
+- [X] T046 [US4] Add API key presence check (warning only) to health_check.py
+- [X] T047 [US4] Add lazy health check call on first probe job in probe-scenario.ts
+- [X] T048 [US4] Cache health check result to avoid repeated verification
+- [X] T049 [US4] Create `cloud/workers/tests/test_health_check.py` with environment verification tests
 
 **Checkpoint**: User Story 4 complete - health check verifies Python environment
 
@@ -155,11 +155,11 @@
 
 **Independent Test**: Start run with models from 3 different providers, verify all complete
 
-- [ ] T050 [US5] Add provider auto-detection to probe.py based on model ID
-- [ ] T051 [US5] Add end-to-end test with multiple providers (mocked) in test_probe.py
-- [ ] T052 [US5] Add clear error message for unsupported provider
-- [ ] T053 [US5] Add clear error message for missing API key
-- [ ] T054 [P] [US5] Add integration test: multi-provider run in probe-scenario.integration.test.ts
+- [X] T050 [US5] Add provider auto-detection to probe.py based on model ID
+- [X] T051 [US5] Add end-to-end test with multiple providers (mocked) in test_probe.py
+- [X] T052 [US5] Add clear error message for unsupported provider
+- [X] T053 [US5] Add clear error message for missing API key
+- [X] T054 [P] [US5] Add integration test: multi-provider run in probe-scenario.integration.test.ts
 
 **Checkpoint**: User Story 5 complete - all 6 providers functional
 
@@ -171,11 +171,11 @@
 
 **Independent Test**: Complete probe job, verify transcript includes model_version field
 
-- [ ] T055 [US6] Extract model version from OpenAI API response in llm_adapters.py
-- [ ] T056 [P] [US6] Extract model version from Anthropic API response (if available)
-- [ ] T057 [P] [US6] Extract model version from Google API response (if available)
-- [ ] T058 [US6] Pass model_version through probe.py output to transcript record
-- [ ] T059 [US6] Add test: model_version captured when available, null when not
+- [X] T055 [US6] Extract model version from OpenAI API response in llm_adapters.py
+- [X] T056 [P] [US6] Extract model version from Anthropic API response (if available)
+- [X] T057 [P] [US6] Extract model version from Google API response (if available)
+- [X] T058 [US6] Pass model_version through probe.py output to transcript record
+- [X] T059 [US6] Add test: model_version captured when available, null when not
 
 **Checkpoint**: User Story 6 complete - model version tracking functional
 
@@ -187,10 +187,10 @@
 
 **Independent Test**: Complete a run, verify analyze_basic job queued and stub completes
 
-- [ ] T060 [US7] Create `cloud/workers/analyze_basic.py` stub (returns placeholder success)
-- [ ] T061 [US7] Update analyze-basic handler to call spawnPython in `cloud/apps/api/src/queue/handlers/analyze-basic.ts`
-- [ ] T062 [US7] Add test: analyze_basic job queued when run completes
-- [ ] T063 [US7] Add test: stub returns success, analysis_results record created with placeholder
+- [X] T060 [US7] Create `cloud/workers/analyze_basic.py` stub (returns placeholder success)
+- [X] T061 [US7] Update analyze-basic handler to call spawnPython in `cloud/apps/api/src/queue/handlers/analyze-basic.ts`
+- [X] T062 [US7] Add test: analyze_basic job queued when run completes
+- [X] T063 [US7] Add test: stub returns success, analysis_results record created with placeholder
 
 **Checkpoint**: User Story 7 complete - analysis stub in place for Stage 11
 

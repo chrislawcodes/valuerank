@@ -98,7 +98,12 @@ class TestOpenAIAdapter:
 
     def test_missing_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test error when API key is missing."""
+        # Clear the environment and reload config
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        from common.config import reload_config
+        reload_config()
+
+        # Create adapter without key
         adapter = OpenAIAdapter(api_key=None)
 
         with pytest.raises(LLMError) as exc_info:

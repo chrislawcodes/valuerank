@@ -1,7 +1,7 @@
 /**
  * Analyze Handler Tests
  *
- * Tests the analyze:basic and analyze:deep stub handlers.
+ * Tests the analyze:basic and analyze:deep handlers.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -12,6 +12,36 @@ import type { AnalyzeBasicJobData, AnalyzeDeepJobData } from '../../../src/queue
 
 // Speed up tests by reducing stub delay
 vi.stubEnv('STUB_JOB_DELAY_MS', '10');
+
+// Mock the spawn module for analyze-basic (which now uses Python)
+vi.mock('../../../src/queue/spawn.js', () => ({
+  spawnPython: vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      success: true,
+      analysis: {
+        status: 'STUB',
+        message: 'Full analysis will be implemented in Stage 11',
+        transcriptCount: 1,
+        completedAt: '2024-01-01T00:00:01.000Z',
+      },
+    },
+    stderr: '',
+  }),
+}));
+
+// Mock the database
+vi.mock('@valuerank/db', () => ({
+  db: {
+    analysisResult: {
+      create: vi.fn().mockResolvedValue({ id: 'mock-result-id' }),
+    },
+  },
+  Prisma: {
+    JsonNull: null,
+    InputJsonValue: {},
+  },
+}));
 
 describe('Analyze Basic Handler', () => {
   let handler: PgBoss.WorkHandler<AnalyzeBasicJobData>;
