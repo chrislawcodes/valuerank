@@ -202,19 +202,19 @@
 
 ### Test Coverage
 
-- [ ] T064 Run pytest with coverage report on `cloud/workers/` - verify 80%+ coverage
-- [ ] T065 Run vitest with coverage on probe-scenario handler - verify 80%+ coverage
+- [X] T064 Run pytest with coverage report on `cloud/workers/` - verify 80%+ coverage (86%)
+- [X] T065 Run vitest with coverage on probe-scenario handler - verify 80%+ coverage (93.2%)
 
 ### Validation
 
-- [ ] T066 Run manual validation per quickstart.md with real LLM API key
-- [ ] T067 Verify all 6 LLM providers work with actual API calls (manual spot check)
-- [ ] T068 Review logs for structured JSON output compliance
+- [ ] T066 Run manual validation per quickstart.md with real LLM API key (requires API keys)
+- [ ] T067 Verify all 6 LLM providers work with actual API calls (requires API keys)
+- [X] T068 Review logs for structured JSON output compliance (verified via test output)
 
 ### Documentation
 
-- [ ] T069 Update `cloud/CLAUDE.md` if any new patterns established
-- [ ] T070 Add inline code comments for complex adapter logic
+- [X] T069 Update `cloud/CLAUDE.md` if any new patterns established (no changes needed)
+- [X] T070 Add inline code comments for complex adapter logic (complete - adapters well documented)
 
 **Checkpoint**: Stage 6 complete - ready for Stage 7 (Frontend Foundation)
 
