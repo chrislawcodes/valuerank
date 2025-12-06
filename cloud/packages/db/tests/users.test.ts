@@ -8,10 +8,13 @@ import {
   createUser,
   getUserById,
   getUserByEmail,
+  getUserWithApiKeys,
+  updateUser,
   createApiKey,
   getApiKeyByPrefix,
   listApiKeysForUser,
   deleteApiKey,
+  deleteAllApiKeysForUser,
 } from '../src/queries/users.js';
 
 const prisma = new PrismaClient();
@@ -133,6 +136,64 @@ skipIfNoDb('User Queries (Integration)', () => {
       const result = await getUserByEmail('CASE@EXAMPLE.COM');
 
       expect(result).not.toBeNull();
+    });
+  });
+
+  describe('getUserWithApiKeys', () => {
+    it('returns user with their API keys', async () => {
+      const user = await createUser({
+        email: 'withkeys@example.com',
+        passwordHash: 'hash',
+      });
+
+      await createApiKey({
+        userId: user.id,
+        name: 'Key 1',
+        keyHash: 'hash1',
+        keyPrefix: 'vr_k1_',
+      });
+
+      const result = await getUserWithApiKeys(user.id);
+
+      expect(result.id).toBe(user.id);
+      expect(result.apiKeys).toHaveLength(1);
+      expect(result.apiKeys[0].name).toBe('Key 1');
+    });
+
+    it('throws NotFoundError when user not exists', async () => {
+      await expect(getUserWithApiKeys('non-existent')).rejects.toThrow(
+        'User not found'
+      );
+    });
+  });
+
+  describe('updateUser', () => {
+    it('updates user name', async () => {
+      const user = await createUser({
+        email: 'update@example.com',
+        passwordHash: 'hash',
+      });
+
+      const result = await updateUser(user.id, { name: 'New Name' });
+
+      expect(result.name).toBe('New Name');
+    });
+
+    it('updates password hash', async () => {
+      const user = await createUser({
+        email: 'updatepw@example.com',
+        passwordHash: 'old_hash',
+      });
+
+      const result = await updateUser(user.id, { passwordHash: 'new_hash' });
+
+      expect(result.passwordHash).toBe('new_hash');
+    });
+
+    it('throws NotFoundError for non-existent user', async () => {
+      await expect(updateUser('non-existent', { name: 'Test' })).rejects.toThrow(
+        'User not found'
+      );
     });
   });
 
@@ -262,6 +323,124 @@ skipIfNoDb('User Queries (Integration)', () => {
       // API key should also be deleted
       const result = await getApiKeyByPrefix('vr_cas_');
       expect(result).toBeNull();
+    });
+
+    it('throws on missing user ID', async () => {
+      await expect(
+        createApiKey({
+          userId: '',
+          name: 'Test',
+          keyHash: 'hash',
+          keyPrefix: 'vr_',
+        })
+      ).rejects.toThrow('User ID is required');
+    });
+
+    it('throws on missing key name', async () => {
+      const user = await createUser({
+        email: 'keyname@example.com',
+        passwordHash: 'hash',
+      });
+
+      await expect(
+        createApiKey({
+          userId: user.id,
+          name: '',
+          keyHash: 'hash',
+          keyPrefix: 'vr_',
+        })
+      ).rejects.toThrow('API key name is required');
+    });
+
+    it('throws on missing key hash', async () => {
+      const user = await createUser({
+        email: 'keyhash@example.com',
+        passwordHash: 'hash',
+      });
+
+      await expect(
+        createApiKey({
+          userId: user.id,
+          name: 'Test',
+          keyHash: '',
+          keyPrefix: 'vr_',
+        })
+      ).rejects.toThrow('Key hash is required');
+    });
+
+    it('throws on missing key prefix', async () => {
+      const user = await createUser({
+        email: 'keyprefix@example.com',
+        passwordHash: 'hash',
+      });
+
+      await expect(
+        createApiKey({
+          userId: user.id,
+          name: 'Test',
+          keyHash: 'hash',
+          keyPrefix: '',
+        })
+      ).rejects.toThrow('Key prefix is required');
+    });
+
+    it('creates API key with expiration', async () => {
+      const user = await createUser({
+        email: 'expires@example.com',
+        passwordHash: 'hash',
+      });
+
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 1 day
+
+      const result = await createApiKey({
+        userId: user.id,
+        name: 'Expiring Key',
+        keyHash: 'hash',
+        keyPrefix: 'vr_exp_',
+        expiresAt,
+      });
+
+      expect(result.expiresAt).toEqual(expiresAt);
+    });
+  });
+
+  describe('deleteAllApiKeysForUser', () => {
+    it('deletes all API keys for a user', async () => {
+      const user = await createUser({
+        email: 'deleteall@example.com',
+        passwordHash: 'hash',
+      });
+
+      await createApiKey({
+        userId: user.id,
+        name: 'Key 1',
+        keyHash: 'hash1',
+        keyPrefix: 'vr_d1_',
+      });
+      await createApiKey({
+        userId: user.id,
+        name: 'Key 2',
+        keyHash: 'hash2',
+        keyPrefix: 'vr_d2_',
+      });
+
+      const result = await deleteAllApiKeysForUser(user.id);
+
+      expect(result.count).toBe(2);
+
+      const keys = await listApiKeysForUser(user.id);
+      expect(keys.length).toBe(0);
+    });
+
+    it('returns zero count when user has no keys', async () => {
+      const user = await createUser({
+        email: 'nokeys@example.com',
+        passwordHash: 'hash',
+      });
+
+      const result = await deleteAllApiKeysForUser(user.id);
+
+      expect(result.count).toBe(0);
     });
   });
 });
