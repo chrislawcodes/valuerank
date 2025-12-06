@@ -28,12 +28,12 @@
 
 This phase creates the shared auth types, error classes, and service foundations that all user stories depend on.
 
-- [ ] T004 Create `packages/shared/src/errors.ts` - Add AuthenticationError class extending AppError (401 status)
-- [ ] T005 [P] Export AuthenticationError from `packages/shared/src/index.ts`
-- [ ] T006 [P] Create `apps/api/src/auth/types.ts` - JWT payload, auth context, login request/response types
-- [ ] T007 Create `apps/api/src/auth/services.ts` - Password hashing (bcrypt), JWT sign/verify utilities
-- [ ] T008 Create `apps/api/src/auth/api-keys.ts` - Key generation (vr_ prefix), hash generation (SHA-256)
-- [ ] T009 Create `apps/api/src/auth/index.ts` - Re-export public auth API
+- [X] T004 Create `packages/shared/src/errors.ts` - Add AuthenticationError class extending AppError (401 status)
+- [X] T005 [P] Export AuthenticationError from `packages/shared/src/index.ts`
+- [X] T006 [P] Create `apps/api/src/auth/types.ts` - JWT payload, auth context, login request/response types
+- [X] T007 Create `apps/api/src/auth/services.ts` - Password hashing (bcrypt), JWT sign/verify utilities
+- [X] T008 Create `apps/api/src/auth/api-keys.ts` - Key generation (vr_ prefix), hash generation (SHA-256)
+- [X] T009 Create `apps/api/src/auth/index.ts` - Re-export public auth API
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 

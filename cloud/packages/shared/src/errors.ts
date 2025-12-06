@@ -21,3 +21,10 @@ export class ValidationError extends AppError {
     super(message, 'VALIDATION_ERROR', 400, { details });
   }
 }
+
+export class AuthenticationError extends AppError {
+  constructor(message: string = 'Unauthorized', context?: Record<string, unknown>) {
+    super(message, 'UNAUTHORIZED', 401, context);
+    this.name = 'AuthenticationError';
+  }
+}
