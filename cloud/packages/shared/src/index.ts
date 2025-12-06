@@ -5,4 +5,7 @@ export {
   NotFoundError,
   ValidationError,
   AuthenticationError,
+  QueueError,
+  JobValidationError,
+  RunStateError,
 } from './errors.js';

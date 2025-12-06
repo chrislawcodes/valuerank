@@ -31,28 +31,28 @@
 
 ### Queue Core
 
-- [ ] T004 Create queue types file: `apps/api/src/queue/types.ts`
+- [X] T004 Create queue types file: `apps/api/src/queue/types.ts`
   - Define JobType union type
   - Define ProbeScenarioJobData interface
   - Define AnalyzeBasicJobData interface
   - Define AnalyzeDeepJobData interface
   - Define job options interfaces
 
-- [ ] T005 Create PgBoss initialization: `apps/api/src/queue/boss.ts`
+- [X] T005 Create PgBoss initialization: `apps/api/src/queue/boss.ts`
   - Initialize PgBoss with DATABASE_URL
   - Configure maintenance interval (30s)
   - Configure archive retention (24h)
   - Export singleton instance
   - Add startup/shutdown hooks
 
-- [ ] T006 Create queue configuration: `apps/api/src/config.ts` (extend existing)
+- [X] T006 Create queue configuration: `apps/api/src/config.ts` (extend existing)
   - Add PGBOSS_MAINTENANCE_INTERVAL
   - Add PGBOSS_ARCHIVE_AFTER
   - Add QUEUE_WORKER_CONCURRENCY
 
 ### Python Spawn Utility
 
-- [ ] T007 Create spawnPython utility: `apps/api/src/queue/spawn.ts`
+- [X] T007 Create spawnPython utility: `apps/api/src/queue/spawn.ts`
   - Implement spawnPython<T> generic function
   - JSON stdin/stdout communication
   - Timeout handling
@@ -61,62 +61,62 @@
 
 ### Stub Handlers
 
-- [ ] T008 Create handler index: `apps/api/src/queue/handlers/index.ts`
+- [X] T008 Create handler index: `apps/api/src/queue/handlers/index.ts`
   - Export handler registration function
   - Define handler interface
 
-- [ ] T009 [P] Create probe:scenario stub handler: `apps/api/src/queue/handlers/probe-scenario.ts`
+- [X] T009 [P] Create probe:scenario stub handler: `apps/api/src/queue/handlers/probe-scenario.ts`
   - Log job receipt
   - Simulate work with configurable delay
   - Return mock transcript data
   - Handle test failure injection
 
-- [ ] T010 [P] Create analyze:basic stub handler: `apps/api/src/queue/handlers/analyze-basic.ts`
+- [X] T010 [P] Create analyze:basic stub handler: `apps/api/src/queue/handlers/analyze-basic.ts`
   - Log job receipt
   - Return mock analysis results
 
-- [ ] T011 [P] Create analyze:deep stub handler: `apps/api/src/queue/handlers/analyze-deep.ts`
+- [X] T011 [P] Create analyze:deep stub handler: `apps/api/src/queue/handlers/analyze-deep.ts`
   - Log job receipt
   - Return mock deep analysis results
 
 ### Orchestrator
 
-- [ ] T012 Create orchestrator: `apps/api/src/queue/orchestrator.ts`
+- [X] T012 Create orchestrator: `apps/api/src/queue/orchestrator.ts`
   - Subscribe to all job types
   - Configure concurrency per type
   - Handle graceful shutdown
   - Add structured logging for job lifecycle
 
-- [ ] T013 Create queue module index: `apps/api/src/queue/index.ts`
+- [X] T013 Create queue module index: `apps/api/src/queue/index.ts`
   - Export public API (boss, orchestrator, types)
 
 ### Error Classes
 
-- [ ] T014 Add queue error classes to: `apps/api/src/errors.ts` or `packages/shared/src/errors.ts`
+- [X] T014 Add queue error classes to: `apps/api/src/errors.ts` or `packages/shared/src/errors.ts`
   - QueueError extends AppError
   - JobValidationError extends AppError
   - RunStateError extends AppError
 
 ### GraphQL Foundation Types
 
-- [ ] T015 Create QueueStatus GraphQL type: `apps/api/src/graphql/types/queue-status.ts`
+- [X] T015 Create QueueStatus GraphQL type: `apps/api/src/graphql/types/queue-status.ts`
   - QueueStatus type
   - JobTypeStatus type
   - Build with Pothos
 
-- [ ] T016 [P] Create RunProgress GraphQL type: `apps/api/src/graphql/types/run-progress.ts`
+- [X] T016 [P] Create RunProgress GraphQL type: `apps/api/src/graphql/types/run-progress.ts`
   - RunProgress type
   - TaskResult type
   - TaskStatus enum
   - Extend Run type with progress field
 
-- [ ] T017 [P] Create RunPriority enum: `apps/api/src/graphql/types/enums.ts` (extend existing)
+- [X] T017 [P] Create RunPriority enum: `apps/api/src/graphql/types/enums.ts` (extend existing)
   - Add RunPriority enum (LOW, NORMAL, HIGH)
 
-- [ ] T018 Create StartRunInput type: `apps/api/src/graphql/types/inputs/start-run.ts`
+- [X] T018 Create StartRunInput type: `apps/api/src/graphql/types/inputs/start-run.ts`
   - definitionId, models, samplePercentage, sampleSeed, priority, experimentId
 
-- [ ] T019 Update GraphQL types index: `apps/api/src/graphql/types/index.ts`
+- [X] T019 Update GraphQL types index: `apps/api/src/graphql/types/index.ts`
   - Export new types
 
 **Checkpoint**: Foundation ready - user story implementation can now begin

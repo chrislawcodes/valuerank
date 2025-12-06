@@ -13,3 +13,10 @@ builder.enumType('AnalysisStatus', {
   values: ['CURRENT', 'SUPERSEDED'] as const,
   description: 'Status of an analysis result',
 });
+
+// RunPriority enum - priority level for runs
+// Note: Not exported as other enums - referenced by string name in input types
+builder.enumType('RunPriority', {
+  values: ['LOW', 'NORMAL', 'HIGH'] as const,
+  description: 'Priority level for run execution (affects job queue ordering)',
+});

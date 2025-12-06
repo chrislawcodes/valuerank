@@ -28,3 +28,30 @@ export class AuthenticationError extends AppError {
     this.name = 'AuthenticationError';
   }
 }
+
+// Queue-specific errors
+export class QueueError extends AppError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, 'QUEUE_ERROR', 500, context);
+    this.name = 'QueueError';
+  }
+}
+
+export class JobValidationError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, 'JOB_VALIDATION_ERROR', 400, { details });
+    this.name = 'JobValidationError';
+  }
+}
+
+export class RunStateError extends AppError {
+  constructor(runId: string, currentState: string, action: string) {
+    super(
+      `Cannot ${action} run in ${currentState} state`,
+      'RUN_STATE_ERROR',
+      400,
+      { runId, currentState, action }
+    );
+    this.name = 'RunStateError';
+  }
+}

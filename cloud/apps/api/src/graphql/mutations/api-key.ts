@@ -111,7 +111,7 @@ builder.mutationField('revokeApiKey', (t) =>
       }
 
       const userId = ctx.user.id;
-      const apiKeyId = args.id;
+      const apiKeyId = String(args.id);
 
       ctx.log.debug({ userId, apiKeyId }, 'Revoking API key');
 

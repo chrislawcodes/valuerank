@@ -13,3 +13,10 @@ import './run.js';
 import './scenario.js';
 import './transcript.js';
 import './experiment.js';
+
+// Queue-related types
+import './queue-status.js';
+import './run-progress.js';
+
+// Input types
+import './inputs/start-run.js';
