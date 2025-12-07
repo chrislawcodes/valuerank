@@ -5,8 +5,18 @@
 
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { db } from '../client.js';
-import { loadDefinitionContent } from '../schema-migration.js';
-import type { DefinitionContent, Dimension } from '../types.js';
+import {
+  loadDefinitionContent,
+  parseStoredContent,
+  mergeContent,
+  getContentOverrides,
+} from '../schema-migration.js';
+import type {
+  DefinitionContent,
+  DefinitionContentStored,
+  DefinitionOverrides,
+  Dimension,
+} from '../types.js';
 import type { Definition, Prisma } from '@prisma/client';
 
 const log = createLogger('db:definitions');
@@ -39,6 +49,21 @@ export type DefinitionFilters = {
 
 export type DefinitionWithContent = Definition & {
   parsedContent: DefinitionContent;
+};
+
+/**
+ * Definition with fully resolved content (inheritance applied)
+ * and information about what's locally overridden.
+ */
+export type DefinitionWithResolvedContent = Definition & {
+  /** Fully resolved content after walking ancestor chain */
+  resolvedContent: DefinitionContent;
+  /** Raw stored content (may have undefined fields for v2) */
+  localContent: DefinitionContentStored;
+  /** Which fields are locally overridden vs inherited */
+  overrides: DefinitionOverrides;
+  /** Whether this definition has a parent (is a fork) */
+  isForked: boolean;
 };
 
 export type DefinitionTreeNode = {
@@ -136,6 +161,83 @@ export async function getDefinitionWithContent(id: string): Promise<DefinitionWi
   return {
     ...definition,
     parsedContent,
+  };
+}
+
+/**
+ * Resolve definition content by walking the ancestor chain and merging.
+ * Returns fully resolved content plus information about local overrides.
+ *
+ * Resolution algorithm:
+ * 1. Fetch ancestors from root to current (ordered by creation date)
+ * 2. Start with root's content as base
+ * 3. For each descendant, merge its content (child overrides parent)
+ * 4. Return final resolved content for the target definition
+ */
+export async function resolveDefinitionContent(
+  id: string
+): Promise<DefinitionWithResolvedContent> {
+  log.debug({ id }, 'Resolving definition content with inheritance');
+
+  // Fetch the definition
+  const definition = await getDefinitionById(id);
+  const localContent = parseStoredContent(definition.content);
+  const overrides = getContentOverrides(localContent);
+  const isForked = definition.parentId !== null;
+
+  // If no parent, this is a root definition - no inheritance needed
+  if (!isForked) {
+    const resolvedContent = loadDefinitionContent(definition.content);
+    return {
+      ...definition,
+      resolvedContent,
+      localContent,
+      overrides,
+      isForked,
+    };
+  }
+
+  // Fetch ancestors (ordered from oldest to newest, root first)
+  const ancestors = await getAncestors(id);
+
+  if (ancestors.length === 0) {
+    // Parent was deleted or orphaned - treat as root
+    log.warn({ id }, 'Definition has parentId but no ancestors found');
+    const resolvedContent = loadDefinitionContent(definition.content);
+    return {
+      ...definition,
+      resolvedContent,
+      localContent,
+      overrides,
+      isForked,
+    };
+  }
+
+  // Start with root ancestor's content
+  const root = ancestors[0]!;
+  let resolvedContent = loadDefinitionContent(root.content);
+
+  // Merge each ancestor's content in order (oldest to newest)
+  for (let i = 1; i < ancestors.length; i++) {
+    const ancestor = ancestors[i]!;
+    const ancestorContent = parseStoredContent(ancestor.content);
+    resolvedContent = mergeContent(ancestorContent, resolvedContent);
+  }
+
+  // Finally, merge the current definition's content
+  resolvedContent = mergeContent(localContent, resolvedContent);
+
+  log.debug(
+    { id, ancestorCount: ancestors.length, overrides },
+    'Content resolved with inheritance'
+  );
+
+  return {
+    ...definition,
+    resolvedContent,
+    localContent,
+    overrides,
+    isForked,
   };
 }
 

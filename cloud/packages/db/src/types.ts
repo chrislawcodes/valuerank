@@ -13,12 +13,59 @@ export type Dimension = {
   description?: string;
 };
 
-export type DefinitionContent = {
+/**
+ * Schema v1: All fields are required (root definitions or legacy).
+ * This is also the "resolved" content type after inheritance is applied.
+ */
+export type DefinitionContentV1 = {
   schema_version: 1;
   preamble: string;
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
+};
+
+/**
+ * Schema v2: Sparse storage for forked definitions.
+ * Fields are optional - undefined/missing = inherit from parent.
+ * Root definitions should still have all fields present.
+ */
+export type DefinitionContentV2 = {
+  schema_version: 2;
+  preamble?: string;
+  template?: string;
+  dimensions?: Dimension[];
+  matching_rules?: string;
+};
+
+/**
+ * Union type for all stored content versions.
+ * Used when reading raw content from database.
+ */
+export type DefinitionContentStored = DefinitionContentV1 | DefinitionContentV2;
+
+/**
+ * Resolved content after inheritance chain is applied.
+ * All fields are guaranteed to be present.
+ * This is the type consumers should use.
+ */
+export type DefinitionContent = {
+  schema_version: 1 | 2;
+  preamble: string;
+  template: string;
+  dimensions: Dimension[];
+  matching_rules?: string;
+};
+
+/**
+ * Indicates which fields are locally overridden vs inherited.
+ * Used by UI to show inheritance indicators.
+ */
+export type DefinitionOverrides = {
+  preamble: boolean;
+  template: boolean;
+  dimensions: boolean;
+  matching_rules: boolean;
 };
 
 export type DefinitionContentV0 = {

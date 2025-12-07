@@ -1,11 +1,39 @@
 import { builder } from '../builder.js';
-import { db, type Prisma } from '@valuerank/db';
+import {
+  db,
+  resolveDefinitionContent,
+  parseStoredContent,
+  getContentOverrides,
+  type Prisma,
+  type DefinitionOverrides,
+} from '@valuerank/db';
 import { DefinitionRef, RunRef, ScenarioRef, TagRef } from './refs.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
 
 const DEFAULT_MAX_DEPTH = 10;
+
+// GraphQL type for inheritance override indicators
+const DefinitionOverridesRef = builder.objectRef<DefinitionOverrides>('DefinitionOverrides');
+
+builder.objectType(DefinitionOverridesRef, {
+  description: 'Indicates which content fields are locally overridden vs inherited from parent',
+  fields: (t) => ({
+    preamble: t.exposeBoolean('preamble', {
+      description: 'True if preamble is locally defined, false if inherited',
+    }),
+    template: t.exposeBoolean('template', {
+      description: 'True if template is locally defined, false if inherited',
+    }),
+    dimensions: t.exposeBoolean('dimensions', {
+      description: 'True if dimensions are locally defined, false if inherited',
+    }),
+    matchingRules: t.exposeBoolean('matching_rules', {
+      description: 'True if matching rules are locally defined, false if inherited',
+    }),
+  }),
+});
 
 // Type for raw query results - content comes as unknown
 type RawDefinitionRow = {
@@ -110,6 +138,128 @@ builder.objectType(DefinitionRef, {
       description: 'Tags assigned to this definition',
       resolve: async (definition, _args, ctx) => {
         return ctx.loaders.tagsByDefinition.load(definition.id);
+      },
+    }),
+
+    // =========================================================================
+    // INHERITANCE FIELDS (Phase 12)
+    // =========================================================================
+
+    // Computed: isForked - whether this definition has a parent
+    isForked: t.field({
+      type: 'Boolean',
+      description: 'Whether this definition is a fork (has a parent)',
+      resolve: (definition) => definition.parentId !== null,
+    }),
+
+    // Computed: resolvedContent - full content with inheritance applied
+    resolvedContent: t.field({
+      type: 'JSON',
+      description: 'Fully resolved content after walking ancestor chain. All fields are guaranteed present.',
+      resolve: async (definition) => {
+        const resolved = await resolveDefinitionContent(definition.id);
+        return resolved.resolvedContent;
+      },
+    }),
+
+    // Computed: localContent - raw stored content showing only overrides
+    localContent: t.field({
+      type: 'JSON',
+      description: 'Raw stored content. For forked definitions, only locally overridden fields are present.',
+      resolve: (definition) => {
+        return parseStoredContent(definition.content);
+      },
+    }),
+
+    // Computed: overrides - which fields are locally overridden
+    overrides: t.field({
+      type: DefinitionOverridesRef,
+      description: 'Indicates which content fields are locally defined vs inherited from parent',
+      resolve: (definition) => {
+        const stored = parseStoredContent(definition.content);
+        return getContentOverrides(stored);
+      },
+    }),
+
+    // Computed: inheritedTags - tags from all ancestors
+    inheritedTags: t.field({
+      type: [TagRef],
+      description: 'Tags inherited from all ancestor definitions (union of ancestor tags)',
+      resolve: async (definition, _args, ctx) => {
+        if (!definition.parentId) return [];
+
+        // Get all ancestors using recursive CTE
+        const ancestors = await db.$queryRaw<{ id: string }[]>`
+          WITH RECURSIVE ancestry AS (
+            SELECT id, parent_id FROM definitions WHERE id = ${definition.id} AND deleted_at IS NULL
+            UNION ALL
+            SELECT d.id, d.parent_id FROM definitions d
+            JOIN ancestry a ON d.id = a.parent_id
+            WHERE a.parent_id IS NOT NULL AND d.deleted_at IS NULL
+          )
+          SELECT id FROM ancestry WHERE id != ${definition.id}
+        `;
+
+        if (ancestors.length === 0) return [];
+
+        // Get unique tags from all ancestors
+        const ancestorIds = ancestors.map((a) => a.id);
+        const inheritedTags = await db.tag.findMany({
+          where: {
+            definitions: {
+              some: {
+                definitionId: { in: ancestorIds },
+                deletedAt: null,
+              },
+            },
+          },
+          distinct: ['id'],
+        });
+
+        return inheritedTags;
+      },
+    }),
+
+    // Computed: allTags - local tags + inherited tags (deduplicated)
+    allTags: t.field({
+      type: [TagRef],
+      description: 'All tags including both local and inherited (deduplicated)',
+      resolve: async (definition, _args, ctx) => {
+        // Get local tags
+        const localTags = await ctx.loaders.tagsByDefinition.load(definition.id);
+        const localTagIds = new Set(localTags.map((t) => t.id));
+
+        if (!definition.parentId) return localTags;
+
+        // Get inherited tags
+        const ancestors = await db.$queryRaw<{ id: string }[]>`
+          WITH RECURSIVE ancestry AS (
+            SELECT id, parent_id FROM definitions WHERE id = ${definition.id} AND deleted_at IS NULL
+            UNION ALL
+            SELECT d.id, d.parent_id FROM definitions d
+            JOIN ancestry a ON d.id = a.parent_id
+            WHERE a.parent_id IS NOT NULL AND d.deleted_at IS NULL
+          )
+          SELECT id FROM ancestry WHERE id != ${definition.id}
+        `;
+
+        if (ancestors.length === 0) return localTags;
+
+        const ancestorIds = ancestors.map((a) => a.id);
+        const inheritedTags = await db.tag.findMany({
+          where: {
+            id: { notIn: Array.from(localTagIds) }, // Exclude local tags
+            definitions: {
+              some: {
+                definitionId: { in: ancestorIds },
+                deletedAt: null,
+              },
+            },
+          },
+          distinct: ['id'],
+        });
+
+        return [...localTags, ...inheritedTags];
       },
     }),
 
