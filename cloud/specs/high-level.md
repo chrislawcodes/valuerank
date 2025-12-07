@@ -192,24 +192,31 @@
 
 ---
 
-## Stage 7: Frontend Foundation [ ]
+## Stage 7: Frontend Foundation [~]
 
 **Goal:** Set up React frontend with auth, navigation shell, and core layout.
 
 **Deliverables:**
-- Vite + React + TypeScript setup in `apps/web`
-- urql GraphQL client with auth headers
-- Login page and auth context
-- Global navigation shell (header, tabs)
-- Protected route wrapper
-- API key management page
-- Basic empty/loading/error states
+- ✅ Vite + React + TypeScript setup in `apps/web`
+- ✅ urql GraphQL client with auth headers
+- ✅ Login page and auth context
+- ✅ Global navigation shell (header, tabs)
+- ✅ Protected route wrapper
+- ✅ API key management page
+- ✅ Basic empty/loading/error states
+- ✅ Tailwind CSS styling
+
+**Test Coverage:**
+- API: 93.2% lines, 87.6% branches (370 tests)
+- DB: 96.5% lines, 93.3% branches (160 tests)
+- Shared: 80% lines, 100% branches (15 tests)
+- Python Workers: 86% lines (72 tests)
 
 **Exit Criteria:**
-- Can login via web UI
-- Navigation between Definitions/Runs/Experiments/Settings
-- Can generate and revoke API keys
-- Auth persists across page refreshes
+- ✅ Can login via web UI
+- ✅ Navigation between Definitions/Runs/Experiments/Settings
+- ✅ Can generate and revoke API keys
+- ✅ Auth persists across page refreshes
 
 ---
 

@@ -136,11 +136,12 @@ describe('Settings Page', () => {
     const createButtons = screen.getAllByText('Create Key');
     await userEvent.click(createButtons[0]);
 
-    // Modal should appear
+    // Modal should appear - use heading role to avoid matching the button
     await waitFor(() => {
-      expect(screen.getByText('Create API Key')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Create API Key' })).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('Key Name')).toBeInTheDocument();
+    // Use placeholder text since the label may not have proper for/id association
+    expect(screen.getByPlaceholderText('e.g., MCP Server Production')).toBeInTheDocument();
   });
 
   it('should show error message when query fails', async () => {

@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
-import { loadEnv } from 'vite';
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // CRITICAL: Setup file forces test database - prevents production data loss
+    setupFiles: ['tests/setup.ts'],
     reporters: ['default', 'json'],
     outputFile: {
       json: 'coverage/test-results.json',
@@ -16,8 +17,8 @@ export default defineConfig({
     },
     // Run test files sequentially
     fileParallelism: false,
-    // Load .env file
-    env: loadEnv('', process.cwd(), ''),
+    // DO NOT load .env file - it contains production DATABASE_URL
+    // Test database URL is set in tests/setup.ts
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

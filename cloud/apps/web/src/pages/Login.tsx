@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/hooks';
 import { Input } from '../components/ui/Input';
@@ -18,10 +18,12 @@ export function Login() {
   // Get the intended destination from location state or default to dashboard
   const from = (location.state as { from?: string })?.from || '/';
 
-  // Redirect if already authenticated
-  if (isAuthenticated) {
-    navigate(from, { replace: true });
-  }
+  // Redirect if already authenticated (useEffect to avoid calling navigate during render)
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

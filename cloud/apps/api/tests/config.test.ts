@@ -21,16 +21,16 @@ describe('config', () => {
 
     const { config } = await import('../src/config.js');
 
-    expect(config.PORT).toBe(3001);
+    expect(config.PORT).toBe(4000);
   });
 
   it('parses PORT from environment', async () => {
-    process.env.PORT = '4000';
+    process.env.PORT = '5000';
     process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
 
     const { config } = await import('../src/config.js');
 
-    expect(config.PORT).toBe(4000);
+    expect(config.PORT).toBe(5000);
   });
 
   it('uses default NODE_ENV when not set', async () => {

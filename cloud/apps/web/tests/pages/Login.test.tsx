@@ -79,10 +79,11 @@ describe('Login Page', () => {
   it('should call login on form submit with correct values', async () => {
     const mockUser = { id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null };
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ token: 'jwt-token', user: mockUser }),
     });
+    global.fetch = fetchMock;
 
     renderLogin();
 
@@ -94,11 +95,13 @@ describe('Login Page', () => {
     await userEvent.type(screen.getByLabelText(/password/i), 'password123');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
+    // Just verify the login API was called with correct params
+    // Don't wait for navigation side effects which can cause test hangs
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({
+      expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ email: 'test@example.com', password: 'password123' }),
       }));
-    });
+    }, { timeout: 2000 });
   });
 });
