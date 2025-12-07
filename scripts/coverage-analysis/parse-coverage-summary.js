@@ -6,7 +6,7 @@
  *   node scripts/coverage-analysis/parse-coverage-summary.js [options]
  *
  * Options:
- *   --service <name>    Filter by service (api, frontend, database, storage)
+ *   --service <name>    Filter by service (api, web, db, shared, workers)
  *   --format <type>     Output format: json (default), table
  *   --sort <field>      Sort by: uncovered, pct, path (default: uncovered)
  *   --limit <n>         Limit results (default: all)
@@ -19,8 +19,17 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-const SERVICES = ['api', 'frontend', 'database', 'storage'];
+// Updated service definitions for the actual project structure
+const SERVICES = {
+  api: { path: 'cloud/apps/api', type: 'js' },
+  web: { path: 'cloud/apps/web', type: 'js' },
+  db: { path: 'cloud/packages/db', type: 'js' },
+  shared: { path: 'cloud/packages/shared', type: 'js' },
+  workers: { path: 'cloud/workers', type: 'python' },
+};
+
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 function parseArgs() {
@@ -76,6 +85,10 @@ function detectCategory(filePath) {
   if (filePath.includes('/contexts/')) return 'contexts';
   if (filePath.includes('/queries/')) return 'queries';
   if (filePath.includes('/providers/')) return 'providers';
+  if (filePath.includes('/common/')) return 'common';
+  if (filePath.includes('/auth/')) return 'auth';
+  if (filePath.includes('/api/')) return 'api';
+  if (filePath.includes('/queue/')) return 'queue';
   return 'other';
 }
 
@@ -84,12 +97,15 @@ function isTestFile(filePath) {
     filePath.includes('.test.') ||
     filePath.includes('.spec.') ||
     filePath.includes('__tests__/') ||
-    filePath.includes('__mocks__/')
+    filePath.includes('__mocks__/') ||
+    filePath.includes('/tests/') ||
+    filePath.includes('test_') ||
+    filePath.includes('conftest.py')
   );
 }
 
-function readCoverageSummary(service) {
-  const summaryPath = path.join(PROJECT_ROOT, 'services', service, 'coverage', 'coverage-summary.json');
+function readJsCoverageSummary(servicePath) {
+  const summaryPath = path.join(PROJECT_ROOT, servicePath, 'coverage', 'coverage-summary.json');
 
   if (!fs.existsSync(summaryPath)) {
     return null;
@@ -99,13 +115,209 @@ function readCoverageSummary(service) {
     const content = fs.readFileSync(summaryPath, 'utf-8');
     return JSON.parse(content);
   } catch (e) {
-    console.error(`Error reading coverage for ${service}: ${e.message}`);
+    console.error(`Error reading coverage for ${servicePath}: ${e.message}`);
     return null;
   }
 }
 
-function processFiles(coverageData, service) {
+function readPythonCoverage(servicePath) {
+  const coverageFile = path.join(PROJECT_ROOT, servicePath, '.coverage');
+
+  if (!fs.existsSync(coverageFile)) {
+    return null;
+  }
+
+  try {
+    // Run coverage json to generate coverage.json, then read it
+    const coverageJsonPath = path.join(PROJECT_ROOT, servicePath, 'coverage.json');
+
+    // Generate JSON report from .coverage file
+    execSync(`cd "${path.join(PROJECT_ROOT, servicePath)}" && coverage json -o coverage.json 2>/dev/null`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    if (!fs.existsSync(coverageJsonPath)) {
+      // Fallback: parse coverage report text output
+      return parsePythonCoverageReport(servicePath);
+    }
+
+    const content = fs.readFileSync(coverageJsonPath, 'utf-8');
+    const data = JSON.parse(content);
+
+    // Convert Python coverage.json format to match JS coverage-summary.json format
+    const result = { total: null };
+
+    if (data.totals) {
+      result.total = {
+        lines: {
+          total: data.totals.num_statements || 0,
+          covered: data.totals.covered_lines || 0,
+          skipped: 0,
+          pct: data.totals.percent_covered || 0,
+        },
+        statements: {
+          total: data.totals.num_statements || 0,
+          covered: data.totals.covered_lines || 0,
+          skipped: 0,
+          pct: data.totals.percent_covered || 0,
+        },
+        functions: {
+          total: 0,
+          covered: 0,
+          skipped: 0,
+          pct: 0,
+        },
+        branches: {
+          total: data.totals.num_branches || 0,
+          covered: data.totals.covered_branches || 0,
+          skipped: 0,
+          pct: data.totals.num_branches > 0
+            ? Math.round((data.totals.covered_branches / data.totals.num_branches) * 10000) / 100
+            : 0,
+        },
+      };
+    }
+
+    // Add per-file data
+    if (data.files) {
+      for (const [filePath, fileData] of Object.entries(data.files)) {
+        const summary = fileData.summary || {};
+        result[filePath] = {
+          lines: {
+            total: summary.num_statements || 0,
+            covered: summary.covered_lines || 0,
+            skipped: 0,
+            pct: summary.percent_covered || 0,
+          },
+          statements: {
+            total: summary.num_statements || 0,
+            covered: summary.covered_lines || 0,
+            skipped: 0,
+            pct: summary.percent_covered || 0,
+          },
+          functions: {
+            total: 0,
+            covered: 0,
+            skipped: 0,
+            pct: 0,
+          },
+          branches: {
+            total: summary.num_branches || 0,
+            covered: summary.covered_branches || 0,
+            skipped: 0,
+            pct: summary.num_branches > 0
+              ? Math.round((summary.covered_branches / summary.num_branches) * 10000) / 100
+              : 0,
+          },
+        };
+      }
+    }
+
+    return result;
+  } catch (e) {
+    // Fallback to parsing text report
+    return parsePythonCoverageReport(servicePath);
+  }
+}
+
+function parsePythonCoverageReport(servicePath) {
+  try {
+    const output = execSync(`cd "${path.join(PROJECT_ROOT, servicePath)}" && coverage report 2>/dev/null`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const lines = output.split('\n');
+    const result = { total: null };
+
+    let totalStmts = 0;
+    let totalMiss = 0;
+
+    for (const line of lines) {
+      // Match lines like: common/errors.py    82      1    99%
+      const match = line.match(/^(\S+\.py)\s+(\d+)\s+(\d+)\s+(\d+)%/);
+      if (match) {
+        const [, filePath, stmts, miss, pct] = match;
+        const total = parseInt(stmts, 10);
+        const missed = parseInt(miss, 10);
+        const covered = total - missed;
+        const percentage = parseInt(pct, 10);
+
+        const fullPath = path.join(PROJECT_ROOT, servicePath, filePath);
+
+        result[fullPath] = {
+          lines: { total, covered, skipped: 0, pct: percentage },
+          statements: { total, covered, skipped: 0, pct: percentage },
+          functions: { total: 0, covered: 0, skipped: 0, pct: 0 },
+          branches: { total: 0, covered: 0, skipped: 0, pct: 0 },
+        };
+
+        totalStmts += total;
+        totalMiss += missed;
+      }
+
+      // Match TOTAL line
+      const totalMatch = line.match(/^TOTAL\s+(\d+)\s+(\d+)\s+(\d+)%/);
+      if (totalMatch) {
+        const [, stmts, miss, pct] = totalMatch;
+        const total = parseInt(stmts, 10);
+        const missed = parseInt(miss, 10);
+        const covered = total - missed;
+        const percentage = parseInt(pct, 10);
+
+        result.total = {
+          lines: { total, covered, skipped: 0, pct: percentage },
+          statements: { total, covered, skipped: 0, pct: percentage },
+          functions: { total: 0, covered: 0, skipped: 0, pct: 0 },
+          branches: { total: 0, covered: 0, skipped: 0, pct: 0 },
+        };
+      }
+    }
+
+    // If no TOTAL found, calculate it
+    if (!result.total && totalStmts > 0) {
+      const covered = totalStmts - totalMiss;
+      result.total = {
+        lines: {
+          total: totalStmts,
+          covered,
+          skipped: 0,
+          pct: Math.round((covered / totalStmts) * 10000) / 100,
+        },
+        statements: {
+          total: totalStmts,
+          covered,
+          skipped: 0,
+          pct: Math.round((covered / totalStmts) * 10000) / 100,
+        },
+        functions: { total: 0, covered: 0, skipped: 0, pct: 0 },
+        branches: { total: 0, covered: 0, skipped: 0, pct: 0 },
+      };
+    }
+
+    return Object.keys(result).length > 1 ? result : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function readCoverageSummary(serviceName) {
+  const serviceConfig = SERVICES[serviceName];
+  if (!serviceConfig) {
+    return null;
+  }
+
+  if (serviceConfig.type === 'python') {
+    return readPythonCoverage(serviceConfig.path);
+  } else {
+    return readJsCoverageSummary(serviceConfig.path);
+  }
+}
+
+function processFiles(coverageData, serviceName) {
   const files = [];
+  const serviceConfig = SERVICES[serviceName];
 
   for (const [absolutePath, metrics] of Object.entries(coverageData)) {
     if (absolutePath === 'total') continue;
@@ -120,8 +332,9 @@ function processFiles(coverageData, service) {
 
     files.push({
       path: relativePath,
-      service,
+      service: serviceName,
       category,
+      language: serviceConfig.type === 'python' ? 'python' : 'typescript',
       coverage: {
         lines: {
           pct: metrics.lines.pct,
@@ -153,32 +366,45 @@ function processFiles(coverageData, service) {
 
 function main() {
   const options = parseArgs();
-  const servicesToProcess = options.service ? [options.service] : SERVICES;
+  const servicesToProcess = options.service ? [options.service] : Object.keys(SERVICES);
 
   let allFiles = [];
   const serviceSummaries = {};
   const categorySummaries = {};
-  let overallTotal = { lines: 0, covered: 0, branches: 0, branchesCovered: 0, functions: 0, functionsCovered: 0 };
+  let overallTotal = {
+    lines: 0,
+    covered: 0,
+    branches: 0,
+    branchesCovered: 0,
+    functions: 0,
+    functionsCovered: 0,
+  };
 
-  for (const service of servicesToProcess) {
-    const coverageData = readCoverageSummary(service);
-
-    if (!coverageData) {
-      serviceSummaries[service] = { error: 'No coverage data found' };
+  for (const serviceName of servicesToProcess) {
+    if (!SERVICES[serviceName]) {
+      serviceSummaries[serviceName] = { error: `Unknown service: ${serviceName}` };
       continue;
     }
 
-    const files = processFiles(coverageData, service);
+    const coverageData = readCoverageSummary(serviceName);
+
+    if (!coverageData) {
+      serviceSummaries[serviceName] = { error: 'No coverage data found' };
+      continue;
+    }
+
+    const files = processFiles(coverageData, serviceName);
     allFiles = allFiles.concat(files);
 
     // Calculate service summary from total
     if (coverageData.total) {
-      serviceSummaries[service] = {
+      serviceSummaries[serviceName] = {
         lines: coverageData.total.lines.pct,
         branches: coverageData.total.branches.pct,
         functions: coverageData.total.functions.pct,
         statements: coverageData.total.statements.pct,
         fileCount: files.length,
+        language: SERVICES[serviceName].type === 'python' ? 'python' : 'typescript',
       };
 
       overallTotal.lines += coverageData.total.lines.total;
@@ -277,7 +503,8 @@ function main() {
       if (summary.error) {
         console.log(`  ${svc}: ${summary.error}`);
       } else {
-        console.log(`  ${svc}: ${summary.lines}% (${summary.fileCount} files)`);
+        const lang = summary.language === 'python' ? '(Python)' : '(TS/JS)';
+        console.log(`  ${svc} ${lang}: ${summary.lines}% (${summary.fileCount} files)`);
       }
     }
     console.log(`\nTop ${allFiles.length} files by uncovered lines:`);

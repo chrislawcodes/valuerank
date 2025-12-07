@@ -21,7 +21,7 @@ export default defineConfig({
     // Test database URL is set in tests/setup.ts
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html'],
       include: ['src/**/*.ts'],
       exclude: ['src/index.ts', 'src/types.ts', 'src/queries/index.ts'],
     },
