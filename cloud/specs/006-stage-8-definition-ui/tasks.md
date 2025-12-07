@@ -14,8 +14,8 @@
 
 **Purpose**: Project initialization and branch setup
 
-- [ ] T001 Create feature branch `stage-8-definition-ui` from main
-- [ ] T002 Verify development environment running (docker, npm run dev)
+- [X] T001 Create feature branch `stage-8-definition-ui` from main
+- [X] T002 Verify development environment running (docker, npm run dev)
 
 ---
 
@@ -27,44 +27,44 @@
 
 ### Database Schema
 
-- [ ] T003 Add Tag and DefinitionTag models to `packages/db/prisma/schema.prisma` per data-model.md
-- [ ] T004 Generate Prisma migration: `npx prisma migrate dev --name add_definition_tags`
-- [ ] T005 Run `npm run db:generate` to update Prisma client types
+- [X] T003 Add Tag and DefinitionTag models to `packages/db/prisma/schema.prisma` per data-model.md
+- [X] T004 Generate Prisma migration: `npx prisma migrate dev --name add_definition_tags`
+- [X] T005 Run `npm run db:generate` to update Prisma client types
 
 ### GraphQL API - Core Types
 
-- [ ] T006 [P] Create Tag GraphQL type in `apps/api/src/graphql/types/tag.ts` per contracts/
-- [ ] T007 [P] Create Tag DataLoader in `apps/api/src/graphql/dataloaders/tag.ts`
-- [ ] T008 Update `apps/api/src/graphql/dataloaders/index.ts` to export tag loader
+- [X] T006 [P] Create Tag GraphQL type in `apps/api/src/graphql/types/tag.ts` per contracts/
+- [X] T007 [P] Create Tag DataLoader in `apps/api/src/graphql/dataloaders/tag.ts`
+- [X] T008 Update `apps/api/src/graphql/dataloaders/index.ts` to export tag loader
 
 ### GraphQL API - Tag Mutations
 
-- [ ] T009 Create tag mutations (createTag, deleteTag) in `apps/api/src/graphql/mutations/tag.ts`
-- [ ] T010 Create definition-tag mutations (addTagToDefinition, removeTagFromDefinition, createAndAssignTag) in `apps/api/src/graphql/mutations/definition-tags.ts`
-- [ ] T011 Update `apps/api/src/graphql/mutations/index.ts` to export tag mutations
+- [X] T009 Create tag mutations (createTag, deleteTag) in `apps/api/src/graphql/mutations/tag.ts`
+- [X] T010 Create definition-tag mutations (addTagToDefinition, removeTagFromDefinition, createAndAssignTag) in `apps/api/src/graphql/mutations/definition-tags.ts`
+- [X] T011 Update `apps/api/src/graphql/mutations/index.ts` to export tag mutations
 
 ### GraphQL API - Enhanced Queries
 
-- [ ] T012 Create tags query in `apps/api/src/graphql/queries/tag.ts`
-- [ ] T013 Add updateDefinition mutation to `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T014 Enhance definitions query with search, tagIds, hasRuns filters in `apps/api/src/graphql/queries/definition.ts`
-- [ ] T015 Add ancestors/descendants fields to Definition type in `apps/api/src/graphql/types/definition.ts`
-- [ ] T016 Create definitionAncestors query in `apps/api/src/graphql/queries/definition.ts`
-- [ ] T017 Create definitionDescendants query in `apps/api/src/graphql/queries/definition.ts`
+- [X] T012 Create tags query in `apps/api/src/graphql/queries/tag.ts`
+- [X] T013 Add updateDefinition mutation to `apps/api/src/graphql/mutations/definition.ts`
+- [X] T014 Enhance definitions query with search, tagIds, hasRuns filters in `apps/api/src/graphql/queries/definition.ts`
+- [X] T015 Add ancestors/descendants fields to Definition type in `apps/api/src/graphql/types/definition.ts`
+- [X] T016 Create definitionAncestors query in `apps/api/src/graphql/queries/definition.ts`
+- [X] T017 Create definitionDescendants query in `apps/api/src/graphql/queries/definition.ts`
 
 ### GraphQL Schema Registration
 
-- [ ] T018 Update `apps/api/src/graphql/queries/index.ts` to export tag queries
-- [ ] T019 Verify GraphQL playground shows new types/queries/mutations
+- [X] T018 Update `apps/api/src/graphql/queries/index.ts` to export tag queries
+- [X] T019 Verify GraphQL playground shows new types/queries/mutations
 
 ### Frontend GraphQL Setup
 
-- [ ] T020 [P] Create definition GraphQL queries/mutations in `apps/web/src/graphql/definitions.ts`
-- [ ] T021 [P] Create tag GraphQL queries/mutations in `apps/web/src/graphql/tags.ts`
+- [X] T020 [P] Create definition GraphQL queries/mutations in `apps/web/src/api/operations/definitions.ts`
+- [X] T021 [P] Create tag GraphQL queries/mutations in `apps/web/src/api/operations/tags.ts`
 
 ### API Integration Tests
 
-- [ ] T022 Write integration tests for tag CRUD in `apps/api/tests/graphql/tags.test.ts`
+- [X] T022 Write integration tests for tag CRUD in `apps/api/tests/graphql/mutations/tag.test.ts`
 - [ ] T023 Write integration tests for enhanced definition queries in `apps/api/tests/graphql/definitions.test.ts`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin

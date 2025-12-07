@@ -163,3 +163,81 @@ builder.mutationField('forkDefinition', (t) =>
     },
   })
 );
+
+// Input type for updating a definition
+const UpdateDefinitionInput = builder.inputType('UpdateDefinitionInput', {
+  fields: (t) => ({
+    name: t.string({
+      required: false,
+      description: 'Updated name (optional)',
+      validate: {
+        minLength: [1, { message: 'Name cannot be empty' }],
+        maxLength: [255, { message: 'Name must be 255 characters or less' }],
+      },
+    }),
+    content: t.field({
+      type: 'JSON',
+      required: false,
+      description: 'Updated content (optional, replaces entire content if provided)',
+    }),
+  }),
+});
+
+// Mutation: updateDefinition
+builder.mutationField('updateDefinition', (t) =>
+  t.field({
+    type: DefinitionRef,
+    description: 'Update an existing definition. Note: If definition has runs, consider forking instead to preserve history.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to update',
+      }),
+      input: t.arg({ type: UpdateDefinitionInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id, input } = args;
+      const { name, content } = input;
+
+      ctx.log.debug({ definitionId: id, hasName: !!name, hasContent: !!content }, 'Updating definition');
+
+      // Check if definition exists
+      const existing = await db.definition.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error(`Definition not found: ${id}`);
+      }
+
+      // Build update data
+      const updateData: Prisma.DefinitionUpdateInput = {};
+
+      if (name !== null && name !== undefined) {
+        updateData.name = name;
+      }
+
+      if (content !== null && content !== undefined) {
+        // Validate content is an object
+        if (typeof content !== 'object' || Array.isArray(content)) {
+          throw new Error('Content must be a JSON object');
+        }
+        updateData.content = ensureSchemaVersion(content as Record<string, unknown>);
+      }
+
+      // Check if there's anything to update
+      if (Object.keys(updateData).length === 0) {
+        ctx.log.debug({ definitionId: id }, 'No changes to apply');
+        return existing;
+      }
+
+      const definition = await db.definition.update({
+        where: { id },
+        data: updateData,
+      });
+
+      ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
+      return definition;
+    },
+  })
+);

@@ -1,5 +1,5 @@
 import { builder } from '../builder.js';
-import type { Definition, Run, Transcript, Scenario, Experiment } from '@valuerank/db';
+import type { Definition, Run, Transcript, Scenario, Experiment, Tag } from '@valuerank/db';
 
 /**
  * Object references for all entity types.
@@ -12,3 +12,4 @@ export const RunRef = builder.objectRef<Run>('Run');
 export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');
 export const ExperimentRef = builder.objectRef<Experiment>('Experiment');
+export const TagRef = builder.objectRef<Tag>('Tag');

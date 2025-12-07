@@ -60,9 +60,35 @@ model Definition {
 
   runs      Run[]
   scenarios Scenario[]
+  tags      DefinitionTag[]
 
   @@index([parentId])
   @@map("definitions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  definitions DefinitionTag[]
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String   @id @default(cuid())
+  definitionId String   @map("definition_id")
+  tagId        String   @map("tag_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
 }
 
 model Run {
