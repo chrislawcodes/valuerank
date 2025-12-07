@@ -1,0 +1,82 @@
+import { FileText, GitBranch, Play, Calendar } from 'lucide-react';
+import type { Definition } from '../../api/operations/definitions';
+
+type DefinitionCardProps = {
+  definition: Definition;
+  onClick?: () => void;
+};
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
+  const hasParent = definition.parentId !== null;
+  const childrenCount = definition.children?.length ?? 0;
+  const hasChildren = childrenCount > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left bg-white rounded-lg border border-gray-200 p-4 hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <h3 className="font-medium text-gray-900 truncate">{definition.name}</h3>
+        </div>
+        {/* Version indicator */}
+        {hasParent && (
+          <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">
+            <GitBranch className="w-3 h-3" />
+            Fork
+          </span>
+        )}
+      </div>
+
+      {/* Tags */}
+      {definition.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {definition.tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag.id}
+              className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
+            >
+              {tag.name}
+            </span>
+          ))}
+          {definition.tags.length > 4 && (
+            <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
+              +{definition.tags.length - 4} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Meta info */}
+      <div className="flex items-center gap-4 text-sm text-gray-500">
+        <span className="flex items-center gap-1">
+          <Calendar className="w-4 h-4" />
+          {formatDate(definition.createdAt)}
+        </span>
+        <span className="flex items-center gap-1">
+          <Play className="w-4 h-4" />
+          {definition.runCount} run{definition.runCount !== 1 ? 's' : ''}
+        </span>
+        {hasChildren && (
+          <span className="flex items-center gap-1">
+            <GitBranch className="w-4 h-4" />
+            {childrenCount} fork{childrenCount !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}

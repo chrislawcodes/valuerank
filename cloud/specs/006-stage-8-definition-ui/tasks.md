@@ -79,14 +79,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T024 [P] [US1] Create DefinitionCard component in `apps/web/src/components/definitions/DefinitionCard.tsx`
-- [ ] T025 [P] [US1] Create useDefinitions hook in `apps/web/src/hooks/useDefinitions.ts`
-- [ ] T026 [US1] Create DefinitionList component in `apps/web/src/components/definitions/DefinitionList.tsx`
-- [ ] T027 [US1] Update Definitions page to render DefinitionList in `apps/web/src/pages/Definitions.tsx`
-- [ ] T028 [US1] Add empty state for no definitions in DefinitionList
-- [ ] T029 [US1] Add loading skeleton for definition list
-- [ ] T030 [US1] Write component tests for DefinitionCard in `apps/web/tests/components/definitions/DefinitionCard.test.tsx`
-- [ ] T031 [US1] Write component tests for DefinitionList in `apps/web/tests/components/definitions/DefinitionList.test.tsx`
+- [X] T024 [P] [US1] Create DefinitionCard component in `apps/web/src/components/definitions/DefinitionCard.tsx`
+- [X] T025 [P] [US1] Create useDefinitions hook in `apps/web/src/hooks/useDefinitions.ts`
+- [X] T026 [US1] Create DefinitionList component in `apps/web/src/components/definitions/DefinitionList.tsx`
+- [X] T027 [US1] Update Definitions page to render DefinitionList in `apps/web/src/pages/Definitions.tsx`
+- [X] T028 [US1] Add empty state for no definitions in DefinitionList
+- [X] T029 [US1] Add loading skeleton for definition list
+- [X] T030 [US1] Write component tests for DefinitionCard in `apps/web/tests/components/definitions/DefinitionCard.test.tsx`
+- [X] T031 [US1] Write component tests for DefinitionList in `apps/web/tests/components/definitions/DefinitionList.test.tsx`
 
 **Checkpoint**: User Story 1 complete - can browse definition library
 
