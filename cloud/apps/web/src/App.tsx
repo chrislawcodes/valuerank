@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
@@ -8,6 +9,7 @@ import { Definitions } from './pages/Definitions';
 import { Runs } from './pages/Runs';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
+import { client } from './api/client';
 
 // Protected layout wrapper
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -21,8 +23,9 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
+      <Provider value={client}>
+        <AuthProvider>
+          <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
 
@@ -70,8 +73,9 @@ function App() {
 
           {/* Catch-all redirect */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+          </Routes>
+        </AuthProvider>
+      </Provider>
     </BrowserRouter>
   );
 }
