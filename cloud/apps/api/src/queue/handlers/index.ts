@@ -64,10 +64,18 @@ const handlerRegistrations: HandlerRegistration[] = [
 
 /**
  * Registers all job handlers with PgBoss.
+ * Creates queues first (required by PgBoss v10+), then registers workers.
  */
 export async function registerHandlers(boss: PgBoss): Promise<void> {
   const batchSize = queueConfig.workerBatchSize;
 
+  // Create queues first (required by PgBoss v10+)
+  for (const registration of handlerRegistrations) {
+    log.info({ jobType: registration.name }, 'Creating queue');
+    await boss.createQueue(registration.name);
+  }
+
+  // Then register workers
   for (const registration of handlerRegistrations) {
     log.info({ jobType: registration.name, batchSize }, 'Registering handler');
     await registration.register(boss, batchSize);
