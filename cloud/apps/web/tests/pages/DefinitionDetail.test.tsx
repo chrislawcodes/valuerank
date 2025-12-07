@@ -288,12 +288,13 @@ describe('DefinitionDetail', () => {
   });
 
   describe('version tree', () => {
-    it('should show version tree message for root definition', async () => {
+    it('should show version tree section for definition', async () => {
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
       await waitFor(() => {
-        expect(screen.getByText('This is a root definition with no forks')).toBeInTheDocument();
+        // With the new tree implementation, we show "Version Tree" header
+        expect(screen.getByText('Version Tree')).toBeInTheDocument();
       });
     });
   });

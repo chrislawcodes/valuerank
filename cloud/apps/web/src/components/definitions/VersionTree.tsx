@@ -122,8 +122,9 @@ export function VersionTree({
     );
   }
 
-  // No tree data (isolated definition)
-  if (!tree && ancestors.length === 0 && descendants.length === 0) {
+  // No tree data at all
+  if (!tree) {
+    // Show a message if we have no tree
     return (
       <div className={`p-4 ${className}`}>
         <div className="text-sm text-gray-500 flex items-center gap-2">
@@ -134,26 +135,26 @@ export function VersionTree({
     );
   }
 
+  // Check if this is an isolated node (no ancestors or descendants)
+  const isIsolated = ancestors.length === 0 && descendants.length === 0;
+
   return (
     <div className={`p-4 ${className}`}>
       <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
         <GitBranch className="w-4 h-4" />
         Version Tree
+        {isIsolated && (
+          <span className="text-xs text-gray-400 font-normal">(no forks yet)</span>
+        )}
       </h3>
 
-      {tree ? (
-        <div className="overflow-x-auto">
-          <TreeNodeComponent
-            node={tree}
-            currentNodeId={currentNodeId}
-            onNodeClick={onNodeClick}
-          />
-        </div>
-      ) : (
-        <div className="text-sm text-gray-500">
-          No version history available
-        </div>
-      )}
+      <div className="overflow-x-auto">
+        <TreeNodeComponent
+          node={tree}
+          currentNodeId={currentNodeId}
+          onNodeClick={onNodeClick}
+        />
+      </div>
     </div>
   );
 }

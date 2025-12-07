@@ -6,28 +6,43 @@ import { Provider } from 'urql';
 import { fromValue } from 'wonka';
 
 // Mock data for tree tests
+const mockCurrentDefinition = {
+  id: 'current',
+  name: 'Current Definition',
+  parentId: 'parent',
+  createdAt: '2024-01-03T00:00:00Z',
+  updatedAt: '2024-01-03T00:00:00Z',
+  content: { schema_version: 1, preamble: '', template: '', dimensions: [] },
+  tags: [],
+  runCount: 0,
+};
+
 const mockAncestors = [
   { id: 'root', name: 'Root Definition', parentId: null, createdAt: '2024-01-01T00:00:00Z' },
   { id: 'parent', name: 'Parent Definition', parentId: 'root', createdAt: '2024-01-02T00:00:00Z' },
-  { id: 'current', name: 'Current Definition', parentId: 'parent', createdAt: '2024-01-03T00:00:00Z' },
 ];
 
 const mockDescendants = [
-  { id: 'current', name: 'Current Definition', parentId: 'parent', createdAt: '2024-01-03T00:00:00Z' },
   { id: 'child1', name: 'Child 1', parentId: 'current', createdAt: '2024-01-04T00:00:00Z' },
   { id: 'child2', name: 'Child 2', parentId: 'current', createdAt: '2024-01-05T00:00:00Z' },
 ];
 
-function createMockClient(ancestors = mockAncestors, descendants = mockDescendants) {
+function createMockClient(
+  current = mockCurrentDefinition,
+  ancestors = mockAncestors,
+  descendants = mockDescendants
+) {
   return {
     executeQuery: vi.fn(({ query }) => {
       const queryStr = query.loc?.source?.body || query.definitions?.[0]?.name?.value || '';
-      const isAncestors = queryStr.includes('Ancestors') || queryStr.includes('definitionAncestors');
-      return fromValue({
-        data: isAncestors
-          ? { definitionAncestors: ancestors }
-          : { definitionDescendants: descendants },
-      });
+      if (queryStr.includes('Ancestors') || queryStr.includes('definitionAncestors')) {
+        return fromValue({ data: { definitionAncestors: ancestors } });
+      }
+      if (queryStr.includes('Descendants') || queryStr.includes('definitionDescendants')) {
+        return fromValue({ data: { definitionDescendants: descendants } });
+      }
+      // DEFINITION_QUERY for current definition
+      return fromValue({ data: { definition: current } });
     }),
     executeMutation: vi.fn(),
     executeSubscription: vi.fn(),
@@ -104,13 +119,17 @@ describe('VersionTree', () => {
     expect(onNodeClick).toHaveBeenCalledWith('current');
   });
 
-  it('should show empty state for isolated definition', () => {
-    const client = createMockClient([], []);
+  it('should show empty state for definition with no lineage', () => {
+    // An isolated definition has no ancestors or descendants but the definition itself exists
+    const isolatedDef = { ...mockCurrentDefinition, id: 'isolated', parentId: null };
+    const client = createMockClient(isolatedDef, [], []);
     renderWithUrql(
       <VersionTree definitionId="isolated" />,
       { client }
     );
-    expect(screen.getByText('This is a root definition with no forks')).toBeInTheDocument();
+    // Should still show Version Tree header with "(no forks yet)" note
+    expect(screen.getByText('Version Tree')).toBeInTheDocument();
+    expect(screen.getByText('(no forks yet)')).toBeInTheDocument();
   });
 
   it('should apply custom className', () => {
