@@ -8,6 +8,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { DefinitionEditor } from '../components/definitions/DefinitionEditor';
 import { ForkDialog } from '../components/definitions/ForkDialog';
 import { TagSelector } from '../components/definitions/TagSelector';
+import { VersionTree } from '../components/definitions/VersionTree';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
 import type { DefinitionContent } from '../api/operations/definitions';
@@ -358,6 +359,18 @@ export function DefinitionDetail() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Version Tree */}
+      <div className="bg-white rounded-lg border border-gray-200">
+        <VersionTree
+          definitionId={definition.id}
+          onNodeClick={(nodeId) => {
+            if (nodeId !== definition.id) {
+              navigate(`/definitions/${nodeId}`);
+            }
+          }}
+        />
       </div>
 
       {/* Fork Dialog */}

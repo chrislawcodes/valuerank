@@ -205,13 +205,13 @@
 
 ### Implementation for User Story 7
 
-- [ ] T072 [P] [US7] Create useVersionTree hook in `apps/web/src/hooks/useVersionTree.ts`
-- [ ] T073 [US7] Create VersionTree component in `apps/web/src/components/definitions/VersionTree.tsx`
-- [ ] T074 [US7] Add VersionTree panel to DefinitionDetail page
-- [ ] T075 [US7] Implement node click navigation in VersionTree
-- [ ] T076 [US7] Add hover tooltip with node details (name, date) in VersionTree
-- [ ] T077 [US7] Highlight current definition in VersionTree
-- [ ] T078 [US7] Write tests for VersionTree in `apps/web/tests/components/definitions/VersionTree.test.tsx`
+- [X] T072 [P] [US7] Create useVersionTree hook in `apps/web/src/hooks/useVersionTree.ts`
+- [X] T073 [US7] Create VersionTree component in `apps/web/src/components/definitions/VersionTree.tsx`
+- [X] T074 [US7] Add VersionTree panel to DefinitionDetail page
+- [X] T075 [US7] Implement node click navigation in VersionTree
+- [X] T076 [US7] Add hover tooltip with node details (name, date) in VersionTree
+- [X] T077 [US7] Highlight current definition in VersionTree
+- [X] T078 [US7] Write tests for VersionTree in `apps/web/tests/components/definitions/VersionTree.test.tsx`
 
 **Checkpoint**: User Story 7 complete - can view version lineage
 
