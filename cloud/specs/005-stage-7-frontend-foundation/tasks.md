@@ -107,15 +107,15 @@
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Create apps/web/src/components/layout/Header.tsx with logo and user menu
-- [ ] T031 [P] [US2] Create apps/web/src/components/layout/NavTabs.tsx with 4 tabs
-- [ ] T032 [US2] Create apps/web/src/components/layout/Layout.tsx wrapping Header + NavTabs + content
-- [ ] T033 [US2] Add logout functionality to Header user menu
-- [ ] T034 [US2] Create apps/web/src/pages/Dashboard.tsx as landing page
-- [ ] T035 [P] [US2] Create apps/web/src/pages/Definitions.tsx placeholder page
-- [ ] T036 [P] [US2] Create apps/web/src/pages/Runs.tsx placeholder page
-- [ ] T037 [P] [US2] Create apps/web/src/pages/Experiments.tsx placeholder page
-- [ ] T038 [US2] Integrate Layout into App.tsx route structure
+- [X] T030 [US2] Create apps/web/src/components/layout/Header.tsx with logo and user menu
+- [X] T031 [P] [US2] Create apps/web/src/components/layout/NavTabs.tsx with 4 tabs
+- [X] T032 [US2] Create apps/web/src/components/layout/Layout.tsx wrapping Header + NavTabs + content
+- [X] T033 [US2] Add logout functionality to Header user menu
+- [X] T034 [US2] Create apps/web/src/pages/Dashboard.tsx as landing page
+- [X] T035 [P] [US2] Create apps/web/src/pages/Definitions.tsx placeholder page
+- [X] T036 [P] [US2] Create apps/web/src/pages/Runs.tsx placeholder page
+- [X] T037 [P] [US2] Create apps/web/src/pages/Experiments.tsx placeholder page
+- [X] T038 [US2] Integrate Layout into App.tsx route structure
 
 **Checkpoint**: User Story 2 complete - navigation between all sections works
 

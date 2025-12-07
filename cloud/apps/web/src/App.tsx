@@ -1,12 +1,22 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
 import { Runs } from './pages/Runs';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
+
+// Protected layout wrapper
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <Layout>{children}</Layout>
+    </ProtectedRoute>
+  );
+}
 
 function App() {
   return (
@@ -16,45 +26,45 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
 
-          {/* Protected routes */}
+          {/* Protected routes with layout */}
           <Route
             path="/"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <Dashboard />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
           <Route
             path="/definitions"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <Definitions />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
           <Route
             path="/runs"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <Runs />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
           <Route
             path="/experiments"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <Experiments />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
           <Route
             path="/settings"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <Settings />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
 
