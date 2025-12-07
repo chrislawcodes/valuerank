@@ -14,10 +14,10 @@
 
 **Purpose**: Project initialization and dependencies
 
-- [ ] T001 Create feature branch `stage-7-frontend` from main
-- [ ] T002 Add dependencies to apps/web/package.json: urql, graphql, @urql/exchange-auth, react-router-dom, lucide-react
-- [ ] T003 Add dev dependencies to apps/web/package.json: @testing-library/react, @testing-library/jest-dom, @testing-library/user-event, jsdom
-- [ ] T004 Update apps/web/vite.config.ts with API proxy configuration per plan.md
+- [X] T001 Create feature branch `stage-7-frontend` from cloud-planning
+- [X] T002 Add dependencies to apps/web/package.json: urql, graphql, @urql/exchange-auth, react-router-dom, lucide-react
+- [X] T003 Add dev dependencies to apps/web/package.json: @testing-library/react, @testing-library/jest-dom, @testing-library/user-event, jsdom, vitest
+- [X] T004 Update apps/web/vite.config.ts with API proxy configuration per plan.md
 
 **Checkpoint**: Dependencies installed, proxy configured
 
