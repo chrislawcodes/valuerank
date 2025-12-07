@@ -81,7 +81,11 @@ export function DefinitionDetail() {
   const handleTagCreate = async (tagName: string) => {
     if (!definition) return;
     const result = await executeCreateAndAssignTag({ definitionId: definition.id, tagName });
-    if (!result.error) {
+    if (result.error) {
+      // Extract the error message and show to user
+      const message = result.error.graphQLErrors?.[0]?.message || result.error.message;
+      alert(`Failed to create tag: ${message}`);
+    } else {
       refetch();
     }
   };
