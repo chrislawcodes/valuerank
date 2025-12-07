@@ -29,7 +29,7 @@ function cartesianProduct<T>(arrays: T[][]): T[][] {
   );
 }
 
-// Fill template placeholders with dimension values
+// Fill template placeholders with dimension values (case-insensitive)
 function fillTemplate(
   template: string,
   dimensions: Dimension[],
@@ -46,15 +46,19 @@ function fillTemplate(
 
     dimensionValues.push({ name: dim.name, level });
 
-    // Replace placeholder with label or first option
+    // Replace placeholder with label or first option (case-insensitive)
     const replacement = level.options?.[0] ?? level.label;
-    const placeholder = `[${dim.name}]`;
+    const placeholderRegex = new RegExp(`\\[${escapeRegex(dim.name)}\\]`, 'gi');
 
-    // Replace all occurrences of the placeholder
-    filled = filled.split(placeholder).join(replacement);
+    filled = filled.replace(placeholderRegex, replacement);
   });
 
   return { filledTemplate: filled, dimensionValues };
+}
+
+// Escape special regex characters
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Validate definition content for preview
@@ -79,7 +83,7 @@ function validateContent(content: DefinitionContent | null): string | null {
     return `Dimension "${emptyDimension.name}" has no levels`;
   }
 
-  // Check for template placeholders that don't match dimensions
+  // Check for template placeholders that don't match dimensions (case-insensitive)
   const placeholderRegex = /\[([^\]]+)\]/g;
   const placeholders = new Set<string>();
   let match;
@@ -90,10 +94,10 @@ function validateContent(content: DefinitionContent | null): string | null {
     }
   }
 
-  const dimensionNames = new Set(content.dimensions.map((d) => d.name));
+  const dimensionNamesLower = new Set(content.dimensions.map((d) => d.name.toLowerCase()));
 
   for (const placeholder of placeholders) {
-    if (!dimensionNames.has(placeholder)) {
+    if (!dimensionNamesLower.has(placeholder.toLowerCase())) {
       return `Template placeholder [${placeholder}] doesn't match any dimension`;
     }
   }
