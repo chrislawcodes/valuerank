@@ -192,7 +192,7 @@
 
 ---
 
-## Stage 7: Frontend Foundation [~]
+## Stage 7: Frontend Foundation [x]
 
 **Goal:** Set up React frontend with auth, navigation shell, and core layout.
 
