@@ -29,6 +29,7 @@ export function ForkDialog({
 
     try {
       await onFork(name.trim());
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fork definition');
     }

@@ -4,6 +4,8 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DimensionEditor } from './DimensionEditor';
 import { ScenarioPreview } from './ScenarioPreview';
+import { CanonicalDimensionChips } from './CanonicalDimensionChips';
+import type { CanonicalDimension } from '@valuerank/shared/canonical-dimensions';
 import type {
   DefinitionContent,
   Dimension,
@@ -105,6 +107,22 @@ export function DefinitionEditor({
     setContent((prev) => ({
       ...prev,
       dimensions: [...prev.dimensions, createDefaultDimension()],
+    }));
+  }, []);
+
+  const handleAddCanonicalDimension = useCallback((canonical: CanonicalDimension) => {
+    const dimension: Dimension = {
+      name: canonical.name,
+      levels: canonical.levels.map((level) => ({
+        score: level.score,
+        label: level.label,
+        description: undefined,
+        options: [...level.options],
+      })),
+    };
+    setContent((prev) => ({
+      ...prev,
+      dimensions: [...prev.dimensions, dimension],
     }));
   }, []);
 
@@ -246,15 +264,24 @@ export function DefinitionEditor({
             disabled={isSaving}
           >
             <Plus className="w-4 h-4 mr-1" />
-            Add Dimension
+            Add Custom Dimension
           </Button>
+        </div>
+
+        {/* Canonical Dimension Chips */}
+        <div className="mb-4">
+          <CanonicalDimensionChips
+            existingDimensionNames={content.dimensions.map((d) => d.name)}
+            onAddDimension={handleAddCanonicalDimension}
+            disabled={isSaving}
+          />
         </div>
 
         {content.dimensions.length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
             <p className="text-sm text-gray-500 mb-2">No dimensions yet</p>
             <p className="text-xs text-gray-400">
-              Dimensions define the variables in your template placeholders
+              Click a canonical dimension above or add a custom one
             </p>
           </div>
         ) : (

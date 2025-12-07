@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./canonical-dimensions": {
+      "import": "./dist/canonical-dimensions.js",
+      "types": "./dist/canonical-dimensions.d.ts"
     }
   },
   "scripts": {
