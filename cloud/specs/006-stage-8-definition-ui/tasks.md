@@ -381,8 +381,8 @@ Foundation (BLOCKING)
 
 ### Testing
 
-- [ ] T114 [P] Write unit tests for `resolveDefinitionContent` in `packages/db/tests/definitions.test.ts`
-- [ ] T115 [P] Write unit tests for v1→v2 schema migration in `packages/db/tests/schema-migration.test.ts`
+- [X] T114 [P] Write unit tests for `resolveDefinitionContent` in `packages/db/tests/definitions.test.ts`
+- [X] T115 [P] Write unit tests for v1→v2 schema migration in `packages/db/tests/schema-migration.test.ts`
 - [ ] T116 Write integration tests for inheritance resolution in `apps/api/tests/graphql/queries/definition.test.ts`
 - [ ] T117 Write component tests for `InheritanceIndicator` in `apps/web/tests/components/definitions/InheritanceIndicator.test.tsx`
 - [ ] T118 Write e2e test: fork definition, change parent, verify child sees change

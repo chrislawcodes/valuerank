@@ -301,64 +301,74 @@ export function DefinitionDetail() {
           />
         </div>
 
-        {/* Content sections */}
-        <div className="space-y-6">
-          {/* Preamble */}
-          {definition.content.preamble && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Preamble</h3>
-              <p className="text-gray-600 bg-gray-50 rounded-lg p-4">
-                {definition.content.preamble}
-              </p>
-            </div>
-          )}
+        {/* Content sections - use resolvedContent for display (handles inheritance) */}
+        {(() => {
+          // Use resolvedContent when available (has inheritance resolved), fallback to content
+          const displayContent = definition.resolvedContent ?? definition.content;
+          const preamble = displayContent?.preamble ?? '';
+          const template = displayContent?.template ?? '';
+          const dimensions = displayContent?.dimensions ?? [];
 
-          {/* Template */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Scenario Template</h3>
-            <pre className="text-gray-600 bg-gray-50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
-              {definition.content.template}
-            </pre>
-          </div>
+          return (
+            <div className="space-y-6">
+              {/* Preamble */}
+              {preamble && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">Preamble</h3>
+                  <p className="text-gray-600 bg-gray-50 rounded-lg p-4">
+                    {preamble}
+                  </p>
+                </div>
+              )}
 
-          {/* Dimensions */}
-          {definition.content.dimensions.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Dimensions ({definition.content.dimensions.length})
-              </h3>
-              <div className="space-y-3">
-                {definition.content.dimensions.map((dim, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">
-                      [{dim.name}]
-                    </h4>
-                    <div className="space-y-2">
-                      {dim.levels.map((level, levelIndex) => (
-                        <div key={levelIndex} className="flex items-start gap-3 text-sm">
-                          <span className="inline-flex px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-medium">
-                            {level.score}
-                          </span>
-                          <div>
-                            <span className="font-medium text-gray-900">{level.label}</span>
-                            {level.description && (
-                              <p className="text-gray-500">{level.description}</p>
-                            )}
-                            {level.options && level.options.length > 0 && (
-                              <p className="text-gray-400 text-xs">
-                                Options: {level.options.join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              {/* Template */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Scenario Template</h3>
+                <pre className="text-gray-600 bg-gray-50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
+                  {template}
+                </pre>
               </div>
+
+              {/* Dimensions */}
+              {dimensions.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">
+                    Dimensions ({dimensions.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {dimensions.map((dim, index) => (
+                      <div key={index} className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="font-medium text-gray-900 mb-2">
+                          [{dim.name}]
+                        </h4>
+                        <div className="space-y-2">
+                          {dim.levels.map((level, levelIndex) => (
+                            <div key={levelIndex} className="flex items-start gap-3 text-sm">
+                              <span className="inline-flex px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-medium">
+                                {level.score}
+                              </span>
+                              <div>
+                                <span className="font-medium text-gray-900">{level.label}</span>
+                                {level.description && (
+                                  <p className="text-gray-500">{level.description}</p>
+                                )}
+                                {level.options && level.options.length > 0 && (
+                                  <p className="text-gray-400 text-xs">
+                                    Options: {level.options.join(', ')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
       {/* Version Tree */}

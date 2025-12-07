@@ -5,6 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   loadDefinitionContent,
+  parseStoredContent,
+  mergeContent,
+  getContentOverrides,
+  createInheritingContent,
+  createPartialContent,
   loadRunConfig,
   loadScenarioContent,
   loadTranscriptContent,
@@ -12,7 +17,12 @@ import {
   loadRubricContent,
   loadCohortCriteria,
 } from '../src/schema-migration.js';
-import type { DefinitionContent, RunConfig } from '../src/types.js';
+import type {
+  DefinitionContent,
+  DefinitionContentV1,
+  DefinitionContentV2,
+  RunConfig,
+} from '../src/types.js';
 
 describe('Schema Migration', () => {
   describe('loadDefinitionContent', () => {
@@ -71,6 +81,213 @@ describe('Schema Migration', () => {
       expect(() => loadDefinitionContent('string')).toThrow(
         'Definition content must be an object'
       );
+    });
+
+    it('handles v2 content with all fields present', () => {
+      const v2Content: DefinitionContentV2 = {
+        schema_version: 2,
+        preamble: 'V2 preamble',
+        template: 'V2 template',
+        dimensions: [{ name: 'test', levels: [] }],
+      };
+
+      const result = loadDefinitionContent(v2Content);
+
+      expect(result.schema_version).toBe(2);
+      expect(result.preamble).toBe('V2 preamble');
+      expect(result.template).toBe('V2 template');
+    });
+
+    it('handles v2 content with missing fields (returns defaults)', () => {
+      const sparseV2: DefinitionContentV2 = {
+        schema_version: 2,
+        // No other fields - would inherit from parent in real use
+      };
+
+      const result = loadDefinitionContent(sparseV2);
+
+      expect(result.schema_version).toBe(2);
+      expect(result.preamble).toBe('');
+      expect(result.template).toBe('');
+      expect(result.dimensions).toEqual([]);
+    });
+  });
+
+  describe('parseStoredContent', () => {
+    it('parses v1 content', () => {
+      const v1Content: DefinitionContentV1 = {
+        schema_version: 1,
+        preamble: 'Test',
+        template: 'Template',
+        dimensions: [],
+      };
+
+      const result = parseStoredContent(v1Content);
+
+      expect(result.schema_version).toBe(1);
+      expect(result.preamble).toBe('Test');
+    });
+
+    it('parses v2 content with sparse fields', () => {
+      const v2Content: DefinitionContentV2 = {
+        schema_version: 2,
+        preamble: 'Only preamble',
+        // template and dimensions are undefined (inherited)
+      };
+
+      const result = parseStoredContent(v2Content);
+
+      expect(result.schema_version).toBe(2);
+      expect(result.preamble).toBe('Only preamble');
+      expect((result as DefinitionContentV2).template).toBeUndefined();
+      expect((result as DefinitionContentV2).dimensions).toBeUndefined();
+    });
+  });
+
+  describe('mergeContent', () => {
+    it('returns v1 child content unchanged (v1 is always complete)', () => {
+      const child: DefinitionContentV1 = {
+        schema_version: 1,
+        preamble: 'Child preamble',
+        template: 'Child template',
+        dimensions: [],
+      };
+      const parent: DefinitionContent = {
+        schema_version: 1,
+        preamble: 'Parent preamble',
+        template: 'Parent template',
+        dimensions: [{ name: 'parent-dim', levels: [] }],
+      };
+
+      const result = mergeContent(child, parent);
+
+      expect(result.preamble).toBe('Child preamble');
+      expect(result.template).toBe('Child template');
+      expect(result.dimensions).toEqual([]);
+    });
+
+    it('merges v2 child with parent, child overrides parent', () => {
+      const child: DefinitionContentV2 = {
+        schema_version: 2,
+        preamble: 'Child preamble',
+        // template and dimensions inherit from parent
+      };
+      const parent: DefinitionContent = {
+        schema_version: 1,
+        preamble: 'Parent preamble',
+        template: 'Parent template',
+        dimensions: [{ name: 'parent-dim', levels: [] }],
+      };
+
+      const result = mergeContent(child, parent);
+
+      expect(result.preamble).toBe('Child preamble'); // overridden
+      expect(result.template).toBe('Parent template'); // inherited
+      expect(result.dimensions).toEqual([{ name: 'parent-dim', levels: [] }]); // inherited
+    });
+
+    it('handles fully sparse v2 (inherits everything)', () => {
+      const child: DefinitionContentV2 = {
+        schema_version: 2,
+        // All fields undefined - inherit everything
+      };
+      const parent: DefinitionContent = {
+        schema_version: 1,
+        preamble: 'Parent preamble',
+        template: 'Parent template',
+        dimensions: [{ name: 'dim1', levels: [] }],
+        matching_rules: 'some rules',
+      };
+
+      const result = mergeContent(child, parent);
+
+      expect(result.preamble).toBe('Parent preamble');
+      expect(result.template).toBe('Parent template');
+      expect(result.dimensions).toEqual([{ name: 'dim1', levels: [] }]);
+      expect(result.matching_rules).toBe('some rules');
+    });
+  });
+
+  describe('getContentOverrides', () => {
+    it('returns all true for v1 content (all fields present)', () => {
+      const v1Content: DefinitionContentV1 = {
+        schema_version: 1,
+        preamble: 'Test',
+        template: 'Template',
+        dimensions: [],
+      };
+
+      const overrides = getContentOverrides(v1Content);
+
+      expect(overrides.preamble).toBe(true);
+      expect(overrides.template).toBe(true);
+      expect(overrides.dimensions).toBe(true);
+      expect(overrides.matching_rules).toBe(false); // not present
+    });
+
+    it('returns correct overrides for v2 content with partial fields', () => {
+      const v2Content: DefinitionContentV2 = {
+        schema_version: 2,
+        preamble: 'Local preamble',
+        // template and dimensions are undefined (inherited)
+      };
+
+      const overrides = getContentOverrides(v2Content);
+
+      expect(overrides.preamble).toBe(true); // present
+      expect(overrides.template).toBe(false); // undefined = inherited
+      expect(overrides.dimensions).toBe(false); // undefined = inherited
+      expect(overrides.matching_rules).toBe(false);
+    });
+
+    it('returns all false for fully sparse v2', () => {
+      const sparseV2: DefinitionContentV2 = {
+        schema_version: 2,
+      };
+
+      const overrides = getContentOverrides(sparseV2);
+
+      expect(overrides.preamble).toBe(false);
+      expect(overrides.template).toBe(false);
+      expect(overrides.dimensions).toBe(false);
+      expect(overrides.matching_rules).toBe(false);
+    });
+  });
+
+  describe('createInheritingContent', () => {
+    it('creates v2 content with no fields (all inherited)', () => {
+      const content = createInheritingContent();
+
+      expect(content.schema_version).toBe(2);
+      expect(content.preamble).toBeUndefined();
+      expect(content.template).toBeUndefined();
+      expect(content.dimensions).toBeUndefined();
+    });
+  });
+
+  describe('createPartialContent', () => {
+    it('creates v2 content with only specified fields', () => {
+      const content = createPartialContent({
+        preamble: 'Only preamble',
+      });
+
+      expect(content.schema_version).toBe(2);
+      expect(content.preamble).toBe('Only preamble');
+      expect(content.template).toBeUndefined();
+      expect(content.dimensions).toBeUndefined();
+    });
+
+    it('creates v2 content with multiple fields', () => {
+      const dims = [{ name: 'test', levels: [] }];
+      const content = createPartialContent({
+        template: 'Custom template',
+        dimensions: dims,
+      });
+
+      expect(content.schema_version).toBe(2);
+      expect(content.preamble).toBeUndefined();
+      expect(content.template).toBe('Custom template');
+      expect(content.dimensions).toEqual(dims);
     });
   });
 
