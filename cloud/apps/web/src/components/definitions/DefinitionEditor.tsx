@@ -3,6 +3,7 @@ import { Plus, Save, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DimensionEditor } from './DimensionEditor';
+import { ScenarioPreview } from './ScenarioPreview';
 import type {
   DefinitionContent,
   Dimension,
@@ -271,6 +272,9 @@ export function DefinitionEditor({
           </div>
         )}
       </div>
+
+      {/* Scenario Preview */}
+      <ScenarioPreview content={content} maxSamples={10} />
 
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4 border-t border-gray-200">

@@ -225,14 +225,14 @@
 
 ### Implementation for User Story 8
 
-- [ ] T079 [P] [US8] Create useScenarioPreview hook in `apps/web/src/hooks/useScenarioPreview.ts`
-- [ ] T080 [US8] Create ScenarioPreview component in `apps/web/src/components/definitions/ScenarioPreview.tsx`
-- [ ] T081 [US8] Implement client-side cartesian product generation in useScenarioPreview
-- [ ] T082 [US8] Add "Preview Scenarios" button to DefinitionEditor
-- [ ] T083 [US8] Display scenario count and sample (max 10) in ScenarioPreview
-- [ ] T084 [US8] Show filled template for each preview scenario
-- [ ] T085 [US8] Write tests for useScenarioPreview in `apps/web/tests/hooks/useScenarioPreview.test.ts`
-- [ ] T086 [US8] Write tests for ScenarioPreview in `apps/web/tests/components/definitions/ScenarioPreview.test.tsx`
+- [X] T079 [P] [US8] Create useScenarioPreview hook in `apps/web/src/hooks/useScenarioPreview.ts`
+- [X] T080 [US8] Create ScenarioPreview component in `apps/web/src/components/definitions/ScenarioPreview.tsx`
+- [X] T081 [US8] Implement client-side cartesian product generation in useScenarioPreview
+- [X] T082 [US8] Add "Preview Scenarios" button to DefinitionEditor
+- [X] T083 [US8] Display scenario count and sample (max 10) in ScenarioPreview
+- [X] T084 [US8] Show filled template for each preview scenario
+- [X] T085 [US8] Write tests for useScenarioPreview in `apps/web/tests/hooks/useScenarioPreview.test.ts`
+- [X] T086 [US8] Write tests for ScenarioPreview in `apps/web/tests/components/definitions/ScenarioPreview.test.tsx`
 
 **Checkpoint**: User Story 8 complete - can preview scenarios
 
