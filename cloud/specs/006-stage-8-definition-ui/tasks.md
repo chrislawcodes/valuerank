@@ -143,12 +143,12 @@
 
 ### Implementation for User Story 4
 
-- [ ] T049 [P] [US4] Create ForkDialog component in `apps/web/src/components/definitions/ForkDialog.tsx`
-- [ ] T050 [US4] Add forkDefinition mutation to useDefinitionMutations hook
-- [ ] T051 [US4] Add "Fork" button to definition detail view in DefinitionDetail.tsx
-- [ ] T052 [US4] Display parent info on forked definitions in DefinitionDetail
-- [ ] T053 [US4] Display children count on definition card in DefinitionCard
-- [ ] T054 [US4] Write tests for ForkDialog in `apps/web/tests/components/definitions/ForkDialog.test.tsx`
+- [X] T049 [P] [US4] Create ForkDialog component in `apps/web/src/components/definitions/ForkDialog.tsx`
+- [X] T050 [US4] Add forkDefinition mutation to useDefinitionMutations hook
+- [X] T051 [US4] Add "Fork" button to definition detail view in DefinitionDetail.tsx
+- [X] T052 [US4] Display parent info on forked definitions in DefinitionDetail
+- [X] T053 [US4] Display children count on definition card in DefinitionCard
+- [X] T054 [US4] Write tests for ForkDialog in `apps/web/tests/components/definitions/ForkDialog.test.tsx`
 
 **Checkpoint**: User Story 4 complete - can fork definitions
 

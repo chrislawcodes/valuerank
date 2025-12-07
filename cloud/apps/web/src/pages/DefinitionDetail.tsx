@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { DefinitionEditor } from '../components/definitions/DefinitionEditor';
+import { ForkDialog } from '../components/definitions/ForkDialog';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
 import type { DefinitionContent } from '../api/operations/definitions';
@@ -24,6 +25,7 @@ export function DefinitionDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [isEditing, setIsEditing] = useState(false);
+  const [showForkDialog, setShowForkDialog] = useState(false);
 
   const isNewDefinition = id === 'new';
 
@@ -35,8 +37,10 @@ export function DefinitionDetail() {
   const {
     createDefinition,
     updateDefinition,
+    forkDefinition,
     isCreating,
-    isUpdating
+    isUpdating,
+    isForking,
   } = useDefinitionMutations();
 
   const handleSave = async (name: string, content: DefinitionContent) => {
@@ -56,6 +60,15 @@ export function DefinitionDetail() {
     } else {
       setIsEditing(false);
     }
+  };
+
+  const handleFork = async (newName: string) => {
+    if (!definition) return;
+    const forkedDefinition = await forkDefinition({
+      parentId: definition.id,
+      name: newName,
+    });
+    navigate(`/definitions/${forkedDefinition.id}`);
   };
 
   // Create mode
@@ -170,10 +183,16 @@ export function DefinitionDetail() {
             Back
           </Button>
         </div>
-        <Button variant="primary" onClick={() => setIsEditing(true)}>
-          <Edit className="w-4 h-4 mr-2" />
-          Edit Definition
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setShowForkDialog(true)}>
+            <GitBranch className="w-4 h-4 mr-2" />
+            Fork
+          </Button>
+          <Button variant="primary" onClick={() => setIsEditing(true)}>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit
+          </Button>
+        </div>
       </div>
 
       {/* Main content */}
@@ -290,6 +309,16 @@ export function DefinitionDetail() {
           )}
         </div>
       </div>
+
+      {/* Fork Dialog */}
+      {showForkDialog && (
+        <ForkDialog
+          originalName={definition.name}
+          onFork={handleFork}
+          onClose={() => setShowForkDialog(false)}
+          isForking={isForking}
+        />
+      )}
     </div>
   );
 }
