@@ -10,7 +10,7 @@ function getJwtSecret(): string {
 }
 
 export const config = {
-  PORT: parseInt(getEnv('PORT', '3001'), 10),
+  PORT: parseInt(getEnv('PORT', '3003'), 10),
   NODE_ENV: getEnv('NODE_ENV', 'development'),
   DATABASE_URL: getEnv('DATABASE_URL'),
   JWT_SECRET: getJwtSecret(),
