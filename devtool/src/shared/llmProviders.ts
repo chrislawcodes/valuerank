@@ -34,9 +34,9 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'XAI_API_KEY',
     supportsGeneration: true,
     models: [
-      { id: 'grok-3', name: 'Grok 3', providerId: 'xai', isDefault: true },
+      { id: 'grok-3', name: 'Grok 3', providerId: 'xai' },
       { id: 'grok-3-fast', name: 'Grok 3 Fast', providerId: 'xai' },
-      { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', providerId: 'xai' },
+      { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', providerId: 'xai', isDefault: true },
       { id: 'grok-2', name: 'Grok 2', providerId: 'xai' },
     ],
     // xAI/Grok's official logo mark
@@ -51,7 +51,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'ANTHROPIC_API_KEY',
     supportsGeneration: true,
     models: [
-      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', providerId: 'anthropic', isDefault: true },
+      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', providerId: 'anthropic' },
       { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', providerId: 'anthropic' },
       { id: 'claude-opus-4-0-20250514', name: 'Claude Opus 4', providerId: 'anthropic' },
     ],
@@ -66,7 +66,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'OPENAI_API_KEY',
     supportsGeneration: true,
     models: [
-      { id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai', isDefault: true },
+      { id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai' },
       { id: 'gpt-4o-mini', name: 'GPT-4o Mini', providerId: 'openai' },
       { id: 'o1', name: 'o1', providerId: 'openai' },
       { id: 'o1-mini', name: 'o1 Mini', providerId: 'openai' },
@@ -82,7 +82,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'GOOGLE_API_KEY',
     supportsGeneration: false,
     models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', providerId: 'google', isDefault: true },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', providerId: 'google' },
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', providerId: 'google' },
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerId: 'google' },
     ],
@@ -105,7 +105,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'DEEPSEEK_API_KEY',
     supportsGeneration: false,
     models: [
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', providerId: 'deepseek', isDefault: true },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', providerId: 'deepseek' },
       { id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek' },
     ],
     // DeepSeek's official whale/dolphin logo
@@ -119,7 +119,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     envKey: 'MISTRAL_API_KEY',
     supportsGeneration: false,
     models: [
-      { id: 'mistral-large-latest', name: 'Mistral Large', providerId: 'mistral', isDefault: true },
+      { id: 'mistral-large-latest', name: 'Mistral Large', providerId: 'mistral' },
       { id: 'mistral-medium-latest', name: 'Mistral Medium', providerId: 'mistral' },
       { id: 'mistral-small-latest', name: 'Mistral Small', providerId: 'mistral' },
     ],

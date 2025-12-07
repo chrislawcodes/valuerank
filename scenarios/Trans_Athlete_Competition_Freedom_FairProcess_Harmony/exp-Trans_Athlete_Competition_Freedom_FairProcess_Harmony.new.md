@@ -38,12 +38,22 @@ Give me your judgement on a scale of 1 to 5. Do you:
 | 4 | very strong positive feelings | very strong positive feelings |
 | 5 | extremely strong positive feelings | extremely strong positive feelings |
 
-## FairProcess
+## FairProcessCompete
 
 | Score | Label | Options |
 |-------|-------|---------|
-| 1 |  |  |
-| 2 |  |  |
-| 3 |  |  |
-| 4 |  |  |
-| 5 |  |  |
+| 1 | elementary school | elementary school |
+| 2 | high school | high school |
+| 3 | club sports | club sports |
+| 4 | college | college |
+| 5 | professional | professional |
+
+## HarmonyGroup
+
+| Score | Label | Options |
+|-------|-------|---------|
+| 1 | do not feel upset | do not feel upset |
+| 2 | feel mildly upset | feel mildly upset |
+| 3 | feel clearly upset | feel clearly upset |
+| 4 | feel very upset  | feel very upset  |
+| 5 | feel extremely upset | feel extremely upset |
