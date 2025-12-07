@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { Plus, Save, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -6,6 +6,7 @@ import { DimensionEditor } from './DimensionEditor';
 import { ScenarioPreview } from './ScenarioPreview';
 import { CanonicalDimensionChips } from './CanonicalDimensionChips';
 import { InheritanceIndicator, InheritanceBanner } from './InheritanceIndicator';
+import { TemplateEditor, type TemplateEditorHandle } from './TemplateEditor';
 import type { CanonicalDimension } from '@valuerank/shared/canonical-dimensions';
 import type {
   DefinitionContent,
@@ -55,25 +56,6 @@ function createDefaultLevel(index: number): DimensionLevel {
   };
 }
 
-// Highlight placeholders like [name] in the template
-function TemplateHighlight({ template }: { template: string }) {
-  const parts = template.split(/(\[[^\]]+\])/g);
-
-  return (
-    <div className="absolute inset-0 p-3 pointer-events-none whitespace-pre-wrap font-mono text-sm">
-      {parts.map((part, index) => {
-        if (part.match(/^\[[^\]]+\]$/)) {
-          return (
-            <span key={index} className="bg-teal-100 text-teal-800 rounded px-0.5">
-              {part}
-            </span>
-          );
-        }
-        return <span key={index} className="text-transparent">{part}</span>;
-      })}
-    </div>
-  );
-}
 
 export function DefinitionEditor({
   initialName = '',
@@ -94,6 +76,13 @@ export function DefinitionEditor({
     initialContent || createDefaultContent()
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const templateEditorRef = useRef<TemplateEditorHandle>(null);
+
+  // Get dimension names for template editor autocomplete
+  const dimensionNames = useMemo(
+    () => content.dimensions.map((d) => d.name).filter((n) => n.trim() !== ''),
+    [content.dimensions]
+  );
 
   // Default overrides for non-forked definitions (everything is local)
   const effectiveOverrides: DefinitionOverrides = overrides ?? {
@@ -266,19 +255,16 @@ export function DefinitionEditor({
         </div>
         <p className="text-sm text-gray-500 mb-2">
           Use placeholders like <code className="bg-gray-100 px-1 rounded">[situation]</code> that
-          will be replaced with dimension values.
+          will be replaced with dimension values. Type <code className="bg-gray-100 px-1 rounded">[</code> for autocomplete.
         </p>
-        <div className="relative">
-          <TemplateHighlight template={content.template} />
-          <textarea
-            value={content.template}
-            onChange={(e) => handleTemplateChange(e.target.value)}
-            placeholder="You encounter a [situation] involving [actor]. What do you do?"
-            rows={4}
-            disabled={isSaving}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100 font-mono text-sm bg-transparent relative z-10"
-          />
-        </div>
+        <TemplateEditor
+          ref={templateEditorRef}
+          value={content.template}
+          dimensions={dimensionNames}
+          onChange={handleTemplateChange}
+          disabled={isSaving}
+          placeholder="You encounter a [situation] involving [actor]. What do you do?"
+        />
         {errors.template && (
           <p className="text-sm text-red-600 mt-1">{errors.template}</p>
         )}
@@ -286,12 +272,15 @@ export function DefinitionEditor({
           <div className="mt-2 flex flex-wrap gap-1">
             <span className="text-sm text-gray-500">Placeholders:</span>
             {placeholders.map((p) => (
-              <span
+              <button
                 key={p}
-                className="inline-flex px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full"
+                type="button"
+                onClick={() => templateEditorRef.current?.insertAtCursor(`[${p}]`)}
+                className="inline-flex px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full hover:bg-teal-100 cursor-pointer transition-colors"
+                title={`Click to insert [${p}]`}
               >
                 {p}
-              </span>
+              </button>
             ))}
           </div>
         )}

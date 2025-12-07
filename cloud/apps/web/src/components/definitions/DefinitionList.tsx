@@ -75,6 +75,14 @@ export function DefinitionList({
     filters.hasRuns ||
     filters.tagIds.length > 0;
 
+  // Must be defined before any early returns (React hooks rule)
+  const handleDefinitionClick = useCallback(
+    (definition: Definition) => {
+      navigate(`/definitions/${definition.id}`);
+    },
+    [navigate]
+  );
+
   if (error) {
     return (
       <ErrorMessage message={`Failed to load definitions: ${error.message}`} />
@@ -99,13 +107,6 @@ export function DefinitionList({
       />
     );
   }
-
-  const handleDefinitionClick = useCallback(
-    (definition: Definition) => {
-      navigate(`/definitions/${definition.id}`);
-    },
-    [navigate]
-  );
 
   return (
     <div className="space-y-4">
