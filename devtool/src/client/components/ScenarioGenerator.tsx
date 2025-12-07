@@ -233,17 +233,17 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
 
     // Check if we have canonical dimension data for this value
     const canonical = name ? canonicalDimensions[name] : null;
+    const defaultScoreEntries = Array.from({ length: 5 }, (_, idx) => {
+      const score = idx + 1;
+      return { score, label: '', options: [''] };
+    });
     const values = canonical
       ? canonical.levels.map((level) => ({
           score: level.score,
           label: level.label,
           options: [...level.options],
         }))
-      : [
-          { score: 1, label: 'Low', options: ['option1'] },
-          { score: 3, label: 'Medium', options: ['option2'] },
-          { score: 5, label: 'High', options: ['option3'] },
-        ];
+      : defaultScoreEntries;
 
     setDefinition((prev) => ({
       ...prev,

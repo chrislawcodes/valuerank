@@ -1,4 +1,3 @@
-export { OptionsInput } from './OptionsInput';
 export { DimensionEditor } from './DimensionEditor';
 export { GeneratorHeader } from './GeneratorHeader';
 export { YamlPreview } from './YamlPreview';

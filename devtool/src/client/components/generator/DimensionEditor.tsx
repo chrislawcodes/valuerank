@@ -1,5 +1,4 @@
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { OptionsInput } from './OptionsInput';
+import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from 'lucide-react';
 import type { Dimension, DimensionValue } from './types';
 
 interface DimensionEditorProps {
@@ -82,15 +81,22 @@ export function DimensionEditor({
 
             {isExpanded && (
               <div className="p-3">
-                <div className="grid grid-cols-[4rem_1fr_2fr_2rem] gap-2 mb-1 px-1">
+                <div className="grid grid-cols-[4rem_1fr_2rem] gap-2 mb-1 px-1">
                   <span className="text-xs text-gray-500">Score</span>
-                  <span className="text-xs text-gray-500">Label</span>
-                  <span className="text-xs text-gray-500">Options (comma-separated)</span>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    Phrase
+                    <span className="relative inline-flex items-center text-gray-400 cursor-help group">
+                      <Info size={12} />
+                      <span className="absolute left-0 top-full z-10 hidden w-52 rounded bg-gray-900 px-2 py-1 text-[10px] text-white group-hover:block">
+                        This is the exact sentence fragment that will be inserted into the generated scenario for this score.
+                      </span>
+                    </span>
+                  </div>
                   <span></span>
                 </div>
                 <div className="space-y-1">
                   {dim.values.map((val, valIndex) => (
-                    <div key={valIndex} className="grid grid-cols-[4rem_1fr_2fr_2rem] gap-2 items-center">
+                    <div key={valIndex} className="grid grid-cols-[4rem_1fr_2rem] gap-2 items-center">
                       <input
                         type="number"
                         value={val.score}
@@ -104,19 +110,13 @@ export function DimensionEditor({
                       <input
                         type="text"
                         value={val.label}
-                        onChange={(e) => onUpdateValue(dimIndex, valIndex, { label: e.target.value })}
+                        onChange={(e) =>
+                          onUpdateValue(dimIndex, valIndex, { label: e.target.value, options: [e.target.value] })
+                        }
                         onFocus={onFocus}
                         onBlur={onBlur}
                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                        placeholder="Score label"
-                      />
-                      <OptionsInput
-                        value={val.options}
-                        onChange={(options) => onUpdateValue(dimIndex, valIndex, { options })}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                        placeholder="option1, option2, option3"
-                        onFocus={onFocus}
-                        onBlur={onBlur}
+                        placeholder="Phrase shown in scenario"
                       />
                       <button
                         onClick={() => onRemoveValue(dimIndex, valIndex)}
