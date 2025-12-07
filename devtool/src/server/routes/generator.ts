@@ -4,7 +4,7 @@ import { watch, type FSWatcher } from 'fs';
 import path from 'path';
 import jsYaml from 'js-yaml';
 import { parseScenarioMd, serializeScenarioMd, type ScenarioDefinition } from '../utils/scenarioMd.js';
-import { getAvailableProviders } from '../utils/llm.js';
+import { getAvailableProviders, callLLM, extractYaml } from '../utils/llm.js';
 import { SCENARIOS_DIR } from '../utils/paths.js';
 
 const router = Router();
