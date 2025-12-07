@@ -1,13 +1,16 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus } from 'lucide-react';
+import { FileText, Plus, List, FolderTree } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
+import { DefinitionFolderView } from './DefinitionFolderView';
 import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Button } from '../ui/Button';
 import type { Definition } from '../../api/operations/definitions';
+
+type ViewMode = 'flat' | 'folder';
 
 type DefinitionListProps = {
   definitions: Definition[];
@@ -63,6 +66,9 @@ export function DefinitionList({
   const filters = externalFilters ?? internalFilters;
   const onFiltersChange = externalOnFiltersChange ?? setInternalFilters;
 
+  // View mode state (flat list vs folder view)
+  const [viewMode, setViewMode] = useState<ViewMode>('folder');
+
   const hasActiveFilters =
     filters.search.length > 0 ||
     filters.rootOnly ||
@@ -94,17 +100,55 @@ export function DefinitionList({
     );
   }
 
+  const handleDefinitionClick = useCallback(
+    (definition: Definition) => {
+      navigate(`/definitions/${definition.id}`);
+    },
+    [navigate]
+  );
+
   return (
     <div className="space-y-4">
-      {/* Header with create button */}
+      {/* Header with create button and view toggle */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-medium text-gray-900">Definitions</h2>
-        {onCreateNew && (
-          <Button onClick={onCreateNew} variant="primary" size="sm">
-            <Plus className="w-4 h-4 mr-1" />
-            New Definition
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('flat')}
+              className={`p-1.5 transition-colors ${
+                viewMode === 'flat'
+                  ? 'bg-teal-50 text-teal-600'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`}
+              title="List view"
+              aria-label="List view"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('folder')}
+              className={`p-1.5 transition-colors ${
+                viewMode === 'folder'
+                  ? 'bg-teal-50 text-teal-600'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Folder view (by tag)"
+              aria-label="Folder view (by tag)"
+            >
+              <FolderTree className="w-4 h-4" />
+            </button>
+          </div>
+          {onCreateNew && (
+            <Button onClick={onCreateNew} variant="primary" size="sm">
+              <Plus className="w-4 h-4 mr-1" />
+              New Definition
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -135,17 +179,25 @@ export function DefinitionList({
         </div>
       )}
 
-      {/* Definition cards */}
-      {definitions.length > 0 && (
+      {/* Definition cards - flat list or folder view */}
+      {definitions.length > 0 && viewMode === 'flat' && (
         <div className="space-y-3">
           {definitions.map((definition) => (
             <DefinitionCard
               key={definition.id}
               definition={definition}
-              onClick={() => navigate(`/definitions/${definition.id}`)}
+              onClick={() => handleDefinitionClick(definition)}
             />
           ))}
         </div>
+      )}
+
+      {/* Folder view grouped by tags */}
+      {definitions.length > 0 && viewMode === 'folder' && (
+        <DefinitionFolderView
+          definitions={definitions}
+          onDefinitionClick={handleDefinitionClick}
+        />
       )}
 
       {/* Loading indicator for pagination */}

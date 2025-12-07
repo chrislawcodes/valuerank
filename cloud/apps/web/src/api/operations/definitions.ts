@@ -109,6 +109,10 @@ export const DEFINITIONS_QUERY = gql`
         id
         name
       }
+      allTags {
+        id
+        name
+      }
     }
   }
 `;

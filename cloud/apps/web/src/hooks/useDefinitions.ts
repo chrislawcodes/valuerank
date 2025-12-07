@@ -35,6 +35,8 @@ export function useDefinitions(options: UseDefinitionsOptions = {}): UseDefiniti
   const [result, reexecuteQuery] = useQuery<DefinitionsQueryResult, DefinitionsQueryVariables>({
     query: DEFINITIONS_QUERY,
     variables,
+    // Always fetch fresh data - show cached first, then update with network response
+    requestPolicy: 'cache-and-network',
   });
 
   return {

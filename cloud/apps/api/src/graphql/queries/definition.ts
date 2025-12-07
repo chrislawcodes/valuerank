@@ -102,12 +102,44 @@ builder.queryField('definitions', (t) =>
       }
 
       if (args.tagIds && args.tagIds.length > 0) {
-        // Filter by tags (OR logic - any of the specified tags)
-        where.tags = {
-          some: {
-            tagId: { in: args.tagIds.map(String) },
-          },
-        };
+        // Tag filtering with inheritance support:
+        // Find definitions that have the tag directly OR have an ancestor with the tag
+        const tagIdStrings = args.tagIds.map(String);
+
+        // Use a CTE to find all definitions that match via direct or inherited tags
+        const matchingDefinitions = await db.$queryRaw<{ id: string }[]>`
+          WITH RECURSIVE
+          -- Get definitions with direct tags
+          direct_tagged AS (
+            SELECT DISTINCT dt.definition_id as id
+            FROM definition_tags dt
+            WHERE dt.tag_id = ANY(${tagIdStrings}::text[])
+            AND dt.deleted_at IS NULL
+          ),
+          -- Get all descendants of directly tagged definitions (they inherit the tag)
+          inherited AS (
+            SELECT d.id, d.parent_id
+            FROM definitions d
+            JOIN direct_tagged dt ON d.id = dt.id
+            WHERE d.deleted_at IS NULL
+            UNION ALL
+            SELECT d.id, d.parent_id
+            FROM definitions d
+            JOIN inherited i ON d.parent_id = i.id
+            WHERE d.deleted_at IS NULL
+          )
+          SELECT DISTINCT id FROM inherited
+        `;
+
+        const matchingIds = matchingDefinitions.map((d) => d.id);
+
+        if (matchingIds.length === 0) {
+          // No definitions match the tag filter
+          ctx.log.debug({ count: 0 }, 'No definitions match tag filter');
+          return [];
+        }
+
+        where.id = { in: matchingIds };
       }
 
       if (args.hasRuns) {

@@ -116,8 +116,15 @@ export function DefinitionDetail() {
 
   const handleDelete = async () => {
     if (!definition) return;
-    await deleteDefinition(definition.id);
-    navigate('/definitions');
+    try {
+      await deleteDefinition(definition.id);
+      setShowDeleteConfirm(false);
+      navigate('/definitions');
+    } catch (err) {
+      // Close dialog on error too - user can retry
+      setShowDeleteConfirm(false);
+      console.error('Failed to delete definition:', err);
+    }
   };
 
   // Create mode
