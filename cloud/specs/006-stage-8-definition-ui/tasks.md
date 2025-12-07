@@ -124,12 +124,12 @@
 
 ### Implementation for User Story 3
 
-- [ ] T043 [P] [US3] Create useDefinition hook for single definition in `apps/web/src/hooks/useDefinition.ts`
-- [ ] T044 [US3] Implement edit mode in DefinitionEditor (load existing data)
-- [ ] T045 [US3] Add "Edit" button to definition detail view in DefinitionDetail.tsx
-- [ ] T046 [US3] Implement unsaved changes detection and prompt in DefinitionEditor
-- [ ] T047 [US3] Add updateDefinition mutation call to useDefinitionMutations
-- [ ] T048 [US3] Write tests for edit flow in `apps/web/tests/components/definitions/DefinitionEditor.test.tsx`
+- [X] T043 [P] [US3] Create useDefinition hook for single definition in `apps/web/src/hooks/useDefinition.ts`
+- [X] T044 [US3] Implement edit mode in DefinitionEditor (load existing data)
+- [X] T045 [US3] Add "Edit" button to definition detail view in DefinitionDetail.tsx
+- [X] T046 [US3] Implement unsaved changes detection and prompt in DefinitionEditor
+- [X] T047 [US3] Add updateDefinition mutation call to useDefinitionMutations
+- [X] T048 [US3] Write tests for edit flow in `apps/web/tests/components/definitions/DefinitionEditor.test.tsx`
 
 **Checkpoint**: User Story 3 complete - can edit definitions
 
