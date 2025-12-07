@@ -12,10 +12,10 @@
 | Phase 4 | ✅ Complete | 5/5 | US5 Protected Routes (P1 MVP) |
 | Phase 5 | ✅ Complete | 9/9 | US2 Navigation (P1 MVP) |
 | Phase 6 | ✅ Complete | 4/4 | US4 UI States (P2) |
-| Phase 7 | ⏳ Pending | 0/7 | US3 API Keys (P2) |
+| Phase 7 | ✅ Complete | 7/7 | US3 API Keys (P2) |
 | Phase 8 | ⏳ Pending | 0/5 | Polish |
 
-**Overall**: 42/54 tasks (78%)
+**Overall**: 49/54 tasks (91%)
 
 ## Format: `[ID] [P?] [Story?] Description`
 
@@ -161,16 +161,16 @@
 
 ### Implementation for User Story 3
 
-- [ ] T043 [US3] Create apps/web/src/pages/Settings.tsx with API keys section
-- [ ] T044 [US3] Implement API keys list with urql useQuery hook
-- [ ] T045 [US3] Create API key creation modal/form
-- [ ] T046 [US3] Display full key with copy button after creation
-- [ ] T047 [US3] Implement revoke with confirmation dialog
-- [ ] T048 [US3] Add optimistic UI updates for create/revoke
+- [X] T043 [US3] Create apps/web/src/pages/Settings.tsx with API keys section
+- [X] T044 [US3] Implement API keys list with urql useQuery hook
+- [X] T045 [US3] Create API key creation modal/form
+- [X] T046 [US3] Display full key with copy button after creation
+- [X] T047 [US3] Implement revoke with confirmation dialog
+- [X] T048 [US3] Add optimistic UI updates for create/revoke
 
 ### Tests for User Story 3
 
-- [ ] T049 [US3] Create apps/web/tests/pages/Settings.test.tsx
+- [X] T049 [US3] Create apps/web/tests/pages/Settings.test.tsx
 
 **Checkpoint**: User Story 3 complete - can manage API keys
 
