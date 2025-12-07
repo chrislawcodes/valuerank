@@ -1,6 +1,8 @@
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
+import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -12,6 +14,8 @@ type DefinitionListProps = {
   loading: boolean;
   error: Error | null;
   onCreateNew?: () => void;
+  filters?: DefinitionFilterState;
+  onFiltersChange?: (filters: DefinitionFilterState) => void;
 };
 
 function DefinitionListSkeleton() {
@@ -37,12 +41,33 @@ function DefinitionListSkeleton() {
   );
 }
 
-export function DefinitionList({ definitions, loading, error, onCreateNew }: DefinitionListProps) {
+const defaultFilters: DefinitionFilterState = {
+  search: '',
+  rootOnly: false,
+  hasRuns: false,
+  tagIds: [],
+};
+
+export function DefinitionList({
+  definitions,
+  loading,
+  error,
+  onCreateNew,
+  filters: externalFilters,
+  onFiltersChange: externalOnFiltersChange,
+}: DefinitionListProps) {
   const navigate = useNavigate();
 
-  if (loading && definitions.length === 0) {
-    return <DefinitionListSkeleton />;
-  }
+  // Use internal state if no external filters provided
+  const [internalFilters, setInternalFilters] = useState<DefinitionFilterState>(defaultFilters);
+  const filters = externalFilters ?? internalFilters;
+  const onFiltersChange = externalOnFiltersChange ?? setInternalFilters;
+
+  const hasActiveFilters =
+    filters.search.length > 0 ||
+    filters.rootOnly ||
+    filters.hasRuns ||
+    filters.tagIds.length > 0;
 
   if (error) {
     return (
@@ -50,7 +75,8 @@ export function DefinitionList({ definitions, loading, error, onCreateNew }: Def
     );
   }
 
-  if (definitions.length === 0) {
+  // Show empty state only when not loading and no definitions exist AND no filters are active
+  if (!loading && definitions.length === 0 && !hasActiveFilters) {
     return (
       <EmptyState
         icon={FileText}
@@ -70,11 +96,9 @@ export function DefinitionList({ definitions, loading, error, onCreateNew }: Def
 
   return (
     <div className="space-y-4">
-      {/* Header with count and create button */}
+      {/* Header with create button */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
-          {definitions.length} definition{definitions.length !== 1 ? 's' : ''}
-        </p>
+        <h2 className="text-lg font-medium text-gray-900">Definitions</h2>
         {onCreateNew && (
           <Button onClick={onCreateNew} variant="primary" size="sm">
             <Plus className="w-4 h-4 mr-1" />
@@ -83,16 +107,46 @@ export function DefinitionList({ definitions, loading, error, onCreateNew }: Def
         )}
       </div>
 
+      {/* Filters */}
+      <DefinitionFilters filters={filters} onFiltersChange={onFiltersChange} />
+
+      {/* Loading skeleton */}
+      {loading && definitions.length === 0 && <DefinitionListSkeleton />}
+
+      {/* Results count */}
+      {!loading && (
+        <p className="text-sm text-gray-500">
+          {definitions.length} definition{definitions.length !== 1 ? 's' : ''}
+          {hasActiveFilters && ' matching filters'}
+        </p>
+      )}
+
+      {/* No results with filters */}
+      {!loading && definitions.length === 0 && hasActiveFilters && (
+        <div className="text-center py-8">
+          <p className="text-gray-500">No definitions match your filters</p>
+          <button
+            type="button"
+            onClick={() => onFiltersChange(defaultFilters)}
+            className="mt-2 text-teal-600 hover:text-teal-700 text-sm"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
       {/* Definition cards */}
-      <div className="space-y-3">
-        {definitions.map((definition) => (
-          <DefinitionCard
-            key={definition.id}
-            definition={definition}
-            onClick={() => navigate(`/definitions/${definition.id}`)}
-          />
-        ))}
-      </div>
+      {definitions.length > 0 && (
+        <div className="space-y-3">
+          {definitions.map((definition) => (
+            <DefinitionCard
+              key={definition.id}
+              definition={definition}
+              onClick={() => navigate(`/definitions/${definition.id}`)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Loading indicator for pagination */}
       {loading && definitions.length > 0 && (

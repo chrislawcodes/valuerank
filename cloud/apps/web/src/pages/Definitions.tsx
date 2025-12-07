@@ -1,10 +1,26 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DefinitionList } from '../components/definitions/DefinitionList';
+import { type DefinitionFilterState } from '../components/definitions/DefinitionFilters';
 import { useDefinitions } from '../hooks/useDefinitions';
+
+const defaultFilters: DefinitionFilterState = {
+  search: '',
+  rootOnly: false,
+  hasRuns: false,
+  tagIds: [],
+};
 
 export function Definitions() {
   const navigate = useNavigate();
-  const { definitions, loading, error } = useDefinitions({ rootOnly: true });
+  const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
+
+  const { definitions, loading, error } = useDefinitions({
+    search: filters.search || undefined,
+    rootOnly: filters.rootOnly || undefined,
+    hasRuns: filters.hasRuns || undefined,
+    tagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
+  });
 
   const handleCreateNew = () => {
     navigate('/definitions/new');
@@ -20,6 +36,8 @@ export function Definitions() {
         loading={loading}
         error={error}
         onCreateNew={handleCreateNew}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
     </div>
   );

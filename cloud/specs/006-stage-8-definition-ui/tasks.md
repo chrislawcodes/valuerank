@@ -167,7 +167,7 @@
 - [X] T057 [US5] Create TagSelector component in `apps/web/src/components/definitions/TagSelector.tsx`
 - [X] T058 [US5] Add TagChips to DefinitionCard to display assigned tags
 - [X] T059 [US5] Add TagSelector to DefinitionDetail for tag assignment
-- [ ] T060 [US5] Add tag filter dropdown to DefinitionFilters (created in US6)
+- [X] T060 [US5] Add tag filter dropdown to DefinitionFilters (created in US6)
 - [X] T061 [US5] Implement inline tag creation in TagSelector
 - [X] T062 [US5] Write tests for TagSelector in `apps/web/tests/components/definitions/TagSelector.test.tsx`
 - [X] T063 [US5] Write tests for TagChips in `apps/web/tests/components/definitions/TagChips.test.tsx`
@@ -184,14 +184,14 @@
 
 ### Implementation for User Story 6
 
-- [ ] T064 [P] [US6] Create DefinitionFilters component in `apps/web/src/components/definitions/DefinitionFilters.tsx`
-- [ ] T065 [US6] Add search input with debounce to DefinitionFilters
-- [ ] T066 [US6] Add "Root only" toggle filter to DefinitionFilters
-- [ ] T067 [US6] Add "Has runs" toggle filter to DefinitionFilters
-- [ ] T068 [US6] Add "Clear filters" button to DefinitionFilters
-- [ ] T069 [US6] Integrate DefinitionFilters into DefinitionList
-- [ ] T070 [US6] Update useDefinitions hook to accept filter parameters
-- [ ] T071 [US6] Write tests for DefinitionFilters in `apps/web/tests/components/definitions/DefinitionFilters.test.tsx`
+- [X] T064 [P] [US6] Create DefinitionFilters component in `apps/web/src/components/definitions/DefinitionFilters.tsx`
+- [X] T065 [US6] Add search input with debounce to DefinitionFilters
+- [X] T066 [US6] Add "Root only" toggle filter to DefinitionFilters
+- [X] T067 [US6] Add "Has runs" toggle filter to DefinitionFilters
+- [X] T068 [US6] Add "Clear filters" button to DefinitionFilters
+- [X] T069 [US6] Integrate DefinitionFilters into DefinitionList
+- [X] T070 [US6] Update useDefinitions hook to accept filter parameters
+- [X] T071 [US6] Write tests for DefinitionFilters in `apps/web/tests/components/definitions/DefinitionFilters.test.tsx`
 
 **Checkpoint**: User Story 6 complete - can search and filter
 
