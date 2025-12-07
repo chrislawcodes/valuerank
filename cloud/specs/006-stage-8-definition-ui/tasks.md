@@ -100,17 +100,17 @@
 
 ### Implementation for User Story 2
 
-- [ ] T032 [P] [US2] Create DimensionLevelEditor component in `apps/web/src/components/definitions/DimensionLevelEditor.tsx`
-- [ ] T033 [P] [US2] Create useDefinitionMutations hook in `apps/web/src/hooks/useDefinitionMutations.ts`
-- [ ] T034 [US2] Create DimensionEditor component in `apps/web/src/components/definitions/DimensionEditor.tsx`
-- [ ] T035 [US2] Create DefinitionEditor component in `apps/web/src/components/definitions/DefinitionEditor.tsx`
-- [ ] T036 [US2] Add syntax highlighting for template placeholders `[name]` in DefinitionEditor
-- [ ] T037 [US2] Create DefinitionDetail page in `apps/web/src/pages/DefinitionDetail.tsx`
-- [ ] T038 [US2] Add route for definition detail/create `/definitions/:id` and `/definitions/new` in `apps/web/src/App.tsx`
-- [ ] T039 [US2] Add "New Definition" button to DefinitionList
-- [ ] T040 [US2] Implement create mode in DefinitionEditor with validation
-- [ ] T041 [US2] Write tests for DimensionEditor in `apps/web/tests/components/definitions/DimensionEditor.test.tsx`
-- [ ] T042 [US2] Write tests for DefinitionEditor in `apps/web/tests/components/definitions/DefinitionEditor.test.tsx`
+- [X] T032 [P] [US2] Create DimensionLevelEditor component in `apps/web/src/components/definitions/DimensionLevelEditor.tsx`
+- [X] T033 [P] [US2] Create useDefinitionMutations hook in `apps/web/src/hooks/useDefinitionMutations.ts`
+- [X] T034 [US2] Create DimensionEditor component in `apps/web/src/components/definitions/DimensionEditor.tsx`
+- [X] T035 [US2] Create DefinitionEditor component in `apps/web/src/components/definitions/DefinitionEditor.tsx`
+- [X] T036 [US2] Add syntax highlighting for template placeholders `[name]` in DefinitionEditor
+- [X] T037 [US2] Create DefinitionDetail page in `apps/web/src/pages/DefinitionDetail.tsx`
+- [X] T038 [US2] Add route for definition detail/create `/definitions/:id` and `/definitions/new` in `apps/web/src/App.tsx`
+- [X] T039 [US2] Add "New Definition" button to DefinitionList
+- [X] T040 [US2] Implement create mode in DefinitionEditor with validation
+- [X] T041 [US2] Write tests for DimensionEditor in `apps/web/tests/components/definitions/DimensionEditor.test.tsx`
+- [X] T042 [US2] Write tests for DefinitionEditor in `apps/web/tests/components/definitions/DefinitionEditor.test.tsx`
 
 **Checkpoint**: User Story 2 complete - can create definitions
 
