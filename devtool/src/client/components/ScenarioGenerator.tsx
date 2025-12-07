@@ -10,7 +10,6 @@ import {
   type TemplateEditorHandle,
 } from './generator';
 import { FileConflictModal } from './Modal';
-import { useAvailableModels } from './ModelSelector';
 
 interface ScenarioGeneratorProps {
   folder: string;
@@ -34,10 +33,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   const [canonicalDimensions, setCanonicalDimensions] = useState<Record<string, CanonicalDimension>>({});
   const [expandedDimensions, setExpandedDimensions] = useState<Set<number>>(new Set([0]));
   const [generatedYaml, setGeneratedYaml] = useState<string | null>(null);
-
-  // Model selection
-  const { models: availableModels, loading: modelsLoading, defaultModel } = useAvailableModels();
-  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [generationStatus, setGenerationStatus] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
 
   // File watcher state
   const [showConflictModal, setShowConflictModal] = useState(false);
@@ -68,18 +64,6 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
     loadValues();
   }, [folder, name, isNew]);
 
-  // Set default model when available and nothing is selected
-  useEffect(() => {
-    if (!selectedModel && defaultModel) {
-      // Check localStorage first
-      const saved = localStorage.getItem('devtool:generator:model');
-      if (saved && availableModels.some(m => m.id === saved)) {
-        setSelectedModel(saved);
-      } else {
-        setSelectedModel(defaultModel);
-      }
-    }
-  }, [defaultModel, availableModels, selectedModel]);
 
   // Set up file watcher for non-new files
   useEffect(() => {
@@ -210,9 +194,31 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
       setGenerating(true);
       setError(null);
       setGeneratedYaml(null);
+      setGenerationStatus(null);
 
-      const result = await generator.generate(folder, definition.name, selectedModel);
+      const result = await generator.generate(folder, definition.name);
       setGeneratedYaml(result.yaml);
+      if (typeof result.expectedCount === 'number' && typeof result.actualCount === 'number') {
+        if (result.actualCount === result.expectedCount) {
+          setGenerationStatus({
+            type: 'success',
+            message: `Generated ${result.actualCount} scenarios (expected ${result.expectedCount})${
+              result.usedFallback ? ' using deterministic fallback.' : '.'
+            }`,
+          });
+        } else {
+          setGenerationStatus({
+            type: 'warning',
+            message: `Expected ${result.expectedCount} scenarios but generated ${result.actualCount}. ${
+              result.usedFallback
+                ? 'Deterministic fallback output was used; please review and adjust the template/dimensions if needed.'
+                : 'Please review the YAML output or regenerate.'
+            }`,
+          });
+        }
+      } else {
+        setGenerationStatus(null);
+      }
       onSaved?.();
     } catch (e) {
       setError(`Generation failed: ${e}`);
@@ -370,15 +376,22 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
         onGenerate={handleGenerate}
         onBlur={handleInputBlur}
         onFocus={handleInputFocus}
-        availableModels={availableModels}
-        modelsLoading={modelsLoading}
-        selectedModel={selectedModel}
-        onModelChange={setSelectedModel}
       />
 
       {error && (
         <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
           {error}
+        </div>
+      )}
+      {generationStatus && !error && (
+        <div
+          className={`mx-4 mt-2 p-3 border rounded text-sm ${
+            generationStatus.type === 'warning'
+              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+              : 'bg-green-50 border-green-200 text-green-800'
+          }`}
+        >
+          {generationStatus.message}
         </div>
       )}
 

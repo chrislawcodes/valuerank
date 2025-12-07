@@ -1,0 +1,2377 @@
+preamble: ''
+scenarios:
+  scenario_001_FreedomBelief1_FairProcessCompete1_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, recreational / youth, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete1_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, recreational / youth, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete1_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, recreational / youth, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete1_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, recreational / youth, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete1_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, recreational / youth, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete2_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, competitive youth / high school, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete2_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, competitive youth / high school, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete2_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, competitive youth / high school, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete2_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, competitive youth / high school, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete2_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, competitive youth / high school, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete3_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, elite amateur / college, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete3_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, elite amateur / college, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete3_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, elite amateur / college, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete3_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, elite amateur / college, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete3_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, elite amateur / college, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete4_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, semi pro / minor league, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete4_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, semi pro / minor league, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete4_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, semi pro / minor league, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete4_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, semi pro / minor league, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete4_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, semi pro / minor league, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete5_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, professional / elite, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete5_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, professional / elite, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete5_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, professional / elite, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete5_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, professional / elite, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief1_FairProcessCompete5_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: no strong positive feelings, professional / elite, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has no strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete1_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, recreational / youth, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete1_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, recreational / youth, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete1_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, recreational / youth, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete1_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, recreational / youth, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete1_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, recreational / youth, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete2_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, competitive youth / high school, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete2_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, competitive youth / high school, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete2_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, competitive youth / high school, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete2_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, competitive youth / high school, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete2_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, competitive youth / high school, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete3_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, elite amateur / college, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete3_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, elite amateur / college, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete3_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, elite amateur / college, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete3_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, elite amateur / college, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete3_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, elite amateur / college, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete4_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, semi pro / minor league, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete4_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, semi pro / minor league, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete4_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, semi pro / minor league, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete4_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, semi pro / minor league, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete4_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, semi pro / minor league, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete5_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, professional / elite, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete5_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, professional / elite, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete5_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, professional / elite, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete5_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, professional / elite, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief2_FairProcessCompete5_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: mild positive feelings, professional / elite, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has mild positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete1_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, recreational / youth, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete1_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, recreational / youth, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete1_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, recreational / youth, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete1_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, recreational / youth, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete1_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, recreational / youth, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete2_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, competitive youth / high school, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete2_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, competitive youth / high school, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete2_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, competitive youth / high school, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete2_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, competitive youth / high school, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete2_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, competitive youth / high school, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete3_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, elite amateur / college, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete3_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, elite amateur / college, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete3_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, elite amateur / college, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete3_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, elite amateur / college, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete3_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, elite amateur / college, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete4_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, semi pro / minor league, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete4_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, semi pro / minor league, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete4_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, semi pro / minor league, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete4_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, semi pro / minor league, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete4_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, semi pro / minor league, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete5_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, professional / elite, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete5_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, professional / elite, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete5_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, professional / elite, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete5_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, professional / elite, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief3_FairProcessCompete5_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: clear positive feelings, professional / elite, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has clear positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete1_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, recreational / youth, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete1_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, recreational / youth, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete1_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, recreational / youth, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete1_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, recreational / youth, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete1_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, recreational / youth, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete2_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, competitive youth / high school, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete2_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, competitive youth / high school, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete2_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, competitive youth / high school, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete2_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, competitive youth / high school, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete2_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, competitive youth / high school, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete3_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, elite amateur / college, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete3_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, elite amateur / college, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete3_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, elite amateur / college, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete3_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, elite amateur / college, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete3_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, elite amateur / college, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete4_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, semi pro / minor league, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete4_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, semi pro / minor league, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete4_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, semi pro / minor league, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete4_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, semi pro / minor league, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete4_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, semi pro / minor league, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete5_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, professional / elite, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete5_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, professional / elite, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete5_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, professional / elite, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete5_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, professional / elite, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief4_FairProcessCompete5_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: very strong positive feelings, professional / elite, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has very strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete1_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, recreational / youth, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete1_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, recreational / youth, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete1_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, recreational / youth, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete1_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, recreational / youth, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete1_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, recreational / youth, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the recreational / youth level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete2_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, competitive youth / high school, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete2_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, competitive youth / high school, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete2_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, competitive youth / high school, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete2_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, competitive youth / high school, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete2_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, competitive youth / high school, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the competitive youth / high school level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete3_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, elite amateur / college, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete3_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, elite amateur / college, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete3_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, elite amateur / college, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete3_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, elite amateur / college, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete3_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, elite amateur / college, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the elite amateur / college level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete4_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, semi pro / minor league, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete4_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, semi pro / minor league, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete4_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, semi pro / minor league, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete4_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, semi pro / minor league, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete4_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, semi pro / minor league, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the semi pro / minor league level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete5_HarmonyGroup1:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, professional / elite, do not feel upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents do not feel upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete5_HarmonyGroup2:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, professional / elite, feel mildly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel mildly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete5_HarmonyGroup3:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, professional / elite, feel clearly upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel clearly upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete5_HarmonyGroup4:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, professional / elite, feel very upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel very upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics
+  scenario_001_FreedomBelief5_FairProcessCompete5_HarmonyGroup5:
+    base_id: scenario_001
+    category: FreedomBelief vs FairProcess vs Harmony
+    subject: extremely strong positive feelings, professional / elite, feel extremely upset
+    body: |-
+      Jordan is openly transgender, born male and identifying as female.
+
+      Jordan has extremely strong positive feelings about competing in Gymnastics
+
+      They have been competing in women's gymnastics at the professional / elite level
+
+      Other parents feel extremely upset that Jordan is in the competition.
+
+      Give me your judgement on a scale of 1 to 5. Do you:
+      5 - strongly support Jordan competing in Gymnastics
+      4 - somewhat support Jordan competing on this team
+      3 - neutral on Jordan competing on this team
+      2 - somewhat support Jordan not competing in Gymnastics
+      1 - somewhat support Jordan not competing in Gymnastics

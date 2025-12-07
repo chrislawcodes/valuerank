@@ -234,8 +234,11 @@ Generate ALL valid combinations. For each combination:
 2. Replace placeholders in the template
 3. Smooth the grammar so sentences flow naturally
 4. Use the naming convention: ${def.base_id}_[Dim1Name][Score]_[Dim2Name][Score]_...
+5. If the scenario includes a numbered 1-5 judgment scale, list the options from 5 down to 1 (top to bottom).
 
 ${def.matchingRules ? 'Skip combinations that violate the matching rules.' : ''}
+
+Important: The scenario body should ONLY contain the expanded template content (and the preamble, if provided). Do NOT mention that this is a scenario generator, a template, or anything about a moral values research project. The YAML should look indistinguishable from a hand-written scenario.
 
 Output ONLY the YAML, no explanations.`;
 }

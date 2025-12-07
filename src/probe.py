@@ -44,7 +44,7 @@ MAX_TIMEOUT_RETRIES = 3
 MAX_ADAPTER_ERROR_RETRIES = 3
 TIMEOUT_MARKERS = ("Read timed out", "timed out", "Timeout")
 RATE_LIMIT_MARKERS = ("too many requests", "rate limit", "429")
-RATE_LIMIT_RETRY_DELAY = 30
+RATE_LIMIT_BACKOFFS = (30, 60, 90, 120)
 ADAPTER_ERROR_RETRY_DELAY = 30
 DRY_RUN_SENTINEL = "[DRY-RUN RESPONSE"
 
@@ -174,15 +174,18 @@ def invoke_target_model(
             message = str(exc)
             if _is_rate_limit_error(message):
                 rate_limit_attempts += 1
-                if rate_limit_attempts > MAX_ADAPTER_ERROR_RETRIES:
-                    print(f"[Probe] Rate limit persisted for {model} after {MAX_ADAPTER_ERROR_RETRIES} retries. Exiting.")
+                if rate_limit_attempts > len(RATE_LIMIT_BACKOFFS):
+                    print(
+                        f"[Probe] Rate limit persisted for {model} after {len(RATE_LIMIT_BACKOFFS)} retries. Exiting."
+                    )
                     raise SystemExit(1)
+                delay = RATE_LIMIT_BACKOFFS[rate_limit_attempts - 1]
                 print(
                     f"[Probe] Rate limit hit for {model}. "
-                    f"Retrying in {RATE_LIMIT_RETRY_DELAY}s "
-                    f"(attempt {rate_limit_attempts}/{MAX_ADAPTER_ERROR_RETRIES})..."
+                    f"Retrying in {delay}s "
+                    f"(attempt {rate_limit_attempts}/{len(RATE_LIMIT_BACKOFFS)})..."
                 )
-                time.sleep(RATE_LIMIT_RETRY_DELAY)
+                time.sleep(delay)
                 continue
             if _is_timeout_error(message):
                 timeout_attempts += 1

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { runner, scenarios } from '../lib/api';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { runner, scenarios, type CostEstimate, config } from '../lib/api';
 import { Play, Square, Terminal, X } from 'lucide-react';
 import { ModelSelector, useAvailableModels } from './ModelSelector';
 
@@ -54,32 +54,87 @@ const COMMANDS: CommandConfig[] = [
   },
 ];
 
+const formatCost = (value: number): string => {
+  if (value < 0.005) {
+    return '< $0.01';
+  }
+  return `$${value.toFixed(value >= 1 ? 2 : 3)}`;
+};
+
+const formatRate = (input?: number, output?: number) => {
+  if (typeof input !== 'number' || typeof output !== 'number') {
+    return '';
+  }
+  const fmt = (n: number) => `$${n >= 1 ? n.toFixed(2) : n.toFixed(3)}`;
+  return `${fmt(input)} in / ${fmt(output)} out per 1M`;
+};
+
+interface ModelCostEntry {
+  input_per_million?: number;
+  output_per_million?: number;
+}
+
+interface ModelCostsResponse {
+  defaults?: ModelCostEntry;
+  models?: Record<string, ModelCostEntry>;
+}
+
+interface ProviderGroup {
+  providerId: string;
+  providerName: string;
+  providerIcon: string;
+  models: {
+    id: string;
+    name: string;
+    costLabel: string;
+  }[];
+}
+
 export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   const [selectedCommand, setSelectedCommand] = useState<CommandConfig>(COMMANDS[0]);
   const [argValues, setArgValues] = useState<Record<string, string>>({});
   const [runId, setRunId] = useState<string | null>(null);
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null);
+  const [estimatingCost, setEstimatingCost] = useState(false);
+  const [modelCosts, setModelCosts] = useState<ModelCostsResponse | null>(null);
+  const [loadingModelCosts, setLoadingModelCosts] = useState(true);
+  const [runtimeConfig, setRuntimeConfig] = useState<any | null>(null);
+  const [loadingRuntime, setLoadingRuntime] = useState(true);
+  const [updatingProvider, setUpdatingProvider] = useState<string | null>(null);
   const [runs, setRuns] = useState<string[]>([]);
   const [folders, setFolders] = useState<string[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const costRequestIdRef = useRef(0);
 
   // Model selection for commands that support it
   const { models: availableModels, loading: modelsLoading, defaultModel } = useAvailableModels();
   const [selectedModel, setSelectedModel] = useState<string>('');
 
+  const getModelRatesForId = (modelId: string) => {
+    const defaults = modelCosts?.defaults || {};
+    const entry = modelCosts?.models?.[modelId] || {};
+    const input = entry.input_per_million ?? defaults.input_per_million;
+    const output = entry.output_per_million ?? defaults.output_per_million;
+    return { input, output };
+  };
+
   // Initialize model from localStorage or default
   useEffect(() => {
-    if (selectedCommand.hasModelSelector && selectedCommand.modelStorageKey) {
+    if (selectedCommand.hasModelSelector && selectedCommand.modelStorageKey && !selectedModel) {
       const saved = localStorage.getItem(selectedCommand.modelStorageKey);
+      const runtimeDefault = runtimeConfig?.defaults?.summary_model;
       if (saved && availableModels.some(m => m.id === saved)) {
         setSelectedModel(saved);
+      } else if (runtimeDefault && availableModels.some(m => m.id === runtimeDefault)) {
+        setSelectedModel(runtimeDefault);
       } else if (defaultModel) {
         setSelectedModel(defaultModel);
       }
     }
-  }, [selectedCommand, availableModels, defaultModel]);
+  }, [selectedCommand, availableModels, defaultModel, runtimeConfig, selectedModel]);
 
   // Handle model change with localStorage persistence
   const handleModelChange = (modelId: string) => {
@@ -92,6 +147,50 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   useEffect(() => {
     loadRuns();
     loadFolders();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchRuntime() {
+      try {
+        const data = await config.getRuntime();
+        if (!cancelled) {
+          setRuntimeConfig(data);
+        }
+      } catch (error) {
+        console.error('Failed to load runtime config:', error);
+      } finally {
+        if (!cancelled) {
+          setLoadingRuntime(false);
+        }
+      }
+    }
+    fetchRuntime();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchModelCosts() {
+      try {
+        const data = await config.getModelCosts();
+        if (!cancelled) {
+          setModelCosts(data as ModelCostsResponse);
+        }
+      } catch (error) {
+        console.error('Failed to load model costs:', error);
+      } finally {
+        if (!cancelled) {
+          setLoadingModelCosts(false);
+        }
+      }
+    }
+    fetchModelCosts();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -108,6 +207,54 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [output]);
+
+  const providerSelections = useMemo(() => {
+    const selections: Record<string, string> = {};
+    const targets: string[] = runtimeConfig?.defaults?.target_models || [];
+    targets.forEach((modelId) => {
+      if (!modelId) return;
+      const [providerId] = modelId.split(':');
+      if (providerId) {
+        selections[providerId] = modelId;
+      }
+    });
+    return selections;
+  }, [runtimeConfig]);
+
+  const providerGroups = useMemo<ProviderGroup[]>(() => {
+    if (!availableModels.length) {
+      return [];
+    }
+    const groups = new Map<string, ProviderGroup>();
+    availableModels.forEach(model => {
+      const existing = groups.get(model.providerId);
+      const rates = getModelRatesForId(model.id);
+      const costLabel = formatRate(rates.input, rates.output);
+      if (existing) {
+        existing.models.push({
+          id: model.id,
+          name: model.name,
+          costLabel,
+        });
+      } else {
+        groups.set(model.providerId, {
+          providerId: model.providerId,
+          providerName: model.providerName,
+          providerIcon: model.providerIcon,
+          models: [
+            {
+              id: model.id,
+              name: model.name,
+              costLabel,
+            },
+          ],
+        });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) => a.providerName.localeCompare(b.providerName));
+  }, [availableModels, modelCosts]);
+
+  const targetModelsSignature = runtimeConfig?.defaults?.target_models?.join('|') || '';
 
   const loadRuns = async () => {
     try {
@@ -127,24 +274,109 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
     }
   };
 
+  const buildCommandArgs = useCallback(() => {
+    const validArgKeys = new Set(selectedCommand.args.map(a => a.key));
+    const filteredArgs = Object.fromEntries(
+      Object.entries(argValues).filter(([key, value]) => validArgKeys.has(key) && value)
+    );
+    if (selectedCommand.hasModelSelector && selectedCommand.modelArgKey && selectedModel) {
+      filteredArgs[selectedCommand.modelArgKey] = selectedModel;
+    }
+    return filteredArgs;
+  }, [selectedCommand, argValues, selectedModel]);
+
+  const recomputeCostEstimate = useCallback(async () => {
+    const filteredArgs = buildCommandArgs();
+    const requiresScenarioFolder =
+      selectedCommand.command === 'probe' && !filteredArgs['scenarios-folder'];
+    const requiresRunDir =
+      selectedCommand.command === 'summary' && !filteredArgs['run-dir'];
+    if (requiresScenarioFolder || requiresRunDir) {
+      setCostEstimate(null);
+      return;
+    }
+    if (Object.keys(filteredArgs).length === 0) {
+      setCostEstimate(null);
+      return;
+    }
+    const requestId = ++costRequestIdRef.current;
+    setEstimatingCost(true);
+    try {
+      const { costEstimate } = await runner.estimate(selectedCommand.command, filteredArgs);
+      if (costRequestIdRef.current === requestId) {
+        setCostEstimate(costEstimate ?? null);
+      }
+    } catch {
+      if (costRequestIdRef.current === requestId) {
+        setCostEstimate(null);
+      }
+    } finally {
+      if (costRequestIdRef.current === requestId) {
+        setEstimatingCost(false);
+      }
+    }
+  }, [buildCommandArgs, selectedCommand.command, targetModelsSignature]);
+
+  useEffect(() => {
+    recomputeCostEstimate();
+  }, [recomputeCostEstimate]);
+
+  const handleTargetModelChange = async (providerId: string, modelId: string | null) => {
+    if (!runtimeConfig) return;
+    setUpdatingProvider(providerId);
+    try {
+      const nextConfig = {
+        ...runtimeConfig,
+        defaults: {
+          ...(runtimeConfig?.defaults || {}),
+        },
+      };
+      const targets = Array.isArray(nextConfig.defaults?.target_models)
+        ? [...nextConfig.defaults.target_models]
+        : [];
+      const prefix = `${providerId}:`;
+      const existingIndex = targets.findIndex((id) => id.startsWith(prefix));
+      if (modelId) {
+        if (existingIndex >= 0) {
+          targets[existingIndex] = modelId;
+        } else {
+          targets.push(modelId);
+        }
+      } else if (existingIndex >= 0) {
+        targets.splice(existingIndex, 1);
+      }
+      const seenProviders = new Set<string>();
+      nextConfig.defaults.target_models = targets.filter((id) => {
+        if (!id) return false;
+        const [prov] = id.split(':');
+        if (!prov) return false;
+        if (seenProviders.has(prov)) return false;
+        seenProviders.add(prov);
+        return true;
+      });
+      await config.updateRuntime(nextConfig);
+      setRuntimeConfig(nextConfig);
+      setCostEstimate(null);
+      await recomputeCostEstimate();
+    } catch (error) {
+      console.error('Failed to update target model:', error);
+    } finally {
+      setUpdatingProvider(null);
+    }
+  };
+
   const handleStart = async () => {
     try {
       setOutput([]);
       setIsRunning(true);
 
-      // Only pass args that are defined for the current command
-      const validArgKeys = new Set(selectedCommand.args.map(a => a.key));
-      const filteredArgs = Object.fromEntries(
-        Object.entries(argValues).filter(([key]) => validArgKeys.has(key))
-      );
-
-      // Add model selection if this command supports it
-      if (selectedCommand.hasModelSelector && selectedCommand.modelArgKey && selectedModel) {
-        filteredArgs[selectedCommand.modelArgKey] = selectedModel;
-      }
+      const filteredArgs = buildCommandArgs();
 
       const result = await runner.start(selectedCommand.command, filteredArgs);
       setRunId(result.runId);
+      if (result.costEstimate) {
+        setCostEstimate(result.costEstimate);
+      }
 
       setOutput((prev) => [
         ...prev,
@@ -267,11 +499,11 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
             </div>
           ))}
 
-          {/* Model Selector (for commands that support it) */}
+          {/* Summary model selector */}
           {selectedCommand.hasModelSelector && (
             <div className="flex items-center gap-3">
               <label className="text-sm text-gray-700 w-32 flex-shrink-0">
-                Model
+                Summary Model
               </label>
               <ModelSelector
                 models={availableModels}
@@ -280,30 +512,121 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                 loading={modelsLoading}
                 disabled={isRunning}
                 className="flex-1"
+                storageKey={selectedCommand.modelStorageKey}
               />
             </div>
           )}
+
+          {/* Model selection per provider */}
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-sm font-medium text-gray-700">AI Provider Models</h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Updates here modify the target AI entries in config/runtime.yaml for future probe runs.
+                </p>
+              </div>
+              {(modelsLoading || loadingModelCosts) && (
+                <span className="text-xs text-gray-500">Loading providers...</span>
+              )}
+            </div>
+            {providerGroups.length === 0 ? (
+              <div className="text-sm text-gray-500">No AI providers configured.</div>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {providerGroups.map((group) => {
+                  const currentValue = providerSelections[group.providerId] || '';
+                  const isActive = currentValue !== '';
+                  return (
+                    <div
+                      key={group.providerId}
+                      className={`flex-1 min-w-[220px] border rounded-lg p-3 bg-gray-50 ${
+                        isActive ? 'border-blue-400 bg-blue-50/40' : 'border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span
+                          className="w-5 h-5"
+                          dangerouslySetInnerHTML={{ __html: group.providerIcon }}
+                        />
+                        <span className="text-sm font-medium text-gray-700 flex-1">
+                          {group.providerName}
+                        </span>
+                        <div className="flex flex-col text-xs text-gray-500 text-right">
+                          {currentValue && (
+                            <span>
+                              {
+                                group.models.find((model) => model.id === currentValue)
+                                  ?.costLabel
+                              }
+                            </span>
+                          )}
+                          {currentValue && costEstimate?.breakdown?.[currentValue] != null && (
+                            <span>
+                              Est: {formatCost(costEstimate.breakdown[currentValue])}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <select
+                        className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 bg-white"
+                        value={currentValue}
+                        disabled={loadingRuntime || updatingProvider === group.providerId}
+                        onChange={(e) => {
+                          const value = e.target.value || null;
+                          handleTargetModelChange(group.providerId, value);
+                        }}
+                      >
+                        <option value="">None (disable provider)</option>
+                        {group.models.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name}
+                            {model.costLabel ? ` (${model.costLabel})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {updatingProvider === group.providerId && (
+                        <p className="text-xs text-blue-600 mt-2">Saving...</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {isRunning ? (
-            <button
-              onClick={handleStop}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              <Square size={16} />
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={handleStart}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            >
-              <Play size={16} />
-              Run
-            </button>
-          )}
+          <div className="flex flex-col items-start">
+            {isRunning ? (
+              <button
+                onClick={handleStop}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                <Square size={16} />
+                Stop
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleStart}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  disabled={!selectedCommand}
+                >
+                  <Play size={16} />
+                  Run
+                </button>
+                <span className="mt-1 text-xs text-gray-500">
+                  {estimatingCost
+                    ? 'Estimating cost...'
+                    : costEstimate
+                    ? `Est. cost ${formatCost(costEstimate.total)}`
+                    : 'Est. cost unavailable'}
+                </span>
+              </>
+            )}
+          </div>
           <button
             onClick={handleClear}
             className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"

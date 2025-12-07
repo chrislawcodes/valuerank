@@ -189,14 +189,14 @@ def _parse_scenarios_block(raw: Dict[str, Any]) -> ScenarioDict:
 
 def load_scenarios(path: Path) -> ScenariosConfig:
     data = _load_yaml(path)
-    preamble = data.get("preamble")
+    preamble = str(data.get("preamble") or "").strip()
     followups = data.get("followups") or {}
     scenarios_map = _parse_scenarios_block(data)
-    if not preamble or not scenarios_map:
-        raise ValueError("scenarios.yaml must include a preamble and at least one scenario.")
+    if not scenarios_map:
+        raise ValueError("scenarios.yaml must include at least one scenario.")
     return ScenariosConfig(
         version=data.get("version"),
-        preamble=str(preamble).strip(),
+        preamble=preamble,
         followups={k: str(v).strip() for k, v in followups.items()},
         golden_runs=data.get("golden_runs", {}) or {},
         scenarios=scenarios_map,

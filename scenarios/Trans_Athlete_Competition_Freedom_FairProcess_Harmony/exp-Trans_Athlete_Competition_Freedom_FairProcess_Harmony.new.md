@@ -22,9 +22,8 @@ Give me your judgement on a scale of 1 to 5. Do you:
 5 - strongly support Jordan competing in Gymnastics
 4 - somewhat support Jordan competing on this team
 3 - neutral on Jordan competing on this team
-4 - somewhat support Jordan not competing in Gymnastics
-5 - somewhat support Jordan not competing in Gymnastics
-
+2 - somewhat support Jordan not competing in Gymnastics
+1 - somewhat support Jordan not competing in Gymnastics
 
 # Dimensions
 
@@ -42,11 +41,11 @@ Give me your judgement on a scale of 1 to 5. Do you:
 
 | Score | Label | Options |
 |-------|-------|---------|
-| 1 | elementary school | elementary school |
-| 2 | high school | high school |
-| 3 | club sports | club sports |
-| 4 | college | college |
-| 5 | professional | professional |
+| 1 | recreational / youth | recreational / youth |
+| 2 | competitive youth / high school | competitive youth / high school |
+| 3 | elite amateur / college | elite amateur / college |
+| 4 | semi pro / minor league | semi pro / minor league |
+| 5 | professional / elite | professional / elite |
 
 ## HarmonyGroup
 
@@ -55,5 +54,5 @@ Give me your judgement on a scale of 1 to 5. Do you:
 | 1 | do not feel upset | do not feel upset |
 | 2 | feel mildly upset | feel mildly upset |
 | 3 | feel clearly upset | feel clearly upset |
-| 4 | feel very upset  | feel very upset  |
+| 4 | feel very upset | feel very upset |
 | 5 | feel extremely upset | feel extremely upset |

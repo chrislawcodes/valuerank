@@ -2,14 +2,101 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import { watch, type FSWatcher } from 'fs';
 import path from 'path';
-import { parseScenarioMd, serializeScenarioMd, buildGenerationPrompt, type ScenarioDefinition } from '../utils/scenarioMd.js';
-import { callLLM, getAvailableProviders, extractYaml } from '../utils/llm.js';
+import jsYaml from 'js-yaml';
+import { parseScenarioMd, serializeScenarioMd, type ScenarioDefinition } from '../utils/scenarioMd.js';
+import { getAvailableProviders } from '../utils/llm.js';
 import { SCENARIOS_DIR } from '../utils/paths.js';
 
 const router = Router();
 
 // Track active file watchers to clean up on disconnect
 const activeWatchers = new Map<string, FSWatcher>();
+
+function computeExpectedScenarioCount(definition: ScenarioDefinition): number {
+  if (!definition.dimensions?.length) {
+    return 0;
+  }
+  return definition.dimensions.reduce((total, dim) => {
+    const values = dim.values?.length ?? 0;
+    return total * (values > 0 ? values : 0);
+  }, 1);
+}
+
+type ScenarioValue = {
+  name: string;
+  safeName: string;
+  score: number;
+  label: string;
+  text: string;
+};
+
+function buildDeterministicYaml(definition: ScenarioDefinition): { yaml: string; count: number } {
+  const dimensions = definition.dimensions || [];
+  if (!dimensions.length) {
+    const data = { preamble: definition.preamble || '', scenarios: {} };
+    return { yaml: jsYaml.dump(data, { lineWidth: 1000 }), count: 0 };
+  }
+
+  const scenarios: Record<string, { base_id: string; category: string; subject: string; body: string }> = {};
+
+  const dimensionValues: ScenarioValue[][] = dimensions.map((dim) =>
+    (dim.values || []).map((val) => {
+      const text = val.options?.find(opt => !!opt?.trim()) || val.label || '';
+      return {
+        name: dim.name,
+        safeName: dim.name.replace(/\s+/g, ''),
+        score: val.score,
+        label: val.label || text || `${dim.name} ${val.score}`,
+        text: text || val.label || '',
+      };
+    })
+  );
+
+  const combo: ScenarioValue[] = new Array(dimensions.length);
+
+  const buildCombo = (index: number) => {
+    if (index === dimensions.length) {
+      const scenarioId = [
+        definition.base_id || 'scenario',
+        ...combo.map((value) => `${value.safeName}${value.score}`),
+      ].join('_');
+
+      const subject = combo.map((value) => value.label).join(', ');
+      let body = definition.template || '';
+      if (body) {
+        combo.forEach((value) => {
+          const placeholder = new RegExp(`\\[${value.name}\\]`, 'gi');
+          body = body.replace(placeholder, value.text);
+        });
+      }
+
+      scenarios[scenarioId] = {
+        base_id: definition.base_id || 'scenario',
+        category: definition.category || '',
+        subject,
+        body: body || '',
+      };
+      return;
+    }
+
+    for (const value of dimensionValues[index]) {
+      combo[index] = value;
+      buildCombo(index + 1);
+    }
+  };
+
+  buildCombo(0);
+
+  const data = {
+    preamble: definition.preamble || '',
+    scenarios,
+  };
+
+  return {
+    yaml: jsYaml.dump(data, { lineWidth: 1000 }),
+    count: Object.keys(scenarios).length,
+  };
+}
 
 // GET /api/generator/definition/:folder/:name - Get a scenario definition (.md file)
 router.get('/definition/:folder/:name', async (req, res) => {
@@ -148,7 +235,6 @@ function buildYamlFilename(name: string, number: string): string {
 router.post('/generate/:folder/:name', async (req, res) => {
   try {
     const { folder, name } = req.params;
-    const { model } = req.body || {};
     const mdPath = path.join(SCENARIOS_DIR, folder, `${name}.md`);
 
     // Build proper YAML filename with number prefix
@@ -161,15 +247,23 @@ router.post('/generate/:folder/:name', async (req, res) => {
     const content = await fs.readFile(mdPath, 'utf-8');
     const definition = parseScenarioMd(content);
 
-    // Build the prompt and call LLM
-    const prompt = buildGenerationPrompt(definition);
-    const result = await callLLM(prompt, { maxTokens: 16000, model });
-    const yaml = extractYaml(result);
+    const deterministic = buildDeterministicYaml(definition);
+    const yamlOutput = deterministic.yaml;
+    const expectedCount = computeExpectedScenarioCount(definition);
+    const actualCount = deterministic.count;
 
     // Save the YAML file
-    await fs.writeFile(yamlPath, yaml, 'utf-8');
+    await fs.writeFile(yamlPath, yamlOutput, 'utf-8');
 
-    res.json({ success: true, yaml, filename: yamlFilename });
+    res.json({
+      success: true,
+      yaml: yamlOutput,
+      filename: yamlFilename,
+      expectedCount,
+      actualCount,
+      countMatches: actualCount === expectedCount,
+      usedFallback: false,
+    });
   } catch (error) {
     console.error('Generation error:', error);
     res.status(500).json({ error: String(error) });

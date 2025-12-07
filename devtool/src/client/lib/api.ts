@@ -127,10 +127,16 @@ export const config = {
 };
 
 // Runner API
+export interface CostEstimate {
+  total: number;
+  breakdown: Record<string, number>;
+}
+
 export interface RunResult {
   runId: string;
   command: string;
   args: string[];
+  costEstimate?: CostEstimate | null;
 }
 
 export const runner = {
@@ -165,6 +171,12 @@ export const runner = {
 
     return () => eventSource.close();
   },
+
+  estimate: (command: string, args: Record<string, string> = {}) =>
+    fetchJson<{ costEstimate: CostEstimate | null }>(`${API_BASE}/runner/estimate`, {
+      method: 'POST',
+      body: JSON.stringify({ command, args }),
+    }),
 };
 
 // Scenario Definition (generator .md files)
@@ -209,7 +221,15 @@ export const generator = {
     }),
 
   generate: (folder: string, name: string, model?: string) =>
-    fetchJson<{ success: boolean; yaml: string }>(`${API_BASE}/generator/generate/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`, {
+    fetchJson<{
+      success: boolean;
+      yaml: string;
+      filename: string;
+      expectedCount?: number | null;
+      actualCount?: number | null;
+      countMatches?: boolean;
+      usedFallback?: boolean;
+    }>(`${API_BASE}/generator/generate/${encodeURIComponent(folder)}/${encodeURIComponent(name)}`, {
       method: 'POST',
       body: JSON.stringify({ model }),
     }),
