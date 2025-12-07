@@ -53,28 +53,31 @@ This is fundamentally a **DAG (directed acyclic graph) problem** - the same stru
 **Recursive CTEs** make ancestry/descendant queries trivial:
 
 ```sql
--- Get full ancestry chain for a definition
+-- Get full ancestry chain for a definition (excluding soft-deleted)
 WITH RECURSIVE ancestors AS (
-  SELECT * FROM definitions WHERE id = 'def_v1.1.1'
+  SELECT * FROM definitions WHERE id = 'def_v1.1.1' AND deleted_at IS NULL
   UNION ALL
   SELECT d.* FROM definitions d
   JOIN ancestors a ON d.id = a.parent_id
+  WHERE d.deleted_at IS NULL
 )
 SELECT * FROM ancestors;
 
--- Get all descendants of a definition
+-- Get all descendants of a definition (excluding soft-deleted)
 WITH RECURSIVE descendants AS (
-  SELECT * FROM definitions WHERE id = 'def_v1'
+  SELECT * FROM definitions WHERE id = 'def_v1' AND deleted_at IS NULL
   UNION ALL
   SELECT d.* FROM definitions d
   JOIN descendants desc ON d.parent_id = desc.id
+  WHERE d.deleted_at IS NULL
 )
 SELECT * FROM descendants;
 
--- Find all runs using this definition or any descendant
+-- Find all runs using this definition or any descendant (excluding soft-deleted)
 WITH RECURSIVE tree AS (...)
 SELECT r.* FROM runs r
-JOIN tree t ON r.definition_id = t.id;
+JOIN tree t ON r.definition_id = t.id
+WHERE t.deleted_at IS NULL;
 ```
 
 **ltree extension** (optional) provides even more powerful hierarchical queries:
@@ -83,11 +86,11 @@ JOIN tree t ON r.definition_id = t.id;
 -- Store path as ltree: 'root.v1.v1_1.v1_1_1'
 CREATE INDEX ON definitions USING GIST (path);
 
--- All descendants of v1
-SELECT * FROM definitions WHERE path <@ 'root.v1';
+-- All descendants of v1 (excluding soft-deleted)
+SELECT * FROM definitions WHERE path <@ 'root.v1' AND deleted_at IS NULL;
 
--- All ancestors of v1.1.1
-SELECT * FROM definitions WHERE 'root.v1.v1_1.v1_1_1' <@ path;
+-- All ancestors of v1.1.1 (excluding soft-deleted)
+SELECT * FROM definitions WHERE 'root.v1.v1_1.v1_1_1' <@ path AND deleted_at IS NULL;
 ```
 
 ## Schema Design
@@ -116,7 +119,10 @@ CREATE TABLE definitions (
   diff_from_parent JSONB,
 
   -- Access tracking for future pruning decisions
-  last_accessed_at TIMESTAMPTZ DEFAULT NOW()  -- Updated on read operations
+  last_accessed_at TIMESTAMPTZ DEFAULT NOW(),  -- Updated on read operations
+
+  -- Soft delete (NULL = not deleted)
+  deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- Display logic: show version_label if set, otherwise truncated UUID
@@ -204,7 +210,10 @@ CREATE TABLE scenarios (
   definition_id UUID REFERENCES definitions(id) NOT NULL,
   run_id UUID REFERENCES runs(id),  -- NULL if pre-generated
   content JSONB NOT NULL,  -- { preamble, scenarios: { id: {...}, ... } }
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Soft delete (NULL = not deleted)
+  deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- Experiments for grouping related runs (with scientific rigor)
@@ -350,10 +359,11 @@ CREATE TABLE rubrics (
 
 ```
 PostgreSQL Tables:
-├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label) + last_accessed_at
+├── definitions          # Versioned scenario definitions (hybrid: UUID + optional label) + soft delete
 ├── runs                 # Pipeline runs with timing + retention settings + last_accessed_at
 ├── transcripts          # Immutable records: model_id, model_version, definition_snapshot + last_accessed_at
-├── scenarios            # Generated scenario variants
+├── scenarios            # Generated scenario variants + soft delete
+├── definition_tags      # Tag associations (join table) + soft delete
 ├── analysis_results     # Versioned analysis (keeps last 3 versions for reproducibility)
 ├── experiments          # Scientific experiment tracking (hypothesis, stats plan, results)
 ├── run_comparisons      # Delta analysis between two runs
@@ -370,6 +380,38 @@ All major entities include `last_accessed_at` timestamp:
 - Updated on read operations (view, export, analysis, MCP query)
 - Enables identification of unused data for future pruning decisions
 - Helps understand usage patterns across the system
+
+### Soft Delete
+
+Certain entities use **soft delete** via a `deleted_at` timestamp column instead of physical deletion:
+
+**Tables with soft delete:**
+- `definitions` - Preserves version history and lineage
+- `scenarios` - Preserves transcript references
+- `definition_tags` - Preserves tag associations
+
+**Pattern:**
+- `deleted_at = NULL` means active/visible
+- `deleted_at = <timestamp>` means logically deleted
+- Records are never physically deleted from the database
+
+**Query requirements:**
+- **All queries** must filter `WHERE deleted_at IS NULL` to exclude soft-deleted records
+- GraphQL resolvers automatically apply this filter
+- The `deleted_at` field is **not exposed** in the GraphQL API
+- Cascading soft delete: when a parent is deleted, related records should also be soft-deleted
+
+**Example:**
+```sql
+-- Always filter out soft-deleted records
+SELECT * FROM definitions WHERE deleted_at IS NULL;
+
+-- Soft delete a definition (not physical DELETE)
+UPDATE definitions SET deleted_at = NOW() WHERE id = $1;
+
+-- Cascade to related records
+UPDATE definition_tags SET deleted_at = NOW() WHERE definition_id = $1;
+```
 
 ### JSONB for Flexible Parts
 
@@ -429,26 +471,30 @@ This gives us:
 
 ## Key Queries
 
+**Important:** All queries must filter `deleted_at IS NULL` to exclude soft-deleted records.
+
 ```sql
--- 1. Get definition with full ancestry
+-- 1. Get definition with full ancestry (excluding soft-deleted)
 SELECT d.*, array_agg(a.id) as ancestors
 FROM definitions d
 LEFT JOIN LATERAL (
   WITH RECURSIVE anc AS (
-    SELECT parent_id FROM definitions WHERE id = d.id
+    SELECT parent_id FROM definitions WHERE id = d.id AND deleted_at IS NULL
     UNION ALL
     SELECT d2.parent_id FROM definitions d2 JOIN anc ON d2.id = anc.parent_id
+    WHERE d2.deleted_at IS NULL
   )
   SELECT id FROM anc WHERE id IS NOT NULL
 ) a ON true
-WHERE d.id = $1
+WHERE d.id = $1 AND d.deleted_at IS NULL
 GROUP BY d.id;
 
--- 2. Get all runs across a definition's descendants
+-- 2. Get all runs across a definition's descendants (excluding soft-deleted)
 WITH RECURSIVE tree AS (
-  SELECT id FROM definitions WHERE id = $root_id
+  SELECT id FROM definitions WHERE id = $root_id AND deleted_at IS NULL
   UNION ALL
   SELECT d.id FROM definitions d JOIN tree t ON d.parent_id = t.id
+  WHERE d.deleted_at IS NULL
 )
 SELECT
   d.name,
@@ -457,12 +503,17 @@ SELECT
   r.status,
   r.created_at
 FROM tree t
-JOIN definitions d ON d.id = t.id
+JOIN definitions d ON d.id = t.id AND d.deleted_at IS NULL
 JOIN runs r ON r.definition_id = d.id
 ORDER BY d.created_at;
 
--- 3. Find all runs affected by a definition change
-WITH RECURSIVE descendants AS (...)
+-- 3. Find all runs affected by a definition change (excluding soft-deleted)
+WITH RECURSIVE descendants AS (
+  SELECT id FROM definitions WHERE id = $1 AND deleted_at IS NULL
+  UNION ALL
+  SELECT d.id FROM definitions d JOIN descendants ON d.parent_id = descendants.id
+  WHERE d.deleted_at IS NULL
+)
 SELECT * FROM runs WHERE definition_id IN (SELECT id FROM descendants);
 ```
 

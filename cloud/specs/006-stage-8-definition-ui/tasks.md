@@ -65,7 +65,7 @@
 ### API Integration Tests
 
 - [X] T022 Write integration tests for tag CRUD in `apps/api/tests/graphql/mutations/tag.test.ts`
-- [ ] T023 Write integration tests for enhanced definition queries in `apps/api/tests/graphql/definitions.test.ts`
+- [X] T023 Write integration tests for enhanced definition queries in `apps/api/tests/graphql/definitions.test.ts`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
