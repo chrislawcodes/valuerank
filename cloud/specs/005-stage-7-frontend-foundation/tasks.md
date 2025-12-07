@@ -86,14 +86,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T025 [US5] Create apps/web/src/components/ProtectedRoute.tsx
-- [ ] T026 [US5] Update apps/web/src/App.tsx with React Router setup
-- [ ] T027 [US5] Add route definitions for /login, /definitions, /runs, /experiments, /settings
-- [ ] T028 [US5] Implement redirect to intended URL after login in auth/context.tsx
+- [X] T025 [US5] Create apps/web/src/components/ProtectedRoute.tsx
+- [X] T026 [US5] Update apps/web/src/App.tsx with React Router setup
+- [X] T027 [US5] Add route definitions for /login, /definitions, /runs, /experiments, /settings
+- [X] T028 [US5] Implement redirect to intended URL after login in auth/context.tsx
 
 ### Tests for User Story 5
 
-- [ ] T029 [US5] Create apps/web/tests/components/ProtectedRoute.test.tsx
+- [X] T029 [US5] Create apps/web/tests/components/ProtectedRoute.test.tsx
 
 **Checkpoint**: User Story 5 complete - all routes protected, redirects work
 
