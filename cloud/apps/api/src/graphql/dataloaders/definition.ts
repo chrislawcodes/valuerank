@@ -11,8 +11,9 @@ export function createDefinitionLoader(): DataLoader<string, Definition | null> 
     async (ids: readonly string[]) => {
       log.debug({ ids: [...ids] }, 'Batching definition load');
 
+      // Filter out soft-deleted definitions
       const definitions = await db.definition.findMany({
-        where: { id: { in: [...ids] } },
+        where: { id: { in: [...ids] }, deletedAt: null },
       });
 
       // Create a map for O(1) lookup

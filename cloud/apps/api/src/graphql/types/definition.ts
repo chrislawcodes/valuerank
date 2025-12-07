@@ -63,7 +63,7 @@ builder.objectType(DefinitionRef, {
       description: 'Child definitions forked from this one',
       resolve: async (definition) => {
         return db.definition.findMany({
-          where: { parentId: definition.id },
+          where: { parentId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
         });
       },
@@ -98,7 +98,7 @@ builder.objectType(DefinitionRef, {
       description: 'Scenarios generated from this definition',
       resolve: async (definition) => {
         return db.scenario.findMany({
-          where: { definitionId: definition.id },
+          where: { definitionId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
         });
       },
@@ -120,14 +120,14 @@ builder.objectType(DefinitionRef, {
       resolve: async (definition) => {
         if (!definition.parentId) return [];
 
-        // Use recursive CTE to get all ancestors
+        // Use recursive CTE to get all ancestors (filtering out deleted)
         const ancestors = await db.$queryRaw<RawDefinitionRow[]>`
           WITH RECURSIVE ancestry AS (
-            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id}
+            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id} AND d.deleted_at IS NULL
             UNION ALL
             SELECT d.*, a.depth + 1 FROM definitions d
             JOIN ancestry a ON d.id = a.parent_id
-            WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH}
+            WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
           SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
           FROM ancestry
@@ -152,14 +152,14 @@ builder.objectType(DefinitionRef, {
       type: [DefinitionRef],
       description: 'All descendants forked from this definition (newest first)',
       resolve: async (definition) => {
-        // Use recursive CTE to get all descendants
+        // Use recursive CTE to get all descendants (filtering out deleted)
         const descendants = await db.$queryRaw<RawDefinitionRow[]>`
           WITH RECURSIVE tree AS (
-            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id}
+            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id} AND d.deleted_at IS NULL
             UNION ALL
             SELECT d.*, t.depth + 1 FROM definitions d
             JOIN tree t ON d.parent_id = t.id
-            WHERE t.depth < ${DEFAULT_MAX_DEPTH}
+            WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
           SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
           FROM tree

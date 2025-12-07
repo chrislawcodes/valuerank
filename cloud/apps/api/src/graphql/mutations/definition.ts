@@ -1,5 +1,5 @@
 import { builder } from '../builder.js';
-import { db } from '@valuerank/db';
+import { db, softDeleteDefinition } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
 
@@ -238,6 +238,58 @@ builder.mutationField('updateDefinition', (t) =>
 
       ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
       return definition;
+    },
+  })
+);
+
+// Result type for delete mutation
+type DeleteDefinitionResultShape = {
+  deletedIds: string[];
+  count: number;
+};
+
+const DeleteDefinitionResultRef = builder.objectRef<DeleteDefinitionResultShape>('DeleteDefinitionResult');
+
+builder.objectType(DeleteDefinitionResultRef, {
+  description: 'Result of deleting a definition',
+  fields: (t) => ({
+    deletedIds: t.stringList({
+      description: 'IDs of all definitions that were deleted (includes descendants)',
+      resolve: (parent) => parent.deletedIds,
+    }),
+    count: t.exposeInt('count', {
+      description: 'Total number of definitions deleted',
+    }),
+  }),
+});
+
+// Mutation: deleteDefinition (soft delete)
+builder.mutationField('deleteDefinition', (t) =>
+  t.field({
+    type: DeleteDefinitionResultRef,
+    description: 'Soft delete a definition and all its descendants. Related scenarios and tags are also soft deleted.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to delete',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id } = args;
+
+      ctx.log.debug({ definitionId: id }, 'Deleting definition');
+
+      const deletedIds = await softDeleteDefinition(id);
+
+      ctx.log.info(
+        { definitionId: id, deletedCount: deletedIds.length },
+        'Definition deleted'
+      );
+
+      return {
+        deletedIds,
+        count: deletedIds.length,
+      };
     },
   })
 );

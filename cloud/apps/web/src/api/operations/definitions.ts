@@ -178,6 +178,16 @@ export const FORK_DEFINITION_MUTATION = gql`
   }
 `;
 
+// Delete a definition (soft delete)
+export const DELETE_DEFINITION_MUTATION = gql`
+  mutation DeleteDefinition($id: String!) {
+    deleteDefinition(id: $id) {
+      deletedIds
+      count
+    }
+  }
+`;
+
 // ============================================================================
 // QUERY RESULT TYPES
 // ============================================================================
@@ -252,4 +262,11 @@ export type ForkDefinitionInput = {
 
 export type ForkDefinitionResult = {
   forkDefinition: Definition;
+};
+
+export type DeleteDefinitionResult = {
+  deleteDefinition: {
+    deletedIds: string[];
+    count: number;
+  };
 };

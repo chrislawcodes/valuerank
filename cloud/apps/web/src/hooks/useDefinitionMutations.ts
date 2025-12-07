@@ -3,12 +3,14 @@ import {
   CREATE_DEFINITION_MUTATION,
   UPDATE_DEFINITION_MUTATION,
   FORK_DEFINITION_MUTATION,
+  DELETE_DEFINITION_MUTATION,
   type CreateDefinitionInput,
   type CreateDefinitionResult,
   type UpdateDefinitionInput,
   type UpdateDefinitionResult,
   type ForkDefinitionInput,
   type ForkDefinitionResult,
+  type DeleteDefinitionResult,
   type Definition,
 } from '../api/operations/definitions';
 
@@ -16,9 +18,11 @@ type UseDefinitionMutationsResult = {
   createDefinition: (input: CreateDefinitionInput) => Promise<Definition>;
   updateDefinition: (id: string, input: UpdateDefinitionInput) => Promise<Definition>;
   forkDefinition: (input: ForkDefinitionInput) => Promise<Definition>;
+  deleteDefinition: (id: string) => Promise<{ deletedIds: string[]; count: number }>;
   isCreating: boolean;
   isUpdating: boolean;
   isForking: boolean;
+  isDeleting: boolean;
   error: Error | null;
 };
 
@@ -37,6 +41,11 @@ export function useDefinitionMutations(): UseDefinitionMutationsResult {
     ForkDefinitionResult,
     { input: ForkDefinitionInput }
   >(FORK_DEFINITION_MUTATION);
+
+  const [deleteResult, executeDelete] = useMutation<
+    DeleteDefinitionResult,
+    { id: string }
+  >(DELETE_DEFINITION_MUTATION);
 
   const createDefinition = async (input: CreateDefinitionInput): Promise<Definition> => {
     const result = await executeCreate({ input });
@@ -74,16 +83,32 @@ export function useDefinitionMutations(): UseDefinitionMutationsResult {
     return result.data.forkDefinition;
   };
 
+  const deleteDefinition = async (
+    id: string
+  ): Promise<{ deletedIds: string[]; count: number }> => {
+    const result = await executeDelete({ id });
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    if (!result.data?.deleteDefinition) {
+      throw new Error('Failed to delete definition');
+    }
+    return result.data.deleteDefinition;
+  };
+
   // Combine errors from all mutations
-  const error = createResult.error || updateResult.error || forkResult.error;
+  const error =
+    createResult.error || updateResult.error || forkResult.error || deleteResult.error;
 
   return {
     createDefinition,
     updateDefinition,
     forkDefinition,
+    deleteDefinition,
     isCreating: createResult.fetching,
     isUpdating: updateResult.fetching,
     isForking: forkResult.fetching,
+    isDeleting: deleteResult.fetching,
     error: error ? new Error(error.message) : null,
   };
 }

@@ -206,12 +206,14 @@ async function fetchScenario(scenarioId: string) {
         select: {
           id: true,
           content: true,
+          deletedAt: true,
         },
       },
     },
   });
 
-  if (!scenario) {
+  // Check scenario is not deleted and its definition is not deleted
+  if (!scenario || scenario.deletedAt !== null || scenario.definition.deletedAt !== null) {
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
 

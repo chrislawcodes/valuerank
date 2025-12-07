@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Edit, FileText, Calendar, Play, GitBranch } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, Calendar, Play, GitBranch, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -26,6 +26,7 @@ export function DefinitionDetail() {
   const { id } = useParams<{ id: string }>();
   const [isEditing, setIsEditing] = useState(false);
   const [showForkDialog, setShowForkDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const isNewDefinition = id === 'new';
 
@@ -38,9 +39,11 @@ export function DefinitionDetail() {
     createDefinition,
     updateDefinition,
     forkDefinition,
+    deleteDefinition,
     isCreating,
     isUpdating,
     isForking,
+    isDeleting,
   } = useDefinitionMutations();
 
   const handleSave = async (name: string, content: DefinitionContent) => {
@@ -69,6 +72,12 @@ export function DefinitionDetail() {
       name: newName,
     });
     navigate(`/definitions/${forkedDefinition.id}`);
+  };
+
+  const handleDelete = async () => {
+    if (!definition) return;
+    await deleteDefinition(definition.id);
+    navigate('/definitions');
   };
 
   // Create mode
@@ -184,6 +193,14 @@ export function DefinitionDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-red-600 hover:bg-red-50"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete
+          </Button>
           <Button variant="secondary" onClick={() => setShowForkDialog(true)}>
             <GitBranch className="w-4 h-4 mr-2" />
             Fork
@@ -318,6 +335,46 @@ export function DefinitionDetail() {
           onClose={() => setShowForkDialog(false)}
           isForking={isForking}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">
+              Delete Definition
+            </h2>
+            <p className="text-gray-600 mb-2">
+              Are you sure you want to delete &quot;{definition.name}&quot;?
+            </p>
+            {definition.children && definition.children.length > 0 && (
+              <p className="text-amber-600 text-sm mb-4">
+                This will also delete {definition.children.length} forked definition
+                {definition.children.length !== 1 ? 's' : ''}.
+              </p>
+            )}
+            <p className="text-gray-500 text-sm mb-6">
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

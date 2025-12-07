@@ -7,7 +7,11 @@ import type { Definition, Run, Transcript, Scenario, Experiment, Tag } from '@va
  * Each type file then implements its corresponding ref.
  */
 
-export const DefinitionRef = builder.objectRef<Definition>('Definition');
+// Omit deletedAt from Definition - soft delete is an internal implementation detail
+// that should never leak to the GraphQL API layer
+export type DefinitionShape = Omit<Definition, 'deletedAt'>;
+
+export const DefinitionRef = builder.objectRef<DefinitionShape>('Definition');
 export const RunRef = builder.objectRef<Run>('Run');
 export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');

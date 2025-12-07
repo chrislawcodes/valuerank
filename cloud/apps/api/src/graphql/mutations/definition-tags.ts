@@ -26,12 +26,12 @@ builder.mutationField('addTagToDefinition', (t) =>
 
       ctx.log.debug({ definitionId, tagId }, 'Adding tag to definition');
 
-      // Verify definition exists
+      // Verify definition exists and is not deleted
       const definition = await db.definition.findUnique({
         where: { id: definitionId },
       });
 
-      if (!definition) {
+      if (!definition || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${definitionId}`);
       }
 
@@ -85,12 +85,12 @@ builder.mutationField('removeTagFromDefinition', (t) =>
 
       ctx.log.debug({ definitionId, tagId }, 'Removing tag from definition');
 
-      // Verify definition exists
+      // Verify definition exists and is not deleted
       const definition = await db.definition.findUnique({
         where: { id: definitionId },
       });
 
-      if (!definition) {
+      if (!definition || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${definitionId}`);
       }
 
@@ -138,12 +138,12 @@ builder.mutationField('createAndAssignTag', (t) =>
         throw new Error('Tag name must contain only lowercase letters, numbers, hyphens, and underscores');
       }
 
-      // Verify definition exists
+      // Verify definition exists and is not deleted
       const definition = await db.definition.findUnique({
         where: { id: definitionId },
       });
 
-      if (!definition) {
+      if (!definition || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${definitionId}`);
       }
 

@@ -54,6 +54,7 @@ model Definition {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastAccessedAt DateTime? @map("last_accessed_at")
+  deletedAt      DateTime? @map("deleted_at")
 
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
@@ -77,10 +78,11 @@ model Tag {
 }
 
 model DefinitionTag {
-  id           String   @id @default(cuid())
-  definitionId String   @map("definition_id")
-  tagId        String   @map("tag_id")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
 
   definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
@@ -160,11 +162,12 @@ model Transcript {
 }
 
 model Scenario {
-  id           String   @id @default(cuid())
-  definitionId String   @map("definition_id")
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
   name         String
-  content      Json     @db.JsonB
-  createdAt    DateTime @default(now()) @map("created_at")
+  content      Json      @db.JsonB
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
 
   definition  Definition   @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   transcripts Transcript[]

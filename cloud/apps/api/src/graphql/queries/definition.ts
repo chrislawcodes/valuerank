@@ -8,6 +8,7 @@ const DEFAULT_LIMIT = 20;
 const DEFAULT_MAX_DEPTH = 10;
 
 // Type for raw query results - content comes as JsonValue from Prisma
+// Note: deletedAt is intentionally omitted - soft delete is filtered at DB layer
 type RawDefinitionRow = {
   id: string;
   parent_id: string | null;
@@ -35,7 +36,8 @@ builder.queryField('definition', (t) =>
         where: { id },
       });
 
-      if (!definition) {
+      // Filter out soft-deleted definitions
+      if (!definition || definition.deletedAt !== null) {
         ctx.log.debug({ definitionId: id }, 'Definition not found');
         return null;
       }
@@ -86,8 +88,10 @@ builder.queryField('definitions', (t) =>
         'Listing definitions'
       );
 
-      // Build where clause
-      const where: Prisma.DefinitionWhereInput = {};
+      // Build where clause - always filter out soft-deleted definitions
+      const where: Prisma.DefinitionWhereInput = {
+        deletedAt: null,
+      };
 
       if (args.rootOnly) {
         where.parentId = null;
@@ -145,23 +149,23 @@ builder.queryField('definitionAncestors', (t) =>
 
       ctx.log.debug({ definitionId: id, maxDepth }, 'Fetching definition ancestors');
 
-      // Verify definition exists
+      // Verify definition exists and is not deleted
       const definition = await db.definition.findUnique({
         where: { id },
       });
 
-      if (!definition) {
+      if (!definition || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 
-      // Use recursive CTE to get all ancestors
+      // Use recursive CTE to get all ancestors (filtering out deleted)
       const ancestors = await db.$queryRaw<RawDefinitionRow[]>`
         WITH RECURSIVE ancestry AS (
-          SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${id}
+          SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${id} AND d.deleted_at IS NULL
           UNION ALL
           SELECT d.*, a.depth + 1 FROM definitions d
           JOIN ancestry a ON d.id = a.parent_id
-          WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth}
+          WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
         SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
         FROM ancestry
@@ -207,23 +211,23 @@ builder.queryField('definitionDescendants', (t) =>
 
       ctx.log.debug({ definitionId: id, maxDepth }, 'Fetching definition descendants');
 
-      // Verify definition exists
+      // Verify definition exists and is not deleted
       const definition = await db.definition.findUnique({
         where: { id },
       });
 
-      if (!definition) {
+      if (!definition || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 
-      // Use recursive CTE to get all descendants
+      // Use recursive CTE to get all descendants (filtering out deleted)
       const descendants = await db.$queryRaw<RawDefinitionRow[]>`
         WITH RECURSIVE tree AS (
-          SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${id}
+          SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${id} AND d.deleted_at IS NULL
           UNION ALL
           SELECT d.*, t.depth + 1 FROM definitions d
           JOIN tree t ON d.parent_id = t.id
-          WHERE t.depth < ${maxDepth}
+          WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
         SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
         FROM tree
