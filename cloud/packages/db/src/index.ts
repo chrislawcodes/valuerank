@@ -19,6 +19,8 @@ export type {
   AnalysisStatus,
   Rubric,
   Cohort,
+  Tag,
+  DefinitionTag,
 } from '@prisma/client';
 
 // JSONB content types

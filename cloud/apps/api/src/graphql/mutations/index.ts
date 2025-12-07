@@ -5,3 +5,5 @@ import './definition.js';
 import './api-key.js';
 import './run.js';
 import './queue.js';
+import './tag.js';
+import './definition-tags.js';

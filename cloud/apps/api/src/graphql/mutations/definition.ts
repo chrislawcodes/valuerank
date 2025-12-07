@@ -1,9 +1,14 @@
 import { builder } from '../builder.js';
-import { db } from '@valuerank/db';
-import type { Prisma } from '@valuerank/db';
+import {
+  db,
+  softDeleteDefinition,
+  createInheritingContent,
+  createPartialContent,
+} from '@valuerank/db';
+import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
 
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 /**
  * Ensures content has schema_version field.
@@ -106,7 +111,11 @@ const ForkDefinitionInput = builder.inputType('ForkDefinitionInput', {
     content: t.field({
       type: 'JSON',
       required: false,
-      description: 'Optional content override. If not provided, inherits from parent.',
+      description: 'Optional content override. If not provided, inherits everything from parent (stores minimal v2 content).',
+    }),
+    inheritAll: t.boolean({
+      required: false,
+      description: 'If true, fork with minimal content (inherit everything). Default: true. Set to false to copy parent content.',
     }),
   }),
 });
@@ -115,14 +124,14 @@ const ForkDefinitionInput = builder.inputType('ForkDefinitionInput', {
 builder.mutationField('forkDefinition', (t) =>
   t.field({
     type: DefinitionRef,
-    description: 'Fork an existing definition. Inherits content from parent if not provided.',
+    description: 'Fork an existing definition. By default inherits all content from parent (sparse v2 storage).',
     args: {
       input: t.arg({ type: ForkDefinitionInput, required: true }),
     },
     resolve: async (_root, args, ctx) => {
-      const { parentId, name, content } = args.input;
+      const { parentId, name, content, inheritAll = true } = args.input;
 
-      ctx.log.debug({ parentId, name }, 'Forking definition');
+      ctx.log.debug({ parentId, name, inheritAll, hasContent: !!content }, 'Forking definition');
 
       // Fetch parent - required for fork
       const parent = await db.definition.findUnique({
@@ -133,18 +142,33 @@ builder.mutationField('forkDefinition', (t) =>
         throw new Error(`Parent definition not found: ${parentId}`);
       }
 
-      // Determine content: use provided content or inherit from parent
+      // Determine content based on options
       let finalContent: Prisma.InputJsonValue;
 
       if (content !== null && content !== undefined) {
-        // Validate provided content
+        // Explicit content provided - use as partial overrides
         if (typeof content !== 'object' || Array.isArray(content)) {
           throw new Error('Content must be a JSON object');
         }
-        finalContent = ensureSchemaVersion(content as Record<string, unknown>);
+        const contentObj = content as Record<string, unknown>;
+
+        // Create v2 content with only provided fields as overrides
+        finalContent = createPartialContent({
+          preamble: typeof contentObj.preamble === 'string' ? contentObj.preamble : undefined,
+          template: typeof contentObj.template === 'string' ? contentObj.template : undefined,
+          dimensions: Array.isArray(contentObj.dimensions) ? contentObj.dimensions as Dimension[] : undefined,
+          matching_rules: typeof contentObj.matching_rules === 'string' ? contentObj.matching_rules : undefined,
+        }) as Prisma.InputJsonValue;
+
+        ctx.log.debug({ overrides: Object.keys(contentObj) }, 'Fork with partial overrides');
+      } else if (inheritAll !== false) {
+        // Inherit everything - store minimal v2 content
+        finalContent = createInheritingContent() as Prisma.InputJsonValue;
+        ctx.log.debug('Fork with full inheritance (minimal content)');
       } else {
-        // Inherit from parent
+        // inheritAll=false and no content - copy parent content (legacy behavior)
         finalContent = parent.content as Prisma.InputJsonValue;
+        ctx.log.debug('Fork with copied parent content (legacy mode)');
       }
 
       const definition = await db.definition.create({
@@ -156,10 +180,263 @@ builder.mutationField('forkDefinition', (t) =>
       });
 
       ctx.log.info(
-        { definitionId: definition.id, name, parentId },
+        { definitionId: definition.id, name, parentId, inheritAll: inheritAll !== false },
         'Definition forked'
       );
       return definition;
+    },
+  })
+);
+
+// Input type for updating a definition
+const UpdateDefinitionInput = builder.inputType('UpdateDefinitionInput', {
+  fields: (t) => ({
+    name: t.string({
+      required: false,
+      description: 'Updated name (optional)',
+      validate: {
+        minLength: [1, { message: 'Name cannot be empty' }],
+        maxLength: [255, { message: 'Name must be 255 characters or less' }],
+      },
+    }),
+    content: t.field({
+      type: 'JSON',
+      required: false,
+      description: 'Updated content (optional, replaces entire content if provided)',
+    }),
+  }),
+});
+
+// Input type for updating specific content fields with inheritance support
+const UpdateDefinitionContentInput = builder.inputType('UpdateDefinitionContentInput', {
+  fields: (t) => ({
+    preamble: t.string({
+      required: false,
+      description: 'Update preamble. Set to empty string to clear override and inherit from parent.',
+    }),
+    template: t.string({
+      required: false,
+      description: 'Update template. Set to empty string to clear override and inherit from parent.',
+    }),
+    dimensions: t.field({
+      type: 'JSON',
+      required: false,
+      description: 'Update dimensions array. Set to null to clear override and inherit from parent.',
+    }),
+    matchingRules: t.string({
+      required: false,
+      description: 'Update matching rules. Set to empty string to clear override.',
+    }),
+    clearOverrides: t.stringList({
+      required: false,
+      description: 'List of fields to clear local override for (inherit from parent). Valid values: preamble, template, dimensions, matching_rules',
+    }),
+  }),
+});
+
+// Mutation: updateDefinition
+builder.mutationField('updateDefinition', (t) =>
+  t.field({
+    type: DefinitionRef,
+    description: 'Update an existing definition. Note: If definition has runs, consider forking instead to preserve history.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to update',
+      }),
+      input: t.arg({ type: UpdateDefinitionInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id, input } = args;
+      const { name, content } = input;
+
+      ctx.log.debug({ definitionId: id, hasName: !!name, hasContent: !!content }, 'Updating definition');
+
+      // Check if definition exists
+      const existing = await db.definition.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error(`Definition not found: ${id}`);
+      }
+
+      // Build update data
+      const updateData: Prisma.DefinitionUpdateInput = {};
+
+      if (name !== null && name !== undefined) {
+        updateData.name = name;
+      }
+
+      if (content !== null && content !== undefined) {
+        // Validate content is an object
+        if (typeof content !== 'object' || Array.isArray(content)) {
+          throw new Error('Content must be a JSON object');
+        }
+        updateData.content = ensureSchemaVersion(content as Record<string, unknown>);
+      }
+
+      // Check if there's anything to update
+      if (Object.keys(updateData).length === 0) {
+        ctx.log.debug({ definitionId: id }, 'No changes to apply');
+        return existing;
+      }
+
+      const definition = await db.definition.update({
+        where: { id },
+        data: updateData,
+      });
+
+      ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
+      return definition;
+    },
+  })
+);
+
+// Mutation: updateDefinitionContent - granular content updates with inheritance support
+builder.mutationField('updateDefinitionContent', (t) =>
+  t.field({
+    type: DefinitionRef,
+    description: 'Update specific content fields of a definition. Supports clearing overrides to inherit from parent.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to update',
+      }),
+      input: t.arg({ type: UpdateDefinitionContentInput, required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id, input } = args;
+      const { preamble, template, dimensions, matchingRules, clearOverrides } = input;
+
+      ctx.log.debug(
+        { definitionId: id, clearOverrides, hasPreamble: preamble !== undefined, hasTemplate: template !== undefined },
+        'Updating definition content'
+      );
+
+      // Check if definition exists
+      const existing = await db.definition.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error(`Definition not found: ${id}`);
+      }
+
+      // Parse existing content
+      const existingContent = existing.content as Record<string, unknown>;
+
+      // Build new content object (v2 format)
+      const newContent: Record<string, unknown> = {
+        schema_version: CURRENT_SCHEMA_VERSION,
+      };
+
+      // Fields to clear (set to undefined to inherit)
+      const fieldsToClear = new Set(clearOverrides ?? []);
+
+      // Preamble
+      if (fieldsToClear.has('preamble')) {
+        // Don't include preamble - will inherit from parent
+      } else if (preamble !== undefined && preamble !== null) {
+        newContent.preamble = preamble;
+      } else if ('preamble' in existingContent) {
+        newContent.preamble = existingContent.preamble;
+      }
+
+      // Template
+      if (fieldsToClear.has('template')) {
+        // Don't include template - will inherit from parent
+      } else if (template !== undefined && template !== null) {
+        newContent.template = template;
+      } else if ('template' in existingContent) {
+        newContent.template = existingContent.template;
+      }
+
+      // Dimensions
+      if (fieldsToClear.has('dimensions')) {
+        // Don't include dimensions - will inherit from parent
+      } else if (dimensions !== undefined && dimensions !== null) {
+        if (!Array.isArray(dimensions)) {
+          throw new Error('Dimensions must be an array');
+        }
+        newContent.dimensions = dimensions;
+      } else if ('dimensions' in existingContent) {
+        newContent.dimensions = existingContent.dimensions;
+      }
+
+      // Matching rules
+      if (fieldsToClear.has('matching_rules')) {
+        // Don't include matching_rules - will inherit from parent
+      } else if (matchingRules !== undefined && matchingRules !== null) {
+        newContent.matching_rules = matchingRules;
+      } else if ('matching_rules' in existingContent) {
+        newContent.matching_rules = existingContent.matching_rules;
+      }
+
+      const definition = await db.definition.update({
+        where: { id },
+        data: {
+          content: newContent as Prisma.InputJsonValue,
+        },
+      });
+
+      ctx.log.info(
+        { definitionId: id, clearedOverrides: Array.from(fieldsToClear) },
+        'Definition content updated'
+      );
+      return definition;
+    },
+  })
+);
+
+// Result type for delete mutation
+type DeleteDefinitionResultShape = {
+  deletedIds: string[];
+  count: number;
+};
+
+const DeleteDefinitionResultRef = builder.objectRef<DeleteDefinitionResultShape>('DeleteDefinitionResult');
+
+builder.objectType(DeleteDefinitionResultRef, {
+  description: 'Result of deleting a definition',
+  fields: (t) => ({
+    deletedIds: t.stringList({
+      description: 'IDs of all definitions that were deleted (includes descendants)',
+      resolve: (parent) => parent.deletedIds,
+    }),
+    count: t.exposeInt('count', {
+      description: 'Total number of definitions deleted',
+    }),
+  }),
+});
+
+// Mutation: deleteDefinition (soft delete)
+builder.mutationField('deleteDefinition', (t) =>
+  t.field({
+    type: DeleteDefinitionResultRef,
+    description: 'Soft delete a definition and all its descendants. Related scenarios and tags are also soft deleted.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to delete',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id } = args;
+
+      ctx.log.debug({ definitionId: id }, 'Deleting definition');
+
+      const deletedIds = await softDeleteDefinition(id);
+
+      ctx.log.info(
+        { definitionId: id, deletedCount: deletedIds.length },
+        'Definition deleted'
+      );
+
+      return {
+        deletedIds,
+        count: deletedIds.length,
+      };
     },
   })
 );

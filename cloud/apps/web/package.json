@@ -15,17 +15,18 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@urql/exchange-auth": "^2.1.6",
+    "graphql": "^16.8.0",
+    "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "urql": "^4.0.0",
-    "graphql": "^16.8.0",
-    "@urql/exchange-auth": "^2.1.6",
     "react-router-dom": "^6.21.0",
-    "lucide-react": "^0.294.0"
+    "urql": "^4.0.0"
   },
   "devDependencies": {
-    "@testing-library/react": "^14.1.0",
     "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^14.1.0",
     "@testing-library/user-event": "^14.5.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",

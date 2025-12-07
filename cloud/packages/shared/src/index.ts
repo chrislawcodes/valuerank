@@ -9,3 +9,10 @@ export {
   JobValidationError,
   RunStateError,
 } from './errors.js';
+export {
+  CANONICAL_DIMENSIONS,
+  getCanonicalDimension,
+  getCanonicalDimensionNames,
+  type CanonicalDimension,
+  type CanonicalLevel,
+} from './canonical-dimensions.js';

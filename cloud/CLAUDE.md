@@ -372,6 +372,47 @@ await prisma.$transaction(async (tx) => {
 });
 ```
 
+### Soft Delete Pattern
+
+Entities that support deletion use **soft delete** via a `deletedAt` timestamp column. Records are never physically deleted - instead, `deletedAt` is set to the current timestamp.
+
+**Tables with soft delete:**
+- `definitions` - `deletedAt`
+- `definition_tags` - `deletedAt`
+- `scenarios` - `deletedAt`
+
+**Required query patterns:**
+
+```typescript
+// ALWAYS filter out soft-deleted records in queries
+const definitions = await prisma.definition.findMany({
+  where: { deletedAt: null },  // Required!
+});
+
+// When "deleting", set deletedAt instead of using delete()
+await prisma.definition.update({
+  where: { id: definitionId },
+  data: { deletedAt: new Date() },
+});
+
+// For cascading soft delete, update related records too
+await prisma.$transaction([
+  prisma.definition.update({
+    where: { id: definitionId },
+    data: { deletedAt: new Date() },
+  }),
+  prisma.definitionTag.updateMany({
+    where: { definitionId },
+    data: { deletedAt: new Date() },
+  }),
+]);
+```
+
+**GraphQL layer requirements:**
+- `deletedAt` field is **NOT exposed** in GraphQL schema
+- All GraphQL resolvers must filter `deletedAt: null` automatically
+- Deleted records are invisible to API consumers
+
 ### Query Helpers in packages/db
 
 ```typescript

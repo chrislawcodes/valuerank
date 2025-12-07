@@ -13,6 +13,7 @@ import './run.js';
 import './scenario.js';
 import './transcript.js';
 import './experiment.js';
+import './tag.js';
 
 // Queue-related types
 import './queue-status.js';

@@ -9,6 +9,11 @@
 import type {
   DefinitionContent,
   DefinitionContentV0,
+  DefinitionContentV1,
+  DefinitionContentV2,
+  DefinitionContentStored,
+  DefinitionOverrides,
+  Dimension,
   RunConfig,
   ScenarioContent,
   TranscriptContent,
@@ -21,7 +26,7 @@ import type {
 // VERSION CONSTANTS
 // ============================================================================
 
-export const CURRENT_DEFINITION_VERSION = 1;
+export const CURRENT_DEFINITION_VERSION = 2;
 export const CURRENT_RUN_CONFIG_VERSION = 1;
 export const CURRENT_SCENARIO_VERSION = 1;
 export const CURRENT_TRANSCRIPT_VERSION = 1;
@@ -33,7 +38,7 @@ export const CURRENT_COHORT_VERSION = 1;
 // DEFINITION CONTENT MIGRATIONS
 // ============================================================================
 
-function migrateDefinitionV0toV1(data: DefinitionContentV0): DefinitionContent {
+function migrateDefinitionV0toV1(data: DefinitionContentV0): DefinitionContentV1 {
   return {
     schema_version: 1,
     preamble: data.preamble ?? '',
@@ -44,10 +49,25 @@ function migrateDefinitionV0toV1(data: DefinitionContentV0): DefinitionContent {
 }
 
 /**
- * Load and migrate definition content to current version.
+ * Migrate v1 content to v2 format.
+ * V1 content has all fields, V2 keeps them but marks schema_version as 2.
+ */
+function migrateDefinitionV1toV2(data: DefinitionContentV1): DefinitionContentV2 {
+  return {
+    schema_version: 2,
+    preamble: data.preamble,
+    template: data.template,
+    dimensions: data.dimensions,
+    matching_rules: data.matching_rules,
+  };
+}
+
+/**
+ * Parse raw database content into a typed stored content object.
+ * Does NOT resolve inheritance - use resolveDefinitionContent for that.
  * @throws Error if schema_version is unknown/unsupported
  */
-export function loadDefinitionContent(raw: unknown): DefinitionContent {
+export function parseStoredContent(raw: unknown): DefinitionContentStored {
   if (!raw || typeof raw !== 'object') {
     throw new Error('Definition content must be an object');
   }
@@ -59,10 +79,128 @@ export function loadDefinitionContent(raw: unknown): DefinitionContent {
     case 0:
       return migrateDefinitionV0toV1(data as unknown as DefinitionContentV0);
     case 1:
-      return data as unknown as DefinitionContent;
+      return data as unknown as DefinitionContentV1;
+    case 2:
+      return data as unknown as DefinitionContentV2;
     default:
       throw new Error(`Unknown definition content schema version: ${version}`);
   }
+}
+
+/**
+ * Load and migrate definition content to current version.
+ * For root definitions or legacy data, returns full content.
+ * For forked definitions with sparse content, returns stored content as-is.
+ * @throws Error if schema_version is unknown/unsupported
+ * @deprecated Use parseStoredContent + resolveDefinitionContent for inheritance support
+ */
+export function loadDefinitionContent(raw: unknown): DefinitionContent {
+  const stored = parseStoredContent(raw);
+
+  // For v1 or v2 with all fields present, return as-is
+  // This maintains backward compatibility
+  if (stored.schema_version === 1) {
+    return stored;
+  }
+
+  // For v2, if all fields are present, return as resolved
+  if (
+    stored.preamble !== undefined &&
+    stored.template !== undefined &&
+    stored.dimensions !== undefined
+  ) {
+    return {
+      schema_version: stored.schema_version,
+      preamble: stored.preamble,
+      template: stored.template,
+      dimensions: stored.dimensions,
+      matching_rules: stored.matching_rules,
+    };
+  }
+
+  // V2 with missing fields - return with empty defaults
+  // (This shouldn't happen for root definitions, but provides fallback)
+  return {
+    schema_version: stored.schema_version,
+    preamble: stored.preamble ?? '',
+    template: stored.template ?? '',
+    dimensions: stored.dimensions ?? [],
+    matching_rules: stored.matching_rules,
+  };
+}
+
+/**
+ * Create sparse v2 content for a forked definition.
+ * All fields are undefined (inherits everything from parent).
+ */
+export function createInheritingContent(): DefinitionContentV2 {
+  return {
+    schema_version: 2,
+    // All fields undefined = inherit from parent
+  };
+}
+
+/**
+ * Create v2 content with specific overrides.
+ * Only the provided fields will be stored; others inherit from parent.
+ */
+export function createPartialContent(overrides: {
+  preamble?: string;
+  template?: string;
+  dimensions?: Dimension[];
+  matching_rules?: string;
+}): DefinitionContentV2 {
+  return {
+    schema_version: 2,
+    ...overrides,
+  };
+}
+
+/**
+ * Determine which fields are locally overridden (not inherited).
+ */
+export function getContentOverrides(content: DefinitionContentStored): DefinitionOverrides {
+  if (content.schema_version === 1) {
+    // V1 content always has all fields (no inheritance)
+    return {
+      preamble: true,
+      template: true,
+      dimensions: true,
+      matching_rules: content.matching_rules !== undefined,
+    };
+  }
+
+  // V2: check which fields are present
+  return {
+    preamble: content.preamble !== undefined,
+    template: content.template !== undefined,
+    dimensions: content.dimensions !== undefined,
+    matching_rules: content.matching_rules !== undefined,
+  };
+}
+
+/**
+ * Resolve content by merging with parent content.
+ * Parent content must already be fully resolved.
+ * Child content overrides parent where fields are present.
+ */
+export function mergeContent(
+  child: DefinitionContentStored,
+  parent: DefinitionContent
+): DefinitionContent {
+  // V1 content is always complete, no merging needed
+  if (child.schema_version === 1) {
+    return child;
+  }
+
+  // V2: merge with parent, child overrides parent
+  return {
+    schema_version: 2,
+    preamble: child.preamble ?? parent.preamble,
+    template: child.template ?? parent.template,
+    dimensions: child.dimensions ?? parent.dimensions,
+    matching_rules: child.matching_rules ?? parent.matching_rules,
+  };
 }
 
 // ============================================================================

@@ -123,17 +123,18 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     throw new ValidationError(`Invalid priority: ${priority}. Must be one of: ${validPriorities.join(', ')}`);
   }
 
-  // Fetch definition with scenarios
+  // Fetch definition with scenarios (filtering out deleted)
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
     include: {
       scenarios: {
+        where: { deletedAt: null },
         select: { id: true },
       },
     },
   });
 
-  if (!definition) {
+  if (!definition || definition.deletedAt !== null) {
     throw new NotFoundError('Definition', definitionId);
   }
 

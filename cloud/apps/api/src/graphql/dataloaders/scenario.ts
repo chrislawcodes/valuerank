@@ -13,8 +13,9 @@ export function createScenarioLoader(): DataLoader<string, Scenario | null> {
     async (ids: readonly string[]) => {
       log.debug({ ids: [...ids] }, 'Batching scenario load');
 
+      // Filter out soft-deleted scenarios
       const scenarios = await db.scenario.findMany({
-        where: { id: { in: [...ids] } },
+        where: { id: { in: [...ids] }, deletedAt: null },
       });
 
       const scenarioMap = new Map(scenarios.map((s) => [s.id, s]));
