@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
+import { Provider } from 'urql';
+import { fromValue, delay, pipe } from 'wonka';
 import { DefinitionList } from '../../../src/components/definitions/DefinitionList';
 import type { Definition } from '../../../src/api/operations/definitions';
 
@@ -19,16 +21,35 @@ function createMockDefinition(overrides: Partial<Definition> = {}): Definition {
   };
 }
 
+// Mock urql client for DefinitionFilters which uses useTags
+function createMockClient() {
+  return {
+    executeQuery: vi.fn(() =>
+      pipe(
+        fromValue({
+          data: { tags: [] },
+        }),
+        delay(0)
+      )
+    ),
+    executeMutation: vi.fn(),
+    executeSubscription: vi.fn(),
+  };
+}
+
 function renderDefinitionList(props: {
   definitions: Definition[];
   loading: boolean;
   error: Error | null;
   onCreateNew?: () => void;
 }) {
+  const client = createMockClient();
   return render(
-    <BrowserRouter>
-      <DefinitionList {...props} />
-    </BrowserRouter>
+    <Provider value={client as never}>
+      <BrowserRouter>
+        <DefinitionList {...props} />
+      </BrowserRouter>
+    </Provider>
   );
 }
 
