@@ -91,8 +91,8 @@ describe('GraphQL Definition Mutations', () => {
       const definition = response.body.data.createDefinition;
       createdDefinitionIds.push(definition.id);
 
-      // Should have schema_version = 1 auto-added
-      expect(definition.content.schema_version).toBe(1);
+      // Should have schema_version = 2 auto-added (current version)
+      expect(definition.content.schema_version).toBe(2);
       expect(definition.content.preamble).toBe('Test');
     });
 
@@ -305,6 +305,7 @@ describe('GraphQL Definition Mutations', () => {
             id
             name
             content
+            resolvedContent
             parentId
             parent {
               id
@@ -339,10 +340,11 @@ describe('GraphQL Definition Mutations', () => {
       expect(fork.name).toBe('Forked Definition');
       expect(fork.parentId).toBe(parent.id);
       expect(fork.parent.id).toBe(parent.id);
-      // Should inherit content from parent
-      expect(fork.content.preamble).toBe('Parent preamble');
-      expect(fork.content.template).toBe('Parent template');
-      expect(fork.content.schema_version).toBe(1);
+      // Raw content is sparse (inherits from parent via resolvedContent)
+      expect(fork.content.schema_version).toBe(2); // v2 sparse content
+      // resolvedContent shows inherited values
+      expect(fork.resolvedContent.preamble).toBe('Parent preamble');
+      expect(fork.resolvedContent.template).toBe('Parent template');
     });
 
     it('forks with custom content override', async () => {
@@ -361,6 +363,7 @@ describe('GraphQL Definition Mutations', () => {
             id
             name
             content
+            resolvedContent
           }
         }
       `;
@@ -374,7 +377,7 @@ describe('GraphQL Definition Mutations', () => {
             input: {
               parentId: parent.id,
               name: 'Fork with Override',
-              content: { preamble: 'New preamble', newField: 'added' },
+              content: { preamble: 'New preamble' },
             },
           },
         })
@@ -385,11 +388,14 @@ describe('GraphQL Definition Mutations', () => {
       const fork = response.body.data.forkDefinition;
       createdDefinitionIds.push(fork.id);
 
-      // Should use provided content, not inherited
+      // Local content only has preamble override (v2 sparse content)
       expect(fork.content.preamble).toBe('New preamble');
-      expect(fork.content.newField).toBe('added');
-      expect(fork.content.schema_version).toBe(1); // Auto-added
-      expect(fork.content.template).toBeUndefined(); // Not inherited
+      expect(fork.content.schema_version).toBe(2); // v2 sparse content
+      expect(fork.content.template).toBeUndefined(); // Not in local content
+
+      // resolvedContent shows local override + inherited values
+      expect(fork.resolvedContent.preamble).toBe('New preamble'); // Local override
+      expect(fork.resolvedContent.template).toBe('Original template'); // Inherited from parent
     });
 
     it('returns error for non-existent parent', async () => {

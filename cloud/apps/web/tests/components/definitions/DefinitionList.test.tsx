@@ -64,13 +64,16 @@ describe('DefinitionList', () => {
       expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
-    it('should show "Loading more..." when loading with existing definitions', () => {
+    it('should show "Loading more..." when loading with existing definitions', async () => {
+      const user = userEvent.setup();
       const definitions = [createMockDefinition()];
       renderDefinitionList({
         definitions,
         loading: true,
         error: null,
       });
+      // Switch to flat view to see loading indicator with definitions
+      await user.click(screen.getByRole('button', { name: /list view/i }));
       expect(screen.getByText('Loading more...')).toBeInTheDocument();
     });
   });
@@ -157,7 +160,8 @@ describe('DefinitionList', () => {
       expect(screen.getByText('1 definition')).toBeInTheDocument();
     });
 
-    it('should render each definition card', () => {
+    it('should render each definition card in flat view', async () => {
+      const user = userEvent.setup();
       const definitions = [
         createMockDefinition({ id: 'def-1', name: 'First Definition' }),
         createMockDefinition({ id: 'def-2', name: 'Second Definition' }),
@@ -168,6 +172,8 @@ describe('DefinitionList', () => {
         loading: false,
         error: null,
       });
+      // Switch to flat view to see definition cards directly
+      await user.click(screen.getByRole('button', { name: /list view/i }));
       expect(screen.getByText('First Definition')).toBeInTheDocument();
       expect(screen.getByText('Second Definition')).toBeInTheDocument();
       expect(screen.getByText('Third Definition')).toBeInTheDocument();

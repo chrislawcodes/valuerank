@@ -189,7 +189,7 @@ describe('GraphQL Scalar Types', () => {
       expect(createdContent.preamble).toBe('Complex test');
       expect(createdContent.dimensions).toHaveLength(2);
       expect(createdContent.metadata.tags).toEqual(['tag1', 'tag2']);
-      expect(createdContent.schema_version).toBe(1); // Auto-added
+      expect(createdContent.schema_version).toBe(2); // Auto-added (current version)
     });
   });
 });

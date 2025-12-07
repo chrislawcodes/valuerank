@@ -47,7 +47,7 @@ describe('Definition DataLoader', () => {
       // Verify only one query was made
       expect(db.definition.findMany).toHaveBeenCalledTimes(1);
       expect(db.definition.findMany).toHaveBeenCalledWith({
-        where: { id: { in: ['def1', 'def2', 'def3'] } },
+        where: { id: { in: ['def1', 'def2', 'def3'] }, deletedAt: null },
       });
     });
 
