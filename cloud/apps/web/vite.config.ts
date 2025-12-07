@@ -7,11 +7,11 @@ export default defineConfig({
     port: 3030,
     proxy: {
       '/api': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
       '/graphql': {
-        target: 'http://localhost:3003',
+        target: 'http://localhost:4000',
         changeOrigin: true,
       },
     },
