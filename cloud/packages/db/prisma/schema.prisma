@@ -81,7 +81,7 @@ model Run {
   retentionDays      Int?      @map("retention_days")
   archivePermanently Boolean   @default(true) @map("archive_permanently")
 
-  definition Definition  @relation(fields: [definitionId], references: [id])
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   experiment Experiment? @relation(fields: [experimentId], references: [id])
 
   transcripts     Transcript[]
@@ -140,7 +140,7 @@ model Scenario {
   content      Json     @db.JsonB
   createdAt    DateTime @default(now()) @map("created_at")
 
-  definition  Definition   @relation(fields: [definitionId], references: [id])
+  definition  Definition   @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   transcripts Transcript[]
   runSelections RunScenarioSelection[]
 
@@ -156,7 +156,7 @@ model RunScenarioSelection {
   createdAt  DateTime @default(now()) @map("created_at")
 
   run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
-  scenario Scenario @relation(fields: [scenarioId], references: [id])
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@unique([runId, scenarioId])
   @@index([runId])
