@@ -1,12 +1,13 @@
 import { createClient, cacheExchange, fetchExchange, Client } from 'urql';
+import { getStoredToken } from '../auth/context';
 
-// Create urql client - auth header injection will be added in Phase 3
-export function createUrqlClient(getToken?: () => string | null): Client {
+// Create urql client with auth header injection
+export function createUrqlClient(getToken: () => string | null = getStoredToken): Client {
   return createClient({
     url: '/graphql',
     exchanges: [cacheExchange, fetchExchange],
     fetchOptions: () => {
-      const token = getToken?.();
+      const token = getToken();
       if (!token) {
         return {};
       }
@@ -19,5 +20,5 @@ export function createUrqlClient(getToken?: () => string | null): Client {
   });
 }
 
-// Default client instance (will be replaced with auth-aware client)
+// Default client instance with auth header injection
 export const client = createUrqlClient();

@@ -57,22 +57,22 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Create apps/web/src/auth/context.tsx with AuthProvider and AuthContext
-- [ ] T013 [US1] Create apps/web/src/auth/hooks.ts with useAuth hook
-- [ ] T014 [US1] Update apps/web/src/api/client.ts to inject auth header from context
-- [ ] T015 [US1] Create apps/web/src/components/ui/Input.tsx for form inputs
-- [ ] T016 [P] [US1] Create apps/web/src/components/ui/Button.tsx for buttons
-- [ ] T017 [P] [US1] Create apps/web/src/components/ui/ErrorMessage.tsx for errors
-- [ ] T018 [US1] Create apps/web/src/pages/Login.tsx with login form
-- [ ] T019 [US1] Integrate login API call (/api/auth/login) in Login.tsx
-- [ ] T020 [US1] Add token storage to localStorage in auth/context.tsx
-- [ ] T021 [US1] Add token restoration on app load in auth/context.tsx
+- [X] T012 [US1] Create apps/web/src/auth/context.tsx with AuthProvider and AuthContext
+- [X] T013 [US1] Create apps/web/src/auth/hooks.ts with useAuth hook
+- [X] T014 [US1] Update apps/web/src/api/client.ts to inject auth header from context
+- [X] T015 [US1] Create apps/web/src/components/ui/Input.tsx for form inputs
+- [X] T016 [P] [US1] Create apps/web/src/components/ui/Button.tsx for buttons
+- [X] T017 [P] [US1] Create apps/web/src/components/ui/ErrorMessage.tsx for errors
+- [X] T018 [US1] Create apps/web/src/pages/Login.tsx with login form
+- [X] T019 [US1] Integrate login API call (/api/auth/login) in Login.tsx
+- [X] T020 [US1] Add token storage to localStorage in auth/context.tsx
+- [X] T021 [US1] Add token restoration on app load in auth/context.tsx
 
 ### Tests for User Story 1
 
-- [ ] T022 [US1] Create apps/web/tests/auth/context.test.tsx for AuthContext
-- [ ] T023 [P] [US1] Create apps/web/tests/auth/hooks.test.tsx for useAuth
-- [ ] T024 [US1] Create apps/web/tests/pages/Login.test.tsx for Login page
+- [X] T022 [US1] Create apps/web/tests/auth/context.test.tsx for AuthContext
+- [X] T023 [P] [US1] Create apps/web/tests/auth/hooks.test.tsx for useAuth
+- [X] T024 [US1] Create apps/web/tests/pages/Login.test.tsx for Login page
 
 **Checkpoint**: User Story 1 complete - can login via web UI
 
