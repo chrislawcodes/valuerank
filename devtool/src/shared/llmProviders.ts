@@ -64,6 +64,7 @@ export const LLM_PROVIDERS: LLMProviderConfig[] = [
     supportsGeneration: true,
     models: [
       { id: 'gpt-5-mini', name: 'GPT-5 Mini', providerId: 'openai', isDefault: true },
+      { id: 'gpt-5.1', name: 'GPT-5.1', providerId: 'openai' },
     ],
     // OpenAI's official interlocking knot logo
     icon: `<svg viewBox="0 0 24 24" fill="#000000" xmlns="http://www.w3.org/2000/svg">

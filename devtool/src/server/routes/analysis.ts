@@ -3,11 +3,105 @@ import path from 'path';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { createLogger } from '../utils/logger.js';
-import { callLLM } from '../utils/llm.js';
-import { DEVTOOL_ROOT, OUTPUT_DIR, SCRIPTS_DIR } from '../utils/paths.js';
+import { callLLM, loadEnvFile } from '../utils/llm.js';
+import { DEVTOOL_ROOT, OUTPUT_DIR, SCRIPTS_DIR, CONFIG_DIR } from '../utils/paths.js';
+import { readYamlFile } from '../utils/yaml.js';
 
 const router = Router();
 const log = createLogger('analysis');
+
+const SUMMARY_MODEL_PREFERENCES = [
+  { envKey: 'DEEPSEEK_API_KEY', model: 'deepseek:deepseek-reasoner' },
+  { envKey: 'ANTHROPIC_API_KEY', model: 'anthropic:claude-haiku-4-5' },
+  { envKey: 'OPENAI_API_KEY', model: 'openai:gpt-5-mini' },
+  { envKey: 'GOOGLE_API_KEY', model: 'google:gemini-2.5-pro' },
+  { envKey: 'XAI_API_KEY', model: 'xai:grok-4-1-fast-reasoning' },
+  { envKey: 'MISTRAL_API_KEY', model: 'mistral:mistral-large-2512' },
+];
+
+interface CostEstimate {
+  total: number;
+  breakdown: Record<string, number>;
+}
+
+let cachedRuntimeConfig: any | null = null;
+async function loadRuntimeConfig(): Promise<any> {
+  if (cachedRuntimeConfig) {
+    return cachedRuntimeConfig;
+  }
+  try {
+    const runtime = await readYamlFile(path.join(CONFIG_DIR, 'runtime.yaml'));
+    cachedRuntimeConfig = runtime;
+    return runtime;
+  } catch {
+    return {};
+  }
+}
+
+let cachedModelCosts: any | null = null;
+async function loadModelCosts(): Promise<any> {
+  if (cachedModelCosts) {
+    return cachedModelCosts;
+  }
+  try {
+    const costs = await readYamlFile(path.join(CONFIG_DIR, 'model_costs.yaml'));
+    cachedModelCosts = costs;
+    return costs;
+  } catch {
+    return {};
+  }
+}
+
+function estimateTokens(text: string): number {
+  if (!text) return 1;
+  return Math.max(1, Math.round(text.length / 4));
+}
+
+function getModelRates(modelId: string, costs: any): { input: number; output: number } {
+  const defaults = costs?.defaults || {};
+  const modelEntry = costs?.models?.[modelId] || {};
+  const input = modelEntry.input_per_million ?? defaults.input_per_million ?? 0;
+  const output = modelEntry.output_per_million ?? defaults.output_per_million ?? 0;
+  return { input, output };
+}
+
+async function getConfiguredSummaryModel(): Promise<string | null> {
+  const runtime = await loadRuntimeConfig();
+  const configured = runtime?.defaults?.summary_model;
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim();
+  }
+  const envVars = await loadEnvFile();
+  const allEnv = { ...process.env, ...envVars };
+  for (const { envKey, model } of SUMMARY_MODEL_PREFERENCES) {
+    if (allEnv[envKey]) {
+      return model;
+    }
+  }
+  return null;
+}
+
+async function estimateDeepAnalysisCostFromContent(csvContent: string): Promise<CostEstimate | null> {
+  if (!csvContent) {
+    return null;
+  }
+  const modelId = await getConfiguredSummaryModel();
+  if (!modelId) {
+    return null;
+  }
+  const modelCosts = await loadModelCosts();
+  const rates = getModelRates(modelId, modelCosts);
+  const responseBudgetTokens = 2000; // matches options.maxTokens in generateLLMSummary
+  const totalTokens = estimateTokens(csvContent) + responseBudgetTokens;
+  if (!totalTokens) {
+    return null;
+  }
+  const cost = (totalTokens / 1_000_000) * (rates.input + rates.output);
+  return {
+    total: cost,
+    breakdown: { [modelId]: cost },
+  };
+}
 
 // Build a prompt for the LLM to summarize statistical analysis results
 function buildSummaryPrompt(analysisResult: Record<string, unknown>): string {
@@ -68,7 +162,12 @@ async function generateLLMSummary(
   try {
     reqLog.info('Generating LLM summary of analysis results');
     const prompt = buildSummaryPrompt(analysisResult);
-    const summary = await callLLM(prompt, { maxTokens: 2000, temperature: 0.3 });
+    const summaryModel = await getConfiguredSummaryModel();
+    const summary = await callLLM(prompt, {
+      maxTokens: 2000,
+      temperature: 0.3,
+      model: summaryModel || undefined,
+    });
     reqLog.info('LLM summary generated', { summaryLength: summary.length });
     return summary;
   } catch (error) {
@@ -122,6 +221,40 @@ function parseCSVLine(line: string): string[] {
   values.push(current.trim());
 
   return values;
+}
+
+async function readCombinedCSVForRun(runPath: string, reqLog?: ReturnType<typeof log.child>): Promise<{ combinedCSV: string; totalLines: number; csvFiles: string[] }> {
+  const runDir = path.join(OUTPUT_DIR, runPath);
+
+  const resolvedPath = path.resolve(runDir);
+  const outputDir = path.resolve(OUTPUT_DIR);
+  if (!resolvedPath.startsWith(outputDir)) {
+    throw new Error('Access denied');
+  }
+
+  const entries = await fs.readdir(runDir);
+  const csvFiles = entries.filter(f => f.startsWith('summary.') && f.endsWith('.csv')).sort();
+  if (!csvFiles.length) {
+    throw new Error('No summary CSV files found');
+  }
+
+  let combinedCSV = '';
+  let totalLines = 0;
+
+  for (let i = 0; i < csvFiles.length; i++) {
+    const content = await fs.readFile(path.join(runDir, csvFiles[i]), 'utf-8');
+    const lines = content.split('\n').filter(line => line.trim());
+    totalLines += lines.length - (i > 0 ? 1 : 0);
+
+    if (i === 0) {
+      combinedCSV = lines.join('\n');
+    } else {
+      combinedCSV += '\n' + lines.slice(1).join('\n');
+    }
+  }
+
+  reqLog?.debug('Combined CSV data prepared', { runPath, totalLines, files: csvFiles });
+  return { combinedCSV, totalLines, csvFiles };
 }
 
 // Recursively find run directories that contain summary CSV files
@@ -436,40 +569,22 @@ router.post('/deep/run/*', async (req, res) => {
   reqLog.info('Deep analysis request for run', { runPath });
 
   try {
-    const runDir = path.join(OUTPUT_DIR, runPath);
-
-    // Security check
-    const resolvedPath = path.resolve(runDir);
-    const outputDir = path.resolve(OUTPUT_DIR);
-    if (!resolvedPath.startsWith(outputDir)) {
-      reqLog.warn('Access denied - path outside output directory', { resolvedPath });
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // Find all CSV files in this run
-    const entries = await fs.readdir(runDir);
-    const csvFiles = entries.filter(f => f.startsWith('summary.') && f.endsWith('.csv'));
-    reqLog.debug('Found CSV files', { count: csvFiles.length, files: csvFiles });
-
-    if (csvFiles.length === 0) {
-      reqLog.warn('No summary CSV files found', { runDir });
-      return res.status(404).json({ error: 'No summary CSV files found' });
-    }
-
-    // Read and combine all CSV data
-    let combinedCSV = '';
-    let totalLines = 0;
-
-    for (let i = 0; i < csvFiles.length; i++) {
-      const content = await fs.readFile(path.join(runDir, csvFiles[i]), 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
-      totalLines += lines.length - (i > 0 ? 1 : 0); // Don't count duplicate headers
-
-      if (i === 0) {
-        combinedCSV = lines.join('\n');
-      } else {
-        combinedCSV += '\n' + lines.slice(1).join('\n');
+    let combinedCSV: string;
+    let totalLines: number;
+    try {
+      const result = await readCombinedCSVForRun(runPath, reqLog);
+      combinedCSV = result.combinedCSV;
+      totalLines = result.totalLines;
+    } catch (error) {
+      const message = String((error as Error).message || error);
+      if (message === 'Access denied') {
+        return res.status(403).json({ error: 'Access denied' });
       }
+      if (message === 'No summary CSV files found') {
+        return res.status(404).json({ error: 'No summary CSV files found' });
+      }
+      reqLog.error('Failed to prepare CSV for deep analysis', { error: message });
+      return res.status(500).json({ error: 'Failed to prepare CSV data', details: message });
     }
 
     reqLog.info('Combined CSV data', { totalLines, totalSize: combinedCSV.length });
@@ -550,6 +665,46 @@ router.post('/deep/run/*', async (req, res) => {
     reqLog.error('Deep analysis error', { error: String(error) });
     res.status(500).json({
       error: 'Failed to run deep analysis',
+      details: String(error),
+    });
+  }
+});
+
+router.post('/deep/estimate', async (req, res) => {
+  const { csvContent, runPath } = req.body || {};
+
+  try {
+    let contentToEstimate: string | null = null;
+
+    if (typeof csvContent === 'string' && csvContent.trim()) {
+      contentToEstimate = csvContent;
+    } else if (typeof runPath === 'string' && runPath.trim()) {
+      try {
+        const result = await readCombinedCSVForRun(runPath);
+        contentToEstimate = result.combinedCSV;
+      } catch (error) {
+        const message = String((error as Error).message || error);
+        if (message === 'Access denied') {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+        if (message === 'No summary CSV files found') {
+          return res.status(404).json({ error: 'No summary CSV files found' });
+        }
+        throw error;
+      }
+    } else {
+      return res.status(400).json({ error: 'Provide csvContent or runPath to estimate cost.' });
+    }
+
+    if (!contentToEstimate) {
+      return res.json({ costEstimate: null });
+    }
+
+    const costEstimate = await estimateDeepAnalysisCostFromContent(contentToEstimate);
+    res.json({ costEstimate });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to estimate deep analysis cost',
       details: String(error),
     });
   }

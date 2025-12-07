@@ -196,6 +196,9 @@ def _prepare_generation_params(
         presence_penalty = None
         frequency_penalty = None
         n = None
+    if vendor_lower == "xai":
+        presence_penalty = None
+        frequency_penalty = None
     params: Dict[str, Any] = {}
     debug_meta: Dict[str, str] = {}
     deterministic = _is_reasoning_model(model)

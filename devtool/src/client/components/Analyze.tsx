@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { analysis, type AnalysisRun, type DeepAnalysisResult } from '../lib/api';
+import { analysis, type AnalysisRun, type CostEstimate, type DeepAnalysisResult } from '../lib/api';
 import { FolderOpen, BarChart3, TrendingUp, Grid3X3, RefreshCw, Upload, X, GitBranch, Microscope } from 'lucide-react';
 import {
   type VisualizationType,
@@ -30,6 +30,9 @@ export function Analyze() {
   const [deepAnalysisData, setDeepAnalysisData] = useState<DeepAnalysisResult | null>(null);
   const [deepAnalysisLoading, setDeepAnalysisLoading] = useState(false);
   const [csvContentForDeepAnalysis, setCsvContentForDeepAnalysis] = useState<string | null>(null);
+  const [deepAnalysisCost, setDeepAnalysisCost] = useState<CostEstimate | null>(null);
+  const [deepAnalysisCostLoading, setDeepAnalysisCostLoading] = useState(false);
+  const [deepAnalysisCostError, setDeepAnalysisCostError] = useState<string | null>(null);
 
   // Load available runs
   useEffect(() => {
@@ -138,6 +141,8 @@ export function Analyze() {
     setDroppedFileName(null);
     setCsvContentForDeepAnalysis(null);
     setDeepAnalysisData(null);
+    setDeepAnalysisCost(null);
+    setDeepAnalysisCostError(null);
     if (selectedRun) {
       loadData(selectedRun);
     } else {
@@ -180,6 +185,45 @@ export function Analyze() {
       runDeepAnalysis();
     }
   }, [activeViz, deepAnalysisData, deepAnalysisLoading, runDeepAnalysis]);
+
+  const refreshDeepAnalysisEstimate = useCallback(async () => {
+    if (
+      (dataSource === 'server' && !selectedRun) ||
+      (dataSource === 'file' && !csvContentForDeepAnalysis)
+    ) {
+      setDeepAnalysisCost(null);
+      setDeepAnalysisCostError(null);
+      return;
+    }
+
+    setDeepAnalysisCostLoading(true);
+    setDeepAnalysisCostError(null);
+
+    try {
+      const payload =
+        dataSource === 'server'
+          ? { runPath: selectedRun }
+          : { csvContent: csvContentForDeepAnalysis ?? '' };
+      const { costEstimate } = await analysis.estimateDeepAnalysis(payload);
+      setDeepAnalysisCost(costEstimate ?? null);
+    } catch (err) {
+      setDeepAnalysisCost(null);
+      setDeepAnalysisCostError('Unable to estimate deep analysis cost');
+    } finally {
+      setDeepAnalysisCostLoading(false);
+    }
+  }, [dataSource, selectedRun, csvContentForDeepAnalysis]);
+
+  useEffect(() => {
+    refreshDeepAnalysisEstimate();
+  }, [refreshDeepAnalysisEstimate]);
+
+  const formatCost = (value: number) => {
+    if (value < 0.01) {
+      return '< $0.01';
+    }
+    return `$${value.toFixed(2)}`;
+  };
 
   const vizOptions: { id: VisualizationType; label: string; icon: React.ReactNode }[] = [
     { id: 'decision-dist', label: 'Decision Distribution', icon: <BarChart3 size={16} /> },
@@ -265,20 +309,40 @@ export function Analyze() {
 
         {/* Visualization Type Tabs */}
         <div className="flex gap-1 mt-4">
-          {vizOptions.map((viz) => (
-            <button
-              key={viz.id}
-              onClick={() => setActiveViz(viz.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
-                activeViz === viz.id
-                  ? 'bg-gray-100 text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {viz.icon}
-              {viz.label}
-            </button>
-          ))}
+          {vizOptions.map((viz) => {
+            const showCost = viz.id === 'deep-analysis';
+            let costLabel = '';
+            if (showCost) {
+              if (deepAnalysisCostLoading) {
+                costLabel = 'Estimating...';
+              } else if (deepAnalysisCost) {
+                costLabel = `~${formatCost(deepAnalysisCost.total)}`;
+              } else if (deepAnalysisCostError) {
+                costLabel = 'Cost unavailable';
+              } else {
+                costLabel = 'No estimate';
+              }
+            }
+            return (
+              <button
+                key={viz.id}
+                onClick={() => setActiveViz(viz.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+                  activeViz === viz.id
+                    ? 'bg-gray-100 text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {viz.icon}
+                <span>{viz.label}</span>
+                {showCost && (
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {costLabel}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -321,6 +385,39 @@ export function Analyze() {
         {/* Deep Analysis Tab */}
         {activeViz === 'deep-analysis' && (
           <>
+            {(deepAnalysisCostLoading || deepAnalysisCost || deepAnalysisCostError) && (
+              <div className="mb-4 bg-white border border-gray-200 rounded-lg p-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-500">Estimated LLM cost</p>
+                    <p className="text-xl font-semibold text-gray-900">
+                      {deepAnalysisCostLoading && 'Estimating...'}
+                      {!deepAnalysisCostLoading && deepAnalysisCost && formatCost(deepAnalysisCost.total)}
+                      {!deepAnalysisCostLoading && !deepAnalysisCost && !deepAnalysisCostError && 'No estimate available'}
+                    </p>
+                    {deepAnalysisCostError && (
+                      <p className="text-sm text-red-600 mt-1">{deepAnalysisCostError}</p>
+                    )}
+                    {!deepAnalysisCostLoading && deepAnalysisCost && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Based on current summary model configuration. Actual billing may vary.
+                      </p>
+                    )}
+                  </div>
+                  {deepAnalysisCost && (
+                    <div className="text-sm text-gray-600">
+                      {Object.entries(deepAnalysisCost.breakdown).map(([model, value]) => (
+                        <div key={model} className="flex items-center gap-2">
+                          <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{model}</span>
+                          <span>{formatCost(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {deepAnalysisLoading && (
               <div className="flex items-center justify-center h-64">
                 <div className="flex flex-col items-center gap-3 text-gray-500">

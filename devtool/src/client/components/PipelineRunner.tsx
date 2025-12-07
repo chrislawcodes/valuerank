@@ -209,14 +209,16 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
   }, [output]);
 
   const providerSelections = useMemo(() => {
-    const selections: Record<string, string> = {};
+    const selections: Record<string, Set<string>> = {};
     const targets: string[] = runtimeConfig?.defaults?.target_models || [];
     targets.forEach((modelId) => {
       if (!modelId) return;
       const [providerId] = modelId.split(':');
-      if (providerId) {
-        selections[providerId] = modelId;
+      if (!providerId) return;
+      if (!selections[providerId]) {
+        selections[providerId] = new Set();
       }
+      selections[providerId].add(modelId);
     });
     return selections;
   }, [runtimeConfig]);
@@ -321,7 +323,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
     recomputeCostEstimate();
   }, [recomputeCostEstimate]);
 
-  const handleTargetModelChange = async (providerId: string, modelId: string | null) => {
+  const handleTargetModelChange = async (providerId: string, modelId: string, enabled: boolean) => {
     if (!runtimeConfig) return;
     setUpdatingProvider(providerId);
     try {
@@ -334,26 +336,13 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
       const targets = Array.isArray(nextConfig.defaults?.target_models)
         ? [...nextConfig.defaults.target_models]
         : [];
-      const prefix = `${providerId}:`;
-      const existingIndex = targets.findIndex((id) => id.startsWith(prefix));
-      if (modelId) {
-        if (existingIndex >= 0) {
-          targets[existingIndex] = modelId;
-        } else {
-          targets.push(modelId);
-        }
-      } else if (existingIndex >= 0) {
+      const existingIndex = targets.indexOf(modelId);
+      if (enabled && existingIndex === -1) {
+        targets.push(modelId);
+      } else if (!enabled && existingIndex >= 0) {
         targets.splice(existingIndex, 1);
       }
-      const seenProviders = new Set<string>();
-      nextConfig.defaults.target_models = targets.filter((id) => {
-        if (!id) return false;
-        const [prov] = id.split(':');
-        if (!prov) return false;
-        if (seenProviders.has(prov)) return false;
-        seenProviders.add(prov);
-        return true;
-      });
+      nextConfig.defaults.target_models = targets.filter(Boolean);
       await config.updateRuntime(nextConfig);
       setRuntimeConfig(nextConfig);
       setCostEstimate(null);
@@ -535,8 +524,15 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
             ) : (
               <div className="flex flex-wrap gap-3">
                 {providerGroups.map((group) => {
-                  const currentValue = providerSelections[group.providerId] || '';
-                  const isActive = currentValue !== '';
+                  const selectedSet = providerSelections[group.providerId] || new Set<string>();
+                  const isActive = selectedSet.size > 0;
+                  const providerTotal =
+                    costEstimate && isActive
+                      ? Array.from(selectedSet).reduce((sum, id) => {
+                          const value = costEstimate.breakdown?.[id] ?? 0;
+                          return sum + value;
+                        }, 0)
+                      : null;
                   return (
                     <div
                       key={group.providerId}
@@ -552,39 +548,54 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                         <span className="text-sm font-medium text-gray-700 flex-1">
                           {group.providerName}
                         </span>
-                        <div className="flex flex-col text-xs text-gray-500 text-right">
-                          {currentValue && (
-                            <span>
-                              {
-                                group.models.find((model) => model.id === currentValue)
-                                  ?.costLabel
-                              }
-                            </span>
-                          )}
-                          {currentValue && costEstimate?.breakdown?.[currentValue] != null && (
-                            <span>
-                              Est: {formatCost(costEstimate.breakdown[currentValue])}
-                            </span>
-                          )}
-                        </div>
+                        {providerTotal != null && (
+                          <span className="text-xs text-gray-600 whitespace-nowrap">
+                            Total est: {formatCost(providerTotal)}
+                          </span>
+                        )}
                       </div>
-                      <select
-                        className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 bg-white"
-                        value={currentValue}
-                        disabled={loadingRuntime || updatingProvider === group.providerId}
-                        onChange={(e) => {
-                          const value = e.target.value || null;
-                          handleTargetModelChange(group.providerId, value);
-                        }}
-                      >
-                        <option value="">None (disable provider)</option>
-                        {group.models.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.name}
-                            {model.costLabel ? ` (${model.costLabel})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="space-y-2">
+                        {group.models.map((model) => {
+                          const isChecked = selectedSet.has(model.id);
+                          const perModelEstimate =
+                            costEstimate?.breakdown?.[model.id] != null
+                              ? formatCost(costEstimate.breakdown[model.id])
+                              : null;
+                          return (
+                            <label
+                              key={model.id}
+                              className="flex items-center gap-2 text-sm text-gray-700"
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                                checked={isChecked}
+                                disabled={loadingRuntime || updatingProvider === group.providerId}
+                                onChange={(e) =>
+                                  handleTargetModelChange(
+                                    group.providerId,
+                                    model.id,
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                  <span>{model.name}</span>
+                                  {perModelEstimate && (
+                                    <span className="text-xs text-gray-500">
+                                      Est {perModelEstimate}
+                                    </span>
+                                  )}
+                                </div>
+                                {model.costLabel && (
+                                  <p className="text-xs text-gray-500">{model.costLabel}</p>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
                       {updatingProvider === group.providerId && (
                         <p className="text-xs text-blue-600 mt-2">Saving...</p>
                       )}

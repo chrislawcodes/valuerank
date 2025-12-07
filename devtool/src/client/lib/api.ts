@@ -423,4 +423,10 @@ export const analysis = {
     fetchJson<DeepAnalysisResult>(`${API_BASE}/analysis/deep/run/${runPath}`, {
       method: 'POST',
     }),
+
+  estimateDeepAnalysis: (payload: { csvContent?: string; runPath?: string }) =>
+    fetchJson<{ costEstimate: CostEstimate | null }>(`${API_BASE}/analysis/deep/estimate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
