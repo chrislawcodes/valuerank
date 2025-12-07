@@ -295,6 +295,7 @@ export function DefinitionDetail() {
           <h3 className="text-sm font-medium text-gray-700 mb-2">Tags</h3>
           <TagSelector
             selectedTags={definition.tags}
+            inheritedTags={definition.inheritedTags ?? []}
             onTagAdd={handleTagAdd}
             onTagRemove={handleTagRemove}
             onTagCreate={handleTagCreate}

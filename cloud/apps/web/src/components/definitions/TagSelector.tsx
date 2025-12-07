@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
-import { Tag as TagIcon, Plus, Check, X, ChevronDown } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Tag as TagIcon, Plus, Check, X, ChevronDown, Link } from 'lucide-react';
 import type { Tag } from '../../api/operations/tags';
 import { useTags } from '../../hooks/useTags';
 
 type TagSelectorProps = {
   selectedTags: Tag[];
+  /** Tags inherited from parent definitions (read-only) */
+  inheritedTags?: Tag[];
   onTagAdd: (tagId: string) => void;
   onTagRemove: (tagId: string) => void;
   onTagCreate: (tagName: string) => Promise<void>;
@@ -14,12 +16,18 @@ type TagSelectorProps = {
 
 export function TagSelector({
   selectedTags,
+  inheritedTags = [],
   onTagAdd,
   onTagRemove,
   onTagCreate,
   disabled = false,
   className = '',
 }: TagSelectorProps) {
+  // Create a set of inherited tag IDs for efficient lookup
+  const inheritedTagIds = useMemo(
+    () => new Set(inheritedTags.map((t) => t.id)),
+    [inheritedTags]
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -28,11 +36,12 @@ export function TagSelector({
 
   const { tags: allTags, loading } = useTags();
 
-  // Filter out already selected tags and apply search
+  // Filter out already selected/inherited tags and apply search
   const availableTags = allTags.filter((tag) => {
     const isSelected = selectedTags.some((t) => t.id === tag.id);
+    const isInherited = inheritedTagIds.has(tag.id);
     const matchesSearch = !search || tag.name.toLowerCase().includes(search.toLowerCase());
-    return !isSelected && matchesSearch;
+    return !isSelected && !isInherited && matchesSearch;
   });
 
   // Check if search term could create a new tag
@@ -89,8 +98,20 @@ export function TagSelector({
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
-      {/* Selected tags */}
+      {/* Selected tags (local + inherited) */}
       <div className="flex flex-wrap gap-1 mb-2">
+        {/* Inherited tags first (read-only, purple styling) */}
+        {inheritedTags.map((tag) => (
+          <span
+            key={`inherited-${tag.id}`}
+            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-sm rounded-full border border-purple-200"
+            title="Inherited from parent definition"
+          >
+            <Link className="w-3 h-3" />
+            {tag.name}
+          </span>
+        ))}
+        {/* Local tags (removable) */}
         {selectedTags.map((tag) => (
           <span
             key={tag.id}

@@ -27,7 +27,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  const validateToken = async (tokenToValidate: string) => {
+  const validateToken = async (tokenToValidate: string, retryCount = 0) => {
     try {
       const response = await fetch('/api/auth/me', {
         headers: {
@@ -39,20 +39,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const userData: User = await response.json();
         setUser(userData);
         setToken(tokenToValidate);
-      } else {
-        // Token is invalid, clear it
+      } else if (response.status === 401 || response.status === 403) {
+        // Token is invalid/expired, clear it
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setUser(null);
+      } else {
+        // Server error (5xx), keep token and retry
+        if (retryCount < 3) {
+          setTimeout(() => validateToken(tokenToValidate, retryCount + 1), 1000);
+          return; // Don't set isLoading to false yet
+        }
+        // After 3 retries, keep the token but set user to null
+        // User will see loading state clear but can retry manually
+        setUser(null);
+        setIsLoading(false);
+        return;
       }
     } catch {
-      // Network error, clear token
-      localStorage.removeItem(TOKEN_KEY);
-      setToken(null);
+      // Network error (server down) - retry a few times before giving up
+      // Don't clear token on network errors - server might just be restarting
+      if (retryCount < 3) {
+        setTimeout(() => validateToken(tokenToValidate, retryCount + 1), 1000);
+        return; // Don't set isLoading to false yet
+      }
+      // After retries, keep the token - user can refresh when server is back
       setUser(null);
-    } finally {
       setIsLoading(false);
+      return;
     }
+    setIsLoading(false);
   };
 
   const login = useCallback(async (email: string, password: string) => {

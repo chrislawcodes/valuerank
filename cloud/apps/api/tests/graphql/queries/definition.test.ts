@@ -752,6 +752,285 @@ describe('GraphQL Definition Query', () => {
     });
   });
 
+  describe('inheritance fields', () => {
+    let inheritanceParent: Definition;
+    let inheritanceChild: Definition;
+    let inheritanceTag: Tag;
+
+    beforeAll(async () => {
+      // Create a tag for testing inheritance
+      inheritanceTag = await db.tag.create({
+        data: { name: 'inheritance-test-tag' },
+      });
+
+      // Create parent with full v1 content and a tag
+      inheritanceParent = await db.definition.create({
+        data: {
+          name: 'Inheritance Parent',
+          content: {
+            schema_version: 1,
+            preamble: 'Parent preamble',
+            template: 'Parent template with [placeholder]',
+            dimensions: [{ name: 'severity', levels: [{ label: 'low', score: 1 }] }],
+          },
+          tags: {
+            create: { tagId: inheritanceTag.id },
+          },
+        },
+      });
+
+      // Create child with sparse v2 content (only overrides preamble)
+      inheritanceChild = await db.definition.create({
+        data: {
+          name: 'Inheritance Child',
+          content: {
+            schema_version: 2,
+            preamble: 'Child preamble override',
+            // template and dimensions undefined - inherited from parent
+          },
+          parentId: inheritanceParent.id,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await db.definition.deleteMany({
+        where: {
+          id: { in: [inheritanceChild.id, inheritanceParent.id] },
+        },
+      });
+      await db.tag.delete({ where: { id: inheritanceTag.id } });
+    });
+
+    it('returns isForked=true for child definitions', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            isForked
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definition.isForked).toBe(true);
+    });
+
+    it('returns isForked=false for root definitions', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            isForked
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceParent.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definition.isForked).toBe(false);
+    });
+
+    it('returns resolvedContent with inherited fields merged', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            resolvedContent
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const resolved = response.body.data.definition.resolvedContent;
+      // Preamble should be from child (overridden)
+      expect(resolved.preamble).toBe('Child preamble override');
+      // Template should be from parent (inherited)
+      expect(resolved.template).toBe('Parent template with [placeholder]');
+      // Dimensions should be from parent (inherited)
+      expect(resolved.dimensions).toHaveLength(1);
+      expect(resolved.dimensions[0].name).toBe('severity');
+    });
+
+    it('returns localContent with only local overrides', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            localContent
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const local = response.body.data.definition.localContent;
+      expect(local.schema_version).toBe(2);
+      // Only preamble is locally set
+      expect(local.preamble).toBe('Child preamble override');
+      // Template and dimensions should be undefined (not overridden)
+      expect(local.template).toBeUndefined();
+      expect(local.dimensions).toBeUndefined();
+    });
+
+    it('returns overrides showing which fields are locally set', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            overrides {
+              preamble
+              template
+              dimensions
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const overrides = response.body.data.definition.overrides;
+      expect(overrides.preamble).toBe(true); // Overridden locally
+      expect(overrides.template).toBe(false); // Inherited
+      expect(overrides.dimensions).toBe(false); // Inherited
+    });
+
+    it('returns inheritedTags from parent definitions', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            inheritedTags {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const inherited = response.body.data.definition.inheritedTags;
+      expect(inherited).toHaveLength(1);
+      expect(inherited[0].id).toBe(inheritanceTag.id);
+      expect(inherited[0].name).toBe('inheritance-test-tag');
+    });
+
+    it('returns empty inheritedTags for root definitions', async () => {
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            inheritedTags {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceParent.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.definition.inheritedTags).toHaveLength(0);
+    });
+
+    it('returns allTags combining local and inherited tags', async () => {
+      // Add a local tag to the child
+      const localTag = await db.tag.create({
+        data: { name: 'child-local-tag' },
+      });
+      await db.definitionTag.create({
+        data: { definitionId: inheritanceChild.id, tagId: localTag.id },
+      });
+
+      const query = `
+        query GetDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            allTags {
+              id
+              name
+            }
+            tags {
+              id
+              name
+            }
+            inheritedTags {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: inheritanceChild.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const allTags = response.body.data.definition.allTags;
+      const tags = response.body.data.definition.tags;
+      const inheritedTags = response.body.data.definition.inheritedTags;
+
+      // allTags should include both local and inherited
+      expect(allTags).toHaveLength(2);
+      const allTagNames = allTags.map((t: { name: string }) => t.name);
+      expect(allTagNames).toContain('inheritance-test-tag');
+      expect(allTagNames).toContain('child-local-tag');
+
+      // tags should only include local
+      expect(tags).toHaveLength(1);
+      expect(tags[0].name).toBe('child-local-tag');
+
+      // inheritedTags should only include inherited
+      expect(inheritedTags).toHaveLength(1);
+      expect(inheritedTags[0].name).toBe('inheritance-test-tag');
+
+      // Clean up
+      await db.definitionTag.deleteMany({ where: { tagId: localTag.id } });
+      await db.tag.delete({ where: { id: localTag.id } });
+    });
+  });
+
   describe('definitionDescendants(id)', () => {
     it('returns all descendants of a definition', async () => {
       const query = `
