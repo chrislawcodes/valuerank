@@ -6,6 +6,7 @@ export { DefinitionList } from './DefinitionList';
 export { DimensionEditor } from './DimensionEditor';
 export { DimensionLevelEditor } from './DimensionLevelEditor';
 export { ForkDialog } from './ForkDialog';
+export { InheritanceIndicator, InheritanceBanner } from './InheritanceIndicator';
 export { ScenarioPreview } from './ScenarioPreview';
 export { TagChips } from './TagChips';
 export { TagSelector } from './TagSelector';

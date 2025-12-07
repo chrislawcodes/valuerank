@@ -10,6 +10,16 @@ export type Tag = {
   createdAt: string;
 };
 
+/**
+ * Indicates which content fields are locally overridden vs inherited.
+ */
+export type DefinitionOverrides = {
+  preamble: boolean;
+  template: boolean;
+  dimensions: boolean;
+  matchingRules: boolean;
+};
+
 export type Definition = {
   id: string;
   name: string;
@@ -22,13 +32,35 @@ export type Definition = {
   tags: Tag[];
   parent?: Definition | null;
   children?: Definition[];
+  // Inheritance fields (Phase 12)
+  isForked?: boolean;
+  resolvedContent?: DefinitionContent;
+  localContent?: Partial<DefinitionContent>;
+  overrides?: DefinitionOverrides;
+  inheritedTags?: Tag[];
+  allTags?: Tag[];
 };
 
+/**
+ * Stored content - may have undefined fields for v2 (sparse storage).
+ */
+export type DefinitionContentStored = {
+  schema_version: number;
+  preamble?: string;
+  template?: string;
+  dimensions?: Dimension[];
+  matching_rules?: string;
+};
+
+/**
+ * Resolved content - all fields guaranteed present.
+ */
 export type DefinitionContent = {
   schema_version: number;
   preamble: string;
   template: string;
   dimensions: Dimension[];
+  matching_rules?: string;
 };
 
 export type Dimension = {
@@ -107,6 +139,26 @@ export const DEFINITION_QUERY = gql`
         name
         createdAt
       }
+      # Inheritance fields (Phase 12)
+      isForked
+      resolvedContent
+      localContent
+      overrides {
+        preamble
+        template
+        dimensions
+        matchingRules
+      }
+      inheritedTags {
+        id
+        name
+        createdAt
+      }
+      allTags {
+        id
+        name
+        createdAt
+      }
     }
   }
 `;
@@ -165,7 +217,7 @@ export const UPDATE_DEFINITION_MUTATION = gql`
   }
 `;
 
-// Fork a definition
+// Fork a definition (uses inheritance by default)
 export const FORK_DEFINITION_MUTATION = gql`
   mutation ForkDefinition($input: ForkDefinitionInput!) {
     forkDefinition(input: $input) {
@@ -174,6 +226,35 @@ export const FORK_DEFINITION_MUTATION = gql`
       parentId
       content
       createdAt
+      isForked
+      resolvedContent
+      localContent
+      overrides {
+        preamble
+        template
+        dimensions
+        matchingRules
+      }
+    }
+  }
+`;
+
+// Update specific content fields with inheritance support
+export const UPDATE_DEFINITION_CONTENT_MUTATION = gql`
+  mutation UpdateDefinitionContent($id: String!, $input: UpdateDefinitionContentInput!) {
+    updateDefinitionContent(id: $id, input: $input) {
+      id
+      name
+      content
+      updatedAt
+      resolvedContent
+      localContent
+      overrides {
+        preamble
+        template
+        dimensions
+        matchingRules
+      }
     }
   }
 `;
@@ -257,11 +338,26 @@ export type UpdateDefinitionResult = {
 export type ForkDefinitionInput = {
   parentId: string;
   name: string;
-  content?: DefinitionContent;
+  content?: Partial<DefinitionContent>;
+  /** If true (default), fork with minimal content (inherit everything) */
+  inheritAll?: boolean;
 };
 
 export type ForkDefinitionResult = {
   forkDefinition: Definition;
+};
+
+export type UpdateDefinitionContentInput = {
+  preamble?: string;
+  template?: string;
+  dimensions?: Dimension[];
+  matchingRules?: string;
+  /** List of fields to clear override for (inherit from parent) */
+  clearOverrides?: ('preamble' | 'template' | 'dimensions' | 'matching_rules')[];
+};
+
+export type UpdateDefinitionContentResult = {
+  updateDefinitionContent: Definition;
 };
 
 export type DeleteDefinitionResult = {

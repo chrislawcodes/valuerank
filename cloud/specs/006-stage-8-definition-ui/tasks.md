@@ -355,29 +355,29 @@ Foundation (BLOCKING)
 
 ### Database Schema Updates
 
-- [ ] T097 Update `DefinitionContent` type in `packages/db/src/types.ts` for schema v2 (make preamble, template, dimensions optional)
-- [ ] T098 Create schema migration helper in `packages/db/src/schema-migration.ts` for v1→v2 content conversion
-- [ ] T099 Add `resolveDefinitionContent` function in `packages/db/src/queries/definitions.ts` to compute inherited content from ancestor chain
+- [X] T097 Update `DefinitionContent` type in `packages/db/src/types.ts` for schema v2 (make preamble, template, dimensions optional)
+- [X] T098 Create schema migration helper in `packages/db/src/schema-migration.ts` for v1→v2 content conversion
+- [X] T099 Add `resolveDefinitionContent` function in `packages/db/src/queries/definitions.ts` to compute inherited content from ancestor chain
 
 ### GraphQL API Updates
 
-- [ ] T100 Add `resolvedContent` field to Definition type in `apps/api/src/graphql/types/definition.ts` (computed, full content with inheritance resolved)
-- [ ] T101 Add `localContent` field to Definition type (raw stored content showing only overrides)
-- [ ] T102 Add `inheritedTags` field to Definition type (tags inherited from ancestors)
-- [ ] T103 Add `hasLocalOverride` helper field that returns which properties are locally overridden
-- [ ] T104 Update `forkDefinition` mutation to store empty/minimal content by default (inherit everything)
-- [ ] T105 Update `updateDefinition` mutation to support clearing overrides (set field to null to inherit)
+- [X] T100 Add `resolvedContent` field to Definition type in `apps/api/src/graphql/types/definition.ts` (computed, full content with inheritance resolved)
+- [X] T101 Add `localContent` field to Definition type (raw stored content showing only overrides)
+- [X] T102 Add `inheritedTags` field to Definition type (tags inherited from ancestors)
+- [X] T103 Add `hasLocalOverride` helper field that returns which properties are locally overridden
+- [X] T104 Update `forkDefinition` mutation to store empty/minimal content by default (inherit everything)
+- [X] T105 Update `updateDefinition` mutation to support clearing overrides (set field to null to inherit)
 
 ### Frontend Updates
 
-- [ ] T106 [P] Update `useDefinition` hook in `apps/web/src/hooks/useDefinition.ts` to fetch both `resolvedContent` and `localContent`
-- [ ] T107 [P] Create `InheritanceIndicator` component in `apps/web/src/components/definitions/InheritanceIndicator.tsx` to show inherited vs local status
-- [ ] T108 Update `DefinitionEditor` to show inheritance indicators on each property section (preamble, template, dimensions)
-- [ ] T109 Add "Inherit from parent" button to each property section in DefinitionEditor to clear local override
-- [ ] T110 Update `DefinitionEditor` to load resolved content for display but track local overrides for saving
-- [ ] T111 Update `ForkDialog` to explain inheritance behavior in UI copy
-- [ ] T112 Update `TagSelector` to show inherited tags (read-only) vs local tags (removable)
-- [ ] T113 Update `TagChips` to visually distinguish inherited vs local tags
+- [X] T106 [P] Update `useDefinition` hook in `apps/web/src/hooks/useDefinition.ts` to fetch both `resolvedContent` and `localContent`
+- [X] T107 [P] Create `InheritanceIndicator` component in `apps/web/src/components/definitions/InheritanceIndicator.tsx` to show inherited vs local status
+- [X] T108 Update `DefinitionEditor` to show inheritance indicators on each property section (preamble, template, dimensions)
+- [X] T109 Add "Inherit from parent" button to each property section in DefinitionEditor to clear local override
+- [X] T110 Update `DefinitionEditor` to load resolved content for display but track local overrides for saving
+- [X] T111 Update `ForkDialog` to explain inheritance behavior in UI copy
+- [X] T112 Update `TagSelector` to show inherited tags (read-only) vs local tags (removable)
+- [X] T113 Update `TagChips` to visually distinguish inherited vs local tags
 
 ### Testing
 

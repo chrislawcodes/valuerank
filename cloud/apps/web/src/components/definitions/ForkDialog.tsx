@@ -66,8 +66,29 @@ export function ForkDialog({
             <div className="px-6 py-4">
               <p className="text-sm text-gray-600 mb-4">
                 Create a new variant of <strong>{originalName}</strong>. The fork will
-                have the same content but can be modified independently.
+                inherit all content from the parent definition.
               </p>
+
+              {/* Inheritance explanation */}
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <h4 className="text-sm font-medium text-purple-800 mb-1">
+                  Property Inheritance
+                </h4>
+                <ul className="text-xs text-purple-700 space-y-1">
+                  <li className="flex items-start gap-2">
+                    <span className="text-purple-500 mt-0.5">•</span>
+                    <span>The fork inherits preamble, template, and dimensions from the parent</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-purple-500 mt-0.5">•</span>
+                    <span>Changes to the parent will be reflected in the fork</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-purple-500 mt-0.5">•</span>
+                    <span>Override any property to customize the fork independently</span>
+                  </li>
+                </ul>
+              </div>
 
               <Input
                 label="Name for the fork"

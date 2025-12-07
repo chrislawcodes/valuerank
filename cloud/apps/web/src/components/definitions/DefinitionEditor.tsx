@@ -5,9 +5,11 @@ import { Input } from '../ui/Input';
 import { DimensionEditor } from './DimensionEditor';
 import { ScenarioPreview } from './ScenarioPreview';
 import { CanonicalDimensionChips } from './CanonicalDimensionChips';
+import { InheritanceIndicator, InheritanceBanner } from './InheritanceIndicator';
 import type { CanonicalDimension } from '@valuerank/shared/canonical-dimensions';
 import type {
   DefinitionContent,
+  DefinitionOverrides,
   Dimension,
   DimensionLevel,
 } from '../../api/operations/definitions';
@@ -19,6 +21,13 @@ type DefinitionEditorProps = {
   onCancel: () => void;
   isSaving?: boolean;
   mode: 'create' | 'edit';
+  // Inheritance support (Phase 12)
+  isForked?: boolean;
+  parentName?: string;
+  parentId?: string;
+  overrides?: DefinitionOverrides;
+  onClearOverride?: (field: 'preamble' | 'template' | 'dimensions' | 'matching_rules') => void;
+  onViewParent?: () => void;
 };
 
 function createDefaultContent(): DefinitionContent {
@@ -73,12 +82,26 @@ export function DefinitionEditor({
   onCancel,
   isSaving = false,
   mode,
+  isForked = false,
+  parentName,
+  parentId,
+  overrides,
+  onClearOverride,
+  onViewParent,
 }: DefinitionEditorProps) {
   const [name, setName] = useState(initialName);
   const [content, setContent] = useState<DefinitionContent>(
     initialContent || createDefaultContent()
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Default overrides for non-forked definitions (everything is local)
+  const effectiveOverrides: DefinitionOverrides = overrides ?? {
+    preamble: true,
+    template: true,
+    dimensions: true,
+    matchingRules: true,
+  };
 
   const handlePreambleChange = useCallback((value: string) => {
     setContent((prev) => ({ ...prev, preamble: value }));
@@ -187,6 +210,14 @@ export function DefinitionEditor({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Inheritance Banner */}
+      <InheritanceBanner
+        isForked={isForked}
+        parentName={parentName}
+        parentId={parentId}
+        onViewParent={onViewParent}
+      />
+
       {/* Name */}
       <Input
         label="Definition Name"
@@ -199,9 +230,17 @@ export function DefinitionEditor({
 
       {/* Preamble */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Preamble (optional)
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-700">
+            Preamble (optional)
+          </label>
+          <InheritanceIndicator
+            isOverridden={effectiveOverrides.preamble}
+            isForked={isForked}
+            fieldName="Preamble"
+            onClearOverride={onClearOverride ? () => onClearOverride('preamble') : undefined}
+          />
+        </div>
         <textarea
           value={content.preamble}
           onChange={(e) => handlePreambleChange(e.target.value)}
@@ -214,9 +253,17 @@ export function DefinitionEditor({
 
       {/* Template */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Scenario Template
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-700">
+            Scenario Template
+          </label>
+          <InheritanceIndicator
+            isOverridden={effectiveOverrides.template}
+            isForked={isForked}
+            fieldName="Template"
+            onClearOverride={onClearOverride ? () => onClearOverride('template') : undefined}
+          />
+        </div>
         <p className="text-sm text-gray-500 mb-2">
           Use placeholders like <code className="bg-gray-100 px-1 rounded">[situation]</code> that
           will be replaced with dimension values.
@@ -253,9 +300,17 @@ export function DefinitionEditor({
       {/* Dimensions */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <label className="block text-sm font-medium text-gray-700">
-            Dimensions
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Dimensions
+            </label>
+            <InheritanceIndicator
+              isOverridden={effectiveOverrides.dimensions}
+              isForked={isForked}
+              fieldName="Dimensions"
+              onClearOverride={onClearOverride ? () => onClearOverride('dimensions') : undefined}
+            />
+          </div>
           <Button
             type="button"
             variant="secondary"
