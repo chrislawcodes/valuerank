@@ -1,14 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation } from 'urql';
 import { ArrowLeft, Edit, FileText, Calendar, Play, GitBranch, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { DefinitionEditor } from '../components/definitions/DefinitionEditor';
 import { ForkDialog } from '../components/definitions/ForkDialog';
+import { TagSelector } from '../components/definitions/TagSelector';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
 import type { DefinitionContent } from '../api/operations/definitions';
+import {
+  ADD_TAG_TO_DEFINITION_MUTATION,
+  REMOVE_TAG_FROM_DEFINITION_MUTATION,
+  CREATE_AND_ASSIGN_TAG_MUTATION,
+  type AddTagToDefinitionResult,
+  type RemoveTagFromDefinitionResult,
+  type CreateAndAssignTagResult,
+} from '../api/operations/tags';
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -45,6 +55,35 @@ export function DefinitionDetail() {
     isForking,
     isDeleting,
   } = useDefinitionMutations();
+
+  // Tag mutations
+  const [, executeAddTag] = useMutation<AddTagToDefinitionResult>(ADD_TAG_TO_DEFINITION_MUTATION);
+  const [, executeRemoveTag] = useMutation<RemoveTagFromDefinitionResult>(REMOVE_TAG_FROM_DEFINITION_MUTATION);
+  const [, executeCreateAndAssignTag] = useMutation<CreateAndAssignTagResult>(CREATE_AND_ASSIGN_TAG_MUTATION);
+
+  const handleTagAdd = async (tagId: string) => {
+    if (!definition) return;
+    const result = await executeAddTag({ definitionId: definition.id, tagId });
+    if (!result.error) {
+      refetch();
+    }
+  };
+
+  const handleTagRemove = async (tagId: string) => {
+    if (!definition) return;
+    const result = await executeRemoveTag({ definitionId: definition.id, tagId });
+    if (!result.error) {
+      refetch();
+    }
+  };
+
+  const handleTagCreate = async (tagName: string) => {
+    if (!definition) return;
+    const result = await executeCreateAndAssignTag({ definitionId: definition.id, tagName });
+    if (!result.error) {
+      refetch();
+    }
+  };
 
   const handleSave = async (name: string, content: DefinitionContent) => {
     if (isNewDefinition) {
@@ -251,21 +290,15 @@ export function DefinitionDetail() {
         </div>
 
         {/* Tags */}
-        {definition.tags.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Tags</h3>
-            <div className="flex flex-wrap gap-2">
-              {definition.tags.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
-                >
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Tags</h3>
+          <TagSelector
+            selectedTags={definition.tags}
+            onTagAdd={handleTagAdd}
+            onTagRemove={handleTagRemove}
+            onTagCreate={handleTagCreate}
+          />
+        </div>
 
         {/* Content sections */}
         <div className="space-y-6">

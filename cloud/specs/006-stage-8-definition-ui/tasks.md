@@ -162,15 +162,15 @@
 
 ### Implementation for User Story 5
 
-- [ ] T055 [P] [US5] Create useTags hook in `apps/web/src/hooks/useTags.ts`
-- [ ] T056 [P] [US5] Create TagChips component in `apps/web/src/components/definitions/TagChips.tsx`
-- [ ] T057 [US5] Create TagSelector component in `apps/web/src/components/definitions/TagSelector.tsx`
-- [ ] T058 [US5] Add TagChips to DefinitionCard to display assigned tags
-- [ ] T059 [US5] Add TagSelector to DefinitionDetail for tag assignment
+- [X] T055 [P] [US5] Create useTags hook in `apps/web/src/hooks/useTags.ts`
+- [X] T056 [P] [US5] Create TagChips component in `apps/web/src/components/definitions/TagChips.tsx`
+- [X] T057 [US5] Create TagSelector component in `apps/web/src/components/definitions/TagSelector.tsx`
+- [X] T058 [US5] Add TagChips to DefinitionCard to display assigned tags
+- [X] T059 [US5] Add TagSelector to DefinitionDetail for tag assignment
 - [ ] T060 [US5] Add tag filter dropdown to DefinitionFilters (created in US6)
-- [ ] T061 [US5] Implement inline tag creation in TagSelector
-- [ ] T062 [US5] Write tests for TagSelector in `apps/web/tests/components/definitions/TagSelector.test.tsx`
-- [ ] T063 [US5] Write tests for TagChips in `apps/web/tests/components/definitions/TagChips.test.tsx`
+- [X] T061 [US5] Implement inline tag creation in TagSelector
+- [X] T062 [US5] Write tests for TagSelector in `apps/web/tests/components/definitions/TagSelector.test.tsx`
+- [X] T063 [US5] Write tests for TagChips in `apps/web/tests/components/definitions/TagChips.test.tsx`
 
 **Checkpoint**: User Story 5 complete - can manage tags
 

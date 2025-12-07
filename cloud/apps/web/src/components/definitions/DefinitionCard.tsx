@@ -1,5 +1,6 @@
 import { FileText, GitBranch, Play, Calendar } from 'lucide-react';
 import type { Definition } from '../../api/operations/definitions';
+import { TagChips } from './TagChips';
 
 type DefinitionCardProps = {
   definition: Definition;
@@ -43,21 +44,7 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
 
       {/* Tags */}
       {definition.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {definition.tags.slice(0, 4).map((tag) => (
-            <span
-              key={tag.id}
-              className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full"
-            >
-              {tag.name}
-            </span>
-          ))}
-          {definition.tags.length > 4 && (
-            <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
-              +{definition.tags.length - 4} more
-            </span>
-          )}
-        </div>
+        <TagChips tags={definition.tags} maxDisplay={4} size="sm" className="mb-3" />
       )}
 
       {/* Meta info */}
