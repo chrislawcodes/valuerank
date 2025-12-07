@@ -1,8 +1,5 @@
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { DimensionLevelEditor } from './DimensionLevelEditor';
 import type { Dimension, DimensionLevel } from '../../api/operations/definitions';
 
 type DimensionEditorProps = {
@@ -35,9 +32,16 @@ export function DimensionEditor({
     onChange({ ...dimension, name });
   };
 
-  const handleLevelChange = (levelIndex: number, level: DimensionLevel) => {
+  const handleLevelChange = (levelIndex: number, updates: Partial<DimensionLevel>) => {
     const newLevels = [...dimension.levels];
-    newLevels[levelIndex] = level;
+    const currentLevel = newLevels[levelIndex];
+    if (!currentLevel) return;
+    newLevels[levelIndex] = {
+      score: updates.score ?? currentLevel.score,
+      label: updates.label ?? currentLevel.label,
+      description: updates.description !== undefined ? updates.description : currentLevel.description,
+      options: updates.options !== undefined ? updates.options : currentLevel.options,
+    };
     onChange({ ...dimension, levels: newLevels });
   };
 
@@ -51,72 +55,125 @@ export function DimensionEditor({
     onChange({ ...dimension, levels: [...dimension.levels, newLevel] });
   };
 
+  const handleOptionsChange = (levelIndex: number, value: string) => {
+    const options = value
+      .split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+    handleLevelChange(levelIndex, { options: options.length > 0 ? options : undefined });
+  };
+
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex items-center gap-2 p-4 bg-white border-b border-gray-200">
+      <div
+        className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <button
           type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-gray-500 hover:text-gray-700"
+          className="text-gray-400"
         >
           {isExpanded ? (
-            <ChevronDown className="w-5 h-5" />
+            <ChevronDown className="w-4 h-4" />
           ) : (
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           )}
         </button>
 
-        <div className="flex-1">
-          <Input
-            value={dimension.name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Dimension name (e.g., situation, actor)"
-            className="font-medium"
-          />
-        </div>
+        <input
+          type="text"
+          value={dimension.name}
+          onChange={(e) => {
+            e.stopPropagation();
+            handleNameChange(e.target.value);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Dimension name"
+          className="flex-1 px-2 py-1 text-sm font-medium border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+        />
 
-        <span className="text-sm text-gray-500">
+        <span className="text-xs text-gray-500">
           {dimension.levels.length} level{dimension.levels.length !== 1 ? 's' : ''}
         </span>
 
         {canRemove && (
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRemove}
-            className="text-gray-400 hover:text-red-500"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="p-1 hover:bg-red-100 rounded"
           >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+            <Trash2 className="w-4 h-4 text-red-500" />
+          </button>
         )}
       </div>
 
-      {/* Levels */}
+      {/* Levels - Compact Grid */}
       {isExpanded && (
-        <div className="p-4 bg-gray-50 space-y-3">
-          {dimension.levels.map((level, levelIndex) => (
-            <DimensionLevelEditor
-              key={levelIndex}
-              level={level}
-              index={levelIndex}
-              onChange={(updatedLevel) => handleLevelChange(levelIndex, updatedLevel)}
-              onRemove={() => handleLevelRemove(levelIndex)}
-              canRemove={dimension.levels.length > 1}
-            />
-          ))}
+        <div className="p-3">
+          {/* Grid Header */}
+          <div className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 mb-1 px-1">
+            <span className="text-xs text-gray-500">Score</span>
+            <span className="text-xs text-gray-500">Label</span>
+            <span className="text-xs text-gray-500">Options (comma-separated)</span>
+            <span></span>
+          </div>
 
-          <Button
+          {/* Level Rows */}
+          <div className="space-y-1">
+            {dimension.levels.map((level, levelIndex) => (
+              <div
+                key={levelIndex}
+                className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 items-center"
+              >
+                <input
+                  type="number"
+                  step="0.1"
+                  value={level.score}
+                  onChange={(e) => {
+                    const score = parseFloat(e.target.value);
+                    if (!isNaN(score)) {
+                      handleLevelChange(levelIndex, { score });
+                    }
+                  }}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <input
+                  type="text"
+                  value={level.label}
+                  onChange={(e) => handleLevelChange(levelIndex, { label: e.target.value })}
+                  placeholder="Label"
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <input
+                  type="text"
+                  value={level.options?.join(', ') || ''}
+                  onChange={(e) => handleOptionsChange(levelIndex, e.target.value)}
+                  placeholder="option1, option2, option3"
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleLevelRemove(levelIndex)}
+                  disabled={dimension.levels.length <= 1}
+                  className="p-1 hover:bg-red-100 rounded disabled:opacity-30 disabled:cursor-not-allowed justify-self-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button
             type="button"
-            variant="secondary"
-            size="sm"
             onClick={handleAddLevel}
-            className="w-full"
+            className="mt-2 text-sm text-teal-600 hover:text-teal-700"
           >
-            <Plus className="w-4 h-4 mr-1" />
-            Add Level
-          </Button>
+            + Add level
+          </button>
         </div>
       )}
     </div>
