@@ -145,7 +145,7 @@ function ApiKeysList({
               <p className="font-medium text-gray-900">{key.name}</p>
               <p className="text-sm text-gray-500">
                 {key.keyPrefix}... · Created {formatDate(key.createdAt)}
-                {key.lastUsed && ` · Last used ${formatDate(key.lastUsed)}`}
+                {key.lastUsedAt && ` · Last used ${formatDate(key.lastUsedAt)}`}
               </p>
             </div>
           </div>

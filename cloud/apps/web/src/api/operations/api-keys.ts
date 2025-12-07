@@ -7,7 +7,7 @@ export const API_KEYS_QUERY = gql`
       id
       name
       keyPrefix
-      lastUsed
+      lastUsedAt
       expiresAt
       createdAt
     }
@@ -22,7 +22,7 @@ export const CREATE_API_KEY_MUTATION = gql`
         id
         name
         keyPrefix
-        lastUsed
+        lastUsedAt
         expiresAt
         createdAt
       }
@@ -43,7 +43,7 @@ export type ApiKey = {
   id: string;
   name: string;
   keyPrefix: string;
-  lastUsed: string | null;
+  lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
 };
