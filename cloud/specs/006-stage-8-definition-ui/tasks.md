@@ -324,3 +324,96 @@ Foundation (BLOCKING)
 
 ### MVP (P1 only): 31 tasks + 23 foundation = 54 tasks
 ### Full Feature: 96 tasks
+
+---
+
+## Phase 12: Property Inheritance for Forked Definitions
+
+**Purpose**: Enable forked definitions to inherit properties from their parent tree, with the ability to override any property locally.
+
+**Key Behavior:**
+- Forked definitions inherit all properties (preamble, template, dimensions, tags) from their parent by default
+- Any property can be overridden locally, creating a unique value
+- If a parent changes a property that a child hasn't overridden, the child sees the change
+- Properties: `preamble`, `template`, `dimensions`, `matching_rules`, and tags
+
+### Design Decisions
+
+**Content Storage Strategy**: Sparse storage with resolved content
+- Store only local overrides in `content` JSON (missing/undefined fields = inherit from parent)
+- Compute resolved content at read time by walking ancestor chain
+- Root definitions have all fields present; forked definitions only store overridden fields
+
+**Schema Version Migration**: Bump to `schema_version: 2`
+- V1 content (existing): all fields present, stored as copy
+- V2 content: sparse fields, undefined = inherit
+
+**Tag Inheritance**: Automatic through computed field
+- `inheritedTags` = union of all ancestor tags
+- `localTags` = tags directly assigned to this definition
+- `allTags` = inheritedTags + localTags (deduplicated)
+
+### Database Schema Updates
+
+- [ ] T097 Update `DefinitionContent` type in `packages/db/src/types.ts` for schema v2 (make preamble, template, dimensions optional)
+- [ ] T098 Create schema migration helper in `packages/db/src/schema-migration.ts` for v1→v2 content conversion
+- [ ] T099 Add `resolveDefinitionContent` function in `packages/db/src/queries/definitions.ts` to compute inherited content from ancestor chain
+
+### GraphQL API Updates
+
+- [ ] T100 Add `resolvedContent` field to Definition type in `apps/api/src/graphql/types/definition.ts` (computed, full content with inheritance resolved)
+- [ ] T101 Add `localContent` field to Definition type (raw stored content showing only overrides)
+- [ ] T102 Add `inheritedTags` field to Definition type (tags inherited from ancestors)
+- [ ] T103 Add `hasLocalOverride` helper field that returns which properties are locally overridden
+- [ ] T104 Update `forkDefinition` mutation to store empty/minimal content by default (inherit everything)
+- [ ] T105 Update `updateDefinition` mutation to support clearing overrides (set field to null to inherit)
+
+### Frontend Updates
+
+- [ ] T106 [P] Update `useDefinition` hook in `apps/web/src/hooks/useDefinition.ts` to fetch both `resolvedContent` and `localContent`
+- [ ] T107 [P] Create `InheritanceIndicator` component in `apps/web/src/components/definitions/InheritanceIndicator.tsx` to show inherited vs local status
+- [ ] T108 Update `DefinitionEditor` to show inheritance indicators on each property section (preamble, template, dimensions)
+- [ ] T109 Add "Inherit from parent" button to each property section in DefinitionEditor to clear local override
+- [ ] T110 Update `DefinitionEditor` to load resolved content for display but track local overrides for saving
+- [ ] T111 Update `ForkDialog` to explain inheritance behavior in UI copy
+- [ ] T112 Update `TagSelector` to show inherited tags (read-only) vs local tags (removable)
+- [ ] T113 Update `TagChips` to visually distinguish inherited vs local tags
+
+### Testing
+
+- [ ] T114 [P] Write unit tests for `resolveDefinitionContent` in `packages/db/tests/definitions.test.ts`
+- [ ] T115 [P] Write unit tests for v1→v2 schema migration in `packages/db/tests/schema-migration.test.ts`
+- [ ] T116 Write integration tests for inheritance resolution in `apps/api/tests/graphql/queries/definition.test.ts`
+- [ ] T117 Write component tests for `InheritanceIndicator` in `apps/web/tests/components/definitions/InheritanceIndicator.test.tsx`
+- [ ] T118 Write e2e test: fork definition, change parent, verify child sees change
+- [ ] T119 Write e2e test: fork definition, override property, change parent, verify child keeps override
+
+### Documentation & Validation
+
+- [ ] T120 Update data-model.md with inheritance design
+- [ ] T121 Manual test: Create definition → Fork → Modify parent → Verify child inherits change
+- [ ] T122 Manual test: Create definition → Fork → Override property in child → Modify parent → Verify child keeps override
+- [ ] T123 Verify backward compatibility: existing definitions with v1 content continue to work
+
+**Checkpoint**: Phase 12 complete - forked definitions inherit properties from parent tree
+
+---
+
+## Phase 12 Dependencies
+
+```
+Phase 11 (Complete)
+    │
+    ├── T097-T099 (DB Layer) ──► T100-T105 (GraphQL Layer) ──► T106-T113 (Frontend)
+    │                                      │
+    │                                      └──► T114-T119 (Testing)
+    │
+    └── T120-T123 (Documentation & Validation) - can proceed in parallel with testing
+```
+
+### Task Statistics Update
+
+| Phase | Tasks | User Story |
+|-------|-------|------------|
+| Phase 12 (Inheritance) | 27 | P1 |
+| **Updated Total** | **123** | - |
