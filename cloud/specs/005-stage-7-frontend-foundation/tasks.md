@@ -31,19 +31,19 @@
 
 ### GraphQL Client Setup
 
-- [ ] T005 Create apps/web/src/api/client.ts with urql client (basic, no auth yet)
-- [ ] T006 [P] Create apps/web/src/api/operations/auth.ts with Me query from contracts/
-- [ ] T007 [P] Create apps/web/src/api/operations/api-keys.ts with apiKeys query and mutations from contracts/
+- [X] T005 Create apps/web/src/api/client.ts with urql client (basic, no auth yet)
+- [X] T006 [P] Create apps/web/src/api/operations/auth.ts with Me query from contracts/
+- [X] T007 [P] Create apps/web/src/api/operations/api-keys.ts with apiKeys query and mutations from contracts/
 
 ### Type Definitions
 
-- [ ] T008 Create apps/web/src/types/index.ts with User, ApiKey, AuthState types
-- [ ] T009 [P] Create apps/web/src/auth/types.ts with AuthContext type, LoginRequest, LoginResponse
+- [X] T008 Create apps/web/src/types/index.ts with User, ApiKey, AuthState types
+- [X] T009 [P] Create apps/web/src/auth/types.ts with AuthContext type, LoginRequest, LoginResponse
 
 ### Test Infrastructure
 
-- [ ] T010 Create apps/web/tests/setup.ts with jsdom configuration
-- [ ] T011 Update apps/web/vitest.config.ts (or add to package.json) for React testing
+- [X] T010 Create apps/web/tests/setup.ts with jsdom configuration
+- [X] T011 Update apps/web/vitest.config.ts (or add to package.json) for React testing
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
