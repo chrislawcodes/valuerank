@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { healthRouter } from './health.js';
 import { authRouter } from './routes/auth.js';
+import { exportRouter } from './routes/export.js';
 import { authMiddleware, graphqlAuthMiddleware } from './auth/index.js';
 import { yoga } from './graphql/index.js';
 import { createLogger, AppError } from '@valuerank/shared';
@@ -49,6 +50,7 @@ export function createServer() {
   // Routes
   app.use('/health', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/export', exportRouter);
 
   // GraphQL endpoint with auth check
   // - Allows introspection queries without auth

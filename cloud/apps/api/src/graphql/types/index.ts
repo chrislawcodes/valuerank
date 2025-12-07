@@ -19,5 +19,8 @@ import './tag.js';
 import './queue-status.js';
 import './run-progress.js';
 
+// Model types
+import './available-model.js';
+
 // Input types
 import './inputs/start-run.js';

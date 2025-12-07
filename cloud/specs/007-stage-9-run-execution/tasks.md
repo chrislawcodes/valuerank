@@ -14,9 +14,9 @@
 
 **Purpose**: Project initialization and verification
 
-- [ ] T001 Verify branch is `feature/stage-9-run-execution`
-- [ ] T002 Verify existing run infrastructure works (start/pause/resume/cancel mutations)
-- [ ] T003 [P] Run existing tests to confirm baseline (`npm test`)
+- [X] T001 Verify branch is `feature/stage-9-run-execution`
+- [X] T002 Verify existing run infrastructure works (start/pause/resume/cancel mutations)
+- [X] T003 [P] Run existing tests to confirm baseline (`npm test`)
 
 **Checkpoint**: Existing infrastructure verified, ready to extend
 
@@ -30,32 +30,32 @@
 
 ### Backend API Extensions
 
-- [ ] T004 Create available models query in `apps/api/src/graphql/queries/models.ts`
-- [ ] T005 [P] Create AvailableModel GraphQL type in `apps/api/src/graphql/types/models.ts`
-- [ ] T006 [P] Add models configuration source (environment or config file)
-- [ ] T007 Add tests for available models query in `apps/api/tests/graphql/queries/models.test.ts`
+- [X] T004 Create available models query in `apps/api/src/graphql/queries/models.ts`
+- [X] T005 [P] Create AvailableModel GraphQL type in `apps/api/src/graphql/types/models.ts`
+- [X] T006 [P] Add models configuration source (environment or config file)
+- [X] T007 Add tests for available models query in `apps/api/tests/graphql/queries/models.test.ts`
 
 ### CSV Export Endpoint
 
-- [ ] T008 Create export route in `apps/api/src/routes/export.ts`
-- [ ] T009 [P] Create CSV serialization helper in `apps/api/src/services/export/csv.ts`
-- [ ] T010 Register export routes in `apps/api/src/server.ts`
-- [ ] T011 Add tests for CSV export in `apps/api/tests/routes/export.test.ts`
+- [X] T008 Create export route in `apps/api/src/routes/export.ts`
+- [X] T009 [P] Create CSV serialization helper in `apps/api/src/services/export/csv.ts`
+- [X] T010 Register export routes in `apps/api/src/server.ts`
+- [X] T011 Add tests for CSV export in `apps/api/tests/routes/export.test.ts`
 
 ### Access Tracking
 
-- [ ] T012 Create access tracking middleware in `apps/api/src/middleware/access-tracking.ts`
-- [ ] T013 [P] Add lastAccessedAt update to run query resolver
-- [ ] T014 [P] Add lastAccessedAt update to transcript query resolver
-- [ ] T015 Add tests for access tracking in `apps/api/tests/middleware/access-tracking.test.ts`
+- [X] T012 Create access tracking middleware in `apps/api/src/middleware/access-tracking.ts`
+- [X] T013 [P] Add lastAccessedAt update to run query resolver
+- [X] T014 [P] Add lastAccessedAt update to transcript query resolver
+- [X] T015 Add tests for access tracking in `apps/api/tests/middleware/access-tracking.test.ts`
 
 ### Frontend Hooks (Shared)
 
-- [ ] T016 Create useAvailableModels hook in `apps/web/src/hooks/useAvailableModels.ts`
-- [ ] T017 [P] Create useRuns hook (list query) in `apps/web/src/hooks/useRuns.ts`
-- [ ] T018 [P] Create useRun hook (single + polling) in `apps/web/src/hooks/useRun.ts`
-- [ ] T019 [P] Create useRunMutations hook in `apps/web/src/hooks/useRunMutations.ts`
-- [ ] T020 Add tests for run hooks in `apps/web/src/hooks/__tests__/`
+- [X] T016 Create useAvailableModels hook in `apps/web/src/hooks/useAvailableModels.ts`
+- [X] T017 [P] Create useRuns hook (list query) in `apps/web/src/hooks/useRuns.ts`
+- [X] T018 [P] Create useRun hook (single + polling) in `apps/web/src/hooks/useRun.ts`
+- [X] T019 [P] Create useRunMutations hook in `apps/web/src/hooks/useRunMutations.ts`
+- [X] T020 Add tests for run hooks in `apps/web/tests/hooks/`
 
 **Checkpoint**: Foundation ready - proceed to Phase 2b for E2E validation
 

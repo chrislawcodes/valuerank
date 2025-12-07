@@ -2,6 +2,7 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import type { RunStatus } from '@valuerank/db';
 import { RunRef } from '../types/run.js';
+import { trackRunAccess } from '../../middleware/access-tracking.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
@@ -34,6 +35,9 @@ builder.queryField('run', (t) =>
         ctx.log.debug({ runId: id }, 'Run not found');
         return null;
       }
+
+      // Track access (non-blocking)
+      trackRunAccess(run.id);
 
       return run;
     },

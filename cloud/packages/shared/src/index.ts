@@ -1,5 +1,5 @@
 export { logger, createLogger } from './logger.js';
-export { getEnv, getEnvRequired } from './env.js';
+export { getEnv, getEnvRequired, getEnvOptional } from './env.js';
 export {
   AppError,
   NotFoundError,

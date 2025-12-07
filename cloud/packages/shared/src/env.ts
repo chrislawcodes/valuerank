@@ -23,3 +23,10 @@ export function getEnvRequired(key: string): string {
   }
   return value;
 }
+
+/**
+ * Get optional environment variable. Returns undefined if not set.
+ */
+export function getEnvOptional(key: string): string | undefined {
+  return process.env[key];
+}
