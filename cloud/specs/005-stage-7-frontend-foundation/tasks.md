@@ -2,6 +2,21 @@
 
 **Prerequisites**: spec.md, plan.md, contracts/frontend-operations.graphql
 
+## Progress Summary
+
+| Phase | Status | Tasks | Description |
+|-------|--------|-------|-------------|
+| Phase 1 | ✅ Complete | 4/4 | Setup - Dependencies & Proxy |
+| Phase 2 | ✅ Complete | 7/7 | Foundation - GraphQL, Types, Tests |
+| Phase 3 | ✅ Complete | 13/13 | US1 Login (P1 MVP) |
+| Phase 4 | ✅ Complete | 5/5 | US5 Protected Routes (P1 MVP) |
+| Phase 5 | ✅ Complete | 9/9 | US2 Navigation (P1 MVP) |
+| Phase 6 | ✅ Complete | 4/4 | US4 UI States (P2) |
+| Phase 7 | ⏳ Pending | 0/7 | US3 API Keys (P2) |
+| Phase 8 | ⏳ Pending | 0/5 | Polish |
+
+**Overall**: 42/54 tasks (78%)
+
 ## Format: `[ID] [P?] [Story?] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
@@ -129,10 +144,10 @@
 
 ### Implementation for User Story 4
 
-- [ ] T039 [US4] Create apps/web/src/components/ui/Loading.tsx spinner component
-- [ ] T040 [P] [US4] Create apps/web/src/components/ui/EmptyState.tsx component
-- [ ] T041 [US4] Update apps/web/src/components/ui/ErrorMessage.tsx with retry functionality
-- [ ] T042 [US4] Add 401 response handling to urql client (clear auth, redirect)
+- [X] T039 [US4] Create apps/web/src/components/ui/Loading.tsx spinner component
+- [X] T040 [P] [US4] Create apps/web/src/components/ui/EmptyState.tsx component
+- [X] T041 [US4] Update apps/web/src/components/ui/ErrorMessage.tsx with retry functionality
+- [X] T042 [US4] Add 401 response handling to urql client (clear auth, redirect)
 
 **Checkpoint**: User Story 4 complete - all UI states display correctly
 

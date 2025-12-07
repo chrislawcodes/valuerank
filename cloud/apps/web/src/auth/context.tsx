@@ -103,3 +103,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
+
+// Export token clearer for 401 handling
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
