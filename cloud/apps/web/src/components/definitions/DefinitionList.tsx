@@ -1,14 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { DefinitionFolderView } from './DefinitionFolderView';
-import { ImportDialog } from '../import';
 import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Button } from '../ui/Button';
+import { importDefinitionFromMd } from '../../api/import';
 import type { Definition } from '../../api/operations/definitions';
 
 type ViewMode = 'flat' | 'folder';
@@ -70,8 +70,11 @@ export function DefinitionList({
   // View mode state (flat list vs folder view)
   const [viewMode, setViewMode] = useState<ViewMode>('folder');
 
-  // Import dialog state
-  const [showImportDialog, setShowImportDialog] = useState(false);
+  // Import state
+  const [isDragging, setIsDragging] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasActiveFilters =
     filters.search.length > 0 ||
@@ -87,13 +90,52 @@ export function DefinitionList({
     [navigate]
   );
 
-  const handleImportSuccess = useCallback(
-    (definitionId: string) => {
-      setShowImportDialog(false);
-      navigate(`/definitions/${definitionId}`);
+  // Handle file import
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (!file.name.endsWith('.md')) {
+        setImportError('Please select a Markdown (.md) file');
+        return;
+      }
+
+      setIsImporting(true);
+      setImportError(null);
+
+      try {
+        const content = await file.text();
+        const result = await importDefinitionFromMd(content);
+        navigate(`/definitions/${result.id}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Import failed';
+        setImportError(message);
+      } finally {
+        setIsImporting(false);
+      }
     },
     [navigate]
   );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleFile(file);
+      }
+    },
+    [handleFile]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
 
   if (error) {
     return (
@@ -155,14 +197,34 @@ export function DefinitionList({
               <FolderTree className="w-4 h-4" />
             </button>
           </div>
-          <Button
-            onClick={() => setShowImportDialog(true)}
-            variant="secondary"
-            size="sm"
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className="relative"
           >
-            <Upload className="w-4 h-4 mr-1" />
-            Import
-          </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.target.value = '';
+              }}
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              variant="secondary"
+              size="sm"
+              disabled={isImporting}
+              className={isDragging ? 'ring-2 ring-teal-500 ring-offset-1' : ''}
+            >
+              <Upload className="w-4 h-4 mr-1" />
+              {isImporting ? 'Importing...' : isDragging ? 'Drop here' : 'Import'}
+            </Button>
+          </div>
           {onCreateNew && (
             <Button onClick={onCreateNew} variant="primary" size="sm">
               <Plus className="w-4 h-4 mr-1" />
@@ -226,12 +288,22 @@ export function DefinitionList({
         <Loading size="sm" text="Loading more..." />
       )}
 
-      {/* Import dialog */}
-      {showImportDialog && (
-        <ImportDialog
-          onClose={() => setShowImportDialog(false)}
-          onSuccess={handleImportSuccess}
-        />
+      {/* Import error toast */}
+      {importError && (
+        <div className="fixed bottom-4 right-4 max-w-md p-4 bg-red-50 border border-red-200 rounded-lg shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Import failed</p>
+              <p className="text-sm text-red-600 mt-1">{importError}</p>
+            </div>
+            <button
+              onClick={() => setImportError(null)}
+              className="text-red-400 hover:text-red-600"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
