@@ -108,7 +108,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Create tool handler at `apps/api/src/mcp/tools/fork-definition.ts`
+- [X] T013 [US2] Create tool handler at `apps/api/src/mcp/tools/fork-definition.ts`
   - Define `ForkDefinitionInputSchema` with Zod
   - Implement `registerForkDefinitionTool(server)`
   - Validate parent exists and not soft-deleted
@@ -117,14 +117,14 @@
   - Call audit log on success
   - Return `definition_id` and `diff_summary`
 
-- [ ] T014 [US2] Create tests at `apps/api/tests/mcp/tools/fork-definition.test.ts`
+- [X] T014 [US2] Create tests at `apps/api/tests/mcp/tools/fork-definition.test.ts`
   - Test successful fork with partial changes
   - Test fork with no changes (warning)
   - Test parent not found error
   - Test parent soft-deleted error
   - Test audit log called on success
 
-- [ ] T015 [US2] Update tool index at `apps/api/src/mcp/tools/index.ts`
+- [X] T015 [US2] Update tool index at `apps/api/src/mcp/tools/index.ts`
   - Import and register fork-definition tool
 
 **Checkpoint**: User Story 2 fully functional and testable independently

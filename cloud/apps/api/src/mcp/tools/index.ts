@@ -28,6 +28,7 @@ import './get-dimension-analysis.js';
 import './get-transcript-summary.js';
 // Stage 14 - Write Tools
 import './create-definition.js';
+import './fork-definition.js';
 
 /**
  * Registers all MCP tools on the given server
