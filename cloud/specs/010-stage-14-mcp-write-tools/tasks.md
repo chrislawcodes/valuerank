@@ -232,7 +232,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T025 [US5] Create tool handler at `apps/api/src/mcp/tools/generate-scenarios-preview.ts`
+- [X] T025 [US5] Create tool handler at `apps/api/src/mcp/tools/generate-scenarios-preview.ts`
   - Define `GenerateScenariosPreviewInputSchema` with Zod
   - Implement `registerGenerateScenariosPreviewTool(server)`
   - Validate definition exists and not soft-deleted
@@ -240,7 +240,7 @@
   - Return `scenario_count`, `scenarios` (sample of 5), `sample_body` (first scenario full text)
   - Do NOT persist scenarios to database
 
-- [ ] T026 [US5] Create tests at `apps/api/tests/mcp/tools/generate-scenarios-preview.test.ts`
+- [X] T026 [US5] Create tests at `apps/api/tests/mcp/tools/generate-scenarios-preview.test.ts`
   - Test successful preview
   - Test definition not found error
   - Test scenario count accuracy
@@ -248,7 +248,7 @@
   - Test sample_body contains full scenario text
   - Verify no database writes
 
-- [ ] T027 [US5] Update tool index at `apps/api/src/mcp/tools/index.ts`
+- [X] T027 [US5] Update tool index at `apps/api/src/mcp/tools/index.ts`
   - Import and register generate-scenarios-preview tool
 
 **Checkpoint**: User Story 5 fully functional and testable independently

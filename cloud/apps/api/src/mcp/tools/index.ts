@@ -31,6 +31,7 @@ import './create-definition.js';
 import './fork-definition.js';
 import './validate-definition.js';
 import './start-run.js';
+import './generate-scenarios-preview.js';
 
 /**
  * Registers all MCP tools on the given server
