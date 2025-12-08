@@ -170,11 +170,11 @@
 
 ### Implementation for User Story 6
 
-- [ ] T050 [P] [US6] Create apps/api/src/services/analysis/cache.ts - Input hash computation and validation
-- [ ] T051 [US6] Update apps/api/src/queue/handlers/analyze-basic.ts - Check cache before computing
-- [ ] T052 [US6] Create apps/api/tests/services/analysis/cache.test.ts - Cache logic tests
-- [ ] T053 [US6] Add "computed at" timestamp display in AnalysisPanel.tsx
-- [ ] T054 [US6] Add "Recompute Analysis" button wired to recomputeAnalysis mutation
+- [X] T050 [P] [US6] Create apps/api/src/services/analysis/cache.ts - Input hash computation and validation
+- [X] T051 [US6] Update apps/api/src/queue/handlers/analyze-basic.ts - Check cache before computing
+- [X] T052 [US6] Create apps/api/tests/services/analysis/cache.test.ts - Cache logic tests
+- [X] T053 [US6] Add "computed at" timestamp display in AnalysisPanel.tsx
+- [X] T054 [US6] Add "Recompute Analysis" button wired to recomputeAnalysis mutation
 
 **Checkpoint**: US6 complete - Caching works, recompute available
 

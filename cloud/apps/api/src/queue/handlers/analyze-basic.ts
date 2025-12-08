@@ -7,13 +7,13 @@
  */
 
 import path from 'path';
-import crypto from 'crypto';
 import type * as PgBoss from 'pg-boss';
 import { db } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
+import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -93,25 +93,14 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
 
       try {
         // Create input hash for deduplication
-        const inputHash = crypto
-          .createHash('sha256')
-          .update(JSON.stringify({ runId, transcriptIds: transcriptIds.sort() }))
-          .digest('hex')
-          .slice(0, 16);
+        const inputHash = computeInputHash(runId, transcriptIds);
 
         // Check for cached result (unless force recompute)
         if (!force) {
-          const existing = await db.analysisResult.findFirst({
-            where: {
-              runId,
-              inputHash,
-              codeVersion: CODE_VERSION,
-              status: 'CURRENT',
-            },
-          });
+          const cached = await getCachedAnalysis(runId, inputHash, CODE_VERSION);
 
-          if (existing) {
-            log.info({ jobId, runId, analysisId: existing.id }, 'Using cached analysis result');
+          if (cached) {
+            log.info({ jobId, runId, analysisId: cached.id }, 'Using cached analysis result');
             return;
           }
         }
@@ -172,15 +161,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         }
 
         // Mark any existing analyses as superseded
-        await db.analysisResult.updateMany({
-          where: {
-            runId,
-            status: 'CURRENT',
-          },
-          data: {
-            status: 'SUPERSEDED',
-          },
-        });
+        await invalidateCache(runId);
 
         // Create analysis result record
         await db.analysisResult.create({
