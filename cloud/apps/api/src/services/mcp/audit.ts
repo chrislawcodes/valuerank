@@ -3,6 +3,41 @@
  *
  * Provides audit trail for all MCP write operations.
  * Logs are structured for easy querying and analysis.
+ *
+ * ## Log Format
+ *
+ * All audit entries are logged as structured JSON with:
+ * - action: The MCP operation (create_definition, fork_definition, start_run, etc.)
+ * - userId: The user performing the operation (MCP user ID)
+ * - entityId: The ID of the created/modified entity
+ * - entityType: Type of entity (definition, run, validation)
+ * - requestId: Unique request ID for correlation
+ * - timestamp: ISO 8601 timestamp
+ * - metadata: Operation-specific details (parentId, models, etc.)
+ *
+ * ## Querying Logs
+ *
+ * Logs are output via pino structured logging. Query with:
+ *
+ * ```bash
+ * # Find all create_definition operations
+ * grep "create_definition" logs/api.log | jq
+ *
+ * # Find operations by user
+ * grep '"userId":"user-123"' logs/api.log
+ *
+ * # Find all MCP audit entries
+ * grep '"context":"mcp:audit"' logs/api.log
+ *
+ * # Using pino-pretty for human-readable output
+ * cat logs/api.log | pino-pretty
+ * ```
+ *
+ * ## Log Retention
+ *
+ * Audit logs should be retained according to your organization's
+ * data retention policy. These logs may contain operation metadata
+ * but not actual scenario content.
  */
 
 import { createLogger } from '@valuerank/shared';

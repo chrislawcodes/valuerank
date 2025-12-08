@@ -313,17 +313,18 @@
 
 ### Implementation for User Story 7
 
-- [ ] T036 [US7] Verify audit logging in all write tools
+- [X] T036 [US7] Verify audit logging in all write tools
   - Confirm create-definition logs audit entry
   - Confirm fork-definition logs audit entry
   - Confirm start-run logs audit entry
 
-- [ ] T037 [US7] Add integration tests at `apps/api/tests/mcp/integration.test.ts`
+- [X] T037 [US7] Add integration tests at `apps/api/tests/mcp/integration.test.ts`
   - Test create-definition audit log includes userId, definitionId, action, timestamp
   - Test fork-definition audit log includes parentId
   - Test start-run audit log includes models array
+  - NOTE: Tests in apps/api/tests/services/mcp/audit.test.ts cover these requirements
 
-- [ ] T038 [US7] Document audit log format in code comments
+- [X] T038 [US7] Document audit log format in code comments
   - Document log fields in audit.ts
   - Document how to query logs (grep, structured log tools)
 
