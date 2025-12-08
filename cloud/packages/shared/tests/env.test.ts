@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getEnv, getEnvRequired } from '../src/env.js';
+import { getEnv, getEnvRequired, getEnvOptional } from '../src/env.js';
 
 describe('env utilities', () => {
   const originalEnv = process.env;
@@ -40,6 +40,23 @@ describe('env utilities', () => {
       expect(() => getEnvRequired('REQUIRED_VAR')).toThrow(
         'Required environment variable REQUIRED_VAR is not set'
       );
+    });
+  });
+
+  describe('getEnvOptional', () => {
+    it('returns value when set', () => {
+      process.env.OPTIONAL_VAR = 'optional_value';
+      expect(getEnvOptional('OPTIONAL_VAR')).toBe('optional_value');
+    });
+
+    it('returns undefined when not set', () => {
+      delete process.env.OPTIONAL_VAR;
+      expect(getEnvOptional('OPTIONAL_VAR')).toBeUndefined();
+    });
+
+    it('returns empty string when set to empty', () => {
+      process.env.OPTIONAL_VAR = '';
+      expect(getEnvOptional('OPTIONAL_VAR')).toBe('');
     });
   });
 });

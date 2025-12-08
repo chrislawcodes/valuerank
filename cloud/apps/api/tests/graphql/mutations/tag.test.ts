@@ -177,8 +177,9 @@ describe('GraphQL Tag Mutations', () => {
     });
 
     it('returns affected definitions count when deleting tag in use', async () => {
-      // Create tag and definitions
-      const tag = await db.tag.create({ data: { name: 'in-use-tag' } });
+      // Create tag and definitions with unique names
+      const uniqueId = `in-use-tag-${Date.now()}`;
+      const tag = await db.tag.create({ data: { name: uniqueId } });
       const def1 = await db.definition.create({
         data: { name: 'Def 1', content: {} },
       });
