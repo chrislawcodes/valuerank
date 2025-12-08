@@ -15,7 +15,6 @@ import type {
   DefinitionContent,
   DefinitionContentStored,
   DefinitionOverrides,
-  Dimension,
 } from '../types.js';
 import type { Definition, Prisma } from '@prisma/client';
 

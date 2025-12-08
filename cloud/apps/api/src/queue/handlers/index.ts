@@ -4,7 +4,7 @@
  * Exports handler registration function for all job types.
  */
 
-import { PgBoss } from 'pg-boss';
+import type { PgBoss } from 'pg-boss';
 import type * as PgBossTypes from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import { queueConfig } from '../../config.js';

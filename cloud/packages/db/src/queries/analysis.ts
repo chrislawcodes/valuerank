@@ -7,7 +7,7 @@ import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared'
 import { db } from '../client.js';
 import { loadAnalysisOutput } from '../schema-migration.js';
 import type { AnalysisPlan, AnalysisOutput, DeltaData } from '../types.js';
-import type { Experiment, RunComparison, AnalysisResult, AnalysisStatus, Prisma } from '@prisma/client';
+import type { Experiment, RunComparison, AnalysisResult, Prisma } from '@prisma/client';
 
 const log = createLogger('db:analysis');
 

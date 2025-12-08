@@ -7,7 +7,8 @@
 
 import path from 'path';
 import type * as PgBoss from 'pg-boss';
-import { db, Prisma } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';

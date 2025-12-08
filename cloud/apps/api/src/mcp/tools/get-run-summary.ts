@@ -95,7 +95,7 @@ Limited to 5KB token budget.`,
         });
 
         // Format the summary
-        let summary = formatRunSummary(run, analysis, run._count.transcripts);
+        const summary = formatRunSummary(run, analysis, run._count.transcripts);
 
         // Remove insights if not requested
         if (!args.include_insights) {

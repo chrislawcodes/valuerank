@@ -18,25 +18,25 @@
 
 ### Health Check Endpoint
 
-- [ ] T001 Create `cloud/apps/api/src/routes/health.ts` with component status checks
-- [ ] T002 Add health route to `cloud/apps/api/src/index.ts` at `/health` path
-- [ ] T003 Add tests for health endpoint in `cloud/apps/api/tests/routes/health.test.ts`
+- [X] T001 Create `cloud/apps/api/src/routes/health.ts` with component status checks
+- [X] T002 Add health route to `cloud/apps/api/src/index.ts` at `/health` path
+- [X] T003 Add tests for health endpoint in `cloud/apps/api/tests/routes/health.test.ts`
 
 ### CI/CD Configuration
 
-- [ ] T004 [P] Create `cloud/.github/workflows/ci.yml` with lint, typecheck, test jobs
-- [ ] T005 [P] Create `cloud/railway.toml` with service configuration
-- [ ] T006 [P] Create `cloud/nixpacks.toml` for Python runtime configuration
+- [X] T004 [P] Create `cloud/.github/workflows/ci.yml` with lint, typecheck, test jobs
+- [X] T005 [P] Create `cloud/railway.toml` with service configuration
+- [X] T006 [P] Create `cloud/nixpacks.toml` for Python runtime configuration
 
 ### Build Scripts
 
-- [ ] T007 Update `cloud/package.json` with Railway-compatible build scripts (if needed)
-- [ ] T008 Verify `cloud/apps/api/package.json` has correct `build` and `start` scripts
-- [ ] T009 Verify `cloud/apps/web/package.json` has correct `build` script
+- [X] T007 Update `cloud/package.json` with Railway-compatible build scripts (if needed)
+- [X] T008 Verify `cloud/apps/api/package.json` has correct `build` and `start` scripts
+- [X] T009 Verify `cloud/apps/web/package.json` has correct `build` script
 
 ### Test & Commit
 
-- [ ] T010 Run tests locally to verify health endpoint works
+- [X] T010 Run tests locally to verify health endpoint works
 - [ ] T011 Commit infrastructure code to `cloud-planning` branch
 - [ ] T012 Push to origin and verify GitHub Actions CI passes (if workflow active)
 

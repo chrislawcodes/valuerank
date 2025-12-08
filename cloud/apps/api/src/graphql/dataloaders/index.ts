@@ -1,4 +1,4 @@
-import DataLoader from 'dataloader';
+import type DataLoader from 'dataloader';
 import type { Definition, Run, Transcript, Scenario, Experiment, Tag } from '@valuerank/db';
 import { createDefinitionLoader } from './definition.js';
 import { createRunLoader } from './run.js';

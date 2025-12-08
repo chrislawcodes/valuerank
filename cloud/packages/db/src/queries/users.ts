@@ -5,7 +5,7 @@
 
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { db } from '../client.js';
-import type { User, ApiKey, Prisma } from '@prisma/client';
+import type { User, ApiKey } from '@prisma/client';
 
 const log = createLogger('db:users');
 
@@ -220,7 +220,7 @@ export async function listApiKeysForUser(userId: string): Promise<ApiKeyInfo[]> 
   });
 
   // Remove keyHash from response for security
-  return apiKeys.map(({ keyHash, ...rest }) => rest);
+  return apiKeys.map(({ keyHash: _keyHash, ...rest }) => rest);
 }
 
 /**

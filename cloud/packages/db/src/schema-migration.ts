@@ -52,6 +52,7 @@ function migrateDefinitionV0toV1(data: DefinitionContentV0): DefinitionContentV1
  * Migrate v1 content to v2 format.
  * V1 content has all fields, V2 keeps them but marks schema_version as 2.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future migration use
 function migrateDefinitionV1toV2(data: DefinitionContentV1): DefinitionContentV2 {
   return {
     schema_version: 2,

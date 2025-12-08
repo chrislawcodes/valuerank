@@ -7,7 +7,7 @@
 
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 const log = createLogger('services:run:progress');
 

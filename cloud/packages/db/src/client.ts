@@ -31,6 +31,7 @@ To fix this:
 3. Use: DATABASE_URL="postgresql://...localhost:5433/valuerank_test"
 ================================================================================
 `;
+      // eslint-disable-next-line no-console -- Critical safeguard message must be visible
       console.error(errorMessage);
       throw new Error('Test database safeguard: Refusing to connect to non-test database');
     }
