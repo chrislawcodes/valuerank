@@ -1,5 +1,5 @@
 /**
- * MCP Tool Registry
+ * MCP Tool Registry Index
  *
  * Central registry for all MCP tools. Each tool is implemented in its own file
  * and registered here to be loaded by the MCP server.
@@ -7,22 +7,19 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
+import { toolRegistrars, addToolRegistrar, type ToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools');
 
-/**
- * Tool handler type that registers tools on an MCP server
- */
-export type ToolRegistrar = (server: McpServer) => void;
-
-// Tool registrars will be imported and added here as they are implemented
-const toolRegistrars: ToolRegistrar[] = [];
-
 // Import tools to trigger their registration via addToolRegistrar
+// P1 MVP Tools
 import './list-runs.js';
 import './get-run-summary.js';
 import './list-definitions.js';
 import './graphql-query.js';
+// P2 Tools
+import './get-dimension-analysis.js';
+import './get-transcript-summary.js';
 
 /**
  * Registers all MCP tools on the given server
@@ -44,12 +41,5 @@ export function registerAllTools(server: McpServer): void {
   log.info('All MCP tools registered');
 }
 
-/**
- * Adds a tool registrar to the registry
- * Used by individual tool modules to register themselves
- *
- * @param registrar - Function that registers a tool on the server
- */
-export function addToolRegistrar(registrar: ToolRegistrar): void {
-  toolRegistrars.push(registrar);
-}
+// Re-export for tools to use
+export { addToolRegistrar, type ToolRegistrar };

@@ -15,7 +15,7 @@ import {
   formatDefinitionListItem,
   type DefinitionListItem,
 } from '../../services/mcp/index.js';
-import { addToolRegistrar } from './index.js';
+import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:list-definitions');
 

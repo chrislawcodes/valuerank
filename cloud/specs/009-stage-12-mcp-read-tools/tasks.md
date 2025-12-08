@@ -179,12 +179,12 @@
 
 ### Implementation for User Story 5
 
-- [ ] T023 [US5] Create get_dimension_analysis tool at apps/api/src/mcp/tools/get-dimension-analysis.ts
+- [X] T023 [US5] Create get_dimension_analysis tool at apps/api/src/mcp/tools/get-dimension-analysis.ts
   - Accept run_id parameter
   - Query analysis results for dimension data
   - Format ranked dimensions, correlations, most divisive
   - Enforce 2KB token budget
-- [ ] T024 [US5] Create get-dimension-analysis tests at apps/api/tests/mcp/tools/get-dimension-analysis.test.ts
+- [X] T024 [US5] Create get-dimension-analysis tests at apps/api/tests/mcp/tools/get-dimension-analysis.test.ts
   - Valid analysis returned
   - Missing analysis handled
   - Token budget compliance
@@ -201,12 +201,12 @@
 
 ### Implementation for User Story 6
 
-- [ ] T025 [US6] Create get_transcript_summary tool at apps/api/src/mcp/tools/get-transcript-summary.ts
+- [X] T025 [US6] Create get_transcript_summary tool at apps/api/src/mcp/tools/get-transcript-summary.ts
   - Accept run_id, scenario_id, model parameters
   - Query transcript with summary fields
   - Format turn count, word count, decision, key reasoning
   - Enforce 1KB token budget
-- [ ] T026 [US6] Create get-transcript-summary tests at apps/api/tests/mcp/tools/get-transcript-summary.test.ts
+- [X] T026 [US6] Create get-transcript-summary tests at apps/api/tests/mcp/tools/get-transcript-summary.test.ts
   - Valid transcript returns summary
   - Not found error handled
   - Token budget compliance
@@ -223,14 +223,14 @@
 
 ### Implementation for User Story 7
 
-- [ ] T027 [US7] Add MCP auth middleware at apps/api/src/mcp/auth.ts
+- [X] T027 [US7] Add MCP auth middleware at apps/api/src/mcp/auth.ts
   - Require X-API-Key header
   - Use existing validateApiKey from auth/middleware.ts
   - Return structured error for missing/invalid key
-- [ ] T028 [US7] Wire auth to MCP endpoint in apps/api/src/mcp/index.ts
+- [X] T028 [US7] Wire auth to MCP endpoint in apps/api/src/mcp/index.ts
   - Apply auth middleware before MCP handler
   - Ensure user context available to tools
-- [ ] T029 [US7] Create MCP auth tests at apps/api/tests/mcp/auth.test.ts
+- [X] T029 [US7] Create MCP auth tests at apps/api/tests/mcp/auth.test.ts
   - Missing key returns 401
   - Invalid key returns 401
   - Valid key allows access
@@ -248,11 +248,11 @@
 
 ### Implementation for User Story 8
 
-- [ ] T030 [US8] Implement rate limit tracking in apps/api/src/mcp/rate-limit.ts
+- [X] T030 [US8] Implement rate limit tracking in apps/api/src/mcp/rate-limit.ts
   - Per-API-key tracking (use key as rate limit key)
   - 1-minute sliding window
   - Include Retry-After header
-- [ ] T031 [US8] Create rate limit integration tests at apps/api/tests/mcp/rate-limit.integration.test.ts
+- [X] T031 [US8] Create rate limit integration tests at apps/api/tests/mcp/rate-limit.test.ts
   - Under limit succeeds
   - At limit returns 429
   - Headers present

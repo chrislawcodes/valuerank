@@ -11,7 +11,7 @@ import { graphql, parse, validate } from 'graphql';
 import { createLogger } from '@valuerank/shared';
 import { schema } from '../../graphql/index.js';
 import { buildMcpResponse, exceedsBudget } from '../../services/mcp/index.js';
-import { addToolRegistrar } from './index.js';
+import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:graphql-query');
 
