@@ -67,13 +67,16 @@ exportRouter.get(
       log.info({ runId, transcriptCount: transcripts.length }, 'Transcripts fetched for export');
 
       // Collect all variable names from scenario content dimensions
-      // Dimensions are stored as { "Freedom": "description", "Harmony": "description", ... }
+      // Dimensions are stored as { "Freedom": 1, "Harmony": 2, ... } (numeric scores)
       const variableSet = new Set<string>();
       for (const transcript of transcripts) {
         const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
         if (content?.dimensions) {
-          for (const key of Object.keys(content.dimensions)) {
-            variableSet.add(key);
+          for (const [key, value] of Object.entries(content.dimensions)) {
+            // Only include dimensions with numeric values
+            if (typeof value === 'number') {
+              variableSet.add(key);
+            }
           }
         }
       }

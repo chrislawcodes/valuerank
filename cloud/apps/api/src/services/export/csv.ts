@@ -61,101 +61,23 @@ function getModelName(modelId: string): string {
   return withoutProvider.replace(/-\d{8}$/, '');
 }
 
-// Scenario content structure with dimensions
+// Scenario content structure with dimension scores
 type ScenarioContent = {
-  dimensions?: Record<string, string>;
+  dimensions?: Record<string, number>;
 };
 
 /**
- * Parse scenario identifier to extract variable scores.
- * Supports multiple formats:
- *
- * 1. Python format: "scenario_011_FreedomBelief1_HarmonyFamily2"
- *    -> { variables: { FreedomBelief: 1, HarmonyFamily: 2 } }
- *
- * 2. Cloud format: "Description text (F1-T2-H3)"
- *    -> { variables: { F: 1, T: 2, H: 3 } } (abbreviations, need dimension names to expand)
- */
-function parseScenarioIdentifier(
-  name: string,
-  dimensionNames?: string[]
-): { number: string | null; variables: Record<string, number> } {
-  const variables: Record<string, number> = {};
-  let scenarioNumber: string | null = null;
-
-  // Format 1: Python format - scenario_XXX_VarName1_VarName2...
-  const pythonMatch = name.match(/^scenario[_-]?(\d+)?(?:_(.*))?$/i);
-  if (pythonMatch) {
-    scenarioNumber = pythonMatch[1] ?? null;
-    const tail = pythonMatch[2] ?? '';
-
-    // Parse variable tokens like "FreedomBelief1" or "Stakes2"
-    for (const token of tail.split('_')) {
-      if (!token) continue;
-      const kvMatch = token.match(/^([A-Za-z]+)(-?\d+)$/);
-      if (kvMatch && kvMatch[1] && kvMatch[2]) {
-        variables[kvMatch[1]] = parseInt(kvMatch[2], 10);
-      }
-    }
-
-    if (Object.keys(variables).length > 0) {
-      return { number: scenarioNumber, variables };
-    }
-  }
-
-  // Format 2: Cloud format - "Description (F1-T2-H3)"
-  const cloudMatch = name.match(/\(([A-Z]\d(?:-[A-Z]\d)*)\)$/);
-  if (cloudMatch && cloudMatch[1]) {
-    const codes = cloudMatch[1].split('-');
-
-    // Map abbreviations to full dimension names if provided
-    for (const code of codes) {
-      const abbrevMatch = code.match(/^([A-Z])(\d)$/);
-      if (abbrevMatch && abbrevMatch[1] && abbrevMatch[2]) {
-        const abbrev = abbrevMatch[1];
-        const score = parseInt(abbrevMatch[2], 10);
-
-        // Find full dimension name that starts with this letter
-        if (dimensionNames) {
-          const fullName = dimensionNames.find((d) => d.charAt(0).toUpperCase() === abbrev);
-          if (fullName) {
-            variables[fullName] = score;
-            continue;
-          }
-        }
-
-        // Fallback to abbreviation if no match
-        variables[abbrev] = score;
-      }
-    }
-  }
-
-  return { number: scenarioNumber, variables };
-}
-
-/**
- * Get dimension names from scenario content.
- */
-function getDimensionNames(transcript: TranscriptWithScenario): string[] {
-  const content = transcript.scenario?.content as ScenarioContent | null;
-  if (content?.dimensions) {
-    return Object.keys(content.dimensions);
-  }
-  return [];
-}
-
-/**
  * Extract scenario number from scenario name or generate index-based number.
- * Parses names like "scenario_011_FreedomBelief1..." to extract "011".
+ * Supports Python format: "scenario_011_FreedomBelief1..." to extract "011".
  * Falls back to padded index if pattern doesn't match.
  */
 function getScenarioNumber(transcript: TranscriptWithScenario, index: number): string {
   const name = transcript.scenario?.name ?? '';
-  const dimensionNames = getDimensionNames(transcript);
-  const { number } = parseScenarioIdentifier(name, dimensionNames);
 
-  if (number) {
-    return number;
+  // Try to match Python format: scenario_XXX_...
+  const match = name.match(/^scenario[_-]?(\d+)/i);
+  if (match && match[1]) {
+    return match[1];
   }
 
   // Fallback to index-based numbering
@@ -163,15 +85,22 @@ function getScenarioNumber(transcript: TranscriptWithScenario, index: number): s
 }
 
 /**
- * Extract dimension variable scores from scenario name.
- * Parses the scenario identifier to get numeric scores (1-5).
- * Returns a map of dimension names to their numeric scores.
+ * Extract dimension scores directly from scenario content.
+ * Returns a map of dimension names to their numeric scores (1-5).
  */
 function getScenarioDimensions(transcript: TranscriptWithScenario): Record<string, number> {
-  const name = transcript.scenario?.name ?? '';
-  const dimensionNames = getDimensionNames(transcript);
-  const { variables } = parseScenarioIdentifier(name, dimensionNames);
-  return variables;
+  const content = transcript.scenario?.content as ScenarioContent | null;
+  if (content?.dimensions && typeof content.dimensions === 'object') {
+    // Filter to only include numeric values
+    const result: Record<string, number> = {};
+    for (const [key, value] of Object.entries(content.dimensions)) {
+      if (typeof value === 'number') {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  return {};
 }
 
 /**

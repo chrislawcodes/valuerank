@@ -53,14 +53,14 @@ describe('CSV Export Endpoint', () => {
     });
     testRunId = run.id;
 
-    // Create a test scenario with cloud format: name ends with (S1-C2), dimensions in content
+    // Create a test scenario with numeric dimension scores in content
     const scenario = await db.scenario.create({
       data: {
         definitionId: testDefinitionId,
-        name: 'Test scenario description (S1-C2)',
+        name: 'Test scenario description',
         content: {
           prompt: 'test',
-          dimensions: { Stakes: 'low stakes', Certainty: 'uncertain' },
+          dimensions: { Stakes: 1, Certainty: 2 },
         },
       },
     });
@@ -146,7 +146,7 @@ describe('CSV Export Endpoint', () => {
     // Scenario number is index-based (001, 002) since name has no number
     expect(dataLines.some((l) => l.startsWith('001,'))).toBe(true);
     expect(dataLines.some((l) => l.startsWith('002,'))).toBe(true);
-    // Check for variable values at the end - parsed from (S1-C2): Certainty=2, Stakes=1
+    // Check for variable values at the end - from content.dimensions: Certainty=2, Stakes=1
     expect(dataLines.every((l) => l.endsWith(',2,1'))).toBe(true);
   });
 
@@ -253,7 +253,7 @@ describe('CSV Export Endpoint', () => {
 });
 
 describe('CSV Serialization Helper', () => {
-  it('parses Python format scenario names correctly', async () => {
+  it('reads dimension scores directly from content.dimensions', async () => {
     const { formatCSVRow, transcriptToCSVRow } = await import(
       '../../src/services/export/csv.js'
     );
@@ -275,11 +275,11 @@ describe('CSV Serialization Helper', () => {
       decisionCode: '1',
       decisionText: 'AI chose safety',
       summarizedAt: new Date('2024-01-01T12:05:00Z'),
-      // Python format: scenario_XXX_VarName1_VarName2
       scenario: {
         id: 'scenario-456',
-        name: 'scenario_042_Stakes1_Certainty2',
-        content: {},
+        name: 'scenario_042_test',
+        // Numeric scores stored directly in content.dimensions
+        content: { dimensions: { Stakes: 1, Certainty: 2 } },
       },
     };
 
@@ -288,21 +288,22 @@ describe('CSV Serialization Helper', () => {
 
     expect(formatted).toContain('042,');
     expect(formatted).toContain('gpt-4o');
+    // Scores read directly from content.dimensions
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
     expect(formatted).toMatch(/,2,1$/);
   });
 
-  it('parses Cloud format scenario names with abbreviations', async () => {
+  it('handles full dimension names correctly', async () => {
     const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
 
-    // Cloud format: "Description (F1-T2-H3)" with dimensions in content
+    // Full dimension names stored in content.dimensions
     const mockTranscript = {
       modelId: 'gpt-4o',
       scenarioId: 'test',
       scenario: {
         id: 'test',
-        name: 'Child wants to skip (F1-T2-H3)',
-        content: { dimensions: { Freedom: 'low', Tradition: 'medium', Harmony: 'high' } },
+        name: 'Child wants to skip bat mitzvah',
+        content: { dimensions: { Freedom: 1, Tradition: 2, Harmony: 3 } },
       },
       decisionCode: '5',
       decisionText: 'Test',
@@ -312,7 +313,7 @@ describe('CSV Serialization Helper', () => {
 
     // Index-based scenario number since name has no explicit number
     expect(row.scenario).toBe('001');
-    // Abbreviations mapped to full names from content.dimensions
+    // Full names with numeric scores from content.dimensions
     expect(row.variables).toEqual({ Freedom: 1, Tradition: 2, Harmony: 3 });
   });
 
@@ -326,8 +327,8 @@ describe('CSV Serialization Helper', () => {
       modelId: 'gpt-4o',
       scenario: {
         id: 'scenario-456',
-        name: 'Some description (S1-C2)',
-        content: { dimensions: { Stakes: 'x', Certainty: 'y' } },
+        name: 'Some description',
+        content: { dimensions: { Stakes: 1, Certainty: 2 } },
       },
       decisionCode: '2',
       decisionText: 'Test decision',
@@ -373,7 +374,7 @@ describe('CSV Serialization Helper', () => {
     const mockTranscript = {
       modelId: 'anthropic:claude-3-5-sonnet-20241022',
       scenarioId: 'test',
-      scenario: { id: 'test', name: 'scenario_001_Freedom3', content: {} },
+      scenario: { id: 'test', name: 'scenario_001', content: { dimensions: { Freedom: 3 } } },
       decisionCode: '1',
       decisionText: 'Test',
     };
@@ -383,7 +384,7 @@ describe('CSV Serialization Helper', () => {
     expect(row.modelName).toBe('claude-3-5-sonnet');
   });
 
-  it('handles scenario name with no variables gracefully', async () => {
+  it('handles empty dimensions gracefully', async () => {
     const { transcriptToCSVRow, formatCSVRow } = await import('../../src/services/export/csv.js');
 
     const mockTranscript = {
@@ -397,8 +398,30 @@ describe('CSV Serialization Helper', () => {
     const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
     const formatted = formatCSVRow(row, ['Stakes', 'Certainty']);
 
-    // Variable values should be empty when not parseable
+    // Variable values should be empty when no dimensions
     expect(formatted).toMatch(/,,$/);
     expect(row.variables).toEqual({});
+  });
+
+  it('filters out non-numeric dimension values', async () => {
+    const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
+
+    // Mixed content - some numeric, some string (legacy data)
+    const mockTranscript = {
+      modelId: 'gpt-4o',
+      scenarioId: 'test',
+      scenario: {
+        id: 'test',
+        name: 'Test',
+        content: { dimensions: { Freedom: 1, OldFormat: 'text value', Harmony: 3 } },
+      },
+      decisionCode: '1',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+
+    // Only numeric values should be included
+    expect(row.variables).toEqual({ Freedom: 1, Harmony: 3 });
   });
 });

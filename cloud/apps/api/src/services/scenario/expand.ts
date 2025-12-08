@@ -17,7 +17,8 @@ type ScenarioContent = {
   preamble?: string;
   prompt: string;
   followups?: Array<{ label: string; prompt: string }>;
-  dimensions: Record<string, string>;
+  // Dimension scores (1-5) for each dimension name
+  dimensions: Record<string, number>;
 };
 
 // Frontend stores dimensions with levels (score, label, options)
@@ -302,16 +303,16 @@ export async function expandScenarios(
     const preamble = parsed.preamble || content.preamble || '';
 
     const scenarioData = scenarioEntries.map(([scenarioKey, scenario]) => {
-      // Extract dimension values from the scenario key (e.g., scenario_Stakes1_Certainty2)
-      const dimensionValues: Record<string, string> = {};
+      // Extract dimension scores from the scenario key (e.g., scenario_Stakes1_Certainty2)
+      const dimensionScores: Record<string, number> = {};
 
-      // Parse dimension values from key like "scenario_Stakes1_Certainty2"
+      // Parse dimension scores from key like "scenario_Stakes1_Certainty2"
       for (const dim of dimensionsWithValues) {
         const dimValues = extractDimensionValues(dim);
         // Find which score level was used based on key pattern
         for (const level of dimValues) {
           if (scenarioKey.includes(`${dim.name}${level.score}`)) {
-            dimensionValues[dim.name] = level.options[0] ?? level.label;
+            dimensionScores[dim.name] = level.score;
             break;
           }
         }
@@ -320,7 +321,7 @@ export async function expandScenarios(
       const scenarioContent: ScenarioContent = {
         preamble: preamble || undefined,
         prompt: scenario.body,
-        dimensions: dimensionValues,
+        dimensions: dimensionScores,
       };
 
       return {
