@@ -19,8 +19,13 @@ export {
   type CSVRow,
 } from './csv.js';
 
-// MD export (to be added)
-// export * from './md.js';
+// MD export
+export {
+  exportDefinitionAsMd,
+  serializeDefinitionToMd,
+  contentToMDDefinition,
+  generateMdFilename,
+} from './md.js';
 
 // YAML export (to be added)
 // export * from './yaml.js';

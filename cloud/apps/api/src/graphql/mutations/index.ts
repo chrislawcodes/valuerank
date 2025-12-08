@@ -8,3 +8,4 @@ import './queue.js';
 import './tag.js';
 import './definition-tags.js';
 import './analysis.js';
+import './export.js';

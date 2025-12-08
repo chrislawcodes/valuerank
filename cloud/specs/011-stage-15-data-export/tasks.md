@@ -66,35 +66,35 @@ This stage implements **P1 user stories only**:
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Create MD serializer: apps/api/src/services/export/md.ts
+- [X] T010 [US1] Create MD serializer: apps/api/src/services/export/md.ts
   - Port `serializeScenarioMd()` from devtool/src/server/utils/scenarioMd.ts
   - Adapt to use cloud's `DefinitionContent` type
   - Map cloud fields to MD format (~200 lines)
 
-- [ ] T011 [US1] Create MD serializer tests: apps/api/tests/services/export/md.test.ts
+- [X] T011 [US1] Create MD serializer tests: apps/api/tests/services/export/md.test.ts
   - Test dimension table formatting
   - Test special character escaping
   - Test empty dimensions case
   - Test matching rules inclusion
 
-- [ ] T012 [US1] Add GraphQL mutation: apps/api/src/graphql/mutations/export.ts
+- [X] T012 [US1] Add GraphQL mutation: apps/api/src/graphql/mutations/export.ts
   - `exportDefinitionAsMd(id: ID!): ExportResult!`
   - Returns content, filename, mimeType
 
-- [ ] T013 [US1] Add mutation tests: apps/api/tests/graphql/mutations/export.test.ts
+- [X] T013 [US1] Add mutation tests: apps/api/tests/graphql/mutations/export.test.ts
 
-- [ ] T014 [US1] Add REST endpoint: apps/api/src/routes/export.ts
+- [X] T014 [US1] Add REST endpoint: apps/api/src/routes/export.ts
   - `GET /api/export/definitions/:id/md`
   - Streams file download
   - Update existing export router
 
-- [ ] T015 [US1] Add REST endpoint tests: apps/api/tests/routes/export-md.test.ts
+- [X] T015 [US1] Add REST endpoint tests: apps/api/tests/routes/export-md.test.ts
 
-- [ ] T016 [US1] Create web UI component: apps/web/src/components/export/ExportButton.tsx
+- [X] T016 [US1] Create web UI component: apps/web/src/components/export/ExportButton.tsx
   - Dropdown with export format options
   - MD export triggers download
 
-- [ ] T017 [US1] Integrate export button in definition detail page: apps/web/src/pages/DefinitionDetail.tsx
+- [X] T017 [US1] Integrate export button in definition detail page: apps/web/src/pages/DefinitionDetail.tsx
 
 **Checkpoint**: User Story 1 complete - definitions can be exported as MD
 
