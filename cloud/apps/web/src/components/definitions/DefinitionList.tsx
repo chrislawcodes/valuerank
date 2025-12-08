@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, List, FolderTree } from 'lucide-react';
+import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { DefinitionFolderView } from './DefinitionFolderView';
@@ -8,6 +8,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Button } from '../ui/Button';
+import { importDefinitionFromMd, ImportApiError } from '../../api/import';
 import type { Definition } from '../../api/operations/definitions';
 
 type ViewMode = 'flat' | 'folder';
@@ -69,6 +70,12 @@ export function DefinitionList({
   // View mode state (flat list vs folder view)
   const [viewMode, setViewMode] = useState<ViewMode>('folder');
 
+  // Import state
+  const [isDragging, setIsDragging] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const hasActiveFilters =
     filters.search.length > 0 ||
     filters.rootOnly ||
@@ -82,6 +89,93 @@ export function DefinitionList({
     },
     [navigate]
   );
+
+  // State for handling name conflicts
+  const [pendingImport, setPendingImport] = useState<{
+    content: string;
+    alternativeName?: string;
+  } | null>(null);
+
+  // Handle file import
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (!file.name.endsWith('.md')) {
+        setImportError('Please select a Markdown (.md) file');
+        return;
+      }
+
+      setIsImporting(true);
+      setImportError(null);
+
+      // Read content first so we can store it for retry
+      const content = await file.text();
+
+      try {
+        const result = await importDefinitionFromMd(content);
+        setPendingImport(null);
+        navigate(`/definitions/${result.id}`);
+      } catch (err) {
+        if (err instanceof ImportApiError && err.errorCode === 'VALIDATION_ERROR') {
+          // Check if it's a name conflict with a suggested alternative
+          if (err.suggestions?.alternativeName) {
+            setPendingImport({ content, alternativeName: err.suggestions.alternativeName });
+            setImportError(`A definition with this name already exists. Use "${err.suggestions.alternativeName}" instead?`);
+          } else {
+            setImportError(err.details?.map(d => d.message).join('; ') || err.message);
+          }
+        } else {
+          const message = err instanceof Error ? err.message : 'Import failed';
+          setImportError(message);
+        }
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [navigate]
+  );
+
+  // Handle importing with alternative name
+  const handleImportWithAlternativeName = useCallback(async () => {
+    if (!pendingImport?.content) return;
+
+    setIsImporting(true);
+    setImportError(null);
+
+    try {
+      const result = await importDefinitionFromMd(pendingImport.content, {
+        forceAlternativeName: true,
+      });
+      setPendingImport(null);
+      navigate(`/definitions/${result.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Import failed';
+      setImportError(message);
+    } finally {
+      setIsImporting(false);
+    }
+  }, [pendingImport, navigate]);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleFile(file);
+      }
+    },
+    [handleFile]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
 
   if (error) {
     return (
@@ -142,6 +236,34 @@ export function DefinitionList({
             >
               <FolderTree className="w-4 h-4" />
             </button>
+          </div>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className="relative"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.target.value = '';
+              }}
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              variant="secondary"
+              size="sm"
+              disabled={isImporting}
+              className={isDragging ? 'ring-2 ring-teal-500 ring-offset-1' : ''}
+            >
+              <Upload className="w-4 h-4 mr-1" />
+              {isImporting ? 'Importing...' : isDragging ? 'Drop here' : 'Import'}
+            </Button>
           </div>
           {onCreateNew && (
             <Button onClick={onCreateNew} variant="primary" size="sm">
@@ -204,6 +326,47 @@ export function DefinitionList({
       {/* Loading indicator for pagination */}
       {loading && definitions.length > 0 && (
         <Loading size="sm" text="Loading more..." />
+      )}
+
+      {/* Import error toast */}
+      {importError && (
+        <div className="fixed bottom-4 right-4 max-w-md p-4 bg-red-50 border border-red-200 rounded-lg shadow-lg z-50">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Import failed</p>
+              <p className="text-sm text-red-600 mt-1">{importError}</p>
+              {pendingImport?.alternativeName && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={handleImportWithAlternativeName}
+                    disabled={isImporting}
+                    className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    {isImporting ? 'Importing...' : 'Use Alternative Name'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPendingImport(null);
+                      setImportError(null);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setPendingImport(null);
+                setImportError(null);
+              }}
+              className="text-red-400 hover:text-red-600 text-xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

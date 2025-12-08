@@ -41,9 +41,9 @@ describe('MCP Resources', () => {
     });
 
     it('mentions validation limits', () => {
-      expect(authoringGuideContent).toContain('Maximum 10 dimensions');
-      expect(authoringGuideContent).toContain('Maximum 10 values');
-      expect(authoringGuideContent).toContain('Maximum 1000 total scenarios');
+      expect(authoringGuideContent).toContain('10 dimensions maximum');
+      expect(authoringGuideContent).toContain('10 levels per dimension maximum');
+      expect(authoringGuideContent).toContain('1000 generated scenarios maximum');
     });
   });
 

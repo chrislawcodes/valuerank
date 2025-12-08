@@ -196,6 +196,101 @@ Get transcript metadata without full text.
 
 ---
 
+## Data Export/Import
+
+REST endpoints for exporting definitions and scenarios, and importing from markdown files.
+
+### Export Definition as Markdown
+
+Download a definition in devtool-compatible markdown format.
+
+```
+GET /api/export/definitions/:id/md
+Authorization: Bearer <jwt>
+```
+
+**Response:** Markdown file download with frontmatter, preamble, template, dimensions, and matching rules.
+
+### Export Scenarios as YAML
+
+Download scenarios in CLI-compatible YAML format for use with `probe.py`.
+
+```
+GET /api/export/definitions/:id/scenarios.yaml
+Authorization: Bearer <jwt>
+```
+
+**Response:** YAML file with `preamble` and `scenarios` map ready for CLI use.
+
+### Export Run as CSV
+
+Download run transcripts as a CSV file.
+
+```
+GET /api/export/runs/:id/csv
+Authorization: Bearer <jwt>
+```
+
+**Response:** CSV file with transcript data including decision codes, dimension scores.
+
+### Import Definition from Markdown
+
+Create a new definition from markdown content.
+
+```
+POST /api/import/definition
+Content-Type: application/json
+Authorization: Bearer <jwt>
+
+{
+  "content": "---\nname: My Definition\n...",
+  "name": "Optional Override Name",
+  "forceAlternativeName": false
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "clx123abc",
+  "name": "My Definition"
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Definition validation failed",
+  "details": [{ "field": "name", "message": "Name already exists" }],
+  "suggestions": { "alternativeName": "My Definition (2)" }
+}
+```
+
+### GraphQL Mutations
+
+Export operations are also available via GraphQL:
+
+```graphql
+mutation {
+  exportDefinitionAsMd(id: "def-id") {
+    content
+    filename
+    mimeType
+  }
+}
+
+mutation {
+  exportScenariosAsYaml(definitionId: "def-id") {
+    content
+    filename
+    mimeType
+  }
+}
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Description | Default |

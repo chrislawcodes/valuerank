@@ -1,15 +1,16 @@
 /**
  * Export Routes
  *
- * REST endpoints for exporting run data.
+ * REST endpoints for exporting run and definition data.
  *
  * GET /api/export/runs/:id/csv - Download run results as CSV
+ * GET /api/export/definitions/:id/md - Download definition as markdown
  */
 
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
-import { db } from '@valuerank/db';
+import { db, resolveDefinitionContent } from '@valuerank/db';
 import { createLogger, AuthenticationError, NotFoundError } from '@valuerank/shared';
 
 import {
@@ -18,6 +19,8 @@ import {
   transcriptToCSVRow,
   generateExportFilename,
 } from '../services/export/csv.js';
+import { exportDefinitionAsMd } from '../services/export/md.js';
+import { exportScenariosAsYaml } from '../services/export/yaml.js';
 
 const log = createLogger('export');
 
@@ -103,6 +106,140 @@ exportRouter.get(
       log.info({ runId, rowsWritten: transcripts.length, variableCount: variableNames.length }, 'CSV export complete');
 
       res.end();
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/export/definitions/:id/md
+ *
+ * Download definition as markdown file.
+ * Format is compatible with devtool's parseScenarioMd().
+ *
+ * Requires authentication.
+ */
+exportRouter.get(
+  '/definitions/:id/md',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check authentication
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const definitionId = req.params.id;
+      if (!definitionId) {
+        throw new NotFoundError('Definition', 'missing');
+      }
+
+      log.info({ userId: req.user.id, definitionId }, 'Exporting definition as MD');
+
+      // Get definition with resolved content (inheritance applied)
+      const definitionWithContent = await resolveDefinitionContent(definitionId);
+
+      // Get tags for category mapping
+      const tags = await db.tag.findMany({
+        where: {
+          definitions: {
+            some: {
+              definitionId,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+
+      // Export to MD format
+      const result = exportDefinitionAsMd(
+        definitionWithContent,
+        definitionWithContent.resolvedContent,
+        tags
+      );
+
+      log.info(
+        { definitionId, filename: result.filename, contentLength: result.content.length },
+        'Definition exported as MD'
+      );
+
+      // Set response headers for file download
+      res.setHeader('Content-Type', `${result.mimeType}; charset=utf-8`);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.send(result.content);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/export/definitions/:id/scenarios.yaml
+ *
+ * Download scenarios as CLI-compatible YAML file.
+ * Format is compatible with src/probe.py.
+ *
+ * Requires authentication.
+ */
+exportRouter.get(
+  '/definitions/:id/scenarios.yaml',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check authentication
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const definitionId = req.params.id;
+      if (!definitionId) {
+        throw new NotFoundError('Definition', 'missing');
+      }
+
+      log.info({ userId: req.user.id, definitionId }, 'Exporting scenarios as YAML');
+
+      // Get definition with resolved content (inheritance applied)
+      const definitionWithContent = await resolveDefinitionContent(definitionId);
+
+      // Get scenarios for this definition
+      const scenarios = await db.scenario.findMany({
+        where: {
+          definitionId,
+          deletedAt: null,
+        },
+        include: {
+          definition: true,
+        },
+      });
+
+      // Get tags for category mapping
+      const tags = await db.tag.findMany({
+        where: {
+          definitions: {
+            some: {
+              definitionId,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+
+      // Export to YAML format
+      const result = exportScenariosAsYaml(
+        definitionWithContent,
+        definitionWithContent.resolvedContent,
+        scenarios,
+        tags
+      );
+
+      log.info(
+        { definitionId, filename: result.filename, scenarioCount: scenarios.length },
+        'Scenarios exported as YAML'
+      );
+
+      // Set response headers for file download
+      res.setHeader('Content-Type', `${result.mimeType}; charset=utf-8`);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.send(result.content);
     } catch (err) {
       next(err);
     }

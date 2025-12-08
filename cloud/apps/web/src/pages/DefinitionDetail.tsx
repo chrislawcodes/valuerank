@@ -11,6 +11,7 @@ import { TagSelector } from '../components/definitions/TagSelector';
 import { VersionTree } from '../components/definitions/VersionTree';
 import { ExpandedScenarios } from '../components/definitions/ExpandedScenarios';
 import { RunForm } from '../components/runs/RunForm';
+import { ExportButton } from '../components/export/ExportButton';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
 import { useRunMutations } from '../hooks/useRunMutations';
@@ -288,6 +289,10 @@ export function DefinitionDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <ExportButton
+            definitionId={definition.id}
+            hasScenarios={(definition.scenarioCount ?? 0) > 0}
+          />
           <Button
             variant="ghost"
             onClick={() => setShowDeleteConfirm(true)}
