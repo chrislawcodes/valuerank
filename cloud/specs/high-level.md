@@ -312,26 +312,43 @@
 
 ---
 
-## Stage 11: Analysis System & Visualizations [ ]
+## Stage 11: Analysis System & Visualizations [~]
+
+> **Spec:** [008-stage-11-analysis/spec.md](./008-stage-11-analysis/spec.md)
 
 **Goal:** Implement automated analysis pipeline with visualizations to answer key questions about AI behavior.
 
 **Deliverables:**
-- Tier 1 auto-analysis on run completion
-- Basic stats computation (win rates, per-model scores)
-- Confidence intervals with Wilson score
-- **Score distribution visualization** (how do AIs tend to answer?)
-- **Variable impact analysis** (which dimensions drive variance?)
-- **Model comparison** (which AIs behave differently?)
-- Analysis versioning and caching (input_hash)
-- Results viewer UI (charts, tables)
+- ✅ Tier 1 auto-analysis on run completion
+- ✅ Basic stats computation (win rates, per-model scores)
+- ✅ Confidence intervals with Wilson score
+- ✅ **Score distribution visualization** (how do AIs tend to answer?)
+- ✅ **Variable impact analysis** (which dimensions drive variance?)
+- ✅ **Model comparison** (which AIs behave differently?)
+- ✅ Analysis versioning and caching (input_hash)
+- ✅ Results viewer UI (charts, tables)
+- ✅ Re-run analysis capability
+
+**Test Coverage:**
+- API: 78.36% lines (below 80% threshold)
+- Web: 89.48% lines
+- DB: 86.99% lines
+- Shared: 27.38% lines (needs improvement)
+- Python Workers: 87.17% lines
+
+**Infrastructure Improvements:**
+- ✅ Fixed web app coverage reporting (vitest.config.ts)
+- ✅ Removed coverage artifacts from git tracking
+- ✅ All tiers now report coverage correctly
 
 **Exit Criteria:**
-- Completed runs automatically have Tier 1 analysis
-- Can see score distributions visualized
-- Can see which variables have most impact
-- Can identify outlier models
-- Analysis methods documented in output
+- ✅ Completed runs automatically have Tier 1 analysis
+- ✅ Can see score distributions visualized
+- ✅ Can see which variables have most impact
+- ✅ Can identify outlier models
+- ✅ Analysis methods documented in output
+- ⏳ 16 failing TypeScript tests to fix
+- ⏳ API coverage needs to reach 80% threshold
 
 ---
 
