@@ -5,23 +5,78 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RunFilters } from '../../../src/components/runs/RunFilters';
+import { Provider, Client } from 'urql';
+import { fromValue } from 'wonka';
+import { RunFilters, type RunFilterState } from '../../../src/components/runs/RunFilters';
+
+// Mock tags response
+const mockTagsResponse = {
+  data: {
+    tags: [
+      { id: 'tag-1', name: 'Production', color: '#ff0000' },
+      { id: 'tag-2', name: 'Testing', color: '#00ff00' },
+    ],
+  },
+};
+
+function createMockClient(): Client {
+  return {
+    executeQuery: vi.fn(() => fromValue(mockTagsResponse)),
+    executeMutation: vi.fn(),
+    executeSubscription: vi.fn(),
+    url: 'http://localhost/graphql',
+    fetchOptions: undefined,
+    fetch: undefined,
+    suspense: false,
+    requestPolicy: 'cache-first',
+    preferGetMethod: false,
+    maskTypename: false,
+  } as unknown as Client;
+}
+
+function createDefaultFilters(overrides: Partial<RunFilterState> = {}): RunFilterState {
+  return {
+    status: '',
+    tagIds: [],
+    viewMode: 'flat',
+    ...overrides,
+  };
+}
+
+function renderRunFilters(
+  filters: RunFilterState = createDefaultFilters(),
+  onFiltersChange = vi.fn()
+) {
+  const mockClient = createMockClient();
+  return {
+    ...render(
+      <Provider value={mockClient}>
+        <RunFilters filters={filters} onFiltersChange={onFiltersChange} />
+      </Provider>
+    ),
+    mockClient,
+    onFiltersChange,
+  };
+}
 
 describe('RunFilters', () => {
-  it('renders status filter dropdown', () => {
-    render(<RunFilters status="" onStatusChange={() => {}} />);
+  it('renders status filter dropdown', async () => {
+    renderRunFilters();
 
-    expect(screen.getByLabelText('Status:')).toBeInTheDocument();
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toBeInTheDocument();
+    });
   });
 
-  it('shows all status options', () => {
-    render(<RunFilters status="" onStatusChange={() => {}} />);
+  it('shows all status options', async () => {
+    renderRunFilters();
 
-    const select = screen.getByRole('combobox');
-    expect(select).toHaveValue('');
+    await waitFor(() => {
+      const select = screen.getByLabelText('Status:');
+      expect(select).toHaveValue('');
+    });
 
     // Check all options exist (8 options: All + 7 statuses including SUMMARIZING)
     const options = screen.getAllByRole('option');
@@ -36,29 +91,75 @@ describe('RunFilters', () => {
     expect(options[7]).toHaveTextContent('Cancelled');
   });
 
-  it('calls onStatusChange when selection changes', async () => {
+  it('calls onFiltersChange when status selection changes', async () => {
     const user = userEvent.setup();
-    const onStatusChange = vi.fn();
-    render(<RunFilters status="" onStatusChange={onStatusChange} />);
+    const onFiltersChange = vi.fn();
+    const filters = createDefaultFilters();
+    renderRunFilters(filters, onFiltersChange);
 
-    await user.selectOptions(screen.getByRole('combobox'), 'RUNNING');
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toBeInTheDocument();
+    });
 
-    expect(onStatusChange).toHaveBeenCalledWith('RUNNING');
+    await user.selectOptions(screen.getByLabelText('Status:'), 'RUNNING');
+
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      ...filters,
+      status: 'RUNNING',
+    });
   });
 
-  it('reflects current status value', () => {
-    render(<RunFilters status="COMPLETED" onStatusChange={() => {}} />);
+  it('reflects current status value', async () => {
+    const filters = createDefaultFilters({ status: 'COMPLETED' });
+    renderRunFilters(filters);
 
-    expect(screen.getByRole('combobox')).toHaveValue('COMPLETED');
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toHaveValue('COMPLETED');
+    });
   });
 
   it('allows clearing filter back to all', async () => {
     const user = userEvent.setup();
-    const onStatusChange = vi.fn();
-    render(<RunFilters status="COMPLETED" onStatusChange={onStatusChange} />);
+    const onFiltersChange = vi.fn();
+    const filters = createDefaultFilters({ status: 'COMPLETED' });
+    renderRunFilters(filters, onFiltersChange);
 
-    await user.selectOptions(screen.getByRole('combobox'), '');
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toBeInTheDocument();
+    });
 
-    expect(onStatusChange).toHaveBeenCalledWith('');
+    await user.selectOptions(screen.getByLabelText('Status:'), '');
+
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      ...filters,
+      status: '',
+    });
+  });
+
+  it('renders view mode toggle buttons', async () => {
+    renderRunFilters();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /list view/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /folder view/i })).toBeInTheDocument();
+    });
+  });
+
+  it('calls onFiltersChange when view mode changes', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    const filters = createDefaultFilters({ viewMode: 'flat' });
+    renderRunFilters(filters, onFiltersChange);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /folder view/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /folder view/i }));
+
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      ...filters,
+      viewMode: 'folder',
+    });
   });
 });

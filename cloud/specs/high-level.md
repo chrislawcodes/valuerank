@@ -330,16 +330,19 @@
 - ✅ Re-run analysis capability
 
 **Test Coverage:**
-- API: 78.36% lines (below 80% threshold)
-- Web: 89.48% lines
-- DB: 86.99% lines
-- Shared: 27.38% lines (needs improvement)
+- API: 78.37% lines (below 80% threshold), 503 tests passing
+- Web: 89.48% lines, 561 tests passing
+- DB: 86.99% lines, 77 tests passing
+- Shared: 27.38% lines, 15 tests passing
 - Python Workers: 87.17% lines
+- **Total: 1,156 tests passing**
 
 **Infrastructure Improvements:**
 - ✅ Fixed web app coverage reporting (vitest.config.ts)
 - ✅ Removed coverage artifacts from git tracking
 - ✅ All tiers now report coverage correctly
+- ✅ Fixed analyze-basic integration test expectations
+- ✅ Fixed 15 pre-existing web test failures (RunFilters, Settings, Runs, RunDetail)
 
 **Exit Criteria:**
 - ✅ Completed runs automatically have Tier 1 analysis
@@ -347,8 +350,9 @@
 - ✅ Can see which variables have most impact
 - ✅ Can identify outlier models
 - ✅ Analysis methods documented in output
-- ⏳ 16 failing TypeScript tests to fix
-- ⏳ API coverage needs to reach 80% threshold
+- ✅ All Stage 11 tasks complete (76/76)
+- ✅ All tests passing (1,156 tests across all packages)
+- ⏳ API coverage 78.37% (gaps in non-Stage-11 code: scenario expansion, LLM generate)
 
 ---
 

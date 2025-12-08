@@ -20,6 +20,16 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
   useRunMutations: vi.fn(),
 }));
 
+vi.mock('../../src/hooks/useAnalysis', () => ({
+  useAnalysis: vi.fn().mockReturnValue({
+    analysis: null,
+    loading: false,
+    error: null,
+    rerunAnalysis: vi.fn(),
+    rerunning: false,
+  }),
+}));
+
 import { useRun } from '../../src/hooks/useRun';
 import { useRunMutations } from '../../src/hooks/useRunMutations';
 
@@ -315,10 +325,10 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('Results (50 transcripts)')).toBeInTheDocument();
+    expect(screen.getByText('Results')).toBeInTheDocument();
   });
 
-  it('shows singular form for single transcript', () => {
+  it('shows results section for single transcript', () => {
     const run = createMockRun({
       status: 'COMPLETED',
       transcriptCount: 1,
@@ -332,7 +342,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('Results (1 transcript)')).toBeInTheDocument();
+    expect(screen.getByText('Results')).toBeInTheDocument();
   });
 
   it('has back button that navigates to runs list', () => {

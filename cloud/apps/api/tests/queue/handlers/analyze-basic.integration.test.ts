@@ -115,13 +115,13 @@ describe('analyze-basic integration', () => {
           id: TEST_IDS.scenario1,
           definitionId: TEST_IDS.definition,
           name: 'Test Scenario 1',
-          content: { dimensions: { 'test-dimension': 'value1' } },
+          content: { dimensions: { 'test-dimension': 1 } },
         },
         {
           id: TEST_IDS.scenario2,
           definitionId: TEST_IDS.definition,
           name: 'Test Scenario 2',
-          content: { dimensions: { 'test-dimension': 'value2' } },
+          content: { dimensions: { 'test-dimension': 2 } },
         },
       ],
     });
@@ -209,9 +209,10 @@ describe('analyze-basic integration', () => {
               id: TEST_IDS.transcript1,
               modelId: 'gpt-4',
               scenarioId: TEST_IDS.scenario1,
-              decisionCode: 'A',
+              summary: { score: null }, // 'A' doesn't parse to numeric 1-5
               scenario: expect.objectContaining({
                 name: 'Test Scenario 1',
+                dimensions: { 'test-dimension': 1 },
               }),
             }),
           ]),
@@ -382,11 +383,11 @@ describe('analyze-basic integration', () => {
       await handler([createMockJob()]);
 
       const callArgs = vi.mocked(spawnPython).mock.calls[0];
-      const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, string> } }> };
+      const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, number> } }> };
 
-      // Verify dimensions were extracted from scenario content
-      const transcript = input.transcripts.find((t) => t.scenario.dimensions['test-dimension']);
-      expect(transcript?.scenario.dimensions['test-dimension']).toBeDefined();
+      // Verify numeric dimensions were extracted from scenario content
+      const transcript = input.transcripts.find((t) => t.scenario.dimensions['test-dimension'] !== undefined);
+      expect(transcript?.scenario.dimensions['test-dimension']).toBe(1);
     });
 
     it('handles transcripts without scenarios gracefully', async () => {

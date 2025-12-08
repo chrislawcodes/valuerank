@@ -55,7 +55,30 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
   };
 }
 
-function createMockClient(executeQuery: ReturnType<typeof vi.fn>): Client {
+// Default tags response for RunFilters component
+const defaultTagsResponse = {
+  data: { tags: [] },
+  error: undefined,
+  stale: false,
+  hasNext: false,
+};
+
+function createMockClient(mockRunsQuery: ReturnType<typeof vi.fn>): Client {
+  // Wrap the runs query mock to also handle tags queries
+  const executeQuery = vi.fn((request, opts) => {
+    // Check multiple ways to identify tags query
+    const queryStr = String(request.query || '');
+    const opName = request.operationName || '';
+    const isTagsQuery = queryStr.includes('tags') || queryStr.includes('Tags') ||
+                        opName.includes('Tags') || opName.includes('tag');
+
+    if (isTagsQuery) {
+      return fromValue(defaultTagsResponse);
+    }
+    // Delegate to the provided mock for runs queries
+    return mockRunsQuery(request, opts);
+  });
+
   return {
     executeQuery,
     executeMutation: vi.fn(),
@@ -169,15 +192,21 @@ describe('Runs Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
 
-    await user.selectOptions(screen.getByRole('combobox'), 'RUNNING');
+    // Wait for initial render
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText('Status:'), 'RUNNING');
 
     await waitFor(() => {
       expect(screen.getByText('No runs found')).toBeInTheDocument();
     });
-    expect(screen.getByText('No runs match the selected filter.')).toBeInTheDocument();
+    expect(screen.getByText('No runs match the selected filters.')).toBeInTheDocument();
   });
 
   it('displays runs list', async () => {
+    const user = userEvent.setup();
     const mockExecuteQuery = vi.fn(() =>
       fromValue({
         data: {
@@ -193,6 +222,12 @@ describe('Runs Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
+
+    // Switch to flat list view (default is folder view where runs are collapsed)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /list view/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Definition A')).toBeInTheDocument();
@@ -214,6 +249,12 @@ describe('Runs Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
+
+    // Switch to flat list view
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /list view/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Test Definition')).toBeInTheDocument();
@@ -237,7 +278,12 @@ describe('Runs Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
 
-    await user.selectOptions(screen.getByRole('combobox'), 'COMPLETED');
+    // Wait for initial render
+    await waitFor(() => {
+      expect(screen.getByLabelText('Status:')).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText('Status:'), 'COMPLETED');
 
     await waitFor(() => {
       // Check that the query was called with status filter
@@ -268,6 +314,7 @@ describe('Runs Page', () => {
   });
 
   it('shows pagination when there are many runs', async () => {
+    const user = userEvent.setup();
     // Create 10 runs (full page)
     const runs = Array.from({ length: 10 }, (_, i) =>
       createMockRun({ id: `run-${i}`, definition: { id: `def-${i}`, name: `Definition ${i}` } })
@@ -283,6 +330,12 @@ describe('Runs Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
+
+    // Switch to flat list view (pagination only shows in flat view)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /list view/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Definition 0')).toBeInTheDocument();
@@ -317,6 +370,7 @@ describe('Runs Page', () => {
   });
 
   it('shows item count in header', async () => {
+    const user = userEvent.setup();
     const runs = [createMockRun({ id: 'run-1' }), createMockRun({ id: 'run-2' })];
 
     const mockExecuteQuery = vi.fn(() =>
@@ -329,6 +383,12 @@ describe('Runs Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
+
+    // Switch to flat list view (item count shows "Showing X-Y" in flat view)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /list view/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Showing 1-2')).toBeInTheDocument();
