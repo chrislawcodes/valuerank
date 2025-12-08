@@ -159,7 +159,7 @@ export function RunDetail() {
     );
   }
 
-  const isActive = run.status === 'PENDING' || run.status === 'RUNNING';
+  const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING';
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
 

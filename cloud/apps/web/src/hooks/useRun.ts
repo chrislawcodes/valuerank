@@ -23,9 +23,10 @@ type UseRunResult = {
 
 /**
  * Check if a run is in an active (non-terminal) state.
+ * Includes SUMMARIZING since it's still processing and should continue polling.
  */
 function isActiveRun(status: string | undefined): boolean {
-  return status === 'PENDING' || status === 'RUNNING';
+  return status === 'PENDING' || status === 'RUNNING' || status === 'SUMMARIZING';
 }
 
 /**
