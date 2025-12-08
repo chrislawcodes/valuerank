@@ -37,8 +37,8 @@
 ### Test & Commit
 
 - [X] T010 Run tests locally to verify health endpoint works
-- [ ] T011 Commit infrastructure code to `cloud-planning` branch
-- [ ] T012 Push to origin and verify GitHub Actions CI passes (if workflow active)
+- [X] T011 Commit infrastructure code to `cloud-planning` branch
+- [X] T012 Push to origin and verify GitHub Actions CI passes (if workflow active)
 
 **Checkpoint**: Infrastructure code complete, ready to merge
 
