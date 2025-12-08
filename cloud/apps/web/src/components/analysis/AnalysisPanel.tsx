@@ -17,6 +17,7 @@ import { ModelComparisonMatrix } from './ModelComparisonMatrix';
 import { MethodsDocumentation } from './MethodsDocumentation';
 import { AnalysisFilters, filterByModels } from './AnalysisFilters';
 import type { FilterState } from './AnalysisFilters';
+import { ContestedScenariosList } from './ContestedScenariosList';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
@@ -359,6 +360,12 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
           modelAgreement={analysis.modelAgreement}
           perModel={filteredPerModel}
         />
+      </div>
+
+      {/* Contested Scenarios */}
+      <div className="border-t border-gray-200 pt-6 mb-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-4">Most Contested Scenarios</h3>
+        <ContestedScenariosList scenarios={analysis.mostContestedScenarios} />
       </div>
 
       {/* Per-model statistics */}

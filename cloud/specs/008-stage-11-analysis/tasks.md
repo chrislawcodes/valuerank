@@ -208,11 +208,11 @@
 
 ### Implementation for User Story 8
 
-- [ ] T062 [P] [US8] Create apps/web/src/components/analysis/ContestedScenariosList.tsx - Table with ranking
-- [ ] T063 [US8] Add contested scenarios data in AnalysisPanel.tsx
-- [ ] T064 [US8] Create apps/web/tests/components/analysis/ContestedScenariosList.test.tsx - Component tests
-- [ ] T065 [US8] Add navigation: click scenario → view transcripts for that scenario
-- [ ] T066 [US8] Add "Top N" limit control (default 5)
+- [X] T062 [P] [US8] Create apps/web/src/components/analysis/ContestedScenariosList.tsx - Table with ranking
+- [X] T063 [US8] Add contested scenarios data in AnalysisPanel.tsx
+- [X] T064 [US8] Create apps/web/tests/components/analysis/ContestedScenariosList.test.tsx - Component tests
+- [X] T065 [US8] Add navigation: click scenario → view transcripts for that scenario
+- [X] T066 [US8] Add "Top N" limit control (default 5)
 
 **Checkpoint**: US8 complete - Contested scenarios list functional
 
