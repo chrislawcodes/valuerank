@@ -20,6 +20,21 @@ export type DefinitionOverrides = {
   matchingRules: boolean;
 };
 
+/**
+ * Expansion job status for a definition.
+ */
+export type ExpansionJobStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'NONE';
+
+export type ExpansionStatus = {
+  status: ExpansionJobStatus;
+  jobId: string | null;
+  triggeredBy: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  scenarioCount: number;
+};
+
 export type Definition = {
   id: string;
   name: string;
@@ -29,6 +44,7 @@ export type Definition = {
   updatedAt: string;
   lastAccessedAt: string | null;
   runCount: number;
+  scenarioCount?: number;
   tags: Tag[];
   parent?: Definition | null;
   children?: Definition[];
@@ -39,6 +55,8 @@ export type Definition = {
   overrides?: DefinitionOverrides;
   inheritedTags?: Tag[];
   allTags?: Tag[];
+  // Expansion status (Phase 9)
+  expansionStatus?: ExpansionStatus;
 };
 
 /**
@@ -129,6 +147,7 @@ export const DEFINITION_QUERY = gql`
       updatedAt
       lastAccessedAt
       runCount
+      scenarioCount
       tags {
         id
         name
@@ -162,6 +181,16 @@ export const DEFINITION_QUERY = gql`
         id
         name
         createdAt
+      }
+      # Expansion status (Phase 9)
+      expansionStatus {
+        status
+        jobId
+        triggeredBy
+        createdAt
+        completedAt
+        error
+        scenarioCount
       }
     }
   }
@@ -368,5 +397,24 @@ export type DeleteDefinitionResult = {
   deleteDefinition: {
     deletedIds: string[];
     count: number;
+  };
+};
+
+// Regenerate scenarios mutation
+export const REGENERATE_SCENARIOS_MUTATION = gql`
+  mutation RegenerateScenarios($definitionId: String!) {
+    regenerateScenarios(definitionId: $definitionId) {
+      definitionId
+      jobId
+      queued
+    }
+  }
+`;
+
+export type RegenerateScenariosResult = {
+  regenerateScenarios: {
+    definitionId: string;
+    jobId: string | null;
+    queued: boolean;
   };
 };

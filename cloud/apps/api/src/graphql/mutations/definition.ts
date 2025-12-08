@@ -7,6 +7,7 @@ import {
 } from '@valuerank/db';
 import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
+import { queueScenarioExpansion } from '../../services/scenario/index.js';
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -88,6 +89,14 @@ builder.mutationField('createDefinition', (t) =>
       });
 
       ctx.log.info({ definitionId: definition.id, name }, 'Definition created');
+
+      // Queue async scenario expansion
+      const queueResult = await queueScenarioExpansion(definition.id, 'create');
+      ctx.log.info(
+        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+        'Scenario expansion queued'
+      );
+
       return definition;
     },
   })
@@ -183,6 +192,14 @@ builder.mutationField('forkDefinition', (t) =>
         { definitionId: definition.id, name, parentId, inheritAll: inheritAll !== false },
         'Definition forked'
       );
+
+      // Queue async scenario expansion
+      const queueResult = await queueScenarioExpansion(definition.id, 'fork');
+      ctx.log.info(
+        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+        'Scenario expansion queued for fork'
+      );
+
       return definition;
     },
   })
@@ -288,6 +305,16 @@ builder.mutationField('updateDefinition', (t) =>
       });
 
       ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
+
+      // Queue async scenario re-expansion if content was updated
+      if (content !== null && content !== undefined) {
+        const queueResult = await queueScenarioExpansion(definition.id, 'update');
+        ctx.log.info(
+          { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+          'Scenario re-expansion queued after update'
+        );
+      }
+
       return definition;
     },
   })
@@ -384,6 +411,14 @@ builder.mutationField('updateDefinitionContent', (t) =>
         { definitionId: id, clearedOverrides: Array.from(fieldsToClear) },
         'Definition content updated'
       );
+
+      // Queue async scenario re-expansion after content update
+      const queueResult = await queueScenarioExpansion(definition.id, 'update');
+      ctx.log.info(
+        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+        'Scenario re-expansion queued after content update'
+      );
+
       return definition;
     },
   })
@@ -436,6 +471,73 @@ builder.mutationField('deleteDefinition', (t) =>
       return {
         deletedIds,
         count: deletedIds.length,
+      };
+    },
+  })
+);
+
+// Result type for regenerate scenarios mutation
+type RegenerateScenariosResultShape = {
+  definitionId: string;
+  jobId: string | null;
+  queued: boolean;
+};
+
+const RegenerateScenariosResultRef = builder.objectRef<RegenerateScenariosResultShape>('RegenerateScenariosResult');
+
+builder.objectType(RegenerateScenariosResultRef, {
+  description: 'Result of triggering scenario regeneration',
+  fields: (t) => ({
+    definitionId: t.exposeString('definitionId', {
+      description: 'ID of the definition being regenerated',
+    }),
+    jobId: t.exposeString('jobId', {
+      nullable: true,
+      description: 'ID of the queued expansion job (null if not queued)',
+    }),
+    queued: t.exposeBoolean('queued', {
+      description: 'Whether a new expansion job was queued',
+    }),
+  }),
+});
+
+// Mutation: regenerateScenarios - manually trigger scenario regeneration
+builder.mutationField('regenerateScenarios', (t) =>
+  t.field({
+    type: RegenerateScenariosResultRef,
+    description: 'Manually trigger scenario regeneration for a definition. Queues a new expansion job.',
+    args: {
+      definitionId: t.arg.string({
+        required: true,
+        description: 'Definition ID to regenerate scenarios for',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { definitionId } = args;
+
+      ctx.log.debug({ definitionId }, 'Manual scenario regeneration requested');
+
+      // Verify definition exists
+      const definition = await db.definition.findUnique({
+        where: { id: definitionId, deletedAt: null },
+      });
+
+      if (!definition) {
+        throw new Error(`Definition not found: ${definitionId}`);
+      }
+
+      // Queue the expansion job
+      const queueResult = await queueScenarioExpansion(definitionId, 'update');
+
+      ctx.log.info(
+        { definitionId, jobId: queueResult.jobId, queued: queueResult.queued },
+        'Manual scenario regeneration queued'
+      );
+
+      return {
+        definitionId,
+        jobId: queueResult.jobId,
+        queued: queueResult.queued,
       };
     },
   })

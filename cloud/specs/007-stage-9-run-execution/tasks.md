@@ -71,32 +71,32 @@
 
 ### Backend: Health Check Services
 
-- [ ] T021 [US0] Create provider health service in `apps/api/src/services/health/providers.ts`
-- [ ] T022 [P] [US0] Create queue status service in `apps/api/src/services/health/queue.ts`
-- [ ] T023 [P] [US0] Create worker health service in `apps/api/src/services/health/workers.ts`
-- [ ] T024 [US0] Create health GraphQL queries in `apps/api/src/graphql/queries/health.ts`
-- [ ] T025 [P] [US0] Add provider health check endpoint to `apps/api/src/routes/health.ts`
+- [X] T021 [US0] Create provider health service in `apps/api/src/services/health/providers.ts`
+- [X] T022 [P] [US0] Create queue status service in `apps/api/src/services/health/queue.ts`
+- [X] T023 [P] [US0] Create worker health service in `apps/api/src/services/health/workers.ts`
+- [X] T024 [US0] Create health GraphQL queries in `apps/api/src/graphql/queries/health.ts`
+- [X] T025 [P] [US0] Add provider health check endpoint to `apps/api/src/routes/health.ts`
 - [ ] T026 [US0] Add tests for health services in `apps/api/tests/services/health/`
 
 ### Backend: Expanded Scenarios Query
 
-- [ ] T027 [US0] Create scenarios query with full content in `apps/api/src/graphql/queries/scenarios.ts`
+- [X] T027 [US0] Create scenarios query with full content in `apps/api/src/graphql/queries/scenarios.ts`
 - [ ] T028 [US0] Add tests for scenarios query in `apps/api/tests/graphql/queries/scenarios.test.ts`
 
 ### Frontend: System Health UI
 
-- [ ] T029 [P] [US0] Create useSystemHealth hook in `apps/web/src/hooks/useSystemHealth.ts`
-- [ ] T030 [P] [US0] Create ProviderStatus component in `apps/web/src/components/settings/ProviderStatus.tsx`
-- [ ] T031 [P] [US0] Create QueueStatus component in `apps/web/src/components/settings/QueueStatus.tsx`
-- [ ] T032 [US0] Create SystemHealth panel in `apps/web/src/components/settings/SystemHealth.tsx`
-- [ ] T033 [US0] Integrate SystemHealth into Settings page `apps/web/src/pages/Settings.tsx`
+- [X] T029 [P] [US0] Create useSystemHealth hook in `apps/web/src/hooks/useSystemHealth.ts`
+- [X] T030 [P] [US0] Create ProviderStatus component in `apps/web/src/components/settings/ProviderStatus.tsx`
+- [X] T031 [P] [US0] Create QueueStatus component in `apps/web/src/components/settings/QueueStatus.tsx`
+- [X] T032 [US0] Create SystemHealth panel in `apps/web/src/components/settings/SystemHealth.tsx`
+- [X] T033 [US0] Integrate SystemHealth into Settings page `apps/web/src/pages/Settings.tsx`
 - [ ] T034 [US0] Add tests for settings components in `apps/web/src/components/settings/__tests__/`
 
 ### Frontend: Expanded Scenarios View
 
-- [ ] T035 [US0] Create useExpandedScenarios hook in `apps/web/src/hooks/useExpandedScenarios.ts`
-- [ ] T036 [US0] Create ExpandedScenarios component in `apps/web/src/components/definitions/ExpandedScenarios.tsx`
-- [ ] T037 [US0] Integrate ExpandedScenarios into DefinitionDetail page
+- [X] T035 [US0] Create useExpandedScenarios hook in `apps/web/src/hooks/useExpandedScenarios.ts`
+- [X] T036 [US0] Create ExpandedScenarios component in `apps/web/src/components/definitions/ExpandedScenarios.tsx`
+- [X] T037 [US0] Integrate ExpandedScenarios into DefinitionDetail page
 - [ ] T038 [US0] Add tests for ExpandedScenarios in `apps/web/src/components/definitions/__tests__/`
 
 ### E2E Validation (Manual Steps)

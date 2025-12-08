@@ -8,6 +8,10 @@ import {
   type DefinitionOverrides,
 } from '@valuerank/db';
 import { DefinitionRef, RunRef, ScenarioRef, TagRef } from './refs.js';
+import {
+  getDefinitionExpansionStatus,
+  type DefinitionExpansionStatus,
+} from '../../services/scenario/index.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -31,6 +35,59 @@ builder.objectType(DefinitionOverridesRef, {
     }),
     matchingRules: t.exposeBoolean('matching_rules', {
       description: 'True if matching rules are locally defined, false if inherited',
+    }),
+  }),
+});
+
+// GraphQL enum for expansion job status
+const ExpansionJobStatusEnum = builder.enumType('ExpansionJobStatus', {
+  description: 'Status of a scenario expansion job',
+  values: {
+    PENDING: { value: 'pending', description: 'Job is queued and waiting to run' },
+    ACTIVE: { value: 'active', description: 'Job is currently running' },
+    COMPLETED: { value: 'completed', description: 'Job completed successfully' },
+    FAILED: { value: 'failed', description: 'Job failed' },
+    NONE: { value: 'none', description: 'No expansion job exists' },
+  },
+});
+
+// GraphQL type for expansion status
+const ExpansionStatusRef = builder.objectRef<DefinitionExpansionStatus>('ExpansionStatus');
+
+builder.objectType(ExpansionStatusRef, {
+  description: 'Status of scenario expansion for a definition',
+  fields: (t) => ({
+    status: t.field({
+      type: ExpansionJobStatusEnum,
+      description: 'Current status of the expansion job',
+      resolve: (parent) => parent.status,
+    }),
+    jobId: t.exposeString('jobId', {
+      nullable: true,
+      description: 'ID of the expansion job (if any)',
+    }),
+    triggeredBy: t.exposeString('triggeredBy', {
+      nullable: true,
+      description: 'What triggered the expansion (create, update, fork)',
+    }),
+    createdAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      description: 'When the expansion job was created',
+      resolve: (parent) => parent.createdAt,
+    }),
+    completedAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      description: 'When the expansion job completed',
+      resolve: (parent) => parent.completedAt,
+    }),
+    error: t.exposeString('error', {
+      nullable: true,
+      description: 'Error message if the job failed',
+    }),
+    scenarioCount: t.exposeInt('scenarioCount', {
+      description: 'Number of scenarios currently generated for this definition',
     }),
   }),
 });
@@ -129,6 +186,26 @@ builder.objectType(DefinitionRef, {
           where: { definitionId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
         });
+      },
+    }),
+
+    // Computed: scenarioCount - Number of scenarios for this definition
+    scenarioCount: t.field({
+      type: 'Int',
+      description: 'Number of scenarios generated from this definition',
+      resolve: async (definition) => {
+        return db.scenario.count({
+          where: { definitionId: definition.id, deletedAt: null },
+        });
+      },
+    }),
+
+    // Computed: expansionStatus - Status of scenario expansion job
+    expansionStatus: t.field({
+      type: ExpansionStatusRef,
+      description: 'Status of scenario expansion job for this definition',
+      resolve: async (definition) => {
+        return getDefinitionExpansionStatus(definition.id);
       },
     }),
 

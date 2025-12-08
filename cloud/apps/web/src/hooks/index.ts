@@ -11,3 +11,9 @@ export { useAvailableModels } from './useAvailableModels';
 export { useRuns } from './useRuns';
 export { useRun } from './useRun';
 export { useRunMutations } from './useRunMutations';
+
+// System Health hooks
+export { useSystemHealth } from './useSystemHealth';
+
+// Scenario hooks
+export { useExpandedScenarios } from './useExpandedScenarios';

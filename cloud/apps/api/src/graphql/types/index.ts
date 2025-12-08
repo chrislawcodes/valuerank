@@ -22,5 +22,8 @@ import './run-progress.js';
 // Model types
 import './available-model.js';
 
+// Health types
+import './health.js';
+
 // Input types
 import './inputs/start-run.js';

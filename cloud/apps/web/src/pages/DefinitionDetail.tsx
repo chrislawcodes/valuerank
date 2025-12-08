@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation } from 'urql';
 import { ArrowLeft, Edit, FileText, Calendar, Play, GitBranch, Trash2 } from 'lucide-react';
@@ -9,6 +9,7 @@ import { DefinitionEditor } from '../components/definitions/DefinitionEditor';
 import { ForkDialog } from '../components/definitions/ForkDialog';
 import { TagSelector } from '../components/definitions/TagSelector';
 import { VersionTree } from '../components/definitions/VersionTree';
+import { ExpandedScenarios } from '../components/definitions/ExpandedScenarios';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
 import type { DefinitionContent } from '../api/operations/definitions';
@@ -45,6 +46,20 @@ export function DefinitionDetail() {
     id: id || '',
     pause: isNewDefinition,
   });
+
+  // Poll for definition updates while expansion is in progress
+  const isExpanding = definition?.expansionStatus?.status === 'PENDING' ||
+                      definition?.expansionStatus?.status === 'ACTIVE';
+
+  useEffect(() => {
+    if (isExpanding && !isNewDefinition) {
+      const interval = setInterval(() => {
+        refetch();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+    return undefined;
+  }, [isExpanding, isNewDefinition, refetch]);
 
   const {
     createDefinition,
@@ -381,6 +396,15 @@ export function DefinitionDetail() {
             </div>
           );
         })()}
+
+        {/* Expanded Scenarios (from database) */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <ExpandedScenarios
+            definitionId={definition.id}
+            expansionStatus={definition.expansionStatus}
+            onRegenerateTriggered={() => refetch()}
+          />
+        </div>
       </div>
 
       {/* Version Tree */}

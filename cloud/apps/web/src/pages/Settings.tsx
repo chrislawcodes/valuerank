@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Loading } from '../components/ui/Loading';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { SystemHealth } from '../components/settings/SystemHealth';
 import {
   API_KEYS_QUERY,
   CREATE_API_KEY_MUTATION,
@@ -46,6 +47,9 @@ export function Settings() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Settings</h1>
+
+      {/* System Health Section */}
+      <SystemHealth />
 
       {/* API Keys Section */}
       <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">

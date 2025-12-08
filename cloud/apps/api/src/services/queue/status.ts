@@ -45,26 +45,32 @@ export async function getQueueStatus(): Promise<QueueStatus> {
     }>>`
       SELECT name, state, COUNT(*) as count
       FROM pgboss.job
-      WHERE name IN ('probe_scenario', 'analyze_basic', 'analyze_deep')
+      WHERE name IN ('probe_scenario', 'analyze_basic', 'analyze_deep', 'expand_scenarios')
       GROUP BY name, state
     `;
 
-    // Also get archived job counts (completed/failed)
-    const archiveCounts = await db.$queryRaw<Array<{
-      name: string;
-      state: string;
-      count: bigint;
-    }>>`
-      SELECT name, state, COUNT(*) as count
-      FROM pgboss.archive
-      WHERE name IN ('probe_scenario', 'analyze_basic', 'analyze_deep')
-        AND archivedon > NOW() - INTERVAL '24 hours'
-      GROUP BY name, state
-    `;
+    // Also get archived job counts (completed/failed) - may not exist in all pgboss versions
+    let archiveCounts: Array<{ name: string; state: string; count: bigint }> = [];
+    try {
+      archiveCounts = await db.$queryRaw<Array<{
+        name: string;
+        state: string;
+        count: bigint;
+      }>>`
+        SELECT name, state, COUNT(*) as count
+        FROM pgboss.archive
+        WHERE name IN ('probe_scenario', 'analyze_basic', 'analyze_deep', 'expand_scenarios')
+          AND archived_on > NOW() - INTERVAL '24 hours'
+        GROUP BY name, state
+      `;
+    } catch {
+      // Archive table may not exist - that's OK, just use job table
+      log.debug('Archive table not available, using job table only');
+    }
 
     // Combine and organize by job type
     const jobTypeMap = new Map<string, JobTypeStatus>();
-    const knownTypes = ['probe_scenario', 'analyze_basic', 'analyze_deep'];
+    const knownTypes = ['probe_scenario', 'analyze_basic', 'analyze_deep', 'expand_scenarios'];
 
     // Initialize all known types
     for (const type of knownTypes) {
@@ -147,6 +153,7 @@ export async function getQueueStatus(): Promise<QueueStatus> {
         { type: 'probe_scenario', pending: 0, active: 0, completed: 0, failed: 0 },
         { type: 'analyze_basic', pending: 0, active: 0, completed: 0, failed: 0 },
         { type: 'analyze_deep', pending: 0, active: 0, completed: 0, failed: 0 },
+        { type: 'expand_scenarios', pending: 0, active: 0, completed: 0, failed: 0 },
       ],
       totals: { pending: 0, active: 0, completed: 0, failed: 0 },
     };

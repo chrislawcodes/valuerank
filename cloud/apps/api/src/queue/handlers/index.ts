@@ -13,15 +13,17 @@ import type {
   ProbeScenarioJobData,
   AnalyzeBasicJobData,
   AnalyzeDeepJobData,
+  ExpandScenariosJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createAnalyzeDeepHandler } from './analyze-deep.js';
+import { createExpandScenariosHandler } from './expand-scenarios.js';
 
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, AnalyzeBasicJobData, AnalyzeDeepJobData };
+export type { ProbeScenarioJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData };
 
 // Handler registration info
 type HandlerRegistration = {
@@ -57,6 +59,16 @@ const handlerRegistrations: HandlerRegistration[] = [
         'analyze_deep',
         { batchSize },
         createAnalyzeDeepHandler()
+      );
+    },
+  },
+  {
+    name: 'expand_scenarios',
+    register: async (boss, batchSize) => {
+      await boss.work<ExpandScenariosJobData>(
+        'expand_scenarios',
+        { batchSize },
+        createExpandScenariosHandler()
       );
     },
   },
