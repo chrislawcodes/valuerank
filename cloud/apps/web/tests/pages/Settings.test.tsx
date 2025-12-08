@@ -156,10 +156,14 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
 
+    // Mock returns same error for all queries (API keys + SystemHealth), so multiple error messages appear
     await waitFor(() => {
-      expect(screen.getByText('Failed to fetch API keys')).toBeInTheDocument();
+      const errorMessages = screen.getAllByText('Failed to fetch API keys');
+      expect(errorMessages.length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.getByText('Try again')).toBeInTheDocument();
+    // Multiple "Try again" buttons will also appear
+    const tryAgainButtons = screen.getAllByText('Try again');
+    expect(tryAgainButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should create API key and show success banner', async () => {

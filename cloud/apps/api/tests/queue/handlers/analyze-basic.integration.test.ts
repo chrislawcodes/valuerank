@@ -23,18 +23,52 @@ import { spawnPython } from '../../../src/queue/spawn.js';
 const TEST_IDS = {
   definition: 'test-def-analyze-' + Date.now(),
   run: 'test-run-analyze-' + Date.now(),
+  scenario1: 'test-scenario-1-' + Date.now(),
+  scenario2: 'test-scenario-2-' + Date.now(),
   transcript1: 'test-transcript-1-' + Date.now(),
   transcript2: 'test-transcript-2-' + Date.now(),
 };
 
-// Mock analysis response from Python worker
+// Mock analysis response from Python worker (matches real output format)
 const MOCK_ANALYSIS = {
   success: true,
   analysis: {
-    status: 'STUB',
-    message: 'Full analysis will be implemented in Stage 11',
-    transcriptCount: 2,
-    completedAt: '2024-01-01T00:00:01.000Z',
+    perModel: {
+      'gpt-4': {
+        totalResponses: 2,
+        decisionCounts: { A: 1, B: 1 },
+        mean: 0.5,
+        stdDev: 0.5,
+        confidenceInterval: { lower: 0.01, upper: 0.99 },
+      },
+    },
+    modelAgreement: {
+      pairwise: {},
+      overallKappa: null,
+    },
+    dimensionAnalysis: {
+      'test-dimension': {
+        effectSize: 0.3,
+        pValue: 0.05,
+        isSignificant: true,
+      },
+    },
+    mostContestedScenarios: [
+      {
+        scenarioId: TEST_IDS.scenario1,
+        scenarioName: 'Test Scenario 1',
+        variance: 0.5,
+        modelScores: { 'gpt-4': 0.5 },
+      },
+    ],
+    methodsUsed: {
+      confidenceInterval: 'Wilson score',
+      effectSize: 'eta-squared',
+      multipleComparison: 'Holm-Bonferroni',
+    },
+    warnings: [],
+    computedAt: '2024-01-01T00:00:01.000Z',
+    durationMs: 150,
   },
 };
 
@@ -74,6 +108,24 @@ describe('analyze-basic integration', () => {
       },
     });
 
+    // Create scenarios
+    await db.scenario.createMany({
+      data: [
+        {
+          id: TEST_IDS.scenario1,
+          definitionId: TEST_IDS.definition,
+          name: 'Test Scenario 1',
+          content: { dimensions: { 'test-dimension': 1 } },
+        },
+        {
+          id: TEST_IDS.scenario2,
+          definitionId: TEST_IDS.definition,
+          name: 'Test Scenario 2',
+          content: { dimensions: { 'test-dimension': 2 } },
+        },
+      ],
+    });
+
     await db.run.create({
       data: {
         id: TEST_IDS.run,
@@ -82,17 +134,47 @@ describe('analyze-basic integration', () => {
         config: { models: ['gpt-4'] },
       },
     });
+
+    // Create transcripts with decision codes
+    await db.transcript.createMany({
+      data: [
+        {
+          id: TEST_IDS.transcript1,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId: TEST_IDS.scenario1,
+          decisionCode: 'A',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+        {
+          id: TEST_IDS.transcript2,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId: TEST_IDS.scenario2,
+          decisionCode: 'B',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      ],
+    });
   });
 
   afterEach(async () => {
     // Clean up in correct order
     await db.analysisResult.deleteMany({ where: { runId: TEST_IDS.run } });
+    await db.transcript.deleteMany({ where: { runId: TEST_IDS.run } });
     await db.run.deleteMany({ where: { id: TEST_IDS.run } });
+    await db.scenario.deleteMany({ where: { definitionId: TEST_IDS.definition } });
     await db.definition.deleteMany({ where: { id: TEST_IDS.definition } });
   });
 
   describe('successful analysis', () => {
-    it('creates analysis_results record with placeholder output', async () => {
+    it('creates analysis_results record with full output', async () => {
       const handler = createAnalyzeBasicHandler();
       await handler([createMockJob()]);
 
@@ -103,44 +185,97 @@ describe('analyze-basic integration', () => {
 
       expect(result).not.toBeNull();
       expect(result?.analysisType).toBe('basic');
-      expect(result?.codeVersion).toBe('0.1.0-stub');
+      expect(result?.codeVersion).toBe('1.0.0');
       expect(result?.status).toBe('CURRENT');
 
       // Verify output structure
-      const output = result?.output as { status: string; message: string };
-      expect(output.status).toBe('STUB');
-      expect(output.message).toContain('Stage 11');
+      const output = result?.output as typeof MOCK_ANALYSIS.analysis;
+      expect(output.perModel).toBeDefined();
+      expect(output.modelAgreement).toBeDefined();
+      expect(output.methodsUsed).toBeDefined();
+      expect(output.computedAt).toBe('2024-01-01T00:00:01.000Z');
     });
 
-    it('calls Python worker with correct input', async () => {
+    it('calls Python worker with transcript data including scenario info', async () => {
       const handler = createAnalyzeBasicHandler();
       await handler([createMockJob()]);
 
       expect(spawnPython).toHaveBeenCalledWith(
         'workers/analyze_basic.py',
-        {
+        expect.objectContaining({
           runId: TEST_IDS.run,
-          transcriptIds: [TEST_IDS.transcript1, TEST_IDS.transcript2],
-        },
-        expect.objectContaining({ timeout: 60000 })
+          transcripts: expect.arrayContaining([
+            expect.objectContaining({
+              id: TEST_IDS.transcript1,
+              modelId: 'gpt-4',
+              scenarioId: TEST_IDS.scenario1,
+              summary: { score: null }, // 'A' doesn't parse to numeric 1-5
+              scenario: expect.objectContaining({
+                name: 'Test Scenario 1',
+                dimensions: { 'test-dimension': 1 },
+              }),
+            }),
+          ]),
+        }),
+        expect.objectContaining({ timeout: 120000 })
       );
     });
 
     it('generates unique input hash for deduplication', async () => {
       const handler = createAnalyzeBasicHandler();
 
-      // Process same job twice
-      await handler([createMockJob()]);
+      // Process same job twice (force=false by default)
       await handler([createMockJob()]);
 
-      // Both should have same input hash (deterministic)
+      // Second call should use cached result
+      await handler([createMockJob()]);
+
+      // Only one result should exist (second used cache)
+      const results = await db.analysisResult.findMany({
+        where: { runId: TEST_IDS.run },
+      });
+
+      expect(results.length).toBe(1);
+      expect(spawnPython).toHaveBeenCalledTimes(1);
+    });
+
+    it('force=true bypasses cache and creates new result', async () => {
+      const handler = createAnalyzeBasicHandler();
+
+      // First call
+      await handler([createMockJob()]);
+
+      // Second call with force=true
+      await handler([createMockJob({ force: true })]);
+
+      // Two results should exist
       const results = await db.analysisResult.findMany({
         where: { runId: TEST_IDS.run },
         orderBy: { createdAt: 'asc' },
       });
 
       expect(results.length).toBe(2);
-      expect(results[0]?.inputHash).toBe(results[1]?.inputHash);
+      expect(results[0]?.status).toBe('SUPERSEDED');
+      expect(results[1]?.status).toBe('CURRENT');
+      expect(spawnPython).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks existing analysis as SUPERSEDED when creating new one', async () => {
+      const handler = createAnalyzeBasicHandler();
+
+      // Create two analyses with force
+      await handler([createMockJob({ force: true })]);
+      await handler([createMockJob({ force: true })]);
+
+      // Check statuses
+      const results = await db.analysisResult.findMany({
+        where: { runId: TEST_IDS.run },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      expect(results.length).toBe(2);
+      expect(results[0]?.status).toBe('SUPERSEDED');
+      expect(results[1]?.status).toBe('CURRENT');
     });
   });
 
@@ -239,6 +374,54 @@ describe('analyze-basic integration', () => {
       // Clean up
       await db.analysisResult.deleteMany({ where: { runId: run2Id } });
       await db.run.deleteMany({ where: { id: run2Id } });
+    });
+  });
+
+  describe('transcript data extraction', () => {
+    it('extracts dimensions from scenario content', async () => {
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob()]);
+
+      const callArgs = vi.mocked(spawnPython).mock.calls[0];
+      const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, number> } }> };
+
+      // Verify numeric dimensions were extracted from scenario content
+      const transcript = input.transcripts.find((t) => t.scenario.dimensions['test-dimension'] !== undefined);
+      expect(transcript?.scenario.dimensions['test-dimension']).toBe(1);
+    });
+
+    it('handles transcripts without scenarios gracefully', async () => {
+      // Create transcript without scenario
+      const orphanTranscriptId = 'orphan-transcript-' + Date.now();
+      await db.transcript.create({
+        data: {
+          id: orphanTranscriptId,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId: null,
+          decisionCode: 'A',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+
+      // Should not throw
+      await handler([
+        createMockJob({ transcriptIds: [TEST_IDS.transcript1, orphanTranscriptId] }),
+      ]);
+
+      // Verify only transcript with scenario was sent to worker
+      const callArgs = vi.mocked(spawnPython).mock.calls[0];
+      const input = callArgs?.[1] as { transcripts: Array<{ id: string }> };
+      expect(input.transcripts.length).toBe(1);
+      expect(input.transcripts[0]?.id).toBe(TEST_IDS.transcript1);
+
+      // Clean up
+      await db.transcript.delete({ where: { id: orphanTranscriptId } });
     });
   });
 });

@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Calendar, Clock, Play, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileText, Calendar, Clock, Play, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -14,6 +14,7 @@ import { RunProgress } from '../components/runs/RunProgress';
 import { RunResults } from '../components/runs/RunResults';
 import { RunControls } from '../components/runs/RunControls';
 import { RerunDialog } from '../components/runs/RerunDialog';
+import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useRun } from '../hooks/useRun';
 import { useRunMutations } from '../hooks/useRunMutations';
 import { exportRunAsCSV } from '../api/export';
@@ -61,6 +62,8 @@ export function RunDetail() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -68,7 +71,7 @@ export function RunDetail() {
     enablePolling: true,
   });
 
-  const { pauseRun, resumeRun, cancelRun } = useRunMutations();
+  const { pauseRun, resumeRun, cancelRun, deleteRun } = useRunMutations();
 
   const handleExport = useCallback(async () => {
     if (!run) return;
@@ -102,6 +105,18 @@ export function RunDetail() {
   const handleRerunSuccess = useCallback((newRunId: string) => {
     navigate(`/runs/${newRunId}`);
   }, [navigate]);
+
+  const handleDelete = useCallback(async () => {
+    if (!run) return;
+    setIsDeleting(true);
+    try {
+      await deleteRun(run.id);
+      navigate('/runs');
+    } catch (err) {
+      console.error('Failed to delete run:', err);
+      setIsDeleting(false);
+    }
+  }, [run, deleteRun, navigate]);
 
   // Loading state
   if (loading && !run) {
@@ -171,6 +186,17 @@ export function RunDetail() {
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Re-run
+            </Button>
+          )}
+          {/* Delete button - shown for terminal states */}
+          {isTerminal && (
+            <Button
+              variant="ghost"
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
             </Button>
           )}
           {/* Run controls - shown for non-terminal states */}
@@ -278,6 +304,14 @@ export function RunDetail() {
         )}
       </div>
 
+      {/* Analysis section (shows for completed runs or when analysis is computing) */}
+      {(run.status === 'COMPLETED' || run.analysisStatus) && (
+        <AnalysisPanel
+          runId={run.id}
+          analysisStatus={run.analysisStatus}
+        />
+      )}
+
       {/* Polling indicator for active runs */}
       {(isActive || isPaused) && (
         <div className="text-center text-sm text-gray-500">
@@ -293,6 +327,42 @@ export function RunDetail() {
         onClose={() => setIsRerunDialogOpen(false)}
         onSuccess={handleRerunSuccess}
       />
+
+      {/* Delete Confirmation Dialog */}
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setIsDeleteConfirmOpen(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Delete Run?
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This will delete the run and all associated transcripts and analysis data.
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void handleDelete()}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -38,6 +38,9 @@ class TestCheckApiKeys:
 
     def test_no_keys_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test warning when no API keys configured."""
+        # Mock load_dotenv to prevent it from loading .env file
+        monkeypatch.setattr("common.config.load_dotenv", lambda: None)
+
         # Clear all API keys
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -62,6 +65,9 @@ class TestCheckApiKeys:
 
     def test_with_openai_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test detection of OpenAI key."""
+        # Mock load_dotenv to prevent it from loading .env file
+        monkeypatch.setattr("common.config.load_dotenv", lambda: None)
+
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)

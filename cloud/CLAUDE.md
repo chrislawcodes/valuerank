@@ -430,6 +430,166 @@ export async function getRunWithTranscripts(id: string) {
 
 ---
 
+## Database Connections
+
+The project uses PostgreSQL running in Docker on port **5433** (not the default 5432).
+
+### Connection URLs
+
+| Environment | Database URL |
+|-------------|-------------|
+| **Development** | `postgresql://valuerank:valuerank@localhost:5433/valuerank` |
+| **Test** | `postgresql://valuerank:valuerank@localhost:5433/valuerank_test` |
+
+### Credentials
+
+- **User**: `valuerank`
+- **Password**: `valuerank`
+- **Host**: `localhost`
+- **Port**: `5433`
+
+### Starting the Database
+
+```bash
+# From cloud/ directory
+docker-compose up -d postgres
+
+# Verify it's running
+docker ps | grep valuerank-postgres
+```
+
+### Running Commands with Database Access
+
+Always set the appropriate DATABASE_URL for the target database:
+
+```bash
+# Development database
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" npx prisma studio
+
+# Test database
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" npx prisma studio
+```
+
+### Prisma Schema Location
+
+The Prisma schema is at `packages/db/prisma/schema.prisma`. When running Prisma commands from the `cloud/` directory, specify the schema path:
+
+```bash
+npx prisma db push --schema packages/db/prisma/schema.prisma
+```
+
+---
+
+## Test Database Provisioning
+
+### Required Environment Variables for Tests
+
+```bash
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
+```
+
+### Setup Test Database (Quick)
+
+Use the built-in npm scripts which handle everything:
+
+```bash
+# From cloud/ directory - sets up schema and runs tests
+npm test
+
+# Or just set up the test database schema
+npm run db:test:setup
+```
+
+### Setup Test Database (Manual)
+
+If tests fail with schema errors, manually push the schema:
+
+```bash
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+  npx prisma db push --schema packages/db/prisma/schema.prisma
+```
+
+### Reset Test Database (Clean Slate)
+
+If tests have data pollution issues, force reset the database:
+
+```bash
+npm run db:test:reset
+
+# Or manually:
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+  npx prisma db push --schema packages/db/prisma/schema.prisma --force-reset
+```
+
+### Running Tests
+
+```bash
+# Run all tests (includes db:test:setup automatically)
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run specific package tests
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+npx vitest run tests/path/to/test.ts
+
+# Run Python worker tests
+cd workers && PYTHONPATH=. pytest tests/ -v
+```
+
+### Test User Account
+
+The seed script creates a development user:
+
+- **Email**: `dev@valuerank.ai`
+- **Password**: `development`
+
+To seed the development database:
+
+```bash
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma db seed --schema packages/db/prisma/schema.prisma
+```
+
+### Troubleshooting Test Failures
+
+1. **"column X does not exist"** - Schema out of sync:
+   ```bash
+   npm run db:test:setup
+   ```
+
+2. **Foreign key constraint violations** - Data pollution from previous runs:
+   ```bash
+   npm run db:test:reset
+   ```
+
+3. **"PgBoss not initialized"** - Test needs to mock `getBoss`:
+   ```typescript
+   vi.mock('../../../src/queue/boss.js', () => ({
+     getBoss: vi.fn().mockReturnValue({
+       send: vi.fn().mockResolvedValue('mock-job-id'),
+     }),
+   }));
+   ```
+
+4. **Test isolation issues** - Use unique IDs or upsert:
+   ```typescript
+   // Use timestamp in test data names
+   const testId = 'test-' + Date.now();
+
+   // Or use upsert for shared fixtures
+   await db.tag.upsert({
+     where: { name: 'test-tag' },
+     update: {},
+     create: { name: 'test-tag' },
+   });
+   ```
+
+---
+
 ## Quick Reference
 
 ```

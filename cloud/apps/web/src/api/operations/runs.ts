@@ -42,6 +42,11 @@ export type RunConfig = {
   priority?: string;
 };
 
+export type RunDefinitionTag = {
+  id: string;
+  name: string;
+};
+
 export type Run = {
   id: string;
   definitionId: string;
@@ -58,9 +63,11 @@ export type Run = {
   transcripts: Transcript[];
   transcriptCount: number;
   recentTasks: TaskResult[];
+  analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
   definition: {
     id: string;
     name: string;
+    tags: RunDefinitionTag[];
   };
 };
 
@@ -88,9 +95,14 @@ export const RUN_FRAGMENT = gql`
     updatedAt
     lastAccessedAt
     transcriptCount
+    analysisStatus
     definition {
       id
       name
+      tags {
+        id
+        name
+      }
     }
   }
 `;
@@ -187,6 +199,12 @@ export const CANCEL_RUN_MUTATION = gql`
   ${RUN_FRAGMENT}
 `;
 
+export const DELETE_RUN_MUTATION = gql`
+  mutation DeleteRun($runId: ID!) {
+    deleteRun(runId: $runId)
+  }
+`;
+
 // ============================================================================
 // INPUT TYPES
 // ============================================================================
@@ -256,4 +274,12 @@ export type CancelRunMutationVariables = {
 
 export type CancelRunMutationResult = {
   cancelRun: Run;
+};
+
+export type DeleteRunMutationVariables = {
+  runId: string;
+};
+
+export type DeleteRunMutationResult = {
+  deleteRun: boolean;
 };

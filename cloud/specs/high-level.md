@@ -287,7 +287,9 @@
 
 ---
 
-## Stage 10: Experiment Framework [ ]
+## Stage 10: Experiment Framework [DEFERRED]
+
+> **Deferred:** Postponed until a future workstream.
 
 **Goal:** Build the organizational foundation for tracking related experiments with cost visibility.
 
@@ -310,26 +312,47 @@
 
 ---
 
-## Stage 11: Analysis System & Visualizations [ ]
+## Stage 11: Analysis System & Visualizations [~]
+
+> **Spec:** [008-stage-11-analysis/spec.md](./008-stage-11-analysis/spec.md)
 
 **Goal:** Implement automated analysis pipeline with visualizations to answer key questions about AI behavior.
 
 **Deliverables:**
-- Tier 1 auto-analysis on run completion
-- Basic stats computation (win rates, per-model scores)
-- Confidence intervals with Wilson score
-- **Score distribution visualization** (how do AIs tend to answer?)
-- **Variable impact analysis** (which dimensions drive variance?)
-- **Model comparison** (which AIs behave differently?)
-- Analysis versioning and caching (input_hash)
-- Results viewer UI (charts, tables)
+- ✅ Tier 1 auto-analysis on run completion
+- ✅ Basic stats computation (win rates, per-model scores)
+- ✅ Confidence intervals with Wilson score
+- ✅ **Score distribution visualization** (how do AIs tend to answer?)
+- ✅ **Variable impact analysis** (which dimensions drive variance?)
+- ✅ **Model comparison** (which AIs behave differently?)
+- ✅ Analysis versioning and caching (input_hash)
+- ✅ Results viewer UI (charts, tables)
+- ✅ Re-run analysis capability
+
+**Test Coverage:**
+- API: 78.37% lines (below 80% threshold), 503 tests passing
+- Web: 89.48% lines, 561 tests passing
+- DB: 86.99% lines, 77 tests passing
+- Shared: 27.38% lines, 15 tests passing
+- Python Workers: 87.17% lines
+- **Total: 1,156 tests passing**
+
+**Infrastructure Improvements:**
+- ✅ Fixed web app coverage reporting (vitest.config.ts)
+- ✅ Removed coverage artifacts from git tracking
+- ✅ All tiers now report coverage correctly
+- ✅ Fixed analyze-basic integration test expectations
+- ✅ Fixed 15 pre-existing web test failures (RunFilters, Settings, Runs, RunDetail)
 
 **Exit Criteria:**
-- Completed runs automatically have Tier 1 analysis
-- Can see score distributions visualized
-- Can see which variables have most impact
-- Can identify outlier models
-- Analysis methods documented in output
+- ✅ Completed runs automatically have Tier 1 analysis
+- ✅ Can see score distributions visualized
+- ✅ Can see which variables have most impact
+- ✅ Can identify outlier models
+- ✅ Analysis methods documented in output
+- ✅ All Stage 11 tasks complete (76/76)
+- ✅ All tests passing (1,156 tests across all packages)
+- ⏳ API coverage 78.37% (gaps in non-Stage-11 code: scenario expansion, LLM generate)
 
 ---
 

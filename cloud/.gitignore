@@ -4,4 +4,7 @@ dist/
 *.log
 .turbo/
 coverage/
+.coverage
+*.coverage
+coverage.json
 .DS_Store

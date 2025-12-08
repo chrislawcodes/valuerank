@@ -4,6 +4,7 @@ import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef } from './refs.js';
 import { RunProgress, TaskResult } from './run-progress.js';
 import { calculatePercentComplete } from '../../services/run/index.js';
 import { getBoss } from '../../queue/boss.js';
+import { AnalysisResultRef } from './analysis.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -159,6 +160,79 @@ builder.objectType(RunRef, {
           select: { scenarioId: true },
         });
         return selections.map((s) => s.scenarioId);
+      },
+    }),
+
+    // Analysis result for this run
+    analysis: t.field({
+      type: AnalysisResultRef,
+      nullable: true,
+      description: 'Most recent analysis result for this run',
+      resolve: async (run) => {
+        const analysis = await db.analysisResult.findFirst({
+          where: {
+            runId: run.id,
+            status: 'CURRENT',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        return analysis;
+      },
+    }),
+
+    // Analysis status derived from job queue and analysis result
+    analysisStatus: t.field({
+      type: 'String',
+      nullable: true,
+      description: 'Analysis status: pending, computing, completed, or failed',
+      resolve: async (run) => {
+        // Check if analysis exists
+        const analysis = await db.analysisResult.findFirst({
+          where: {
+            runId: run.id,
+            status: 'CURRENT',
+          },
+        });
+
+        if (analysis) {
+          return 'completed';
+        }
+
+        // Check if analysis job is pending or active
+        try {
+          // Use raw query to check PgBoss job state
+          const jobs = await db.$queryRaw<Array<{ state: string }>>`
+            SELECT state FROM pgboss.job
+            WHERE name = 'analyze_basic'
+              AND data->>'runId' = ${run.id}
+              AND state IN ('created', 'active', 'retry')
+            LIMIT 1
+          `;
+
+          const firstJob = jobs[0];
+          if (firstJob) {
+            return firstJob.state === 'active' ? 'computing' : 'pending';
+          }
+
+          // Check for failed jobs
+          const failedJobs = await db.$queryRaw<Array<{ state: string }>>`
+            SELECT state FROM pgboss.archive
+            WHERE name = 'analyze_basic'
+              AND data->>'runId' = ${run.id}
+              AND state = 'failed'
+            ORDER BY completedon DESC
+            LIMIT 1
+          `;
+
+          if (failedJobs.length > 0) {
+            return 'failed';
+          }
+        } catch {
+          // PgBoss tables may not exist
+        }
+
+        // No analysis and no pending job - run may not be completed yet
+        return run.status === 'COMPLETED' ? 'pending' : null;
       },
     }),
   }),

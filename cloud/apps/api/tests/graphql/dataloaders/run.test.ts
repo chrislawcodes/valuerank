@@ -52,7 +52,7 @@ describe('Run DataLoader', () => {
 
       expect(db.run.findMany).toHaveBeenCalledTimes(1);
       expect(db.run.findMany).toHaveBeenCalledWith({
-        where: { id: { in: ['run1', 'run2', 'run3'] } },
+        where: { id: { in: ['run1', 'run2', 'run3'] }, deletedAt: null },
       });
     });
 

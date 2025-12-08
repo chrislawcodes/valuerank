@@ -27,7 +27,8 @@ export type SummarizeTranscriptJobData = {
 
 export type AnalyzeBasicJobData = {
   runId: string;
-  transcriptIds: string[];
+  transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
+  force?: boolean; // Force recomputation even if cached
 };
 
 export type AnalyzeDeepJobData = {

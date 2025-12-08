@@ -12,6 +12,9 @@ export { useRuns } from './useRuns';
 export { useRun } from './useRun';
 export { useRunMutations } from './useRunMutations';
 
+// Analysis hooks
+export { useAnalysis } from './useAnalysis';
+
 // System Health hooks
 export { useSystemHealth } from './useSystemHealth';
 
