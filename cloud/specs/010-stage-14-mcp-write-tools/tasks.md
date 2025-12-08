@@ -201,7 +201,7 @@
 
 ### Implementation for User Story 8
 
-- [ ] T022 [US8] Enhance validation service at `apps/api/src/services/mcp/validation.ts`
+- [X] T022 [US8] Enhance validation service at `apps/api/src/services/mcp/validation.ts`
   - Add template length error message with limit value
   - Add dimension count error message with limit value
   - Add levels count error message with limit value
@@ -209,13 +209,13 @@
   - Validate JSON structure (preamble, template, dimensions required)
   - Check for unmatched placeholders (warning)
 
-- [ ] T023 [US8] Add validation tests at `apps/api/tests/services/mcp/validation.test.ts`
+- [X] T023 [US8] Add validation tests at `apps/api/tests/services/mcp/validation.test.ts`
   - Test all error messages include limit values
   - Test missing required fields
   - Test malformed JSON structure
   - Test unmatched placeholder warning
 
-- [ ] T024 [US8] Verify validation integration in all write tools
+- [X] T024 [US8] Verify validation integration in all write tools
   - Confirm create-definition calls validation
   - Confirm fork-definition calls validation on merged content
   - Confirm validate-definition returns all validation results
