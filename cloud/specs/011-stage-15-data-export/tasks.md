@@ -27,10 +27,10 @@ This stage implements **P1 user stories only**:
 
 **Purpose**: Install dependencies and create base structure
 
-- [ ] T001 Install `js-yaml` package in apps/api/package.json
-- [ ] T002 [P] Install `@types/js-yaml` dev dependency
-- [ ] T003 Create directory structure: apps/api/src/services/export/
-- [ ] T004 [P] Create directory structure: apps/api/src/services/import/
+- [X] T001 Install `js-yaml` package in apps/api/package.json (SKIPPED: using existing `yaml` ^2.8.2)
+- [X] T002 [P] Install `@types/js-yaml` dev dependency (SKIPPED: `yaml` package has built-in types)
+- [X] T003 Create directory structure: apps/api/src/services/export/ (already exists)
+- [X] T004 [P] Create directory structure: apps/api/src/services/import/
 
 ---
 
@@ -42,17 +42,17 @@ This stage implements **P1 user stories only**:
 
 ### Types
 
-- [ ] T005 Create export types file: apps/api/src/services/export/types.ts (~50 lines)
-- [ ] T006 [P] Create import types file: apps/api/src/services/import/types.ts (~30 lines)
+- [X] T005 Create export types file: apps/api/src/services/export/types.ts (~50 lines)
+- [X] T006 [P] Create import types file: apps/api/src/services/import/types.ts (~30 lines)
 
 ### Export Service Index
 
-- [ ] T007 Create export service index: apps/api/src/services/export/index.ts (re-exports)
+- [X] T007 Create export service index: apps/api/src/services/export/index.ts (re-exports)
 
 ### Tests Setup
 
-- [ ] T008 Create test fixtures: apps/api/tests/services/export/fixtures.ts
-- [ ] T009 [P] Create import test fixtures: apps/api/tests/services/import/fixtures.ts
+- [X] T008 Create test fixtures: apps/api/tests/services/export/fixtures.ts
+- [X] T009 [P] Create import test fixtures: apps/api/tests/services/import/fixtures.ts
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
