@@ -135,11 +135,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T041 [P] [US4] Create apps/web/src/components/analysis/ModelComparisonMatrix.tsx - Heatmap or comparison table
-- [ ] T042 [US4] Add model agreement data transformation in AnalysisPanel.tsx
-- [ ] T043 [US4] Create apps/web/tests/components/analysis/ModelComparisonMatrix.test.tsx - Chart tests
-- [ ] T044 [US4] Add outlier model highlighting (visual indicator for >2 SD from mean)
-- [ ] T045 [US4] Handle edge case: single model run (hide comparison section)
+- [X] T041 [P] [US4] Create apps/web/src/components/analysis/ModelComparisonMatrix.tsx - Heatmap or comparison table
+- [X] T042 [US4] Add model agreement data transformation in AnalysisPanel.tsx
+- [X] T043 [US4] Create apps/web/tests/components/analysis/ModelComparisonMatrix.test.tsx - Chart tests
+- [X] T044 [US4] Add outlier model highlighting (visual indicator for >2 SD from mean)
+- [X] T045 [US4] Handle edge case: single model run (hide comparison section)
 
 **Checkpoint**: US4 complete - Model comparison visible with pairwise statistics
 

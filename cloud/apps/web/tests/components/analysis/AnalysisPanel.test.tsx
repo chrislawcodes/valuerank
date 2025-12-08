@@ -223,8 +223,9 @@ describe('AnalysisPanel', () => {
     render(<AnalysisPanel runId="run-1" />);
 
     expect(screen.getByText('Per-Model Statistics')).toBeInTheDocument();
-    expect(screen.getByText('gpt-4')).toBeInTheDocument();
-    expect(screen.getByText('claude-3')).toBeInTheDocument();
+    // Model names appear in both Per-Model Statistics and Model Comparison Matrix
+    expect(screen.getAllByText('gpt-4').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('claude-3').length).toBeGreaterThan(0);
   });
 
   it('renders top values for each model', () => {

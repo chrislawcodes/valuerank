@@ -12,6 +12,7 @@ import { ErrorMessage } from '../ui/ErrorMessage';
 import { StatCard } from './StatCard';
 import { ScoreDistributionChart } from './ScoreDistributionChart';
 import { VariableImpactChart } from './VariableImpactChart';
+import { ModelComparisonMatrix } from './ModelComparisonMatrix';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { AnalysisResult, PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
@@ -304,6 +305,15 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
       <div className="border-t border-gray-200 pt-6 mb-6">
         <h3 className="text-sm font-medium text-gray-700 mb-4">Dimension Impact Analysis</h3>
         <VariableImpactChart dimensionAnalysis={analysis.dimensionAnalysis} />
+      </div>
+
+      {/* Model Comparison Matrix */}
+      <div className="border-t border-gray-200 pt-6 mb-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-4">Model Agreement</h3>
+        <ModelComparisonMatrix
+          modelAgreement={analysis.modelAgreement}
+          perModel={analysis.perModel}
+        />
       </div>
 
       {/* Per-model statistics */}
