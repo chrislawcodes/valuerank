@@ -63,30 +63,6 @@ describe('MD Serializer', () => {
       });
     });
 
-    it('handles legacy values format', () => {
-      const legacyContent: DefinitionContent = {
-        schema_version: 1,
-        preamble: 'Test preamble',
-        template: 'Test template',
-        dimensions: [
-          {
-            name: 'LegacyDim',
-            values: ['Option A', 'Option B', 'Option C'],
-          },
-        ],
-      };
-
-      const result = contentToMDDefinition(SAMPLE_DEFINITION, legacyContent, []);
-
-      const dim = result.dimensions[0];
-      expect(dim!.values).toHaveLength(3);
-      expect(dim!.values[0]).toEqual({
-        score: 1,
-        label: 'Option A',
-        options: ['Option A'],
-      });
-    });
-
     it('generates base_id from definition name', () => {
       const result = contentToMDDefinition(
         SAMPLE_DEFINITION,

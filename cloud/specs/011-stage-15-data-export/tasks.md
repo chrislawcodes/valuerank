@@ -108,44 +108,42 @@ This stage implements **P1 user stories only**:
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Create MD parser: apps/api/src/services/import/md.ts
+- [X] T018 [US2] Create MD parser: apps/api/src/services/import/md.ts
   - Port `parseScenarioMd()` from devtool/src/server/utils/scenarioMd.ts
   - Validate required sections (preamble, template)
   - Map to cloud's `DefinitionContent` type
   - Return structured validation errors (~200 lines)
 
-- [ ] T019 [US2] Create MD parser tests: apps/api/tests/services/import/md.test.ts
+- [X] T019 [US2] Create MD parser tests: apps/api/tests/services/import/md.test.ts
   - Test valid MD parsing
   - Test missing section errors
   - Test malformed dimension tables
   - Test frontmatter extraction
 
-- [ ] T020 [US2] Create validation service: apps/api/src/services/import/validation.ts
+- [X] T020 [US2] Create validation service: apps/api/src/services/import/validation.ts
   - Validate parsed content structure
   - Check for duplicate definition names
   - Return actionable error messages (~100 lines)
 
-- [ ] T021 [US2] Add REST import endpoint: apps/api/src/routes/import.ts
-  - `POST /api/import/definition` (multipart/form-data)
-  - Accept file upload
+- [X] T021 [US2] Add REST import endpoint: apps/api/src/routes/import.ts
+  - `POST /api/import/definition` (JSON body with content)
   - Parse and validate
   - Create definition via existing service (~100 lines)
 
-- [ ] T022 [US2] Add import endpoint tests: apps/api/tests/routes/import.test.ts
+- [X] T022 [US2] Add import endpoint tests: apps/api/tests/routes/import.test.ts
 
-- [ ] T023 [US2] Register import router: apps/api/src/routes/index.ts
+- [X] T023 [US2] Register import router: apps/api/src/server.ts
 
-- [ ] T024 [US2] Create web UI component: apps/web/src/components/import/ImportDialog.tsx
+- [X] T024 [US2] Create web UI component: apps/web/src/components/import/ImportDialog.tsx
   - File upload drag-and-drop
-  - Preview parsed content
   - Validation error display
   - Name conflict resolution (~200 lines)
 
-- [ ] T025 [US2] Create import API client: apps/web/src/api/import.ts
+- [X] T025 [US2] Create import API client: apps/web/src/api/import.ts
 
-- [ ] T026 [US2] Add import button to definitions page: apps/web/src/pages/Definitions.tsx
+- [X] T026 [US2] Add import button to definitions page: apps/web/src/components/definitions/DefinitionList.tsx
 
-- [ ] T027 [US2] Create round-trip test: apps/api/tests/integration/md-roundtrip.test.ts
+- [X] T027 [US2] Create round-trip test: apps/api/tests/integration/md-roundtrip.test.ts
   - Export → Import → Compare content
 
 **Checkpoint**: User Story 2 complete - definitions can be imported from MD

@@ -5,6 +5,7 @@ import cors from 'cors';
 import { healthRouter } from './health.js';
 import { authRouter } from './routes/auth.js';
 import { exportRouter } from './routes/export.js';
+import { importRouter } from './routes/import.js';
 import { authMiddleware, graphqlAuthMiddleware } from './auth/index.js';
 import { yoga } from './graphql/index.js';
 import { createMcpRouter } from './mcp/index.js';
@@ -52,6 +53,7 @@ export function createServer() {
   app.use('/health', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/export', exportRouter);
+  app.use('/api/import', importRouter);
 
   // GraphQL endpoint with auth check
   // - Allows introspection queries without auth

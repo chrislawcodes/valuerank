@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, List, FolderTree } from 'lucide-react';
+import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { DefinitionFolderView } from './DefinitionFolderView';
+import { ImportDialog } from '../import';
 import { EmptyState } from '../ui/EmptyState';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -69,6 +70,9 @@ export function DefinitionList({
   // View mode state (flat list vs folder view)
   const [viewMode, setViewMode] = useState<ViewMode>('folder');
 
+  // Import dialog state
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
   const hasActiveFilters =
     filters.search.length > 0 ||
     filters.rootOnly ||
@@ -79,6 +83,14 @@ export function DefinitionList({
   const handleDefinitionClick = useCallback(
     (definition: Definition) => {
       navigate(`/definitions/${definition.id}`);
+    },
+    [navigate]
+  );
+
+  const handleImportSuccess = useCallback(
+    (definitionId: string) => {
+      setShowImportDialog(false);
+      navigate(`/definitions/${definitionId}`);
     },
     [navigate]
   );
@@ -143,6 +155,14 @@ export function DefinitionList({
               <FolderTree className="w-4 h-4" />
             </button>
           </div>
+          <Button
+            onClick={() => setShowImportDialog(true)}
+            variant="secondary"
+            size="sm"
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            Import
+          </Button>
           {onCreateNew && (
             <Button onClick={onCreateNew} variant="primary" size="sm">
               <Plus className="w-4 h-4 mr-1" />
@@ -204,6 +224,14 @@ export function DefinitionList({
       {/* Loading indicator for pagination */}
       {loading && definitions.length > 0 && (
         <Loading size="sm" text="Loading more..." />
+      )}
+
+      {/* Import dialog */}
+      {showImportDialog && (
+        <ImportDialog
+          onClose={() => setShowImportDialog(false)}
+          onSuccess={handleImportSuccess}
+        />
       )}
     </div>
   );

@@ -15,12 +15,10 @@ import type { MDDefinition, MDDimension, MDDimensionValue, ExportResult } from '
 
 /**
  * Convert cloud Dimension to MD format.
- * Handles both 'levels' (new format) and 'values' (legacy format).
  */
 function dimensionToMD(dim: Dimension): MDDimension {
   const values: MDDimensionValue[] = [];
 
-  // Prefer 'levels' format (new), fall back to 'values' (legacy)
   if (dim.levels && dim.levels.length > 0) {
     for (const level of dim.levels) {
       values.push({
@@ -29,15 +27,6 @@ function dimensionToMD(dim: Dimension): MDDimension {
         options: level.options ?? [],
       });
     }
-  } else if (dim.values && dim.values.length > 0) {
-    // Legacy format: convert string values to score-based levels
-    dim.values.forEach((value, index) => {
-      values.push({
-        score: index + 1,
-        label: value,
-        options: [value],
-      });
-    });
   }
 
   // Sort by score ascending
