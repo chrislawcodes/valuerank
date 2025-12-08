@@ -981,8 +981,10 @@ describe('GraphQL Definition Query', () => {
 
     it('returns allTags combining local and inherited tags', async () => {
       // Add a local tag to the child
-      const localTag = await db.tag.create({
-        data: { name: 'child-local-tag' },
+      const localTag = await db.tag.upsert({
+        where: { name: 'child-local-tag' },
+        update: {},
+        create: { name: 'child-local-tag' },
       });
       await db.definitionTag.create({
         data: { definitionId: inheritanceChild.id, tagId: localTag.id },
