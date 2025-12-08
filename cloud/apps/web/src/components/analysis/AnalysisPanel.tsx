@@ -10,6 +10,8 @@ import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { StatCard } from './StatCard';
+import { ScoreDistributionChart } from './ScoreDistributionChart';
+import { VariableImpactChart } from './VariableImpactChart';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { AnalysisResult, PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
@@ -290,6 +292,18 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
           value={analysis.status}
           variant={analysis.status === 'CURRENT' ? 'success' : 'default'}
         />
+      </div>
+
+      {/* Score Distribution Chart */}
+      <div className="border-t border-gray-200 pt-6 mb-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-4">Win Rate by Value</h3>
+        <ScoreDistributionChart perModel={analysis.perModel} />
+      </div>
+
+      {/* Variable Impact Chart */}
+      <div className="border-t border-gray-200 pt-6 mb-6">
+        <h3 className="text-sm font-medium text-gray-700 mb-4">Dimension Impact Analysis</h3>
+        <VariableImpactChart dimensionAnalysis={analysis.dimensionAnalysis} />
       </div>
 
       {/* Per-model statistics */}

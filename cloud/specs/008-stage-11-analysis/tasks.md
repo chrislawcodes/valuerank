@@ -101,10 +101,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T033 [P] [US2] Create apps/web/src/components/analysis/ScoreDistributionChart.tsx - Recharts histogram
-- [ ] T034 [US2] Add score distribution data transformation in apps/web/src/components/analysis/AnalysisPanel.tsx
-- [ ] T035 [US2] Create apps/web/tests/components/analysis/ScoreDistributionChart.test.tsx - Chart tests
-- [ ] T036 [US2] Add value selector for filtering distribution by specific value
+- [X] T033 [P] [US2] Create apps/web/src/components/analysis/ScoreDistributionChart.tsx - Recharts histogram
+- [X] T034 [US2] Add score distribution data transformation in apps/web/src/components/analysis/AnalysisPanel.tsx
+- [X] T035 [US2] Create apps/web/tests/components/analysis/ScoreDistributionChart.test.tsx - Chart tests
+- [X] T036 [US2] Add value selector for filtering distribution by specific value
 
 **Checkpoint**: US2 complete - Score distribution histogram visible
 
@@ -118,10 +118,10 @@
 
 ### Implementation for User Story 3
 
-- [ ] T037 [P] [US3] Create apps/web/src/components/analysis/VariableImpactChart.tsx - Bar chart of dimension effects
-- [ ] T038 [US3] Add dimension analysis data transformation in AnalysisPanel.tsx
-- [ ] T039 [US3] Create apps/web/tests/components/analysis/VariableImpactChart.test.tsx - Chart tests
-- [ ] T040 [US3] Handle edge case: definition with no dimensions (show appropriate message)
+- [X] T037 [P] [US3] Create apps/web/src/components/analysis/VariableImpactChart.tsx - Bar chart of dimension effects
+- [X] T038 [US3] Add dimension analysis data transformation in AnalysisPanel.tsx
+- [X] T039 [US3] Create apps/web/tests/components/analysis/VariableImpactChart.test.tsx - Chart tests
+- [X] T040 [US3] Handle edge case: definition with no dimensions (show appropriate message)
 
 **Checkpoint**: US3 complete - Variable impact chart visible with rankings
 
