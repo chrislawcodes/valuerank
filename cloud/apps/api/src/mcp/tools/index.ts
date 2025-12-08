@@ -18,14 +18,16 @@ import {
 const log = createLogger('mcp:tools');
 
 // Import tools to trigger their registration via addToolRegistrar
-// P1 MVP Tools
+// P1 MVP Tools - Read
 import './list-runs.js';
 import './get-run-summary.js';
 import './list-definitions.js';
 import './graphql-query.js';
-// P2 Tools
+// P2 Tools - Read
 import './get-dimension-analysis.js';
 import './get-transcript-summary.js';
+// Stage 14 - Write Tools
+import './create-definition.js';
 
 /**
  * Registers all MCP tools on the given server

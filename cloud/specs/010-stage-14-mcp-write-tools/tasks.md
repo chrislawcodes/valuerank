@@ -77,7 +77,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Create tool handler at `apps/api/src/mcp/tools/create-definition.ts`
+- [X] T010 [US1] Create tool handler at `apps/api/src/mcp/tools/create-definition.ts`
   - Define `CreateDefinitionInputSchema` with Zod
   - Implement `registerCreateDefinitionTool(server)`
   - Call validation service before creation
@@ -86,14 +86,14 @@
   - Return `definition_id` and `validation_warnings`
   - Use `addToolRegistrar` to register tool
 
-- [ ] T011 [US1] Create tests at `apps/api/tests/mcp/tools/create-definition.test.ts`
+- [X] T011 [US1] Create tests at `apps/api/tests/mcp/tools/create-definition.test.ts`
   - Test successful creation with valid input
   - Test validation error on invalid content
   - Test missing required fields error
   - Test audit log called on success
   - Test response format matches spec
 
-- [ ] T012 [US1] Update tool index at `apps/api/src/mcp/tools/index.ts`
+- [X] T012 [US1] Update tool index at `apps/api/src/mcp/tools/index.ts`
   - Import and register create-definition tool
 
 **Checkpoint**: User Story 1 fully functional and testable independently
