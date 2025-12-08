@@ -263,38 +263,38 @@
 
 ### Implementation for User Story 6
 
-- [ ] T028 [US6] Create resources directory at `apps/api/src/mcp/resources/`
+- [X] T028 [US6] Create resources directory at `apps/api/src/mcp/resources/`
 
-- [ ] T029 [P] [US6] Create authoring guide at `apps/api/src/mcp/resources/authoring-guide.ts`
+- [X] T029 [P] [US6] Create authoring guide at `apps/api/src/mcp/resources/authoring-guide.ts`
   - Export `AUTHORING_GUIDE_URI = 'valuerank://authoring/guide'`
   - Export `authoringGuideContent` with scenario structure, best practices, dimension design, pitfalls
   - Export `registerAuthoringGuideResource(server)`
 
-- [ ] T030 [P] [US6] Create authoring examples at `apps/api/src/mcp/resources/authoring-examples.ts`
+- [X] T030 [P] [US6] Create authoring examples at `apps/api/src/mcp/resources/authoring-examples.ts`
   - Export `AUTHORING_EXAMPLES_URI = 'valuerank://authoring/examples'`
   - Export `authoringExamplesContent` with 3-5 annotated real definition examples
   - Export `registerAuthoringExamplesResource(server)`
 
-- [ ] T031 [P] [US6] Create value pairs at `apps/api/src/mcp/resources/value-pairs.ts`
+- [X] T031 [P] [US6] Create value pairs at `apps/api/src/mcp/resources/value-pairs.ts`
   - Export `VALUE_PAIRS_URI = 'valuerank://authoring/value-pairs'`
   - Export `valuePairsContent` with common value tensions
   - Include Physical_Safety vs Economics, Freedom vs Tradition, etc.
   - Export `registerValuePairsResource(server)`
 
-- [ ] T032 [P] [US6] Create preamble templates at `apps/api/src/mcp/resources/preamble-templates.ts`
+- [X] T032 [P] [US6] Create preamble templates at `apps/api/src/mcp/resources/preamble-templates.ts`
   - Export `PREAMBLE_TEMPLATES_URI = 'valuerank://authoring/preamble-templates'`
   - Export `preambleTemplatesContent` with tested preamble patterns
   - Export `registerPreambleTemplatesResource(server)`
 
-- [ ] T033 [US6] Create resource index at `apps/api/src/mcp/resources/index.ts`
+- [X] T033 [US6] Create resource index at `apps/api/src/mcp/resources/index.ts`
   - Import all resource modules
   - Export `registerAllResources(server)` function
   - Export all URIs for reference
 
-- [ ] T034 [US6] Update MCP index at `apps/api/src/mcp/index.ts`
+- [X] T034 [US6] Update MCP index at `apps/api/src/mcp/index.ts`
   - Import and call `registerAllResources(server)`
 
-- [ ] T035 [US6] Create tests at `apps/api/tests/mcp/resources/index.test.ts`
+- [X] T035 [US6] Create tests at `apps/api/tests/mcp/resources/index.test.ts`
   - Test authoring guide resource accessible
   - Test examples resource accessible
   - Test value-pairs resource accessible

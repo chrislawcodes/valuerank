@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createLogger } from '@valuerank/shared';
 import { getMcpServer } from './server.js';
 import { registerAllTools } from './tools/index.js';
+import { registerAllResources } from './resources/index.js';
 import { mcpAuthMiddleware } from './auth.js';
 import { mcpRateLimiter } from './rate-limit.js';
 
@@ -26,9 +27,10 @@ const log = createLogger('mcp:router');
 export function createMcpRouter(): Router {
   const router = Router();
 
-  // Get MCP server and register tools
+  // Get MCP server and register tools + resources
   const mcpServer = getMcpServer();
   registerAllTools(mcpServer);
+  registerAllResources(mcpServer);
 
   // Apply rate limiting and auth middleware
   router.use(mcpRateLimiter);
@@ -146,5 +148,6 @@ export function createMcpRouter(): Router {
 // Export everything needed
 export { getMcpServer, resetMcpServer } from './server.js';
 export { registerAllTools } from './tools/index.js';
+export { registerAllResources, RESOURCE_URIS } from './resources/index.js';
 export { mcpAuthMiddleware } from './auth.js';
 export { mcpRateLimiter } from './rate-limit.js';
