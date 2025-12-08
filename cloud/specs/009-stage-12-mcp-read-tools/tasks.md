@@ -267,9 +267,9 @@
 
 ### Documentation & Integration
 
-- [ ] T032 [P] Update apps/api/README.md with MCP endpoint documentation
-- [ ] T033 [P] Add MCP tools to API documentation/schema
-- [ ] T034 Create MCP integration test suite at apps/api/tests/mcp/integration.test.ts
+- [X] T032 [P] Update apps/api/README.md with MCP endpoint documentation
+- [X] T033 [P] Add MCP tools to API documentation/schema
+- [X] T034 Create MCP integration test suite at apps/api/tests/mcp/integration.test.ts
   - Full tool workflow tests
   - Auth + rate limit combined
   - Token budget validation across all tools
@@ -280,8 +280,8 @@
   - 87 tests passing across 10 test files
   - Typecheck passes
 - [ ] T036 Manual test with Claude Desktop per quickstart.md
-- [ ] T037 Verify all response sizes comply with token budgets
-- [ ] T038 Security review - ensure no data leakage, auth bypass
+- [X] T037 Verify all response sizes comply with token budgets
+- [X] T038 Security review - ensure no data leakage, auth bypass
 
 **Checkpoint**: All tests passing, manual validation complete
 

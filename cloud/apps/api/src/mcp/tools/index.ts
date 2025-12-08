@@ -7,7 +7,13 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';
-import { toolRegistrars, addToolRegistrar, type ToolRegistrar } from './registry.js';
+import {
+  toolRegistrars,
+  addToolRegistrar,
+  isServerRegistered,
+  markServerRegistered,
+  type ToolRegistrar,
+} from './registry.js';
 
 const log = createLogger('mcp:tools');
 
@@ -24,9 +30,19 @@ import './get-transcript-summary.js';
 /**
  * Registers all MCP tools on the given server
  *
+ * This function is idempotent - calling it multiple times on the same server
+ * will only register tools once. This is important for test isolation where
+ * multiple server instances may be created but share the singleton MCP server.
+ *
  * @param server - MCP server instance to register tools on
  */
 export function registerAllTools(server: McpServer): void {
+  // Skip if tools already registered on this server
+  if (isServerRegistered(server)) {
+    log.debug('Tools already registered on this server, skipping');
+    return;
+  }
+
   log.info({ toolCount: toolRegistrars.length }, 'Registering MCP tools');
 
   for (const registrar of toolRegistrars) {
@@ -38,6 +54,7 @@ export function registerAllTools(server: McpServer): void {
     }
   }
 
+  markServerRegistered(server);
   log.info('All MCP tools registered');
 }
 

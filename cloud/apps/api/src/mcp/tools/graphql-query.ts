@@ -10,6 +10,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { graphql, parse, validate } from 'graphql';
 import { createLogger } from '@valuerank/shared';
 import { schema } from '../../graphql/index.js';
+import { createDataLoaders } from '../../graphql/dataloaders/index.js';
+import type { Context } from '../../graphql/context.js';
 import { buildMcpResponse, exceedsBudget } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
 
@@ -79,16 +81,22 @@ Limited to 10KB token budget.`,
           };
         }
 
+        // Create a proper GraphQL context for MCP queries
+        // This includes the logger and dataloaders that resolvers expect
+        const mcpLog = createLogger('mcp:graphql');
+        const contextValue: Partial<Context> = {
+          log: mcpLog,
+          loaders: createDataLoaders(),
+          user: { id: 'mcp-query', email: 'mcp@valuerank.ai' },
+          authMethod: 'api_key',
+        };
+
         // Execute the query
         const result = await graphql({
           schema,
           source: args.query,
           variableValues: args.variables,
-          contextValue: {
-            // Provide minimal context for queries
-            // Note: In production, this would include user context from API key
-            user: { id: 'mcp-query', email: 'mcp@valuerank.ai' },
-          },
+          contextValue,
         });
 
         // Check response size before returning
