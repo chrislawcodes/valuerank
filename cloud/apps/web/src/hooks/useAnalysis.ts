@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from 'urql';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ANALYSIS_QUERY,
   RECOMPUTE_ANALYSIS_MUTATION,
@@ -35,6 +35,11 @@ function isAnalysisPending(status: string | null | undefined): boolean {
   return status === 'pending' || status === 'computing';
 }
 
+/** Max number of poll attempts after recompute */
+const RECOMPUTE_POLL_MAX_ATTEMPTS = 10;
+/** Poll interval in ms after recompute */
+const RECOMPUTE_POLL_INTERVAL = 1000;
+
 /**
  * Hook to fetch analysis results for a run.
  *
@@ -62,12 +67,14 @@ export function useAnalysis({
   >(RECOMPUTE_ANALYSIS_MUTATION);
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recomputePollRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPollingAfterRecompute, setIsPollingAfterRecompute] = useState(false);
   const analysis = result.data?.analysis ?? null;
 
   // Determine if we should poll:
   // - analysisStatus is pending/computing (from run query)
-  // - OR we have no analysis yet and the run might be processing
-  const shouldPoll = isAnalysisPending(analysisStatus);
+  // - OR we're polling after a recompute
+  const shouldPoll = isAnalysisPending(analysisStatus) || isPollingAfterRecompute;
 
   // Set up polling for pending/computing analysis
   useEffect(() => {
@@ -93,14 +100,54 @@ export function useAnalysis({
     };
   }, [enablePolling, shouldPoll, pause, reexecuteQuery]);
 
+  // Stop polling after recompute once we have analysis
+  useEffect(() => {
+    if (isPollingAfterRecompute && analysis) {
+      setIsPollingAfterRecompute(false);
+      if (recomputePollRef.current) {
+        clearTimeout(recomputePollRef.current);
+        recomputePollRef.current = null;
+      }
+    }
+  }, [isPollingAfterRecompute, analysis]);
+
+  // Cleanup recompute poll timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (recomputePollRef.current) {
+        clearTimeout(recomputePollRef.current);
+        recomputePollRef.current = null;
+      }
+    };
+  }, []);
+
   const refetch = useCallback(() => {
     reexecuteQuery({ requestPolicy: 'network-only' });
   }, [reexecuteQuery]);
 
   const recompute = useCallback(async () => {
     await executeRecompute({ runId });
-    // Refetch after recompute
+
+    // Start polling until analysis is ready (with timeout)
+    setIsPollingAfterRecompute(true);
+
+    // Refetch immediately
     reexecuteQuery({ requestPolicy: 'network-only' });
+
+    // Set up polling with max attempts
+    let attempts = 0;
+    const poll = () => {
+      attempts++;
+      if (attempts >= RECOMPUTE_POLL_MAX_ATTEMPTS) {
+        setIsPollingAfterRecompute(false);
+        return;
+      }
+      recomputePollRef.current = setTimeout(() => {
+        reexecuteQuery({ requestPolicy: 'network-only' });
+        poll();
+      }, RECOMPUTE_POLL_INTERVAL);
+    };
+    poll();
   }, [runId, executeRecompute, reexecuteQuery]);
 
   return {
@@ -109,6 +156,6 @@ export function useAnalysis({
     error: result.error ? new Error(result.error.message) : null,
     refetch,
     recompute,
-    recomputing: recomputeResult.fetching,
+    recomputing: recomputeResult.fetching || isPollingAfterRecompute,
   };
 }

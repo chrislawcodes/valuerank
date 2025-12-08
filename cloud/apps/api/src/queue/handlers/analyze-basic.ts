@@ -83,8 +83,24 @@ type AnalyzeWorkerOutput =
 export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobData> {
   return async (jobs: PgBoss.Job<AnalyzeBasicJobData>[]) => {
     for (const job of jobs) {
-      const { runId, transcriptIds, force = false } = job.data;
+      const { runId, transcriptIds: providedTranscriptIds, force = false } = job.data;
       const jobId = job.id;
+
+      // Fetch transcriptIds if not provided (e.g., force recompute from mutation)
+      let transcriptIds = providedTranscriptIds;
+      if (!transcriptIds || transcriptIds.length === 0) {
+        const transcripts = await db.transcript.findMany({
+          where: { runId },
+          select: { id: true },
+        });
+        transcriptIds = transcripts.map((t) => t.id);
+        log.debug({ jobId, runId, count: transcriptIds.length }, 'Fetched transcript IDs for run');
+      }
+
+      if (transcriptIds.length === 0) {
+        log.warn({ jobId, runId }, 'No transcripts found for run, skipping analysis');
+        return;
+      }
 
       log.info(
         { jobId, runId, transcriptCount: transcriptIds.length, force },
