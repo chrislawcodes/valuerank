@@ -5,6 +5,7 @@
  * Shows per-model statistics, win rates, and warnings.
  */
 
+import { useMemo, useState } from 'react';
 import { BarChart2, AlertCircle, Clock, RefreshCw, Loader2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
@@ -14,8 +15,10 @@ import { ScoreDistributionChart } from './ScoreDistributionChart';
 import { VariableImpactChart } from './VariableImpactChart';
 import { ModelComparisonMatrix } from './ModelComparisonMatrix';
 import { MethodsDocumentation } from './MethodsDocumentation';
+import { AnalysisFilters, filterByModels } from './AnalysisFilters';
+import type { FilterState } from './AnalysisFilters';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import type { AnalysisResult, PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
+import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
 type AnalysisPanelProps = {
   runId: string;
@@ -194,6 +197,33 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
     analysisStatus,
   });
 
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    selectedModels: [],
+    selectedValue: null,
+  });
+
+  // Extract available models and values
+  const availableModels = useMemo(
+    () => (analysis ? Object.keys(analysis.perModel).sort() : []),
+    [analysis]
+  );
+
+  const availableValues = useMemo(() => {
+    if (!analysis) return [];
+    const valueSet = new Set<string>();
+    Object.values(analysis.perModel).forEach((modelStats) => {
+      Object.keys(modelStats.values).forEach((v) => valueSet.add(v));
+    });
+    return Array.from(valueSet).sort();
+  }, [analysis]);
+
+  // Apply filters to perModel data
+  const filteredPerModel = useMemo(
+    () => (analysis ? filterByModels(analysis.perModel, filters.selectedModels) : {}),
+    [analysis, filters.selectedModels]
+  );
+
   // Loading state
   if (loading && !analysis) {
     return (
@@ -296,10 +326,24 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
         />
       </div>
 
+      {/* Filters */}
+      <div className="mb-6">
+        <AnalysisFilters
+          availableModels={availableModels}
+          availableValues={availableValues}
+          filters={filters}
+          onFilterChange={setFilters}
+        />
+      </div>
+
       {/* Score Distribution Chart */}
       <div className="border-t border-gray-200 pt-6 mb-6">
         <h3 className="text-sm font-medium text-gray-700 mb-4">Win Rate by Value</h3>
-        <ScoreDistributionChart perModel={analysis.perModel} />
+        <ScoreDistributionChart
+          perModel={filteredPerModel}
+          selectedValue={filters.selectedValue ?? undefined}
+          onValueChange={(value) => setFilters({ ...filters, selectedValue: value })}
+        />
       </div>
 
       {/* Variable Impact Chart */}
@@ -313,7 +357,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
         <h3 className="text-sm font-medium text-gray-700 mb-4">Model Agreement</h3>
         <ModelComparisonMatrix
           modelAgreement={analysis.modelAgreement}
-          perModel={analysis.perModel}
+          perModel={filteredPerModel}
         />
       </div>
 
@@ -321,7 +365,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
       <div className="border-t border-gray-200 pt-6">
         <h3 className="text-sm font-medium text-gray-700 mb-4">Per-Model Statistics</h3>
         <div className="space-y-4">
-          {Object.entries(analysis.perModel).map(([modelId, stats]) => (
+          {Object.entries(filteredPerModel).map(([modelId, stats]) => (
             <ModelStatsRow key={modelId} modelId={modelId} stats={stats} />
           ))}
         </div>
