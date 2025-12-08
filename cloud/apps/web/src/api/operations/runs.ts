@@ -42,6 +42,11 @@ export type RunConfig = {
   priority?: string;
 };
 
+export type RunDefinitionTag = {
+  id: string;
+  name: string;
+};
+
 export type Run = {
   id: string;
   definitionId: string;
@@ -62,6 +67,7 @@ export type Run = {
   definition: {
     id: string;
     name: string;
+    tags: RunDefinitionTag[];
   };
 };
 
@@ -93,6 +99,10 @@ export const RUN_FRAGMENT = gql`
     definition {
       id
       name
+      tags {
+        id
+        name
+      }
     }
   }
 `;

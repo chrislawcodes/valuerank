@@ -152,24 +152,43 @@ function ModelStatsRow({ modelId, stats }: { modelId: string; stats: PerModelSta
 /**
  * Pending analysis display.
  */
-function AnalysisPending({ status }: { status: string | null | undefined }) {
+function AnalysisPending({
+  status,
+  onRunAnalysis,
+  isRunning,
+}: {
+  status: string | null | undefined;
+  onRunAnalysis?: () => void;
+  isRunning?: boolean;
+}) {
   const isComputing = status === 'computing';
 
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      {isComputing ? (
+      {isComputing || isRunning ? (
         <Loader2 className="w-8 h-8 text-teal-500 animate-spin mb-4" />
       ) : (
         <Clock className="w-8 h-8 text-gray-400 mb-4" />
       )}
       <h3 className="text-lg font-medium text-gray-900 mb-2">
-        {isComputing ? 'Computing Analysis...' : 'Analysis Pending'}
+        {isComputing || isRunning ? 'Computing Analysis...' : 'Analysis Pending'}
       </h3>
       <p className="text-sm text-gray-500 max-w-md">
-        {isComputing
+        {isComputing || isRunning
           ? 'Statistical analysis is being computed. This usually takes a few seconds.'
-          : 'Analysis will begin automatically once the run completes.'}
+          : 'Analysis has not been computed yet for this run.'}
       </p>
+      {!isComputing && !isRunning && onRunAnalysis && (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onRunAnalysis}
+          className="mt-4"
+        >
+          <BarChart2 className="w-4 h-4 mr-2" />
+          Run Analysis
+        </Button>
+      )}
     </div>
   );
 }
@@ -273,7 +292,11 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   if (!analysis && (analysisStatus === 'pending' || analysisStatus === 'computing')) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <AnalysisPending status={analysisStatus} />
+        <AnalysisPending
+          status={analysisStatus}
+          onRunAnalysis={() => void recompute()}
+          isRunning={recomputing}
+        />
       </div>
     );
   }
