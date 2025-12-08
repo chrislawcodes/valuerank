@@ -15,7 +15,7 @@ export function createRunLoader(): DataLoader<string, Run | null> {
       log.debug({ ids: [...ids] }, 'Batching run load');
 
       const runs = await db.run.findMany({
-        where: { id: { in: [...ids] } },
+        where: { id: { in: [...ids] }, deletedAt: null },
       });
 
       // Create lookup map for O(1) access

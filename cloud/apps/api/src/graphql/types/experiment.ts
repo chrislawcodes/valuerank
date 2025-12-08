@@ -15,23 +15,23 @@ builder.objectType(ExperimentRef, {
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
-    // Relation: runs
+    // Relation: runs (excludes soft-deleted)
     runs: t.field({
       type: [RunRef],
       resolve: async (experiment) => {
         return db.run.findMany({
-          where: { experimentId: experiment.id },
+          where: { experimentId: experiment.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
         });
       },
     }),
 
-    // Computed: run count
+    // Computed: run count (excludes soft-deleted)
     runCount: t.field({
       type: 'Int',
       resolve: async (experiment) => {
         return db.run.count({
-          where: { experimentId: experiment.id },
+          where: { experimentId: experiment.id, deletedAt: null },
         });
       },
     }),

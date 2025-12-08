@@ -19,7 +19,7 @@ builder.queryField('run', (t) =>
   t.field({
     type: RunRef,
     nullable: true,
-    description: 'Fetch a single run by ID. Returns null if not found.',
+    description: 'Fetch a single run by ID. Returns null if not found or deleted.',
     args: {
       id: t.arg.id({ required: true, description: 'Run ID' }),
     },
@@ -27,8 +27,11 @@ builder.queryField('run', (t) =>
       const id = String(args.id);
       ctx.log.debug({ runId: id }, 'Fetching run');
 
-      const run = await db.run.findUnique({
-        where: { id },
+      const run = await db.run.findFirst({
+        where: {
+          id,
+          deletedAt: null, // Exclude soft-deleted runs
+        },
       });
 
       if (!run) {
@@ -81,8 +84,10 @@ builder.queryField('runs', (t) =>
         'Listing runs'
       );
 
-      // Build where clause
-      const where: RunWhereInput = {};
+      // Build where clause (always exclude soft-deleted runs)
+      const where: RunWhereInput & { deletedAt: null } = {
+        deletedAt: null,
+      };
       if (args.definitionId) {
         where.definitionId = args.definitionId;
       }

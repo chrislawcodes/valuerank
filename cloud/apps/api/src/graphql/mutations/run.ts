@@ -1,11 +1,12 @@
 /**
  * Run Mutations
  *
- * GraphQL mutations for run management: start, pause, resume, cancel.
+ * GraphQL mutations for run management: start, pause, resume, cancel, delete.
  */
 
 import { builder } from '../builder.js';
-import { AuthenticationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
+import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { RunRef } from '../types/refs.js';
 import {
   startRun as startRunService,
@@ -226,6 +227,57 @@ builder.mutationField('cancelRun', (t) =>
         throw new Error(`Run not found: ${result.id}`);
       }
       return run;
+    },
+  })
+);
+
+// deleteRun mutation (soft delete)
+builder.mutationField('deleteRun', (t) =>
+  t.field({
+    type: 'Boolean',
+    description: `
+      Soft delete a run and its associated data.
+
+      Sets deletedAt timestamp on the run. Transcripts and analysis results
+      associated with this run will be filtered out in queries.
+
+      Requires authentication.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to delete',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Deleting run via GraphQL');
+
+      // Check run exists and is not already deleted
+      const run = await db.run.findFirst({
+        where: {
+          id: runId,
+          deletedAt: null,
+        },
+      });
+
+      if (!run) {
+        throw new NotFoundError('Run', runId);
+      }
+
+      // Soft delete by setting deletedAt
+      await db.run.update({
+        where: { id: runId },
+        data: { deletedAt: new Date() },
+      });
+
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Run deleted (soft)');
+
+      return true;
     },
   })
 );

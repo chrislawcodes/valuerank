@@ -199,6 +199,12 @@ export const CANCEL_RUN_MUTATION = gql`
   ${RUN_FRAGMENT}
 `;
 
+export const DELETE_RUN_MUTATION = gql`
+  mutation DeleteRun($runId: ID!) {
+    deleteRun(runId: $runId)
+  }
+`;
+
 // ============================================================================
 // INPUT TYPES
 // ============================================================================
@@ -268,4 +274,12 @@ export type CancelRunMutationVariables = {
 
 export type CancelRunMutationResult = {
   cancelRun: Run;
+};
+
+export type DeleteRunMutationVariables = {
+  runId: string;
+};
+
+export type DeleteRunMutationResult = {
+  deleteRun: boolean;
 };

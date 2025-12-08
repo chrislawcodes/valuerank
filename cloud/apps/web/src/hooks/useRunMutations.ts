@@ -5,6 +5,7 @@ import {
   PAUSE_RUN_MUTATION,
   RESUME_RUN_MUTATION,
   CANCEL_RUN_MUTATION,
+  DELETE_RUN_MUTATION,
   type Run,
   type StartRunInput,
   type StartRunMutationVariables,
@@ -15,6 +16,8 @@ import {
   type ResumeRunMutationResult,
   type CancelRunMutationVariables,
   type CancelRunMutationResult,
+  type DeleteRunMutationVariables,
+  type DeleteRunMutationResult,
 } from '../api/operations/runs';
 
 type StartRunResult = {
@@ -27,6 +30,7 @@ type UseRunMutationsResult = {
   pauseRun: (runId: string) => Promise<Run>;
   resumeRun: (runId: string) => Promise<Run>;
   cancelRun: (runId: string) => Promise<Run>;
+  deleteRun: (runId: string) => Promise<boolean>;
   loading: boolean;
   error: Error | null;
 };
@@ -54,6 +58,11 @@ export function useRunMutations(): UseRunMutationsResult {
     CancelRunMutationResult,
     CancelRunMutationVariables
   >(CANCEL_RUN_MUTATION);
+
+  const [deleteRunResult, executeDeleteRun] = useMutation<
+    DeleteRunMutationResult,
+    DeleteRunMutationVariables
+  >(DELETE_RUN_MUTATION);
 
   const startRun = useCallback(
     async (input: StartRunInput): Promise<StartRunResult> => {
@@ -111,24 +120,41 @@ export function useRunMutations(): UseRunMutationsResult {
     [executeCancelRun]
   );
 
+  const deleteRun = useCallback(
+    async (runId: string): Promise<boolean> => {
+      const result = await executeDeleteRun({ runId });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (result.data?.deleteRun === undefined) {
+        throw new Error('Failed to delete run');
+      }
+      return result.data.deleteRun;
+    },
+    [executeDeleteRun]
+  );
+
   // Combine loading and error states
   const loading =
     startRunResult.fetching ||
     pauseRunResult.fetching ||
     resumeRunResult.fetching ||
-    cancelRunResult.fetching;
+    cancelRunResult.fetching ||
+    deleteRunResult.fetching;
 
   const error =
     startRunResult.error ||
     pauseRunResult.error ||
     resumeRunResult.error ||
-    cancelRunResult.error;
+    cancelRunResult.error ||
+    deleteRunResult.error;
 
   return {
     startRun,
     pauseRun,
     resumeRun,
     cancelRun,
+    deleteRun,
     loading,
     error: error ? new Error(error.message) : null,
   };

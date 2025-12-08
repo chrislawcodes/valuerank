@@ -154,25 +154,25 @@ builder.objectType(DefinitionRef, {
       },
     }),
 
-    // Relation: runs
+    // Relation: runs (excludes soft-deleted)
     runs: t.field({
       type: [RunRef],
       description: 'Runs executed with this definition',
       resolve: async (definition) => {
         return db.run.findMany({
-          where: { definitionId: definition.id },
+          where: { definitionId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
         });
       },
     }),
 
-    // Computed: runCount - Number of runs using this definition
+    // Computed: runCount - Number of runs using this definition (excludes soft-deleted)
     runCount: t.field({
       type: 'Int',
       description: 'Number of runs using this definition',
       resolve: async (definition) => {
         return db.run.count({
-          where: { definitionId: definition.id },
+          where: { definitionId: definition.id, deletedAt: null },
         });
       },
     }),
