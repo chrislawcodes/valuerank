@@ -1,5 +1,6 @@
 # Railway deployment configuration
 # See: https://docs.railway.com/reference/config-as-code
+# Last updated: 2024-12-08 - Trigger redeploy after health check fix
 #
 # NOTE: This file applies to ALL services in the monorepo.
 # Service-specific settings (like health checks) should be configured
