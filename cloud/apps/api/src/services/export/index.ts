@@ -27,5 +27,9 @@ export {
   generateMdFilename,
 } from './md.js';
 
-// YAML export (to be added)
-// export * from './yaml.js';
+// YAML export
+export {
+  exportScenariosAsYaml,
+  serializeScenariosToYaml,
+  generateYamlFilename,
+} from './yaml.js';

@@ -9,6 +9,7 @@ import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { exportDefinitionAsMd } from '../../services/export/md.js';
+import { exportScenariosAsYaml } from '../../services/export/yaml.js';
 
 const log = createLogger('graphql:export');
 
@@ -89,6 +90,71 @@ builder.mutationField('exportDefinitionAsMd', (t) =>
           contentLength: result.content.length,
         },
         'Definition exported as MD'
+      );
+
+      return result;
+    },
+  })
+);
+
+/**
+ * Export scenarios as CLI-compatible YAML.
+ * Returns the full YAML content for immediate download.
+ */
+builder.mutationField('exportScenariosAsYaml', (t) =>
+  t.field({
+    type: ExportResultRef,
+    description: 'Export scenarios as CLI-compatible YAML for use with probe.py',
+    args: {
+      definitionId: t.arg.id({ required: true, description: 'Definition ID to export scenarios for' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const definitionId = String(args.definitionId);
+
+      log.info({ definitionId, userId: ctx.user?.id }, 'Exporting scenarios as YAML');
+
+      // Get definition with resolved content (inheritance applied)
+      const definitionWithContent = await resolveDefinitionContent(definitionId);
+
+      // Get scenarios for this definition
+      const scenarios = await db.scenario.findMany({
+        where: {
+          definitionId,
+          deletedAt: null,
+        },
+        include: {
+          definition: true,
+        },
+      });
+
+      // Get tags for category mapping
+      const tags = await db.tag.findMany({
+        where: {
+          definitions: {
+            some: {
+              definitionId,
+              deletedAt: null,
+            },
+          },
+        },
+      });
+
+      // Export to YAML format
+      const result = exportScenariosAsYaml(
+        definitionWithContent,
+        definitionWithContent.resolvedContent,
+        scenarios,
+        tags
+      );
+
+      log.info(
+        {
+          definitionId,
+          filename: result.filename,
+          scenarioCount: scenarios.length,
+          contentLength: result.content.length,
+        },
+        'Scenarios exported as YAML'
       );
 
       return result;

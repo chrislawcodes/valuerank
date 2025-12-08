@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Download, ChevronDown, FileText, FileCode } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { exportDefinitionAsMd } from '../../api/export';
+import { exportDefinitionAsMd, exportScenariosAsYaml } from '../../api/export';
 
 type ExportFormat = 'md' | 'yaml';
 
@@ -53,8 +53,7 @@ export function ExportButton({
       if (format === 'md') {
         await exportDefinitionAsMd(definitionId);
       } else if (format === 'yaml') {
-        // Future: YAML export
-        setError('YAML export not yet implemented');
+        await exportScenariosAsYaml(definitionId);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Export failed';

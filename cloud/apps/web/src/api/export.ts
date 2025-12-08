@@ -126,3 +126,57 @@ export async function exportDefinitionAsMd(definitionId: string): Promise<void> 
   document.body.removeChild(link);
   URL.revokeObjectURL(blobUrl);
 }
+
+/**
+ * Export scenarios as CLI-compatible YAML and trigger download.
+ *
+ * @param definitionId - The definition ID to export scenarios for
+ * @returns Promise that resolves when download starts
+ */
+export async function exportScenariosAsYaml(definitionId: string): Promise<void> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/api/export/definitions/${definitionId}/scenarios.yaml`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Export failed: ${response.status} ${errorText}`);
+  }
+
+  // Get filename from Content-Disposition header or generate one
+  const contentDisposition = response.headers.get('Content-Disposition');
+  let filename = `definition-${definitionId.slice(0, 8)}.scenarios.yaml`;
+
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (match?.[1]) {
+      filename = match[1];
+    }
+  }
+
+  // Convert response to blob and trigger download
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  // Create temporary link and click it
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+
+  // Cleanup
+  document.body.removeChild(link);
+  URL.revokeObjectURL(blobUrl);
+}
