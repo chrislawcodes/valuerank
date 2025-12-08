@@ -14,9 +14,9 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create feature branch `feature/stage-14-mcp-write-tools` from `cloud-planning`
-- [ ] T002 Verify all Stage 12 tests pass (`npm test`)
-- [ ] T003 Review existing MCP tool pattern in `apps/api/src/mcp/tools/list-definitions.ts`
+- [X] T001 Create feature branch `feature/stage-14-mcp-write-tools` from `cloud-planning`
+- [X] T002 Verify all Stage 12 tests pass (`npm test`)
+- [X] T003 Review existing MCP tool pattern in `apps/api/src/mcp/tools/list-definitions.ts`
 
 **Checkpoint**: Ready to implement foundation
 
@@ -29,7 +29,7 @@
 ⚠️ **CRITICAL**: No user story work can begin until this phase is complete
 
 ### Validation Utilities
-- [ ] T004 Create validation service at `apps/api/src/services/mcp/validation.ts`
+- [X] T004 Create validation service at `apps/api/src/services/mcp/validation.ts`
   - Export `ValidationResult`, `ValidationError`, `ValidationWarning` types
   - Export `validateDefinitionContent(content)` function
   - Implement dimension limit check (max 10)
@@ -39,16 +39,16 @@
   - Implement scenario count limit check (max 1000)
   - Implement warning for template without placeholders
 
-- [ ] T005 [P] Create audit logging service at `apps/api/src/services/mcp/audit.ts`
+- [X] T005 [P] Create audit logging service at `apps/api/src/services/mcp/audit.ts`
   - Export `AuditEntry` type
   - Export `logAuditEvent(entry)` function
   - Use structured logging via `createLogger('mcp:audit')`
 
-- [ ] T006 [P] Update MCP service index at `apps/api/src/services/mcp/index.ts`
+- [X] T006 [P] Update MCP service index at `apps/api/src/services/mcp/index.ts`
   - Re-export validation utilities
   - Re-export audit logging
 
-- [ ] T007 Create tests for validation at `apps/api/tests/services/mcp/validation.test.ts`
+- [X] T007 Create tests for validation at `apps/api/tests/services/mcp/validation.test.ts`
   - Test valid content passes validation
   - Test dimension limit error
   - Test levels limit error
@@ -56,12 +56,12 @@
   - Test scenario count error
   - Test placeholder warning
 
-- [ ] T008 [P] Create tests for audit at `apps/api/tests/services/mcp/audit.test.ts`
+- [X] T008 [P] Create tests for audit at `apps/api/tests/services/mcp/audit.test.ts`
   - Test audit log entry creation
   - Test structured log format
 
 ### MCP Server Update
-- [ ] T009 Update MCP server at `apps/api/src/mcp/server.ts`
+- [X] T009 Update MCP server at `apps/api/src/mcp/server.ts`
   - Add `resources: {}` to capabilities
   - Update instructions to mention write tools and resources
 

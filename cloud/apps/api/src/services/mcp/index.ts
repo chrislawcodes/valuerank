@@ -27,3 +27,28 @@ export {
   type RunSummary,
   type DimensionAnalysis,
 } from './formatters.js';
+
+// Validation utilities (Stage 14)
+export {
+  validateDefinitionContent,
+  validateContentStructure,
+  calculateScenarioCombinations,
+  extractPlaceholders,
+  VALIDATION_LIMITS,
+  type ValidationResult,
+  type ValidationError,
+  type ValidationWarning,
+  type DimensionCoverage,
+} from './validation.js';
+
+// Audit logging (Stage 14)
+export {
+  logAuditEvent,
+  logAuditError,
+  createDefinitionAudit,
+  createRunAudit,
+  createValidationAudit,
+  type AuditAction,
+  type AuditEntry,
+  type AuditErrorEntry,
+} from './audit.js';
