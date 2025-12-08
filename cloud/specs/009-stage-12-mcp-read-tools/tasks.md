@@ -84,12 +84,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Create list_runs tool at apps/api/src/mcp/tools/list-runs.ts
+- [X] T015 [US1] Create list_runs tool at apps/api/src/mcp/tools/list-runs.ts
   - Accept definition_id, status, limit parameters
   - Query runs with filters via Prisma
   - Return formatted run list items
   - Enforce 2KB token budget
-- [ ] T016 [US1] Create list-runs tests at apps/api/tests/mcp/tools/list-runs.test.ts
+- [X] T016 [US1] Create list-runs tests at apps/api/tests/mcp/tools/list-runs.test.ts
   - Parameter validation
   - Filter behavior
   - Pagination
@@ -107,13 +107,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Create get_run_summary tool at apps/api/src/mcp/tools/get-run-summary.ts
+- [X] T017 [US2] Create get_run_summary tool at apps/api/src/mcp/tools/get-run-summary.ts
   - Accept run_id, include_insights parameters
   - Query run and analysis results
   - Format basic stats, model agreement, contested scenarios
   - Include insights and llm_summary if available
   - Enforce 5KB token budget
-- [ ] T018 [US2] Create get-run-summary tests at apps/api/tests/mcp/tools/get-run-summary.test.ts
+- [X] T018 [US2] Create get-run-summary tests at apps/api/tests/mcp/tools/get-run-summary.test.ts
   - Valid run returns full summary
   - Invalid run returns error
   - Analysis pending status handled
@@ -131,12 +131,12 @@
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Create list_definitions tool at apps/api/src/mcp/tools/list-definitions.ts
+- [X] T019 [US3] Create list_definitions tool at apps/api/src/mcp/tools/list-definitions.ts
   - Accept folder, include_children parameters
   - Query definitions with soft-delete filter
   - Return formatted definition list items
   - Enforce 2KB token budget
-- [ ] T020 [US3] Create list-definitions tests at apps/api/tests/mcp/tools/list-definitions.test.ts
+- [X] T020 [US3] Create list-definitions tests at apps/api/tests/mcp/tools/list-definitions.test.ts
   - Folder filter
   - Include children option
   - Soft-delete exclusion
@@ -154,13 +154,13 @@
 
 ### Implementation for User Story 4
 
-- [ ] T021 [US4] Create graphql_query tool at apps/api/src/mcp/tools/graphql-query.ts
+- [X] T021 [US4] Create graphql_query tool at apps/api/src/mcp/tools/graphql-query.ts
   - Accept query, variables parameters
   - Execute against existing GraphQL schema
   - Apply user context from API key auth
   - Reject mutation operations
   - Enforce 10KB token budget
-- [ ] T022 [US4] Create graphql-query tests at apps/api/tests/mcp/tools/graphql-query.test.ts
+- [X] T022 [US4] Create graphql-query tests at apps/api/tests/mcp/tools/graphql-query.test.ts
   - Valid query execution
   - Variables support
   - Mutation rejection

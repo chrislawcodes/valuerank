@@ -18,6 +18,12 @@ export type ToolRegistrar = (server: McpServer) => void;
 // Tool registrars will be imported and added here as they are implemented
 const toolRegistrars: ToolRegistrar[] = [];
 
+// Import tools to trigger their registration via addToolRegistrar
+import './list-runs.js';
+import './get-run-summary.js';
+import './list-definitions.js';
+import './graphql-query.js';
+
 /**
  * Registers all MCP tools on the given server
  *
