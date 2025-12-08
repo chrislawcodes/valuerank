@@ -10,9 +10,13 @@ import { ForkDialog } from '../components/definitions/ForkDialog';
 import { TagSelector } from '../components/definitions/TagSelector';
 import { VersionTree } from '../components/definitions/VersionTree';
 import { ExpandedScenarios } from '../components/definitions/ExpandedScenarios';
+import { RunForm } from '../components/runs/RunForm';
 import { useDefinition } from '../hooks/useDefinition';
 import { useDefinitionMutations } from '../hooks/useDefinitionMutations';
+import { useRunMutations } from '../hooks/useRunMutations';
+import { useExpandedScenarios } from '../hooks/useExpandedScenarios';
 import type { DefinitionContent } from '../api/operations/definitions';
+import type { StartRunInput } from '../api/operations/runs';
 import {
   ADD_TAG_TO_DEFINITION_MUTATION,
   REMOVE_TAG_FROM_DEFINITION_MUTATION,
@@ -39,6 +43,8 @@ export function DefinitionDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [showForkDialog, setShowForkDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRunForm, setShowRunForm] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const isNewDefinition = id === 'new';
 
@@ -46,6 +52,15 @@ export function DefinitionDetail() {
     id: id || '',
     pause: isNewDefinition,
   });
+
+  // Fetch scenario count for run form
+  const { totalCount: scenarioCount } = useExpandedScenarios({
+    definitionId: id || '',
+    pause: isNewDefinition || !id,
+    limit: 1, // We only need the count, not the actual scenarios
+  });
+
+  const { startRun, loading: isStartingRun } = useRunMutations();
 
   // Poll for definition updates while expansion is in progress
   const isExpanding = definition?.expansionStatus?.status === 'PENDING' ||
@@ -143,6 +158,20 @@ export function DefinitionDetail() {
       // Close dialog on error too - user can retry
       setShowDeleteConfirm(false);
       console.error('Failed to delete definition:', err);
+    }
+  };
+
+  const handleStartRun = async (input: StartRunInput) => {
+    setRunError(null);
+    try {
+      const result = await startRun(input);
+      setShowRunForm(false);
+      // Navigate to the run detail page (or runs list until RunDetail is implemented)
+      navigate(`/runs/${result.run.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start run';
+      setRunError(message);
+      throw err; // Re-throw so RunForm knows it failed
     }
   };
 
@@ -271,9 +300,17 @@ export function DefinitionDetail() {
             <GitBranch className="w-4 h-4 mr-2" />
             Fork
           </Button>
-          <Button variant="primary" onClick={() => setIsEditing(true)}>
+          <Button variant="secondary" onClick={() => setIsEditing(true)}>
             <Edit className="w-4 h-4 mr-2" />
             Edit
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setShowRunForm(true)}
+            disabled={scenarioCount === 0}
+          >
+            <Play className="w-4 h-4 mr-2" />
+            Start Run
           </Button>
         </div>
       </div>
@@ -465,6 +502,35 @@ export function DefinitionDetail() {
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run Form Dialog */}
+      {showRunForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">
+              Start Evaluation Run
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Configure and start an evaluation run for &quot;{definition.name}&quot;
+            </p>
+            {runError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {runError}
+              </div>
+            )}
+            <RunForm
+              definitionId={definition.id}
+              scenarioCount={scenarioCount}
+              onSubmit={handleStartRun}
+              onCancel={() => {
+                setShowRunForm(false);
+                setRunError(null);
+              }}
+              isSubmitting={isStartingRun}
+            />
           </div>
         </div>
       )}

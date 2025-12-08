@@ -57,7 +57,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         const result = await spawnPython<AnalyzeWorkerInput, AnalyzeWorkerOutput>(
           ANALYZE_WORKER_PATH,
           { runId, transcriptIds },
-          { cwd: path.resolve(process.cwd(), '..'), timeout: 60000 }
+          { cwd: path.resolve(process.cwd(), '../..'), timeout: 60000 }
         );
 
         // Handle spawn failure

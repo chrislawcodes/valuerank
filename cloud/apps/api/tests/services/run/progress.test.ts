@@ -4,8 +4,15 @@
  * Tests atomic progress updates and status transitions.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { db } from '@valuerank/db';
+
+// Mock PgBoss for SUMMARIZING transition (which queues summarize jobs)
+vi.mock('../../../src/queue/boss.js', () => ({
+  getBoss: vi.fn(() => ({
+    send: vi.fn().mockResolvedValue('mock-job-id'),
+  })),
+}));
 import {
   updateProgress,
   incrementCompleted,
@@ -132,7 +139,7 @@ describe('progress service', () => {
       expect(result.status).toBe('RUNNING');
     });
 
-    it('transitions RUNNING to COMPLETED when all jobs done', async () => {
+    it('transitions RUNNING to SUMMARIZING when all jobs done', async () => {
       const run = await createTestRun({ total: 3, completed: 2, failed: 0 });
       // Update to RUNNING first
       await db.run.update({
@@ -142,15 +149,12 @@ describe('progress service', () => {
 
       const result = await incrementCompleted(run.id);
 
-      expect(result.status).toBe('COMPLETED');
+      // Should transition to SUMMARIZING, not COMPLETED
+      expect(result.status).toBe('SUMMARIZING');
       expect(result.progress.completed).toBe(3);
-
-      // Verify completedAt was set
-      const dbRun = await db.run.findUnique({ where: { id: run.id } });
-      expect(dbRun?.completedAt).not.toBeNull();
     });
 
-    it('transitions to COMPLETED even with failures', async () => {
+    it('transitions to SUMMARIZING even with failures', async () => {
       const run = await createTestRun({ total: 3, completed: 1, failed: 1 });
       await db.run.update({
         where: { id: run.id },
@@ -159,7 +163,8 @@ describe('progress service', () => {
 
       const result = await incrementFailed(run.id);
 
-      expect(result.status).toBe('COMPLETED');
+      // Should transition to SUMMARIZING, not COMPLETED
+      expect(result.status).toBe('SUMMARIZING');
       expect(result.progress.completed).toBe(1);
       expect(result.progress.failed).toBe(2);
     });

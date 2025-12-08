@@ -76,12 +76,12 @@
 - [X] T023 [P] [US0] Create worker health service in `apps/api/src/services/health/workers.ts`
 - [X] T024 [US0] Create health GraphQL queries in `apps/api/src/graphql/queries/health.ts`
 - [X] T025 [P] [US0] Add provider health check endpoint to `apps/api/src/routes/health.ts`
-- [ ] T026 [US0] Add tests for health services in `apps/api/tests/services/health/`
+- [X] T026 [US0] Add tests for health services in `apps/api/tests/services/health/`
 
 ### Backend: Expanded Scenarios Query
 
 - [X] T027 [US0] Create scenarios query with full content in `apps/api/src/graphql/queries/scenarios.ts`
-- [ ] T028 [US0] Add tests for scenarios query in `apps/api/tests/graphql/queries/scenarios.test.ts`
+- [X] T028 [US0] Add tests for scenarios query in `apps/api/tests/graphql/queries/scenarios.test.ts`
 
 ### Frontend: System Health UI
 
@@ -90,22 +90,22 @@
 - [X] T031 [P] [US0] Create QueueStatus component in `apps/web/src/components/settings/QueueStatus.tsx`
 - [X] T032 [US0] Create SystemHealth panel in `apps/web/src/components/settings/SystemHealth.tsx`
 - [X] T033 [US0] Integrate SystemHealth into Settings page `apps/web/src/pages/Settings.tsx`
-- [ ] T034 [US0] Add tests for settings components in `apps/web/src/components/settings/__tests__/`
+- [X] T034 [US0] Add tests for settings components in `apps/web/src/components/settings/__tests__/`
 
 ### Frontend: Expanded Scenarios View
 
 - [X] T035 [US0] Create useExpandedScenarios hook in `apps/web/src/hooks/useExpandedScenarios.ts`
 - [X] T036 [US0] Create ExpandedScenarios component in `apps/web/src/components/definitions/ExpandedScenarios.tsx`
 - [X] T037 [US0] Integrate ExpandedScenarios into DefinitionDetail page
-- [ ] T038 [US0] Add tests for ExpandedScenarios in `apps/web/src/components/definitions/__tests__/`
+- [X] T038 [US0] Add tests for ExpandedScenarios in `apps/web/src/components/definitions/__tests__/`
 
 ### E2E Validation (Manual Steps)
 
-- [ ] T039 [US0] **VALIDATION**: Verify provider health checks show correct status for each LLM
-- [ ] T040 [US0] **VALIDATION**: Verify queue status shows worker as online when running
-- [ ] T041 [US0] **VALIDATION**: Verify expanded scenarios show for a definition with dimensions
-- [ ] T042 [US0] **VALIDATION**: Start a test run with 1 model, 1 scenario → verify transcript created
-- [ ] T043 [US0] **VALIDATION**: Document any issues found and fixes required
+- [X] T039 [US0] **VALIDATION**: Verify provider health checks show correct status for each LLM
+- [X] T040 [US0] **VALIDATION**: Verify queue status shows worker as online when running
+- [X] T041 [US0] **VALIDATION**: Verify expanded scenarios show for a definition with dimensions
+- [X] T042 [US0] **VALIDATION**: Start a test run with 1 model, 1 scenario → verify transcript created
+- [X] T043 [US0] **VALIDATION**: Document any issues found and fixes required
 
 **Checkpoint**: E2E validation complete - system is proven to work. Proceed to run UI.
 
@@ -119,13 +119,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T044 [P] [US1] Create ModelSelector component in `apps/web/src/components/runs/ModelSelector.tsx`
-- [ ] T045 [P] [US1] Create RunForm component in `apps/web/src/components/runs/RunForm.tsx`
-- [ ] T046 [US1] Add "Start Run" button to DefinitionDetail page in `apps/web/src/pages/DefinitionDetail.tsx`
-- [ ] T047 [US1] Implement RunForm integration with startRun mutation
-- [ ] T048 [US1] Add redirect to RunDetail after successful run creation
-- [ ] T049 [US1] Add tests for ModelSelector in `apps/web/src/components/runs/__tests__/ModelSelector.test.tsx`
-- [ ] T050 [P] [US1] Add tests for RunForm in `apps/web/src/components/runs/__tests__/RunForm.test.tsx`
+- [X] T044 [P] [US1] Create ModelSelector component in `apps/web/src/components/runs/ModelSelector.tsx`
+- [X] T045 [P] [US1] Create RunForm component in `apps/web/src/components/runs/RunForm.tsx`
+- [X] T046 [US1] Add "Start Run" button to DefinitionDetail page in `apps/web/src/pages/DefinitionDetail.tsx`
+- [X] T047 [US1] Implement RunForm integration with startRun mutation
+- [X] T048 [US1] Add redirect to RunDetail after successful run creation
+- [X] T049 [US1] Add tests for ModelSelector in `apps/web/src/components/runs/__tests__/ModelSelector.test.tsx`
+- [X] T050 [P] [US1] Add tests for RunForm in `apps/web/src/components/runs/__tests__/RunForm.test.tsx`
 
 **Checkpoint**: User Story 1 should be fully functional - can create and start runs
 
@@ -139,14 +139,14 @@
 
 ### Implementation for User Story 2
 
-- [ ] T051 [P] [US2] Create RunProgress component in `apps/web/src/components/runs/RunProgress.tsx`
-- [ ] T052 [P] [US2] Create RunDetail page in `apps/web/src/pages/RunDetail.tsx`
-- [ ] T053 [US2] Add route for RunDetail page in `apps/web/src/App.tsx`
-- [ ] T054 [US2] Implement polling logic in useRun hook (5s interval when active)
-- [ ] T055 [US2] Add per-model progress breakdown to RunProgress component
-- [ ] T056 [US2] Add automatic polling stop on terminal state
-- [ ] T057 [US2] Add tests for RunProgress in `apps/web/src/components/runs/__tests__/RunProgress.test.tsx`
-- [ ] T058 [P] [US2] Add tests for RunDetail page in `apps/web/src/pages/__tests__/RunDetail.test.tsx`
+- [X] T051 [P] [US2] Create RunProgress component in `apps/web/src/components/runs/RunProgress.tsx`
+- [X] T052 [P] [US2] Create RunDetail page in `apps/web/src/pages/RunDetail.tsx`
+- [X] T053 [US2] Add route for RunDetail page in `apps/web/src/App.tsx`
+- [X] T054 [US2] Implement polling logic in useRun hook (5s interval when active)
+- [X] T055 [US2] Add per-model progress breakdown to RunProgress component
+- [X] T056 [US2] Add automatic polling stop on terminal state
+- [X] T057 [US2] Add tests for RunProgress in `apps/web/src/components/runs/__tests__/RunProgress.test.tsx`
+- [X] T058 [P] [US2] Add tests for RunDetail page in `apps/web/src/pages/__tests__/RunDetail.test.tsx`
 
 **Checkpoint**: User Story 2 should be fully functional - can monitor progress in real-time
 
@@ -160,14 +160,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T059 [P] [US3] Create RunResults component in `apps/web/src/components/runs/RunResults.tsx`
-- [ ] T060 [P] [US3] Create TranscriptList component in `apps/web/src/components/runs/TranscriptList.tsx`
-- [ ] T061 [P] [US3] Create TranscriptViewer component in `apps/web/src/components/runs/TranscriptViewer.tsx`
-- [ ] T062 [US3] Integrate RunResults into RunDetail page
-- [ ] T063 [US3] Add expandable per-model breakdown in RunResults
-- [ ] T064 [US3] Add transcript detail modal/view
-- [ ] T065 [US3] Add tests for RunResults in `apps/web/src/components/runs/__tests__/RunResults.test.tsx`
-- [ ] T066 [P] [US3] Add tests for TranscriptList in `apps/web/src/components/runs/__tests__/TranscriptList.test.tsx`
+- [X] T059 [P] [US3] Create RunResults component in `apps/web/src/components/runs/RunResults.tsx`
+- [X] T060 [P] [US3] Create TranscriptList component in `apps/web/src/components/runs/TranscriptList.tsx`
+- [X] T061 [P] [US3] Create TranscriptViewer component in `apps/web/src/components/runs/TranscriptViewer.tsx`
+- [X] T062 [US3] Integrate RunResults into RunDetail page
+- [X] T063 [US3] Add expandable per-model breakdown in RunResults
+- [X] T064 [US3] Add transcript detail modal/view
+- [X] T065 [US3] Add tests for RunResults in `apps/web/src/components/runs/__tests__/RunResults.test.tsx`
+- [X] T066 [P] [US3] Add tests for TranscriptList in `apps/web/src/components/runs/__tests__/TranscriptList.test.tsx`
 
 **Checkpoint**: User Story 3 should be fully functional - can view run results and transcripts
 
@@ -181,11 +181,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T067 [US4] Create CSV export helper in `apps/web/src/api/export.ts`
-- [ ] T068 [US4] Add "Export CSV" button to RunResults component
-- [ ] T069 [US4] Implement download trigger with proper filename
-- [ ] T070 [US4] Add loading state during export
-- [ ] T071 [US4] Add tests for export functionality in `apps/web/src/api/__tests__/export.test.ts`
+- [X] T067 [US4] Create CSV export helper in `apps/web/src/api/export.ts`
+- [X] T068 [US4] Add "Export CSV" button to RunResults component
+- [X] T069 [US4] Implement download trigger with proper filename
+- [X] T070 [US4] Add loading state during export
+- [X] T071 [US4] Add tests for export functionality in `apps/web/tests/api/export.test.ts`
 
 **Checkpoint**: User Story 4 should be fully functional - can export results as CSV
 
@@ -199,14 +199,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T072 [P] [US5] Create RunCard component in `apps/web/src/components/runs/RunCard.tsx`
-- [ ] T073 [P] [US5] Create RunFilters component in `apps/web/src/components/runs/RunFilters.tsx`
-- [ ] T074 [US5] Implement Runs page in `apps/web/src/pages/Runs.tsx`
-- [ ] T075 [US5] Add status filtering to Runs page
-- [ ] T076 [US5] Add pagination to Runs page
-- [ ] T077 [US5] Add navigation to RunDetail on card click
-- [ ] T078 [US5] Add empty state for no runs
-- [ ] T079 [US5] Add tests for Runs page in `apps/web/src/pages/__tests__/Runs.test.tsx`
+- [X] T072 [P] [US5] Create RunCard component in `apps/web/src/components/runs/RunCard.tsx`
+- [X] T073 [P] [US5] Create RunFilters component in `apps/web/src/components/runs/RunFilters.tsx`
+- [X] T074 [US5] Implement Runs page in `apps/web/src/pages/Runs.tsx`
+- [X] T075 [US5] Add status filtering to Runs page
+- [X] T076 [US5] Add pagination to Runs page
+- [X] T077 [US5] Add navigation to RunDetail on card click
+- [X] T078 [US5] Add empty state for no runs
+- [X] T079 [US5] Add tests for Runs page in `apps/web/tests/pages/Runs.test.tsx`
 
 **Checkpoint**: User Story 5 should be fully functional - can browse and filter runs
 

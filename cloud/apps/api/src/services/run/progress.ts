@@ -29,9 +29,12 @@ export type ProgressData = {
  * 1. Atomically increments completed/failed counts
  * 2. Transitions run status based on progress:
  *    - PENDING -> RUNNING when first job completes
- *    - RUNNING -> COMPLETED when all jobs done
- *    - RUNNING -> FAILED when all jobs done and some failed
+ *    - RUNNING -> SUMMARIZING when all jobs done
  * 3. Sets startedAt/completedAt timestamps as appropriate
+ *
+ * Note: Progress is only updated for runs in PENDING or RUNNING state.
+ * Once a run transitions to SUMMARIZING or terminal states, progress
+ * updates are ignored to prevent overcounting.
  */
 export async function updateProgress(
   runId: string,
@@ -39,18 +42,34 @@ export async function updateProgress(
 ): Promise<{ progress: ProgressData; status: string }> {
   const { incrementCompleted = 0, incrementFailed = 0 } = update;
 
+  // First check current state
+  const currentRun = await db.run.findUnique({
+    where: { id: runId },
+    select: { progress: true, status: true },
+  });
+
+  if (!currentRun) {
+    throw new NotFoundError('Run', runId);
+  }
+
+  // Don't update progress if run is not in PENDING or RUNNING state
+  // This prevents overcounting when probe jobs complete after the run has moved on
+  if (!['PENDING', 'RUNNING'].includes(currentRun.status)) {
+    log.debug(
+      { runId, status: currentRun.status, incrementCompleted, incrementFailed },
+      'Skipping progress update - run not in PENDING/RUNNING state'
+    );
+    return {
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
+    };
+  }
+
   if (incrementCompleted === 0 && incrementFailed === 0) {
     // No-op, just return current state
-    const run = await db.run.findUnique({
-      where: { id: runId },
-      select: { progress: true, status: true },
-    });
-    if (!run) {
-      throw new NotFoundError('Run', runId);
-    }
     return {
-      progress: run.progress as ProgressData,
-      status: run.status,
+      progress: currentRun.progress as ProgressData,
+      status: currentRun.status,
     };
   }
 
@@ -108,7 +127,7 @@ export async function updateProgress(
 }
 
 // Valid run statuses (from Prisma enum)
-type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 /**
  * Determines the appropriate run status based on progress.
@@ -122,20 +141,23 @@ function determineStatus(progress: ProgressData, currentStatus: string): RunStat
     return currentStatus as RunStatus;
   }
 
+  // If already summarizing, don't change (summarize completion handled separately)
+  if (currentStatus === 'SUMMARIZING') {
+    return 'SUMMARIZING';
+  }
+
   // If run is PAUSED, keep it paused - only resumeRun can change this
   if (currentStatus === 'PAUSED') {
-    // But if all jobs are done, transition to COMPLETED
+    // But if all jobs are done, transition to SUMMARIZING
     if (done >= total) {
-      return 'COMPLETED';
+      return 'SUMMARIZING';
     }
     return 'PAUSED';
   }
 
-  // If all jobs are done
+  // If all jobs are done, transition to SUMMARIZING (not directly to COMPLETED)
   if (done >= total) {
-    // If any failed, mark as COMPLETED (we still completed, just with failures)
-    // Per spec: "failures don't block completion"
-    return 'COMPLETED';
+    return 'SUMMARIZING';
   }
 
   // If at least one job has completed/failed, run is RUNNING
@@ -172,6 +194,54 @@ async function transitionStatus(
     where: { id: runId },
     data: updates,
   });
+
+  // When transitioning to SUMMARIZING, queue summarize jobs for all transcripts
+  if (toStatus === 'SUMMARIZING') {
+    await queueSummarizeJobs(runId);
+  }
+}
+
+/**
+ * Queues summarize jobs for all transcripts in a run.
+ */
+async function queueSummarizeJobs(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../../queue/boss.js');
+  const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
+
+  const boss = getBoss();
+  if (!boss) {
+    log.error({ runId }, 'Cannot queue summarize jobs - boss not initialized');
+    return;
+  }
+
+  // Get all transcripts for this run
+  const transcripts = await db.transcript.findMany({
+    where: { runId },
+    select: { id: true },
+  });
+
+  if (transcripts.length === 0) {
+    log.warn({ runId }, 'No transcripts to summarize, completing run');
+    await db.run.update({
+      where: { id: runId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    return;
+  }
+
+  log.info({ runId, transcriptCount: transcripts.length }, 'Queueing summarize jobs');
+
+  const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
+
+  for (const transcript of transcripts) {
+    await boss.send('summarize_transcript', {
+      runId,
+      transcriptId: transcript.id,
+    }, jobOptions);
+  }
+
+  log.info({ runId, jobCount: transcripts.length }, 'Summarize jobs queued');
 }
 
 /**

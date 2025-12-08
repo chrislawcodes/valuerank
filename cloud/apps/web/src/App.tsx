@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
+import { RunDetail } from './pages/RunDetail';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
 import { client } from './api/client';
@@ -60,6 +61,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <Runs />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/runs/:id"
+            element={
+              <ProtectedLayout>
+                <RunDetail />
               </ProtectedLayout>
             }
           />

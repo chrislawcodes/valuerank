@@ -53,37 +53,46 @@ describe('CSV Export Endpoint', () => {
     });
     testRunId = run.id;
 
-    // Create a test scenario
+    // Create a test scenario with cloud format: name ends with (S1-C2), dimensions in content
     const scenario = await db.scenario.create({
       data: {
         definitionId: testDefinitionId,
-        name: 'Test Scenario',
-        content: { prompt: 'test' },
+        name: 'Test scenario description (S1-C2)',
+        content: {
+          prompt: 'test',
+          dimensions: { Stakes: 'low stakes', Certainty: 'uncertain' },
+        },
       },
     });
 
-    // Create test transcripts
+    // Create test transcripts with summary data
     await db.transcript.createMany({
       data: [
         {
           runId: testRunId,
           scenarioId: scenario.id,
-          modelId: 'gpt-4o',
+          modelId: 'anthropic:gpt-4o-20241120',
           modelVersion: 'gpt-4o-2024-11-20',
           content: { transcript: 'Test transcript content 1', decision: 'Option A' },
           turnCount: 3,
           tokenCount: 150,
           durationMs: 1500,
+          decisionCode: '1',
+          decisionText: 'AI chose option A, prioritizing safety',
+          summarizedAt: new Date(),
         },
         {
           runId: testRunId,
           scenarioId: scenario.id,
-          modelId: 'claude-3-5-sonnet',
+          modelId: 'anthropic:claude-3-5-sonnet-20241022',
           modelVersion: 'claude-3-5-sonnet-20241022',
           content: { transcript: 'Test transcript content 2', decision: 'Option B' },
           turnCount: 4,
           tokenCount: 200,
           durationMs: 2000,
+          decisionCode: '2',
+          decisionText: 'AI chose option B, prioritizing efficiency',
+          summarizedAt: new Date(),
         },
       ],
     });
@@ -101,7 +110,7 @@ describe('CSV Export Endpoint', () => {
     }
   });
 
-  it('returns CSV with correct headers', async () => {
+  it('returns CSV with correct headers including variable columns', async () => {
     const response = await request(app)
       .get(`/api/export/runs/${testRunId}/csv`)
       .set('Authorization', getAuthHeader());
@@ -112,12 +121,11 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
-    expect(headerLine).toBe(
-      'run_id,scenario_id,model_id,model_version,turn_count,token_count,duration_ms,created_at'
-    );
+    // Base headers plus dimension columns from content.dimensions (alphabetically sorted)
+    expect(headerLine).toBe('Scenario,AI Model Name,Decision Code,Decision Text,Certainty,Stakes');
   });
 
-  it('returns CSV with correct data rows', async () => {
+  it('returns CSV with correct data rows including variable values', async () => {
     const response = await request(app)
       .get(`/api/export/runs/${testRunId}/csv`)
       .set('Authorization', getAuthHeader());
@@ -128,10 +136,18 @@ describe('CSV Export Endpoint', () => {
     // Header + 2 data rows
     expect(lines.length).toBe(3);
 
-    // Check that data rows contain expected values
+    // Check that data rows contain expected values (model names without provider/version)
     const dataLines = lines.slice(1);
     expect(dataLines.some((l) => l.includes('gpt-4o'))).toBe(true);
     expect(dataLines.some((l) => l.includes('claude-3-5-sonnet'))).toBe(true);
+    // Check for decision codes
+    expect(dataLines.some((l) => l.includes(',1,'))).toBe(true);
+    expect(dataLines.some((l) => l.includes(',2,'))).toBe(true);
+    // Scenario number is index-based (001, 002) since name has no number
+    expect(dataLines.some((l) => l.startsWith('001,'))).toBe(true);
+    expect(dataLines.some((l) => l.startsWith('002,'))).toBe(true);
+    // Check for variable values at the end - parsed from (S1-C2): Certainty=2, Stakes=1
+    expect(dataLines.every((l) => l.endsWith(',2,1'))).toBe(true);
   });
 
   it('sets correct Content-Disposition header', async () => {
@@ -143,7 +159,8 @@ describe('CSV Export Endpoint', () => {
 
     const contentDisposition = response.headers['content-disposition'];
     expect(contentDisposition).toMatch(/attachment/);
-    expect(contentDisposition).toMatch(new RegExp(`run_${testRunId}`));
+    // Filename format is summary_<8-char-id>_<date>.csv
+    expect(contentDisposition).toMatch(/summary_/);
     expect(contentDisposition).toMatch(/\.csv/);
   });
 
@@ -198,8 +215,8 @@ describe('CSV Export Endpoint', () => {
     }
   });
 
-  it('handles special characters in model fields', async () => {
-    // Create transcript with special characters in modelVersion
+  it('handles special characters in decision text', async () => {
+    // Create transcript with special characters in decisionText
     const scenario = await db.scenario.findFirst({
       where: { definitionId: testDefinitionId },
     });
@@ -209,11 +226,14 @@ describe('CSV Export Endpoint', () => {
         runId: testRunId!,
         scenarioId: scenario!.id,
         modelId: 'test-model',
-        modelVersion: 'version-with, comma',
+        modelVersion: 'version-1',
         content: { test: 'data' },
         turnCount: 1,
         tokenCount: 10,
         durationMs: 100,
+        decisionCode: '3',
+        decisionText: 'Decision with, comma and "quotes"',
+        summarizedAt: new Date(),
       },
     });
 
@@ -224,8 +244,8 @@ describe('CSV Export Endpoint', () => {
 
       expect(response.status).toBe(200);
 
-      // The special characters should be properly escaped
-      expect(response.text).toMatch(/"version-with, comma"/);
+      // The special characters should be properly escaped with quotes
+      expect(response.text).toMatch(/"Decision with, comma and ""quotes"""/);
     } finally {
       await db.transcript.delete({ where: { id: specialTranscript.id } });
     }
@@ -233,8 +253,7 @@ describe('CSV Export Endpoint', () => {
 });
 
 describe('CSV Serialization Helper', () => {
-  it('formats rows correctly', async () => {
-    // Import helpers directly for unit testing
+  it('parses Python format scenario names correctly', async () => {
     const { formatCSVRow, transcriptToCSVRow } = await import(
       '../../src/services/export/csv.js'
     );
@@ -243,7 +262,7 @@ describe('CSV Serialization Helper', () => {
       id: 'test-id',
       runId: 'run-123',
       scenarioId: 'scenario-456',
-      modelId: 'gpt-4o',
+      modelId: 'anthropic:gpt-4o-20241120',
       modelVersion: 'gpt-4o-2024-11-20',
       content: { test: 'content' },
       turnCount: 3,
@@ -253,25 +272,133 @@ describe('CSV Serialization Helper', () => {
       createdAt: new Date('2024-01-01T12:00:00Z'),
       lastAccessedAt: null,
       contentExpiresAt: null,
+      decisionCode: '1',
+      decisionText: 'AI chose safety',
+      summarizedAt: new Date('2024-01-01T12:05:00Z'),
+      // Python format: scenario_XXX_VarName1_VarName2
+      scenario: {
+        id: 'scenario-456',
+        name: 'scenario_042_Stakes1_Certainty2',
+        content: {},
+      },
     };
 
-    const row = transcriptToCSVRow(mockTranscript);
-    const formatted = formatCSVRow(row);
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+    const formatted = formatCSVRow(row, ['Certainty', 'Stakes']);
 
-    expect(formatted).toContain('run-123');
-    expect(formatted).toContain('scenario-456');
+    expect(formatted).toContain('042,');
     expect(formatted).toContain('gpt-4o');
-    expect(formatted).toContain('gpt-4o-2024-11-20');
-    expect(formatted).toContain('3');
-    expect(formatted).toContain('150');
-    expect(formatted).toContain('1500');
+    expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
+    expect(formatted).toMatch(/,2,1$/);
+  });
+
+  it('parses Cloud format scenario names with abbreviations', async () => {
+    const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
+
+    // Cloud format: "Description (F1-T2-H3)" with dimensions in content
+    const mockTranscript = {
+      modelId: 'gpt-4o',
+      scenarioId: 'test',
+      scenario: {
+        id: 'test',
+        name: 'Child wants to skip (F1-T2-H3)',
+        content: { dimensions: { Freedom: 'low', Tradition: 'medium', Harmony: 'high' } },
+      },
+      decisionCode: '5',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+
+    // Index-based scenario number since name has no explicit number
+    expect(row.scenario).toBe('001');
+    // Abbreviations mapped to full names from content.dimensions
+    expect(row.variables).toEqual({ Freedom: 1, Tradition: 2, Harmony: 3 });
+  });
+
+  it('uses index-based numbering when name has no number', async () => {
+    const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      id: 'test-id',
+      runId: 'run-123',
+      scenarioId: 'scenario-456',
+      modelId: 'gpt-4o',
+      scenario: {
+        id: 'scenario-456',
+        name: 'Some description (S1-C2)',
+        content: { dimensions: { Stakes: 'x', Certainty: 'y' } },
+      },
+      decisionCode: '2',
+      decisionText: 'Test decision',
+    };
+
+    // Index 4 should produce "005" (1-based)
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 4);
+
+    expect(row.scenario).toBe('005');
+    expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
+  });
+
+  it('shows pending status when not summarized', async () => {
+    const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      id: 'test-id',
+      runId: 'run-123',
+      scenarioId: 'scenario-456',
+      modelId: 'gpt-4o',
+      scenario: { id: 'scenario-456', name: 'Test', content: {} },
+      decisionCode: null,
+      decisionText: null,
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+
+    expect(row.decisionCode).toBe('pending');
+    expect(row.decisionText).toBe('Summary not yet generated');
   });
 
   it('generates correct filename', async () => {
     const { generateExportFilename } = await import('../../src/services/export/csv.js');
 
-    const filename = generateExportFilename('test-run-id');
+    const filename = generateExportFilename('test-run-id-12345678');
 
-    expect(filename).toMatch(/^run_test-run-id_\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(filename).toMatch(/^summary_test-run_\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  it('extracts model name correctly', async () => {
+    const { transcriptToCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      modelId: 'anthropic:claude-3-5-sonnet-20241022',
+      scenarioId: 'test',
+      scenario: { id: 'test', name: 'scenario_001_Freedom3', content: {} },
+      decisionCode: '1',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+
+    expect(row.modelName).toBe('claude-3-5-sonnet');
+  });
+
+  it('handles scenario name with no variables gracefully', async () => {
+    const { transcriptToCSVRow, formatCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      modelId: 'gpt-4o',
+      scenarioId: 'test',
+      scenario: { id: 'test', name: 'Simple description', content: {} },
+      decisionCode: '1',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0], 0);
+    const formatted = formatCSVRow(row, ['Stakes', 'Certainty']);
+
+    // Variable values should be empty when not parseable
+    expect(formatted).toMatch(/,,$/);
+    expect(row.variables).toEqual({});
   });
 });

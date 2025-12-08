@@ -153,6 +153,7 @@ export function QueueStatus({ queue, loading }: QueueStatusProps) {
 function formatJobType(type: string): string {
   const names: Record<string, string> = {
     probe_scenario: 'Probe Scenario',
+    summarize_transcript: 'Summarize Transcript',
     analyze_basic: 'Analyze (Basic)',
     analyze_deep: 'Analyze (Deep)',
     expand_scenarios: 'Expand Scenarios',

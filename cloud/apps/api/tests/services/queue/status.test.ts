@@ -41,7 +41,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(3);
+      expect(status.jobTypes).toHaveLength(5);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,
@@ -232,7 +232,7 @@ describe('Queue Status Service', () => {
 
       expect(status.isRunning).toBe(true);
       expect(status.isPaused).toBe(false);
-      expect(status.jobTypes).toHaveLength(3);
+      expect(status.jobTypes).toHaveLength(5);
       expect(status.totals).toEqual({
         pending: 0,
         active: 0,

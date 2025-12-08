@@ -57,13 +57,27 @@ exportRouter.get(
         throw new NotFoundError('Run', runId);
       }
 
-      // Get transcripts for the run
+      // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
         where: { runId },
+        include: { scenario: true },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
       });
 
       log.info({ runId, transcriptCount: transcripts.length }, 'Transcripts fetched for export');
+
+      // Collect all variable names from scenario content dimensions
+      // Dimensions are stored as { "Freedom": "description", "Harmony": "description", ... }
+      const variableSet = new Set<string>();
+      for (const transcript of transcripts) {
+        const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
+        if (content?.dimensions) {
+          for (const key of Object.keys(content.dimensions)) {
+            variableSet.add(key);
+          }
+        }
+      }
+      const variableNames = Array.from(variableSet).sort();
 
       // Set response headers
       const filename = generateExportFilename(runId);
@@ -73,16 +87,17 @@ exportRouter.get(
       // Write BOM for Excel compatibility
       res.write('\uFEFF');
 
-      // Write header
-      res.write(getCSVHeader() + '\n');
+      // Write header with variable columns
+      res.write(getCSVHeader(variableNames) + '\n');
 
-      // Stream rows
-      for (const transcript of transcripts) {
-        const row = transcriptToCSVRow(transcript);
-        res.write(formatCSVRow(row) + '\n');
+      // Stream rows with index and variable names
+      for (let i = 0; i < transcripts.length; i++) {
+        const transcript = transcripts[i]!;
+        const row = transcriptToCSVRow(transcript, i);
+        res.write(formatCSVRow(row, variableNames) + '\n');
       }
 
-      log.info({ runId, rowsWritten: transcripts.length }, 'CSV export complete');
+      log.info({ runId, rowsWritten: transcripts.length, variableCount: variableNames.length }, 'CSV export complete');
 
       res.end();
     } catch (err) {

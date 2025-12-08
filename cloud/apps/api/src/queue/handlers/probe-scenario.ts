@@ -15,6 +15,7 @@ import { spawnPython } from '../spawn.js';
 import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from '../../services/run/index.js';
 import { createTranscript, validateTranscript } from '../../services/transcript/index.js';
 import type { ProbeTranscript } from '../../services/transcript/index.js';
+import { LLM_PROVIDERS } from '../../config/models.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -65,7 +66,7 @@ async function ensureHealthCheck(): Promise<void> {
     const result = await spawnPython<Record<string, never>, HealthCheckOutput>(
       HEALTH_CHECK_PATH,
       {},
-      { cwd: path.resolve(process.cwd(), '..'), timeout: 10000 }
+      { cwd: path.resolve(process.cwd(), '../..'), timeout: 10000 }
     );
 
     if (!result.success) {
@@ -221,6 +222,22 @@ async function fetchScenario(scenarioId: string) {
 }
 
 /**
+ * Resolve a model ID to its full API version.
+ * E.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022"
+ */
+function resolveModelVersion(modelId: string): string {
+  for (const provider of LLM_PROVIDERS) {
+    for (const model of provider.models) {
+      if (model.id === modelId) {
+        return model.defaultVersion ?? modelId;
+      }
+    }
+  }
+  // If not found in config, return as-is (might be a full version ID)
+  return modelId;
+}
+
+/**
  * Build Python worker input from scenario data.
  */
 function buildWorkerInput(
@@ -244,10 +261,13 @@ function buildWorkerInput(
   // Get followups from scenario
   const followups = (content.followups as Array<{ label: string; prompt: string }>) || [];
 
+  // Resolve model ID to full API version (e.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022")
+  const resolvedModelId = resolveModelVersion(modelId);
+
   return {
     runId,
     scenarioId,
-    modelId,
+    modelId: resolvedModelId,
     scenario: {
       preamble,
       prompt,
@@ -310,7 +330,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         const result = await spawnPython<ProbeWorkerInput, ProbeWorkerOutput>(
           PROBE_WORKER_PATH,
           workerInput,
-          { cwd: path.resolve(process.cwd(), '..') } // cloud/ directory
+          { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
         );
 
         // Handle spawn failure
@@ -344,7 +364,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         }
 
         // Create transcript record
-        await createTranscript({
+        const transcriptRecord = await createTranscript({
           runId,
           scenarioId,
           modelId,
@@ -354,6 +374,21 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
 
         // Update progress - increment completed count
         const { progress, status } = await incrementCompleted(runId);
+
+        // If run is already in SUMMARIZING state (late-arriving probe job),
+        // queue a summarize job for this transcript immediately
+        if (status === 'SUMMARIZING') {
+          const { getBoss } = await import('../boss.js');
+          const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
+          const boss = getBoss();
+          if (boss) {
+            await boss.send('summarize_transcript', {
+              runId,
+              transcriptId: transcriptRecord.id,
+            }, DEFAULT_JOB_OPTIONS['summarize_transcript']);
+            log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+          }
+        }
 
         log.info(
           { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },

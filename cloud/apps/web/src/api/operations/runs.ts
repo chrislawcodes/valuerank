@@ -4,7 +4,7 @@ import { gql } from 'urql';
 // TYPES
 // ============================================================================
 
-export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export type RunProgress = {
   total: number;

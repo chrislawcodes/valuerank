@@ -11,11 +11,13 @@ import { queueConfig } from '../../config.js';
 import type {
   JobType,
   ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
   AnalyzeBasicJobData,
   AnalyzeDeepJobData,
   ExpandScenariosJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
@@ -23,7 +25,7 @@ import { createExpandScenariosHandler } from './expand-scenarios.js';
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData };
+export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData };
 
 // Handler registration info
 type HandlerRegistration = {
@@ -39,6 +41,16 @@ const handlerRegistrations: HandlerRegistration[] = [
         'probe_scenario',
         { batchSize },
         createProbeScenarioHandler()
+      );
+    },
+  },
+  {
+    name: 'summarize_transcript',
+    register: async (boss, batchSize) => {
+      await boss.work<SummarizeTranscriptJobData>(
+        'summarize_transcript',
+        { batchSize },
+        createSummarizeTranscriptHandler()
       );
     },
   },

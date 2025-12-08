@@ -128,6 +128,7 @@ enum RunStatus {
   PENDING
   RUNNING
   PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
   COMPLETED
   FAILED
   CANCELLED
@@ -151,6 +152,10 @@ model Transcript {
   lastAccessedAt     DateTime? @map("last_accessed_at")
   // Retention (NULL = permanent, default)
   contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes)
+  decisionCode       String?   @map("decision_code")     // 1-5 rating or "other"
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
 
   run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
   scenario Scenario? @relation(fields: [scenarioId], references: [id])
