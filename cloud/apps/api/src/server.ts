@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js';
 import { exportRouter } from './routes/export.js';
 import { authMiddleware, graphqlAuthMiddleware } from './auth/index.js';
 import { yoga } from './graphql/index.js';
+import { createMcpRouter } from './mcp/index.js';
 import { createLogger, AppError } from '@valuerank/shared';
 
 // Extend Express Request to include logger
@@ -58,6 +59,11 @@ export function createServer() {
   app.all('/graphql', graphqlAuthMiddleware, (req, res) => {
     void yoga.handle(req, res);
   });
+
+  // MCP endpoint for AI agent access
+  // - Requires API key authentication
+  // - Rate limited to 120 req/min per key
+  app.use('/mcp', createMcpRouter());
 
   // Root
   app.get('/', (_req, res) => {

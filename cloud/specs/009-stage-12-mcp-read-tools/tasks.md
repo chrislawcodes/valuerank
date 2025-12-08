@@ -14,9 +14,9 @@
 
 **Purpose**: Install dependencies and create feature branch
 
-- [ ] T001 Create feature branch `stage-12-mcp-read-tools` from cloud-planning
-- [ ] T002 Install `@modelcontextprotocol/sdk` package in apps/api/package.json
-- [ ] T003 [P] Add MCP types to tsconfig include paths if needed
+- [X] T001 Create feature branch `stage-12-mcp-read-tools` from cloud-planning
+- [X] T002 Install `@modelcontextprotocol/sdk` package in apps/api/package.json
+- [X] T003 [P] Add MCP types to tsconfig include paths if needed
 
 **Checkpoint**: Dependencies installed, branch ready
 
@@ -30,45 +30,45 @@
 
 ### MCP Server Setup
 
-- [ ] T004 Create MCP server module at apps/api/src/mcp/server.ts
+- [X] T004 Create MCP server module at apps/api/src/mcp/server.ts
   - Initialize MCP server with SDK
   - Configure HTTP transport
   - Export server instance
-- [ ] T005 Create MCP router at apps/api/src/mcp/index.ts
+- [X] T005 Create MCP router at apps/api/src/mcp/index.ts
   - Create Express router for /mcp endpoint
   - Wire up MCP server to Express
   - Handle MCP protocol requests
-- [ ] T006 [P] Create MCP rate limiter at apps/api/src/mcp/rate-limit.ts
+- [X] T006 [P] Create MCP rate limiter at apps/api/src/mcp/rate-limit.ts
   - 120 requests/minute per API key
   - Key generator using X-API-Key header
   - Standard rate limit headers
-- [ ] T007 [P] Create response builder at apps/api/src/services/mcp/response.ts
+- [X] T007 [P] Create response builder at apps/api/src/services/mcp/response.ts
   - MCPResponse type with metadata
   - Token budget enforcement utility
   - Truncation helpers
-- [ ] T008 [P] Create MCP formatters at apps/api/src/services/mcp/formatters.ts
+- [X] T008 [P] Create MCP formatters at apps/api/src/services/mcp/formatters.ts
   - Definition list item formatter
   - Run list item formatter
   - Summary formatters
-- [ ] T009 Create MCP service index at apps/api/src/services/mcp/index.ts
+- [X] T009 Create MCP service index at apps/api/src/services/mcp/index.ts
   - Re-export response and formatters
-- [ ] T010 Create tool registry at apps/api/src/mcp/tools/index.ts
+- [X] T010 Create tool registry at apps/api/src/mcp/tools/index.ts
   - Export all tool handlers
   - Tool name to handler mapping
-- [ ] T011 Register MCP endpoint in apps/api/src/server.ts
+- [X] T011 Register MCP endpoint in apps/api/src/server.ts
   - Add /mcp route with auth middleware
   - Add MCP rate limiter
   - Wire up MCP router
 
 ### Foundation Tests
 
-- [ ] T012 [P] Create MCP server tests at apps/api/tests/mcp/server.test.ts
+- [X] T012 [P] Create MCP server tests at apps/api/tests/mcp/server.test.ts
   - Server initialization
   - Protocol handling
-- [ ] T013 [P] Create rate limit tests at apps/api/tests/mcp/rate-limit.test.ts
+- [X] T013 [P] Create rate limit tests at apps/api/tests/mcp/rate-limit.test.ts
   - Rate limiting enforcement
   - Header generation
-- [ ] T014 [P] Create response builder tests at apps/api/tests/mcp/response.test.ts
+- [X] T014 [P] Create response builder tests at apps/api/tests/mcp/response.test.ts
   - Token budget enforcement
   - Truncation behavior
 
