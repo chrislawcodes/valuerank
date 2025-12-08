@@ -35,6 +35,11 @@ vi.mock('@valuerank/db', () => ({
   db: {
     analysisResult: {
       create: vi.fn().mockResolvedValue({ id: 'mock-result-id' }),
+      findFirst: vi.fn().mockResolvedValue(null), // No cached result
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }), // No previous results to invalidate
+    },
+    transcript: {
+      findMany: vi.fn().mockResolvedValue([]), // Empty transcripts
     },
   },
   Prisma: {
