@@ -30,6 +30,7 @@ import './get-transcript-summary.js';
 import './create-definition.js';
 import './fork-definition.js';
 import './validate-definition.js';
+import './start-run.js';
 
 /**
  * Registers all MCP tools on the given server

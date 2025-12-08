@@ -169,7 +169,7 @@
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] Create tool handler at `apps/api/src/mcp/tools/start-run.ts`
+- [X] T019 [US4] Create tool handler at `apps/api/src/mcp/tools/start-run.ts`
   - Define `StartRunInputSchema` with Zod
   - Implement `registerStartRunTool(server)`
   - Validate definition exists and not soft-deleted
@@ -178,7 +178,7 @@
   - Call audit log on success
   - Return `run_id`, `queued_task_count`, `estimated_cost`
 
-- [ ] T020 [US4] Create tests at `apps/api/tests/mcp/tools/start-run.test.ts`
+- [X] T020 [US4] Create tests at `apps/api/tests/mcp/tools/start-run.test.ts`
   - Test successful run start
   - Test definition not found error
   - Test invalid model error
@@ -186,7 +186,7 @@
   - Test audit log called on success
   - Test job queuing
 
-- [ ] T021 [US4] Update tool index at `apps/api/src/mcp/tools/index.ts`
+- [X] T021 [US4] Update tool index at `apps/api/src/mcp/tools/index.ts`
   - Import and register start-run tool
 
 **Checkpoint**: User Story 4 fully functional and testable independently
