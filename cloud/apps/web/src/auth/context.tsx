@@ -4,6 +4,9 @@ import type { AuthContextValue, LoginResponse } from './types';
 
 const TOKEN_KEY = 'valuerank_token';
 
+// API base URL - empty string means same origin (dev), full URL for production
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
 type AuthProviderProps = {
@@ -29,7 +32,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const validateToken = async (tokenToValidate: string, retryCount = 0) => {
     try {
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${tokenToValidate}`,
         },
@@ -72,7 +75,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const login = useCallback(async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

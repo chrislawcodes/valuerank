@@ -1,6 +1,9 @@
 import { createClient, cacheExchange, fetchExchange, Client, mapExchange } from 'urql';
 import { getStoredToken, clearStoredToken } from '../auth/context';
 
+// API base URL - empty string means same origin (dev), full URL for production
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 // Custom exchange to handle 401 responses
 const authErrorExchange = mapExchange({
   onResult(result) {
@@ -24,7 +27,7 @@ const authErrorExchange = mapExchange({
 // Create urql client with auth header injection and 401 handling
 export function createUrqlClient(getToken: () => string | null = getStoredToken): Client {
   return createClient({
-    url: '/graphql',
+    url: `${API_BASE_URL}/graphql`,
     exchanges: [cacheExchange, authErrorExchange, fetchExchange],
     fetchOptions: () => {
       const token = getToken();
