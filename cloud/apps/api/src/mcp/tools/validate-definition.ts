@@ -89,7 +89,7 @@ Validation limits:
 - Max 1000 generated scenarios`,
       inputSchema: ValidateDefinitionInputSchema,
     },
-    async (args, extra) => {
+    (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const userId = 'mcp-user'; // TODO: Extract from auth context when available
 

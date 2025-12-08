@@ -210,16 +210,14 @@ export function registerAuthoringExamplesResource(server: McpServer): void {
       description: 'Annotated example scenario definitions',
       mimeType: 'text/markdown',
     },
-    async () => {
-      return {
-        contents: [
-          {
-            uri: AUTHORING_EXAMPLES_URI,
-            mimeType: 'text/markdown',
-            text: authoringExamplesContent,
-          },
-        ],
-      };
-    }
+    () => ({
+      contents: [
+        {
+          uri: AUTHORING_EXAMPLES_URI,
+          mimeType: 'text/markdown',
+          text: authoringExamplesContent,
+        },
+      ],
+    })
   );
 }

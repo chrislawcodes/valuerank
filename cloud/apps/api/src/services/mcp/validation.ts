@@ -261,10 +261,10 @@ export function validateContentStructure(
   return {
     valid: true,
     content: {
-      preamble: obj.preamble as string | undefined,
-      template: obj.template as string | undefined,
-      dimensions: obj.dimensions as Dimension[] | undefined,
-      matching_rules: obj.matching_rules as string | undefined,
-    },
+      preamble: obj.preamble,
+      template: obj.template,
+      dimensions: obj.dimensions,
+      matching_rules: obj.matching_rules,
+    } as Partial<DefinitionContent>,
   };
 }

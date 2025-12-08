@@ -117,16 +117,14 @@ export function registerAuthoringGuideResource(server: McpServer): void {
       description: 'Best practices for scenario definition authoring',
       mimeType: 'text/markdown',
     },
-    async () => {
-      return {
-        contents: [
-          {
-            uri: AUTHORING_GUIDE_URI,
-            mimeType: 'text/markdown',
-            text: authoringGuideContent,
-          },
-        ],
-      };
-    }
+    () => ({
+      contents: [
+        {
+          uri: AUTHORING_GUIDE_URI,
+          mimeType: 'text/markdown',
+          text: authoringGuideContent,
+        },
+      ],
+    })
   );
 }

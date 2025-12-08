@@ -214,7 +214,7 @@ Example response:
           );
         }
 
-        const dimensions = (content.dimensions ?? []) as Dimension[];
+        const dimensions = content.dimensions ?? [];
         const template = content.template ?? '';
         const preamble = content.preamble ?? '';
 

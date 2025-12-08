@@ -149,16 +149,14 @@ export function registerPreambleTemplatesResource(server: McpServer): void {
       description: 'Tested preamble patterns for scenario definitions',
       mimeType: 'text/markdown',
     },
-    async () => {
-      return {
-        contents: [
-          {
-            uri: PREAMBLE_TEMPLATES_URI,
-            mimeType: 'text/markdown',
-            text: preambleTemplatesContent,
-          },
-        ],
-      };
-    }
+    () => ({
+      contents: [
+        {
+          uri: PREAMBLE_TEMPLATES_URI,
+          mimeType: 'text/markdown',
+          text: preambleTemplatesContent,
+        },
+      ],
+    })
   );
 }

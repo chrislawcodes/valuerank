@@ -160,16 +160,14 @@ export function registerValuePairsResource(server: McpServer): void {
       description: 'Common value tensions for designing moral dilemmas',
       mimeType: 'text/markdown',
     },
-    async () => {
-      return {
-        contents: [
-          {
-            uri: VALUE_PAIRS_URI,
-            mimeType: 'text/markdown',
-            text: valuePairsContent,
-          },
-        ],
-      };
-    }
+    () => ({
+      contents: [
+        {
+          uri: VALUE_PAIRS_URI,
+          mimeType: 'text/markdown',
+          text: valuePairsContent,
+        },
+      ],
+    })
   );
 }
