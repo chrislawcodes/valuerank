@@ -6,12 +6,14 @@
 
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Calendar, Clock, Play, Pause, Square } from 'lucide-react';
+import { ArrowLeft, FileText, Calendar, Clock, Play, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { RunProgress } from '../components/runs/RunProgress';
 import { RunResults } from '../components/runs/RunResults';
+import { RunControls } from '../components/runs/RunControls';
+import { RerunDialog } from '../components/runs/RerunDialog';
 import { useRun } from '../hooks/useRun';
 import { useRunMutations } from '../hooks/useRunMutations';
 import { exportRunAsCSV } from '../api/export';
@@ -58,6 +60,7 @@ export function RunDetail() {
   const { id } = useParams<{ id: string }>();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -65,7 +68,7 @@ export function RunDetail() {
     enablePolling: true,
   });
 
-  const { pauseRun, resumeRun, cancelRun, loading: mutationLoading } = useRunMutations();
+  const { pauseRun, resumeRun, cancelRun } = useRunMutations();
 
   const handleExport = useCallback(async () => {
     if (!run) return;
@@ -81,38 +84,24 @@ export function RunDetail() {
     }
   }, [run]);
 
-  const handlePause = async () => {
-    if (!run) return;
-    try {
-      await pauseRun(run.id);
-      refetch();
-    } catch (err) {
-      console.error('Failed to pause run:', err);
-    }
-  };
+  const handlePause = useCallback(async (runId: string) => {
+    await pauseRun(runId);
+    refetch();
+  }, [pauseRun, refetch]);
 
-  const handleResume = async () => {
-    if (!run) return;
-    try {
-      await resumeRun(run.id);
-      refetch();
-    } catch (err) {
-      console.error('Failed to resume run:', err);
-    }
-  };
+  const handleResume = useCallback(async (runId: string) => {
+    await resumeRun(runId);
+    refetch();
+  }, [resumeRun, refetch]);
 
-  const handleCancel = async () => {
-    if (!run) return;
-    if (!confirm('Are you sure you want to cancel this run? This cannot be undone.')) {
-      return;
-    }
-    try {
-      await cancelRun(run.id);
-      refetch();
-    } catch (err) {
-      console.error('Failed to cancel run:', err);
-    }
-  };
+  const handleCancel = useCallback(async (runId: string) => {
+    await cancelRun(runId);
+    refetch();
+  }, [cancelRun, refetch]);
+
+  const handleRerunSuccess = useCallback((newRunId: string) => {
+    navigate(`/runs/${newRunId}`);
+  }, [navigate]);
 
   // Loading state
   if (loading && !run) {
@@ -173,41 +162,26 @@ export function RunDetail() {
             Back to Runs
           </Button>
         </div>
-        {!isTerminal && (
-          <div className="flex items-center gap-2">
-            {isActive && (
-              <Button
-                variant="secondary"
-                onClick={handlePause}
-                disabled={mutationLoading}
-              >
-                <Pause className="w-4 h-4 mr-2" />
-                Pause
-              </Button>
-            )}
-            {isPaused && (
-              <Button
-                variant="secondary"
-                onClick={handleResume}
-                disabled={mutationLoading}
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Resume
-              </Button>
-            )}
-            {(isActive || isPaused) && (
-              <Button
-                variant="ghost"
-                onClick={handleCancel}
-                disabled={mutationLoading}
-                className="text-red-600 hover:bg-red-50"
-              >
-                <Square className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Re-run button - shown for terminal states */}
+          {isTerminal && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsRerunDialogOpen(true)}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Re-run
+            </Button>
+          )}
+          {/* Run controls - shown for non-terminal states */}
+          <RunControls
+            runId={run.id}
+            status={run.status}
+            onPause={handlePause}
+            onResume={handleResume}
+            onCancel={handleCancel}
+          />
+        </div>
       </div>
 
       {/* Main content card */}
@@ -297,7 +271,7 @@ export function RunDetail() {
             )}
             <RunResults
               run={run}
-              onExport={handleExport}
+              onExport={() => void handleExport()}
               isExporting={isExporting}
             />
           </div>
@@ -310,6 +284,15 @@ export function RunDetail() {
           {isActive ? 'Updating every 5 seconds...' : 'Run is paused'}
         </div>
       )}
+
+      {/* Re-run Dialog */}
+      <RerunDialog
+        run={run}
+        scenarioCount={run.runProgress?.total}
+        isOpen={isRerunDialogOpen}
+        onClose={() => setIsRerunDialogOpen(false)}
+        onSuccess={handleRerunSuccess}
+      />
     </div>
   );
 }

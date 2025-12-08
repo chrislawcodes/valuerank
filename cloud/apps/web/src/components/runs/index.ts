@@ -5,7 +5,9 @@
  */
 
 export { ModelSelector } from './ModelSelector';
+export { RerunDialog } from './RerunDialog';
 export { RunCard } from './RunCard';
+export { RunControls } from './RunControls';
 export { RunFilters } from './RunFilters';
 export { RunForm } from './RunForm';
 export { RunProgress } from './RunProgress';

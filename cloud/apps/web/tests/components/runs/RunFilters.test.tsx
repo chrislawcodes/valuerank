@@ -23,16 +23,17 @@ describe('RunFilters', () => {
     const select = screen.getByRole('combobox');
     expect(select).toHaveValue('');
 
-    // Check all options exist
+    // Check all options exist (8 options: All + 7 statuses including SUMMARIZING)
     const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(8);
     expect(options[0]).toHaveTextContent('All Statuses');
     expect(options[1]).toHaveTextContent('Running');
     expect(options[2]).toHaveTextContent('Pending');
     expect(options[3]).toHaveTextContent('Paused');
-    expect(options[4]).toHaveTextContent('Completed');
-    expect(options[5]).toHaveTextContent('Failed');
-    expect(options[6]).toHaveTextContent('Cancelled');
+    expect(options[4]).toHaveTextContent('Summarizing');
+    expect(options[5]).toHaveTextContent('Completed');
+    expect(options[6]).toHaveTextContent('Failed');
+    expect(options[7]).toHaveTextContent('Cancelled');
   });
 
   it('calls onStatusChange when selection changes', async () => {
