@@ -64,7 +64,7 @@ function truncateModel(name: string, maxLen: number = 12): string {
 function CellTooltip({ agreement }: { agreement: PairwiseAgreement }) {
   return (
     <div className="text-xs space-y-1">
-      <p>Spearman's ρ: <span className="font-medium">{formatRho(agreement.spearmanRho)}</span></p>
+      <p>Spearman&apos;s ρ: <span className="font-medium">{formatRho(agreement.spearmanRho)}</span></p>
       <p>Effect Size: <span className="font-medium">{agreement.effectSize.toFixed(2)}</span></p>
       <p>Effect: {agreement.effectInterpretation}</p>
       <p className={agreement.significant ? 'text-green-600' : 'text-gray-400'}>
@@ -151,17 +151,19 @@ export function ModelComparisonMatrix({ modelAgreement, perModel }: ModelCompari
             </tr>
           </thead>
           <tbody>
-            {matrixData.map((row, rowIndex) => (
-              <tr key={models[rowIndex]}>
+            {matrixData.map((row, rowIndex) => {
+              const rowModel = models[rowIndex] ?? '';
+              return (
+              <tr key={rowModel}>
                 <td
                   className={`p-2 text-xs font-medium text-gray-700 border border-gray-200 ${
-                    modelAgreement.outlierModels.includes(models[rowIndex]) ? 'bg-amber-50' : ''
+                    modelAgreement.outlierModels.includes(rowModel) ? 'bg-amber-50' : ''
                   }`}
-                  title={models[rowIndex]}
+                  title={rowModel}
                 >
-                  {truncateModel(models[rowIndex])}
+                  {truncateModel(rowModel)}
                 </td>
-                {row.map((cell, colIndex) => (
+                {row.map((cell) => (
                   <td
                     key={`${cell.model1}-${cell.model2}`}
                     className={`p-2 text-center border border-gray-200 ${
@@ -193,14 +195,15 @@ export function ModelComparisonMatrix({ modelAgreement, perModel }: ModelCompari
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-        <span className="font-medium">Spearman's ρ:</span>
+        <span className="font-medium">Spearman&apos;s ρ:</span>
         <div className="flex items-center gap-1">
           <div className="w-4 h-4 rounded bg-red-400"></div>
           <span>&lt; -0.4</span>

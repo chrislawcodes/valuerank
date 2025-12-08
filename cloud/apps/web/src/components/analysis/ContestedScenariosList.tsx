@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { AlertTriangle, ChevronRight, ExternalLink } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import type { ContestedScenario } from '../../api/operations/analysis';
 
 type ContestedScenariosListProps = {

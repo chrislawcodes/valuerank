@@ -224,22 +224,22 @@
 
 ### Testing & Coverage
 
-- [ ] T067 Run full Python test suite: `pytest workers/tests/` - verify 80%+ coverage
-- [ ] T068 Run full API test suite: `npm run test:coverage` in apps/api/ - verify 80%+ coverage
-- [ ] T069 Run full web test suite: `npm run test:coverage` in apps/web/ - verify tests pass
+- [X] T067 Run full Python test suite: `pytest workers/tests/` - verify 80%+ coverage
+- [X] T068 Run full API test suite: `npm run test:coverage` in apps/api/ - verify 80%+ coverage
+- [X] T069 Run full web test suite: `npm run test:coverage` in apps/web/ - verify tests pass
 
 ### Edge Cases
 
-- [ ] T070 Handle empty run (no successful transcripts) - show "Analysis unavailable" message
-- [ ] T071 Handle analysis failure - show error with retry button
-- [ ] T072 Handle very large runs (10K+ transcripts) - show progress indicator
+- [X] T070 Handle empty run (no successful transcripts) - show "Analysis unavailable" message
+- [X] T071 Handle analysis failure - show error with retry button
+- [X] T072 Handle very large runs (10K+ transcripts) - show progress indicator
 
 ### Documentation
 
-- [ ] T073 Update apps/web/src/components/analysis/index.ts - Export all analysis components
-- [ ] T074 Validate all user stories per quickstart.md
-- [ ] T075 Typecheck passes: `npm run typecheck`
-- [ ] T076 Lint passes: `npm run lint`
+- [X] T073 Update apps/web/src/components/analysis/index.ts - Export all analysis components
+- [X] T074 Validate all user stories per quickstart.md
+- [X] T075 Typecheck passes: `npm run typecheck`
+- [X] T076 Lint passes: `npm run lint`
 
 **Checkpoint**: Feature complete and validated
 
