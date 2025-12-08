@@ -387,7 +387,7 @@
 
 ---
 
-## Stage 13: Run Comparison & Delta Analysis [ ]
+## Stage 13: Run Comparison & Delta Analysis [DEFERRED]
 
 **Goal:** Enable side-by-side comparison with statistical rigor, including cross-model-version comparisons.
 
