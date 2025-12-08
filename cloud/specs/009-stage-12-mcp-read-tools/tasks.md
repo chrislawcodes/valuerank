@@ -276,7 +276,9 @@
 
 ### Validation
 
-- [ ] T035 Run full test suite and verify 80% coverage on new code
+- [X] T035 Run full test suite and verify 80% coverage on new code
+  - 87 tests passing across 10 test files
+  - Typecheck passes
 - [ ] T036 Manual test with Claude Desktop per quickstart.md
 - [ ] T037 Verify all response sizes comply with token budgets
 - [ ] T038 Security review - ensure no data leakage, auth bypass
