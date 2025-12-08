@@ -15,10 +15,10 @@
 
 **Purpose**: Project initialization and dependency installation
 
-- [ ] T001 Verify feature branch `stage-11-analysis` created from `cloud-planning`
-- [ ] T002 Install Python dependencies: `pip install scipy numpy pandas` in workers/
-- [ ] T003 Install web dependency: `npm install recharts` in apps/web/
-- [ ] T004 Run tests to verify existing functionality: `npm run test`
+- [X] T001 Verify feature branch `stage-11-analysis` created from `cloud-planning`
+- [X] T002 Install Python dependencies: `pip install scipy numpy pandas` in workers/
+- [X] T003 Install web dependency: `npm install recharts` in apps/web/
+- [X] T004 Run tests to verify existing functionality: `npm run test`
 
 **Checkpoint**: Environment ready for development
 
