@@ -13,6 +13,7 @@ import { StatCard } from './StatCard';
 import { ScoreDistributionChart } from './ScoreDistributionChart';
 import { VariableImpactChart } from './VariableImpactChart';
 import { ModelComparisonMatrix } from './ModelComparisonMatrix';
+import { MethodsDocumentation } from './MethodsDocumentation';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { AnalysisResult, PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
@@ -326,38 +327,13 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
         </div>
       </div>
 
-      {/* Methods documentation - collapsible */}
-      <details className="border-t border-gray-200 pt-6 mt-6">
-        <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
-          Statistical Methods Used
-        </summary>
-        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-gray-500">Win Rate CI:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.winRateCI}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Model Comparison:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.modelComparison}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">P-Value Correction:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.pValueCorrection}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Effect Size:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.effectSize}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Dimension Test:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.dimensionTest}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">Alpha Level:</span>
-            <span className="ml-2 text-gray-900">{analysis.methodsUsed.alpha}</span>
-          </div>
-        </div>
-      </details>
+      {/* Methods documentation */}
+      <div className="border-t border-gray-200 pt-6 mt-6">
+        <MethodsDocumentation
+          methodsUsed={analysis.methodsUsed}
+          warnings={analysis.warnings}
+        />
+      </div>
     </div>
   );
 }

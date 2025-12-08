@@ -153,10 +153,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T046 [P] [US5] Create apps/web/src/components/analysis/MethodsDocumentation.tsx - Expandable methods panel
-- [ ] T047 [US5] Add methods data display in AnalysisPanel.tsx
-- [ ] T048 [US5] Create apps/web/tests/components/analysis/MethodsDocumentation.test.tsx - Component tests
-- [ ] T049 [US5] Display warnings (small sample, non-normal) with visual indicators
+- [X] T046 [P] [US5] Create apps/web/src/components/analysis/MethodsDocumentation.tsx - Expandable methods panel
+- [X] T047 [US5] Add methods data display in AnalysisPanel.tsx
+- [X] T048 [US5] Create apps/web/tests/components/analysis/MethodsDocumentation.test.tsx - Component tests
+- [X] T049 [US5] Display warnings (small sample, non-normal) with visual indicators
 
 **Checkpoint**: US5 complete - Methods documentation visible and warnings displayed
 
