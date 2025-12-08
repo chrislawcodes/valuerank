@@ -256,7 +256,7 @@ export async function expandScenarios(
   try {
     const llmResult = await callLLM(prompt, {
       temperature: 0.7,
-      maxTokens: 65536, // 64K tokens - enough for 125+ scenarios
+      maxTokens: 64000, // Max for claude-sonnet-4
       timeoutMs: 300000, // 5 minutes - scenario expansion can take longer
     });
 
