@@ -25,16 +25,18 @@ const CODE_VERSION = '1.0.0';
 
 /**
  * Transcript data structure sent to Python worker.
+ * Matches CSV export format for consistency.
  */
 type TranscriptData = {
   id: string;
   modelId: string;
   scenarioId: string;
-  decisionCode: string | null;
-  content: Record<string, unknown>;
+  summary: {
+    score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
+  };
   scenario: {
     name: string;
-    dimensions: Record<string, string>;
+    dimensions: Record<string, number>; // Numeric dimension scores (matches CSV variable columns)
   };
 };
 
@@ -129,20 +131,35 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           },
         });
 
-        // Transform to worker input format
+        // Transform to worker input format (matches CSV export structure)
         const transcriptData: TranscriptData[] = transcripts
           .filter((t) => t.scenario !== null && t.scenarioId !== null)
           .map((t) => {
-            // Extract dimensions from scenario content JSON
+            // Extract numeric dimensions from scenario content (matches CSV variable columns)
             const scenarioContent = t.scenario!.content as Record<string, unknown> | null;
-            const dimensions = (scenarioContent?.dimensions as Record<string, string>) || {};
+            const rawDimensions = (scenarioContent?.dimensions as Record<string, unknown>) || {};
+            const dimensions: Record<string, number> = {};
+            for (const [key, value] of Object.entries(rawDimensions)) {
+              if (typeof value === 'number') {
+                dimensions[key] = value;
+              }
+            }
+
+            // Convert decisionCode string to numeric score (matches CSV "Decision Code")
+            const decisionCode = t.decisionCode;
+            let score: number | null = null;
+            if (decisionCode !== null) {
+              const parsed = parseInt(decisionCode, 10);
+              if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
+                score = parsed;
+              }
+            }
 
             return {
               id: t.id,
               modelId: t.modelId,
               scenarioId: t.scenarioId as string,
-              decisionCode: t.decisionCode,
-              content: t.content as Record<string, unknown>,
+              summary: { score },
               scenario: {
                 name: t.scenario!.name,
                 dimensions,
