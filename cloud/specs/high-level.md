@@ -287,7 +287,9 @@
 
 ---
 
-## Stage 10: Experiment Framework [ ]
+## Stage 10: Experiment Framework [DEFERRED]
+
+> **Deferred:** Postponed until a future workstream.
 
 **Goal:** Build the organizational foundation for tracking related experiments with cost visibility.
 
