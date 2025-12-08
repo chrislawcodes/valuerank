@@ -28,12 +28,15 @@ export function DimensionEditor({
 }: DimensionEditorProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // Ensure levels array exists (handle legacy 'values' format gracefully)
+  const levels = dimension.levels ?? [];
+
   const handleNameChange = (name: string) => {
     onChange({ ...dimension, name });
   };
 
   const handleLevelChange = (levelIndex: number, updates: Partial<DimensionLevel>) => {
-    const newLevels = [...dimension.levels];
+    const newLevels = [...levels];
     const currentLevel = newLevels[levelIndex];
     if (!currentLevel) return;
     newLevels[levelIndex] = {
@@ -46,13 +49,13 @@ export function DimensionEditor({
   };
 
   const handleLevelRemove = (levelIndex: number) => {
-    const newLevels = dimension.levels.filter((_, i) => i !== levelIndex);
+    const newLevels = levels.filter((_, i) => i !== levelIndex);
     onChange({ ...dimension, levels: newLevels });
   };
 
   const handleAddLevel = () => {
-    const newLevel = createDefaultLevel(dimension.levels.length);
-    onChange({ ...dimension, levels: [...dimension.levels, newLevel] });
+    const newLevel = createDefaultLevel(levels.length);
+    onChange({ ...dimension, levels: [...levels, newLevel] });
   };
 
   const handleOptionsChange = (levelIndex: number, value: string) => {
@@ -94,7 +97,7 @@ export function DimensionEditor({
         />
 
         <span className="text-xs text-gray-500">
-          {dimension.levels.length} level{dimension.levels.length !== 1 ? 's' : ''}
+          {levels.length} level{levels.length !== 1 ? 's' : ''}
         </span>
 
         {canRemove && (
@@ -124,7 +127,7 @@ export function DimensionEditor({
 
           {/* Level Rows */}
           <div className="space-y-1">
-            {dimension.levels.map((level, levelIndex) => (
+            {levels.map((level, levelIndex) => (
               <div
                 key={levelIndex}
                 className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 items-center"
@@ -158,7 +161,7 @@ export function DimensionEditor({
                 <button
                   type="button"
                   onClick={() => handleLevelRemove(levelIndex)}
-                  disabled={dimension.levels.length <= 1}
+                  disabled={levels.length <= 1}
                   className="p-1 hover:bg-red-100 rounded disabled:opacity-30 disabled:cursor-not-allowed justify-self-center"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-red-400" />

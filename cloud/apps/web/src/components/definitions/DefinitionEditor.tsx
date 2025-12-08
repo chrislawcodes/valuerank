@@ -167,10 +167,11 @@ export function DefinitionEditor({
       if (!dim.name.trim()) {
         newErrors[`dimension-${i}`] = 'Dimension name is required';
       }
-      if (dim.levels.length === 0) {
+      const levels = dim.levels ?? [];
+      if (levels.length === 0) {
         newErrors[`dimension-${i}`] = 'At least one level is required';
       }
-      dim.levels.forEach((level, j) => {
+      levels.forEach((level, j) => {
         if (!level.label.trim()) {
           newErrors[`dimension-${i}-level-${j}`] = 'Level label is required';
         }

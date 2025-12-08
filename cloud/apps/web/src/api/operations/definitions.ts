@@ -83,7 +83,10 @@ export type DefinitionContent = {
 
 export type Dimension = {
   name: string;
-  levels: DimensionLevel[];
+  // New format: structured levels with scores
+  levels?: DimensionLevel[];
+  // Legacy format: simple string array
+  values?: string[];
 };
 
 export type DimensionLevel = {

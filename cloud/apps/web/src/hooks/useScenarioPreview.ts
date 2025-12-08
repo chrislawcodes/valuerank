@@ -41,7 +41,8 @@ function fillTemplate(
   dimensions.forEach((dim, i) => {
     const levelIndex = levelIndices[i];
     if (levelIndex === undefined) return;
-    const level = dim.levels[levelIndex];
+    const levels = dim.levels ?? [];
+    const level = levels[levelIndex];
     if (!level) return;
 
     dimensionValues.push({ name: dim.name, level });
@@ -123,13 +124,13 @@ export function useScenarioPreview(
 
     // Calculate total combinations
     const totalCount = content.dimensions.reduce(
-      (acc, dim) => acc * dim.levels.length,
+      (acc, dim) => acc * (dim.levels?.length ?? 0),
       1
     );
 
     // Generate level index combinations
     const levelIndexArrays = content.dimensions.map((dim) =>
-      dim.levels.map((_, i) => i)
+      (dim.levels ?? []).map((_, i) => i)
     );
 
     // Generate all combinations (limited for performance)

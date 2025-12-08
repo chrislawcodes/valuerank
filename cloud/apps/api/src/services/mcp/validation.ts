@@ -63,6 +63,16 @@ export const VALIDATION_LIMITS = {
 // ============================================================================
 
 /**
+ * Gets the count of levels/values in a dimension (supports both formats).
+ */
+function getDimensionLevelCount(dim: Dimension): number {
+  if (dim.levels && dim.levels.length > 0) {
+    return dim.levels.length;
+  }
+  return dim.values?.length ?? 0;
+}
+
+/**
  * Calculates the number of scenarios that would be generated from dimensions.
  * Each dimension's levels multiply together.
  */
@@ -72,8 +82,7 @@ export function calculateScenarioCombinations(dimensions: Dimension[]): number {
   }
 
   return dimensions.reduce((total, dim) => {
-    // Use 'values' array - this is the canonical field name in Dimension type
-    const levelCount = dim.values?.length ?? 0;
+    const levelCount = getDimensionLevelCount(dim);
     return total * Math.max(levelCount, 1);
   }, 1);
 }
@@ -148,8 +157,6 @@ export function validateDefinitionContent(
 
   // FR-041: max_levels_per_dimension: 10
   for (const dim of dimensions) {
-    const levelCount = dim.values?.length ?? 0;
-
     if (!dim.name || typeof dim.name !== 'string') {
       errors.push({
         field: `dimensions`,
@@ -158,13 +165,19 @@ export function validateDefinitionContent(
       continue;
     }
 
-    if (!Array.isArray(dim.values)) {
+    // Support both 'levels' (new format) and 'values' (legacy format)
+    const hasLevels = Array.isArray(dim.levels) && dim.levels.length > 0;
+    const hasValues = Array.isArray(dim.values) && dim.values.length > 0;
+
+    if (!hasLevels && !hasValues) {
       errors.push({
         field: `dimensions.${dim.name}`,
-        message: `Dimension '${dim.name}' must have a values array`,
+        message: `Dimension '${dim.name}' must have either 'levels' (preferred) or 'values' array`,
       });
       continue;
     }
+
+    const levelCount = getDimensionLevelCount(dim);
 
     if (levelCount < 2) {
       errors.push({
@@ -178,6 +191,24 @@ export function validateDefinitionContent(
         field: `dimensions.${dim.name}`,
         message: `Dimension '${dim.name}' exceeds ${VALIDATION_LIMITS.maxLevelsPerDimension} levels limit (current: ${levelCount})`,
       });
+    }
+
+    // Validate level structure if using 'levels' format
+    if (hasLevels && dim.levels) {
+      for (const level of dim.levels) {
+        if (typeof level.score !== 'number' || level.score < 1 || level.score > 5) {
+          errors.push({
+            field: `dimensions.${dim.name}.levels`,
+            message: `Level in '${dim.name}' must have score between 1-5`,
+          });
+        }
+        if (!level.label || typeof level.label !== 'string') {
+          errors.push({
+            field: `dimensions.${dim.name}.levels`,
+            message: `Level in '${dim.name}' must have a label`,
+          });
+        }
+      }
     }
   }
 

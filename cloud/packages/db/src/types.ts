@@ -7,9 +7,26 @@
 // DEFINITION CONTENT
 // ============================================================================
 
+/**
+ * A level within a dimension representing an intensity of value stakes.
+ */
+export type DimensionLevel = {
+  score: number; // 1-5 intensity scale
+  label: string; // Short description
+  options?: string[]; // Alternative phrasings for random selection
+  description?: string; // Optional longer description
+};
+
+/**
+ * A dimension represents a VALUE being tested with multiple intensity levels.
+ * Named after one of the 14 canonical values.
+ */
 export type Dimension = {
   name: string;
-  values: string[];
+  // New format: structured levels with scores
+  levels?: DimensionLevel[];
+  // Legacy format: simple string array (for backward compatibility)
+  values?: string[];
   description?: string;
 };
 

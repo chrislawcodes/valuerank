@@ -406,7 +406,8 @@ export function DefinitionDetail() {
                           [{dim.name}]
                         </h4>
                         <div className="space-y-2">
-                          {dim.levels.map((level, levelIndex) => (
+                          {/* Handle 'levels' format (with score/label/options) */}
+                          {dim.levels && dim.levels.length > 0 && dim.levels.map((level, levelIndex) => (
                             <div key={levelIndex} className="flex items-start gap-3 text-sm">
                               <span className="inline-flex px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-medium">
                                 {level.score}
@@ -424,6 +425,19 @@ export function DefinitionDetail() {
                               </div>
                             </div>
                           ))}
+                          {/* Handle 'values' format (simple string array) */}
+                          {(!dim.levels || dim.levels.length === 0) && dim.values && dim.values.length > 0 && dim.values.map((value: string, valueIndex: number) => (
+                            <div key={valueIndex} className="flex items-start gap-3 text-sm">
+                              <span className="inline-flex px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-medium">
+                                {valueIndex + 1}
+                              </span>
+                              <span className="text-gray-900">{value}</span>
+                            </div>
+                          ))}
+                          {/* Show message if no levels or values */}
+                          {(!dim.levels || dim.levels.length === 0) && (!dim.values || dim.values.length === 0) && (
+                            <p className="text-gray-400 text-sm italic">No levels defined</p>
+                          )}
                         </div>
                       </div>
                     ))}
