@@ -139,14 +139,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Create tool handler at `apps/api/src/mcp/tools/validate-definition.ts`
+- [X] T016 [US3] Create tool handler at `apps/api/src/mcp/tools/validate-definition.ts`
   - Define `ValidateDefinitionInputSchema` with Zod
   - Implement `registerValidateDefinitionTool(server)`
   - Call validation service
   - Return `valid`, `errors`, `warnings`, `estimatedScenarioCount`, `dimensionCoverage`
   - Do NOT persist anything to database
 
-- [ ] T017 [US3] Create tests at `apps/api/tests/mcp/tools/validate-definition.test.ts`
+- [X] T017 [US3] Create tests at `apps/api/tests/mcp/tools/validate-definition.test.ts`
   - Test valid content returns valid: true
   - Test invalid content returns errors
   - Test warnings for non-blocking issues
@@ -154,7 +154,7 @@
   - Test dimension coverage calculation
   - Verify no database operations
 
-- [ ] T018 [US3] Update tool index at `apps/api/src/mcp/tools/index.ts`
+- [X] T018 [US3] Update tool index at `apps/api/src/mcp/tools/index.ts`
   - Import and register validate-definition tool
 
 **Checkpoint**: User Story 3 fully functional and testable independently
