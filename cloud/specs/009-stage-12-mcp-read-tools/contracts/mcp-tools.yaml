@@ -1,0 +1,437 @@
+# MCP Tool Contracts for Stage 12: Read Tools
+#
+# These tools follow the Model Context Protocol specification.
+# Each tool is read-only and returns data within token budget limits.
+
+tools:
+  # ============================================
+  # list_definitions
+  # ============================================
+  - name: list_definitions
+    description: >
+      List scenario definitions with version info.
+      Returns basic metadata for browsing available definitions.
+    inputSchema:
+      type: object
+      properties:
+        folder:
+          type: string
+          description: Filter definitions by folder path
+        include_children:
+          type: boolean
+          default: false
+          description: Include child count for each definition
+      required: []
+    returns:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            description: Definition UUID
+          name:
+            type: string
+            description: Human-readable name
+          versionLabel:
+            type: string
+            nullable: true
+            description: Optional version label (e.g., "baseline")
+          parentId:
+            type: string
+            nullable: true
+            description: Parent definition ID if forked
+          createdAt:
+            type: string
+            format: date-time
+            description: ISO 8601 timestamp
+          childCount:
+            type: integer
+            description: Number of child definitions (if include_children=true)
+    tokenBudget: 2KB
+    example:
+      input: { "folder": "autonomous-vehicles" }
+      output:
+        - id: "def_abc123"
+          name: "trolley-av-v1"
+          versionLabel: "baseline"
+          parentId: null
+          createdAt: "2024-01-15T10:30:00Z"
+
+  # ============================================
+  # list_runs
+  # ============================================
+  - name: list_runs
+    description: >
+      List evaluation runs with status and summary metrics.
+      Use filters to narrow results.
+    inputSchema:
+      type: object
+      properties:
+        definition_id:
+          type: string
+          description: Filter by definition UUID
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          description: Filter by run status
+        limit:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+          description: Maximum number of runs to return
+      required: []
+    returns:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            description: Run UUID
+          status:
+            type: string
+            enum: [pending, running, completed, failed]
+          models:
+            type: array
+            items:
+              type: string
+            description: Models evaluated in this run
+          scenarioCount:
+            type: integer
+            description: Number of scenarios in run
+          samplePercentage:
+            type: integer
+            nullable: true
+            description: Sampling percentage (null = 100%)
+          createdAt:
+            type: string
+            format: date-time
+    tokenBudget: 2KB
+    example:
+      input: { "status": "completed", "limit": 5 }
+      output:
+        - id: "run_xyz789"
+          status: "completed"
+          models: ["openai:gpt-4", "anthropic:claude-3"]
+          scenarioCount: 50
+          samplePercentage: null
+          createdAt: "2024-01-16T14:00:00Z"
+
+  # ============================================
+  # get_run_summary
+  # ============================================
+  - name: get_run_summary
+    description: >
+      Get aggregated analysis for a completed run.
+      Returns computed statistics, NOT raw transcripts.
+    inputSchema:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Run UUID (required)
+        include_insights:
+          type: boolean
+          default: true
+          description: Include auto-generated insights
+      required:
+        - run_id
+    returns:
+      type: object
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+        basicStats:
+          type: object
+          properties:
+            modelCount:
+              type: integer
+            transcriptCount:
+              type: integer
+            perModel:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  sampleSize:
+                    type: integer
+                  meanScore:
+                    type: number
+                  stdDev:
+                    type: number
+        modelAgreement:
+          type: object
+          properties:
+            averageCorrelation:
+              type: number
+            outlierModels:
+              type: array
+              items:
+                type: string
+        mostContestedScenarios:
+          type: array
+          items:
+            type: object
+            properties:
+              scenarioId:
+                type: string
+              variance:
+                type: number
+        insights:
+          type: array
+          items:
+            type: string
+          description: Auto-generated findings (if include_insights=true)
+        llmSummary:
+          type: string
+          nullable: true
+          description: Natural language summary if available
+        analysisStatus:
+          type: string
+          enum: [pending, completed, failed]
+    tokenBudget: 5KB
+    example:
+      input: { "run_id": "run_xyz789" }
+      output:
+        runId: "run_xyz789"
+        status: "completed"
+        basicStats:
+          modelCount: 2
+          transcriptCount: 100
+          perModel:
+            "openai:gpt-4":
+              sampleSize: 50
+              meanScore: 0.72
+              stdDev: 0.15
+        modelAgreement:
+          averageCorrelation: 0.85
+          outlierModels: []
+        mostContestedScenarios:
+          - scenarioId: "scenario_12"
+            variance: 0.45
+        insights:
+          - "GPT-4 prioritizes Physical_Safety 15% more than Claude"
+        analysisStatus: "completed"
+
+  # ============================================
+  # get_dimension_analysis
+  # ============================================
+  - name: get_dimension_analysis
+    description: >
+      Get analysis of which scenario dimensions drive model divergence.
+      Shows ranked dimensions by variance impact.
+    inputSchema:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Run UUID (required)
+      required:
+        - run_id
+    returns:
+      type: object
+      properties:
+        rankedDimensions:
+          type: array
+          description: Dimensions sorted by variance impact (top 10)
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              effectSize:
+                type: number
+              rank:
+                type: integer
+        correlations:
+          type: object
+          additionalProperties:
+            type: number
+          description: Correlation of each dimension with model scores
+        mostDivisive:
+          type: array
+          items:
+            type: string
+          description: Dimensions where models disagree most
+    tokenBudget: 2KB
+    example:
+      input: { "run_id": "run_xyz789" }
+      output:
+        rankedDimensions:
+          - name: "severity"
+            effectSize: 0.42
+            rank: 1
+          - name: "victim_type"
+            effectSize: 0.28
+            rank: 2
+        correlations:
+          severity: 0.42
+          victim_type: 0.28
+          certainty: 0.15
+        mostDivisive:
+          - "severity"
+          - "victim_type"
+
+  # ============================================
+  # get_transcript_summary
+  # ============================================
+  - name: get_transcript_summary
+    description: >
+      Get summary of a specific transcript.
+      Returns metadata and key points, NOT full text.
+    inputSchema:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Run UUID
+        scenario_id:
+          type: string
+          description: Scenario identifier
+        model:
+          type: string
+          description: Model identifier (e.g., "openai:gpt-4")
+      required:
+        - run_id
+        - scenario_id
+        - model
+    returns:
+      type: object
+      properties:
+        runId:
+          type: string
+        scenarioId:
+          type: string
+        model:
+          type: string
+        turnCount:
+          type: integer
+          description: Number of dialogue turns
+        wordCount:
+          type: integer
+          description: Approximate word count
+        decision:
+          type: string
+          nullable: true
+          description: Final decision if applicable
+        keyReasoning:
+          type: array
+          items:
+            type: string
+          description: Extracted key reasoning points
+    tokenBudget: 1KB
+    example:
+      input:
+        run_id: "run_xyz789"
+        scenario_id: "scenario_12"
+        model: "openai:gpt-4"
+      output:
+        runId: "run_xyz789"
+        scenarioId: "scenario_12"
+        model: "openai:gpt-4"
+        turnCount: 4
+        wordCount: 850
+        decision: "prioritize_safety"
+        keyReasoning:
+          - "Model emphasized duty of care to customers"
+          - "Economic concerns were secondary to physical safety"
+
+  # ============================================
+  # graphql_query
+  # ============================================
+  - name: graphql_query
+    description: >
+      Execute arbitrary GraphQL queries for flexible data access.
+      Mutations are not allowed - read-only queries only.
+      Use schema introspection to discover available types.
+    inputSchema:
+      type: object
+      properties:
+        query:
+          type: string
+          description: GraphQL query string (required)
+        variables:
+          type: object
+          additionalProperties: true
+          description: Query variables (optional)
+      required:
+        - query
+    returns:
+      type: object
+      properties:
+        data:
+          type: object
+          description: GraphQL response data
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
+              path:
+                type: array
+          description: GraphQL errors if any
+    tokenBudget: 10KB
+    notes:
+      - Mutations will be rejected with error
+      - Schema introspection is allowed
+      - User context from API key is applied
+    example:
+      input:
+        query: |
+          query GetRun($id: ID!) {
+            run(id: $id) {
+              id
+              status
+              progress { completed total }
+            }
+          }
+        variables:
+          id: "run_xyz789"
+      output:
+        data:
+          run:
+            id: "run_xyz789"
+            status: "completed"
+            progress:
+              completed: 100
+              total: 100
+
+# ============================================
+# Error Responses
+# ============================================
+errors:
+  - code: AUTHENTICATION_REQUIRED
+    status: 401
+    message: "API key required in X-API-Key header"
+
+  - code: INVALID_API_KEY
+    status: 401
+    message: "Invalid or expired API key"
+
+  - code: RATE_LIMIT_EXCEEDED
+    status: 429
+    message: "Rate limit exceeded. Try again in {retry_after} seconds"
+    headers:
+      - Retry-After
+
+  - code: NOT_FOUND
+    status: 404
+    message: "Resource not found: {resource_type} {resource_id}"
+
+  - code: MUTATION_NOT_ALLOWED
+    status: 400
+    message: "MCP read tools do not support GraphQL mutations"
+
+  - code: RESPONSE_TOO_LARGE
+    status: 413
+    message: "Response exceeds token budget. Use pagination or filters."
+
+  - code: INVALID_PARAMETERS
+    status: 400
+    message: "Invalid parameters: {details}"

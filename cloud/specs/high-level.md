@@ -1,0 +1,588 @@
+# Cloud ValueRank - High-Level Implementation Plan
+
+> MVP Implementation Roadmap
+>
+> Each stage represents a major milestone (roughly 1 day to 1 week of focused work).
+> Stages are designed to be specced and implemented sequentially, with each building on the previous.
+
+---
+
+## Stage 1: Project Scaffolding & Infrastructure [x]
+
+> **Spec:** [stage-1-scaffolding.md](./stage-1-scaffolding.md) | **Plan:** [stage-1-plan.md](./stage-1-plan.md) | **Tasks:** [stage-1-tasks.md](./stage-1-tasks.md)
+
+**Goal:** Establish the foundational project structure, build system, and local development environment.
+
+**Deliverables:**
+- Turborepo monorepo structure (`apps/api`, `apps/web`, `packages/db`, `packages/shared`)
+- Docker Compose for local PostgreSQL
+- Basic TypeScript configuration with strict mode
+- ESLint/Prettier setup
+- Logger abstraction (pino-based)
+- Environment configuration pattern
+- npm scripts for dev, build, test
+
+**Exit Criteria:**
+- `npm run dev` starts both API and web in development mode
+- `docker-compose up -d` runs PostgreSQL locally
+- TypeScript compiles with strict mode, no errors
+- Logger works and outputs structured JSON
+
+---
+
+## Stage 2: Database Schema & Migrations [x]
+
+> **Spec:** [stage-2-database.md](./stage-2-database.md) | **Plan:** [stage-2-plan.md](./stage-2-plan.md) | **Tasks:** [stage-2-tasks.md](./stage-2-tasks.md)
+
+**Goal:** Implement the core PostgreSQL schema with Prisma, including all tables needed for MVP.
+
+**Deliverables:**
+- Prisma schema with all core tables:
+  - `users`, `api_keys` (auth)
+  - `definitions` (with parent_id for versioning)
+  - `runs`, `transcripts`, `scenarios`
+  - `experiments`, `run_comparisons`
+  - `analysis_results`
+  - `rubrics`
+  - `tags`, `definition_tags`, `run_tags`, `experiment_tags` (tagging system)
+- **Transcript versioning fields:**
+  - `model_id` and `model_version` (e.g., `gemini-1.5-pro`, `gemini-1.5-pro-002`)
+  - `definition_snapshot` (JSONB copy of definition at run time)
+  - Immutable records - never modified after creation
+- **Access tracking fields:**
+  - `last_accessed_at` on transcripts, runs, definitions
+  - Updated on read operations for future pruning analysis
+- **Retention fields (for future use):**
+  - `retention_days`, `archive_permanently` on runs
+  - Default: permanent retention
+- JSONB schema versioning pattern implemented
+- Seed script for development data
+- Database query helpers in `packages/db`
+
+**Exit Criteria:**
+- `npm run db:migrate` creates all tables
+- `npm run db:seed` populates test data
+- Recursive CTE queries work for definition ancestry
+- TypeScript types generated from Prisma
+- Transcripts capture model version information
+
+---
+
+## Stage 2b: Transcript Versioning & Access Tracking [x]
+
+**Goal:** Extend database schema to support model version tracking, definition snapshots, and access tracking for future pruning.
+
+**Context:** These requirements were identified after Stage 2 completion. They are needed for the model version comparison use case (re-run scenarios against new model versions).
+
+**Deliverables:**
+- **Schema migration** adding new fields:
+  - `transcripts.model_id` - Provider model name (e.g., "gemini-1.5-pro")
+  - `transcripts.model_version` - Specific version (e.g., "gemini-1.5-pro-002")
+  - `transcripts.definition_snapshot` - JSONB copy of definition at run time
+  - `definitions.last_accessed_at` - Access tracking timestamp
+  - `runs.last_accessed_at` - Access tracking timestamp
+  - `transcripts.last_accessed_at` - Access tracking timestamp
+- **Update retention defaults:**
+  - `runs.archive_permanently` default to TRUE (was FALSE)
+  - `transcripts.content_expires_at` default to NULL (permanent)
+- **Query helpers** for updating `last_accessed_at` on read operations
+- **Rename** `transcripts.target_model` → `transcripts.model_id` (migration)
+
+**Exit Criteria:**
+- Migration runs successfully on existing data
+- Transcripts capture model version on creation
+- `last_accessed_at` updated on read operations
+- Existing data preserved with NULL for new optional fields
+
+**Dependencies:** Stage 2 (complete)
+
+---
+
+## Stage 3: GraphQL API Foundation [x]
+
+**Goal:** Set up the GraphQL server with Pothos (code-first), core types, and basic CRUD operations.
+
+**Deliverables:**
+- GraphQL Yoga server in `apps/api`
+- Pothos schema builder configuration
+- Core GraphQL types: Definition, Run, Transcript, Experiment
+- DataLoaders for N+1 prevention
+- Basic queries: `definition`, `definitions`, `run`, `runs`
+- Basic mutations: `createDefinition`, `forkDefinition`
+- GraphQL playground in development
+
+**Exit Criteria:**
+- Can query definitions and runs via GraphQL
+- Can create and fork definitions via mutations
+- DataLoaders prevent N+1 queries
+- Schema introspection works for LLM consumption
+
+---
+
+## Stage 4: Authentication System [x]
+
+**Goal:** Implement simple JWT-based auth for web and API key auth for MCP.
+
+**Deliverables:**
+- User registration CLI command (no public signup)
+- Login endpoint returning JWT
+- JWT middleware for protected routes
+- API key generation and validation
+- Combined auth middleware (JWT or API key)
+- Password hashing with bcrypt
+- Token refresh (optional, 24h expiry may suffice)
+
+**Exit Criteria:**
+- Can create users via CLI
+- Can login and receive JWT
+- Protected GraphQL endpoints require auth
+- API keys work for programmatic access
+
+---
+
+## Stage 5: Queue System & Job Infrastructure [x]
+
+> **Spec:** [003-stage-5-queue/spec.md](./003-stage-5-queue/spec.md) | **Plan:** [003-stage-5-queue/plan.md](./003-stage-5-queue/plan.md) | **Tasks:** [003-stage-5-queue/tasks.md](./003-stage-5-queue/tasks.md)
+
+**Goal:** Set up PgBoss queue with TypeScript orchestrator and job lifecycle management.
+
+**Deliverables:**
+- PgBoss initialization and configuration
+- Job type definitions: `probe_scenario`, `analyze_basic`, `analyze_deep`
+- TypeScript orchestrator with `spawnPython` utility
+- Job progress tracking in database
+- Basic job handlers (stubs)
+- Queue status GraphQL queries
+- Pause/resume/cancel mutations
+
+**Exit Criteria:**
+- Can queue jobs via GraphQL
+- Jobs appear in PgBoss queue
+- Progress updates visible via polling
+- Can pause/resume/cancel runs
+
+---
+
+## Stage 6: Python Worker Integration [x]
+
+> **Spec:** [004-stage-6-python-workers/spec.md](./004-stage-6-python-workers/spec.md) | **Plan:** [004-stage-6-python-workers/plan.md](./004-stage-6-python-workers/plan.md) | **Tasks:** [004-stage-6-python-workers/tasks.md](./004-stage-6-python-workers/tasks.md)
+
+**Goal:** Connect existing Python pipeline code to the TypeScript orchestrator.
+
+**Deliverables:**
+- Python worker package at `cloud/workers/`
+- `workers/probe.py` - scenario probing via stdin/stdout JSON
+- `workers/analyze_basic.py` - Tier 1 analysis stub
+- `workers/health_check.py` - environment verification
+- 6 LLM provider adapters (OpenAI, Anthropic, Gemini, xAI, DeepSeek, Mistral)
+- Error handling with retry classification
+- Lazy health check on first job with caching
+- Structured JSON logging to stderr
+
+**Test Coverage:**
+- Python: 86% (72 tests)
+- TypeScript: 93.2% (370 tests)
+
+**Exit Criteria:**
+- ✅ `probe_scenario` jobs execute Python and return results
+- ✅ Transcripts are saved to database
+- ✅ LLM calls work with configured API keys
+- ✅ Errors are logged and jobs marked as failed appropriately
+- ⏳ Manual validation with real API keys (requires credentials)
+
+---
+
+## Stage 7: Frontend Foundation [x]
+
+**Goal:** Set up React frontend with auth, navigation shell, and core layout.
+
+**Deliverables:**
+- ✅ Vite + React + TypeScript setup in `apps/web`
+- ✅ urql GraphQL client with auth headers
+- ✅ Login page and auth context
+- ✅ Global navigation shell (header, tabs)
+- ✅ Protected route wrapper
+- ✅ API key management page
+- ✅ Basic empty/loading/error states
+- ✅ Tailwind CSS styling
+
+**Test Coverage:**
+- API: 93.2% lines, 87.6% branches (370 tests)
+- DB: 96.5% lines, 93.3% branches (160 tests)
+- Shared: 80% lines, 100% branches (15 tests)
+- Python Workers: 86% lines (72 tests)
+
+**Exit Criteria:**
+- ✅ Can login via web UI
+- ✅ Navigation between Definitions/Runs/Experiments/Settings
+- ✅ Can generate and revoke API keys
+- ✅ Auth persists across page refreshes
+
+---
+
+## Stage 8: Definition Management UI [x]
+
+**Goal:** Build the definition library, editor, and version tree visualization with tag-based navigation.
+
+**Deliverables:**
+- ✅ Definition library page with tag-based filtering
+- ✅ Tag management (create, assign, filter by tags)
+- ✅ Definition editor with preamble, template, dimensions
+- ✅ Fork definition flow with label
+- ✅ Version tree visualization (basic lineage diagram)
+- ✅ Search and filter functionality
+- ✅ Syntax highlighting for template placeholders
+- ✅ Property inheritance for forked definitions (Phase 12)
+
+**Test Coverage:**
+- API: 89.48% lines, 87.14% branches (407 tests)
+- Web: 249 tests passing
+
+**Exit Criteria:**
+- ✅ Can browse, create, and edit definitions
+- ✅ Can assign and filter by tags
+- ✅ Can fork definitions and see lineage
+- ✅ Version tree shows parent/child relationships
+- ✅ Can preview generated scenarios
+- ✅ Forked definitions inherit properties from parent tree
+
+---
+
+## Stage 9: Run Execution & Basic Export [x]
+
+> **Spec:** [007-stage-9-run-execution/spec.md](./007-stage-9-run-execution/spec.md) | **Plan:** [007-stage-9-run-execution/plan.md](./007-stage-9-run-execution/plan.md) | **Tasks:** [007-stage-9-run-execution/tasks.md](./007-stage-9-run-execution/tasks.md)
+
+**Goal:** Complete end-to-end run execution from UI to results, with CSV export for external analysis.
+
+**Deliverables:**
+- ✅ Run creation form (select definition, models, options)
+- ✅ **Model version selection** (provider/model picker)
+- ✅ Run dashboard with status table and filters
+- ✅ Polling-based progress updates (5s interval)
+- ✅ Run detail page showing per-model progress
+- ✅ Run controls (pause/resume/cancel with confirmation)
+- ✅ **CSV export endpoint** for run results (dimension scores)
+- ✅ **Basic results viewer** (transcript viewer, scores)
+- ✅ Transcript storage with model version capture
+- ✅ **LLM scenario expansion** (generate scenarios from definition)
+- ✅ **Summarization pipeline** (auto-summarize transcripts on completion)
+- ✅ **Re-run capability** (re-run from completed runs with different models)
+- ⏳ **Parent/child run linking** (deferred - requires schema migration)
+
+**Test Coverage:**
+- Web: 121 component tests passing
+- API: Run mutations, queries, progress tracking tested
+
+**Exit Criteria:**
+- ✅ Can start a run from the UI
+- ✅ Can watch progress update in real-time (polling)
+- ✅ Can pause, resume, and cancel runs
+- ✅ Completed runs show in dashboard with filters
+- ✅ **Can download run results as CSV**
+- ✅ Transcripts capture model version and definition snapshot
+- ✅ Can re-run a scenario against different models
+- ⏳ Parent/child run tracking (deferred to future stage)
+
+**Phase 1 Complete:** Team can create definitions, run evaluations, and export results for external analysis.
+
+---
+
+## Stage 10: Experiment Framework [DEFERRED]
+
+> **Deferred:** Postponed until a future workstream.
+
+**Goal:** Build the organizational foundation for tracking related experiments with cost visibility.
+
+**Deliverables:**
+- Experiment creation with hypothesis tracking
+- Experiment workspace (group related definitions and runs)
+- Link runs to experiments
+- **Cost estimation** before starting a run (based on model pricing × scenario count)
+- Tag inheritance (experiments can have tags, propagate to children)
+- Experiment timeline/history view
+
+**Exit Criteria:**
+- Can create experiments with hypothesis
+- Can link definitions and runs to experiments
+- Can see estimated cost before starting a run
+- Experiments group related runs
+- Can track related scenarios (e.g., "flipped perspective" variants)
+
+**Phase 2 Complete:** Team can organize experiments and track related work systematically.
+
+---
+
+## Stage 11: Analysis System & Visualizations [~]
+
+> **Spec:** [008-stage-11-analysis/spec.md](./008-stage-11-analysis/spec.md)
+
+**Goal:** Implement automated analysis pipeline with visualizations to answer key questions about AI behavior.
+
+**Deliverables:**
+- ✅ Tier 1 auto-analysis on run completion
+- ✅ Basic stats computation (win rates, per-model scores)
+- ✅ Confidence intervals with Wilson score
+- ✅ **Score distribution visualization** (how do AIs tend to answer?)
+- ✅ **Variable impact analysis** (which dimensions drive variance?)
+- ✅ **Model comparison** (which AIs behave differently?)
+- ✅ Analysis versioning and caching (input_hash)
+- ✅ Results viewer UI (charts, tables)
+- ✅ Re-run analysis capability
+
+**Test Coverage:**
+- API: 78.37% lines (below 80% threshold), 503 tests passing
+- Web: 89.48% lines, 561 tests passing
+- DB: 86.99% lines, 77 tests passing
+- Shared: 27.38% lines, 15 tests passing
+- Python Workers: 87.17% lines
+- **Total: 1,156 tests passing**
+
+**Infrastructure Improvements:**
+- ✅ Fixed web app coverage reporting (vitest.config.ts)
+- ✅ Removed coverage artifacts from git tracking
+- ✅ All tiers now report coverage correctly
+- ✅ Fixed analyze-basic integration test expectations
+- ✅ Fixed 15 pre-existing web test failures (RunFilters, Settings, Runs, RunDetail)
+
+**Exit Criteria:**
+- ✅ Completed runs automatically have Tier 1 analysis
+- ✅ Can see score distributions visualized
+- ✅ Can see which variables have most impact
+- ✅ Can identify outlier models
+- ✅ Analysis methods documented in output
+- ✅ All Stage 11 tasks complete (76/76)
+- ✅ All tests passing (1,156 tests across all packages)
+- ⏳ API coverage 78.37% (gaps in non-Stage-11 code: scenario expansion, LLM generate)
+
+---
+
+## Stage 12: MCP Read Tools [x]
+
+> **Spec:** [009-stage-12-mcp-read-tools/spec.md](./009-stage-12-mcp-read-tools/spec.md) | **Plan:** [009-stage-12-mcp-read-tools/plan.md](./009-stage-12-mcp-read-tools/plan.md) | **Tasks:** [009-stage-12-mcp-read-tools/tasks.md](./009-stage-12-mcp-read-tools/tasks.md)
+
+**Goal:** Enable AI agents to query and reason over ValueRank data.
+
+**Deliverables:**
+- ✅ MCP server setup (embedded in API at `/mcp` endpoint)
+- ✅ Read tools: `list_definitions`, `list_runs`, `get_run_summary`, `get_dimension_analysis`, `get_transcript_summary`
+- ✅ `graphql_query` tool for ad-hoc queries (mutations blocked)
+- ✅ Token-budget-aware response formatting (1-10KB per tool)
+- ✅ Rate limiting for MCP endpoints (120 req/min per API key)
+- ✅ API key authentication via X-API-Key header
+- ✅ API documentation (README.md with tool reference)
+
+**Test Coverage:**
+- API: 621 tests passing across 56 test files
+- MCP integration tests: 16 tests
+- All tools have dedicated test suites
+
+**Exit Criteria:**
+- ✅ Can query data from Claude Desktop via MCP
+- ✅ Can retrieve run summaries and analysis results
+- ✅ Responses stay within token budget guidelines
+- ✅ API key authentication works for MCP
+- ⏳ Manual Claude Desktop testing (requires human validation)
+
+**Phase 3 Complete:** Team has automated analysis and can use AI to reason over results.
+
+---
+
+## Stage 13: Run Comparison & Delta Analysis [DEFERRED]
+
+**Goal:** Enable side-by-side comparison with statistical rigor, including cross-model-version comparisons.
+
+**Deliverables:**
+- Run comparison page (side-by-side delta view)
+- Delta visualization (diverging bar chart)
+- "What Changed" diff display
+- **Model version comparison** (same scenario, different model versions)
+- **Effect sizes** (Cohen's d for pairwise comparisons)
+- **Significance testing** (p-values with Holm-Bonferroni correction)
+- Tier 2 on-demand analysis (correlations, dimension impact)
+- Statistical method documentation in results
+
+**Use Case:** Compare `gemini-1.5-pro-001` results against `gemini-1.5-pro-002` on the same scenario to see how model updates affect value priorities.
+
+**Exit Criteria:**
+- Can compare any two runs side-by-side
+- Can compare same scenario across model versions
+- Statistical significance shown for deltas
+- Effect sizes reported alongside p-values
+- Can trigger deeper analysis on demand
+
+**Phase 4 Complete:** Team can rigorously compare and analyze differences between runs.
+
+---
+
+## Stage 14: MCP Write Tools [x]
+
+> **Spec:** [010-stage-14-mcp-write-tools/spec.md](./010-stage-14-mcp-write-tools/spec.md) | **Plan:** [010-stage-14-mcp-write-tools/plan.md](./010-stage-14-mcp-write-tools/plan.md) | **Tasks:** [010-stage-14-mcp-write-tools/tasks.md](./010-stage-14-mcp-write-tools/tasks.md)
+
+**Goal:** Enable AI-assisted scenario authoring via MCP.
+
+**Deliverables:**
+- ✅ Write tools: `create_definition`, `fork_definition`, `validate_definition`, `start_run`
+- ✅ Preview tool: `generate_scenarios_preview` (dry-run without LLM)
+- ✅ Authoring resources (guide, examples, value-pairs, preamble-templates)
+- ✅ Input validation service with limits (max 10 dimensions, 10 levels, 1000 scenarios)
+- ✅ Audit logging for all write operations
+- ✅ MCP README documentation
+
+**Test Coverage:**
+- API: 743 tests passing (122+ MCP-specific tests)
+- MCP services: 83% line coverage
+- All new files under 400 lines, no new `any` types
+
+**Exit Criteria:**
+- ✅ Can create definitions via MCP
+- ✅ Can fork definitions via MCP
+- ✅ Can validate content via MCP (dry-run)
+- ✅ Can start runs via MCP
+- ✅ Can preview scenarios without LLM calls
+- ✅ Authoring resources accessible via URI
+- ✅ All write operations logged with audit trail
+- ⏳ `compare_runs` tool (deferred - requires Stage 13)
+- ⏳ Manual Claude Desktop testing (requires human validation)
+
+**Phase 5 Complete:** AI can assist with scenario creation and experimentation.
+
+---
+
+## Stage 15: Data Export & CLI Compatibility [x]
+
+> **Spec:** [011-stage-15-data-export/spec.md](./011-stage-15-data-export/spec.md) | **Plan:** [011-stage-15-data-export/plan.md](./011-stage-15-data-export/plan.md) | **Tasks:** [011-stage-15-data-export/tasks.md](./011-stage-15-data-export/tasks.md)
+
+**Goal:** Enable round-trip data exchange between Cloud ValueRank and the CLI devtool.
+
+**Deliverables (MVP Scope - P1):**
+- ✅ **Export Definition as Markdown**: Download definitions in devtool-compatible `.md` format with frontmatter, preamble, template, dimensions, and matching rules
+- ✅ **Import Definition from Markdown**: Upload `.md` files from devtool to create new definitions, with validation and name conflict resolution
+- ✅ **Export Scenarios as YAML**: Download generated scenarios in CLI-compatible `.yaml` format for use with `probe.py`
+- ✅ REST endpoints: `GET /api/export/definitions/:id/md`, `GET /api/export/definitions/:id/scenarios.yaml`, `POST /api/import/definition`
+- ✅ GraphQL mutations: `exportDefinitionAsMd`, `exportScenariosAsYaml`
+- ✅ Export/import services with comprehensive test coverage
+- ✅ UI components: ExportButton dropdown, import via drag-and-drop with conflict resolution
+
+**Deferred (P2/P3):**
+- Bulk export (multiple definitions)
+- Bundle export (definition + scenarios in zip)
+- Download URLs with expiry
+- YAML import (scenarios → definition)
+- Aggregation/results export
+
+**Test Coverage:**
+- API: 72 test files, 819+ tests passing
+- Web: 62 test files, 646 tests passing
+- Export/import specific: md.ts 100%, yaml.ts 91%, import/md.ts 100%
+
+**Exit Criteria:**
+- ✅ Can export definitions as devtool-compatible `.md` files
+- ✅ Can import definitions from devtool `.md` files
+- ✅ Can export scenarios as CLI-compatible `.yaml` files
+- ✅ MD round-trip parsing validated (integration tests)
+- ✅ YAML CLI compatibility validated (integration tests)
+- ✅ Name conflict resolution with alternative name suggestions
+
+**Phase 6 Complete:** Round-trip data exchange with CLI devtool enabled.
+
+---
+
+## Stage 16: Scale & Efficiency [DEFERRED]
+
+> **Deferred:** Postponed until scale requirements emerge.
+
+**Goal:** Make it cheaper to run the system at scale.
+
+**Deliverables:**
+- Batch processing for large run queues
+- Sampling/partial runs (run N% for quick tests)
+- Queue optimization for high throughput
+- Cost tracking and reporting
+
+**Exit Criteria:**
+- Can run sampled evaluations for quick iteration
+- Batch processing reduces per-run overhead
+- Can track actual vs estimated costs
+
+---
+
+## Stage 17: Production Deployment [ ]
+
+**Goal:** Deploy to Railway with proper configuration, monitoring, and CI/CD.
+
+**Deliverables:**
+- Railway project setup (API, Web, PostgreSQL, Worker)
+- Environment variable configuration
+- GitHub Actions CI/CD pipeline
+- Health check endpoints
+- Error tracking setup (optional: Sentry)
+- Database backups configured
+- Domain and SSL configuration
+
+**Exit Criteria:**
+- Application deployed and accessible
+- CI/CD automatically deploys on merge to main
+- Database backups running
+- Team can access production instance
+
+---
+
+## Dependency Graph
+
+```
+Stage 1 (Scaffolding)
+    └── Stage 2 (Database)
+        ├── Stage 2b (Transcript Versioning) ─── can run in parallel with Stage 3+
+        └── Stage 3 (GraphQL API)
+            ├── Stage 4 (Auth)
+            │   └── Stage 7 (Frontend Foundation)
+            │       └── Stage 8 (Definition UI + Tags)
+            │           └── Stage 9 (Run Execution + CSV Export) ─── PHASE 1 COMPLETE
+            │               └── Stage 10 (Experiment Framework) ─── PHASE 2 COMPLETE
+            │                   └── Stage 11 (Analysis + Visualizations)
+            │                       └── Stage 12 (MCP Read) ─── PHASE 3 COMPLETE
+            │                           └── Stage 13 (Run Comparison) ─── PHASE 4 COMPLETE
+            │                               └── Stage 14 (MCP Write) ─── PHASE 5 COMPLETE
+            │                                   └── Stage 15 (Data Export) ─── PHASE 6 COMPLETE
+            │
+            └── Stage 5 (Queue System)
+                └── Stage 6 (Python Workers)
+                    └── Stage 9 (Run Execution + CSV Export)
+
+Stage 2b (Transcript Versioning) must complete before Stage 9
+Stage 15 (Export) depends on: Stages 9, 11 ─── COMPLETE
+Stage 16 (Scale) depends on: Stage 9, can be done in parallel with later stages
+Stage 17 (Deployment) can start after Stage 9
+```
+
+---
+
+## Phase Summary
+
+| Phase | Stages | Focus | Milestone |
+|-------|--------|-------|-----------|
+| **Foundation** | 1-4, 2b | Infrastructure, database, API, auth, transcript versioning | - |
+| **Core Pipeline** | 5-9 | Queue, workers, UI, run execution, CSV export | **Phase 1: CLI Replication** |
+| **Experimentation** | 10 | Experiment framework, cost estimation | **Phase 2: Experiment Tracking** |
+| **Analysis** | 11-12 | Auto-analysis, visualizations, MCP read | **Phase 3: Automated Analysis** |
+| **Comparison** | 13 | Run comparison, delta analysis | **Phase 4: Comparison** |
+| **AI Authoring** | 14 | MCP write tools | **Phase 5: AI-Assisted Authoring** |
+| **Data Exchange** | 15 | CLI compatibility, export/import | **Phase 6: CLI Interop** |
+| **Scale** | 16 | Batch processing, sampling, cost tracking | *(deferred)* |
+| **Ship** | 17 | Production deployment | - |
+
+---
+
+## Next Steps
+
+To begin implementation:
+1. Create detailed spec for Stage 1
+2. Review and approve spec
+3. Implement Stage 1
+4. Repeat for subsequent stages
+
+Each stage spec should include:
+- Detailed file/folder structure
+- API contracts (types, schemas)
+- Test requirements
+- Acceptance criteria checklist

@@ -1,0 +1,205 @@
+/**
+ * MCP Audit Logging Service
+ *
+ * Provides audit trail for all MCP write operations.
+ * Logs are structured for easy querying and analysis.
+ *
+ * ## Log Format
+ *
+ * All audit entries are logged as structured JSON with:
+ * - action: The MCP operation (create_definition, fork_definition, start_run, etc.)
+ * - userId: The user performing the operation (MCP user ID)
+ * - entityId: The ID of the created/modified entity
+ * - entityType: Type of entity (definition, run, validation)
+ * - requestId: Unique request ID for correlation
+ * - timestamp: ISO 8601 timestamp
+ * - metadata: Operation-specific details (parentId, models, etc.)
+ *
+ * ## Querying Logs
+ *
+ * Logs are output via pino structured logging. Query with:
+ *
+ * ```bash
+ * # Find all create_definition operations
+ * grep "create_definition" logs/api.log | jq
+ *
+ * # Find operations by user
+ * grep '"userId":"user-123"' logs/api.log
+ *
+ * # Find all MCP audit entries
+ * grep '"context":"mcp:audit"' logs/api.log
+ *
+ * # Using pino-pretty for human-readable output
+ * cat logs/api.log | pino-pretty
+ * ```
+ *
+ * ## Log Retention
+ *
+ * Audit logs should be retained according to your organization's
+ * data retention policy. These logs may contain operation metadata
+ * but not actual scenario content.
+ */
+
+import { createLogger } from '@valuerank/shared';
+
+const auditLog = createLogger('mcp:audit');
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+/**
+ * Audit action types for MCP write operations
+ */
+export type AuditAction =
+  | 'create_definition'
+  | 'fork_definition'
+  | 'validate_definition'
+  | 'start_run'
+  | 'generate_scenarios_preview';
+
+/**
+ * Audit entry for MCP write operations
+ */
+export type AuditEntry = {
+  action: AuditAction;
+  userId: string;
+  entityId: string;
+  entityType: 'definition' | 'run' | 'validation';
+  requestId: string;
+  timestamp?: Date;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Audit entry for failed operations
+ */
+export type AuditErrorEntry = {
+  action: AuditAction;
+  userId: string;
+  requestId: string;
+  error: string;
+  timestamp?: Date;
+  metadata?: Record<string, unknown>;
+};
+
+// ============================================================================
+// LOGGING FUNCTIONS
+// ============================================================================
+
+/**
+ * Logs a successful MCP write operation.
+ *
+ * @param entry - Audit entry with operation details
+ */
+export function logAuditEvent(entry: AuditEntry): void {
+  const timestamp = entry.timestamp ?? new Date();
+
+  auditLog.info(
+    {
+      action: entry.action,
+      userId: entry.userId,
+      entityId: entry.entityId,
+      entityType: entry.entityType,
+      requestId: entry.requestId,
+      timestamp: timestamp.toISOString(),
+      ...entry.metadata,
+    },
+    `MCP write: ${entry.action}`
+  );
+}
+
+/**
+ * Logs a failed MCP write operation.
+ *
+ * @param entry - Error audit entry with failure details
+ */
+export function logAuditError(entry: AuditErrorEntry): void {
+  const timestamp = entry.timestamp ?? new Date();
+
+  auditLog.error(
+    {
+      action: entry.action,
+      userId: entry.userId,
+      requestId: entry.requestId,
+      error: entry.error,
+      timestamp: timestamp.toISOString(),
+      ...entry.metadata,
+    },
+    `MCP write failed: ${entry.action}`
+  );
+}
+
+/**
+ * Creates a standardized audit entry for definition operations.
+ */
+export function createDefinitionAudit(params: {
+  action: 'create_definition' | 'fork_definition';
+  userId: string;
+  definitionId: string;
+  requestId: string;
+  parentId?: string;
+  name?: string;
+}): AuditEntry {
+  return {
+    action: params.action,
+    userId: params.userId,
+    entityId: params.definitionId,
+    entityType: 'definition',
+    requestId: params.requestId,
+    metadata: {
+      parentId: params.parentId,
+      definitionName: params.name,
+    },
+  };
+}
+
+/**
+ * Creates a standardized audit entry for run operations.
+ */
+export function createRunAudit(params: {
+  userId: string;
+  runId: string;
+  definitionId: string;
+  requestId: string;
+  models: string[];
+  samplePercentage?: number;
+}): AuditEntry {
+  return {
+    action: 'start_run',
+    userId: params.userId,
+    entityId: params.runId,
+    entityType: 'run',
+    requestId: params.requestId,
+    metadata: {
+      definitionId: params.definitionId,
+      models: params.models,
+      samplePercentage: params.samplePercentage,
+    },
+  };
+}
+
+/**
+ * Creates a standardized audit entry for validation operations.
+ * Validation doesn't persist, but we log for usage tracking.
+ */
+export function createValidationAudit(params: {
+  userId: string;
+  requestId: string;
+  valid: boolean;
+  errorCount: number;
+  warningCount: number;
+}): AuditEntry {
+  return {
+    action: 'validate_definition',
+    userId: params.userId,
+    entityId: 'validation', // No entity created
+    entityType: 'validation',
+    requestId: params.requestId,
+    metadata: {
+      valid: params.valid,
+      errorCount: params.errorCount,
+      warningCount: params.warningCount,
+    },
+  };
+}

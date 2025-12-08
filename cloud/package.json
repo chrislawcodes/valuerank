@@ -1,0 +1,40 @@
+{
+  "name": "cloud-valuerank",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "npm run db:test:setup && turbo test",
+    "test:coverage": "npm run db:test:setup && turbo test:coverage",
+    "lint": "turbo lint",
+    "lint:fix": "turbo lint:fix",
+    "typecheck": "turbo typecheck",
+    "db:migrate": "npm run migrate --workspace=@valuerank/db",
+    "db:generate": "npm run generate --workspace=@valuerank/db",
+    "db:studio": "npm run studio --workspace=@valuerank/db",
+    "db:push": "npm run push --workspace=@valuerank/db",
+    "db:seed": "npx prisma db seed --schema=packages/db/prisma/schema.prisma",
+    "db:test:setup": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
+    "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --force-reset --skip-generate",
+    "clean": "turbo clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.3.3",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.2.0"
+  },
+  "packageManager": "npm@10.2.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

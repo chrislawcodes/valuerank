@@ -1,0 +1,84 @@
+# Frontend GraphQL Operations
+# Stage 7: Frontend Foundation
+#
+# These are the GraphQL operations the frontend will use.
+# The API already implements these - this documents what we're consuming.
+
+# ============================================================================
+# Authentication Queries
+# ============================================================================
+
+# Get current authenticated user
+# Used by AuthContext to validate token and get user info
+query Me {
+  me {
+    id
+    email
+    name
+    lastLoginAt
+    createdAt
+  }
+}
+
+# ============================================================================
+# API Key Management
+# ============================================================================
+
+# List all API keys for current user
+# Used by Settings page to display keys
+query ApiKeys {
+  apiKeys {
+    id
+    name
+    keyPrefix
+    lastUsed
+    expiresAt
+    createdAt
+  }
+}
+
+# Create a new API key
+# Returns full key value ONCE - must display to user immediately
+mutation CreateApiKey($input: CreateApiKeyInput!) {
+  createApiKey(input: $input) {
+    apiKey {
+      id
+      name
+      keyPrefix
+      lastUsed
+      expiresAt
+      createdAt
+    }
+    key  # Full key value - only returned at creation
+  }
+}
+
+# Input type for creating API key
+# input CreateApiKeyInput {
+#   name: String!  # Human-readable name (e.g., "Claude Desktop", "Cursor IDE")
+# }
+
+# Revoke (delete) an API key
+# Returns true on success
+mutation RevokeApiKey($id: ID!) {
+  revokeApiKey(id: $id)
+}
+
+# ============================================================================
+# Notes
+# ============================================================================
+#
+# REST Endpoints (not GraphQL):
+#
+# POST /api/auth/login
+# Body: { email: string, password: string }
+# Response: { token: string, user: { id, email, name } }
+#
+# GET /api/auth/me
+# Header: Authorization: Bearer <token>
+# Response: { id, email, name, createdAt, lastLoginAt }
+#
+# The login endpoint is REST because:
+# 1. We need the JWT before we can make authenticated GraphQL requests
+# 2. It's simpler than unauthenticated GraphQL mutations
+# 3. Consistent with auth patterns (separate auth endpoints)

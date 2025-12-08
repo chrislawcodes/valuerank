@@ -1,0 +1,245 @@
+# GraphQL Schema Extensions for Stage 8: Definition Management UI
+# This file documents the API contract - implementation uses Pothos code-first
+
+# =============================================================================
+# NEW TYPES
+# =============================================================================
+
+"""
+A tag for organizing and categorizing definitions
+"""
+type Tag {
+  """Unique identifier"""
+  id: ID!
+
+  """Tag name (lowercase, 1-50 characters)"""
+  name: String!
+
+  """When this tag was created"""
+  createdAt: DateTime!
+
+  """Definitions using this tag"""
+  definitions: [Definition!]!
+
+  """Number of definitions using this tag"""
+  definitionCount: Int!
+}
+
+# =============================================================================
+# EXTENDED TYPES
+# =============================================================================
+
+"""
+Extended Definition type with tag support
+"""
+extend type Definition {
+  """Tags assigned to this definition"""
+  tags: [Tag!]!
+
+  """Full ancestry chain from this definition to root (oldest first)"""
+  ancestors: [Definition!]!
+
+  """All descendants forked from this definition (newest first)"""
+  descendants: [Definition!]!
+
+  """Number of runs using this definition"""
+  runCount: Int!
+}
+
+# =============================================================================
+# QUERIES
+# =============================================================================
+
+extend type Query {
+  """List all tags, optionally filtered"""
+  tags(
+    """Search tags by name (contains match)"""
+    search: String
+
+    """Maximum number of results"""
+    limit: Int = 50
+  ): [Tag!]!
+
+  """Get a single tag by ID"""
+  tag(id: ID!): Tag
+
+  """
+  List definitions with enhanced filtering.
+  Extends existing definitions query with search and tag filters.
+  """
+  definitions(
+    """Only return root definitions (no parent)"""
+    rootOnly: Boolean
+
+    """Search by definition name (case-insensitive contains)"""
+    search: String
+
+    """Filter by tag IDs (OR logic - matches any of the tags)"""
+    tagIds: [ID!]
+
+    """Only definitions that have been used in runs"""
+    hasRuns: Boolean
+
+    """Maximum number of results (default: 20, max: 100)"""
+    limit: Int = 20
+
+    """Pagination offset"""
+    offset: Int = 0
+  ): [Definition!]!
+
+  """
+  Get ancestors of a definition (full chain to root).
+  Returns definitions ordered from root to immediate parent.
+  """
+  definitionAncestors(
+    """Definition ID to get ancestors for"""
+    id: ID!
+
+    """Maximum depth to traverse (default: 10)"""
+    maxDepth: Int = 10
+  ): [Definition!]!
+
+  """
+  Get descendants of a definition (full subtree).
+  Returns definitions ordered by creation date (newest first).
+  """
+  definitionDescendants(
+    """Definition ID to get descendants for"""
+    id: ID!
+
+    """Maximum depth to traverse (default: 10)"""
+    maxDepth: Int = 10
+  ): [Definition!]!
+}
+
+# =============================================================================
+# MUTATIONS - TAGS
+# =============================================================================
+
+extend type Mutation {
+  """
+  Create a new tag.
+  Name is normalized to lowercase and must be unique.
+  """
+  createTag(
+    """Tag name (1-50 characters, alphanumeric/hyphen/underscore)"""
+    name: String!
+  ): Tag!
+
+  """
+  Delete a tag.
+  Removes the tag from all definitions that use it.
+  """
+  deleteTag(
+    """Tag ID to delete"""
+    id: ID!
+  ): DeleteTagResult!
+
+  """
+  Add a tag to a definition.
+  No-op if tag is already assigned.
+  """
+  addTagToDefinition(
+    """Definition to tag"""
+    definitionId: ID!
+
+    """Tag to assign"""
+    tagId: ID!
+  ): Definition!
+
+  """
+  Remove a tag from a definition.
+  No-op if tag was not assigned.
+  """
+  removeTagFromDefinition(
+    """Definition to untag"""
+    definitionId: ID!
+
+    """Tag to remove"""
+    tagId: ID!
+  ): Definition!
+
+  """
+  Create a tag and immediately assign it to a definition.
+  Convenience mutation for inline tag creation.
+  """
+  createAndAssignTag(
+    """Definition to tag"""
+    definitionId: ID!
+
+    """New tag name"""
+    tagName: String!
+  ): Definition!
+}
+
+"""Result type for tag deletion"""
+type DeleteTagResult {
+  """Whether deletion was successful"""
+  success: Boolean!
+
+  """Number of definitions the tag was removed from"""
+  affectedDefinitions: Int!
+}
+
+# =============================================================================
+# MUTATIONS - DEFINITIONS (ENHANCED)
+# =============================================================================
+
+extend type Mutation {
+  """
+  Update an existing definition.
+  Note: If definition has runs, consider forking instead to preserve history.
+  """
+  updateDefinition(
+    """Definition ID to update"""
+    id: ID!
+
+    """Update payload"""
+    input: UpdateDefinitionInput!
+  ): Definition!
+}
+
+"""Input type for updating a definition"""
+input UpdateDefinitionInput {
+  """Updated name (optional)"""
+  name: String
+
+  """Updated content (optional, replaces entire content if provided)"""
+  content: JSON
+}
+
+# =============================================================================
+# INPUT TYPES
+# =============================================================================
+
+"""
+Enhanced input for creating definitions (extends existing CreateDefinitionInput)
+"""
+input CreateDefinitionInput {
+  """Name of the definition"""
+  name: String!
+
+  """JSONB content for the definition"""
+  content: JSON!
+
+  """Optional parent definition ID for forking"""
+  parentId: String
+
+  """Optional tag IDs to assign immediately"""
+  tagIds: [ID!]
+}
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+# Implementation Notes:
+#
+# 1. Tag names are normalized to lowercase on create
+# 2. Tag name uniqueness is case-insensitive
+# 3. Ancestors query uses recursive CTE, limited to maxDepth
+# 4. Descendants query uses recursive CTE, limited to maxDepth
+# 5. Tag filtering uses OR logic (matches any tag in list)
+# 6. Search is case-insensitive contains match on name
+# 7. hasRuns filter joins with runs table to check existence
+# 8. All mutations require authentication (existing middleware)

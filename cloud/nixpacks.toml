@@ -1,0 +1,22 @@
+# Nixpacks configuration for multi-runtime deployment
+# See: https://nixpacks.com/docs/configuration/file
+
+[phases.setup]
+# Include Python alongside Node.js for worker scripts
+nixPkgs = ["python311", "python311Packages.pip"]
+
+[phases.install]
+# Install both Node.js and Python dependencies
+cmds = [
+  "npm ci",
+  "pip install -r workers/requirements.txt"
+]
+
+[phases.build]
+# Build command varies per service (set in Railway dashboard)
+# API: npm run build --workspace=@valuerank/api
+# Web: npm run build --workspace=@valuerank/web
+
+[variables]
+# Ensure Python 3.11 is used
+NIXPACKS_PYTHON_VERSION = "3.11"

@@ -102,3 +102,18 @@ devtool/
 cd devtool && npm install && npm run dev
 # Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in .env
 ```
+
+## Claude Code Agent Instructions
+
+### Testing and Coverage
+- Use the **test-runner-json** agent when running tests. This provides structured JSON output for test results.
+- Use the **coverage-analyzer** agent for code coverage analysis and reporting.
+
+### Complex Feature Development
+For multi-step features, use the feature development skill workflow:
+1. **feature-spec** - Create a specification with prioritized user stories and requirements
+2. **feature-plan** - Generate a technical implementation plan with architecture decisions
+3. **feature-tasks** - Break down the plan into executable tasks with dependency tracking
+4. **feature-implement** - Execute tasks phase-by-phase with automatic progress tracking
+
+This workflow ensures proper planning, documentation, and incremental commits for larger features.
