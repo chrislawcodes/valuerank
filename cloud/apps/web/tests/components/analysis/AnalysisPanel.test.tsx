@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
 
@@ -155,7 +155,25 @@ describe('AnalysisPanel', () => {
 
     render(<AnalysisPanel runId="run-1" />);
 
-    expect(screen.getByText('Analysis Unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Analysis Not Available')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeInTheDocument();
+  });
+
+  it('calls recompute when Run Analysis button is clicked', () => {
+    const recompute = vi.fn().mockResolvedValue(undefined);
+    mockUseAnalysis.mockReturnValue({
+      analysis: null,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute,
+      recomputing: false,
+    });
+
+    render(<AnalysisPanel runId="run-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Analysis/i }));
+    expect(recompute).toHaveBeenCalled();
   });
 
   it('renders analysis header with computed time', () => {

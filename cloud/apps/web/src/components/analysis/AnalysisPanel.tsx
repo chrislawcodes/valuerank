@@ -175,19 +175,45 @@ function AnalysisPending({ status }: { status: string | null | undefined }) {
 }
 
 /**
- * Empty analysis display (for runs without enough data).
+ * Empty analysis display (for runs without enough data or not yet analyzed).
  */
-function AnalysisEmpty() {
+function AnalysisEmpty({
+  onRunAnalysis,
+  isRunning,
+}: {
+  onRunAnalysis?: () => void;
+  isRunning?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <Info className="w-8 h-8 text-gray-400 mb-4" />
       <h3 className="text-lg font-medium text-gray-900 mb-2">
-        Analysis Unavailable
+        Analysis Not Available
       </h3>
-      <p className="text-sm text-gray-500 max-w-md">
-        Not enough successful transcripts to compute analysis.
-        Analysis requires at least one summarized transcript with a decision code.
+      <p className="text-sm text-gray-500 max-w-md mb-4">
+        Analysis has not been computed for this run yet, or there were not enough
+        successful transcripts with decision codes.
       </p>
+      {onRunAnalysis && (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onRunAnalysis}
+          disabled={isRunning}
+        >
+          {isRunning ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Running Analysis...
+            </>
+          ) : (
+            <>
+              <BarChart2 className="w-4 h-4 mr-2" />
+              Run Analysis
+            </>
+          )}
+        </Button>
+      )}
     </div>
   );
 }
@@ -256,7 +282,10 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   if (!analysis) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <AnalysisEmpty />
+        <AnalysisEmpty
+          onRunAnalysis={() => void recompute()}
+          isRunning={recomputing}
+        />
       </div>
     );
   }
