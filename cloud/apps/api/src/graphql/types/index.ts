@@ -25,5 +25,8 @@ import './available-model.js';
 // Health types
 import './health.js';
 
+// Analysis types
+import './analysis.js';
+
 // Input types
 import './inputs/start-run.js';

@@ -8,7 +8,7 @@ builder.enumType('RunStatus', {
 });
 
 // AnalysisStatus enum - mirrors Prisma AnalysisStatus
-// Registered with builder, not exported as value
+// Registered with builder, referenced via builder.enumRef in other files
 builder.enumType('AnalysisStatus', {
   values: ['CURRENT', 'SUPERSEDED'] as const,
   description: 'Status of an analysis result',

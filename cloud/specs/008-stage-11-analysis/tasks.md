@@ -32,40 +32,40 @@
 
 ### Python Statistics Module
 
-- [ ] T005 Create workers/stats/__init__.py with module exports
-- [ ] T006 [P] Create workers/stats/confidence.py - Wilson score CI implementation
-- [ ] T007 [P] Create workers/stats/basic_stats.py - Win rates, means, std dev calculation
-- [ ] T008 [P] Create workers/stats/model_comparison.py - Spearman's rho, Cohen's d, outlier detection
-- [ ] T009 [P] Create workers/stats/dimension_impact.py - Variable analysis, R-squared
-- [ ] T010 Create workers/tests/test_stats.py - Unit tests for all stats modules (validate against scipy reference)
+- [X] T005 Create workers/stats/__init__.py with module exports
+- [X] T006 [P] Create workers/stats/confidence.py - Wilson score CI implementation
+- [X] T007 [P] Create workers/stats/basic_stats.py - Win rates, means, std dev calculation
+- [X] T008 [P] Create workers/stats/model_comparison.py - Spearman's rho, Cohen's d, outlier detection
+- [X] T009 [P] Create workers/stats/dimension_impact.py - Variable analysis, R-squared
+- [X] T010 Create workers/tests/test_stats.py - Unit tests for all stats modules (validate against scipy reference)
 
 ### Extend analyze_basic.py
 
-- [ ] T011 Update workers/analyze_basic.py - Replace stub with real implementation that uses stats/ modules
-- [ ] T012 Add input parsing: read transcripts, extract decision codes, scenario dimensions
-- [ ] T013 Add output formatting: return full AnalysisOutput schema per plan.md
-- [ ] T014 Create workers/tests/test_analyze_basic.py - Integration tests for full analysis
+- [X] T011 Update workers/analyze_basic.py - Replace stub with real implementation that uses stats/ modules
+- [X] T012 Add input parsing: read transcripts, extract decision codes, scenario dimensions
+- [X] T013 Add output formatting: return full AnalysisOutput schema per plan.md
+- [X] T014 Create workers/tests/test_analyze_basic.py - Integration tests for full analysis
 
 ### GraphQL Types
 
-- [ ] T015 Create apps/api/src/graphql/types/analysis.ts - AnalysisResult, ContestedScenario, AnalysisWarning types
-- [ ] T016 Update apps/api/src/graphql/types/index.ts - Export new analysis types
-- [ ] T017 Update apps/api/src/graphql/types/run.ts - Add analysis and analysisStatus fields
+- [X] T015 Create apps/api/src/graphql/types/analysis.ts - AnalysisResult, ContestedScenario, AnalysisWarning types
+- [X] T016 Update apps/api/src/graphql/types/index.ts - Export new analysis types
+- [X] T017 Update apps/api/src/graphql/types/run.ts - Add analysis and analysisStatus fields
 
 ### GraphQL Queries
 
-- [ ] T018 Create apps/api/src/graphql/queries/analysis.ts - analysis(runId) query
-- [ ] T019 Update apps/api/src/graphql/queries/index.ts - Export analysis query
+- [X] T018 Create apps/api/src/graphql/queries/analysis.ts - analysis(runId) query
+- [X] T019 Update apps/api/src/graphql/queries/index.ts - Export analysis query
 
 ### GraphQL Mutations
 
-- [ ] T020 Create apps/api/src/graphql/mutations/analysis.ts - recomputeAnalysis mutation
-- [ ] T021 Update apps/api/src/graphql/mutations/index.ts - Export analysis mutation
+- [X] T020 Create apps/api/src/graphql/mutations/analysis.ts - recomputeAnalysis mutation
+- [X] T021 Update apps/api/src/graphql/mutations/index.ts - Export analysis mutation
 
 ### Update Handler
 
-- [ ] T022 Update apps/api/src/queue/handlers/analyze-basic.ts - Update output type, bump CODE_VERSION to 1.0.0
-- [ ] T023 Create apps/api/tests/queue/handlers/analyze-basic.test.ts - Handler integration tests
+- [X] T022 Update apps/api/src/queue/handlers/analyze-basic.ts - Update output type, bump CODE_VERSION to 1.0.0
+- [X] T023 Create apps/api/tests/queue/handlers/analyze-basic.test.ts - Handler integration tests
 
 **Checkpoint**: Foundation ready - Python computes real stats, GraphQL exposes data
 

@@ -28,6 +28,7 @@ export type SummarizeTranscriptJobData = {
 export type AnalyzeBasicJobData = {
   runId: string;
   transcriptIds: string[];
+  force?: boolean; // Force recomputation even if cached
 };
 
 export type AnalyzeDeepJobData = {

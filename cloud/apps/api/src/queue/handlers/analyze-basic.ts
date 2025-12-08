@@ -2,14 +2,15 @@
  * Analyze Basic Handler
  *
  * Handles analyze_basic jobs by executing Python analyze_basic worker.
- * Currently runs a stub that returns placeholder results.
- * Real analysis will be added in Stage 11.
+ * Computes win rates, confidence intervals, model comparisons, and
+ * dimension impact analysis.
  */
 
 import path from 'path';
 import crypto from 'crypto';
 import type * as PgBoss from 'pg-boss';
-import { db, Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
@@ -20,21 +21,59 @@ const log = createLogger('queue:analyze-basic');
 const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // Code version for tracking analysis versions
-const CODE_VERSION = '0.1.0-stub';
+const CODE_VERSION = '1.0.0';
+
+/**
+ * Transcript data structure sent to Python worker.
+ */
+type TranscriptData = {
+  id: string;
+  modelId: string;
+  scenarioId: string;
+  decisionCode: string | null;
+  content: Record<string, unknown>;
+  scenario: {
+    name: string;
+    dimensions: Record<string, string>;
+  };
+};
 
 /**
  * Python worker input structure.
  */
 type AnalyzeWorkerInput = {
   runId: string;
-  transcriptIds: string[];
+  transcripts: TranscriptData[];
+};
+
+/**
+ * Analysis output from Python worker.
+ */
+type AnalysisOutput = {
+  perModel: Record<string, unknown>;
+  modelAgreement: Record<string, unknown>;
+  dimensionAnalysis: Record<string, unknown>;
+  mostContestedScenarios: Array<{
+    scenarioId: string;
+    scenarioName: string;
+    variance: number;
+    modelScores: Record<string, number>;
+  }>;
+  methodsUsed: Record<string, unknown>;
+  warnings: Array<{
+    code: string;
+    message: string;
+    recommendation: string;
+  }>;
+  computedAt: string;
+  durationMs: number;
 };
 
 /**
  * Python worker output structure.
  */
 type AnalyzeWorkerOutput =
-  | { success: true; analysis: { status: string; message: string; transcriptCount: number; completedAt: string } }
+  | { success: true; analysis: AnalysisOutput }
   | { success: false; error: { message: string; code: string; retryable: boolean } };
 
 /**
@@ -44,20 +83,73 @@ type AnalyzeWorkerOutput =
 export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobData> {
   return async (jobs: PgBoss.Job<AnalyzeBasicJobData>[]) => {
     for (const job of jobs) {
-      const { runId, transcriptIds } = job.data;
+      const { runId, transcriptIds, force = false } = job.data;
       const jobId = job.id;
 
       log.info(
-        { jobId, runId, transcriptCount: transcriptIds.length },
+        { jobId, runId, transcriptCount: transcriptIds.length, force },
         'Processing analyze_basic job'
       );
 
       try {
+        // Create input hash for deduplication
+        const inputHash = crypto
+          .createHash('sha256')
+          .update(JSON.stringify({ runId, transcriptIds: transcriptIds.sort() }))
+          .digest('hex')
+          .slice(0, 16);
+
+        // Check for cached result (unless force recompute)
+        if (!force) {
+          const existing = await db.analysisResult.findFirst({
+            where: {
+              runId,
+              inputHash,
+              codeVersion: CODE_VERSION,
+              status: 'CURRENT',
+            },
+          });
+
+          if (existing) {
+            log.info({ jobId, runId, analysisId: existing.id }, 'Using cached analysis result');
+            return;
+          }
+        }
+
+        // Fetch transcript data with scenario info
+        const transcripts = await db.transcript.findMany({
+          where: { id: { in: transcriptIds } },
+          include: {
+            scenario: true,
+          },
+        });
+
+        // Transform to worker input format
+        const transcriptData: TranscriptData[] = transcripts
+          .filter((t) => t.scenario !== null && t.scenarioId !== null)
+          .map((t) => {
+            // Extract dimensions from scenario content JSON
+            const scenarioContent = t.scenario!.content as Record<string, unknown> | null;
+            const dimensions = (scenarioContent?.dimensions as Record<string, string>) || {};
+
+            return {
+              id: t.id,
+              modelId: t.modelId,
+              scenarioId: t.scenarioId as string,
+              decisionCode: t.decisionCode,
+              content: t.content as Record<string, unknown>,
+              scenario: {
+                name: t.scenario!.name,
+                dimensions,
+              },
+            };
+          });
+
         // Execute Python analyze worker
         const result = await spawnPython<AnalyzeWorkerInput, AnalyzeWorkerOutput>(
           ANALYZE_WORKER_PATH,
-          { runId, transcriptIds },
-          { cwd: path.resolve(process.cwd(), '../..'), timeout: 60000 }
+          { runId, transcripts: transcriptData },
+          { cwd: path.resolve(process.cwd(), '../..'), timeout: 120000 }
         );
 
         // Handle spawn failure
@@ -79,12 +171,16 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           throw new Error(`${err.code}: ${err.message}`);
         }
 
-        // Create input hash for deduplication
-        const inputHash = crypto
-          .createHash('sha256')
-          .update(JSON.stringify({ runId, transcriptIds: transcriptIds.sort() }))
-          .digest('hex')
-          .slice(0, 16);
+        // Mark any existing analyses as superseded
+        await db.analysisResult.updateMany({
+          where: {
+            runId,
+            status: 'CURRENT',
+          },
+          data: {
+            status: 'SUPERSEDED',
+          },
+        });
 
         // Create analysis result record
         await db.analysisResult.create({
@@ -99,7 +195,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         });
 
         log.info(
-          { jobId, runId, status: output.analysis.status },
+          { jobId, runId, durationMs: output.analysis.durationMs },
           'Analyze:basic job completed'
         );
       } catch (error) {

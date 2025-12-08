@@ -7,3 +7,4 @@ import './run.js';
 import './queue.js';
 import './tag.js';
 import './definition-tags.js';
+import './analysis.js';
