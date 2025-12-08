@@ -12,6 +12,7 @@ import { createLogger } from '@valuerank/shared';
 import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
+import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -55,6 +56,7 @@ async function checkAllSummarized(runId: string): Promise<boolean> {
 
 /**
  * Update run status to COMPLETED if all transcripts are summarized.
+ * Also triggers basic analysis for the completed run.
  */
 async function maybeCompleteRun(runId: string): Promise<void> {
   const allDone = await checkAllSummarized(runId);
@@ -68,6 +70,14 @@ async function maybeCompleteRun(runId: string): Promise<void> {
       },
     });
     log.info({ runId }, 'Run completed - all transcripts summarized');
+
+    // Trigger basic analysis for the completed run
+    try {
+      await triggerBasicAnalysis(runId);
+    } catch (error) {
+      // Log error but don't fail - analysis can be triggered manually
+      log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+    }
   }
 }
 

@@ -58,6 +58,7 @@ export type Run = {
   transcripts: Transcript[];
   transcriptCount: number;
   recentTasks: TaskResult[];
+  analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
   definition: {
     id: string;
     name: string;
@@ -88,6 +89,7 @@ export const RUN_FRAGMENT = gql`
     updatedAt
     lastAccessedAt
     transcriptCount
+    analysisStatus
     definition {
       id
       name

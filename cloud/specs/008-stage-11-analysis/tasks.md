@@ -79,15 +79,15 @@
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Create apps/api/src/services/analysis/trigger.ts - Queue analyze_basic job on run completion
-- [ ] T025 [US1] Update apps/api/src/queue/handlers/index.ts - Wire up analysis trigger to run completion event
-- [ ] T026 [US1] Create apps/api/tests/services/analysis/trigger.test.ts - Unit tests for trigger logic
-- [ ] T027 [US1] Create apps/web/src/hooks/useAnalysis.ts - urql query hook for analysis data
-- [ ] T028 [US1] Create apps/web/src/components/analysis/AnalysisPanel.tsx - Main container component
-- [ ] T029 [US1] Create apps/web/src/components/analysis/StatCard.tsx - Reusable stat display card
-- [ ] T030 [US1] Update apps/web/src/pages/RunDetail.tsx - Add AnalysisPanel to run detail page
-- [ ] T031 [US1] Create apps/web/tests/components/analysis/AnalysisPanel.test.tsx - Component tests
-- [ ] T032 [US1] Create apps/web/tests/hooks/useAnalysis.test.ts - Hook tests
+- [X] T024 [US1] Create apps/api/src/services/analysis/trigger.ts - Queue analyze_basic job on run completion
+- [X] T025 [US1] Update apps/api/src/queue/handlers/index.ts - Wire up analysis trigger to run completion event
+- [X] T026 [US1] Create apps/api/tests/services/analysis/trigger.test.ts - Unit tests for trigger logic
+- [X] T027 [US1] Create apps/web/src/hooks/useAnalysis.ts - urql query hook for analysis data
+- [X] T028 [US1] Create apps/web/src/components/analysis/AnalysisPanel.tsx - Main container component
+- [X] T029 [US1] Create apps/web/src/components/analysis/StatCard.tsx - Reusable stat display card
+- [X] T030 [US1] Update apps/web/src/pages/RunDetail.tsx - Add AnalysisPanel to run detail page
+- [X] T031 [US1] Create apps/web/tests/components/analysis/AnalysisPanel.test.tsx - Component tests
+- [X] T032 [US1] Create apps/web/tests/hooks/useAnalysis.test.ts - Hook tests
 
 **Checkpoint**: US1 complete - Analysis auto-triggers and displays basic stats
 

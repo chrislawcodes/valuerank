@@ -14,6 +14,7 @@ import { RunProgress } from '../components/runs/RunProgress';
 import { RunResults } from '../components/runs/RunResults';
 import { RunControls } from '../components/runs/RunControls';
 import { RerunDialog } from '../components/runs/RerunDialog';
+import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useRun } from '../hooks/useRun';
 import { useRunMutations } from '../hooks/useRunMutations';
 import { exportRunAsCSV } from '../api/export';
@@ -277,6 +278,14 @@ export function RunDetail() {
           </div>
         )}
       </div>
+
+      {/* Analysis section (shows for completed runs or when analysis is computing) */}
+      {(run.status === 'COMPLETED' || run.analysisStatus) && (
+        <AnalysisPanel
+          runId={run.id}
+          analysisStatus={run.analysisStatus}
+        />
+      )}
 
       {/* Polling indicator for active runs */}
       {(isActive || isPaused) && (
