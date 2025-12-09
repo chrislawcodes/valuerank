@@ -237,7 +237,7 @@ export function createOAuthRouter(): Router {
    */
   router.post('/authorize', async (req: Request, res: Response) => {
     const body = req.body || {};
-    log.debug({ body: { ...body, api_key: '[redacted]' } }, 'Authorization POST request');
+    log.info({ body: { ...body, api_key: body.api_key ? '[redacted]' : undefined }, contentType: req.headers['content-type'] }, 'Authorization POST request');
 
     // Reconstruct auth request from form data
     const validation = validateAuthorizationRequest({

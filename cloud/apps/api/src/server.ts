@@ -29,6 +29,7 @@ export function createServer() {
   // Middleware
   app.use(cors());
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true })); // For OAuth form submissions
 
   // Request ID and logging middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
