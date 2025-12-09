@@ -8,7 +8,7 @@ import analysisRouter from './routes/analysis.js';
 import { createLogger } from './utils/logger.js';
 
 const app = express();
-const PORT = process.env.PORT || 0;
+const PORT = process.env.PORT || 3030;
 const log = createLogger('server');
 
 app.use(cors());
