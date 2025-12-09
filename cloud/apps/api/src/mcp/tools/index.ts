@@ -32,6 +32,21 @@ import './fork-definition.js';
 import './validate-definition.js';
 import './start-run.js';
 import './generate-scenarios-preview.js';
+// Feature 014 - Delete Tools
+import './delete-definition.js';
+import './delete-run.js';
+// Feature 014 - LLM Management Tools
+import './list-llm-providers.js';
+import './list-llm-models.js';
+import './get-llm-model.js';
+import './create-llm-model.js';
+import './update-llm-model.js';
+import './deprecate-llm-model.js';
+import './reactivate-llm-model.js';
+import './set-default-llm-model.js';
+import './update-llm-provider.js';
+import './set-infra-model.js';
+import './list-system-settings.js';
 
 /**
  * Registers all MCP tools on the given server

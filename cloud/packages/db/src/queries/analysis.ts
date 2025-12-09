@@ -253,12 +253,13 @@ export async function createAnalysisResult(
   log.info({ runId: data.runId, analysisType: data.analysisType }, 'Creating analysis result');
 
   return db.$transaction(async (tx) => {
-    // Mark existing current results as superseded
+    // Mark existing current results as superseded (only non-deleted)
     await tx.analysisResult.updateMany({
       where: {
         runId: data.runId,
         analysisType: data.analysisType,
         status: 'CURRENT',
+        deletedAt: null,
       },
       data: { status: 'SUPERSEDED' },
     });
@@ -279,6 +280,7 @@ export async function createAnalysisResult(
 
 /**
  * Get the latest (current) analysis result for a run and type.
+ * Excludes soft-deleted results.
  */
 export async function getLatestAnalysis(
   runId: string,
@@ -291,6 +293,7 @@ export async function getLatestAnalysis(
       runId,
       analysisType,
       status: 'CURRENT',
+      deletedAt: null, // Exclude soft-deleted
     },
   });
 
@@ -306,23 +309,25 @@ export async function getLatestAnalysis(
 
 /**
  * Get all analysis results for a run.
+ * Excludes soft-deleted results.
  */
 export async function getAnalysisResultsForRun(runId: string): Promise<AnalysisResult[]> {
   return db.analysisResult.findMany({
-    where: { runId },
+    where: { runId, deletedAt: null },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 /**
  * Get analysis history for a run and type (including superseded).
+ * Excludes soft-deleted results.
  */
 export async function getAnalysisHistory(
   runId: string,
   analysisType: string
 ): Promise<AnalysisResultWithOutput[]> {
   const results = await db.analysisResult.findMany({
-    where: { runId, analysisType },
+    where: { runId, analysisType, deletedAt: null },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -334,6 +339,7 @@ export async function getAnalysisHistory(
 
 /**
  * Check if analysis result can be reused (same input hash and code version).
+ * Excludes soft-deleted results.
  */
 export async function findMatchingAnalysis(
   runId: string,
@@ -350,6 +356,7 @@ export async function findMatchingAnalysis(
       inputHash,
       codeVersion,
       status: 'CURRENT',
+      deletedAt: null, // Exclude soft-deleted
     },
   });
 

@@ -116,12 +116,13 @@ export async function createTranscripts(
 
 /**
  * Get a transcript by ID.
+ * Only returns non-deleted transcripts.
  */
 export async function getTranscriptById(id: string): Promise<Transcript> {
   log.debug({ id }, 'Fetching transcript');
 
   const transcript = await db.transcript.findUnique({ where: { id } });
-  if (!transcript) {
+  if (!transcript || transcript.deletedAt !== null) {
     log.warn({ id }, 'Transcript not found');
     throw new NotFoundError('Transcript', id);
   }
@@ -144,12 +145,13 @@ export async function getTranscriptWithContent(id: string): Promise<TranscriptWi
 
 /**
  * Get all transcripts for a run.
+ * Automatically excludes soft-deleted transcripts.
  */
 export async function getTranscriptsForRun(runId: string): Promise<Transcript[]> {
   log.debug({ runId }, 'Fetching transcripts for run');
 
   return db.transcript.findMany({
-    where: { runId },
+    where: { runId, deletedAt: null },
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -170,11 +172,14 @@ export async function getTranscriptsWithContentForRun(
 
 /**
  * List transcripts with optional filters.
+ * Automatically excludes soft-deleted transcripts.
  */
 export async function listTranscripts(filters?: TranscriptFilters): Promise<Transcript[]> {
   log.debug({ filters }, 'Listing transcripts');
 
-  const where: Prisma.TranscriptWhereInput = {};
+  const where: Prisma.TranscriptWhereInput = {
+    deletedAt: null, // Exclude soft-deleted
+  };
 
   if (filters?.runId) where.runId = filters.runId;
   if (filters?.scenarioId) where.scenarioId = filters.scenarioId;
@@ -194,6 +199,7 @@ export async function listTranscripts(filters?: TranscriptFilters): Promise<Tran
 
 /**
  * Get transcript statistics for a run.
+ * Excludes soft-deleted transcripts from statistics.
  */
 export async function getTranscriptStatsForRun(
   runId: string
@@ -207,7 +213,7 @@ export async function getTranscriptStatsForRun(
   log.debug({ runId }, 'Getting transcript stats');
 
   const transcripts = await db.transcript.findMany({
-    where: { runId },
+    where: { runId, deletedAt: null },
     select: {
       modelId: true,
       turnCount: true,

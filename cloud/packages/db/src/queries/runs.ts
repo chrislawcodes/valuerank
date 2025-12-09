@@ -256,3 +256,126 @@ export async function touchRuns(ids: string[]): Promise<void> {
     data: { lastAccessedAt: new Date() },
   });
 }
+
+// ============================================================================
+// DELETE OPERATIONS (Soft Delete)
+// ============================================================================
+
+/**
+ * Result of a soft-delete operation.
+ */
+export type DeleteResult = {
+  success: boolean;
+  entityType: 'definition' | 'run';
+  entityId: string;
+  deletedAt: Date;
+  deletedCount: {
+    primary: number;
+    scenarios?: number;
+    transcripts?: number;
+    analysisResults?: number;
+  };
+};
+
+/**
+ * Cancel any pending or running PgBoss jobs for a run.
+ * This should be called before soft-deleting a running run.
+ *
+ * Note: This is a placeholder that logs the cancellation intent.
+ * The actual PgBoss cancellation should be done at the MCP tool layer
+ * where the boss instance is available.
+ *
+ * @returns List of job names that should be cancelled
+ */
+export function getRunJobNames(runId: string): string[] {
+  // Job names follow the pattern from the job handlers
+  return [
+    `probe-scenario-${runId}`,
+    `summarize-run-${runId}`,
+  ];
+}
+
+/**
+ * Soft delete a run and cascade to related entities.
+ * Sets deletedAt timestamp rather than actually removing data.
+ *
+ * Cascading soft delete includes:
+ * - The run itself
+ * - All transcripts belonging to the run
+ * - All analysis results belonging to the run
+ *
+ * For running/pending runs, jobs should be cancelled first via PgBoss
+ * at the MCP tool layer before calling this function.
+ *
+ * @returns DeleteResult with counts of affected entities
+ */
+export async function softDeleteRun(id: string): Promise<DeleteResult> {
+  log.info({ id }, 'Soft deleting run');
+
+  return db.$transaction(async (tx) => {
+    // Verify run exists and is not already deleted
+    const run = await tx.run.findUnique({ where: { id } });
+    if (!run) {
+      log.warn({ id }, 'Run not found');
+      throw new NotFoundError('Run', id);
+    }
+    if (run.deletedAt !== null) {
+      log.warn({ id }, 'Run already deleted');
+      throw new ValidationError('Run is already deleted', { id });
+    }
+
+    const now = new Date();
+
+    // Soft delete the run (also set status to CANCELLED if still running)
+    const updateData: Prisma.RunUpdateInput = { deletedAt: now };
+    if (run.status === 'RUNNING' || run.status === 'PENDING') {
+      updateData.status = 'CANCELLED';
+      updateData.completedAt = now;
+    }
+    await tx.run.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Soft delete all transcripts belonging to this run
+    const transcriptResult = await tx.transcript.updateMany({
+      where: {
+        runId: id,
+        deletedAt: null,
+      },
+      data: { deletedAt: now },
+    });
+    log.debug({ count: transcriptResult.count }, 'Soft deleted transcripts');
+
+    // Soft delete all analysis results belonging to this run
+    const analysisResult = await tx.analysisResult.updateMany({
+      where: {
+        runId: id,
+        deletedAt: null,
+      },
+      data: { deletedAt: now },
+    });
+    log.debug({ count: analysisResult.count }, 'Soft deleted analysis results');
+
+    log.info(
+      {
+        runId: id,
+        transcripts: transcriptResult.count,
+        analysisResults: analysisResult.count,
+      },
+      'Run soft delete complete'
+    );
+
+    return {
+      success: true,
+      entityType: 'run',
+      entityId: id,
+      deletedAt: now,
+      deletedCount: {
+        primary: 1,
+        transcripts: transcriptResult.count,
+        analysisResults: analysisResult.count,
+      },
+    };
+  });
+}

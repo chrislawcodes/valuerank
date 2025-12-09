@@ -465,6 +465,22 @@ export async function softDeleteDefinition(id: string): Promise<string[]> {
       throw new ValidationError('Definition is already deleted', { id });
     }
 
+    // Check for running runs that reference this definition (FR-014)
+    const runningRunCount = await tx.run.count({
+      where: {
+        definitionId: id,
+        status: 'RUNNING',
+        deletedAt: null,
+      },
+    });
+    if (runningRunCount > 0) {
+      log.warn({ id, runningRunCount }, 'Cannot delete definition with running runs');
+      throw new ValidationError('Cannot delete definition with running runs', {
+        id,
+        runningRunCount,
+      });
+    }
+
     const now = new Date();
 
     // Get all descendant IDs using recursive CTE

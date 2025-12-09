@@ -2,6 +2,12 @@
 
 This document defines the coding standards and architectural principles for the Cloud ValueRank project. All code contributions must adhere to these guidelines.
 
+## Git Push Policy
+
+**NEVER push to origin without explicit human confirmation.** Always ask before running `git push`.
+
+---
+
 ## Core Principles
 
 1. **Small, focused files** - Easy to read, test, and maintain

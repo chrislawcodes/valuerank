@@ -56,7 +56,18 @@ export type AuditAction =
   | 'fork_definition'
   | 'validate_definition'
   | 'start_run'
-  | 'generate_scenarios_preview';
+  | 'generate_scenarios_preview'
+  // Delete operations (Feature #014)
+  | 'delete_definition'
+  | 'delete_run'
+  // LLM management operations (Feature #014)
+  | 'create_llm_model'
+  | 'update_llm_model'
+  | 'deprecate_llm_model'
+  | 'reactivate_llm_model'
+  | 'set_default_llm_model'
+  | 'update_llm_provider'
+  | 'set_infra_model';
 
 /**
  * Audit entry for MCP write operations
@@ -65,7 +76,7 @@ export type AuditEntry = {
   action: AuditAction;
   userId: string;
   entityId: string;
-  entityType: 'definition' | 'run' | 'validation';
+  entityType: 'definition' | 'run' | 'validation' | 'llm_model' | 'llm_provider' | 'system_setting';
   requestId: string;
   timestamp?: Date;
   metadata?: Record<string, unknown>;
@@ -201,5 +212,61 @@ export function createValidationAudit(params: {
       errorCount: params.errorCount,
       warningCount: params.warningCount,
     },
+  };
+}
+
+/**
+ * Creates a standardized audit entry for delete operations.
+ */
+export function createDeleteAudit(params: {
+  action: 'delete_definition' | 'delete_run';
+  userId: string;
+  entityId: string;
+  entityType: 'definition' | 'run';
+  requestId: string;
+  deletedCount?: {
+    primary: number;
+    scenarios?: number;
+    transcripts?: number;
+    analysisResults?: number;
+  };
+}): AuditEntry {
+  return {
+    action: params.action,
+    userId: params.userId,
+    entityId: params.entityId,
+    entityType: params.entityType,
+    requestId: params.requestId,
+    metadata: {
+      deletedCount: params.deletedCount,
+    },
+  };
+}
+
+/**
+ * Creates a standardized audit entry for LLM management operations.
+ */
+export function createLlmAudit(params: {
+  action:
+    | 'create_llm_model'
+    | 'update_llm_model'
+    | 'deprecate_llm_model'
+    | 'reactivate_llm_model'
+    | 'set_default_llm_model'
+    | 'update_llm_provider'
+    | 'set_infra_model';
+  userId: string;
+  entityId: string;
+  entityType: 'llm_model' | 'llm_provider' | 'system_setting';
+  requestId: string;
+  details?: Record<string, unknown>;
+}): AuditEntry {
+  return {
+    action: params.action,
+    userId: params.userId,
+    entityId: params.entityId,
+    entityType: params.entityType,
+    requestId: params.requestId,
+    metadata: params.details,
   };
 }

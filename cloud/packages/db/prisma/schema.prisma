@@ -196,6 +196,8 @@ model Transcript {
   decisionCode       String?   @map("decision_code")     // 1-5 rating or "other"
   decisionText       String?   @map("decision_text")     // LLM-generated summary
   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
 
   run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
   scenario Scenario? @relation(fields: [scenarioId], references: [id])
@@ -203,6 +205,7 @@ model Transcript {
   @@index([runId])
   @@index([scenarioId])
   @@index([modelId])
+  @@index([deletedAt])
   @@map("transcripts")
 }
 
@@ -283,12 +286,15 @@ model AnalysisResult {
   output       Json           @db.JsonB
   status       AnalysisStatus @default(CURRENT)
   createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
 
   run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([runId])
   @@index([analysisType])
   @@index([status])
+  @@index([deletedAt])
   @@map("analysis_results")
 }
 
