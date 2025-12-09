@@ -48,6 +48,8 @@ export {
   createDefinitionAudit,
   createRunAudit,
   createValidationAudit,
+  createDeleteAudit,
+  createLlmAudit,
   type AuditAction,
   type AuditEntry,
   type AuditErrorEntry,

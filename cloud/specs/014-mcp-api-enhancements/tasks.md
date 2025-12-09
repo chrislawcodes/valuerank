@@ -66,13 +66,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Create `apps/api/src/mcp/tools/delete-definition.ts` with Zod input schema
-- [ ] T019 [US1] Implement definition existence check (not already deleted)
-- [ ] T020 [US1] Implement running run validation (block if RUNNING status)
-- [ ] T021 [US1] Implement cascading soft-delete (definition + scenarios in transaction)
-- [ ] T022 [US1] Add audit logging for delete_definition action
-- [ ] T023 [US1] Register tool via `addToolRegistrar` in tool file
-- [ ] T024 [US1] Write test `apps/api/tests/mcp/tools/delete-definition.test.ts`
+- [X] T018 [US1] Create `apps/api/src/mcp/tools/delete-definition.ts` with Zod input schema
+- [X] T019 [US1] Implement definition existence check (not already deleted)
+- [X] T020 [US1] Implement running run validation (block if RUNNING status)
+- [X] T021 [US1] Implement cascading soft-delete (definition + scenarios in transaction)
+- [X] T022 [US1] Add audit logging for delete_definition action
+- [X] T023 [US1] Register tool via `addToolRegistrar` in tool file
+- [X] T024 [US1] Write test `apps/api/tests/mcp/tools/delete-definition.test.ts`
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently
 

@@ -32,6 +32,8 @@ import './fork-definition.js';
 import './validate-definition.js';
 import './start-run.js';
 import './generate-scenarios-preview.js';
+// Feature 014 - Delete Tools
+import './delete-definition.js';
 
 /**
  * Registers all MCP tools on the given server
