@@ -21,6 +21,30 @@ export type TaskResult = {
   completedAt: string | null;
 };
 
+export type CompletionEvent = {
+  modelId: string;
+  scenarioId: string;
+  success: boolean;
+  completedAt: string;
+  durationMs: number;
+};
+
+export type ProviderExecutionMetrics = {
+  provider: string;
+  activeJobs: number;
+  queuedJobs: number;
+  maxParallel: number;
+  requestsPerMinute: number;
+  recentCompletions: CompletionEvent[];
+};
+
+export type ExecutionMetrics = {
+  providers: ProviderExecutionMetrics[];
+  totalActive: number;
+  totalQueued: number;
+  estimatedSecondsRemaining: number | null;
+};
+
 export type Transcript = {
   id: string;
   runId: string;
@@ -65,6 +89,7 @@ export type Run = {
   transcriptCount: number;
   recentTasks: TaskResult[];
   analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
+  executionMetrics: ExecutionMetrics | null;
   definition: {
     id: string;
     name: string;
@@ -131,6 +156,25 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       status
       error
       completedAt
+    }
+    executionMetrics {
+      providers {
+        provider
+        activeJobs
+        queuedJobs
+        maxParallel
+        requestsPerMinute
+        recentCompletions {
+          modelId
+          scenarioId
+          success
+          completedAt
+          durationMs
+        }
+      }
+      totalActive
+      totalQueued
+      estimatedSecondsRemaining
     }
   }
   ${RUN_FRAGMENT}

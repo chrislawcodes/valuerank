@@ -2,8 +2,10 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef } from './refs.js';
 import { RunProgress, TaskResult } from './run-progress.js';
+import { ExecutionMetrics } from './execution-metrics.js';
 import { calculatePercentComplete } from '../../services/run/index.js';
 import { AnalysisResultRef } from './analysis.js';
+import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
 
 // Re-export for backward compatibility
 export { RunRef, TranscriptRef, ExperimentRef };
@@ -230,6 +232,43 @@ builder.objectType(RunRef, {
 
         // No analysis and no pending job - run may not be completed yet
         return run.status === 'COMPLETED' ? 'pending' : null;
+      },
+    }),
+
+    // Real-time execution metrics (only populated during RUNNING state)
+    executionMetrics: t.field({
+      type: ExecutionMetrics,
+      nullable: true,
+      description: 'Real-time execution metrics for monitoring parallel processing (only available during RUNNING state)',
+      resolve: async (run) => {
+        // Only show execution metrics for active runs
+        if (!['PENDING', 'RUNNING'].includes(run.status)) {
+          return null;
+        }
+
+        const providers = await getAllMetrics();
+        const { totalActive, totalQueued } = getTotals();
+
+        // Calculate estimated time remaining based on progress and throughput
+        const progress = run.progress as ProgressData | null;
+        let estimatedSecondsRemaining: number | null = null;
+
+        if (progress) {
+          const remaining = progress.total - progress.completed - progress.failed;
+          if (remaining > 0 && totalActive > 0) {
+            // Rough estimate: assume average of 5 seconds per job
+            // In production, calculate from recent completion times
+            const avgJobTime = 5;
+            estimatedSecondsRemaining = Math.ceil((remaining * avgJobTime) / Math.max(1, totalActive));
+          }
+        }
+
+        return {
+          providers,
+          totalActive,
+          totalQueued,
+          estimatedSecondsRemaining,
+        };
       },
     }),
   }),

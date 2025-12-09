@@ -18,6 +18,7 @@ import './tag.js';
 // Queue-related types
 import './queue-status.js';
 import './run-progress.js';
+import './execution-metrics.js';
 
 // Model types
 import './available-model.js';

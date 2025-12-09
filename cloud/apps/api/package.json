@@ -23,6 +23,7 @@
     "@valuerank/db": "*",
     "@valuerank/shared": "*",
     "bcrypt": "^5.1.1",
+    "bottleneck": "^2.19.5",
     "cors": "^2.8.5",
     "dataloader": "^2.2.2",
     "dotenv": "^17.2.3",

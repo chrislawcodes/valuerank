@@ -3,6 +3,9 @@
  *
  * Handles probe_scenario jobs by executing Python probe worker
  * and saving transcripts to database.
+ *
+ * Jobs are processed in parallel within each batch, with rate limiting
+ * enforced per-provider using Bottleneck.
  */
 
 import path from 'path';
@@ -17,6 +20,8 @@ import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from 
 import { createTranscript, validateTranscript } from '../../services/transcript/index.js';
 import type { ProbeTranscript } from '../../services/transcript/index.js';
 import { LLM_PROVIDERS } from '../../config/models.js';
+import { schedule as rateLimitSchedule } from '../../services/rate-limiter/index.js';
+import { getProviderForModel } from '../../services/parallelism/index.js';
 
 const log = createLogger('queue:probe-scenario');
 
@@ -322,162 +327,226 @@ async function buildWorkerInput(
 }
 
 /**
+ * Process a single probe job.
+ * Extracted to allow parallel execution within batches.
+ */
+async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
+  const { runId, scenarioId, modelId, config } = job.data;
+  const jobId = job.id;
+
+  log.info(
+    { jobId, runId, scenarioId, modelId, config },
+    'Processing probe_scenario job'
+  );
+
+  try {
+    // Check if run is in a terminal state (completed/cancelled) - skip processing
+    if (await isRunTerminal(runId)) {
+      log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
+      return;
+    }
+
+    // Check if run is paused - defer job for later
+    if (await isRunPaused(runId)) {
+      log.info({ jobId, runId }, 'Deferring job - run is paused');
+      throw new Error('RUN_PAUSED: Job deferred because run is paused');
+    }
+
+    // Run health check on first job (lazy initialization)
+    await ensureHealthCheck();
+
+    // Fetch scenario and definition from database
+    const scenario = await fetchScenario(scenarioId);
+
+    // Build input for Python worker
+    const workerInput = await buildWorkerInput(
+      runId,
+      scenarioId,
+      modelId,
+      scenario.content,
+      scenario.definition.content,
+      config
+    );
+
+    log.debug({ jobId, workerInput }, 'Calling Python probe worker');
+
+    // Execute Python probe worker
+    const result = await spawnPython<ProbeWorkerInput, ProbeWorkerOutput>(
+      PROBE_WORKER_PATH,
+      workerInput,
+      { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
+    );
+
+    // Handle spawn failure
+    if (!result.success) {
+      log.error({ jobId, runId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+      throw new Error(`Python worker failed: ${result.error}`);
+    }
+
+    // Handle worker failure
+    const output = result.data;
+    if (!output.success) {
+      const err = output.error;
+      log.warn({ jobId, runId, error: err }, 'Probe worker returned error');
+
+      // Use Python's retryable flag if available
+      if (!err.retryable) {
+        // Non-retryable error - increment failed count immediately
+        const { progress, status } = await incrementFailed(runId);
+        log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
+        return; // Complete job without retrying
+      }
+
+      // Retryable error - throw to trigger retry
+      throw new Error(`${err.code}: ${err.message}`);
+    }
+
+    // Validate transcript structure
+    if (!validateTranscript(output.transcript)) {
+      log.error({ jobId, runId }, 'Invalid transcript structure from Python worker');
+      throw new Error('Invalid transcript structure');
+    }
+
+    // Create transcript record
+    const transcriptRecord = await createTranscript({
+      runId,
+      scenarioId,
+      modelId,
+      transcript: output.transcript,
+      definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+    });
+
+    // Update progress - increment completed count
+    const { progress, status } = await incrementCompleted(runId);
+
+    // If run is already in SUMMARIZING state (late-arriving probe job),
+    // queue a summarize job for this transcript immediately
+    if (status === 'SUMMARIZING') {
+      const { getBoss } = await import('../boss.js');
+      const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
+      const boss = getBoss();
+      if (boss) {
+        await boss.send('summarize_transcript', {
+          runId,
+          transcriptId: transcriptRecord.id,
+        }, DEFAULT_JOB_OPTIONS['summarize_transcript']);
+        log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
+      }
+    }
+
+    log.info(
+      { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
+      'Probe job completed'
+    );
+  } catch (error) {
+    // Check if this is a pause deferral (not a real failure)
+    const isPauseDeferral = error instanceof Error && error.message.startsWith('RUN_PAUSED:');
+
+    if (isPauseDeferral) {
+      throw error;
+    }
+
+    // Check if error is retryable and if we have retries left
+    const retryable = isRetryableError(error);
+    const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+    const maxRetriesReached = retryCount >= RETRY_LIMIT;
+
+    log.warn(
+      { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+      'Probe job error'
+    );
+
+    // Only increment failed count if:
+    // 1. Error is not retryable, OR
+    // 2. Max retries have been reached
+    if (!retryable || maxRetriesReached) {
+      try {
+        const { progress, status } = await incrementFailed(runId);
+        log.error(
+          { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+          'Probe job permanently failed'
+        );
+      } catch (progressError) {
+        log.error(
+          { jobId, runId, err: progressError },
+          'Failed to update progress after job failure'
+        );
+      }
+    } else {
+      log.info(
+        { jobId, runId, retryCount, retriesRemaining: RETRY_LIMIT - retryCount },
+        'Job will be retried'
+      );
+    }
+
+    // Re-throw to let PgBoss handle retry logic
+    throw error;
+  }
+}
+
+/**
  * Creates a handler for probe_scenario jobs.
+ *
+ * Jobs in each batch are processed in PARALLEL using the rate limiter
+ * to enforce per-provider concurrency and rate limits.
  */
 export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJobData> {
   return async (jobs: PgBoss.Job<ProbeScenarioJobData>[]) => {
-    for (const job of jobs) {
-      const { runId, scenarioId, modelId, config } = job.data;
-      const jobId = job.id;
+    if (jobs.length === 0) {
+      return;
+    }
 
-      log.info(
-        { jobId, runId, scenarioId, modelId, config },
-        'Processing probe_scenario job'
+    log.info({ jobCount: jobs.length }, 'Processing probe_scenario batch in parallel');
+
+    // Process all jobs in parallel with rate limiting
+    const results = await Promise.allSettled(
+      jobs.map(async (job) => {
+        const { modelId, scenarioId } = job.data;
+        const jobId = job.id;
+
+        // Get provider for this model to route to correct rate limiter
+        const provider = await getProviderForModel(modelId);
+
+        if (!provider) {
+          // Unknown provider - process without rate limiting (fallback)
+          log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
+          return processProbeJob(job);
+        }
+
+        // Schedule through rate limiter for this provider
+        return rateLimitSchedule(
+          provider,
+          jobId,
+          modelId,
+          scenarioId,
+          () => processProbeJob(job)
+        );
+      })
+    );
+
+    // Check for failures - PgBoss needs us to throw to trigger retries
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+
+    if (failures.length > 0) {
+      log.warn(
+        { failureCount: failures.length, totalJobs: jobs.length },
+        'Some jobs in batch failed'
       );
 
-      try {
-        // Check if run is in a terminal state (completed/cancelled) - skip processing
-        if (await isRunTerminal(runId)) {
-          log.info({ jobId, runId }, 'Skipping job - run is in terminal state');
-          return;
-        }
-
-        // Check if run is paused - defer job for later
-        if (await isRunPaused(runId)) {
-          log.info({ jobId, runId }, 'Deferring job - run is paused');
-          throw new Error('RUN_PAUSED: Job deferred because run is paused');
-        }
-
-        // Run health check on first job (lazy initialization)
-        await ensureHealthCheck();
-
-        // Fetch scenario and definition from database
-        const scenario = await fetchScenario(scenarioId);
-
-        // Build input for Python worker
-        const workerInput = await buildWorkerInput(
-          runId,
-          scenarioId,
-          modelId,
-          scenario.content,
-          scenario.definition.content,
-          config
-        );
-
-        log.debug({ jobId, workerInput }, 'Calling Python probe worker');
-
-        // Execute Python probe worker
-        const result = await spawnPython<ProbeWorkerInput, ProbeWorkerOutput>(
-          PROBE_WORKER_PATH,
-          workerInput,
-          { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
-        );
-
-        // Handle spawn failure
-        if (!result.success) {
-          log.error({ jobId, runId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
-          throw new Error(`Python worker failed: ${result.error}`);
-        }
-
-        // Handle worker failure
-        const output = result.data;
-        if (!output.success) {
-          const err = output.error;
-          log.warn({ jobId, runId, error: err }, 'Probe worker returned error');
-
-          // Use Python's retryable flag if available
-          if (!err.retryable) {
-            // Non-retryable error - increment failed count immediately
-            const { progress, status } = await incrementFailed(runId);
-            log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
-            return; // Complete job without retrying
-          }
-
-          // Retryable error - throw to trigger retry
-          throw new Error(`${err.code}: ${err.message}`);
-        }
-
-        // Validate transcript structure
-        if (!validateTranscript(output.transcript)) {
-          log.error({ jobId, runId }, 'Invalid transcript structure from Python worker');
-          throw new Error('Invalid transcript structure');
-        }
-
-        // Create transcript record
-        const transcriptRecord = await createTranscript({
-          runId,
-          scenarioId,
-          modelId,
-          transcript: output.transcript,
-          definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
-        });
-
-        // Update progress - increment completed count
-        const { progress, status } = await incrementCompleted(runId);
-
-        // If run is already in SUMMARIZING state (late-arriving probe job),
-        // queue a summarize job for this transcript immediately
-        if (status === 'SUMMARIZING') {
-          const { getBoss } = await import('../boss.js');
-          const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
-          const boss = getBoss();
-          if (boss) {
-            await boss.send('summarize_transcript', {
-              runId,
-              transcriptId: transcriptRecord.id,
-            }, DEFAULT_JOB_OPTIONS['summarize_transcript']);
-            log.info({ runId, transcriptId: transcriptRecord.id }, 'Queued summarize job for late-arriving transcript');
-          }
-        }
-
-        log.info(
-          { jobId, runId, scenarioId, modelId, progress, status, turns: output.transcript.turns.length },
-          'Probe job completed'
-        );
-      } catch (error) {
-        // Check if this is a pause deferral (not a real failure)
-        const isPauseDeferral = error instanceof Error && error.message.startsWith('RUN_PAUSED:');
-
-        if (isPauseDeferral) {
-          throw error;
-        }
-
-        // Check if error is retryable and if we have retries left
-        const retryable = isRetryableError(error);
-        const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
-        const maxRetriesReached = retryCount >= RETRY_LIMIT;
-
-        log.warn(
-          { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
-          'Probe job error'
-        );
-
-        // Only increment failed count if:
-        // 1. Error is not retryable, OR
-        // 2. Max retries have been reached
-        if (!retryable || maxRetriesReached) {
-          try {
-            const { progress, status } = await incrementFailed(runId);
-            log.error(
-              { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
-              'Probe job permanently failed'
-            );
-          } catch (progressError) {
-            log.error(
-              { jobId, runId, err: progressError },
-              'Failed to update progress after job failure'
-            );
-          }
-        } else {
-          log.info(
-            { jobId, runId, retryCount, retriesRemaining: RETRY_LIMIT - retryCount },
-            'Job will be retried'
-          );
-        }
-
-        // Re-throw to let PgBoss handle retry logic
-        throw error;
+      // If all jobs failed, throw the first error
+      if (failures.length === jobs.length && failures[0]) {
+        throw failures[0].reason;
       }
+
+      // If some succeeded and some failed, log but don't throw
+      // The successful ones are done, failed ones were handled in processProbeJob
     }
+
+    log.info(
+      { completed: results.length - failures.length, failed: failures.length },
+      'Probe batch processing complete'
+    );
   };
 }

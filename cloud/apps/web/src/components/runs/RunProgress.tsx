@@ -2,10 +2,13 @@
  * RunProgress Component
  *
  * Displays progress of a run with visual progress bar and status indicators.
+ * Shows detailed execution metrics during RUNNING state, collapses when complete.
  */
 
-import { CheckCircle, XCircle, Clock, Loader2, Pause, AlertCircle, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, XCircle, Clock, Loader2, Pause, AlertCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Run, RunProgress as RunProgressType } from '../../api/operations/runs';
+import { ExecutionProgress } from './ExecutionProgress';
 
 type RunProgressProps = {
   run: Run;
@@ -73,6 +76,13 @@ function calculateProgress(progress: RunProgressType | null): number {
   return progress.percentComplete;
 }
 
+/**
+ * Check if run is in an active state that should show expanded metrics.
+ */
+function isActiveRun(status: string): boolean {
+  return ['PENDING', 'RUNNING'].includes(status);
+}
+
 export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
   const progress = run.runProgress;
   const percentComplete = calculateProgress(progress);
@@ -85,6 +95,13 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
 
   // Calculate per-model breakdown from config
   const models = run.config?.models ?? [];
+
+  // Show expanded execution metrics for active runs
+  const isActive = isActiveRun(run.status);
+  const hasExecutionMetrics = run.executionMetrics !== null && run.executionMetrics !== undefined;
+
+  // Allow expanding completed runs to see details
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -109,30 +126,52 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
             />
           </div>
         </div>
+
+        {/* Expand/collapse button for completed runs */}
+        {!isActive && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            title={isExpanded ? 'Collapse details' : 'Expand details'}
+          >
+            {isExpanded ? (
+              <ChevronUp className="w-5 h-5" />
+            ) : (
+              <ChevronDown className="w-5 h-5" />
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Stats row */}
-      <div className="flex items-center gap-6 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-gray-600">Completed: {completed}</span>
+      {/* Execution metrics for active runs */}
+      {isActive && hasExecutionMetrics && run.executionMetrics && (
+        <ExecutionProgress metrics={run.executionMetrics} />
+      )}
+
+      {/* Stats row - always show for active runs, only when expanded for completed */}
+      {(isActive || isExpanded) && (
+        <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <span className="text-gray-600">Completed: {completed}</span>
+          </div>
+          {failed > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-500" />
+              <span className="text-gray-600">Failed: {failed}</span>
+            </div>
+          )}
+          {pending > 0 && run.status !== 'COMPLETED' && run.status !== 'CANCELLED' && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-gray-300" />
+              <span className="text-gray-600">Pending: {pending}</span>
+            </div>
+          )}
         </div>
-        {failed > 0 && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-600">Failed: {failed}</span>
-          </div>
-        )}
-        {pending > 0 && run.status !== 'COMPLETED' && run.status !== 'CANCELLED' && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gray-300" />
-            <span className="text-gray-600">Pending: {pending}</span>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Per-model breakdown */}
-      {showPerModel && models.length > 0 && (
+      {/* Per-model breakdown - only when expanded or showPerModel is true */}
+      {(showPerModel || isExpanded) && models.length > 0 && (
         <div className="border-t border-gray-200 pt-4 mt-4">
           <h4 className="text-sm font-medium text-gray-700 mb-3">Per-Model Progress</h4>
           <div className="space-y-2">

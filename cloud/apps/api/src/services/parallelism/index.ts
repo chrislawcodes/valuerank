@@ -18,7 +18,7 @@ import type { PgBoss, QueueResult } from 'pg-boss';
 const log = createLogger('services:parallelism');
 
 // Cache provider limits with TTL for performance
-type ProviderLimits = {
+export type ProviderLimits = {
   maxParallelRequests: number;
   requestsPerMinute: number;
   queueName: string;
