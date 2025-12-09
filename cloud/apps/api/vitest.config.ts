@@ -6,6 +6,9 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    // Run test files sequentially to avoid database conflicts
+    // (multiple test files clean and create the same LLM tables)
+    fileParallelism: false,
     reporters: ['default', 'json'],
     outputFile: {
       json: 'coverage/test-results.json',

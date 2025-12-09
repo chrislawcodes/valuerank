@@ -80,10 +80,10 @@
 
 ### Implementation
 
-- [ ] T029 [US1] Update `apps/api/src/config/models.ts` to read from database instead of hardcoded list
-- [ ] T030 [US1] Update `availableModels` query in `apps/api/src/graphql/queries/models.ts` to use database
-- [ ] T031 [US1] Add `isAvailable` field logic to LlmModel type (check API key presence)
-- [ ] T032 [US1] Create `apps/api/tests/graphql/llm-integration.test.ts` for database integration
+- [X] T029 [US1] Update `apps/api/src/config/models.ts` to read from database instead of hardcoded list
+- [X] T030 [US1] Update `availableModels` query in `apps/api/src/graphql/queries/models.ts` to use database
+- [X] T031 [US1] Add `isAvailable` field logic to LlmModel type (check API key presence)
+- [X] T032 [US1] Create `apps/api/tests/graphql/llm-integration.test.ts` for database integration
 
 **Checkpoint**: User Story 1 complete - models load from database
 
