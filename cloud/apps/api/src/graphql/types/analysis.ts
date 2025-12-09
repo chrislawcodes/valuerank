@@ -25,11 +25,18 @@ type AnalysisResultShape = {
   createdAt: Date;
 };
 
+// Type for visualization data
+type VisualizationDataShape = {
+  decisionDistribution: Record<string, Record<string, number>>;
+  modelScenarioMatrix: Record<string, Record<string, number>>;
+};
+
 // Type for output data stored in JSONB
 type AnalysisOutput = {
   perModel: Record<string, unknown>;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis?: Record<string, unknown>;
+  visualizationData?: VisualizationDataShape;
   mostContestedScenarios: ContestedScenarioShape[];
   methodsUsed: Record<string, unknown>;
   warnings: AnalysisWarningShape[];
@@ -125,6 +132,16 @@ builder.objectType(AnalysisResultRef, {
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
         return output?.dimensionAnalysis ?? null;
+      },
+    }),
+
+    visualizationData: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Data for frontend visualizations (decision distribution, model-scenario matrix)',
+      resolve: (analysis) => {
+        const output = analysis.output as AnalysisOutput | null;
+        return output?.visualizationData ?? null;
       },
     }),
 

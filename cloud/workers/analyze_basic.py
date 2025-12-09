@@ -49,7 +49,7 @@ from typing import Any
 
 from common.errors import ErrorCode, ValidationError
 from common.logging import get_logger
-from stats.basic_stats import aggregate_transcripts_by_model
+from stats.basic_stats import aggregate_transcripts_by_model, compute_visualization_data
 from stats.model_comparison import compute_model_agreement
 from stats.dimension_impact import compute_dimension_analysis
 
@@ -249,6 +249,9 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     # Find most contested scenarios
     contested = find_contested_scenarios(transcripts)
 
+    # Compute visualization data
+    visualization_data = compute_visualization_data(transcripts)
+
     # Generate warnings
     warnings = generate_warnings(transcripts, per_model)
 
@@ -269,6 +272,7 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
             "modelAgreement": model_agreement,
             "dimensionAnalysis": dimension_analysis,
             "mostContestedScenarios": contested,
+            "visualizationData": visualization_data,
             "methodsUsed": {
                 "winRateCI": "wilson_score",
                 "modelComparison": "spearman_rho",

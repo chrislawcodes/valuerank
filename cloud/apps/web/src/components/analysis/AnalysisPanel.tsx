@@ -18,8 +18,13 @@ import { MethodsDocumentation } from './MethodsDocumentation';
 import { AnalysisFilters, filterByModels } from './AnalysisFilters';
 import type { FilterState } from './AnalysisFilters';
 import { ContestedScenariosList } from './ContestedScenariosList';
+import { DecisionDistributionChart } from './DecisionDistributionChart';
+import { ModelConsistencyChart } from './ModelConsistencyChart';
+import { ScenarioHeatmap } from './ScenarioHeatmap';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
+
+type AnalysisTab = 'overview' | 'decisions' | 'scenarios' | 'values' | 'agreement' | 'methods';
 
 type AnalysisPanelProps = {
   runId: string;
@@ -237,11 +242,23 @@ function AnalysisEmpty({
   );
 }
 
+const TABS: { id: AnalysisTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'decisions', label: 'Decisions' },
+  { id: 'scenarios', label: 'Scenarios' },
+  { id: 'values', label: 'Values' },
+  { id: 'agreement', label: 'Agreement' },
+  { id: 'methods', label: 'Methods' },
+];
+
 export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
     analysisStatus,
   });
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -389,53 +406,110 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
         />
       </div>
 
-      {/* Score Distribution Chart */}
-      <div className="border-t border-gray-200 pt-6 mb-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Win Rate by Value</h3>
-        <ScoreDistributionChart
-          perModel={filteredPerModel}
-          selectedValue={filters.selectedValue ?? undefined}
-          onValueChange={(value) => setFilters({ ...filters, selectedValue: value })}
-        />
-      </div>
-
-      {/* Variable Impact Chart */}
-      <div className="border-t border-gray-200 pt-6 mb-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Dimension Impact Analysis</h3>
-        <VariableImpactChart dimensionAnalysis={analysis.dimensionAnalysis} />
-      </div>
-
-      {/* Model Comparison Matrix */}
-      <div className="border-t border-gray-200 pt-6 mb-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Model Agreement</h3>
-        <ModelComparisonMatrix
-          modelAgreement={analysis.modelAgreement}
-          perModel={filteredPerModel}
-        />
-      </div>
-
-      {/* Contested Scenarios */}
-      <div className="border-t border-gray-200 pt-6 mb-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Most Contested Scenarios</h3>
-        <ContestedScenariosList scenarios={analysis.mostContestedScenarios} />
-      </div>
-
-      {/* Per-model statistics */}
-      <div className="border-t border-gray-200 pt-6">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Per-Model Statistics</h3>
-        <div className="space-y-4">
-          {Object.entries(filteredPerModel).map(([modelId, stats]) => (
-            <ModelStatsRow key={modelId} modelId={modelId} stats={stats} />
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="flex gap-4 -mb-px">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'border-teal-500 text-teal-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
           ))}
-        </div>
+        </nav>
       </div>
 
-      {/* Methods documentation */}
-      <div className="border-t border-gray-200 pt-6 mt-6">
-        <MethodsDocumentation
-          methodsUsed={analysis.methodsUsed}
-          warnings={analysis.warnings}
-        />
+      {/* Tab Content */}
+      <div className="min-h-[400px]">
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-700">Per-Model Statistics</h3>
+              {Object.entries(filteredPerModel).map(([modelId, stats]) => (
+                <ModelStatsRow key={modelId} modelId={modelId} stats={stats} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Decisions Tab */}
+        {activeTab === 'decisions' && (
+          <div className="space-y-8">
+            {analysis.visualizationData ? (
+              <>
+                <DecisionDistributionChart visualizationData={analysis.visualizationData} />
+                <div className="border-t border-gray-200 pt-6">
+                  <ModelConsistencyChart perModel={filteredPerModel} />
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No decision data available. Re-run analysis to compute visualization data.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Scenarios Tab */}
+        {activeTab === 'scenarios' && (
+          <div className="space-y-8">
+            {analysis.visualizationData ? (
+              <ScenarioHeatmap visualizationData={analysis.visualizationData} />
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No scenario data available. Re-run analysis to compute visualization data.
+              </div>
+            )}
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-4">Most Contested Scenarios</h3>
+              <ContestedScenariosList scenarios={analysis.mostContestedScenarios} />
+            </div>
+          </div>
+        )}
+
+        {/* Values Tab */}
+        {activeTab === 'values' && (
+          <div className="space-y-8">
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-4">Win Rate by Value</h3>
+              <ScoreDistributionChart
+                perModel={filteredPerModel}
+                selectedValue={filters.selectedValue ?? undefined}
+                onValueChange={(value) => setFilters({ ...filters, selectedValue: value })}
+              />
+            </div>
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-4">Dimension Impact Analysis</h3>
+              <VariableImpactChart dimensionAnalysis={analysis.dimensionAnalysis} />
+            </div>
+          </div>
+        )}
+
+        {/* Agreement Tab */}
+        {activeTab === 'agreement' && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Model Agreement Matrix</h3>
+            <ModelComparisonMatrix
+              modelAgreement={analysis.modelAgreement}
+              perModel={filteredPerModel}
+            />
+          </div>
+        )}
+
+        {/* Methods Tab */}
+        {activeTab === 'methods' && (
+          <MethodsDocumentation
+            methodsUsed={analysis.methodsUsed}
+            warnings={analysis.warnings}
+          />
+        )}
       </div>
     </div>
   );

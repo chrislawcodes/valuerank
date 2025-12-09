@@ -85,6 +85,11 @@ export type MethodsUsed = {
   codeVersion: string;
 };
 
+export type VisualizationData = {
+  decisionDistribution: Record<string, Record<string, number>>;
+  modelScenarioMatrix: Record<string, Record<string, number>>;
+};
+
 export type AnalysisResult = {
   id: string;
   runId: string;
@@ -98,6 +103,7 @@ export type AnalysisResult = {
   perModel: Record<string, PerModelStats>;
   modelAgreement: ModelAgreement;
   dimensionAnalysis: DimensionAnalysis | null;
+  visualizationData: VisualizationData | null;
   mostContestedScenarios: ContestedScenario[];
   methodsUsed: MethodsUsed;
   warnings: AnalysisWarning[];
@@ -121,6 +127,7 @@ export const ANALYSIS_RESULT_FRAGMENT = gql`
     perModel
     modelAgreement
     dimensionAnalysis
+    visualizationData
     mostContestedScenarios {
       scenarioId
       scenarioName

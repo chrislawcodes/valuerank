@@ -137,6 +137,73 @@ def compute_model_summary(scores: list[float]) -> ModelSummary:
     )
 
 
+class VisualizationData(TypedDict):
+    """Data for frontend visualizations."""
+
+    decisionDistribution: dict[str, dict[str, int]]  # model -> decision code -> count
+    modelScenarioMatrix: dict[str, dict[str, float]]  # model -> scenario -> avg
+
+
+def compute_visualization_data(
+    transcripts: list[dict[str, Any]],
+) -> VisualizationData:
+    """
+    Compute data needed for frontend visualizations.
+
+    Args:
+        transcripts: List of transcript dicts with modelId, scenarioId, summary.score
+
+    Returns:
+        VisualizationData with decision distribution and model-scenario matrix
+    """
+    # Decision distribution: model -> decision code (1-5) -> count
+    decision_dist: dict[str, dict[str, int]] = {}
+
+    # Model-scenario scores: model -> scenario -> list of scores
+    model_scenario_scores: dict[str, dict[str, list[float]]] = {}
+
+    for t in transcripts:
+        model_id = t.get("modelId", "unknown")
+        scenario = t.get("scenario", {})
+        scenario_name = scenario.get("name", t.get("scenarioId", "unknown"))
+        summary = t.get("summary", {})
+        score = summary.get("score")
+
+        if score is None:
+            continue
+
+        score_int = int(score)
+
+        # Build decision distribution
+        if model_id not in decision_dist:
+            decision_dist[model_id] = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+        decision_key = str(score_int)
+        if decision_key in decision_dist[model_id]:
+            decision_dist[model_id][decision_key] += 1
+
+        # Build model-scenario matrix
+        if model_id not in model_scenario_scores:
+            model_scenario_scores[model_id] = {}
+        if scenario_name not in model_scenario_scores[model_id]:
+            model_scenario_scores[model_id][scenario_name] = []
+        model_scenario_scores[model_id][scenario_name].append(float(score))
+
+    # Compute averages for model-scenario matrix
+    model_scenario_matrix: dict[str, dict[str, float]] = {}
+    for model_id, scenarios in model_scenario_scores.items():
+        model_scenario_matrix[model_id] = {}
+        for scenario_name, scores in scenarios.items():
+            if scores:
+                model_scenario_matrix[model_id][scenario_name] = round(
+                    float(np.mean(scores)), 2
+                )
+
+    return VisualizationData(
+        decisionDistribution=decision_dist,
+        modelScenarioMatrix=model_scenario_matrix,
+    )
+
+
 def aggregate_transcripts_by_model(
     transcripts: list[dict[str, Any]],
 ) -> dict[str, ModelStats]:
