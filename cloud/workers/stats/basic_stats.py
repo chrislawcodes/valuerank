@@ -183,8 +183,8 @@ def aggregate_transcripts_by_model(
                 else:
                     value_counts[value_id]["neutral"] += 1
 
-            # Collect overall score if present
-            if "score" in summary:
+            # Collect overall score if present and not null
+            if "score" in summary and summary["score"] is not None:
                 scores.append(float(summary["score"]))
 
         # Compute value stats
