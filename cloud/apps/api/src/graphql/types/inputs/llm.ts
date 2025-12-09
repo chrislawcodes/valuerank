@@ -12,7 +12,7 @@ import { builder } from '../../builder.js';
 export const CreateLlmModelInput = builder.inputType('CreateLlmModelInput', {
   description: 'Input for creating a new LLM model',
   fields: (t) => ({
-    providerId: t.id({
+    providerId: t.string({
       required: true,
       description: 'Provider ID this model belongs to',
     }),

@@ -97,12 +97,12 @@
 
 ### GraphQL Mutations
 
-- [ ] T033 [US2] Create `apps/api/src/graphql/mutations/llm.ts` with createLlmModel mutation
-- [ ] T034 [US2] Add updateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T035 [US2] Add deprecateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T036 [US2] Add reactivateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T037 [US2] Export mutations from `apps/api/src/graphql/mutations/index.ts`
-- [ ] T038 [US2] Create `apps/api/tests/graphql/llm-mutations.test.ts`
+- [X] T033 [US2] Create `apps/api/src/graphql/mutations/llm.ts` with createLlmModel mutation
+- [X] T034 [US2] Add updateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
+- [X] T035 [US2] Add deprecateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
+- [X] T036 [US2] Add reactivateLlmModel mutation to `apps/api/src/graphql/mutations/llm.ts`
+- [X] T037 [US2] Export mutations from `apps/api/src/graphql/mutations/index.ts`
+- [X] T038 [US2] Create `apps/api/tests/graphql/llm-mutations.test.ts`
 
 ### Frontend Operations
 
