@@ -44,5 +44,19 @@ builder.objectType(TranscriptRef, {
         return ctx.loaders.scenario.load(transcript.scenarioId);
       },
     }),
+
+    // Computed: estimated cost from transcript content
+    estimatedCost: t.float({
+      nullable: true,
+      description: 'Estimated cost in dollars based on token usage and model pricing',
+      resolve: (transcript) => {
+        const content = transcript.content as Record<string, unknown> | null;
+        if (!content) return null;
+        const costSnapshot = content.costSnapshot as Record<string, unknown> | null;
+        if (!costSnapshot) return null;
+        const cost = costSnapshot.estimatedCost;
+        return typeof cost === 'number' ? cost : null;
+      },
+    }),
   }),
 });

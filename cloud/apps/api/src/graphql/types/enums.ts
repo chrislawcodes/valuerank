@@ -20,3 +20,9 @@ builder.enumType('RunPriority', {
   values: ['LOW', 'NORMAL', 'HIGH'] as const,
   description: 'Priority level for run execution (affects job queue ordering)',
 });
+
+// LlmModelStatus enum - mirrors Prisma LlmModelStatus
+builder.enumType('LlmModelStatus', {
+  values: ['ACTIVE', 'DEPRECATED'] as const,
+  description: 'Lifecycle status of an LLM model',
+});

@@ -4,10 +4,11 @@
  * Tests availableModels query returns supported LLM models.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { getAuthHeader } from '../../test-utils.js';
+import { db } from '@valuerank/db';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -41,8 +42,57 @@ describe('Available Models Query', () => {
     }
   `;
 
+  const testPrefix = `models-q-${Date.now()}`;
+  const createdProviderIds: string[] = [];
+  const createdModelIds: string[] = [];
+
   // Store original env values
   const originalEnv = { ...process.env };
+
+  beforeAll(async () => {
+    // Create test providers and models for this test suite
+    const openai = await db.llmProvider.create({
+      data: { name: `${testPrefix}-openai`, displayName: 'OpenAI Test' },
+    });
+    createdProviderIds.push(openai.id);
+
+    const model1 = await db.llmModel.create({
+      data: {
+        providerId: openai.id,
+        modelId: `${testPrefix}-gpt-4o`,
+        displayName: 'GPT-4o Test',
+        costInputPerMillion: 2.5,
+        costOutputPerMillion: 10.0,
+      },
+    });
+    createdModelIds.push(model1.id);
+
+    const anthropic = await db.llmProvider.create({
+      data: { name: `${testPrefix}-anthropic`, displayName: 'Anthropic Test' },
+    });
+    createdProviderIds.push(anthropic.id);
+
+    const model2 = await db.llmModel.create({
+      data: {
+        providerId: anthropic.id,
+        modelId: `${testPrefix}-claude-3-opus`,
+        displayName: 'Claude 3 Opus Test',
+        costInputPerMillion: 15.0,
+        costOutputPerMillion: 75.0,
+      },
+    });
+    createdModelIds.push(model2.id);
+  });
+
+  afterAll(async () => {
+    // Clean up test data
+    if (createdModelIds.length > 0) {
+      await db.llmModel.deleteMany({ where: { id: { in: createdModelIds } } });
+    }
+    if (createdProviderIds.length > 0) {
+      await db.llmProvider.deleteMany({ where: { id: { in: createdProviderIds } } });
+    }
+  });
 
   beforeEach(() => {
     // Reset env to test state
@@ -89,7 +139,7 @@ describe('Available Models Query', () => {
     }
   });
 
-  it('includes models from known providers', async () => {
+  it('includes test models from our created providers', async () => {
     const response = await request(app)
       .post('/graphql')
       .set('Authorization', getAuthHeader())
@@ -100,16 +150,14 @@ describe('Available Models Query', () => {
     const models = response.body.data.availableModels;
     const providerIds = new Set(models.map((m: { providerId: string }) => m.providerId));
 
-    // Should include at least some known providers
-    const knownProviders = ['openai', 'anthropic', 'google', 'xai', 'deepseek', 'mistral'];
-    const hasKnownProvider = knownProviders.some((p) => providerIds.has(p));
-    expect(hasKnownProvider).toBe(true);
+    // Should include our test providers (created in beforeAll)
+    expect(providerIds.has(`${testPrefix}-openai`)).toBe(true);
+    expect(providerIds.has(`${testPrefix}-anthropic`)).toBe(true);
   });
 
-  it('marks models as available when API key is configured', async () => {
-    // Set an API key for testing
-    process.env.OPENAI_API_KEY = 'test-key';
-
+  it('marks test models as unavailable when no matching API key exists', async () => {
+    // Our test providers use prefixed names that won't map to any env var
+    // So they should all be unavailable
     const response = await request(app)
       .post('/graphql')
       .set('Authorization', getAuthHeader())
@@ -118,16 +166,18 @@ describe('Available Models Query', () => {
     expect(response.status).toBe(200);
 
     const models = response.body.data.availableModels;
-    const openaiModels = models.filter((m: { providerId: string }) => m.providerId === 'openai');
+    const testModels = models.filter((m: { providerId: string }) =>
+      m.providerId.startsWith(testPrefix)
+    );
 
-    // OpenAI models should be available
-    expect(openaiModels.length).toBeGreaterThan(0);
-    for (const model of openaiModels) {
-      expect(model.isAvailable).toBe(true);
+    // Test models should be unavailable (no API key maps to prefixed provider names)
+    expect(testModels.length).toBe(2);
+    for (const model of testModels) {
+      expect(model.isAvailable).toBe(false);
     }
   });
 
-  it('marks models as unavailable when API key is not configured', async () => {
+  it('marks our test models as unavailable when API keys are not configured', async () => {
     // Clear all API keys
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
@@ -144,9 +194,12 @@ describe('Available Models Query', () => {
     expect(response.status).toBe(200);
 
     const models = response.body.data.availableModels;
+    const testModels = models.filter((m: { providerId: string }) =>
+      m.providerId.startsWith(testPrefix)
+    );
 
-    // All models should be unavailable
-    for (const model of models) {
+    // Our test models should be unavailable
+    for (const model of testModels) {
       expect(model.isAvailable).toBe(false);
     }
   });

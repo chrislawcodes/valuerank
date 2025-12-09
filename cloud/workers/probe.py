@@ -21,6 +21,10 @@ Input format (ProbeWorkerInput):
     "temperature": number,
     "maxTokens": number,
     "maxTurns": number
+  },
+  "modelCost": {  // Optional - if provided, cost will be calculated
+    "costInputPerMillion": number,
+    "costOutputPerMillion": number
   }
 }
 
@@ -34,7 +38,14 @@ Success:
     "totalOutputTokens": number,
     "modelVersion": string | null,
     "startedAt": string,
-    "completedAt": string
+    "completedAt": string,
+    "costSnapshot": {  // Only present if modelCost was provided in input
+      "costInputPerMillion": number,
+      "costOutputPerMillion": number,
+      "inputTokens": number,
+      "outputTokens": number,
+      "estimatedCost": number
+    }
   }
 }
 
@@ -66,6 +77,7 @@ try:
 except ImportError:
     TIKTOKEN_AVAILABLE = False
 
+from common.cost import CostSnapshot, create_cost_snapshot
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
 from common.llm_adapters import LLMResponse, generate, infer_provider
 from common.logging import get_logger
@@ -106,10 +118,11 @@ class Transcript:
     model_version: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    cost_snapshot: Optional[CostSnapshot] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "turns": [t.to_dict() for t in self.turns],
             "totalInputTokens": self.total_input_tokens,
             "totalOutputTokens": self.total_output_tokens,
@@ -117,6 +130,9 @@ class Transcript:
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
         }
+        if self.cost_snapshot is not None:
+            result["costSnapshot"] = self.cost_snapshot.to_dict()
+        return result
 
 
 def estimate_tokens(text: str, model: str) -> int:
@@ -179,6 +195,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     model_id = data["modelId"]
     scenario = data["scenario"]
     config = data.get("config", {})
+    model_cost = data.get("modelCost")  # Optional cost configuration
 
     temperature = config.get("temperature", 0.7)
     max_tokens = config.get("maxTokens", 1024)
@@ -277,6 +294,17 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
 
         transcript.completed_at = datetime.now(timezone.utc)
 
+        # Calculate cost if model cost configuration was provided
+        if model_cost:
+            cost_input = model_cost.get("costInputPerMillion", 0)
+            cost_output = model_cost.get("costOutputPerMillion", 0)
+            transcript.cost_snapshot = create_cost_snapshot(
+                input_tokens=transcript.total_input_tokens,
+                output_tokens=transcript.total_output_tokens,
+                cost_input_per_million=cost_input,
+                cost_output_per_million=cost_output,
+            )
+
         log.info(
             "Probe completed",
             runId=run_id,
@@ -285,6 +313,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             turns=len(transcript.turns),
             inputTokens=transcript.total_input_tokens,
             outputTokens=transcript.total_output_tokens,
+            estimatedCost=transcript.cost_snapshot.estimated_cost if transcript.cost_snapshot else None,
         )
 
         return {

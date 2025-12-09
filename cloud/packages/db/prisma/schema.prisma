@@ -280,3 +280,56 @@ model Cohort {
 
   @@map("cohorts")
 }
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models LlmModel[]
+
+  @@map("llm_providers")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}

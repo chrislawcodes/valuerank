@@ -14,6 +14,7 @@ export const AvailableModelType = builder.objectRef<{
   versions: string[];
   defaultVersion: string | null;
   isAvailable: boolean;
+  isDefault: boolean;
 }>('AvailableModel').implement({
   description: 'An LLM model available for evaluation runs',
   fields: (t) => ({
@@ -35,6 +36,9 @@ export const AvailableModelType = builder.objectRef<{
     }),
     isAvailable: t.exposeBoolean('isAvailable', {
       description: 'Whether the model is available (API key configured)',
+    }),
+    isDefault: t.exposeBoolean('isDefault', {
+      description: 'Whether this is the default model for its provider',
     }),
   }),
 });

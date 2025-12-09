@@ -1,0 +1,285 @@
+# LLM Provider & Model GraphQL Schema
+# Feature 013: Provider Metadata
+
+# =============================================================================
+# ENUMS
+# =============================================================================
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+# =============================================================================
+# TYPES
+# =============================================================================
+
+type LlmProvider {
+  id: ID!
+  name: String!
+  displayName: String!
+  maxParallelRequests: Int!
+  requestsPerMinute: Int!
+  isEnabled: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Models belonging to this provider"""
+  models: [LlmModel!]!
+
+  """Active models only (excludes deprecated)"""
+  activeModels: [LlmModel!]!
+
+  """The default model for this provider"""
+  defaultModel: LlmModel
+}
+
+type LlmModel {
+  id: ID!
+  providerId: ID!
+  modelId: String!
+  displayName: String!
+  costInputPerMillion: Float!
+  costOutputPerMillion: Float!
+  status: LlmModelStatus!
+  isDefault: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """The provider this model belongs to"""
+  provider: LlmProvider!
+
+  """Whether this model is available (provider has API key configured)"""
+  isAvailable: Boolean!
+}
+
+type SystemSetting {
+  id: ID!
+  key: String!
+  value: JSON!
+  updatedAt: DateTime!
+}
+
+"""Result of creating a new model"""
+type CreateLlmModelResult {
+  model: LlmModel!
+}
+
+"""Result of updating a model"""
+type UpdateLlmModelResult {
+  model: LlmModel!
+}
+
+"""Result of deprecating a model"""
+type DeprecateLlmModelResult {
+  model: LlmModel!
+  """If this was the default, the new default (if auto-promoted)"""
+  newDefault: LlmModel
+}
+
+"""Result of setting default model"""
+type SetDefaultModelResult {
+  model: LlmModel!
+  """The previous default model (if any)"""
+  previousDefault: LlmModel
+}
+
+"""Result of updating system settings"""
+type UpdateSystemSettingResult {
+  setting: SystemSetting!
+}
+
+"""Result of updating provider settings"""
+type UpdateLlmProviderResult {
+  provider: LlmProvider!
+}
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+input CreateLlmModelInput {
+  """Provider ID this model belongs to"""
+  providerId: ID!
+
+  """API model identifier (e.g., 'gpt-4o-mini')"""
+  modelId: String!
+
+  """Human-readable display name"""
+  displayName: String!
+
+  """Cost per 1M input tokens in USD"""
+  costInputPerMillion: Float!
+
+  """Cost per 1M output tokens in USD"""
+  costOutputPerMillion: Float!
+
+  """Set as default for this provider"""
+  setAsDefault: Boolean
+}
+
+input UpdateLlmModelInput {
+  """Updated display name"""
+  displayName: String
+
+  """Updated cost per 1M input tokens"""
+  costInputPerMillion: Float
+
+  """Updated cost per 1M output tokens"""
+  costOutputPerMillion: Float
+}
+
+input UpdateLlmProviderInput {
+  """Max concurrent API requests"""
+  maxParallelRequests: Int
+
+  """Rate limit (requests per minute)"""
+  requestsPerMinute: Int
+
+  """Whether provider is enabled"""
+  isEnabled: Boolean
+}
+
+input UpdateSystemSettingInput {
+  """Setting key"""
+  key: String!
+
+  """New value (JSON)"""
+  value: JSON!
+}
+
+# =============================================================================
+# QUERIES
+# =============================================================================
+
+extend type Query {
+  """
+  List all LLM providers.
+  Returns providers with their models and availability status.
+  """
+  llmProviders: [LlmProvider!]!
+
+  """
+  Get a specific provider by ID.
+  """
+  llmProvider(id: ID!): LlmProvider
+
+  """
+  List all LLM models, optionally filtered by provider.
+  """
+  llmModels(
+    """Filter by provider ID"""
+    providerId: ID
+
+    """Filter by status (default: all)"""
+    status: LlmModelStatus
+
+    """Only show available models (provider has API key)"""
+    availableOnly: Boolean
+  ): [LlmModel!]!
+
+  """
+  Get a specific model by ID.
+  """
+  llmModel(id: ID!): LlmModel
+
+  """
+  Get model by provider name and model ID.
+  Useful for looking up by API identifier.
+  """
+  llmModelByIdentifier(
+    """Provider name (e.g., 'openai')"""
+    providerName: String!
+
+    """Model ID (e.g., 'gpt-4o-mini')"""
+    modelId: String!
+  ): LlmModel
+
+  """
+  List all system settings.
+  """
+  systemSettings: [SystemSetting!]!
+
+  """
+  Get a specific system setting by key.
+  """
+  systemSetting(key: String!): SystemSetting
+
+  """
+  Get the configured infrastructure model for a specific purpose.
+  Returns the full model with provider info.
+  """
+  infraModel(
+    """Purpose key (e.g., 'scenario_expansion')"""
+    purpose: String!
+  ): LlmModel
+}
+
+# =============================================================================
+# MUTATIONS
+# =============================================================================
+
+extend type Mutation {
+  """
+  Create a new LLM model.
+  Requires admin privileges.
+  """
+  createLlmModel(input: CreateLlmModelInput!): CreateLlmModelResult!
+
+  """
+  Update an existing LLM model.
+  Model ID cannot be changed after creation.
+  Requires admin privileges.
+  """
+  updateLlmModel(
+    """Model ID to update"""
+    id: ID!
+    input: UpdateLlmModelInput!
+  ): UpdateLlmModelResult!
+
+  """
+  Deprecate a model.
+  Model will be hidden from new run selection but remain for historical reference.
+  If this was the default, may auto-promote another model.
+  Requires admin privileges.
+  """
+  deprecateLlmModel(
+    """Model ID to deprecate"""
+    id: ID!
+  ): DeprecateLlmModelResult!
+
+  """
+  Reactivate a deprecated model.
+  Requires admin privileges.
+  """
+  reactivateLlmModel(
+    """Model ID to reactivate"""
+    id: ID!
+  ): UpdateLlmModelResult!
+
+  """
+  Set a model as the default for its provider.
+  Only one model per provider can be default.
+  Requires admin privileges.
+  """
+  setDefaultModel(
+    """Model ID to set as default"""
+    id: ID!
+  ): SetDefaultModelResult!
+
+  """
+  Update provider settings (rate limits, parallelism).
+  Requires admin privileges.
+  """
+  updateLlmProvider(
+    """Provider ID to update"""
+    id: ID!
+    input: UpdateLlmProviderInput!
+  ): UpdateLlmProviderResult!
+
+  """
+  Update a system setting.
+  Requires admin privileges.
+  """
+  updateSystemSetting(input: UpdateSystemSettingInput!): UpdateSystemSettingResult!
+}

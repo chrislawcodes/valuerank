@@ -1,11 +1,14 @@
 /**
  * Available Models Configuration
  *
- * Defines all supported LLM providers and models for evaluation runs.
- * Models are available if the corresponding API key is configured.
+ * Defines LLM provider environment key mappings and provides functions
+ * to fetch model data from the database with availability status.
+ *
+ * Models are available if the corresponding provider API key is configured.
  */
 
 import { getEnvOptional } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 
 export type AvailableModel = {
   id: string;
@@ -96,11 +99,33 @@ export const LLM_PROVIDERS: LLMProvider[] = [
 ];
 
 /**
+ * Provider name to environment variable key mapping.
+ * Used to check if a provider is available (has API key configured).
+ */
+export const PROVIDER_ENV_KEYS: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  xai: 'XAI_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+};
+
+/**
  * Check if a provider's API key is configured.
  */
 export function isProviderConfigured(envKey: string): boolean {
   const key = getEnvOptional(envKey);
   return key !== undefined && key.length > 0;
+}
+
+/**
+ * Check if a provider is available by name.
+ */
+export function isProviderAvailable(providerName: string): boolean {
+  const envKey = PROVIDER_ENV_KEYS[providerName];
+  if (!envKey) return false;
+  return isProviderConfigured(envKey);
 }
 
 /**
@@ -129,10 +154,78 @@ export function getAvailableModels(): AvailableModel[] {
 }
 
 /**
+ * Database-powered model representation for GraphQL.
+ */
+export type DatabaseModel = {
+  id: string;
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  displayName: string;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+  status: string;
+  isDefault: boolean;
+  isAvailable: boolean;
+};
+
+/**
+ * Get all models from the database with availability status.
+ * This is the primary function for fetching models in Phase 3+.
+ *
+ * @param options.activeOnly - Only return ACTIVE models (default: true)
+ * @param options.availableOnly - Only return available models (default: false)
+ */
+export async function getModelsFromDatabase(options?: {
+  activeOnly?: boolean;
+  availableOnly?: boolean;
+}): Promise<DatabaseModel[]> {
+  const { activeOnly = true, availableOnly = false } = options ?? {};
+
+  // Fetch models with their providers
+  const models = await db.llmModel.findMany({
+    where: activeOnly ? { status: 'ACTIVE' } : undefined,
+    include: { provider: true },
+    orderBy: [{ provider: { displayName: 'asc' } }, { displayName: 'asc' }],
+  });
+
+  // Map to output format with availability status
+  const result: DatabaseModel[] = models.map((model) => {
+    const isAvailable = isProviderAvailable(model.provider.name);
+    return {
+      id: model.id,
+      modelId: model.modelId,
+      providerId: model.provider.id,
+      providerName: model.provider.name,
+      displayName: model.displayName,
+      costInputPerMillion: Number(model.costInputPerMillion),
+      costOutputPerMillion: Number(model.costOutputPerMillion),
+      status: model.status,
+      isDefault: model.isDefault,
+      isAvailable,
+    };
+  });
+
+  // Filter to available only if requested
+  if (availableOnly) {
+    return result.filter((m) => m.isAvailable);
+  }
+
+  return result;
+}
+
+/**
  * Get provider information by ID.
  */
 export function getProvider(providerId: string): LLMProvider | undefined {
   return LLM_PROVIDERS.find((p) => p.id === providerId);
+}
+
+/**
+ * Get list of available provider IDs (those with configured API keys).
+ */
+export function getAvailableProviders(): string[] {
+  return LLM_PROVIDERS.filter((p) => isProviderConfigured(p.envKey)).map((p) => p.id);
 }
 
 /**

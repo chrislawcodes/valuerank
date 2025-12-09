@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Download, FileText, BarChart2, List, Grid } from 'lucide-react';
+import { Download, FileText, BarChart2, List, Grid, DollarSign } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
 import { TranscriptViewer } from './TranscriptViewer';
@@ -20,6 +20,20 @@ type RunResultsProps = {
 type ViewMode = 'list' | 'grouped';
 
 /**
+ * Format cost for display.
+ */
+function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    // Show fractions of a cent
+    return `$${cost.toFixed(4)}`;
+  }
+  if (cost < 1) {
+    return `$${cost.toFixed(3)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+
+/**
  * Calculate summary stats from transcripts.
  */
 function calculateStats(transcripts: Transcript[]) {
@@ -29,17 +43,22 @@ function calculateStats(transcripts: Transcript[]) {
       avgTokens: 0,
       avgTurns: 0,
       avgDuration: 0,
+      totalCost: 0,
       modelCounts: {} as Record<string, number>,
+      modelCosts: {} as Record<string, number>,
     };
   }
 
   const totalTokens = transcripts.reduce((sum, t) => sum + t.tokenCount, 0);
   const totalTurns = transcripts.reduce((sum, t) => sum + t.turnCount, 0);
   const totalDuration = transcripts.reduce((sum, t) => sum + t.durationMs, 0);
+  const totalCost = transcripts.reduce((sum, t) => sum + (t.estimatedCost ?? 0), 0);
 
   const modelCounts: Record<string, number> = {};
+  const modelCosts: Record<string, number> = {};
   for (const t of transcripts) {
     modelCounts[t.modelId] = (modelCounts[t.modelId] ?? 0) + 1;
+    modelCosts[t.modelId] = (modelCosts[t.modelId] ?? 0) + (t.estimatedCost ?? 0);
   }
 
   return {
@@ -47,7 +66,9 @@ function calculateStats(transcripts: Transcript[]) {
     avgTokens: Math.round(totalTokens / transcripts.length),
     avgTurns: Math.round((totalTurns / transcripts.length) * 10) / 10,
     avgDuration: Math.round(totalDuration / transcripts.length),
+    totalCost,
     modelCounts,
+    modelCosts,
   };
 }
 
@@ -83,7 +104,7 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
   return (
     <div className="space-y-6">
       {/* Stats summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-gray-50 rounded-lg p-4">
           <div className="text-2xl font-medium text-gray-900">
             {transcripts.length}
@@ -108,6 +129,14 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
           </div>
           <div className="text-sm text-gray-500">Avg Duration</div>
         </div>
+        {stats.totalCost > 0 && (
+          <div className="bg-green-50 rounded-lg p-4">
+            <div className="text-2xl font-medium text-green-700">
+              {formatCost(stats.totalCost)}
+            </div>
+            <div className="text-sm text-green-600">Est. Cost</div>
+          </div>
+        )}
       </div>
 
       {/* Per-model breakdown */}
@@ -118,15 +147,24 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
             Results by Model
           </h4>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(stats.modelCounts).map(([modelId, count]) => (
-              <div
-                key={modelId}
-                className="bg-white px-3 py-2 rounded border border-gray-200"
-              >
-                <span className="font-medium text-gray-900">{modelId}</span>
-                <span className="text-gray-500 ml-2">{count}</span>
-              </div>
-            ))}
+            {Object.entries(stats.modelCounts).map(([modelId, count]) => {
+              const modelCost = stats.modelCosts[modelId] ?? 0;
+              return (
+                <div
+                  key={modelId}
+                  className="bg-white px-3 py-2 rounded border border-gray-200"
+                >
+                  <span className="font-medium text-gray-900">{modelId}</span>
+                  <span className="text-gray-500 ml-2">{count}</span>
+                  {modelCost > 0 && (
+                    <span className="text-green-600 ml-2 text-sm flex items-center gap-0.5 inline-flex">
+                      <DollarSign className="w-3 h-3" />
+                      {formatCost(modelCost).slice(1)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

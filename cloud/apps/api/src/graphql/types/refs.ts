@@ -1,5 +1,15 @@
 import { builder } from '../builder.js';
-import type { Definition, Run, Transcript, Scenario, Experiment, Tag } from '@valuerank/db';
+import type {
+  Definition,
+  Run,
+  Transcript,
+  Scenario,
+  Experiment,
+  Tag,
+  LlmProvider,
+  LlmModel,
+  SystemSetting,
+} from '@valuerank/db';
 
 /**
  * Object references for all entity types.
@@ -17,3 +27,8 @@ export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');
 export const ExperimentRef = builder.objectRef<Experiment>('Experiment');
 export const TagRef = builder.objectRef<Tag>('Tag');
+
+// LLM Provider types
+export const LlmProviderRef = builder.objectRef<LlmProvider>('LlmProvider');
+export const LlmModelRef = builder.objectRef<LlmModel>('LlmModel');
+export const SystemSettingRef = builder.objectRef<SystemSetting>('SystemSetting');

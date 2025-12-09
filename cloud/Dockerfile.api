@@ -27,4 +27,6 @@ RUN npx prisma generate --schema=packages/db/prisma/schema.prisma
 RUN npx turbo build --filter=@valuerank/api
 
 ENV NODE_ENV=production
-CMD ["npm", "run", "start", "--workspace=@valuerank/api"]
+
+# Run migrations then start the API
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma && npm run start --workspace=@valuerank/api"]

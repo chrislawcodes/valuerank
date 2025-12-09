@@ -1,0 +1,103 @@
+/**
+ * Infrastructure Model Service
+ *
+ * Provides helpers for fetching configured infrastructure models
+ * used for internal tasks like scenario expansion.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('infra-models');
+
+export type InfraModelPurpose = 'scenario_expansion';
+
+export type InfraModelConfig = {
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  displayName: string;
+};
+
+/**
+ * Get the configured infrastructure model for a specific purpose.
+ *
+ * @param purpose - The purpose key (e.g., "scenario_expansion")
+ * @returns The model configuration or null if not configured
+ */
+export async function getInfraModel(purpose: InfraModelPurpose): Promise<InfraModelConfig | null> {
+  const key = `infra_model_${purpose}`;
+
+  log.debug({ purpose, key }, 'Fetching infrastructure model');
+
+  const setting = await db.systemSetting.findUnique({
+    where: { key },
+  });
+
+  if (!setting) {
+    log.debug({ purpose }, 'No infrastructure model configured');
+    return null;
+  }
+
+  const value = setting.value as { modelId?: string; providerId?: string };
+  if (!value.modelId || !value.providerId) {
+    log.warn({ purpose, value }, 'Invalid infrastructure model configuration');
+    return null;
+  }
+
+  // Find the provider by name
+  const provider = await db.llmProvider.findUnique({
+    where: { name: value.providerId },
+  });
+
+  if (!provider) {
+    log.warn({ purpose, providerId: value.providerId }, 'Provider not found for infrastructure model');
+    return null;
+  }
+
+  // Find the model
+  const model = await db.llmModel.findUnique({
+    where: {
+      providerId_modelId: {
+        providerId: provider.id,
+        modelId: value.modelId,
+      },
+    },
+  });
+
+  if (!model) {
+    log.warn({ purpose, modelId: value.modelId }, 'Model not found for infrastructure model');
+    return null;
+  }
+
+  log.info({ purpose, modelId: model.modelId, provider: provider.name }, 'Infrastructure model resolved');
+
+  return {
+    modelId: model.modelId,
+    providerId: provider.id,
+    providerName: provider.name,
+    displayName: model.displayName,
+  };
+}
+
+/**
+ * Get the default infrastructure model for scenario expansion.
+ * Falls back to a hardcoded default if not configured.
+ */
+export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
+  const configured = await getInfraModel('scenario_expansion');
+
+  if (configured) {
+    return configured;
+  }
+
+  // Default fallback - use Anthropic Claude 3.5 Haiku for cost efficiency
+  log.info('Using default scenario expansion model (claude-3-5-haiku)');
+
+  return {
+    modelId: 'claude-3-5-haiku-20241022',
+    providerId: 'anthropic',
+    providerName: 'anthropic',
+    displayName: 'Claude 3.5 Haiku (Default)',
+  };
+}

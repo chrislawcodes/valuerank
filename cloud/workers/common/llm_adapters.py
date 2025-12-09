@@ -27,6 +27,10 @@ DEFAULT_TIMEOUT = 60
 MAX_HTTP_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 2.0
 
+# Rate limit retry configuration
+MAX_RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_BACKOFF_SECONDS = [30, 60, 90, 120]  # Exponential backoff for 429 responses
+
 # Provider detection patterns
 PROVIDER_PATTERNS = {
     "openai": ["gpt", "text-", "o1", "davinci", "curie", "babbage", "ada"],
@@ -73,6 +77,25 @@ class BaseLLMAdapter(ABC):
         pass
 
 
+def _is_rate_limit_response(status_code: int, response_text: str) -> bool:
+    """Check if a response indicates rate limiting."""
+    if status_code == 429:
+        return True
+    # Some providers return 400/503 with rate limit messages
+    text_lower = response_text.lower()
+    return any(pattern in text_lower for pattern in [
+        "rate limit",
+        "rate_limit",
+        "ratelimit",
+        "too many requests",
+        "quota exceeded",
+        "requests per minute",
+        "rpm limit",
+        "tpm limit",
+        "tokens per minute",
+    ])
+
+
 def _post_json(
     url: str,
     headers: dict[str, str],
@@ -80,15 +103,49 @@ def _post_json(
     *,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> dict:
-    """Make a POST request with JSON body and retry logic."""
-    last_exc: Optional[Exception] = None
+    """Make a POST request with JSON body and retry logic.
 
-    for attempt in range(1, MAX_HTTP_RETRIES + 1):
+    Includes intelligent rate limit handling with exponential backoff:
+    - 429 responses trigger retries with 30s, 60s, 90s, 120s delays
+    - Rate limit detection also checks response body for limit messages
+    - Rate limit retries are independent of network error retries
+    """
+    last_exc: Optional[Exception] = None
+    rate_limit_attempts = 0
+    network_attempts = 0
+
+    # Total max attempts: MAX_HTTP_RETRIES for network issues + MAX_RATE_LIMIT_RETRIES for rate limits
+    max_total_attempts = MAX_HTTP_RETRIES + MAX_RATE_LIMIT_RETRIES
+
+    while network_attempts < MAX_HTTP_RETRIES and rate_limit_attempts <= MAX_RATE_LIMIT_RETRIES:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=timeout)
 
             if response.status_code >= 400:
                 snippet = response.text[:500]
+
+                # Check if this is a rate limit response
+                if _is_rate_limit_response(response.status_code, snippet):
+                    if rate_limit_attempts < MAX_RATE_LIMIT_RETRIES:
+                        sleep_for = RATE_LIMIT_BACKOFF_SECONDS[rate_limit_attempts]
+                        log.warn(
+                            "Rate limited, retrying with backoff",
+                            attempt=rate_limit_attempts + 1,
+                            max_attempts=MAX_RATE_LIMIT_RETRIES,
+                            sleep_seconds=sleep_for,
+                            status_code=response.status_code,
+                        )
+                        rate_limit_attempts += 1
+                        time.sleep(sleep_for)
+                        continue
+                    else:
+                        raise LLMError(
+                            message=f"Rate limited after {MAX_RATE_LIMIT_RETRIES} retries",
+                            code=ErrorCode.RATE_LIMIT,
+                            status_code=response.status_code,
+                            details=snippet,
+                        )
+
                 raise LLMError(
                     message=f"HTTP {response.status_code}: {snippet}",
                     status_code=response.status_code,
@@ -106,9 +163,10 @@ def _post_json(
 
         except requests.Timeout as exc:
             last_exc = exc
-            if attempt < MAX_HTTP_RETRIES:
-                sleep_for = RETRY_BACKOFF_SECONDS * attempt
-                log.warn("Request timed out, retrying", attempt=attempt, sleep=sleep_for)
+            network_attempts += 1
+            if network_attempts < MAX_HTTP_RETRIES:
+                sleep_for = RETRY_BACKOFF_SECONDS * network_attempts
+                log.warn("Request timed out, retrying", attempt=network_attempts, sleep=sleep_for)
                 time.sleep(sleep_for)
                 continue
             raise LLMError(
@@ -119,9 +177,10 @@ def _post_json(
 
         except requests.ConnectionError as exc:
             last_exc = exc
-            if attempt < MAX_HTTP_RETRIES:
-                sleep_for = RETRY_BACKOFF_SECONDS * attempt
-                log.warn("Connection error, retrying", attempt=attempt, sleep=sleep_for)
+            network_attempts += 1
+            if network_attempts < MAX_HTTP_RETRIES:
+                sleep_for = RETRY_BACKOFF_SECONDS * network_attempts
+                log.warn("Connection error, retrying", attempt=network_attempts, sleep=sleep_for)
                 time.sleep(sleep_for)
                 continue
             raise LLMError(
@@ -139,7 +198,7 @@ def _post_json(
 
     # Should not reach here, but just in case
     raise LLMError(
-        message=f"Failed after {MAX_HTTP_RETRIES} attempts",
+        message=f"Failed after {max_total_attempts} attempts",
         code=ErrorCode.NETWORK_ERROR,
         details=str(last_exc) if last_exc else None,
     )

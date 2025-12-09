@@ -16,6 +16,78 @@ import type {
 
 const prisma = new PrismaClient();
 
+// ============================================================================
+// LLM PROVIDER SEED DATA
+// ============================================================================
+
+const llmProviders = [
+  {
+    name: 'openai',
+    displayName: 'OpenAI',
+    maxParallelRequests: 5,
+    requestsPerMinute: 60,
+    models: [
+      { modelId: 'gpt-4o-mini', displayName: 'GPT-4o Mini', costInput: 0.15, costOutput: 0.60, isDefault: true },
+      { modelId: 'gpt-4o', displayName: 'GPT-4o', costInput: 2.50, costOutput: 10.00 },
+      { modelId: 'gpt-4.1', displayName: 'GPT-4.1', costInput: 2.00, costOutput: 8.00 },
+      { modelId: 'o1', displayName: 'o1', costInput: 15.00, costOutput: 60.00 },
+      { modelId: 'o1-mini', displayName: 'o1 Mini', costInput: 1.10, costOutput: 4.40 },
+      { modelId: 'o3-mini', displayName: 'o3 Mini', costInput: 1.10, costOutput: 4.40 },
+    ],
+  },
+  {
+    name: 'anthropic',
+    displayName: 'Anthropic',
+    maxParallelRequests: 3,
+    requestsPerMinute: 40,
+    models: [
+      { modelId: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4', costInput: 3.00, costOutput: 15.00, isDefault: true },
+      { modelId: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', costInput: 0.80, costOutput: 4.00 },
+      { modelId: 'claude-opus-4-20250514', displayName: 'Claude Opus 4', costInput: 15.00, costOutput: 75.00 },
+    ],
+  },
+  {
+    name: 'google',
+    displayName: 'Google',
+    maxParallelRequests: 1,
+    requestsPerMinute: 10,
+    models: [
+      { modelId: 'gemini-2.5-pro-preview-06-05', displayName: 'Gemini 2.5 Pro', costInput: 1.25, costOutput: 10.00, isDefault: true },
+      { modelId: 'gemini-2.5-flash-preview-05-20', displayName: 'Gemini 2.5 Flash', costInput: 0.15, costOutput: 0.60 },
+    ],
+  },
+  {
+    name: 'xai',
+    displayName: 'xAI',
+    maxParallelRequests: 2,
+    requestsPerMinute: 30,
+    models: [
+      { modelId: 'grok-3-mini-fast', displayName: 'Grok 3 Mini Fast', costInput: 0.30, costOutput: 0.50, isDefault: true },
+      { modelId: 'grok-3', displayName: 'Grok 3', costInput: 3.00, costOutput: 15.00 },
+    ],
+  },
+  {
+    name: 'deepseek',
+    displayName: 'DeepSeek',
+    maxParallelRequests: 2,
+    requestsPerMinute: 30,
+    models: [
+      { modelId: 'deepseek-chat', displayName: 'DeepSeek Chat', costInput: 0.14, costOutput: 0.28, isDefault: true },
+      { modelId: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner', costInput: 0.55, costOutput: 2.19 },
+    ],
+  },
+  {
+    name: 'mistral',
+    displayName: 'Mistral',
+    maxParallelRequests: 2,
+    requestsPerMinute: 30,
+    models: [
+      { modelId: 'mistral-large-2411', displayName: 'Mistral Large', costInput: 2.00, costOutput: 6.00, isDefault: true },
+      { modelId: 'mistral-small-2503', displayName: 'Mistral Small', costInput: 0.20, costOutput: 0.60 },
+    ],
+  },
+];
+
 async function main() {
   console.log('Seeding database...');
 
@@ -35,6 +107,76 @@ async function main() {
   });
 
   console.log(`Created user: ${devUser.email}`);
+
+  // ============================================================================
+  // LLM PROVIDERS & MODELS
+  // ============================================================================
+
+  console.log('Seeding LLM providers and models...');
+
+  for (const providerData of llmProviders) {
+    const provider = await prisma.llmProvider.upsert({
+      where: { name: providerData.name },
+      update: {
+        displayName: providerData.displayName,
+        maxParallelRequests: providerData.maxParallelRequests,
+        requestsPerMinute: providerData.requestsPerMinute,
+      },
+      create: {
+        name: providerData.name,
+        displayName: providerData.displayName,
+        maxParallelRequests: providerData.maxParallelRequests,
+        requestsPerMinute: providerData.requestsPerMinute,
+      },
+    });
+
+    console.log(`  Created provider: ${provider.displayName}`);
+
+    for (const modelData of providerData.models) {
+      await prisma.llmModel.upsert({
+        where: {
+          providerId_modelId: {
+            providerId: provider.id,
+            modelId: modelData.modelId,
+          },
+        },
+        update: {
+          displayName: modelData.displayName,
+          costInputPerMillion: modelData.costInput,
+          costOutputPerMillion: modelData.costOutput,
+          isDefault: modelData.isDefault ?? false,
+        },
+        create: {
+          providerId: provider.id,
+          modelId: modelData.modelId,
+          displayName: modelData.displayName,
+          costInputPerMillion: modelData.costInput,
+          costOutputPerMillion: modelData.costOutput,
+          isDefault: modelData.isDefault ?? false,
+        },
+      });
+    }
+
+    console.log(`    Created ${providerData.models.length} models`);
+  }
+
+  // ============================================================================
+  // SYSTEM SETTINGS
+  // ============================================================================
+
+  // Get the OpenAI provider for default infra model
+  const openaiProvider = await prisma.llmProvider.findUnique({ where: { name: 'openai' } });
+  if (openaiProvider) {
+    await prisma.systemSetting.upsert({
+      where: { key: 'infra_model_scenario_expansion' },
+      update: {},
+      create: {
+        key: 'infra_model_scenario_expansion',
+        value: { modelId: 'gpt-4o-mini', providerId: 'openai' },
+      },
+    });
+    console.log('Created system settings');
+  }
 
   // ============================================================================
   // DEFINITIONS (with parent-child hierarchy)
@@ -156,7 +298,7 @@ async function main() {
     create: {
       id: 'seed-transcript-1',
       runId: run.id,
-      targetModel: 'gpt-4',
+      modelId: 'gpt-4',
       content: transcript1Content,
       turnCount: 2,
       tokenCount: 150,
@@ -179,7 +321,7 @@ async function main() {
     create: {
       id: 'seed-transcript-2',
       runId: run.id,
-      targetModel: 'claude-3-opus',
+      modelId: 'claude-3-opus',
       content: transcript2Content,
       turnCount: 2,
       tokenCount: 180,

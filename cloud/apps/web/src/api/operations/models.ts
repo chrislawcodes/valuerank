@@ -11,6 +11,7 @@ export type AvailableModel = {
   versions: string[];
   defaultVersion: string | null;
   isAvailable: boolean;
+  isDefault: boolean;
 };
 
 // ============================================================================
@@ -26,6 +27,7 @@ export const AVAILABLE_MODELS_QUERY = gql`
       versions
       defaultVersion
       isAvailable
+      isDefault
     }
   }
 `;

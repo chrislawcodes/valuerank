@@ -132,6 +132,10 @@ type ProbeWorkerInput = {
     maxTokens: number;
     maxTurns: number;
   };
+  modelCost?: {
+    costInputPerMillion: number;
+    costOutputPerMillion: number;
+  };
 };
 
 /**
@@ -239,16 +243,42 @@ function resolveModelVersion(modelId: string): string {
 }
 
 /**
+ * Fetch model cost data from database.
+ */
+async function fetchModelCost(modelId: string): Promise<{ costInputPerMillion: number; costOutputPerMillion: number } | null> {
+  try {
+    const model = await db.llmModel.findFirst({
+      where: { modelId },
+      select: {
+        costInputPerMillion: true,
+        costOutputPerMillion: true,
+      },
+    });
+
+    if (model) {
+      return {
+        costInputPerMillion: Number(model.costInputPerMillion),
+        costOutputPerMillion: Number(model.costOutputPerMillion),
+      };
+    }
+  } catch (err) {
+    log.warn({ modelId, err }, 'Failed to fetch model cost, continuing without cost tracking');
+  }
+
+  return null;
+}
+
+/**
  * Build Python worker input from scenario data.
  */
-function buildWorkerInput(
+async function buildWorkerInput(
   runId: string,
   scenarioId: string,
   modelId: string,
   scenarioContent: unknown,
   definitionContent: unknown,
   config: { temperature: number; maxTurns: number }
-): ProbeWorkerInput {
+): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
   const definition = definitionContent as Record<string, unknown>;
@@ -265,7 +295,10 @@ function buildWorkerInput(
   // Resolve model ID to full API version (e.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022")
   const resolvedModelId = resolveModelVersion(modelId);
 
-  return {
+  // Fetch model cost for cost tracking
+  const modelCost = await fetchModelCost(resolvedModelId) || await fetchModelCost(modelId);
+
+  const input: ProbeWorkerInput = {
     runId,
     scenarioId,
     modelId: resolvedModelId,
@@ -280,6 +313,12 @@ function buildWorkerInput(
       maxTurns: config.maxTurns,
     },
   };
+
+  if (modelCost) {
+    input.modelCost = modelCost;
+  }
+
+  return input;
 }
 
 /**
@@ -316,7 +355,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         const scenario = await fetchScenario(scenarioId);
 
         // Build input for Python worker
-        const workerInput = buildWorkerInput(
+        const workerInput = await buildWorkerInput(
           runId,
           scenarioId,
           modelId,

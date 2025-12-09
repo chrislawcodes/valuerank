@@ -10,11 +10,11 @@
       "persistent": true
     },
     "test": {
-      "dependsOn": ["build"],
+      "dependsOn": ["build", "^test"],
       "outputs": ["coverage/**"]
     },
     "test:coverage": {
-      "dependsOn": ["build"],
+      "dependsOn": ["build", "^test:coverage"],
       "outputs": ["coverage/**"]
     },
     "lint": {

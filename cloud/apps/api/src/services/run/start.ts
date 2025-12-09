@@ -2,6 +2,7 @@
  * Start Run Service
  *
  * Creates a new run and queues probe_scenario jobs for each model-scenario pair.
+ * Jobs are routed to provider-specific queues for parallelism enforcement.
  */
 
 import { db } from '@valuerank/db';
@@ -9,6 +10,7 @@ import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared'
 import { getBoss } from '../../queue/boss.js';
 import type { ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
 import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
+import { getQueueNameForModel } from '../parallelism/index.js';
 
 const log = createLogger('services:run:start');
 
@@ -214,13 +216,17 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     priority: priorityValue,
   };
 
-  // Create jobs in batches for better performance
-  const jobs: Array<{ name: string; data: ProbeScenarioJobData; options: typeof jobOptions }> = [];
+  // Create jobs with provider-specific queue routing for parallelism enforcement
+  type JobEntry = { queueName: string; data: ProbeScenarioJobData; options: typeof jobOptions };
+  const jobs: JobEntry[] = [];
 
   for (const modelId of models) {
+    // Get the provider-specific queue for this model
+    const queueName = await getQueueNameForModel(modelId);
+
     for (const scenarioId of selectedScenarioIds) {
       jobs.push({
-        name: 'probe_scenario',
+        queueName,
         data: {
           runId: run.id,
           scenarioId,
@@ -235,10 +241,17 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     }
   }
 
-  // Use PgBoss insert for batch job creation
+  // Log queue distribution for debugging
+  const queueCounts = new Map<string, number>();
+  for (const job of jobs) {
+    queueCounts.set(job.queueName, (queueCounts.get(job.queueName) ?? 0) + 1);
+  }
+  log.debug({ runId: run.id, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
+
+  // Send jobs to provider-specific queues
   const jobIds: string[] = [];
   for (const job of jobs) {
-    const jobId = await boss.send(job.name, job.data, job.options);
+    const jobId = await boss.send(job.queueName, job.data, job.options);
     if (jobId) {
       jobIds.push(jobId);
     }

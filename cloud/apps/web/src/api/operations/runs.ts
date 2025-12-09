@@ -31,6 +31,7 @@ export type Transcript = {
   turnCount: number;
   tokenCount: number;
   durationMs: number;
+  estimatedCost: number | null;
   createdAt: string;
   lastAccessedAt: string | null;
 };
@@ -120,6 +121,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       turnCount
       tokenCount
       durationMs
+      estimatedCost
       createdAt
       lastAccessedAt
     }

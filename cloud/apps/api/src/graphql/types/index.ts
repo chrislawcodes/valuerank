@@ -22,6 +22,11 @@ import './run-progress.js';
 // Model types
 import './available-model.js';
 
+// LLM Provider types
+import './llm-provider.js';
+import './llm-model.js';
+import './system-setting.js';
+
 // Health types
 import './health.js';
 
@@ -30,3 +35,4 @@ import './analysis.js';
 
 // Input types
 import './inputs/start-run.js';
+import './inputs/llm.js';

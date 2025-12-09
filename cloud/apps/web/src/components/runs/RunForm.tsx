@@ -5,7 +5,7 @@
  * and configuration options.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Play, AlertCircle, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
@@ -52,6 +52,20 @@ export function RunForm({
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [hasPreselected, setHasPreselected] = useState(false);
+
+  // Pre-select default models when models load
+  useEffect(() => {
+    if (!loadingModels && models.length > 0 && !hasPreselected) {
+      const defaultModels = models
+        .filter((m) => m.isDefault && m.isAvailable)
+        .map((m) => m.id);
+      if (defaultModels.length > 0) {
+        setFormState((prev) => ({ ...prev, selectedModels: defaultModels }));
+      }
+      setHasPreselected(true);
+    }
+  }, [models, loadingModels, hasPreselected]);
 
   const handleModelSelectionChange = useCallback((models: string[]) => {
     setFormState((prev) => ({ ...prev, selectedModels: models }));

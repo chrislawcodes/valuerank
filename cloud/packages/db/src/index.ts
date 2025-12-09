@@ -21,6 +21,10 @@ export type {
   Cohort,
   Tag,
   DefinitionTag,
+  LlmProvider,
+  LlmModel,
+  LlmModelStatus,
+  SystemSetting,
 } from '@prisma/client';
 
 // JSONB content types
