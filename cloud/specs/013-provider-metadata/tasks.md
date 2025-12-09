@@ -155,18 +155,18 @@
 
 ### Backend
 
-- [ ] T056 [US4] Add updateSystemSetting mutation to `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T057 [US4] Create helper to get infra model: `apps/api/src/services/infra-models.ts`
-- [ ] T058 [US4] Update scenario expansion to use infra model service
+- [X] T056 [US4] updateSystemSetting mutation in `apps/api/src/graphql/mutations/llm.ts` (Phase 4)
+- [X] T057 [US4] Create helper to get infra model: `apps/api/src/services/infra-models.ts`
+- [ ] T058 [US4] Update scenario expansion to use infra model service (Python workers - deferred)
 
 ### Frontend
 
-- [ ] T059 [US4] Create `apps/web/src/components/settings/InfraPanel.tsx`
-- [ ] T060 [US4] Add model selector dropdown for scenario expansion
-- [ ] T061 [US4] Wire up to updateSystemSetting mutation
-- [ ] T062 [US4] Add InfraPanel to Settings tabs
+- [X] T059 [US4] Create `apps/web/src/components/settings/InfraPanel.tsx`
+- [X] T060 [US4] Model selector dropdown with provider/model selection
+- [X] T061 [US4] Wired up to updateSystemSetting mutation
+- [X] T062 [US4] Added InfraPanel to Settings tabs
 
-**Checkpoint**: User Story 4 complete - infra model configurable
+**Checkpoint**: User Story 4 UI complete - Python worker integration deferred
 
 ---
 
