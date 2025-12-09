@@ -16,6 +16,11 @@ vi.mock('../../../src/queue/boss.js', () => ({
   })),
 }));
 
+// Mock parallelism service - always returns default queue in tests
+vi.mock('../../../src/services/parallelism/index.js', () => ({
+  getQueueNameForModel: vi.fn().mockResolvedValue('probe_scenario'),
+}));
+
 describe('startRun service', () => {
   const testUserId = 'test-user-id';
   const createdDefinitionIds: string[] = [];

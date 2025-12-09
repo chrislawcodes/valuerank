@@ -2,6 +2,7 @@
  * Queue Handler Registration
  *
  * Exports handler registration function for all job types.
+ * Includes provider-specific queues for parallelism enforcement.
  */
 
 import type { PgBoss } from 'pg-boss';
@@ -21,6 +22,10 @@ import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
+import {
+  createProviderQueues,
+  getAllProviderQueues,
+} from '../../services/parallelism/index.js';
 
 const log = createLogger('queue:handlers');
 
@@ -37,6 +42,7 @@ const handlerRegistrations: HandlerRegistration[] = [
   {
     name: 'probe_scenario',
     register: async (boss, batchSize) => {
+      // Register for the default probe_scenario queue (fallback)
       await boss.work<ProbeScenarioJobData>(
         'probe_scenario',
         { batchSize },
@@ -87,25 +93,66 @@ const handlerRegistrations: HandlerRegistration[] = [
 ];
 
 /**
+ * Registers provider-specific probe queue handlers.
+ * Each provider queue has its own batchSize based on maxParallelRequests.
+ * batchSize controls how many jobs are fetched and processed concurrently.
+ */
+async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
+  const providerQueues = await getAllProviderQueues();
+  const probeHandler = createProbeScenarioHandler();
+
+  let registeredCount = 0;
+
+  for (const [providerName, limits] of providerQueues) {
+    const queueName = limits.queueName;
+    const batchSize = limits.maxParallelRequests;
+
+    log.info(
+      { provider: providerName, queueName, batchSize },
+      'Registering provider probe handler'
+    );
+
+    // batchSize controls max concurrent jobs for this queue
+    await boss.work<ProbeScenarioJobData>(queueName, { batchSize }, probeHandler);
+    registeredCount++;
+  }
+
+  return registeredCount;
+}
+
+/**
  * Registers all job handlers with PgBoss.
  * Creates queues first (required by PgBoss v10+), then registers workers.
+ * Includes provider-specific probe queues for parallelism enforcement.
  */
 export async function registerHandlers(boss: PgBoss): Promise<void> {
   const batchSize = queueConfig.workerBatchSize;
 
-  // Create queues first (required by PgBoss v10+)
+  // Create standard queues first (required by PgBoss v10+)
   for (const registration of handlerRegistrations) {
     log.info({ jobType: registration.name }, 'Creating queue');
     await boss.createQueue(registration.name);
   }
 
-  // Then register workers
+  // Create provider-specific probe queues
+  await createProviderQueues(boss);
+
+  // Register standard handlers
   for (const registration of handlerRegistrations) {
     log.info({ jobType: registration.name, batchSize }, 'Registering handler');
     await registration.register(boss, batchSize);
   }
 
-  log.info({ handlerCount: handlerRegistrations.length }, 'All handlers registered');
+  // Register provider-specific probe handlers with parallelism limits
+  const providerHandlerCount = await registerProviderProbeHandlers(boss);
+
+  log.info(
+    {
+      standardHandlers: handlerRegistrations.length,
+      providerHandlers: providerHandlerCount,
+    },
+    'All handlers registered'
+  );
 }
 
 /**

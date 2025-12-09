@@ -178,16 +178,16 @@
 
 ### Backend
 
-- [ ] T063 [US5] Add updateLlmProvider mutation to `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T064 [US5] Create parallelism enforcer in `apps/api/src/jobs/parallelism.ts`
-- [ ] T065 [US5] Update probe job scheduler to check provider limits before scheduling
-- [ ] T066 [US5] Add active job tracking per provider (in-memory or PgBoss state)
-- [ ] T067 [US5] Create `apps/api/tests/jobs/parallelism.test.ts`
+- [X] T063 [US5] Add updateLlmProvider mutation to `apps/api/src/graphql/mutations/llm.ts`
+- [X] T064 [US5] Create parallelism enforcer in `apps/api/src/services/parallelism/index.ts`
+- [X] T065 [US5] Update probe job scheduler to check provider limits before scheduling
+- [X] T066 [US5] Add active job tracking per provider (in-memory or PgBoss state)
+- [X] T067 [US5] Create `apps/api/tests/services/parallelism/index.test.ts`
 
 ### Frontend
 
-- [ ] T068 [US5] Add provider settings edit to ModelsPanel (rate limit, parallelism)
-- [ ] T069 [US5] Create ProviderSettingsForm component for editing limits
+- [X] T068 [US5] Add provider settings edit to ModelsPanel (rate limit, parallelism)
+- [X] T069 [US5] Create ProviderSettingsForm component for editing limits
 
 **Checkpoint**: User Story 5 complete - parallelism enforced per provider
 
