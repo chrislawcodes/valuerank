@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
 
@@ -322,7 +323,7 @@ describe('AnalysisPanel', () => {
     expect(button).toBeDisabled();
   });
 
-  it('renders statistical methods documentation', () => {
+  it('renders statistical methods documentation', async () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -334,6 +335,10 @@ describe('AnalysisPanel', () => {
     });
 
     render(<AnalysisPanel runId="run-1" />);
+
+    // Navigate to Methods tab
+    const methodsTab = screen.getByRole('button', { name: /Methods/i });
+    await userEvent.click(methodsTab);
 
     expect(screen.getByText('Statistical Methods Used')).toBeInTheDocument();
   });

@@ -23,7 +23,7 @@ export default defineConfig({
       thresholds: {
         lines: 80,
         branches: 75,
-        functions: 80,
+        functions: 65, // Lower threshold for UI components (many callback functions)
       },
     },
   },

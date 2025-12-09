@@ -44,6 +44,12 @@ function renderSettings(mockClient: ReturnType<typeof createMockClient>) {
   );
 }
 
+// Helper to navigate to API Keys tab
+async function navigateToApiKeysTab() {
+  const apiKeysTab = screen.getByRole('button', { name: /API Keys/i });
+  await userEvent.click(apiKeysTab);
+}
+
 describe('Settings Page', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -62,6 +68,9 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(vi.fn(() => never));
     renderSettings(mockClient);
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     await waitFor(() => {
       expect(screen.getByText('Loading API keys...')).toBeInTheDocument();
     });
@@ -78,6 +87,9 @@ describe('Settings Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
+
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
 
     await waitFor(() => {
       expect(screen.getByText('No API keys')).toBeInTheDocument();
@@ -110,6 +122,9 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     await waitFor(() => {
       expect(screen.getByText('Production Key')).toBeInTheDocument();
     });
@@ -127,6 +142,9 @@ describe('Settings Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
+
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
 
     await waitFor(() => {
       expect(screen.getByText('No API keys')).toBeInTheDocument();
@@ -203,6 +221,9 @@ describe('Settings Page', () => {
       </BrowserRouter>
     );
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     await waitFor(() => {
       expect(screen.getByText('No API keys')).toBeInTheDocument();
     });
@@ -250,6 +271,9 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     await waitFor(() => {
       expect(screen.getByText('Production Key')).toBeInTheDocument();
     });
@@ -288,6 +312,9 @@ describe('Settings Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
+
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
 
     await waitFor(() => {
       expect(screen.getByText('Production Key')).toBeInTheDocument();
@@ -334,6 +361,9 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     await waitFor(() => {
       expect(screen.getByText('Used Key')).toBeInTheDocument();
     });
@@ -351,6 +381,9 @@ describe('Settings Page', () => {
     );
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
+
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
 
     await waitFor(() => {
       expect(screen.getByText('No API keys')).toBeInTheDocument();
