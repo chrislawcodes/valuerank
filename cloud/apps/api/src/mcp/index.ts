@@ -3,6 +3,7 @@
  *
  * Express router for MCP protocol handling.
  * Wires up the MCP server to Express and handles HTTP transport.
+ * Includes OAuth 2.1 support for Claude.ai integration.
  */
 
 import { Router } from 'express';
@@ -13,8 +14,12 @@ import { registerAllTools } from './tools/index.js';
 import { registerAllResources } from './resources/index.js';
 import { mcpAuthMiddleware } from './auth.js';
 import { mcpRateLimiter } from './rate-limit.js';
+import { protectedResourceMetadata } from './oauth/index.js';
 
 const log = createLogger('mcp:router');
+
+/** MCP Protocol Version */
+const MCP_PROTOCOL_VERSION = '2025-06-18';
 
 /**
  * Creates the MCP Express router
@@ -32,7 +37,18 @@ export function createMcpRouter(): Router {
   registerAllTools(mcpServer);
   registerAllResources(mcpServer);
 
-  // Apply rate limiting and auth middleware
+  // Protected Resource Metadata (RFC 9728) - no auth required
+  // Claude.ai fetches this to discover the authorization server
+  router.get('/.well-known/resource.json', protectedResourceMetadata);
+
+  // HEAD request for protocol version check - no auth required
+  // Claude.ai uses this to verify MCP compatibility
+  router.head('/', (req, res) => {
+    res.setHeader('MCP-Protocol-Version', MCP_PROTOCOL_VERSION);
+    res.status(200).end();
+  });
+
+  // Apply rate limiting and auth middleware for all other requests
   router.use(mcpRateLimiter);
   router.use(mcpAuthMiddleware);
 

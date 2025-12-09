@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "prisma migrate deploy --schema ../db/prisma/schema.prisma && node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

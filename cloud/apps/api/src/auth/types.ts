@@ -30,7 +30,7 @@ export type AuthUser = {
 /**
  * Authentication method used for the current request
  */
-export type AuthMethod = 'jwt' | 'api_key';
+export type AuthMethod = 'jwt' | 'api_key' | 'oauth';
 
 /**
  * Authentication context added to Express request

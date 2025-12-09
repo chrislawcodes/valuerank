@@ -475,8 +475,82 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" np
 The Prisma schema is at `packages/db/prisma/schema.prisma`. When running Prisma commands from the `cloud/` directory, specify the schema path:
 
 ```bash
-npx prisma db push --schema packages/db/prisma/schema.prisma
+npx prisma migrate dev --schema packages/db/prisma/schema.prisma
 ```
+
+---
+
+## Schema Changes (Migrations)
+
+**IMPORTANT: Always use Prisma Migrate for schema changes, never `db push`.**
+
+Migrations are version-controlled SQL files that track schema evolution. Production deployments run `prisma migrate deploy` automatically on startup.
+
+### Creating a Migration
+
+When you modify `packages/db/prisma/schema.prisma`, create a migration:
+
+```bash
+# Create migration with descriptive name
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
+```
+
+This will:
+1. Generate SQL in `packages/db/prisma/migrations/<timestamp>_<name>/migration.sql`
+2. Apply the migration to your local database
+3. Regenerate Prisma Client
+
+### Migration Naming Convention
+
+Use descriptive, snake_case names:
+- `add_oauth_tables` - Adding new tables
+- `add_user_preferences` - Adding columns
+- `rename_status_column` - Renaming
+- `add_index_on_created_at` - Performance improvements
+
+### Applying Migrations
+
+```bash
+# Development - creates and applies migration interactively
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --schema packages/db/prisma/schema.prisma
+
+# Production - applies pending migrations (non-interactive)
+DATABASE_URL="..." npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+
+# Check migration status
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate status --schema packages/db/prisma/schema.prisma
+```
+
+### Production Deployment
+
+Migrations auto-deploy on Railway. The API start script runs:
+```bash
+prisma migrate deploy --schema ../db/prisma/schema.prisma && node dist/index.js
+```
+
+### Handling Existing Schema (db push recovery)
+
+If you accidentally used `db push` and need to create a migration retroactively:
+
+```bash
+# 1. Create migration file manually in packages/db/prisma/migrations/<timestamp>_<name>/
+# 2. Mark it as applied (since db push already modified the schema):
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate resolve --applied <migration_name> --schema packages/db/prisma/schema.prisma
+```
+
+### Why Migrations Over db push
+
+| `migrate dev` | `db push` |
+|---------------|-----------|
+| Creates versioned SQL files | No history |
+| Safe for production | Development only |
+| Supports rollback planning | Destructive |
+| Team collaboration | Local only |
+| CI/CD friendly | Manual sync needed |
 
 ---
 
@@ -503,23 +577,23 @@ npm run db:test:setup
 
 ### Setup Test Database (Manual)
 
-If tests fail with schema errors, manually push the schema:
+If tests fail with schema errors, apply migrations to the test database:
 
 ```bash
 DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
-  npx prisma db push --schema packages/db/prisma/schema.prisma
+  npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
 ```
 
 ### Reset Test Database (Clean Slate)
 
-If tests have data pollution issues, force reset the database:
+If tests have data pollution issues, reset and re-apply migrations:
 
 ```bash
 npm run db:test:reset
 
 # Or manually:
 DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
-  npx prisma db push --schema packages/db/prisma/schema.prisma --force-reset
+  npx prisma migrate reset --schema packages/db/prisma/schema.prisma --force
 ```
 
 ### Running Tests
