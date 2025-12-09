@@ -596,13 +596,13 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
 
 ```bash
 # API service logs
-railway logs --service api
+railway logs --service api --lines 100
 
 # Web service logs
-railway logs --service web
+railway logs --service web --lines 100
 
 # Postgres logs
-railway logs --service postgres
+railway logs --service postgres --lines 100
 ```
 
 ### SSH into Production
