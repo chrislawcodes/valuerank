@@ -377,5 +377,79 @@ describe('Audit Log Queries', () => {
       const overlap = firstIds.filter((id: string) => secondIds.includes(id));
       expect(overlap.length).toBe(0);
     });
+
+    it('filters by date range', async () => {
+      // Create logs with specific timestamps for testing
+      const now = new Date();
+      const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      // Create a log that will be outside the range
+      await db.auditLog.create({
+        data: {
+          action: 'CREATE',
+          entityType: 'Definition',
+          entityId: 'date-test-entity',
+          userId: testUser.id,
+          metadata: { test: 'old' },
+          createdAt: twoHoursAgo,
+        },
+      });
+
+      // Create a log that will be inside the range
+      await db.auditLog.create({
+        data: {
+          action: 'UPDATE',
+          entityType: 'Definition',
+          entityId: 'date-test-entity',
+          userId: testUser.id,
+          metadata: { test: 'recent' },
+          createdAt: now,
+        },
+      });
+
+      const query = `
+        query AuditLogs($filter: AuditLogFilterInput) {
+          auditLogs(filter: $filter) {
+            nodes {
+              id
+              entityId
+              metadata
+              createdAt
+            }
+            totalCount
+          }
+        }
+      `;
+
+      // Query for logs from 30 minutes ago to now
+      const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000);
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query,
+          variables: {
+            filter: {
+              entityId: 'date-test-entity',
+              from: thirtyMinsAgo.toISOString(),
+              to: now.toISOString(),
+            },
+          },
+        })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      const nodes = response.body.data.auditLogs.nodes;
+
+      // Should only include the recent log, not the 2-hour-old one
+      expect(nodes.length).toBe(1);
+      expect(nodes[0].metadata).toEqual({ test: 'recent' });
+
+      // Cleanup date test logs
+      await db.auditLog.deleteMany({
+        where: { entityId: 'date-test-entity' },
+      });
+    });
   });
 });

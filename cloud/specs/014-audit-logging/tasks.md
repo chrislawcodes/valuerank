@@ -212,15 +212,15 @@
 
 ### Implementation
 
-- [ ] T079 [US4] Add userId filter support to auditLogs query in `apps/api/src/graphql/queries/audit-log.ts`
-- [ ] T080 [US4] Add date range filter (from/to) support in `apps/api/src/services/audit/query.ts`
-- [ ] T081 [US4] Add pagination (first/after) support to auditLogs query
+- [X] T079 [US4] Add userId filter support to auditLogs query in `apps/api/src/graphql/queries/audit-log.ts`
+- [X] T080 [US4] Add date range filter (from/to) support in `apps/api/src/services/audit/query.ts`
+- [X] T081 [US4] Add pagination (first/after) support to auditLogs query
 
 ### Tests
 
-- [ ] T082 [US4] Write test for userId filter in `apps/api/tests/graphql/queries/audit-log.test.ts`
-- [ ] T083 [P] [US4] Write test for date range filter in `apps/api/tests/graphql/queries/audit-log.test.ts`
-- [ ] T084 [P] [US4] Write test for pagination in `apps/api/tests/graphql/queries/audit-log.test.ts`
+- [X] T082 [US4] Write test for userId filter in `apps/api/tests/graphql/queries/audit-log.test.ts`
+- [X] T083 [P] [US4] Write test for date range filter in `apps/api/tests/graphql/queries/audit-log.test.ts`
+- [X] T084 [P] [US4] Write test for pagination in `apps/api/tests/graphql/queries/audit-log.test.ts`
 
 **Checkpoint**: User Story 4 complete - users can query audit logs by user with filters and pagination
 
