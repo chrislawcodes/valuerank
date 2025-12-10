@@ -1,0 +1,203 @@
+# Cost Visibility GraphQL Schema Extensions
+#
+# This file defines the GraphQL types and operations for cost estimation
+# and visibility features (Feature #015).
+
+# ============================================================================
+# NEW TYPES
+# ============================================================================
+
+"""
+Token usage statistics for a model, used for cost prediction.
+"""
+type ModelTokenStats {
+  """Model identifier (e.g., 'openai:gpt-4o')"""
+  modelId: ID!
+
+  """Average input tokens per probe based on historical data"""
+  avgInputTokens: Float!
+
+  """Average output tokens per probe based on historical data"""
+  avgOutputTokens: Float!
+
+  """Number of probes used to compute these averages"""
+  sampleCount: Int!
+
+  """When these statistics were last updated"""
+  lastUpdatedAt: DateTime!
+}
+
+"""
+Cost estimate for a single model in a run.
+"""
+type ModelCostEstimate {
+  """Model identifier (e.g., 'openai:gpt-4o')"""
+  modelId: ID!
+
+  """Human-readable model name"""
+  displayName: String!
+
+  """Number of scenarios this model will run"""
+  scenarioCount: Int!
+
+  """Predicted total input tokens for all scenarios"""
+  inputTokens: Float!
+
+  """Predicted total output tokens for all scenarios"""
+  outputTokens: Float!
+
+  """Cost for input tokens in USD"""
+  inputCost: Float!
+
+  """Cost for output tokens in USD"""
+  outputCost: Float!
+
+  """Total cost (inputCost + outputCost) in USD"""
+  totalCost: Float!
+
+  """Average input tokens per probe used for prediction"""
+  avgInputPerProbe: Float!
+
+  """Average output tokens per probe used for prediction"""
+  avgOutputPerProbe: Float!
+
+  """Number of historical probes used to compute averages"""
+  sampleCount: Int!
+
+  """True if using fallback estimates (no model-specific history)"""
+  isUsingFallback: Boolean!
+
+  """Cost per million input tokens for this model"""
+  costInputPerMillion: Float!
+
+  """Cost per million output tokens for this model"""
+  costOutputPerMillion: Float!
+}
+
+"""
+Complete cost estimate for a run before execution.
+"""
+type CostEstimate {
+  """Total estimated cost in USD across all models"""
+  total: Float!
+
+  """Per-model cost breakdown"""
+  perModel: [ModelCostEstimate!]!
+
+  """Total number of scenarios to be run"""
+  scenarioCount: Int!
+
+  """Minimum sample count across all models (indicates estimate quality)"""
+  basedOnSampleCount: Int!
+
+  """True if any model is using fallback estimates"""
+  isUsingFallback: Boolean!
+
+  """Explanation of fallback usage if applicable"""
+  fallbackReason: String
+}
+
+"""
+Actual cost summary for a completed run.
+"""
+type ActualCost {
+  """Total actual cost in USD"""
+  total: Float!
+
+  """Per-model actual cost breakdown"""
+  perModel: [ActualModelCost!]!
+}
+
+"""
+Actual cost for a single model from a completed run.
+"""
+type ActualModelCost {
+  """Model identifier"""
+  modelId: ID!
+
+  """Total input tokens used"""
+  inputTokens: Int!
+
+  """Total output tokens used"""
+  outputTokens: Int!
+
+  """Actual cost in USD"""
+  cost: Float!
+
+  """Number of probes completed"""
+  probeCount: Int!
+}
+
+# ============================================================================
+# QUERY EXTENSIONS
+# ============================================================================
+
+extend type Query {
+  """
+  Estimate cost for a potential run before starting it.
+
+  Returns per-model breakdown with token predictions based on historical data.
+  If a model has no history, uses all-model average or system defaults.
+  """
+  estimateCost(
+    """Definition ID to estimate cost for"""
+    definitionId: ID!
+
+    """Model IDs to include in the estimate"""
+    models: [String!]!
+
+    """Sample percentage (1-100, default 100)"""
+    samplePercentage: Int = 100
+  ): CostEstimate!
+
+  """
+  Get token statistics for specific models.
+  Useful for understanding prediction quality.
+  """
+  modelTokenStats(
+    """Model IDs to get stats for (returns all if not specified)"""
+    modelIds: [String!]
+  ): [ModelTokenStats!]!
+}
+
+# ============================================================================
+# RUN TYPE EXTENSIONS
+# ============================================================================
+
+extend type Run {
+  """
+  Estimated cost calculated when run was created.
+  Stored in run config for historical reference.
+  """
+  estimatedCosts: CostEstimate
+}
+
+# ============================================================================
+# ANALYSIS RESULT EXTENSIONS
+# ============================================================================
+
+extend type AnalysisResult {
+  """
+  Actual cost calculated from completed probes.
+  Only available after run completion.
+  """
+  actualCost: ActualCost
+}
+
+# ============================================================================
+# START RUN MUTATION EXTENSION
+# ============================================================================
+
+"""
+Enhanced StartRunPayload with cost estimate.
+"""
+type StartRunPayload {
+  """The created run"""
+  run: Run!
+
+  """Number of jobs queued"""
+  jobCount: Int!
+
+  """Estimated cost for the run"""
+  estimatedCost: CostEstimate!
+}
