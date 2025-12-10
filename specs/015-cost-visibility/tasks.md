@@ -62,23 +62,23 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Create CostEstimate GraphQL types in `apps/api/src/graphql/types/cost-estimate.ts`:
+- [X] T013 [P] [US1] Create CostEstimate GraphQL types in `apps/api/src/graphql/types/cost-estimate.ts`:
   - ModelCostEstimate type (per contracts/cost-schema.graphql)
   - CostEstimate type with total and perModel
   - ModelTokenStats type
-- [ ] T014 [P] [US1] Add `estimateCost` query to GraphQL schema in `apps/api/src/graphql/types/cost-estimate.ts`:
+- [X] T014 [P] [US1] Add `estimateCost` query to GraphQL schema in `apps/api/src/graphql/types/cost-estimate.ts`:
   - Args: definitionId, models[], samplePercentage
   - Returns: CostEstimate
   - Resolver calls cost estimation service
-- [ ] T015 [US1] Add `modelTokenStats` query to `apps/api/src/graphql/types/cost-estimate.ts`:
+- [X] T015 [US1] Add `modelTokenStats` query to `apps/api/src/graphql/types/cost-estimate.ts`:
   - Optional modelIds filter
   - Returns array of ModelTokenStats
-- [ ] T016 [US1] Create CostBreakdown React component in `apps/web/src/components/runs/CostBreakdown.tsx`:
+- [X] T016 [US1] Create CostBreakdown React component in `apps/web/src/components/runs/CostBreakdown.tsx`:
   - Display per-model cost breakdown
   - Show input/output token predictions
   - Indicate when using fallback estimates
   - Dynamic precision formatting (4 decimals for sub-cent)
-- [ ] T017 [US1] Add integration test for estimateCost query in `apps/api/tests/graphql/cost-estimate.test.ts`
+- [X] T017 [US1] Add integration test for estimateCost query in `apps/api/tests/graphql/cost-estimate.test.ts`
 
 **Checkpoint**: User Story 1 complete - users can see per-model cost predictions
 

@@ -11,6 +11,7 @@ export { useAvailableModels } from './useAvailableModels';
 export { useRuns } from './useRuns';
 export { useRun } from './useRun';
 export { useRunMutations } from './useRunMutations';
+export { useCostEstimate } from './useCostEstimate';
 
 // Analysis hooks
 export { useAnalysis } from './useAnalysis';

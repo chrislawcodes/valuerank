@@ -9,7 +9,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Play, AlertCircle, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
+import { CostBreakdown } from './CostBreakdown';
 import { useAvailableModels } from '../../hooks/useAvailableModels';
+import { useCostEstimate } from '../../hooks/useCostEstimate';
 import type { StartRunInput } from '../../api/operations/runs';
 
 type RunFormProps = {
@@ -53,6 +55,18 @@ export function RunForm({
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasPreselected, setHasPreselected] = useState(false);
+
+  // Fetch cost estimate when models and sample percentage change
+  const {
+    costEstimate,
+    loading: loadingCost,
+    error: costError,
+  } = useCostEstimate({
+    definitionId,
+    models: formState.selectedModels,
+    samplePercentage: formState.samplePercentage,
+    pause: formState.selectedModels.length === 0,
+  });
 
   // Pre-select default models when models load
   useEffect(() => {
@@ -190,18 +204,13 @@ export function RunForm({
         )}
       </div>
 
-      {/* Summary */}
-      {totalJobs !== null && totalJobs > 0 && (
-        <div className="p-4 bg-teal-50 rounded-lg">
-          <h4 className="text-sm font-medium text-teal-900 mb-1">Run Summary</h4>
-          <p className="text-sm text-teal-700">
-            {formState.selectedModels.length} model{formState.selectedModels.length !== 1 ? 's' : ''}
-            {' x '}
-            {estimatedScenarios} scenario{estimatedScenarios !== 1 ? 's' : ''}
-            {' = '}
-            <strong>{totalJobs} probe job{totalJobs !== 1 ? 's' : ''}</strong>
-          </p>
-        </div>
+      {/* Cost Estimate */}
+      {formState.selectedModels.length > 0 && (
+        <CostBreakdown
+          costEstimate={costEstimate}
+          loading={loadingCost}
+          error={costError}
+        />
       )}
 
       {/* Actions */}
