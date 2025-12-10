@@ -113,6 +113,61 @@ describe('GraphQL Run Query', () => {
       expect(response.body.data.run).toBeNull();
     });
 
+    it('returns null for definition when definition is soft-deleted (orphaned run)', async () => {
+      // Create a definition and run, then soft-delete the definition
+      const orphanDef = await db.definition.create({
+        data: {
+          name: 'Orphan Test Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+
+      const orphanRun = await db.run.create({
+        data: {
+          definitionId: orphanDef.id,
+          status: 'COMPLETED',
+          config: { models: ['test-model'] },
+          progress: { completed: 1, total: 1 },
+        },
+      });
+
+      // Soft-delete the definition (simulating what happens in prod)
+      await db.definition.update({
+        where: { id: orphanDef.id },
+        data: { deletedAt: new Date() },
+      });
+
+      const query = `
+        query GetOrphanedRun($id: ID!) {
+          run(id: $id) {
+            id
+            definitionId
+            definition {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: orphanRun.id } })
+        .expect(200);
+
+      // Should NOT have errors - this is the key fix
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.run).not.toBeNull();
+      expect(response.body.data.run.definitionId).toBe(orphanDef.id);
+      // Definition should be null because it was soft-deleted
+      expect(response.body.data.run.definition).toBeNull();
+
+      // Cleanup
+      await db.run.delete({ where: { id: orphanRun.id } });
+      await db.definition.delete({ where: { id: orphanDef.id } });
+    });
+
     it('resolves definition relationship via DataLoader', async () => {
       const query = `
         query GetRunWithDefinition($id: ID!) {

@@ -105,13 +105,13 @@ function registerDeleteDefinitionTool(server: McpServer): void {
         }
 
         // Perform soft delete with cascading
-        const deletedIds = await softDeleteDefinition(args.definition_id);
+        const result = await softDeleteDefinition(args.definition_id);
 
         log.info({
           requestId,
           definitionId: args.definition_id,
           name: definitionName,
-          deletedCount: deletedIds.length,
+          deletedCount: result.deletedCount,
         }, 'Definition deleted');
 
         // Log audit event
@@ -124,7 +124,9 @@ function registerDeleteDefinitionTool(server: McpServer): void {
             requestId,
             deletedCount: {
               primary: 1,
-              scenarios: deletedIds.length - 1, // descendants
+              scenarios: result.deletedCount.scenarios,
+              runs: result.deletedCount.runs,
+              transcripts: result.deletedCount.transcripts,
             },
           })
         );
@@ -135,9 +137,7 @@ function registerDeleteDefinitionTool(server: McpServer): void {
           definition_id: args.definition_id,
           name: definitionName,
           deleted_at: new Date().toISOString(),
-          deleted_count: {
-            definitions: deletedIds.length,
-          },
+          deleted_count: result.deletedCount,
         });
       } catch (err) {
         log.error({ err, requestId }, 'delete_definition failed');
