@@ -1,6 +1,7 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { TagRef } from '../types/refs.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // Validation regex for tag names: alphanumeric, hyphen, underscore
 const TAG_NAME_REGEX = /^[a-z0-9_-]+$/;
@@ -69,6 +70,16 @@ builder.mutationField('createTag', (t) =>
       });
 
       ctx.log.info({ tagId: tag.id, name: tag.name }, 'Tag created');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'Tag',
+        entityId: tag.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: tag.name },
+      });
+
       return tag;
     },
   })
@@ -109,6 +120,15 @@ builder.mutationField('deleteTag', (t) =>
         { tagId: args.id, name: tag.name, affectedDefinitions },
         'Tag deleted'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'DELETE',
+        entityType: 'Tag',
+        entityId: args.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: tag.name, affectedDefinitions },
+      });
 
       return { success: true, affectedDefinitions };
     },

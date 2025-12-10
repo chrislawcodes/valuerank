@@ -8,6 +8,7 @@ import {
 import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
 import { queueScenarioExpansion } from '../../services/scenario/index.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -97,6 +98,15 @@ builder.mutationField('createDefinition', (t) =>
         { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
         'Scenario expansion queued'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'Definition',
+        entityId: definition.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name },
+      });
 
       return definition;
     },
@@ -201,6 +211,15 @@ builder.mutationField('forkDefinition', (t) =>
         { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
         'Scenario expansion queued for fork'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'Definition',
+        entityId: definition.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name, parentId, inheritAll: inheritAll !== false },
+      });
 
       return definition;
     },
@@ -317,6 +336,15 @@ builder.mutationField('updateDefinition', (t) =>
         );
       }
 
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Definition',
+        entityId: definition.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { updatedFields: Object.keys(updateData) },
+      });
+
       return definition;
     },
   })
@@ -421,6 +449,15 @@ builder.mutationField('updateDefinitionContent', (t) =>
         'Scenario re-expansion queued after content update'
       );
 
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Definition',
+        entityId: definition.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { clearedOverrides: Array.from(fieldsToClear), contentUpdate: true },
+      });
+
       return definition;
     },
   })
@@ -469,6 +506,15 @@ builder.mutationField('deleteDefinition', (t) =>
         { definitionId: id, deletedCount: result.deletedCount },
         'Definition deleted'
       );
+
+      // Audit log for primary definition (non-blocking)
+      createAuditLog({
+        action: 'DELETE',
+        entityType: 'Definition',
+        entityId: id,
+        userId: ctx.user?.id ?? null,
+        metadata: { deletedIds: result.definitionIds, count: result.definitionIds.length },
+      });
 
       return {
         deletedIds: result.definitionIds,
@@ -535,6 +581,15 @@ builder.mutationField('regenerateScenarios', (t) =>
         { definitionId, jobId: queueResult.jobId, queued: queueResult.queued },
         'Manual scenario regeneration queued'
       );
+
+      // Audit log (non-blocking) - ACTION type for regeneration
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Definition',
+        entityId: definitionId,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'regenerateScenarios', jobId: queueResult.jobId, queued: queueResult.queued },
+      });
 
       return {
         definitionId,

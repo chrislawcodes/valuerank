@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
 import { db } from '@valuerank/db';
+import { TEST_USER } from '../../test-utils.js';
 
 // Mock the queue boss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -21,6 +22,16 @@ describe('start_run tool', () => {
   const createdRunIds: string[] = [];
 
   beforeAll(async () => {
+    // Ensure test user exists
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
     // Create test definition
     const definition = await db.definition.create({
       data: {
@@ -89,7 +100,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -104,7 +115,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models: ['openai:gpt-4', 'anthropic:claude-3-opus'],
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -118,7 +129,7 @@ describe('start_run tool', () => {
         models: ['openai:gpt-4'],
         samplePercentage: 34, // Should sample ~1 scenario from 3
         sampleSeed: 42,
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -132,7 +143,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -151,7 +162,7 @@ describe('start_run tool', () => {
         startRun({
           definitionId: '00000000-0000-0000-0000-000000000000',
           models: ['openai:gpt-4'],
-          userId: 'test-user',
+          userId: TEST_USER.id,
         })
       ).rejects.toThrow();
     });
@@ -161,7 +172,7 @@ describe('start_run tool', () => {
         startRun({
           definitionId: testDefinitionId,
           models: [],
-          userId: 'test-user',
+          userId: TEST_USER.id,
         })
       ).rejects.toThrow('At least one model');
     });
@@ -172,7 +183,7 @@ describe('start_run tool', () => {
           definitionId: testDefinitionId,
           models: ['openai:gpt-4'],
           samplePercentage: 0, // Invalid
-          userId: 'test-user',
+          userId: TEST_USER.id,
         })
       ).rejects.toThrow();
 
@@ -181,7 +192,7 @@ describe('start_run tool', () => {
           definitionId: testDefinitionId,
           models: ['openai:gpt-4'],
           samplePercentage: 101, // Invalid
-          userId: 'test-user',
+          userId: TEST_USER.id,
         })
       ).rejects.toThrow();
     });
@@ -192,7 +203,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models: ['openai:gpt-4', 'anthropic:claude-3-sonnet'],
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -206,7 +217,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models,
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);
@@ -221,7 +232,7 @@ describe('start_run tool', () => {
       const result = await startRun({
         definitionId: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: 'test-user',
+        userId: TEST_USER.id,
       });
 
       createdRunIds.push(result.run.id);

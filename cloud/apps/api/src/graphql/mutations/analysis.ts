@@ -9,6 +9,7 @@ import { db } from '@valuerank/db';
 import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { AnalysisResultRef } from '../types/analysis.js';
 import { getBoss } from '../../queue/boss.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // recomputeAnalysis mutation
 builder.mutationField('recomputeAnalysis', (t) =>
@@ -70,6 +71,15 @@ builder.mutationField('recomputeAnalysis', (t) =>
       });
 
       ctx.log.info({ runId, jobId }, 'Analysis job queued');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'AnalysisResult',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'recompute', jobId },
+      });
 
       // Return latest analysis (may be superseded, or null if first run)
       const analysis = await db.analysisResult.findFirst({

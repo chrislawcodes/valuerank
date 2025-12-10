@@ -128,54 +128,54 @@
 
 ### Wrap Definition Mutations
 
-- [ ] T042 [US5] Wrap createDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T043 [P] [US5] Wrap forkDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T044 [P] [US5] Wrap updateDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T045 [P] [US5] Wrap updateDefinitionContent with audit logging in `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T046 [P] [US5] Wrap deleteDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
-- [ ] T047 [P] [US5] Wrap regenerateScenarios with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T042 [US5] Wrap createDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T043 [P] [US5] Wrap forkDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T044 [P] [US5] Wrap updateDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T045 [P] [US5] Wrap updateDefinitionContent with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T046 [P] [US5] Wrap deleteDefinition with audit logging in `apps/api/src/graphql/mutations/definition.ts`
+- [X] T047 [P] [US5] Wrap regenerateScenarios with audit logging in `apps/api/src/graphql/mutations/definition.ts`
 
 ### Wrap Run Mutations
 
-- [ ] T048 [US5] Wrap startRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
-- [ ] T049 [P] [US5] Wrap pauseRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
-- [ ] T050 [P] [US5] Wrap resumeRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
-- [ ] T051 [P] [US5] Wrap cancelRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
-- [ ] T052 [P] [US5] Wrap deleteRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
+- [X] T048 [US5] Wrap startRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
+- [X] T049 [P] [US5] Wrap pauseRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
+- [X] T050 [P] [US5] Wrap resumeRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
+- [X] T051 [P] [US5] Wrap cancelRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
+- [X] T052 [P] [US5] Wrap deleteRun with audit logging in `apps/api/src/graphql/mutations/run.ts`
 
 ### Wrap Tag Mutations
 
-- [ ] T053 [US5] Wrap createTag with audit logging in `apps/api/src/graphql/mutations/tag.ts`
-- [ ] T054 [P] [US5] Wrap deleteTag with audit logging in `apps/api/src/graphql/mutations/tag.ts`
-- [ ] T055 [P] [US5] Wrap addTagToDefinition with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
-- [ ] T056 [P] [US5] Wrap removeTagFromDefinition with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
-- [ ] T057 [P] [US5] Wrap createAndAssignTag with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
+- [X] T053 [US5] Wrap createTag with audit logging in `apps/api/src/graphql/mutations/tag.ts`
+- [X] T054 [P] [US5] Wrap deleteTag with audit logging in `apps/api/src/graphql/mutations/tag.ts`
+- [X] T055 [P] [US5] Wrap addTagToDefinition with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
+- [X] T056 [P] [US5] Wrap removeTagFromDefinition with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
+- [X] T057 [P] [US5] Wrap createAndAssignTag with audit logging in `apps/api/src/graphql/mutations/definition-tags.ts`
 
 ### Wrap API Key Mutations
 
-- [ ] T058 [US5] Wrap createApiKey with audit logging in `apps/api/src/graphql/mutations/api-key.ts`
-- [ ] T059 [P] [US5] Wrap revokeApiKey with audit logging in `apps/api/src/graphql/mutations/api-key.ts`
+- [X] T058 [US5] Wrap createApiKey with audit logging in `apps/api/src/graphql/mutations/api-key.ts`
+- [X] T059 [P] [US5] Wrap revokeApiKey with audit logging in `apps/api/src/graphql/mutations/api-key.ts`
 
 ### Wrap LLM Mutations
 
-- [ ] T060 [US5] Wrap createLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T061 [P] [US5] Wrap updateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T062 [P] [US5] Wrap deprecateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T063 [P] [US5] Wrap reactivateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T064 [P] [US5] Wrap setDefaultLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T065 [P] [US5] Wrap updateLlmProvider with audit logging in `apps/api/src/graphql/mutations/llm.ts`
-- [ ] T066 [P] [US5] Wrap updateSystemSetting with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T060 [US5] Wrap createLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T061 [P] [US5] Wrap updateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T062 [P] [US5] Wrap deprecateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T063 [P] [US5] Wrap reactivateLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T064 [P] [US5] Wrap setDefaultLlmModel with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T065 [P] [US5] Wrap updateLlmProvider with audit logging in `apps/api/src/graphql/mutations/llm.ts`
+- [X] T066 [P] [US5] Wrap updateSystemSetting with audit logging in `apps/api/src/graphql/mutations/llm.ts`
 
 ### Wrap Analysis/Queue Mutations
 
-- [ ] T067 [US5] Wrap recomputeAnalysis with audit logging in `apps/api/src/graphql/mutations/analysis.ts`
-- [ ] T068 [P] [US5] Wrap pauseQueue with audit logging in `apps/api/src/graphql/mutations/queue.ts`
-- [ ] T069 [P] [US5] Wrap resumeQueue with audit logging in `apps/api/src/graphql/mutations/queue.ts`
+- [X] T067 [US5] Wrap recomputeAnalysis with audit logging in `apps/api/src/graphql/mutations/analysis.ts`
+- [X] T068 [P] [US5] Wrap pauseQueue with audit logging in `apps/api/src/graphql/mutations/queue.ts`
+- [X] T069 [P] [US5] Wrap resumeQueue with audit logging in `apps/api/src/graphql/mutations/queue.ts`
 
 ### Tests
 
-- [ ] T070 [US5] Write integration test for audit log creation in `apps/api/tests/services/audit/audit.test.ts`
-- [ ] T071 [P] [US5] Write test verifying all 27 mutations create audit entries
+- [X] T070 [US5] Write integration test for audit log creation in `apps/api/tests/services/audit/audit.test.ts`
+- [X] T071 [P] [US5] Write test verifying all 27 mutations create audit entries
 
 **Checkpoint**: User Story 5 complete - all mutations automatically create audit log entries
 

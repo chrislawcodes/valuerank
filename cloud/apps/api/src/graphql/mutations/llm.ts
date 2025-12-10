@@ -22,6 +22,7 @@ import {
   upsertSetting,
   LlmModel,
 } from '@valuerank/db';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // Result type for model deprecation
 type DeprecateModelResultShape = {
@@ -95,6 +96,16 @@ builder.mutationField('createLlmModel', (t) =>
       });
 
       ctx.log.info({ modelId: model.id, apiModelId: model.modelId }, 'LLM model created');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { modelId: model.modelId, displayName: model.displayName },
+      });
+
       return model;
     },
   })
@@ -137,6 +148,16 @@ builder.mutationField('updateLlmModel', (t) =>
       const model = await updateModel(args.id, updateData);
 
       ctx.log.info({ modelId: model.id }, 'LLM model updated');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { updatedFields: Object.keys(updateData) },
+      });
+
       return model;
     },
   })
@@ -159,6 +180,16 @@ builder.mutationField('deprecateLlmModel', (t) =>
         { modelId: result.model.id, newDefaultId: result.newDefault?.id },
         'LLM model deprecated'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: result.model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'deprecate', newDefaultId: result.newDefault?.id },
+      });
+
       return result;
     },
   })
@@ -178,6 +209,16 @@ builder.mutationField('reactivateLlmModel', (t) =>
       const model = await reactivateModel(args.id);
 
       ctx.log.info({ modelId: model.id }, 'LLM model reactivated');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'reactivate' },
+      });
+
       return model;
     },
   })
@@ -200,6 +241,16 @@ builder.mutationField('setDefaultLlmModel', (t) =>
         { modelId: result.model.id, previousDefaultId: result.previousDefault?.id },
         'Default LLM model set'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: result.model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'setDefault', previousDefaultId: result.previousDefault?.id },
+      });
+
       return result;
     },
   })
@@ -224,6 +275,16 @@ builder.mutationField('updateLlmProvider', (t) =>
       });
 
       ctx.log.info({ providerId: provider.id }, 'LLM provider updated');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'LlmProvider',
+        entityId: provider.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: provider.name },
+      });
+
       return provider;
     },
   })
@@ -243,6 +304,16 @@ builder.mutationField('updateSystemSetting', (t) =>
       const setting = await upsertSetting(args.input.key, args.input.value as Record<string, unknown>);
 
       ctx.log.info({ key: setting.key }, 'System setting updated');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'SystemSetting',
+        entityId: setting.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { key: setting.key },
+      });
+
       return setting;
     },
   })

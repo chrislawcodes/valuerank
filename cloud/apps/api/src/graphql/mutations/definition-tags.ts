@@ -1,6 +1,7 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // Validation regex for tag names: alphanumeric, hyphen, underscore
 const TAG_NAME_REGEX = /^[a-z0-9_-]+$/;
@@ -58,6 +59,15 @@ builder.mutationField('addTagToDefinition', (t) =>
         });
 
         ctx.log.info({ definitionId, tagId, tagName: tag.name }, 'Tag added to definition');
+
+        // Audit log (non-blocking)
+        createAuditLog({
+          action: 'CREATE',
+          entityType: 'DefinitionTag',
+          entityId: `${definitionId}:${tagId}`,
+          userId: ctx.user?.id ?? null,
+          metadata: { definitionId, tagId, tagName: tag.name },
+        });
       }
 
       return definition;
@@ -95,11 +105,22 @@ builder.mutationField('removeTagFromDefinition', (t) =>
       }
 
       // Try to delete the association (will fail silently if doesn't exist)
-      await db.definitionTag.deleteMany({
+      const deleted = await db.definitionTag.deleteMany({
         where: { definitionId, tagId },
       });
 
       ctx.log.info({ definitionId, tagId }, 'Tag removed from definition');
+
+      // Audit log only if something was actually deleted (non-blocking)
+      if (deleted.count > 0) {
+        createAuditLog({
+          action: 'DELETE',
+          entityType: 'DefinitionTag',
+          entityId: `${definitionId}:${tagId}`,
+          userId: ctx.user?.id ?? null,
+          metadata: { definitionId, tagId },
+        });
+      }
 
       return definition;
     },
@@ -152,11 +173,22 @@ builder.mutationField('createAndAssignTag', (t) =>
         where: { name: normalizedName },
       });
 
+      let tagCreated = false;
       if (!tag) {
         tag = await db.tag.create({
           data: { name: normalizedName },
         });
+        tagCreated = true;
         ctx.log.info({ tagId: tag.id, name: tag.name }, 'Tag created');
+
+        // Audit log for tag creation (non-blocking)
+        createAuditLog({
+          action: 'CREATE',
+          entityType: 'Tag',
+          entityId: tag.id,
+          userId: ctx.user?.id ?? null,
+          metadata: { name: tag.name },
+        });
       }
 
       // Check if already assigned
@@ -173,6 +205,15 @@ builder.mutationField('createAndAssignTag', (t) =>
         });
 
         ctx.log.info({ definitionId, tagId: tag.id, tagName: tag.name }, 'Tag assigned to definition');
+
+        // Audit log for tag assignment (non-blocking)
+        createAuditLog({
+          action: 'CREATE',
+          entityType: 'DefinitionTag',
+          entityId: `${definitionId}:${tag.id}`,
+          userId: ctx.user?.id ?? null,
+          metadata: { definitionId, tagId: tag.id, tagName: tag.name, tagCreated },
+        });
       }
 
       return definition;

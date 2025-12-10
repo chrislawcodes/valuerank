@@ -12,6 +12,8 @@ import {
   resumeQueue as resumeQueueService,
   getQueueStatus,
 } from '../../services/queue/index.js';
+import { createAuditLog } from '../../services/audit/index.js';
+import { SYSTEM_ACTOR_ID } from '@valuerank/shared';
 
 // pauseQueue mutation
 builder.mutationField('pauseQueue', (t) =>
@@ -33,6 +35,15 @@ builder.mutationField('pauseQueue', (t) =>
       ctx.log.info({ userId: ctx.user.id }, 'Pausing global queue via GraphQL');
 
       await pauseQueueService();
+
+      // Audit log (non-blocking) - System entity type
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'System',
+        entityId: SYSTEM_ACTOR_ID,
+        userId: ctx.user.id,
+        metadata: { action: 'pauseQueue' },
+      });
 
       // Return full queue status
       return getQueueStatus();
@@ -59,6 +70,15 @@ builder.mutationField('resumeQueue', (t) =>
       ctx.log.info({ userId: ctx.user.id }, 'Resuming global queue via GraphQL');
 
       await resumeQueueService();
+
+      // Audit log (non-blocking) - System entity type
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'System',
+        entityId: SYSTEM_ACTOR_ID,
+        userId: ctx.user.id,
+        metadata: { action: 'resumeQueue' },
+      });
 
       // Return full queue status
       return getQueueStatus();
