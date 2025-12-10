@@ -58,6 +58,16 @@ export type ExpandScenariosResult = {
 };
 
 /**
+ * Normalize preamble - returns undefined if empty or whitespace-only.
+ */
+function normalizePreamble(preamble: string | undefined): string | undefined {
+  if (!preamble || preamble.trim().length === 0) {
+    return undefined;
+  }
+  return preamble;
+}
+
+/**
  * Extract dimension values for prompt building.
  * Returns array of {score, label, options} for each dimension.
  */
@@ -107,12 +117,43 @@ function buildGenerationPrompt(
   const baseId = 'scenario';
   const category = dimensions.map((d) => d.name).join('_vs_');
 
+  // Only include preamble section if one is defined
+  const normalizedPreamble = normalizePreamble(content.preamble);
+  const hasPreamble = normalizedPreamble !== undefined;
+  const preambleSection = hasPreamble
+    ? `## Preamble (use exactly):
+${normalizedPreamble}
+
+`
+    : '';
+
+  // Build output format based on whether preamble exists
+  const outputFormat = hasPreamble
+    ? `\`\`\`yaml
+preamble: >
+  [the preamble text]
+
+scenarios:
+  ${baseId}_[Dim1Score]_[Dim2Score]_...:
+    base_id: ${baseId}
+    category: ${category}
+    subject: [descriptive title with scores]
+    body: |
+      [filled template with natural grammar]
+\`\`\``
+    : `\`\`\`yaml
+scenarios:
+  ${baseId}_[Dim1Score]_[Dim2Score]_...:
+    base_id: ${baseId}
+    category: ${category}
+    subject: [descriptive title with scores]
+    body: |
+      [filled template with natural grammar]
+\`\`\``;
+
   return `You are a scenario generator for a moral values research project. Generate a YAML file with all valid combinations of the following dimensions.
 
-## Preamble (use exactly):
-${content.preamble || ''}
-
-## Scenario Template:
+${preambleSection}## Scenario Template:
 The template uses these placeholders: ${placeholders}
 Each placeholder should be replaced with an option from the corresponding dimension score.
 
@@ -126,18 +167,7 @@ ${content.matching_rules ? `## Matching Rules:\n${content.matching_rules}` : ''}
 
 ## Output Format:
 Generate valid YAML with this structure:
-\`\`\`yaml
-preamble: >
-  [the preamble text]
-
-scenarios:
-  ${baseId}_[Dim1Score]_[Dim2Score]_...:
-    base_id: ${baseId}
-    category: ${category}
-    subject: [descriptive title with scores]
-    body: |
-      [filled template with natural grammar]
-\`\`\`
+${outputFormat}
 
 Generate ALL valid combinations. For each combination:
 1. Pick a random option from each dimension's score level
@@ -202,7 +232,7 @@ export async function expandScenarios(
     log.debug({ definitionId }, 'No dimensions or template, creating single scenario');
 
     const scenarioContent: ScenarioContent = {
-      preamble: content.preamble || undefined,
+      preamble: normalizePreamble(content.preamble),
       prompt: content.template || '',
       dimensions: {},
     };
@@ -233,7 +263,7 @@ export async function expandScenarios(
     log.debug({ definitionId }, 'Dimensions have no values, creating single scenario');
 
     const scenarioContent: ScenarioContent = {
-      preamble: content.preamble || undefined,
+      preamble: normalizePreamble(content.preamble),
       prompt: content.template,
       dimensions: {},
     };
@@ -282,7 +312,7 @@ export async function expandScenarios(
 
       // Fallback: create single scenario with raw template
       const scenarioContent: ScenarioContent = {
-        preamble: content.preamble || undefined,
+        preamble: normalizePreamble(content.preamble),
         prompt: content.template,
         dimensions: {},
       };
@@ -300,7 +330,8 @@ export async function expandScenarios(
 
     // Create scenario records from parsed YAML
     const scenarioEntries = Object.entries(parsed.scenarios);
-    const preamble = parsed.preamble || content.preamble || '';
+    // Only use preamble if it has actual content (not empty or whitespace-only)
+    const preamble = normalizePreamble(parsed.preamble) ?? normalizePreamble(content.preamble);
 
     const scenarioData = scenarioEntries.map(([scenarioKey, scenario]) => {
       // Extract dimension scores from the scenario key (e.g., scenario_Stakes1_Certainty2)
@@ -319,7 +350,7 @@ export async function expandScenarios(
       }
 
       const scenarioContent: ScenarioContent = {
-        preamble: preamble || undefined,
+        preamble,
         prompt: scenario.body,
         dimensions: dimensionScores,
       };
@@ -345,7 +376,7 @@ export async function expandScenarios(
 
     // Fallback: create single scenario with raw template
     const scenarioContent: ScenarioContent = {
-      preamble: content.preamble || undefined,
+      preamble: normalizePreamble(content.preamble),
       prompt: content.template,
       dimensions: {},
     };

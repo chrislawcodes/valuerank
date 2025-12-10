@@ -12,6 +12,7 @@ __pycache__/
 *.venv
 venv/
 .envrc
+.mcp.json
 
 # Output directories
 output/

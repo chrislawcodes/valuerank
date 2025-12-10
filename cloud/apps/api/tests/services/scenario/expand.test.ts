@@ -474,6 +474,98 @@ scenarios:
 
         expect(scenarios[0].name).toBe('scenario_Test1');
       });
+
+      it('omits preamble from scenarios when definition has empty preamble', async () => {
+        const content = {
+          template: 'Template with [Test] value.',
+          preamble: '', // Empty preamble
+          dimensions: [
+            {
+              name: 'Test',
+              levels: [{ score: 1, label: 'One' }],
+            },
+          ],
+        };
+
+        const mockYamlResponse = `
+scenarios:
+  scenario_Test1:
+    subject: Test scenario
+    body: Template with One value.
+`;
+        mockedCallLLM.mockResolvedValue(mockYamlResponse);
+        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
+
+        await expandScenarios(testDefinitionId, content);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+
+        expect(scenarios).toHaveLength(1);
+        const scenarioContent = scenarios[0].content as { preamble?: string };
+        expect(scenarioContent.preamble).toBeUndefined();
+      });
+
+      it('omits preamble when definition has whitespace-only preamble', async () => {
+        const content = {
+          template: 'Template',
+          preamble: '   \n  ', // Whitespace-only preamble
+          dimensions: [
+            {
+              name: 'Test',
+              levels: [{ score: 1, label: 'One' }],
+            },
+          ],
+        };
+
+        const mockYamlResponse = `
+scenarios:
+  scenario_Test1:
+    subject: Test scenario
+    body: Body text
+`;
+        mockedCallLLM.mockResolvedValue(mockYamlResponse);
+        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
+
+        await expandScenarios(testDefinitionId, content);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+
+        const scenarioContent = scenarios[0].content as { preamble?: string };
+        expect(scenarioContent.preamble).toBeUndefined();
+      });
+
+      it('does not include preamble section in LLM prompt when preamble is empty', async () => {
+        const content = {
+          template: 'Template with [Test] placeholder.',
+          preamble: '', // Empty preamble
+          dimensions: [
+            {
+              name: 'Test',
+              levels: [{ score: 1, label: 'One' }],
+            },
+          ],
+        };
+
+        const mockYamlResponse = `
+scenarios:
+  scenario_Test1:
+    subject: Test
+    body: Template with One placeholder.
+`;
+        mockedCallLLM.mockResolvedValue(mockYamlResponse);
+        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
+
+        await expandScenarios(testDefinitionId, content);
+
+        // Check that the LLM prompt does not include preamble instructions
+        const prompt = mockedCallLLM.mock.calls[0][0];
+        expect(prompt).not.toContain('## Preamble');
+        expect(prompt).not.toContain('preamble: >');
+      });
     });
   });
 });
