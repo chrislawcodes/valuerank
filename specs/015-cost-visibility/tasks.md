@@ -31,21 +31,21 @@
 
 ⚠️ **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 [P] Create cost types in `apps/api/src/services/cost/types.ts` per data-model.md TypeScript types
-- [ ] T008 [P] Create cost service index in `apps/api/src/services/cost/index.ts` with re-exports
-- [ ] T009 Create token statistics queries in `apps/api/src/services/cost/statistics.ts`:
+- [X] T007 [P] Create cost types in `apps/api/src/services/cost/types.ts` per data-model.md TypeScript types
+- [X] T008 [P] Create cost service index in `apps/api/src/services/cost/index.ts` with re-exports
+- [X] T009 Create token statistics queries in `apps/api/src/services/cost/statistics.ts`:
   - `getTokenStatsForModels(modelIds: string[])` - fetch stats for specific models
   - `getAllModelAverage()` - compute fallback average across all models
   - `upsertTokenStats(modelId, avgInput, avgOutput, sampleCount)` - update statistics
-- [ ] T010 Create cost estimation logic in `apps/api/src/services/cost/estimate.ts`:
+- [X] T010 Create cost estimation logic in `apps/api/src/services/cost/estimate.ts`:
   - `estimateCost(definitionId, modelIds, samplePercentage)` - main estimation function
   - Implement three-tier fallback: model stats → all-model avg → system default (100/900)
   - Calculate: `(scenarios × avgTokens × costPerMillion) / 1,000,000`
-- [ ] T011 Add unit tests for cost estimation in `apps/api/tests/services/cost/estimate.test.ts`:
+- [X] T011 Add unit tests for cost estimation in `apps/api/tests/services/cost/estimate.test.ts`:
   - Test calculation accuracy
   - Test fallback logic (model → all-model avg → system default)
   - Test edge cases (zero scenarios, missing model costs)
-- [ ] T012 Add unit tests for statistics queries in `apps/api/tests/services/cost/statistics.test.ts`:
+- [X] T012 Add unit tests for statistics queries in `apps/api/tests/services/cost/statistics.test.ts`:
   - Test getTokenStatsForModels
   - Test getAllModelAverage with empty DB
   - Test upsertTokenStats
