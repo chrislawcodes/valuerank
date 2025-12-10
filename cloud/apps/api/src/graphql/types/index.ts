@@ -35,6 +35,9 @@ import './health.js';
 // Analysis types
 import './analysis.js';
 
+// Audit types
+import './audit-log.js';
+
 // Input types
 import './inputs/start-run.js';
 import './inputs/llm.js';

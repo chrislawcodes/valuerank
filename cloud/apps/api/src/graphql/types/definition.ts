@@ -101,6 +101,8 @@ type RawDefinitionRow = {
   created_at: Date;
   updated_at: Date;
   last_accessed_at: Date | null;
+  created_by_user_id: string | null;
+  deleted_by_user_id: string | null;
 };
 
 builder.objectType(DefinitionRef, {
@@ -356,7 +358,7 @@ builder.objectType(DefinitionRef, {
             JOIN ancestry a ON d.id = a.parent_id
             WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
+          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
           FROM ancestry
           WHERE id != ${definition.id}
           ORDER BY created_at ASC
@@ -370,6 +372,8 @@ builder.objectType(DefinitionRef, {
           createdAt: a.created_at,
           updatedAt: a.updated_at,
           lastAccessedAt: a.last_accessed_at,
+          createdByUserId: a.created_by_user_id,
+          deletedByUserId: a.deleted_by_user_id,
         }));
       },
     }),
@@ -388,7 +392,7 @@ builder.objectType(DefinitionRef, {
             JOIN tree t ON d.parent_id = t.id
             WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at
+          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
           FROM tree
           WHERE id != ${definition.id}
           ORDER BY created_at DESC
@@ -402,6 +406,8 @@ builder.objectType(DefinitionRef, {
           createdAt: d.created_at,
           updatedAt: d.updated_at,
           lastAccessedAt: d.last_accessed_at,
+          createdByUserId: d.created_by_user_id,
+          deletedByUserId: d.deleted_by_user_id,
         }));
       },
     }),

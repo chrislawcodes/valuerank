@@ -9,6 +9,7 @@ import type {
   LlmProvider,
   LlmModel,
   SystemSetting,
+  AuditLog,
 } from '@valuerank/db';
 
 /**
@@ -32,3 +33,6 @@ export const TagRef = builder.objectRef<Tag>('Tag');
 export const LlmProviderRef = builder.objectRef<LlmProvider>('LlmProvider');
 export const LlmModelRef = builder.objectRef<LlmModel>('LlmModel');
 export const SystemSettingRef = builder.objectRef<SystemSetting>('SystemSetting');
+
+// Audit types
+export const AuditLogRef = builder.objectRef<AuditLog>('AuditLog');

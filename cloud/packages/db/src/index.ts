@@ -25,7 +25,15 @@ export type {
   LlmModel,
   LlmModelStatus,
   SystemSetting,
+  AuditLog,
 } from '@prisma/client';
+
+// Audit types
+export type {
+  AuditAction,
+  AuditableEntityType,
+  CreateAuditLogInput,
+} from './types/audit.js';
 
 // JSONB content types
 export * from './types.js';

@@ -14,8 +14,8 @@
 
 **Purpose**: Initialize feature branch and prepare development environment
 
-- [ ] T001 Create feature branch `014-audit-logging` from main
-- [ ] T002 Verify local database is running and migrations are current
+- [X] T001 Create feature branch `014-audit-logging` from main
+- [X] T002 Verify local database is running and migrations are current
 
 **Checkpoint**: Development environment ready
 
@@ -29,34 +29,34 @@
 
 ### Database Schema
 
-- [ ] T003 Add AuditLog model to `packages/db/prisma/schema.prisma` per data-model.md
-- [ ] T004 Add createdByUserId/deletedByUserId fields to Definition model in `packages/db/prisma/schema.prisma`
-- [ ] T005 [P] Add createdByUserId/deletedByUserId fields to Run model in `packages/db/prisma/schema.prisma`
-- [ ] T006 [P] Add createdByUserId field to Tag model in `packages/db/prisma/schema.prisma`
-- [ ] T007 [P] Add createdByUserId field to LlmModel model in `packages/db/prisma/schema.prisma`
-- [ ] T008 Add User relations for all new audit fields in `packages/db/prisma/schema.prisma`
-- [ ] T009 Create migration `add_audit_logging` via `prisma migrate dev`
-- [ ] T010 Run migration on development database
-- [ ] T011 Run migration on test database (`npm run db:test:setup`)
+- [X] T003 Add AuditLog model to `packages/db/prisma/schema.prisma` per data-model.md
+- [X] T004 Add createdByUserId/deletedByUserId fields to Definition model in `packages/db/prisma/schema.prisma`
+- [X] T005 [P] Add createdByUserId/deletedByUserId fields to Run model in `packages/db/prisma/schema.prisma`
+- [X] T006 [P] Add createdByUserId field to Tag model in `packages/db/prisma/schema.prisma`
+- [X] T007 [P] Add createdByUserId field to LlmModel model in `packages/db/prisma/schema.prisma`
+- [X] T008 Add User relations for all new audit fields in `packages/db/prisma/schema.prisma`
+- [X] T009 Create migration `add_audit_logging` via `prisma migrate dev`
+- [X] T010 Run migration on development database
+- [X] T011 Run migration on test database (`npm run db:test:setup`)
 
 ### Shared Types and Constants
 
-- [ ] T012 [P] Add SYSTEM_ACTOR_ID constant to `packages/shared/src/constants.ts`
-- [ ] T013 [P] Create audit types in `packages/db/src/types/audit.ts` (AuditAction, AuditableEntityType, CreateAuditLogInput)
-- [ ] T014 Export audit types from `packages/db/src/index.ts`
+- [X] T012 [P] Add SYSTEM_ACTOR_ID constant to `packages/shared/src/constants.ts`
+- [X] T013 [P] Create audit types in `packages/db/src/types/audit.ts` (AuditAction, AuditableEntityType, CreateAuditLogInput)
+- [X] T014 Export audit types from `packages/db/src/index.ts`
 
 ### Audit Service
 
-- [ ] T015 Create `apps/api/src/services/audit/types.ts` with AuditConfig, AuditLogFilters types
-- [ ] T016 Create `apps/api/src/services/audit/create.ts` with createAuditLog function
-- [ ] T017 [P] Create `apps/api/src/services/audit/query.ts` with queryAuditLogs function
-- [ ] T018 Create `apps/api/src/services/audit/index.ts` with re-exports
-- [ ] T019 Create `apps/api/src/graphql/utils/audited-mutation.ts` wrapper utility
+- [X] T015 Create `apps/api/src/services/audit/types.ts` with AuditConfig, AuditLogFilters types
+- [X] T016 Create `apps/api/src/services/audit/create.ts` with createAuditLog function
+- [X] T017 [P] Create `apps/api/src/services/audit/query.ts` with queryAuditLogs function
+- [X] T018 Create `apps/api/src/services/audit/index.ts` with re-exports
+- [X] T019 Create `apps/api/src/graphql/utils/audited-mutation.ts` wrapper utility
 
 ### GraphQL Types
 
-- [ ] T020 Create `apps/api/src/graphql/types/audit-log.ts` with AuditLog, AuditAction types
-- [ ] T021 Add AuditLog type to `apps/api/src/graphql/types/refs.ts`
+- [X] T020 Create `apps/api/src/graphql/types/audit-log.ts` with AuditLog, AuditAction types
+- [X] T021 Add AuditLog type to `apps/api/src/graphql/types/refs.ts`
 
 **Checkpoint**: Foundation complete - database schema deployed, types defined, audit service ready
 

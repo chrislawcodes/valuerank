@@ -16,3 +16,4 @@ export {
   type CanonicalDimension,
   type CanonicalLevel,
 } from './canonical-dimensions.js';
+export { SYSTEM_ACTOR_ID } from './constants.js';
