@@ -72,8 +72,17 @@ class BaseLLMAdapter(ABC):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
-        """Generate a completion from the LLM."""
+        """Generate a completion from the LLM.
+
+        Args:
+            model: Model identifier
+            messages: List of message dicts with 'role' and 'content'
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            model_config: Optional provider-specific configuration (e.g., API parameter names)
+        """
         pass
 
 
@@ -223,6 +232,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -235,14 +245,21 @@ class OpenAIAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
+        # Determine max_tokens parameter name from config
+        # Newer OpenAI models (gpt-5.1, o1, o3) require "max_completion_tokens"
+        # Older models use "max_tokens"
+        max_tokens_param = "max_tokens"
+        if model_config:
+            max_tokens_param = model_config.get("maxTokensParam", "max_tokens")
+
         payload = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            max_tokens_param: max_tokens,
         }
 
-        log.debug("Calling OpenAI API", model=model)
+        log.debug("Calling OpenAI API", model=model, max_tokens_param=max_tokens_param)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
@@ -285,6 +302,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -371,6 +389,7 @@ class GeminiAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -459,6 +478,7 @@ class XAIAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -519,6 +539,7 @@ class DeepSeekAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -582,6 +603,7 @@ class MistralAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -723,6 +745,7 @@ def generate(
     *,
     temperature: float = 0.7,
     max_tokens: int = 1024,
+    model_config: Optional[dict] = None,
 ) -> LLMResponse:
     """
     Generate a completion using the appropriate adapter for the model.
@@ -734,6 +757,7 @@ def generate(
         messages: List of message dicts with 'role' and 'content'
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
+        model_config: Optional provider-specific configuration from database
 
     Returns:
         LLMResponse with content and token counts
@@ -747,4 +771,5 @@ def generate(
         messages,
         temperature=temperature,
         max_tokens=max_tokens,
+        model_config=model_config,
     )

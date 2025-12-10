@@ -5,7 +5,8 @@
 
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { db } from '../client.js';
-import type { LlmProvider, LlmModel, LlmModelStatus, SystemSetting, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { LlmProvider, LlmModel, LlmModelStatus, SystemSetting } from '@prisma/client';
 
 const log = createLogger('db:llm');
 
@@ -262,11 +263,28 @@ export async function updateModel(
     displayName?: string;
     costInputPerMillion?: number;
     costOutputPerMillion?: number;
+    apiConfig?: Record<string, unknown> | null;
   }
 ): Promise<LlmModel> {
   log.info({ id, ...data }, 'Updating model');
   await getModelById(id); // Verify exists
-  return db.llmModel.update({ where: { id }, data });
+
+  // Build Prisma-compatible update data
+  // For nullable JSON fields, Prisma requires special handling of null values
+  const updateData: Prisma.LlmModelUpdateInput = {
+    displayName: data.displayName,
+    costInputPerMillion: data.costInputPerMillion,
+    costOutputPerMillion: data.costOutputPerMillion,
+  };
+
+  // Handle apiConfig specially - undefined means don't update, null means set to null
+  if (data.apiConfig !== undefined) {
+    updateData.apiConfig = data.apiConfig === null
+      ? Prisma.DbNull
+      : (data.apiConfig as Prisma.InputJsonValue);
+  }
+
+  return db.llmModel.update({ where: { id }, data: updateData });
 }
 
 /**

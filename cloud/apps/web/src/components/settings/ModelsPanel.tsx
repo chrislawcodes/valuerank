@@ -371,18 +371,55 @@ function ModelFormModal({
   const [displayName, setDisplayName] = useState(model?.displayName ?? '');
   const [costInput, setCostInput] = useState(model?.costInputPerMillion?.toString() ?? '');
   const [costOutput, setCostOutput] = useState(model?.costOutputPerMillion?.toString() ?? '');
+  const [apiConfig, setApiConfig] = useState(
+    model?.apiConfig ? JSON.stringify(model.apiConfig, null, 2) : ''
+  );
+  const [apiConfigError, setApiConfigError] = useState<string | null>(null);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const handleApiConfigChange = (value: string) => {
+    setApiConfig(value);
+    if (value.trim() === '') {
+      setApiConfigError(null);
+      return;
+    }
+    try {
+      JSON.parse(value);
+      setApiConfigError(null);
+    } catch {
+      setApiConfigError('Invalid JSON');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (apiConfigError) return;
     setIsSaving(true);
+
+    // Parse apiConfig if provided
+    let parsedApiConfig: Record<string, unknown> | null | undefined = undefined;
+    if (isEditing) {
+      if (apiConfig.trim() === '') {
+        // Empty string means clear the config
+        parsedApiConfig = null;
+      } else {
+        try {
+          parsedApiConfig = JSON.parse(apiConfig);
+        } catch {
+          // Shouldn't happen due to validation
+          setIsSaving(false);
+          return;
+        }
+      }
+    }
 
     if (isEditing) {
       await onSave({
         displayName: displayName || undefined,
         costInputPerMillion: costInput ? parseFloat(costInput) : undefined,
         costOutputPerMillion: costOutput ? parseFloat(costOutput) : undefined,
+        apiConfig: parsedApiConfig,
       });
     } else if (provider) {
       await onSave({
@@ -399,7 +436,7 @@ function ModelFormModal({
   };
 
   const isValid = isEditing
-    ? displayName || costInput || costOutput
+    ? (displayName || costInput || costOutput || apiConfig !== (model?.apiConfig ? JSON.stringify(model.apiConfig, null, 2) : '')) && !apiConfigError
     : modelId && displayName && costInput && costOutput;
 
   return (
@@ -466,6 +503,30 @@ function ModelFormModal({
               />
               <span className="text-sm text-gray-700">Set as default for this provider</span>
             </label>
+          )}
+
+          {isEditing && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                API Config (JSON)
+              </label>
+              <textarea
+                value={apiConfig}
+                onChange={(e) => handleApiConfigChange(e.target.value)}
+                placeholder='{"maxTokensParam": "max_completion_tokens"}'
+                className={`w-full px-3 py-2 border rounded-md text-sm font-mono h-24 resize-none ${
+                  apiConfigError
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    : 'border-gray-300 focus:ring-teal-500 focus:border-teal-500'
+                }`}
+              />
+              {apiConfigError && (
+                <p className="mt-1 text-sm text-red-600">{apiConfigError}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Provider-specific configuration. Leave empty to clear.
+              </p>
+            </div>
           )}
 
           <div className="flex justify-end gap-3 pt-4">

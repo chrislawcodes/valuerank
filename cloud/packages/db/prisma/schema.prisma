@@ -395,6 +395,7 @@ model LlmModel {
   costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
   status               LlmModelStatus @default(ACTIVE)
   isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
   createdAt            DateTime       @default(now()) @map("created_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
 

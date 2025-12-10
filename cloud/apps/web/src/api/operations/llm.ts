@@ -28,6 +28,7 @@ export type LlmModel = {
   status: LlmModelStatus;
   isDefault: boolean;
   isAvailable: boolean;
+  apiConfig?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   provider?: LlmProvider;
@@ -55,6 +56,7 @@ export const LLM_MODEL_FRAGMENT = gql`
     status
     isDefault
     isAvailable
+    apiConfig
     createdAt
     updatedAt
   }
@@ -277,6 +279,7 @@ export type UpdateLlmModelInput = {
   displayName?: string;
   costInputPerMillion?: number;
   costOutputPerMillion?: number;
+  apiConfig?: Record<string, unknown> | null;
 };
 
 export type UpdateLlmProviderInput = {

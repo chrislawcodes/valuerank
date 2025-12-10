@@ -142,6 +142,7 @@ type ProbeWorkerInput = {
     costInputPerMillion: number;
     costOutputPerMillion: number;
   };
+  modelConfig?: Record<string, unknown>;
 };
 
 /**
@@ -249,15 +250,25 @@ function resolveModelVersion(modelId: string): string {
 }
 
 /**
- * Fetch model cost data from database.
+ * Model info fetched from database.
  */
-async function fetchModelCost(modelId: string): Promise<{ costInputPerMillion: number; costOutputPerMillion: number } | null> {
+type ModelInfo = {
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+  apiConfig?: Record<string, unknown>;
+};
+
+/**
+ * Fetch model info (cost and API config) from database.
+ */
+async function fetchModelInfo(modelId: string): Promise<ModelInfo | null> {
   try {
     const model = await db.llmModel.findFirst({
       where: { modelId },
       select: {
         costInputPerMillion: true,
         costOutputPerMillion: true,
+        apiConfig: true,
       },
     });
 
@@ -265,10 +276,11 @@ async function fetchModelCost(modelId: string): Promise<{ costInputPerMillion: n
       return {
         costInputPerMillion: Number(model.costInputPerMillion),
         costOutputPerMillion: Number(model.costOutputPerMillion),
+        apiConfig: model.apiConfig as Record<string, unknown> | undefined,
       };
     }
   } catch (err) {
-    log.warn({ modelId, err }, 'Failed to fetch model cost, continuing without cost tracking');
+    log.warn({ modelId, err }, 'Failed to fetch model info, continuing without cost tracking');
   }
 
   return null;
@@ -301,8 +313,8 @@ async function buildWorkerInput(
   // Resolve model ID to full API version (e.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022")
   const resolvedModelId = resolveModelVersion(modelId);
 
-  // Fetch model cost for cost tracking
-  const modelCost = await fetchModelCost(resolvedModelId) || await fetchModelCost(modelId);
+  // Fetch model info (cost and API config)
+  const modelInfo = await fetchModelInfo(resolvedModelId) || await fetchModelInfo(modelId);
 
   const input: ProbeWorkerInput = {
     runId,
@@ -320,8 +332,14 @@ async function buildWorkerInput(
     },
   };
 
-  if (modelCost) {
-    input.modelCost = modelCost;
+  if (modelInfo) {
+    input.modelCost = {
+      costInputPerMillion: modelInfo.costInputPerMillion,
+      costOutputPerMillion: modelInfo.costOutputPerMillion,
+    };
+    if (modelInfo.apiConfig) {
+      input.modelConfig = modelInfo.apiConfig;
+    }
   }
 
   return input;

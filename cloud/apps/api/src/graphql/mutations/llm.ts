@@ -103,7 +103,7 @@ builder.mutationField('createLlmModel', (t) =>
 builder.mutationField('updateLlmModel', (t) =>
   t.field({
     type: LlmModelRef,
-    description: 'Update an LLM model (display name, costs)',
+    description: 'Update an LLM model (display name, costs, API config)',
     args: {
       id: t.arg.string({ required: true, description: 'Model ID to update' }),
       input: t.arg({ type: UpdateLlmModelInput, required: true }),
@@ -111,11 +111,29 @@ builder.mutationField('updateLlmModel', (t) =>
     resolve: async (_root, args, ctx) => {
       ctx.log.debug({ id: args.id }, 'Updating LLM model');
 
-      const model = await updateModel(args.id, {
-        displayName: args.input.displayName ?? undefined,
-        costInputPerMillion: args.input.costInputPerMillion ?? undefined,
-        costOutputPerMillion: args.input.costOutputPerMillion ?? undefined,
-      });
+      // Build update data - only include fields that were provided
+      const updateData: {
+        displayName?: string;
+        costInputPerMillion?: number;
+        costOutputPerMillion?: number;
+        apiConfig?: Record<string, unknown> | null;
+      } = {};
+
+      if (args.input.displayName !== undefined && args.input.displayName !== null) {
+        updateData.displayName = args.input.displayName;
+      }
+      if (args.input.costInputPerMillion !== undefined && args.input.costInputPerMillion !== null) {
+        updateData.costInputPerMillion = args.input.costInputPerMillion;
+      }
+      if (args.input.costOutputPerMillion !== undefined && args.input.costOutputPerMillion !== null) {
+        updateData.costOutputPerMillion = args.input.costOutputPerMillion;
+      }
+      // For apiConfig, explicitly allow null to clear the value
+      if (args.input.apiConfig !== undefined) {
+        updateData.apiConfig = args.input.apiConfig as Record<string, unknown> | null;
+      }
+
+      const model = await updateModel(args.id, updateData);
 
       ctx.log.info({ modelId: model.id }, 'LLM model updated');
       return model;

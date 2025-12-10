@@ -25,6 +25,10 @@ Input format (ProbeWorkerInput):
   "modelCost": {  // Optional - if provided, cost will be calculated
     "costInputPerMillion": number,
     "costOutputPerMillion": number
+  },
+  "modelConfig": {  // Optional - provider-specific API configuration
+    "maxTokensParam": string,  // e.g., "max_completion_tokens" for newer OpenAI models
+    ...
   }
 }
 
@@ -196,6 +200,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     scenario = data["scenario"]
     config = data.get("config", {})
     model_cost = data.get("modelCost")  # Optional cost configuration
+    model_config = data.get("modelConfig")  # Optional API configuration
 
     temperature = config.get("temperature", 0.7)
     max_tokens = config.get("maxTokens", 1024)
@@ -228,6 +233,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            model_config=model_config,
         )
 
         turn = Turn(
@@ -270,6 +276,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                model_config=model_config,
             )
 
             turn = Turn(

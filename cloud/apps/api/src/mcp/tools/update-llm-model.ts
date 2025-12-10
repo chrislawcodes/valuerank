@@ -35,6 +35,11 @@ const UpdateLlmModelInputSchema = {
     .min(0)
     .optional()
     .describe('New cost per million output tokens in dollars'),
+  api_config: z
+    .record(z.unknown())
+    .optional()
+    .nullable()
+    .describe('Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"} for newer OpenAI models). Set to null to clear.'),
 };
 
 /**
@@ -81,6 +86,7 @@ function registerUpdateLlmModelTool(server: McpServer): void {
 - display_name: Human-readable name
 - cost_input_per_million: Cost per million input tokens
 - cost_output_per_million: Cost per million output tokens
+- api_config: Provider-specific API configuration (JSON object)
 
 **Immutable fields (cannot be changed):**
 - model_id: The API model identifier
@@ -90,11 +96,20 @@ function registerUpdateLlmModelTool(server: McpServer): void {
 - Model must exist
 - At least one field must be provided
 
+**api_config options:**
+- maxTokensParam: Parameter name for max tokens (e.g., "max_completion_tokens" for gpt-5.1, o1, o3)
+
 **Example:**
 {
   "id": "clxx...",
   "display_name": "GPT-4o Updated",
   "cost_input_per_million": 2.50
+}
+
+**Example with api_config (for newer OpenAI models):**
+{
+  "id": "clxx...",
+  "api_config": {"maxTokensParam": "max_completion_tokens"}
 }`,
       inputSchema: UpdateLlmModelInputSchema,
     },
@@ -109,6 +124,7 @@ function registerUpdateLlmModelTool(server: McpServer): void {
           hasDisplayName: !!args.display_name,
           hasCostInput: args.cost_input_per_million !== undefined,
           hasCostOutput: args.cost_output_per_million !== undefined,
+          hasApiConfig: args.api_config !== undefined,
         },
         'update_llm_model called'
       );
@@ -118,13 +134,14 @@ function registerUpdateLlmModelTool(server: McpServer): void {
         const hasUpdates =
           args.display_name !== undefined ||
           args.cost_input_per_million !== undefined ||
-          args.cost_output_per_million !== undefined;
+          args.cost_output_per_million !== undefined ||
+          args.api_config !== undefined;
 
         if (!hasUpdates) {
           return formatError(
             'NO_UPDATES',
             'At least one field must be provided to update',
-            { mutableFields: ['display_name', 'cost_input_per_million', 'cost_output_per_million'] }
+            { mutableFields: ['display_name', 'cost_input_per_million', 'cost_output_per_million', 'api_config'] }
           );
         }
 
@@ -144,6 +161,7 @@ function registerUpdateLlmModelTool(server: McpServer): void {
           displayName?: string;
           costInputPerMillion?: number;
           costOutputPerMillion?: number;
+          apiConfig?: Record<string, unknown> | null;
         } = {};
 
         if (args.display_name !== undefined) {
@@ -154,6 +172,9 @@ function registerUpdateLlmModelTool(server: McpServer): void {
         }
         if (args.cost_output_per_million !== undefined) {
           updateData.costOutputPerMillion = args.cost_output_per_million;
+        }
+        if (args.api_config !== undefined) {
+          updateData.apiConfig = args.api_config;
         }
 
         // Update the model
@@ -181,11 +202,13 @@ function registerUpdateLlmModelTool(server: McpServer): void {
                 displayName: previousState.displayName,
                 costInputPerMillion: Number(previousState.costInputPerMillion),
                 costOutputPerMillion: Number(previousState.costOutputPerMillion),
+                apiConfig: previousState.apiConfig,
               },
               newState: {
                 displayName: model.displayName,
                 costInputPerMillion: Number(model.costInputPerMillion),
                 costOutputPerMillion: Number(model.costOutputPerMillion),
+                apiConfig: model.apiConfig,
               },
               updatedFields: Object.keys(updateData),
             },
@@ -205,6 +228,7 @@ function registerUpdateLlmModelTool(server: McpServer): void {
               input_per_million: Number(model.costInputPerMillion),
               output_per_million: Number(model.costOutputPerMillion),
             },
+            api_config: model.apiConfig,
             updated_at: model.updatedAt.toISOString(),
           },
           updated_fields: Object.keys(updateData),

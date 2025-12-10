@@ -71,5 +71,13 @@ LlmModelRef.implement({
         return availableProviders.includes(provider.name);
       },
     }),
+
+    // API configuration
+    apiConfig: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"})',
+      resolve: (model) => model.apiConfig,
+    }),
   }),
 });

@@ -57,6 +57,11 @@ export const UpdateLlmModelInput = builder.inputType('UpdateLlmModelInput', {
       required: false,
       description: 'Updated cost per 1M output tokens',
     }),
+    apiConfig: t.field({
+      type: 'JSON',
+      required: false,
+      description: 'Provider-specific API configuration (e.g., {"maxTokensParam": "max_completion_tokens"}). Set to null to clear.',
+    }),
   }),
 });
 
