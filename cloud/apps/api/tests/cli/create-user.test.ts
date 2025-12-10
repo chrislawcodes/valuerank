@@ -167,9 +167,9 @@ describe('Create User CLI', () => {
     });
 
     it('normalizes email to lowercase', async () => {
-      const result = await createUser('TEST@EXAMPLE.COM', 'validpassword123');
+      const result = await createUser('NORMALIZE-TEST@EXAMPLE.COM', 'validpassword123');
 
-      expect(result.email).toBe('test@example.com');
+      expect(result.email).toBe('normalize-test@example.com');
 
       // Clean up
       await db.user.delete({ where: { id: result.id } });
