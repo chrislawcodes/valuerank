@@ -1,0 +1,215 @@
+# Audit Logging GraphQL Schema
+# This schema defines the audit logging types, queries, and field extensions
+
+# =============================================================================
+# ENUMS
+# =============================================================================
+
+"""
+Type of action performed on an entity
+"""
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ACTION
+}
+
+# =============================================================================
+# TYPES
+# =============================================================================
+
+"""
+A single audit log entry recording a mutation performed on an entity
+"""
+type AuditLog {
+  """Unique identifier"""
+  id: ID!
+
+  """Type of action: CREATE, UPDATE, DELETE, or ACTION"""
+  action: AuditAction!
+
+  """Entity type that was affected (e.g., Definition, Run, Tag)"""
+  entityType: String!
+
+  """ID of the affected entity"""
+  entityId: String!
+
+  """User who performed the action (null for system-initiated actions)"""
+  performedBy: User
+
+  """Additional context about the action (mutation args, changes, etc.)"""
+  metadata: JSON
+
+  """When the action occurred"""
+  timestamp: DateTime!
+}
+
+"""
+Connection type for paginated audit log queries
+"""
+type AuditLogConnection {
+  """List of audit log entries"""
+  edges: [AuditLogEdge!]!
+
+  """Pagination info"""
+  pageInfo: PageInfo!
+
+  """Total count of matching entries"""
+  totalCount: Int!
+}
+
+"""
+Edge type for audit log pagination
+"""
+type AuditLogEdge {
+  """The audit log entry"""
+  node: AuditLog!
+
+  """Cursor for pagination"""
+  cursor: String!
+}
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+"""
+Filter options for audit log queries
+"""
+input AuditLogFilter {
+  """Filter by entity type"""
+  entityType: String
+
+  """Filter by specific entity ID"""
+  entityId: String
+
+  """Filter by user who performed actions"""
+  userId: String
+
+  """Filter by action type"""
+  action: AuditAction
+
+  """Filter by start date (inclusive)"""
+  from: DateTime
+
+  """Filter by end date (inclusive)"""
+  to: DateTime
+}
+
+# =============================================================================
+# QUERIES
+# =============================================================================
+
+extend type Query {
+  """
+  Query audit log entries with filtering and pagination.
+
+  Supports filtering by entity, user, action type, and date range.
+  Results are returned in reverse chronological order.
+
+  Requires authentication.
+  """
+  auditLogs(
+    """Filter criteria"""
+    filter: AuditLogFilter
+
+    """Number of entries to return (default: 50, max: 100)"""
+    first: Int
+
+    """Cursor for pagination"""
+    after: String
+  ): AuditLogConnection!
+
+  """
+  Get audit history for a specific entity.
+
+  Shorthand for auditLogs with entityType and entityId filter.
+
+  Requires authentication.
+  """
+  entityAuditHistory(
+    """Type of entity (e.g., 'Definition', 'Run')"""
+    entityType: String!
+
+    """ID of the entity"""
+    entityId: String!
+
+    """Number of entries to return (default: 20, max: 100)"""
+    first: Int
+  ): [AuditLog!]!
+}
+
+# =============================================================================
+# TYPE EXTENSIONS - Add createdBy/deletedBy to existing types
+# =============================================================================
+
+"""
+Extend Definition type with audit fields
+"""
+extend type Definition {
+  """User who created this definition (null for legacy data)"""
+  createdBy: User
+
+  """User who deleted this definition (null if not deleted or legacy)"""
+  deletedBy: User
+}
+
+"""
+Extend Run type with audit fields
+"""
+extend type Run {
+  """User who started this run (null for legacy data)"""
+  createdBy: User
+
+  """User who deleted this run (null if not deleted or legacy)"""
+  deletedBy: User
+}
+
+"""
+Extend Tag type with audit fields
+"""
+extend type Tag {
+  """User who created this tag (null for legacy data)"""
+  createdBy: User
+}
+
+"""
+Extend LlmModel type with audit fields
+"""
+extend type LlmModel {
+  """User who added this model (null for seed data)"""
+  createdBy: User
+}
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+# Implementation Notes:
+#
+# 1. All audit queries require authentication
+#
+# 2. The performedBy field:
+#    - Returns User object for user-initiated actions
+#    - Returns null for system-initiated actions (background jobs)
+#    - Use metadata.actor = "__SYSTEM__" to identify system actions
+#
+# 3. Pagination:
+#    - Default page size: 50 entries
+#    - Maximum page size: 100 entries
+#    - Uses cursor-based pagination for consistency
+#
+# 4. Performance considerations:
+#    - Indexed by (entityType, entityId) for entity history queries
+#    - Indexed by userId for user activity queries
+#    - Indexed by createdAt for time-range queries
+#
+# 5. Retention:
+#    - Audit logs are retained for 90 days minimum
+#    - No automatic pruning implemented initially
+#
+# 6. The createdBy/deletedBy fields on entities:
+#    - Provide O(1) lookup for common "who created this?" queries
+#    - May be null for data created before audit logging was implemented
+#    - Foreign key with ON DELETE SET NULL (preserves history)

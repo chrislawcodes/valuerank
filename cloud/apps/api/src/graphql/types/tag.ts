@@ -1,6 +1,7 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { TagRef, DefinitionRef } from './refs.js';
+import { UserRef } from './user.js';
 
 // Re-export for backward compatibility
 export { TagRef };
@@ -14,6 +15,19 @@ builder.objectType(TagRef, {
     createdAt: t.expose('createdAt', {
       type: 'DateTime',
       description: 'When this tag was created',
+    }),
+
+    // Audit field: who created this tag
+    createdBy: t.field({
+      type: UserRef,
+      nullable: true,
+      description: 'User who created this tag',
+      resolve: async (tag) => {
+        if (!tag.createdByUserId) return null;
+        return db.user.findUnique({
+          where: { id: tag.createdByUserId },
+        });
+      },
     }),
 
     // Relation: definitions using this tag

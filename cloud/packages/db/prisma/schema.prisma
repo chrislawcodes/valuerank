@@ -22,6 +22,15 @@ model User {
 
   apiKeys ApiKey[]
 
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels   LlmModel[]   @relation("LlmModelCreator")
+
   @@map("users")
 }
 
@@ -95,12 +104,20 @@ model Definition {
   lastAccessedAt DateTime? @map("last_accessed_at")
   deletedAt      DateTime? @map("deleted_at")
 
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
 
   runs      Run[]
   scenarios Scenario[]
   tags      DefinitionTag[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
 
   @@index([parentId])
   @@map("definitions")
@@ -111,7 +128,13 @@ model Tag {
   name      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
 
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
   definitions DefinitionTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
 
   @@map("tags")
 }
@@ -149,6 +172,10 @@ model Run {
   retentionDays      Int?      @map("retention_days")
   archivePermanently Boolean   @default(true) @map("archive_permanently")
 
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
   definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   experiment Experiment? @relation(fields: [experimentId], references: [id])
 
@@ -158,6 +185,10 @@ model Run {
   comparisonFor   RunComparison[]  @relation("ComparisonRun")
   scenarioSelections RunScenarioSelection[]
   probeResults    ProbeResult[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
 
   @@index([definitionId])
   @@index([experimentId])
@@ -399,7 +430,13 @@ model LlmModel {
   createdAt            DateTime       @default(now()) @map("created_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
 
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
   provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
 
   @@unique([providerId, modelId])
   @@index([providerId])
@@ -419,4 +456,26 @@ model SystemSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
 }

@@ -192,6 +192,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         status: 'PENDING',
         config,
         progress: initialProgress,
+        createdByUserId: userId ?? null,
       },
     });
 

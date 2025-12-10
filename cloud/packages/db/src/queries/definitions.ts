@@ -466,10 +466,15 @@ export type DefinitionDeleteResult = {
  * - All transcripts belonging to deleted runs
  * - All analysis results belonging to deleted runs
  *
+ * @param id - Definition ID to delete
+ * @param userId - Optional user ID of who is deleting (for audit)
  * @returns IDs of all soft-deleted definitions and counts of deleted entities
  */
-export async function softDeleteDefinition(id: string): Promise<DefinitionDeleteResult> {
-  log.info({ id }, 'Soft deleting definition');
+export async function softDeleteDefinition(
+  id: string,
+  userId?: string | null
+): Promise<DefinitionDeleteResult> {
+  log.info({ id, userId }, 'Soft deleting definition');
 
   return db.$transaction(async (tx) => {
     // Verify definition exists and is not already deleted
@@ -522,7 +527,10 @@ export async function softDeleteDefinition(id: string): Promise<DefinitionDelete
     // Soft delete all definitions (root + descendants)
     await tx.definition.updateMany({
       where: { id: { in: allDefinitionIds } },
-      data: { deletedAt: now },
+      data: {
+        deletedAt: now,
+        deletedByUserId: userId ?? null,
+      },
     });
 
     // Soft delete all scenarios belonging to these definitions
@@ -562,7 +570,10 @@ export async function softDeleteDefinition(id: string): Promise<DefinitionDelete
         definitionId: { in: allDefinitionIds },
         deletedAt: null,
       },
-      data: { deletedAt: now },
+      data: {
+        deletedAt: now,
+        deletedByUserId: userId ?? null,
+      },
     });
     log.debug({ count: runResult.count }, 'Soft deleted runs');
 

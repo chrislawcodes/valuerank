@@ -217,6 +217,7 @@ export async function createModel(data: {
   costInputPerMillion: number;
   costOutputPerMillion: number;
   setAsDefault?: boolean;
+  createdByUserId?: string | null;
 }): Promise<LlmModel> {
   log.info({ providerId: data.providerId, modelId: data.modelId }, 'Creating model');
 
@@ -238,6 +239,7 @@ export async function createModel(data: {
           costInputPerMillion: data.costInputPerMillion,
           costOutputPerMillion: data.costOutputPerMillion,
           isDefault: true,
+          createdByUserId: data.createdByUserId ?? null,
         },
       });
     });
@@ -250,6 +252,7 @@ export async function createModel(data: {
       displayName: data.displayName,
       costInputPerMillion: data.costInputPerMillion,
       costOutputPerMillion: data.costOutputPerMillion,
+      createdByUserId: data.createdByUserId ?? null,
     },
   });
 }

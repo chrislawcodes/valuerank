@@ -1,6 +1,7 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef } from './refs.js';
+import { UserRef } from './user.js';
 import { RunProgress, TaskResult } from './run-progress.js';
 import { ExecutionMetrics } from './execution-metrics.js';
 import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
@@ -35,6 +36,32 @@ builder.objectType(RunRef, {
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
+
+    // Audit field: who created this run
+    createdBy: t.field({
+      type: UserRef,
+      nullable: true,
+      description: 'User who started this run',
+      resolve: async (run) => {
+        if (!run.createdByUserId) return null;
+        return db.user.findUnique({
+          where: { id: run.createdByUserId },
+        });
+      },
+    }),
+
+    // Audit field: who deleted this run
+    deletedBy: t.field({
+      type: UserRef,
+      nullable: true,
+      description: 'User who deleted this run (only populated for soft-deleted records)',
+      resolve: async (run) => {
+        if (!run.deletedByUserId) return null;
+        return db.user.findUnique({
+          where: { id: run.deletedByUserId },
+        });
+      },
+    }),
 
     // Structured progress with percentComplete calculation
     runProgress: t.field({

@@ -10,6 +10,7 @@ import { db } from '@valuerank/db';
 import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../../auth/api-keys.js';
 import { CreateApiKeyResultRef } from '../types/api-key.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // Input type for creating an API key
 const CreateApiKeyInput = builder.inputType('CreateApiKeyInput', {
@@ -74,6 +75,15 @@ builder.mutationField('createApiKey', (t) =>
         'API key created'
       );
 
+      // Audit log (non-blocking) - do not log the key value
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'ApiKey',
+        entityId: apiKey.id,
+        userId,
+        metadata: { name, keyPrefix },
+      });
+
       // Return the full key only in this response
       return {
         apiKey: {
@@ -134,6 +144,15 @@ builder.mutationField('revokeApiKey', (t) =>
         { userId, apiKeyId, keyPrefix: apiKey.keyPrefix },
         'API key revoked'
       );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'DELETE',
+        entityType: 'ApiKey',
+        entityId: apiKeyId,
+        userId,
+        metadata: { name: apiKey.name, keyPrefix: apiKey.keyPrefix },
+      });
 
       return true;
     },

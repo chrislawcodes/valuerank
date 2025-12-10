@@ -15,6 +15,7 @@ import {
   cancelRun as cancelRunService,
 } from '../../services/run/index.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 // StartRunPayload - return type for startRun mutation
 const StartRunPayload = builder.objectRef<{
@@ -107,6 +108,19 @@ builder.mutationField('startRun', (t) =>
         'Run started successfully'
       );
 
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'CREATE',
+        entityType: 'Run',
+        entityId: result.run.id,
+        userId,
+        metadata: {
+          definitionId: String(input.definitionId),
+          models: input.models,
+          jobCount: result.jobCount,
+        },
+      });
+
       return result;
     },
   })
@@ -141,6 +155,15 @@ builder.mutationField('pauseRun', (t) =>
       const result = await pauseRunService(runId);
 
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run paused');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'pause', previousStatus: result.status },
+      });
 
       // Fetch full run for resolver
       const run = await ctx.loaders.run.load(result.id);
@@ -181,6 +204,15 @@ builder.mutationField('resumeRun', (t) =>
 
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run resumed');
 
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'resume', newStatus: result.status },
+      });
+
       // Fetch full run for resolver
       const run = await ctx.loaders.run.load(result.id);
       if (!run) {
@@ -220,6 +252,15 @@ builder.mutationField('cancelRun', (t) =>
       const result = await cancelRunService(runId);
 
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run cancelled');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'cancel', finalStatus: result.status },
+      });
 
       // Fetch full run for resolver
       const run = await ctx.loaders.run.load(result.id);
@@ -269,13 +310,24 @@ builder.mutationField('deleteRun', (t) =>
         throw new NotFoundError('Run', runId);
       }
 
-      // Soft delete by setting deletedAt
+      // Soft delete by setting deletedAt and deletedByUserId
       await db.run.update({
         where: { id: runId },
-        data: { deletedAt: new Date() },
+        data: {
+          deletedAt: new Date(),
+          deletedByUserId: ctx.user.id,
+        },
       });
 
       ctx.log.info({ userId: ctx.user.id, runId }, 'Run deleted (soft)');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'DELETE',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+      });
 
       return true;
     },

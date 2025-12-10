@@ -22,19 +22,22 @@ builder.queryField('run', (t) =>
     description: 'Fetch a single run by ID. Returns null if not found or deleted.',
     args: {
       id: t.arg.id({ required: true, description: 'Run ID' }),
+      includeDeleted: t.arg.boolean({
+        required: false,
+        description: 'Include soft-deleted runs (default: false)',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       const id = String(args.id);
-      ctx.log.debug({ runId: id }, 'Fetching run');
+      const includeDeleted = args.includeDeleted ?? false;
+      ctx.log.debug({ runId: id, includeDeleted }, 'Fetching run');
 
-      const run = await db.run.findFirst({
-        where: {
-          id,
-          deletedAt: null, // Exclude soft-deleted runs
-        },
+      const run = await db.run.findUnique({
+        where: { id },
       });
 
-      if (!run) {
+      // Filter out soft-deleted runs unless includeDeleted is true
+      if (!run || (!includeDeleted && run.deletedAt !== null)) {
         ctx.log.debug({ runId: id }, 'Run not found');
         return null;
       }

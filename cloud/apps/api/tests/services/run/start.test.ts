@@ -4,10 +4,11 @@
  * Tests run creation and job queuing logic.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { db } from '@valuerank/db';
 import { startRun } from '../../../src/services/run/start.js';
 import { NotFoundError, ValidationError } from '@valuerank/shared';
+import { TEST_USER } from '../../test-utils.js';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -22,10 +23,23 @@ vi.mock('../../../src/services/parallelism/index.js', () => ({
 }));
 
 describe('startRun service', () => {
-  const testUserId = 'test-user-id';
+  const testUserId = TEST_USER.id;
   const createdDefinitionIds: string[] = [];
   const createdExperimentIds: string[] = [];
   const createdRunIds: string[] = [];
+
+  // Ensure test user exists before all tests
+  beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -7,6 +7,7 @@
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { LlmModelRef, LlmProviderRef } from './refs.js';
+import { UserRef } from './user.js';
 import { getAvailableProviders } from '../../config/models.js';
 
 LlmModelRef.implement({
@@ -40,6 +41,19 @@ LlmModelRef.implement({
     }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
+    // Audit field: who created this model
+    createdBy: t.field({
+      type: UserRef,
+      nullable: true,
+      description: 'User who created this LLM model',
+      resolve: async (model) => {
+        if (!model.createdByUserId) return null;
+        return db.user.findUnique({
+          where: { id: model.createdByUserId },
+        });
+      },
+    }),
 
     // Relations
     provider: t.field({
