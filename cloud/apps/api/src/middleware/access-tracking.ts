@@ -13,13 +13,17 @@ const log = createLogger('access-tracking');
 /**
  * Update lastAccessedAt for a run.
  * Non-blocking - fire and forget.
+ *
+ * IMPORTANT: Uses raw SQL to avoid triggering Prisma's @updatedAt auto-update.
+ * This ensures that polling the run status doesn't reset updatedAt, which would
+ * prevent the orphaned run recovery service from detecting stuck runs.
  */
 export function trackRunAccess(runId: string): void {
-  db.run
-    .update({
-      where: { id: runId },
-      data: { lastAccessedAt: new Date() },
-    })
+  db.$executeRaw`
+    UPDATE runs
+    SET last_accessed_at = NOW()
+    WHERE id = ${runId}
+  `
     .then(() => {
       log.debug({ runId }, 'Run access tracked');
     })
