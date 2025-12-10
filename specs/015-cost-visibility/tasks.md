@@ -14,12 +14,12 @@
 
 **Purpose**: Project initialization and database schema
 
-- [ ] T001 Create feature branch `feat/cost-visibility` from main
-- [ ] T002 Add ModelTokenStatistics model to `packages/db/prisma/schema.prisma` per data-model.md
-- [ ] T003 Add relation to LlmModel in `packages/db/prisma/schema.prisma` (tokenStatistics field)
-- [ ] T004 Add relation to Definition in `packages/db/prisma/schema.prisma` (tokenStatistics field)
-- [ ] T005 Run Prisma migration: `npx prisma migrate dev --name add_model_token_statistics`
-- [ ] T006 Verify migration applied successfully and Prisma client regenerated
+- [X] T001 Create feature branch `feat/cost-visibility` from main
+- [X] T002 Add ModelTokenStatistics model to `packages/db/prisma/schema.prisma` per data-model.md
+- [X] T003 Add relation to LlmModel in `packages/db/prisma/schema.prisma` (tokenStatistics field)
+- [X] T004 Add relation to Definition in `packages/db/prisma/schema.prisma` (tokenStatistics field)
+- [X] T005 Run Prisma migration: `npx prisma migrate dev --name add_model_token_statistics`
+- [X] T006 Verify migration applied successfully and Prisma client regenerated
 
 **Checkpoint**: Database schema ready - cost service implementation can begin
 

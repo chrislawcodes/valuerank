@@ -119,6 +119,9 @@ model Definition {
   createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
   deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
 
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
   @@index([parentId])
   @@map("definitions")
 }
@@ -438,6 +441,9 @@ model LlmModel {
   // Audit relations
   createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
 
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
   @@unique([providerId, modelId])
   @@index([providerId])
   @@index([status])
@@ -456,6 +462,29 @@ model SystemSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
 }
 
 // ============================================================================
