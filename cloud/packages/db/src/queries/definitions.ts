@@ -439,6 +439,21 @@ export async function getDefinitionTreeIds(rootId: string): Promise<string[]> {
 // ============================================================================
 
 /**
+ * Result of a definition soft-delete operation.
+ */
+export type DefinitionDeleteResult = {
+  definitionIds: string[];
+  deletedCount: {
+    definitions: number;
+    scenarios: number;
+    tags: number;
+    runs: number;
+    transcripts: number;
+    analysisResults: number;
+  };
+};
+
+/**
  * Soft delete a definition and cascade to related entities.
  * Sets deletedAt timestamp rather than actually removing data.
  *
@@ -447,10 +462,13 @@ export async function getDefinitionTreeIds(rootId: string): Promise<string[]> {
  * - All child definitions (descendants)
  * - All scenarios belonging to deleted definitions
  * - All definition-tag associations for deleted definitions
+ * - All runs belonging to deleted definitions
+ * - All transcripts belonging to deleted runs
+ * - All analysis results belonging to deleted runs
  *
- * @returns IDs of all soft-deleted definitions
+ * @returns IDs of all soft-deleted definitions and counts of deleted entities
  */
-export async function softDeleteDefinition(id: string): Promise<string[]> {
+export async function softDeleteDefinition(id: string): Promise<DefinitionDeleteResult> {
   log.info({ id }, 'Soft deleting definition');
 
   return db.$transaction(async (tx) => {
@@ -527,12 +545,86 @@ export async function softDeleteDefinition(id: string): Promise<string[]> {
     });
     log.debug({ count: tagResult.count }, 'Soft deleted definition tags');
 
+    // Get all run IDs for these definitions (for cascading to transcripts/analysis)
+    const runRows = await tx.run.findMany({
+      where: {
+        definitionId: { in: allDefinitionIds },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    const runIds = runRows.map((r) => r.id);
+
+    // Soft delete all runs belonging to these definitions
+    // Also set status to CANCELLED for any pending runs
+    const runResult = await tx.run.updateMany({
+      where: {
+        definitionId: { in: allDefinitionIds },
+        deletedAt: null,
+      },
+      data: { deletedAt: now },
+    });
+    log.debug({ count: runResult.count }, 'Soft deleted runs');
+
+    // Cancel any pending/paused runs
+    await tx.run.updateMany({
+      where: {
+        id: { in: runIds },
+        status: { in: ['PENDING', 'PAUSED'] },
+      },
+      data: { status: 'CANCELLED', completedAt: now },
+    });
+
+    // Soft delete all transcripts belonging to deleted runs
+    let transcriptCount = 0;
+    let analysisCount = 0;
+    if (runIds.length > 0) {
+      const transcriptResult = await tx.transcript.updateMany({
+        where: {
+          runId: { in: runIds },
+          deletedAt: null,
+        },
+        data: { deletedAt: now },
+      });
+      transcriptCount = transcriptResult.count;
+      log.debug({ count: transcriptCount }, 'Soft deleted transcripts');
+
+      // Soft delete all analysis results belonging to deleted runs
+      const analysisResult = await tx.analysisResult.updateMany({
+        where: {
+          runId: { in: runIds },
+          deletedAt: null,
+        },
+        data: { deletedAt: now },
+      });
+      analysisCount = analysisResult.count;
+      log.debug({ count: analysisCount }, 'Soft deleted analysis results');
+    }
+
     log.info(
-      { rootId: id, deletedDefinitions: allDefinitionIds.length },
+      {
+        rootId: id,
+        definitions: allDefinitionIds.length,
+        scenarios: scenarioResult.count,
+        tags: tagResult.count,
+        runs: runResult.count,
+        transcripts: transcriptCount,
+        analysisResults: analysisCount,
+      },
       'Definition soft delete complete'
     );
 
-    return allDefinitionIds;
+    return {
+      definitionIds: allDefinitionIds,
+      deletedCount: {
+        definitions: allDefinitionIds.length,
+        scenarios: scenarioResult.count,
+        tags: tagResult.count,
+        runs: runResult.count,
+        transcripts: transcriptCount,
+        analysisResults: analysisCount,
+      },
+    };
   });
 }
 

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { db } from '@valuerank/db';
+import { db, softDeleteDefinition } from '@valuerank/db';
 
 describe('delete_definition tool', () => {
   // Test data
@@ -246,6 +246,79 @@ describe('delete_definition tool', () => {
 
       expect(deletedDef?.deletedAt).not.toBeNull();
       expect(deletedScenario?.deletedAt).not.toBeNull();
+    });
+
+    it('cascades soft delete to runs, transcripts, and analysis results', async () => {
+      // Create definition
+      const def = await db.definition.create({
+        data: {
+          name: 'test-cascade-runs-' + Date.now(),
+          content: {
+            schema_version: 2,
+            preamble: 'Test',
+            template: 'Test [var]',
+            dimensions: [{ name: 'var', values: ['a'] }],
+          },
+        },
+      });
+      createdDefinitionIds.push(def.id);
+
+      // Create a completed run
+      const run = await db.run.create({
+        data: {
+          definitionId: def.id,
+          status: 'COMPLETED',
+          config: { schema_version: 1, models: ['test-model'] },
+          progress: { total: 1, completed: 1, failed: 0 },
+          completedAt: new Date(),
+        },
+      });
+      createdRunIds.push(run.id);
+
+      // Create a transcript
+      const transcript = await db.transcript.create({
+        data: {
+          runId: run.id,
+          modelId: 'test-model',
+          content: { schema_version: 1, messages: [], model_response: 'test' },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+
+      // Create an analysis result
+      const analysis = await db.analysisResult.create({
+        data: {
+          runId: run.id,
+          analysisType: 'test',
+          inputHash: 'hash123',
+          codeVersion: '1.0.0',
+          output: { test: true },
+          status: 'CURRENT',
+        },
+      });
+
+      // Use the softDeleteDefinition function
+      const result = await softDeleteDefinition(def.id);
+
+      // Verify all counts are returned
+      expect(result.deletedCount.definitions).toBe(1);
+      expect(result.deletedCount.runs).toBe(1);
+      expect(result.deletedCount.transcripts).toBe(1);
+      expect(result.deletedCount.analysisResults).toBe(1);
+
+      // Verify the run is soft deleted
+      const deletedRun = await db.run.findUnique({ where: { id: run.id } });
+      expect(deletedRun?.deletedAt).not.toBeNull();
+
+      // Verify the transcript is soft deleted
+      const deletedTranscript = await db.transcript.findUnique({ where: { id: transcript.id } });
+      expect(deletedTranscript?.deletedAt).not.toBeNull();
+
+      // Verify the analysis result is soft deleted
+      const deletedAnalysis = await db.analysisResult.findUnique({ where: { id: analysis.id } });
+      expect(deletedAnalysis?.deletedAt).not.toBeNull();
     });
   });
 

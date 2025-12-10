@@ -461,16 +461,16 @@ builder.mutationField('deleteDefinition', (t) =>
 
       ctx.log.debug({ definitionId: id }, 'Deleting definition');
 
-      const deletedIds = await softDeleteDefinition(id);
+      const result = await softDeleteDefinition(id);
 
       ctx.log.info(
-        { definitionId: id, deletedCount: deletedIds.length },
+        { definitionId: id, deletedCount: result.deletedCount },
         'Definition deleted'
       );
 
       return {
-        deletedIds,
-        count: deletedIds.length,
+        deletedIds: result.definitionIds,
+        count: result.definitionIds.length,
       };
     },
   })

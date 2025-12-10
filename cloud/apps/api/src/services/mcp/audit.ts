@@ -227,6 +227,7 @@ export function createDeleteAudit(params: {
   deletedCount?: {
     primary: number;
     scenarios?: number;
+    runs?: number;
     transcripts?: number;
     analysisResults?: number;
   };

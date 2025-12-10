@@ -100,15 +100,13 @@ builder.objectType(RunRef, {
       },
     }),
 
-    // Relation: definition
+    // Relation: definition (nullable if definition was deleted)
     definition: t.field({
       type: DefinitionRef,
+      nullable: true,
       resolve: async (run, _args, ctx) => {
         const definition = await ctx.loaders.definition.load(run.definitionId);
-        if (!definition) {
-          throw new Error(`Definition not found for run ${run.id}`);
-        }
-        return definition;
+        return definition ?? null;
       },
     }),
 
