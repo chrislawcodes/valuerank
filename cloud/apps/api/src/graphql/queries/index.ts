@@ -11,3 +11,4 @@ import './health.js';
 import './scenarios.js';
 import './analysis.js';
 import './llm.js';
+import './audit-log.js';

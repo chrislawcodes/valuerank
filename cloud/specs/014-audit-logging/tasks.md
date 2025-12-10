@@ -189,16 +189,16 @@
 
 ### GraphQL Query
 
-- [ ] T072 [US3] Create auditLogs query in `apps/api/src/graphql/queries/audit-log.ts`
-- [ ] T073 [US3] Create entityAuditHistory query in `apps/api/src/graphql/queries/audit-log.ts`
-- [ ] T074 [US3] Add AuditLogConnection type for pagination in `apps/api/src/graphql/types/audit-log.ts`
-- [ ] T075 [US3] Add AuditLogFilter input type in `apps/api/src/graphql/types/audit-log.ts`
-- [ ] T076 [US3] Register audit-log queries in `apps/api/src/graphql/queries/index.ts`
+- [X] T072 [US3] Create auditLogs query in `apps/api/src/graphql/queries/audit-log.ts`
+- [X] T073 [US3] Create entityAuditHistory query in `apps/api/src/graphql/queries/audit-log.ts`
+- [X] T074 [US3] Add AuditLogConnection type for pagination in `apps/api/src/graphql/types/audit-log.ts`
+- [X] T075 [US3] Add AuditLogFilter input type in `apps/api/src/graphql/types/audit-log.ts`
+- [X] T076 [US3] Register audit-log queries in `apps/api/src/graphql/queries/index.ts`
 
 ### Tests
 
-- [ ] T077 [US3] Write test for entityAuditHistory query in `apps/api/tests/graphql/queries/audit-log.test.ts`
-- [ ] T078 [P] [US3] Write test for auditLogs query with filters in `apps/api/tests/graphql/queries/audit-log.test.ts`
+- [X] T077 [US3] Write test for entityAuditHistory query in `apps/api/tests/graphql/queries/audit-log.test.ts`
+- [X] T078 [P] [US3] Write test for auditLogs query with filters in `apps/api/tests/graphql/queries/audit-log.test.ts`
 
 **Checkpoint**: User Story 3 complete - users can query audit history for specific entities
 

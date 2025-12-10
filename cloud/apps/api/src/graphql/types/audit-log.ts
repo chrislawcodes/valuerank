@@ -4,11 +4,80 @@
 
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
+import type { AuditLog } from '@valuerank/db';
 import { UserRef } from './user.js';
 import { AuditLogRef } from './refs.js';
 
 // Re-export for convenience
 export { AuditLogRef };
+
+/**
+ * Input type for filtering audit logs
+ */
+export const AuditLogFilterInput = builder.inputType('AuditLogFilterInput', {
+  description: 'Filters for querying audit logs',
+  fields: (t) => ({
+    entityType: t.string({
+      required: false,
+      description: 'Filter by entity type (e.g., "Definition", "Run")',
+    }),
+    entityId: t.string({
+      required: false,
+      description: 'Filter by specific entity ID',
+    }),
+    action: t.string({
+      required: false,
+      description: 'Filter by action type (CREATE, UPDATE, DELETE, ACTION)',
+    }),
+    userId: t.string({
+      required: false,
+      description: 'Filter by user who performed the action',
+    }),
+    from: t.field({
+      type: 'DateTime',
+      required: false,
+      description: 'Filter logs from this date/time (inclusive)',
+    }),
+    to: t.field({
+      type: 'DateTime',
+      required: false,
+      description: 'Filter logs until this date/time (inclusive)',
+    }),
+  }),
+});
+
+/**
+ * Connection type for paginated audit logs
+ */
+export type AuditLogConnectionShape = {
+  nodes: AuditLog[];
+  totalCount: number;
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
+export const AuditLogConnectionRef = builder.objectRef<AuditLogConnectionShape>('AuditLogConnection');
+
+builder.objectType(AuditLogConnectionRef, {
+  description: 'Paginated list of audit log entries',
+  fields: (t) => ({
+    nodes: t.field({
+      type: [AuditLogRef],
+      description: 'List of audit log entries',
+      resolve: (parent) => parent.nodes,
+    }),
+    totalCount: t.exposeInt('totalCount', {
+      description: 'Total number of matching audit log entries',
+    }),
+    hasNextPage: t.exposeBoolean('hasNextPage', {
+      description: 'Whether there are more results after the current page',
+    }),
+    endCursor: t.exposeString('endCursor', {
+      nullable: true,
+      description: 'Cursor for the last item in the current page (for pagination)',
+    }),
+  }),
+});
 
 // AuditAction enum type - registered with builder, referenced by string name
 builder.enumType('AuditAction', {
