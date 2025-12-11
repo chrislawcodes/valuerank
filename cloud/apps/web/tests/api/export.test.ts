@@ -168,3 +168,279 @@ describe('exportRunAsCSV', () => {
     expect(mockRevokeObjectURL).toHaveBeenCalled();
   });
 });
+
+describe('exportDefinitionAsMd', () => {
+  let originalLocalStorage: Storage;
+  let originalFetch: typeof fetch;
+  let originalURL: typeof URL;
+  let exportDefinitionAsMd: (definitionId: string) => Promise<void>;
+
+  beforeEach(async () => {
+    // Save originals
+    originalLocalStorage = global.localStorage;
+    originalFetch = global.fetch;
+    originalURL = global.URL;
+
+    // Mock localStorage
+    Object.defineProperty(global, 'localStorage', {
+      value: mockLocalStorage,
+      writable: true,
+    });
+
+    // Mock fetch
+    global.fetch = mockFetch;
+
+    // Mock URL
+    mockCreateObjectURL.mockReturnValue('blob:test-url');
+    global.URL.createObjectURL = mockCreateObjectURL;
+    global.URL.revokeObjectURL = mockRevokeObjectURL;
+
+    // Mock document.createElement
+    const mockLink = {
+      href: '',
+      download: '',
+      click: mockClick,
+    };
+    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+    vi.spyOn(document.body, 'appendChild').mockImplementation(mockAppendChild);
+    vi.spyOn(document.body, 'removeChild').mockImplementation(mockRemoveChild);
+
+    // Reset mocks
+    vi.clearAllMocks();
+
+    // Import module fresh for each test
+    const module = await import('../../src/api/export');
+    exportDefinitionAsMd = module.exportDefinitionAsMd;
+  });
+
+  afterEach(() => {
+    // Restore originals
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+    });
+    global.fetch = originalFetch;
+    global.URL = originalURL;
+    vi.restoreAllMocks();
+  });
+
+  it('throws error when not authenticated', async () => {
+    mockLocalStorage.getItem.mockReturnValue(null);
+
+    await expect(exportDefinitionAsMd('def-123')).rejects.toThrow('Not authenticated');
+  });
+
+  it('makes authenticated request to export endpoint', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['# Markdown content'])),
+    });
+
+    await exportDefinitionAsMd('def-123');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/export/definitions/def-123/md'),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      })
+    );
+  });
+
+  it('throws error when request fails', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: vi.fn().mockResolvedValue('Definition not found'),
+    });
+
+    await expect(exportDefinitionAsMd('def-123')).rejects.toThrow('Export failed: 404 Definition not found');
+  });
+
+  it('triggers download with filename from header', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        'Content-Disposition': 'attachment; filename="test-definition.md"',
+      }),
+      blob: vi.fn().mockResolvedValue(new Blob(['# Markdown'])),
+    });
+
+    await exportDefinitionAsMd('def-123');
+
+    expect(mockCreateObjectURL).toHaveBeenCalled();
+    expect(mockClick).toHaveBeenCalled();
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:test-url');
+  });
+
+  it('uses default filename when Content-Disposition header is missing', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['# Markdown'])),
+    });
+
+    await exportDefinitionAsMd('def-12345678');
+
+    expect(mockClick).toHaveBeenCalled();
+  });
+
+  it('cleans up after download', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['# Markdown'])),
+    });
+
+    await exportDefinitionAsMd('def-123');
+
+    expect(mockRemoveChild).toHaveBeenCalled();
+    expect(mockRevokeObjectURL).toHaveBeenCalled();
+  });
+});
+
+describe('exportScenariosAsYaml', () => {
+  let originalLocalStorage: Storage;
+  let originalFetch: typeof fetch;
+  let originalURL: typeof URL;
+  let exportScenariosAsYaml: (definitionId: string) => Promise<void>;
+
+  beforeEach(async () => {
+    // Save originals
+    originalLocalStorage = global.localStorage;
+    originalFetch = global.fetch;
+    originalURL = global.URL;
+
+    // Mock localStorage
+    Object.defineProperty(global, 'localStorage', {
+      value: mockLocalStorage,
+      writable: true,
+    });
+
+    // Mock fetch
+    global.fetch = mockFetch;
+
+    // Mock URL
+    mockCreateObjectURL.mockReturnValue('blob:test-url');
+    global.URL.createObjectURL = mockCreateObjectURL;
+    global.URL.revokeObjectURL = mockRevokeObjectURL;
+
+    // Mock document.createElement
+    const mockLink = {
+      href: '',
+      download: '',
+      click: mockClick,
+    };
+    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+    vi.spyOn(document.body, 'appendChild').mockImplementation(mockAppendChild);
+    vi.spyOn(document.body, 'removeChild').mockImplementation(mockRemoveChild);
+
+    // Reset mocks
+    vi.clearAllMocks();
+
+    // Import module fresh for each test
+    const module = await import('../../src/api/export');
+    exportScenariosAsYaml = module.exportScenariosAsYaml;
+  });
+
+  afterEach(() => {
+    // Restore originals
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+    });
+    global.fetch = originalFetch;
+    global.URL = originalURL;
+    vi.restoreAllMocks();
+  });
+
+  it('throws error when not authenticated', async () => {
+    mockLocalStorage.getItem.mockReturnValue(null);
+
+    await expect(exportScenariosAsYaml('def-123')).rejects.toThrow('Not authenticated');
+  });
+
+  it('makes authenticated request to export endpoint', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['scenarios:\n  - name: test'])),
+    });
+
+    await exportScenariosAsYaml('def-123');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/export/definitions/def-123/scenarios.yaml'),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      })
+    );
+  });
+
+  it('throws error when request fails', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: vi.fn().mockResolvedValue('Internal server error'),
+    });
+
+    await expect(exportScenariosAsYaml('def-123')).rejects.toThrow('Export failed: 500 Internal server error');
+  });
+
+  it('triggers download with filename from header', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        'Content-Disposition': 'attachment; filename="test.scenarios.yaml"',
+      }),
+      blob: vi.fn().mockResolvedValue(new Blob(['scenarios:\n  - name: test'])),
+    });
+
+    await exportScenariosAsYaml('def-123');
+
+    expect(mockCreateObjectURL).toHaveBeenCalled();
+    expect(mockClick).toHaveBeenCalled();
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:test-url');
+  });
+
+  it('uses default filename when Content-Disposition header is missing', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['scenarios:\n  - name: test'])),
+    });
+
+    await exportScenariosAsYaml('def-12345678');
+
+    expect(mockClick).toHaveBeenCalled();
+  });
+
+  it('cleans up after download', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['scenarios:\n  - name: test'])),
+    });
+
+    await exportScenariosAsYaml('def-123');
+
+    expect(mockRemoveChild).toHaveBeenCalled();
+    expect(mockRevokeObjectURL).toHaveBeenCalled();
+  });
+});
