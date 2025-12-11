@@ -80,7 +80,7 @@ export function DefinitionEditor({
 
   // Get dimension names for template editor autocomplete
   const dimensionNames = useMemo(
-    () => content.dimensions.map((d) => d.name).filter((n) => n.trim() !== ''),
+    () => (content.dimensions ?? []).map((d) => d.name).filter((n) => n.trim() !== ''),
     [content.dimensions]
   );
 
@@ -152,7 +152,7 @@ export function DefinitionEditor({
 
     // Check that all placeholders in template have corresponding dimensions
     const placeholders = content.template.match(/\[([^\]]+)\]/g) || [];
-    const dimensionNames = new Set(content.dimensions.map((d) => d.name.toLowerCase()));
+    const dimensionNames = new Set((content.dimensions ?? []).map((d) => d.name.toLowerCase()));
 
     for (const placeholder of placeholders) {
       const name = placeholder.slice(1, -1).toLowerCase();
@@ -163,7 +163,7 @@ export function DefinitionEditor({
     }
 
     // Validate dimensions
-    content.dimensions.forEach((dim, i) => {
+    (content.dimensions ?? []).forEach((dim, i) => {
       if (!dim.name.trim()) {
         newErrors[`dimension-${i}`] = 'Dimension name is required';
       }
@@ -316,13 +316,13 @@ export function DefinitionEditor({
         {/* Canonical Dimension Chips */}
         <div className="mb-4">
           <CanonicalDimensionChips
-            existingDimensionNames={content.dimensions.map((d) => d.name)}
+            existingDimensionNames={(content.dimensions ?? []).map((d) => d.name)}
             onAddDimension={handleAddCanonicalDimension}
             disabled={isSaving}
           />
         </div>
 
-        {content.dimensions.length === 0 ? (
+        {(content.dimensions ?? []).length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
             <p className="text-sm text-gray-500 mb-2">No dimensions yet</p>
             <p className="text-xs text-gray-400">
@@ -331,14 +331,14 @@ export function DefinitionEditor({
           </div>
         ) : (
           <div className="space-y-4">
-            {content.dimensions.map((dimension, index) => (
+            {(content.dimensions ?? []).map((dimension, index) => (
               <DimensionEditor
                 key={index}
                 dimension={dimension}
                 index={index}
                 onChange={(dim) => handleDimensionChange(index, dim)}
                 onRemove={() => handleDimensionRemove(index)}
-                canRemove={content.dimensions.length > 0}
+                canRemove={(content.dimensions ?? []).length > 0}
               />
             ))}
           </div>

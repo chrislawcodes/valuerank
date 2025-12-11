@@ -63,19 +63,19 @@ export function DefinitionDetail() {
 
   const { startRun, loading: isStartingRun } = useRunMutations();
 
-  // Poll for definition updates while expansion is in progress
+  // Poll for definition updates while expansion is in progress (but not while editing)
   const isExpanding = definition?.expansionStatus?.status === 'PENDING' ||
                       definition?.expansionStatus?.status === 'ACTIVE';
 
   useEffect(() => {
-    if (isExpanding && !isNewDefinition) {
+    if (isExpanding && !isNewDefinition && !isEditing) {
       const interval = setInterval(() => {
         refetch();
       }, 3000);
       return () => clearInterval(interval);
     }
     return undefined;
-  }, [isExpanding, isNewDefinition, refetch]);
+  }, [isExpanding, isNewDefinition, isEditing, refetch]);
 
   const {
     createDefinition,
@@ -267,10 +267,14 @@ export function DefinitionDetail() {
           <DefinitionEditor
             mode="edit"
             initialName={definition.name}
-            initialContent={definition.content}
+            initialContent={definition.resolvedContent ?? definition.content}
             onSave={handleSave}
             onCancel={handleCancel}
             isSaving={isUpdating}
+            isForked={definition.isForked}
+            parentName={definition.parent?.name}
+            parentId={definition.parentId ?? undefined}
+            overrides={definition.overrides}
           />
         </div>
       </div>
