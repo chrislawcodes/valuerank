@@ -214,8 +214,11 @@ builder.queryField('estimateCost', (t) =>
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
       const modelIds: string[] = [];
       for (const modelInput of models) {
-        // Check if it's a database UUID (cuid format starting with 'c' without ':')
-        if (modelInput.startsWith('c') && !modelInput.includes(':')) {
+        // Check if it's a database UUID (cuid format: starts with 'c', ~25 chars, alphanumeric)
+        // CUIDs look like: "clxx1234567890abcdefgh" - they don't contain dashes
+        const isCuid = /^c[a-z0-9]{20,}$/i.test(modelInput);
+
+        if (isCuid) {
           // Look up the model to get its identifier string
           const model = await db.llmModel.findUnique({
             where: { id: modelInput },
@@ -227,25 +230,38 @@ builder.queryField('estimateCost', (t) =>
           continue;
         }
 
-        // Parse provider:modelId format
-        const parts = modelInput.split(':');
-        if (parts.length !== 2) {
-          throw new Error(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or UUID.`);
-        }
-        const [providerName, modelId] = parts;
+        // Check for provider:modelId format
+        if (modelInput.includes(':')) {
+          const parts = modelInput.split(':');
+          if (parts.length !== 2) {
+            throw new Error(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`);
+          }
+          const [providerName, modelId] = parts;
 
-        const provider = await db.llmProvider.findFirst({
-          where: { name: providerName },
-        });
-        if (!provider) {
-          throw new Error(`Provider not found: ${providerName}`);
+          const provider = await db.llmProvider.findFirst({
+            where: { name: providerName },
+          });
+          if (!provider) {
+            throw new Error(`Provider not found: ${providerName}`);
+          }
+
+          const model = await db.llmModel.findFirst({
+            where: {
+              providerId: provider.id,
+              modelId: modelId,
+            },
+          });
+          if (!model) {
+            throw new Error(`Model not found: ${modelInput}`);
+          }
+          modelIds.push(model.modelId);
+          continue;
         }
 
+        // Assume it's a direct model identifier (e.g., "claude-sonnet-4-20250514")
+        // Verify it exists in the database
         const model = await db.llmModel.findFirst({
-          where: {
-            providerId: provider.id,
-            modelId: modelId,
-          },
+          where: { modelId: modelInput },
         });
         if (!model) {
           throw new Error(`Model not found: ${modelInput}`);
@@ -280,8 +296,11 @@ builder.queryField('modelTokenStats', (t) =>
         // Convert database UUIDs to model identifier strings if needed
         const resolvedModelIds: string[] = [];
         for (const modelInput of inputModelIds) {
-          // Check if it's a database UUID (cuid format)
-          if (modelInput.startsWith('c') && !modelInput.includes(':')) {
+          // Check if it's a database UUID (cuid format: starts with 'c', ~25 chars, alphanumeric)
+          // CUIDs look like: "clxx1234567890abcdefgh" - they don't contain dashes
+          const isCuid = /^c[a-z0-9]{20,}$/i.test(modelInput);
+
+          if (isCuid) {
             const model = await db.llmModel.findUnique({
               where: { id: modelInput },
             });
@@ -290,6 +309,16 @@ builder.queryField('modelTokenStats', (t) =>
             }
             continue;
           }
+
+          // Check for provider:modelId format
+          if (modelInput.includes(':')) {
+            const parts = modelInput.split(':');
+            if (parts.length === 2 && parts[1]) {
+              resolvedModelIds.push(parts[1]);
+              continue;
+            }
+          }
+
           // Otherwise, assume it's already a model identifier
           resolvedModelIds.push(modelInput);
         }
