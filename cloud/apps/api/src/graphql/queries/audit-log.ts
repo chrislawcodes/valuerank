@@ -97,19 +97,19 @@ builder.queryField('auditLogs', (t) =>
 
       const where = buildWhereClause(filter);
 
-      // If cursor is provided, add it to the query
-      if (args.after) {
-        where.id = { lt: args.after };
-      }
-
       // Get total count (without pagination)
       const totalCount = await db.auditLog.count({ where: buildWhereClause(filter) });
 
-      // Get logs with pagination
+      // Get logs with pagination using Prisma's cursor-based pagination
+      // This ensures consistent results by using ID as the cursor
       const logs = await db.auditLog.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { id: 'desc' }, // Order by ID for consistent cursor pagination
         take: limit + 1, // Take one extra to check if there's a next page
+        ...(args.after && {
+          cursor: { id: args.after },
+          skip: 1, // Skip the cursor item itself
+        }),
       });
 
       const hasNextPage = logs.length > limit;
