@@ -14,6 +14,16 @@ vi.mock('../../../src/services/llm/generate.js', () => ({
   extractYaml: vi.fn(),
 }));
 
+// Mock the infra-models module
+vi.mock('../../../src/services/infra-models.js', () => ({
+  getScenarioExpansionModel: vi.fn().mockResolvedValue({
+    modelId: 'claude-3-5-haiku-20241022',
+    providerId: 'anthropic',
+    providerName: 'anthropic',
+    displayName: 'Claude 3.5 Haiku (Default)',
+  }),
+}));
+
 // Import mocked functions
 import { callLLM, extractYaml } from '../../../src/services/llm/generate.js';
 
@@ -157,11 +167,13 @@ scenarios:
         expect(prompt).toContain('Score 1 (Low)');
         expect(prompt).toContain('Score 3 (High)');
 
-        // Verify options passed
+        // Verify options passed (now includes provider and model from infra config)
         expect(mockedCallLLM.mock.calls[0][1]).toEqual({
           temperature: 0.7,
-          maxTokens: 64000,
+          maxTokens: 8192,
           timeoutMs: 300000,
+          provider: 'anthropic',
+          model: 'claude-3-5-haiku-20241022',
         });
 
         // Verify scenarios created

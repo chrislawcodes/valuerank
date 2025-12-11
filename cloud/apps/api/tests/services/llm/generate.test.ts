@@ -220,7 +220,7 @@ describe('LLM Generation Service', () => {
         mockedGetEnvOptional.mockReturnValue(undefined);
 
         await expect(callLLM('test prompt')).rejects.toThrow(
-          'No LLM API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY'
+          'No LLM API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, etc.'
         );
       });
 

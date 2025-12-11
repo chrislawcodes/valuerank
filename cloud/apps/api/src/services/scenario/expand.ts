@@ -2,6 +2,7 @@
  * Scenario Expansion Service
  *
  * Generates scenarios from a definition using LLM-based generation.
+ * Uses the configured infrastructure model for scenario expansion.
  * Matches the devtool approach: builds a prompt, calls LLM, parses YAML output.
  */
 
@@ -9,6 +10,7 @@ import { db, type DefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { parse as parseYaml } from 'yaml';
 import { callLLM, extractYaml } from '../llm/generate.js';
+import { getScenarioExpansionModel } from '../infra-models.js';
 
 const log = createLogger('services:scenario:expand');
 
@@ -283,11 +285,20 @@ export async function expandScenarios(
   const prompt = buildGenerationPrompt(content, dimensionsWithValues);
   log.debug({ definitionId, promptLength: prompt.length }, 'Built generation prompt');
 
+  // Get the configured infrastructure model for scenario expansion
+  const infraModel = await getScenarioExpansionModel();
+  log.info(
+    { definitionId, provider: infraModel.providerName, model: infraModel.modelId },
+    'Using infrastructure model for scenario expansion'
+  );
+
   try {
     const llmResult = await callLLM(prompt, {
       temperature: 0.7,
-      maxTokens: 64000, // Max for claude-sonnet-4
+      maxTokens: 8192, // Use reasonable default, provider will cap if needed
       timeoutMs: 300000, // 5 minutes - scenario expansion can take longer
+      provider: infraModel.providerName,
+      model: infraModel.modelId,
     });
 
     log.info(
