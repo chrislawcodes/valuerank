@@ -73,15 +73,21 @@ export function RunForm({
 
   // Filter cost estimate to only selected models for summary display
   const costEstimate = allModelsCostEstimate
-    ? {
-        ...allModelsCostEstimate,
-        total: allModelsCostEstimate.perModel
-          .filter((m) => formState.selectedModels.includes(m.modelId))
-          .reduce((sum, m) => sum + m.totalCost, 0),
-        perModel: allModelsCostEstimate.perModel.filter((m) =>
+    ? (() => {
+        const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
           formState.selectedModels.includes(m.modelId)
-        ),
-      }
+        );
+        // Only show fallback warning if ANY selected model is using fallback
+        const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
+        return {
+          ...allModelsCostEstimate,
+          total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
+          perModel: selectedPerModel,
+          isUsingFallback,
+          // Clear fallback reason if no selected models are using fallback
+          fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
+        };
+      })()
     : null;
 
   // Pre-select default models when models load
