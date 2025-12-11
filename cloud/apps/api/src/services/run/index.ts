@@ -38,4 +38,6 @@ export {
   stopRecoveryScheduler,
   isRecoverySchedulerRunning,
   triggerRecovery,
+  signalRunActivity,
+  RECOVERY_ACTIVITY_WINDOW_MS,
 } from './scheduler.js';

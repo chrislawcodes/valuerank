@@ -22,6 +22,11 @@ vi.mock('../../../src/services/parallelism/index.js', () => ({
   getQueueNameForModel: vi.fn().mockResolvedValue('probe_scenario'),
 }));
 
+// Mock scheduler - prevent actual interval management in tests
+vi.mock('../../../src/services/run/scheduler.js', () => ({
+  signalRunActivity: vi.fn(),
+}));
+
 describe('startRun service', () => {
   const testUserId = TEST_USER.id;
   const createdDefinitionIds: string[] = [];

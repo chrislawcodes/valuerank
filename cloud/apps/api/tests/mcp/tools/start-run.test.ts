@@ -13,6 +13,16 @@ vi.mock('../../../src/queue/boss.js', () => ({
   }),
 }));
 
+// Mock scheduler - prevent actual interval management in tests
+vi.mock('../../../src/services/run/scheduler.js', () => ({
+  signalRunActivity: vi.fn(),
+  startRecoveryScheduler: vi.fn(),
+  stopRecoveryScheduler: vi.fn(),
+  isRecoverySchedulerRunning: vi.fn().mockReturnValue(false),
+  triggerRecovery: vi.fn(),
+  RECOVERY_ACTIVITY_WINDOW_MS: 60 * 60 * 1000,
+}));
+
 // Import after mocking
 import { startRun } from '../../../src/services/run/index.js';
 

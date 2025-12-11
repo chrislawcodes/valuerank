@@ -12,6 +12,7 @@ import type { ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
 import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
+import { signalRunActivity } from './scheduler.js';
 
 const log = createLogger('services:run:start');
 
@@ -277,6 +278,9 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     { runId: run.id, jobsCreated: jobIds.length, totalJobs },
     'Jobs queued successfully'
   );
+
+  // Signal run activity to ensure recovery scheduler is running
+  signalRunActivity();
 
   return {
     run: {
