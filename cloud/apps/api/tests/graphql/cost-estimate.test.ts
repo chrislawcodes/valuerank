@@ -202,7 +202,8 @@ describe('Cost Estimate GraphQL Queries', () => {
 
       expect(estimate.perModel).toHaveLength(1);
       const modelEstimate = estimate.perModel[0];
-      expect(modelEstimate.modelId).toBe(model.id);
+      // modelId is now the model identifier string, not the database UUID
+      expect(modelEstimate.modelId).toBe(model.modelId);
       expect(modelEstimate.displayName).toBe('Test Model');
       expect(modelEstimate.scenarioCount).toBe(10);
       expect(modelEstimate.avgInputPerProbe).toBe(500);
@@ -430,9 +431,9 @@ describe('Cost Estimate GraphQL Queries', () => {
       const stats = response.body.data.modelTokenStats;
       expect(stats.length).toBeGreaterThanOrEqual(2);
 
-      // Find our test models
-      const model1Stats = stats.find((s: { modelId: string }) => s.modelId === model1.id);
-      const model2Stats = stats.find((s: { modelId: string }) => s.modelId === model2.id);
+      // Find our test models - modelId is now the model identifier string
+      const model1Stats = stats.find((s: { modelId: string }) => s.modelId === model1.modelId);
+      const model2Stats = stats.find((s: { modelId: string }) => s.modelId === model2.modelId);
 
       expect(model1Stats).toBeDefined();
       expect(model1Stats.avgInputTokens).toBe(500);
@@ -471,7 +472,8 @@ describe('Cost Estimate GraphQL Queries', () => {
 
       const stats = response.body.data.modelTokenStats;
       expect(stats).toHaveLength(1);
-      expect(stats[0].modelId).toBe(model1.id);
+      // modelId is now the model identifier string, not the database UUID
+      expect(stats[0].modelId).toBe(model1.modelId);
       expect(stats[0].avgInputTokens).toBe(500);
     });
 

@@ -120,18 +120,18 @@
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Add `actualCost` field to AnalysisResult GraphQL type in `apps/api/src/graphql/types/analysis.ts`:
+- [X] T023 [US3] Add `actualCost` field to AnalysisResult GraphQL type in `apps/api/src/graphql/types/analysis.ts`:
   - Compute from transcripts in resolver
   - Sum transcript.content.costSnapshot.estimatedCost
   - Group by model for per-model breakdown
-- [ ] T024 [US3] Create actualCost computation helper in `apps/api/src/services/cost/estimate.ts`:
+- [X] T024 [US3] Create actualCost computation helper in `apps/api/src/services/cost/estimate.ts`:
   - `computeActualCost(transcripts)` - aggregate costs from transcripts
   - Handle missing costSnapshot gracefully
-- [ ] T025 [US3] Enhance RunResults component in `apps/web/src/components/runs/RunResults.tsx`:
-  - Import and use formatCost for consistency
-  - Show per-model cost breakdown in Results by Model section
-  - Display total actual cost prominently
-- [ ] T026 [US3] Add integration test for actual cost computation in `apps/api/tests/graphql/analysis.test.ts`
+- [X] T025 [US3] Enhance RunResults component in `apps/web/src/components/runs/RunResults.tsx`:
+  - Import and use formatCost for consistency (already implemented)
+  - Show per-model cost breakdown in Results by Model section (already implemented)
+  - Display total actual cost prominently (already implemented)
+- [X] T026 [US3] Add integration test for actual cost computation in `apps/api/tests/graphql/queries/analysis-cost.test.ts`
 
 **Checkpoint**: User Story 3 complete - users see actual cost in results
 

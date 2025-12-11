@@ -239,15 +239,17 @@ export async function computeActualCost(
   let total = 0;
 
   // If no pricing map provided, fetch it
+  // Note: transcript.modelId is the model identifier string (e.g., "gpt-4"), not a database UUID
   let pricing = modelPricing;
   if (!pricing) {
     const modelIds = [...new Set(transcripts.map((t) => t.modelId))];
     const models = await db.llmModel.findMany({
-      where: { id: { in: modelIds } },
+      where: { modelId: { in: modelIds } },
     });
+    // Map by modelId (identifier string) to match transcript.modelId
     pricing = new Map(
       models.map((m) => [
-        m.id,
+        m.modelId,
         {
           inputPerMillion: Number(m.costInputPerMillion),
           outputPerMillion: Number(m.costOutputPerMillion),

@@ -210,19 +210,27 @@ builder.queryField('estimateCost', (t) =>
     resolve: async (_, args) => {
       const { definitionId, models, samplePercentage } = args;
 
-      // Resolve model UUIDs from provider:modelId format
+      // Resolve model identifiers from various formats
+      // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
       const modelIds: string[] = [];
-      for (const modelIdentifier of models) {
-        // Check if it's already a UUID (cuid format)
-        if (modelIdentifier.startsWith('c') && !modelIdentifier.includes(':')) {
-          modelIds.push(modelIdentifier);
+      for (const modelInput of models) {
+        // Check if it's a database UUID (cuid format starting with 'c' without ':')
+        if (modelInput.startsWith('c') && !modelInput.includes(':')) {
+          // Look up the model to get its identifier string
+          const model = await db.llmModel.findUnique({
+            where: { id: modelInput },
+          });
+          if (!model) {
+            throw new Error(`Model not found: ${modelInput}`);
+          }
+          modelIds.push(model.modelId);
           continue;
         }
 
         // Parse provider:modelId format
-        const parts = modelIdentifier.split(':');
+        const parts = modelInput.split(':');
         if (parts.length !== 2) {
-          throw new Error(`Invalid model identifier format: ${modelIdentifier}. Expected 'provider:modelId' or UUID.`);
+          throw new Error(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or UUID.`);
         }
         const [providerName, modelId] = parts;
 
@@ -240,9 +248,9 @@ builder.queryField('estimateCost', (t) =>
           },
         });
         if (!model) {
-          throw new Error(`Model not found: ${modelIdentifier}`);
+          throw new Error(`Model not found: ${modelInput}`);
         }
-        modelIds.push(model.id);
+        modelIds.push(model.modelId);
       }
 
       return estimateCostService({
@@ -266,21 +274,41 @@ builder.queryField('modelTokenStats', (t) =>
       }),
     },
     resolve: async (_, args) => {
-      const { modelIds } = args;
+      const { modelIds: inputModelIds } = args;
 
-      if (modelIds && modelIds.length > 0) {
+      if (inputModelIds && inputModelIds.length > 0) {
+        // Convert database UUIDs to model identifier strings if needed
+        const resolvedModelIds: string[] = [];
+        for (const modelInput of inputModelIds) {
+          // Check if it's a database UUID (cuid format)
+          if (modelInput.startsWith('c') && !modelInput.includes(':')) {
+            const model = await db.llmModel.findUnique({
+              where: { id: modelInput },
+            });
+            if (model) {
+              resolvedModelIds.push(model.modelId);
+            }
+            continue;
+          }
+          // Otherwise, assume it's already a model identifier
+          resolvedModelIds.push(modelInput);
+        }
+
         // Return stats for specific models
-        const statsMap = await getTokenStatsForModels(modelIds);
+        const statsMap = await getTokenStatsForModels(resolvedModelIds);
         return Array.from(statsMap.values());
       }
 
-      // Return all global stats
+      // Return all global stats with model identifier from relation
       const allStats = await db.modelTokenStatistics.findMany({
         where: { definitionId: null },
+        include: {
+          model: { select: { modelId: true } },
+        },
       });
 
       return allStats.map((s) => ({
-        modelId: s.modelId,
+        modelId: s.model.modelId,
         avgInputTokens: Number(s.avgInputTokens),
         avgOutputTokens: Number(s.avgOutputTokens),
         sampleCount: s.sampleCount,

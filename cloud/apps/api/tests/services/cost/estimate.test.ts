@@ -447,10 +447,10 @@ describe('cost estimation service', () => {
 
   describe('computeActualCost', () => {
     it('computes cost from transcript costSnapshot data', async () => {
-      // computeActualCost uses database UUIDs for modelId since it looks up pricing
+      // computeActualCost uses model identifier strings (e.g., "gpt-4") matching transcript.modelId
       const transcripts = [
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {
             costSnapshot: {
               estimatedCost: 0.05,
@@ -460,7 +460,7 @@ describe('cost estimation service', () => {
           },
         },
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {
             costSnapshot: {
               estimatedCost: 0.08,
@@ -474,17 +474,17 @@ describe('cost estimation service', () => {
       const result = await computeActualCost(transcripts);
 
       expect(result.total).toBeCloseTo(0.13, 4);
-      expect(result.perModel[testModel1DbId]?.cost).toBeCloseTo(0.13, 4);
-      expect(result.perModel[testModel1DbId]?.probeCount).toBe(2);
-      expect(result.perModel[testModel1DbId]?.inputTokens).toBe(1300);
-      expect(result.perModel[testModel1DbId]?.outputTokens).toBe(2200);
+      expect(result.perModel[testModel1Id]?.cost).toBeCloseTo(0.13, 4);
+      expect(result.perModel[testModel1Id]?.probeCount).toBe(2);
+      expect(result.perModel[testModel1Id]?.inputTokens).toBe(1300);
+      expect(result.perModel[testModel1Id]?.outputTokens).toBe(2200);
     });
 
     it('calculates cost from tokens when estimatedCost not available', async () => {
-      // computeActualCost uses database UUIDs for modelId
+      // computeActualCost uses model identifier strings
       const transcripts = [
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {
             costSnapshot: {
               inputTokens: 1000,
@@ -501,10 +501,10 @@ describe('cost estimation service', () => {
     });
 
     it('handles missing costSnapshot gracefully', async () => {
-      // computeActualCost uses database UUIDs for modelId
+      // computeActualCost uses model identifier strings
       const transcripts = [
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {},
         },
       ];
@@ -512,27 +512,27 @@ describe('cost estimation service', () => {
       const result = await computeActualCost(transcripts);
 
       expect(result.total).toBe(0);
-      expect(result.perModel[testModel1DbId]?.probeCount).toBe(1);
-      expect(result.perModel[testModel1DbId]?.cost).toBe(0);
+      expect(result.perModel[testModel1Id]?.probeCount).toBe(1);
+      expect(result.perModel[testModel1Id]?.cost).toBe(0);
     });
 
     it('groups costs by model', async () => {
-      // computeActualCost uses database UUIDs for modelId
+      // computeActualCost uses model identifier strings
       const transcripts = [
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {
             costSnapshot: { estimatedCost: 0.10 },
           },
         },
         {
-          modelId: testModel2DbId,
+          modelId: testModel2Id,
           content: {
             costSnapshot: { estimatedCost: 0.05 },
           },
         },
         {
-          modelId: testModel1DbId,
+          modelId: testModel1Id,
           content: {
             costSnapshot: { estimatedCost: 0.10 },
           },
@@ -542,10 +542,10 @@ describe('cost estimation service', () => {
       const result = await computeActualCost(transcripts);
 
       expect(result.total).toBeCloseTo(0.25, 4);
-      expect(result.perModel[testModel1DbId]?.cost).toBeCloseTo(0.20, 4);
-      expect(result.perModel[testModel1DbId]?.probeCount).toBe(2);
-      expect(result.perModel[testModel2DbId]?.cost).toBeCloseTo(0.05, 4);
-      expect(result.perModel[testModel2DbId]?.probeCount).toBe(1);
+      expect(result.perModel[testModel1Id]?.cost).toBeCloseTo(0.20, 4);
+      expect(result.perModel[testModel1Id]?.probeCount).toBe(2);
+      expect(result.perModel[testModel2Id]?.cost).toBeCloseTo(0.05, 4);
+      expect(result.perModel[testModel2Id]?.probeCount).toBe(1);
     });
   });
 });
