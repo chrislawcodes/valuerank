@@ -34,9 +34,9 @@ function formatCost(cost: number): string {
 }
 
 /**
- * Calculate summary stats from transcripts.
+ * Calculate summary stats from transcripts and analysis.
  */
-function calculateStats(transcripts: Transcript[]) {
+function calculateStats(transcripts: Transcript[], analysis: Run['analysis']) {
   if (transcripts.length === 0) {
     return {
       totalTokens: 0,
@@ -52,13 +52,27 @@ function calculateStats(transcripts: Transcript[]) {
   const totalTokens = transcripts.reduce((sum, t) => sum + t.tokenCount, 0);
   const totalTurns = transcripts.reduce((sum, t) => sum + t.turnCount, 0);
   const totalDuration = transcripts.reduce((sum, t) => sum + t.durationMs, 0);
-  const totalCost = transcripts.reduce((sum, t) => sum + (t.estimatedCost ?? 0), 0);
+
+  // First try transcript-level costs
+  let totalCost = transcripts.reduce((sum, t) => sum + (t.estimatedCost ?? 0), 0);
+  const modelCosts: Record<string, number> = {};
+
+  // If transcript costs are zero but we have analysis.actualCost, use that
+  if (totalCost === 0 && analysis?.actualCost) {
+    totalCost = analysis.actualCost.total;
+    for (const mc of analysis.actualCost.perModel) {
+      modelCosts[mc.modelId] = mc.cost;
+    }
+  } else {
+    // Use transcript-level costs
+    for (const t of transcripts) {
+      modelCosts[t.modelId] = (modelCosts[t.modelId] ?? 0) + (t.estimatedCost ?? 0);
+    }
+  }
 
   const modelCounts: Record<string, number> = {};
-  const modelCosts: Record<string, number> = {};
   for (const t of transcripts) {
     modelCounts[t.modelId] = (modelCounts[t.modelId] ?? 0) + 1;
-    modelCosts[t.modelId] = (modelCosts[t.modelId] ?? 0) + (t.estimatedCost ?? 0);
   }
 
   return {
@@ -77,7 +91,7 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
 
   const transcripts = run.transcripts ?? [];
-  const stats = calculateStats(transcripts);
+  const stats = calculateStats(transcripts, run.analysis);
 
   const handleTranscriptSelect = (transcript: Transcript) => {
     setSelectedTranscript(transcript);
