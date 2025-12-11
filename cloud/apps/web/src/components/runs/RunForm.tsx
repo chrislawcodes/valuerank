@@ -56,17 +56,33 @@ export function RunForm({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasPreselected, setHasPreselected] = useState(false);
 
-  // Fetch cost estimate when models and sample percentage change
+  // Get all available model IDs for cost preview
+  const allAvailableModelIds = models.filter((m) => m.isAvailable).map((m) => m.id);
+
+  // Fetch cost estimate for ALL available models (so we can show preview costs)
   const {
-    costEstimate,
+    costEstimate: allModelsCostEstimate,
     loading: loadingCost,
     error: costError,
   } = useCostEstimate({
     definitionId,
-    models: formState.selectedModels,
+    models: allAvailableModelIds,
     samplePercentage: formState.samplePercentage,
-    pause: formState.selectedModels.length === 0,
+    pause: allAvailableModelIds.length === 0,
   });
+
+  // Filter cost estimate to only selected models for summary display
+  const costEstimate = allModelsCostEstimate
+    ? {
+        ...allModelsCostEstimate,
+        total: allModelsCostEstimate.perModel
+          .filter((m) => formState.selectedModels.includes(m.modelId))
+          .reduce((sum, m) => sum + m.totalCost, 0),
+        perModel: allModelsCostEstimate.perModel.filter((m) =>
+          formState.selectedModels.includes(m.modelId)
+        ),
+      }
+    : null;
 
   // Pre-select default models when models load
   useEffect(() => {
@@ -148,6 +164,9 @@ export function RunForm({
             onSelectionChange={handleModelSelectionChange}
             loading={loadingModels}
             disabled={isSubmitting}
+            costEstimate={costEstimate}
+            allModelsCostEstimate={allModelsCostEstimate}
+            costLoading={loadingCost}
           />
         )}
         {validationError && (
@@ -204,12 +223,13 @@ export function RunForm({
         )}
       </div>
 
-      {/* Cost Estimate */}
+      {/* Cost Estimate Summary */}
       {formState.selectedModels.length > 0 && (
         <CostBreakdown
           costEstimate={costEstimate}
           loading={loadingCost}
           error={costError}
+          compact
         />
       )}
 
