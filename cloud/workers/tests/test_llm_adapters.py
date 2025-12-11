@@ -17,6 +17,7 @@ from common.llm_adapters import (
     XAIAdapter,
     generate,
     infer_provider,
+    resolve_max_tokens,
 )
 
 from .conftest import MockResponse
@@ -373,3 +374,157 @@ class TestErrorHandling:
 
             assert exc_info.value.code == ErrorCode.AUTH_ERROR
             assert not exc_info.value.retryable
+
+
+class TestResolveMaxTokens:
+    """Tests for resolve_max_tokens helper function."""
+
+    def test_no_config_returns_default(self) -> None:
+        """Test that None config returns default value."""
+        assert resolve_max_tokens(None, 1024) == 1024
+
+    def test_empty_config_returns_default(self) -> None:
+        """Test that empty config returns default value."""
+        assert resolve_max_tokens({}, 1024) == 1024
+
+    def test_config_without_max_tokens_returns_default(self) -> None:
+        """Test that config without maxTokens key returns default."""
+        assert resolve_max_tokens({"maxTokensParam": "max_completion_tokens"}, 1024) == 1024
+
+    def test_explicit_null_returns_none(self) -> None:
+        """Test that explicit null value returns None (unlimited)."""
+        assert resolve_max_tokens({"maxTokens": None}, 1024) is None
+
+    def test_numeric_value_returns_value(self) -> None:
+        """Test that numeric value is returned as-is."""
+        assert resolve_max_tokens({"maxTokens": 8192}, 1024) == 8192
+
+    def test_float_value_converted_to_int(self) -> None:
+        """Test that float value is converted to int."""
+        assert resolve_max_tokens({"maxTokens": 4096.5}, 1024) == 4096
+
+    def test_invalid_value_returns_default(self) -> None:
+        """Test that invalid value falls back to default."""
+        assert resolve_max_tokens({"maxTokens": "invalid"}, 1024) == 1024
+
+
+class TestMaxTokensConfig:
+    """Tests for max tokens configuration in adapters."""
+
+    @pytest.fixture
+    def mock_openai_response(self) -> dict[str, Any]:
+        """Mock OpenAI response."""
+        return {
+            "id": "chatcmpl-123",
+            "model": "gpt-4-0613",
+            "choices": [{"message": {"content": "Hello"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        }
+
+    def test_openai_uses_config_max_tokens(
+        self, mock_openai_response: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test OpenAI adapter uses maxTokens from config."""
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        adapter = OpenAIAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(mock_openai_response, 200)
+
+            adapter.generate(
+                "gpt-4",
+                [{"role": "user", "content": "Hello"}],
+                model_config={"maxTokens": 8192},
+            )
+
+            payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            assert payload["max_tokens"] == 8192
+
+    def test_openai_unlimited_omits_max_tokens(
+        self, mock_openai_response: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test OpenAI adapter omits max_tokens when None (unlimited)."""
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        adapter = OpenAIAdapter(api_key="test-key")
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(mock_openai_response, 200)
+
+            adapter.generate(
+                "gpt-4",
+                [{"role": "user", "content": "Hello"}],
+                model_config={"maxTokens": None},
+            )
+
+            payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            assert "max_tokens" not in payload
+            assert "max_completion_tokens" not in payload
+
+    def test_gemini_uses_config_max_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test Gemini adapter uses maxTokens from config."""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+        adapter = GeminiAdapter(api_key="test-key")
+
+        mock_response = {
+            "candidates": [{"content": {"parts": [{"text": "Hello"}]}, "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(mock_response, 200)
+
+            adapter.generate(
+                "gemini-1.5-pro",
+                [{"role": "user", "content": "Hello"}],
+                model_config={"maxTokens": 16000},
+            )
+
+            payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            assert payload["generationConfig"]["maxOutputTokens"] == 16000
+
+    def test_gemini_unlimited_omits_max_output_tokens(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test Gemini adapter omits maxOutputTokens when None (unlimited)."""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+        adapter = GeminiAdapter(api_key="test-key")
+
+        mock_response = {
+            "candidates": [{"content": {"parts": [{"text": "Hello"}]}, "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(mock_response, 200)
+
+            adapter.generate(
+                "gemini-2.5-pro",
+                [{"role": "user", "content": "Hello"}],
+                model_config={"maxTokens": None},
+            )
+
+            payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            assert "maxOutputTokens" not in payload["generationConfig"]
+
+    def test_anthropic_uses_high_default_for_unlimited(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test Anthropic adapter uses high default when maxTokens is None (since max_tokens is required)."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        adapter = AnthropicAdapter(api_key="test-key")
+
+        mock_response = {
+            "id": "msg-123",
+            "model": "claude-3-sonnet",
+            "content": [{"type": "text", "text": "Hello"}],
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value = MockResponse(mock_response, 200)
+
+            adapter.generate(
+                "claude-3-sonnet",
+                [{"role": "user", "content": "Hello"}],
+                model_config={"maxTokens": None},
+            )
+
+            payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+            # Anthropic requires max_tokens, so we use 8192 as the default for "unlimited"
+            assert payload["max_tokens"] == 8192

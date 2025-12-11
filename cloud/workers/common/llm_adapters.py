@@ -118,6 +118,51 @@ def normalize_finish_reason(provider: str, raw_reason: Optional[str]) -> str:
     return provider_map.get(raw_reason, raw_reason.lower())
 
 
+def resolve_max_tokens(
+    model_config: Optional[dict],
+    default_max_tokens: int,
+) -> Optional[int]:
+    """
+    Resolve the max_tokens value from model config.
+
+    Rules:
+    - If model_config has maxTokens: null, return None (unlimited)
+    - If model_config has maxTokens: <number>, return that number
+    - If model_config has no maxTokens key, return default_max_tokens
+
+    Args:
+        model_config: Optional model configuration dict
+        default_max_tokens: Default value if not specified in config
+
+    Returns:
+        The resolved max_tokens value, or None for unlimited
+    """
+    if model_config is None:
+        return default_max_tokens
+
+    # Check if maxTokens key exists in config
+    if "maxTokens" not in model_config:
+        return default_max_tokens
+
+    max_tokens_value = model_config["maxTokens"]
+
+    # Explicit null means unlimited (no limit)
+    if max_tokens_value is None:
+        return None
+
+    # Numeric value - use it directly
+    if isinstance(max_tokens_value, (int, float)):
+        return int(max_tokens_value)
+
+    # Invalid value - fall back to default
+    log.warn(
+        "Invalid maxTokens value in model config, using default",
+        value=max_tokens_value,
+        default=default_max_tokens,
+    )
+    return default_max_tokens
+
+
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM providers."""
 
@@ -309,14 +354,20 @@ class OpenAIAdapter(BaseLLMAdapter):
         if model_config:
             max_tokens_param = model_config.get("maxTokensParam", "max_tokens")
 
-        payload = {
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            max_tokens_param: max_tokens,
         }
 
-        log.debug("Calling OpenAI API", model=model, max_tokens_param=max_tokens_param)
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload[max_tokens_param] = resolved_max_tokens
+
+        log.debug("Calling OpenAI API", model=model, max_tokens_param=max_tokens_param, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
@@ -410,9 +461,15 @@ class AnthropicAdapter(BaseLLMAdapter):
         if not anthropic_messages:
             anthropic_messages = [{"role": "user", "content": ""}]
 
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Note: Anthropic requires max_tokens, so use a high default if unlimited
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        # Anthropic requires max_tokens - use 8192 as default for "unlimited"
+        effective_max_tokens = resolved_max_tokens if resolved_max_tokens is not None else 8192
+
         payload: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
             "messages": anthropic_messages,
         }
 
@@ -422,7 +479,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         # Anthropic supports temperature
         payload["temperature"] = temperature
 
-        log.debug("Calling Anthropic API", model=model)
+        log.debug("Calling Anthropic API", model=model, max_tokens=effective_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
@@ -505,12 +562,22 @@ class GeminiAdapter(BaseLLMAdapter):
         if not contents:
             contents = [{"role": "user", "parts": [{"text": ""}]}]
 
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+
+        # Build generation config
+        generation_config: dict[str, Any] = {
+            "temperature": temperature,
+        }
+
+        # Only add maxOutputTokens if not unlimited (None)
+        # For Gemini 2.5 thinking models, omitting this allows full thinking + output
+        if resolved_max_tokens is not None:
+            generation_config["maxOutputTokens"] = resolved_max_tokens
+
         payload: dict[str, Any] = {
             "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-            },
+            "generationConfig": generation_config,
         }
 
         if system_parts:
@@ -519,7 +586,7 @@ class GeminiAdapter(BaseLLMAdapter):
         url = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
         headers = {"Content-Type": "application/json"}
 
-        log.debug("Calling Gemini API", model=model)
+        log.debug("Calling Gemini API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(url, headers, payload, timeout=self.timeout)
 
         try:
@@ -653,14 +720,20 @@ class XAIAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        payload = {
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
 
-        log.debug("Calling xAI API", model=model)
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        log.debug("Calling xAI API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
@@ -727,17 +800,24 @@ class DeepSeekAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        # DeepSeek has a max of 8192 tokens
-        max_tokens = min(max_tokens, 8192)
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
 
-        payload = {
+        # DeepSeek has a max of 8192 tokens for optimal quality
+        if resolved_max_tokens is not None:
+            resolved_max_tokens = min(resolved_max_tokens, 8192)
+
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
 
-        log.debug("Calling DeepSeek API", model=model)
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        log.debug("Calling DeepSeek API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
@@ -811,14 +891,20 @@ class MistralAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        payload = {
+        # Resolve max_tokens from config (None = unlimited, number = use value)
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
 
-        log.debug("Calling Mistral API", model=model)
+        # Only add max_tokens if not unlimited (None)
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        log.debug("Calling Mistral API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
 
         try:
