@@ -26,6 +26,7 @@ import './graphql-query.js';
 // P2 Tools - Read
 import './get-dimension-analysis.js';
 import './get-transcript-summary.js';
+import './get-transcript.js';
 // Stage 14 - Write Tools
 import './create-definition.js';
 import './fork-definition.js';
