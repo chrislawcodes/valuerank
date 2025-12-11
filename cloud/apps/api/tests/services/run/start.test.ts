@@ -679,6 +679,194 @@ describe('startRun service', () => {
     });
   });
 
+  describe('cost estimation', () => {
+    // Track provider/model IDs for cleanup
+    const createdProviderIds: string[] = [];
+    const createdModelIds: string[] = [];
+    const testPrefix = `cost-start-${Date.now()}`;
+
+    // Helper to create provider
+    async function createTestProvider(name: string) {
+      const provider = await db.llmProvider.create({
+        data: { name: `${testPrefix}-${name}`, displayName: `Test ${name}` },
+      });
+      createdProviderIds.push(provider.id);
+      return provider;
+    }
+
+    // Helper to create model
+    async function createTestModel(
+      providerId: string,
+      modelId: string,
+      costInput = 1.0,
+      costOutput = 2.0
+    ) {
+      const model = await db.llmModel.create({
+        data: {
+          providerId,
+          modelId: `${testPrefix}-${modelId}`,
+          displayName: `Test ${modelId}`,
+          costInputPerMillion: costInput,
+          costOutputPerMillion: costOutput,
+        },
+      });
+      createdModelIds.push(model.id);
+      return model;
+    }
+
+    afterEach(async () => {
+      // Clean up models and providers created in cost tests
+      if (createdModelIds.length > 0) {
+        await db.llmModel.deleteMany({ where: { id: { in: createdModelIds } } });
+        createdModelIds.length = 0;
+      }
+      if (createdProviderIds.length > 0) {
+        await db.llmProvider.deleteMany({ where: { id: { in: createdProviderIds } } });
+        createdProviderIds.length = 0;
+      }
+    });
+
+    it('includes cost estimate in result', async () => {
+      // Create provider and model for cost estimation to find
+      const provider = await createTestProvider('openai');
+      const model = await createTestModel(provider.id, 'gpt-4', 2.5, 10.0);
+
+      const definition = await db.definition.create({
+        data: {
+          name: 'Cost Test Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+        ],
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: [model.modelId], // Use actual model ID from database
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // Should have estimatedCosts in result
+      expect(result.estimatedCosts).toBeDefined();
+      expect(result.estimatedCosts.total).toBeGreaterThanOrEqual(0);
+      expect(result.estimatedCosts.scenarioCount).toBe(2);
+      expect(result.estimatedCosts.perModel).toHaveLength(1);
+      expect(result.estimatedCosts.isUsingFallback).toBeDefined();
+    });
+
+    it('stores cost estimate in run config', async () => {
+      const provider = await createTestProvider('openai');
+      const model = await createTestModel(provider.id, 'gpt-4', 2.5, 10.0);
+
+      const definition = await db.definition.create({
+        data: {
+          name: 'Config Cost Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: [model.modelId],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // Verify config includes estimatedCosts
+      const config = result.run.config as Record<string, unknown>;
+      expect(config.estimatedCosts).toBeDefined();
+      const estimatedCosts = config.estimatedCosts as { total: number; scenarioCount: number };
+      expect(estimatedCosts.total).toBeGreaterThanOrEqual(0);
+      expect(estimatedCosts.scenarioCount).toBe(1);
+    });
+
+    it('calculates cost for multiple models', async () => {
+      const openaiProvider = await createTestProvider('openai');
+      const anthropicProvider = await createTestProvider('anthropic');
+      const gpt4 = await createTestModel(openaiProvider.id, 'gpt-4', 2.5, 10.0);
+      const claude = await createTestModel(anthropicProvider.id, 'claude-3', 3.0, 15.0);
+
+      const definition = await db.definition.create({
+        data: {
+          name: 'Multi Model Cost Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+          { definitionId: definition.id, name: 'Scenario 3', content: { test: 3 } },
+        ],
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: [gpt4.modelId, claude.modelId],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // Should have per-model breakdown for each model
+      expect(result.estimatedCosts.perModel).toHaveLength(2);
+      expect(result.estimatedCosts.scenarioCount).toBe(3);
+    });
+
+    it('respects sample percentage in cost estimate', async () => {
+      const provider = await createTestProvider('openai');
+      const model = await createTestModel(provider.id, 'gpt-4', 2.5, 10.0);
+
+      const definition = await db.definition.create({
+        data: {
+          name: 'Sample Cost Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: Array.from({ length: 10 }, (_, i) => ({
+          definitionId: definition.id,
+          name: `Scenario ${i + 1}`,
+          content: { test: i + 1 },
+        })),
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: [model.modelId],
+        samplePercentage: 50,
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // Should calculate cost for 50% of scenarios (5)
+      expect(result.estimatedCosts.scenarioCount).toBe(5);
+    });
+  });
+
   describe('job priority', () => {
     it('stores priority in run config as HIGH', async () => {
       const definition = await db.definition.create({

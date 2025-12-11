@@ -11,6 +11,7 @@ import { getBoss } from '../../queue/boss.js';
 import type { ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
 import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
+import { estimateCost, type CostEstimate } from '../cost/index.js';
 
 const log = createLogger('services:run:start');
 
@@ -39,6 +40,7 @@ export type StartRunResult = {
     createdAt: Date;
   };
   jobCount: number;
+  estimatedCosts: CostEstimate;
 };
 
 /**
@@ -166,13 +168,26 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   // Calculate total job count
   const totalJobs = selectedScenarioIds.length * models.length;
 
-  // Create run config
+  // Calculate cost estimate before creating run
+  const costEstimate = await estimateCost({
+    definitionId,
+    modelIds: models,
+    samplePercentage,
+  });
+
+  log.debug(
+    { definitionId, totalCost: costEstimate.total, isUsingFallback: costEstimate.isUsingFallback },
+    'Cost estimate calculated'
+  );
+
+  // Create run config including cost estimate for historical reference
   const config = {
     models,
     samplePercentage,
     sampleSeed,
     priority,
     definitionSnapshot: definition.content,
+    estimatedCosts: costEstimate,
   };
 
   // Initial progress
@@ -274,5 +289,6 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       createdAt: run.createdAt,
     },
     jobCount: jobIds.length,
+    estimatedCosts: costEstimate,
   };
 }

@@ -92,21 +92,21 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Modify `apps/api/src/services/run/start.ts`:
+- [X] T018 [US2] Modify `apps/api/src/services/run/start.ts`:
   - Call estimateCost before creating run
   - Store estimatedCosts in run.config JSON
   - Return estimatedCosts in StartRunResult
-- [ ] T019 [US2] Add `estimatedCosts` field to Run GraphQL type in `apps/api/src/graphql/types/run.ts`:
+- [X] T019 [US2] Add `estimatedCosts` field to Run GraphQL type in `apps/api/src/graphql/types/run.ts`:
   - Extract from run.config.estimatedCosts
   - Return CostEstimate type
-- [ ] T020 [US2] Modify MCP start_run tool in `apps/api/src/mcp/tools/start-run.ts`:
+- [X] T020 [US2] Modify MCP start_run tool in `apps/api/src/mcp/tools/start-run.ts`:
   - Replace rough estimate with detailed cost breakdown
   - Include per-model breakdown in response
   - Add using_fallback flag
-- [ ] T021 [US2] Integrate CostBreakdown component into start run UI:
-  - Display total cost prominently
-  - Update when models or sample percentage changes
-- [ ] T022 [US2] Add integration test for startRun with cost estimate in `apps/api/tests/services/run/start.test.ts`
+- [X] T021 [US2] Integrate CostBreakdown component into start run UI:
+  - Display total cost prominently (already done in Phase 3)
+  - Update when models or sample percentage changes (already done in Phase 3)
+- [X] T022 [US2] Add integration test for startRun with cost estimate in `apps/api/tests/services/run/start.test.ts`
 
 **Checkpoint**: User Story 2 complete - users see total cost before starting
 

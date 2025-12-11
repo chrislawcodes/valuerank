@@ -19,8 +19,12 @@ describe('token statistics service', () => {
   const createdProviderIds: string[] = [];
 
   // Test provider and models
+  // We need both the database UUID (for creating stats) and the model identifier (for querying)
   let testProviderId: string;
-  let testModel1Id: string;
+  let testModel1DbId: string; // Database UUID (LlmModel.id)
+  let testModel2DbId: string;
+  let testModel3DbId: string;
+  let testModel1Id: string; // Model identifier string (LlmModel.modelId)
   let testModel2Id: string;
   let testModel3Id: string;
 
@@ -46,7 +50,7 @@ describe('token statistics service', () => {
     testProviderId = provider.id;
     createdProviderIds.push(provider.id);
 
-    // Create test models
+    // Create test models - store both database UUID and model identifier
     const model1 = await db.llmModel.create({
       data: {
         providerId: provider.id,
@@ -56,7 +60,8 @@ describe('token statistics service', () => {
         costOutputPerMillion: 30.0,
       },
     });
-    testModel1Id = model1.id;
+    testModel1DbId = model1.id; // Database UUID for creating stats
+    testModel1Id = model1.modelId; // Model identifier for querying
     createdModelIds.push(model1.id);
 
     const model2 = await db.llmModel.create({
@@ -68,7 +73,8 @@ describe('token statistics service', () => {
         costOutputPerMillion: 15.0,
       },
     });
-    testModel2Id = model2.id;
+    testModel2DbId = model2.id;
+    testModel2Id = model2.modelId;
     createdModelIds.push(model2.id);
 
     const model3 = await db.llmModel.create({
@@ -80,15 +86,16 @@ describe('token statistics service', () => {
         costOutputPerMillion: 6.0,
       },
     });
-    testModel3Id = model3.id;
+    testModel3DbId = model3.id;
+    testModel3Id = model3.modelId;
     createdModelIds.push(model3.id);
   });
 
   afterEach(async () => {
-    // Clean up all stats for our test models after each test
+    // Clean up all stats for our test models after each test (use database UUIDs)
     await db.modelTokenStatistics.deleteMany({
       where: {
-        modelId: { in: [testModel1Id, testModel2Id, testModel3Id] },
+        modelId: { in: [testModel1DbId, testModel2DbId, testModel3DbId] },
       },
     });
   });
@@ -100,10 +107,10 @@ describe('token statistics service', () => {
     });
 
     it('returns stats for models that have them', async () => {
-      // Create stats for model 1
+      // Create stats for model 1 (use database UUID for FK)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId, // Database UUID for FK
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -111,6 +118,7 @@ describe('token statistics service', () => {
         },
       });
 
+      // Query by model identifier string
       const result = await getTokenStatsForModels([testModel1Id]);
 
       expect(result.size).toBe(1);
@@ -126,10 +134,10 @@ describe('token statistics service', () => {
     });
 
     it('returns only global stats (not definition-specific)', async () => {
-      // Create global stats
+      // Create global stats (use database UUID for FK)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -149,7 +157,7 @@ describe('token statistics service', () => {
         // Create definition-specific stats (should be ignored)
         await db.modelTokenStatistics.create({
           data: {
-            modelId: testModel1Id,
+            modelId: testModel1DbId,
             definitionId: definition.id,
             avgInputTokens: 800,
             avgOutputTokens: 2000,
@@ -157,6 +165,7 @@ describe('token statistics service', () => {
           },
         });
 
+        // Query by model identifier string
         const result = await getTokenStatsForModels([testModel1Id]);
 
         // Should only return global stats
@@ -169,10 +178,10 @@ describe('token statistics service', () => {
     });
 
     it('returns stats for multiple models', async () => {
-      // Create stats for both models
+      // Create stats for both models (use database UUIDs for FK)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -182,7 +191,7 @@ describe('token statistics service', () => {
 
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel2Id,
+          modelId: testModel2DbId,
           definitionId: null,
           avgInputTokens: 800,
           avgOutputTokens: 2000,
@@ -190,6 +199,7 @@ describe('token statistics service', () => {
         },
       });
 
+      // Query by model identifier strings
       const result = await getTokenStatsForModels([testModel1Id, testModel2Id]);
 
       expect(result.size).toBe(2);
@@ -200,9 +210,9 @@ describe('token statistics service', () => {
 
   describe('getAllModelAverage', () => {
     it('returns null when DB is empty', async () => {
-      // Ensure no stats exist for our test models
+      // Ensure no stats exist for our test models (use database UUIDs)
       await db.modelTokenStatistics.deleteMany({
-        where: { modelId: { in: [testModel1Id, testModel2Id, testModel3Id] } },
+        where: { modelId: { in: [testModel1DbId, testModel2DbId, testModel3DbId] } },
       });
 
       // Also need to ensure no other stats exist (other tests might leave data)
@@ -213,10 +223,10 @@ describe('token statistics service', () => {
     });
 
     it('returns average across all models with stats', async () => {
-      // Create stats for multiple models
+      // Create stats for multiple models (use database UUIDs)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 400,
           avgOutputTokens: 1200,
@@ -226,7 +236,7 @@ describe('token statistics service', () => {
 
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel2Id,
+          modelId: testModel2DbId,
           definitionId: null,
           avgInputTokens: 600,
           avgOutputTokens: 1800,
@@ -245,10 +255,10 @@ describe('token statistics service', () => {
     });
 
     it('ignores models with zero sample count', async () => {
-      // Create stats with samples
+      // Create stats with samples (use database UUIDs)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -259,7 +269,7 @@ describe('token statistics service', () => {
       // Create stats with zero samples (should be ignored)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel2Id,
+          modelId: testModel2DbId,
           definitionId: null,
           avgInputTokens: 10000,  // Would skew average if included
           avgOutputTokens: 30000,
@@ -276,10 +286,10 @@ describe('token statistics service', () => {
     });
 
     it('only includes global stats in average', async () => {
-      // Create global stats
+      // Create global stats (use database UUIDs)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -299,7 +309,7 @@ describe('token statistics service', () => {
         // Create definition-specific stats (should be ignored in average)
         await db.modelTokenStatistics.create({
           data: {
-            modelId: testModel2Id,
+            modelId: testModel2DbId,
             definitionId: definition.id,
             avgInputTokens: 10000,
             avgOutputTokens: 30000,
@@ -321,8 +331,9 @@ describe('token statistics service', () => {
 
   describe('upsertTokenStats', () => {
     it('creates new record when none exists', async () => {
+      // upsertTokenStats takes database UUID (FK to LlmModel.id)
       await upsertTokenStats({
-        modelId: testModel1Id,
+        modelId: testModel1DbId,
         definitionId: null,
         avgInputTokens: 500,
         avgOutputTokens: 1500,
@@ -332,7 +343,7 @@ describe('token statistics service', () => {
       // Use findFirst instead of findUnique because Prisma doesn't support null in compound keys
       const stats = await db.modelTokenStatistics.findFirst({
         where: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
         },
       });
@@ -344,10 +355,10 @@ describe('token statistics service', () => {
     });
 
     it('updates existing record', async () => {
-      // Create initial stats
+      // Create initial stats (use database UUID)
       await db.modelTokenStatistics.create({
         data: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -357,7 +368,7 @@ describe('token statistics service', () => {
 
       // Update with new values
       await upsertTokenStats({
-        modelId: testModel1Id,
+        modelId: testModel1DbId,
         definitionId: null,
         avgInputTokens: 600,
         avgOutputTokens: 1800,
@@ -367,7 +378,7 @@ describe('token statistics service', () => {
       // Use findFirst instead of findUnique because Prisma doesn't support null in compound keys
       const stats = await db.modelTokenStatistics.findFirst({
         where: {
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
         },
       });
@@ -387,9 +398,9 @@ describe('token statistics service', () => {
       });
 
       try {
-        // Create global stats
+        // Create global stats (use database UUID)
         await upsertTokenStats({
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: null,
           avgInputTokens: 500,
           avgOutputTokens: 1500,
@@ -398,7 +409,7 @@ describe('token statistics service', () => {
 
         // Create definition-specific stats
         await upsertTokenStats({
-          modelId: testModel1Id,
+          modelId: testModel1DbId,
           definitionId: definition.id,
           avgInputTokens: 800,
           avgOutputTokens: 2000,
@@ -408,7 +419,7 @@ describe('token statistics service', () => {
         // Use findFirst instead of findUnique because Prisma doesn't support null in compound keys
         const globalStats = await db.modelTokenStatistics.findFirst({
           where: {
-            modelId: testModel1Id,
+            modelId: testModel1DbId,
             definitionId: null,
           },
         });
@@ -417,7 +428,7 @@ describe('token statistics service', () => {
         const defStats = await db.modelTokenStatistics.findUnique({
           where: {
             modelId_definitionId: {
-              modelId: testModel1Id,
+              modelId: testModel1DbId,
               definitionId: definition.id,
             },
           },

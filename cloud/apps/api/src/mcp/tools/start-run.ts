@@ -73,14 +73,12 @@ function formatSuccess(data: unknown) {
 }
 
 /**
- * Estimates cost for a run based on model count and scenario count.
- * This is a rough estimate - actual cost depends on token usage.
+ * Formats a cost value for display with dynamic precision.
  */
-function estimateCost(modelCount: number, scenarioCount: number): string {
-  // Rough estimate: ~$0.01 per probe (varies by model)
-  const estimatedProbes = modelCount * scenarioCount;
-  const estimatedCostDollars = estimatedProbes * 0.01;
-  return `~$${estimatedCostDollars.toFixed(2)} (${estimatedProbes} probes)`;
+function formatCostValue(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  if (cost < 1) return `$${cost.toFixed(3)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 /**
@@ -186,18 +184,41 @@ Example:
           })
         );
 
-        // Step 4: Calculate estimated cost
-        const totalScenarios = definition.scenarios.length;
-        const sampledScenarios = Math.ceil((totalScenarios * (args.sample_percentage ?? 100)) / 100);
-        const estimatedCost = estimateCost(args.models.length, sampledScenarios);
+        // Step 4: Format cost estimate from service result
+        const costEstimate = result.estimatedCosts;
+        const perModelCosts = costEstimate.perModel.map((m) => ({
+          model_id: m.modelId,
+          display_name: m.displayName,
+          total_cost: formatCostValue(m.totalCost),
+          input_tokens: m.inputTokens,
+          output_tokens: m.outputTokens,
+          using_fallback: m.isUsingFallback,
+        }));
 
-        // Step 5: Return success response
+        // Compute fallback reason (same logic as GraphQL resolver)
+        let fallbackReason: string | null = null;
+        if (costEstimate.isUsingFallback) {
+          if (costEstimate.basedOnSampleCount === 0) {
+            fallbackReason = 'No historical token data available. Using system defaults (100 input / 900 output tokens per probe).';
+          } else {
+            fallbackReason = 'Some models lack historical data. Using all-model average for those models.';
+          }
+        }
+
+        // Step 5: Return success response with detailed cost breakdown
         return formatSuccess({
           success: true,
           run_id: result.run.id,
           definition_id: args.definition_id,
           queued_task_count: result.jobCount,
-          estimated_cost: estimatedCost,
+          estimated_cost: {
+            total: formatCostValue(costEstimate.total),
+            total_raw: costEstimate.total,
+            scenario_count: costEstimate.scenarioCount,
+            per_model: perModelCosts,
+            using_fallback: costEstimate.isUsingFallback,
+            fallback_reason: fallbackReason,
+          },
           config: {
             models: args.models,
             sample_percentage: args.sample_percentage,

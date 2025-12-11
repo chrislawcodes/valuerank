@@ -94,17 +94,18 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
   }
 
   // Fetch model details and pricing
+  // Note: modelIds are model identifier strings (e.g., "gpt-4"), not database UUIDs
   const models = await db.llmModel.findMany({
     where: {
-      id: { in: modelIds },
+      modelId: { in: modelIds },
     },
     include: {
       provider: true,
     },
   });
 
-  // Build model lookup map
-  const modelMap = new Map(models.map((m) => [m.id, m]));
+  // Build model lookup map by modelId (the identifier string, not database ID)
+  const modelMap = new Map(models.map((m) => [m.modelId, m]));
 
   // Fetch token statistics for all models
   const tokenStats = await getTokenStatsForModels(modelIds);

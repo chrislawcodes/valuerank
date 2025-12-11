@@ -14,8 +14,12 @@ const log = createLogger('services:cost:statistics');
  * Fetches token statistics for specific models.
  * Only returns global stats (definitionId = null) for P1.
  *
- * @param modelIds - Array of model IDs to fetch stats for
- * @returns Map of modelId to ModelTokenStats
+ * Note: modelIds are model identifier strings (e.g., "gpt-4"), not database UUIDs.
+ * The ModelTokenStatistics.modelId is a foreign key to LlmModel.id (UUID),
+ * so we need to join through LlmModel to filter by model identifier.
+ *
+ * @param modelIds - Array of model identifier strings to fetch stats for
+ * @returns Map of model identifier to ModelTokenStats
  */
 export async function getTokenStatsForModels(
   modelIds: string[]
@@ -24,20 +28,29 @@ export async function getTokenStatsForModels(
     return new Map();
   }
 
+  // Fetch statistics joined with LlmModel to filter by model identifier (not UUID)
   const stats = await db.modelTokenStatistics.findMany({
     where: {
-      modelId: { in: modelIds },
+      model: {
+        modelId: { in: modelIds },
+      },
       definitionId: null, // Global stats only (P1)
+    },
+    include: {
+      model: {
+        select: { modelId: true }, // Get the model identifier for mapping
+      },
     },
   });
 
   log.debug({ modelIds, foundCount: stats.length }, 'Fetched token statistics');
 
+  // Map by model identifier string (not database UUID)
   return new Map(
     stats.map((s) => [
-      s.modelId,
+      s.model.modelId, // Use the model identifier, not the database ID
       {
-        modelId: s.modelId,
+        modelId: s.model.modelId,
         avgInputTokens: Number(s.avgInputTokens),
         avgOutputTokens: Number(s.avgOutputTokens),
         sampleCount: s.sampleCount,
