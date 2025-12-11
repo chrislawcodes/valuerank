@@ -213,5 +213,168 @@ describe('Access Tracking', () => {
       });
       expect(updatedDef?.lastAccessedAt).not.toBeNull();
     });
+
+    it('trackDefinitionAccess does not throw for invalid id', async () => {
+      const { trackDefinitionAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Should not throw, just log warning
+      expect(() => {
+        trackDefinitionAccess('invalid-id-that-does-not-exist');
+      }).not.toThrow();
+
+      // Wait to ensure promise settles
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+  });
+
+  describe('Transcript Access Tracking Functions', () => {
+    let testTranscriptId: string | undefined;
+    let testTranscript2Id: string | undefined;
+
+    beforeEach(async () => {
+      // Create test transcript
+      const transcript = await db.transcript.create({
+        data: {
+          runId: testRunId!,
+          modelId: 'test-model',
+          content: { messages: [], model_response: 'test' },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+      testTranscriptId = transcript.id;
+    });
+
+    afterEach(async () => {
+      if (testTranscriptId) {
+        await db.transcript.delete({ where: { id: testTranscriptId } }).catch(() => {});
+        testTranscriptId = undefined;
+      }
+      if (testTranscript2Id) {
+        await db.transcript.delete({ where: { id: testTranscript2Id } }).catch(() => {});
+        testTranscript2Id = undefined;
+      }
+    });
+
+    it('trackTranscriptAccess updates lastAccessedAt', async () => {
+      const { trackTranscriptAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Verify initial state
+      const initialTranscript = await db.transcript.findUnique({
+        where: { id: testTranscriptId },
+        select: { lastAccessedAt: true },
+      });
+      expect(initialTranscript?.lastAccessedAt).toBeNull();
+
+      // Track access
+      trackTranscriptAccess(testTranscriptId!);
+
+      // Wait for async update
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify update
+      const updatedTranscript = await db.transcript.findUnique({
+        where: { id: testTranscriptId },
+        select: { lastAccessedAt: true },
+      });
+      expect(updatedTranscript?.lastAccessedAt).not.toBeNull();
+    });
+
+    it('trackTranscriptAccess does not throw for invalid id', async () => {
+      const { trackTranscriptAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Should not throw, just log warning
+      expect(() => {
+        trackTranscriptAccess('invalid-id-that-does-not-exist');
+      }).not.toThrow();
+
+      // Wait to ensure promise settles
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    it('trackTranscriptsAccess updates lastAccessedAt for multiple transcripts', async () => {
+      const { trackTranscriptsAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Create second transcript
+      const transcript2 = await db.transcript.create({
+        data: {
+          runId: testRunId!,
+          modelId: 'test-model-2',
+          content: { messages: [], model_response: 'test 2' },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+      testTranscript2Id = transcript2.id;
+
+      // Verify initial state
+      const [initial1, initial2] = await Promise.all([
+        db.transcript.findUnique({
+          where: { id: testTranscriptId },
+          select: { lastAccessedAt: true },
+        }),
+        db.transcript.findUnique({
+          where: { id: testTranscript2Id },
+          select: { lastAccessedAt: true },
+        }),
+      ]);
+      expect(initial1?.lastAccessedAt).toBeNull();
+      expect(initial2?.lastAccessedAt).toBeNull();
+
+      // Track access for both
+      trackTranscriptsAccess([testTranscriptId!, testTranscript2Id!]);
+
+      // Wait for async update
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify both were updated
+      const [updated1, updated2] = await Promise.all([
+        db.transcript.findUnique({
+          where: { id: testTranscriptId },
+          select: { lastAccessedAt: true },
+        }),
+        db.transcript.findUnique({
+          where: { id: testTranscript2Id },
+          select: { lastAccessedAt: true },
+        }),
+      ]);
+      expect(updated1?.lastAccessedAt).not.toBeNull();
+      expect(updated2?.lastAccessedAt).not.toBeNull();
+    });
+
+    it('trackTranscriptsAccess handles empty array gracefully', async () => {
+      const { trackTranscriptsAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Should return early without error
+      expect(() => {
+        trackTranscriptsAccess([]);
+      }).not.toThrow();
+    });
+
+    it('trackTranscriptsAccess does not throw for invalid ids', async () => {
+      const { trackTranscriptsAccess } = await import(
+        '../../src/middleware/access-tracking.js'
+      );
+
+      // Should not throw, just log warning
+      expect(() => {
+        trackTranscriptsAccess(['invalid-id-1', 'invalid-id-2']);
+      }).not.toThrow();
+
+      // Wait to ensure promise settles
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
   });
 });
