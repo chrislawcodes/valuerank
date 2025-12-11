@@ -163,6 +163,73 @@ def resolve_max_tokens(
     return default_max_tokens
 
 
+def get_config_value(
+    model_config: Optional[dict],
+    key: str,
+    expected_type: type,
+    min_val: Optional[float] = None,
+    max_val: Optional[float] = None,
+) -> Optional[Any]:
+    """
+    Get a typed value from model config with optional range validation.
+
+    Args:
+        model_config: Optional model configuration dict
+        key: The config key to look up
+        expected_type: Expected type (int, float, list, str)
+        min_val: Optional minimum value for numeric types
+        max_val: Optional maximum value for numeric types
+
+    Returns:
+        The config value if valid, None otherwise
+    """
+    if model_config is None or key not in model_config:
+        return None
+
+    value = model_config[key]
+
+    if value is None:
+        return None
+
+    # For numeric types, accept int or float
+    if expected_type in (int, float):
+        if not isinstance(value, (int, float)):
+            log.warn(f"Invalid {key} value type", value=value, expected=expected_type.__name__)
+            return None
+        if min_val is not None and value < min_val:
+            log.warn(f"{key} below minimum", value=value, min=min_val)
+            return None
+        if max_val is not None and value > max_val:
+            log.warn(f"{key} above maximum", value=value, max=max_val)
+            return None
+        return expected_type(value)
+
+    # For other types, check directly
+    if not isinstance(value, expected_type):
+        log.warn(f"Invalid {key} value type", value=value, expected=expected_type.__name__)
+        return None
+
+    return value
+
+
+def resolve_temperature(
+    model_config: Optional[dict],
+    default_temperature: float,
+) -> float:
+    """
+    Resolve the temperature value from model config.
+
+    Args:
+        model_config: Optional model configuration dict
+        default_temperature: Default value if not specified in config
+
+    Returns:
+        The resolved temperature value (0-2)
+    """
+    temp = get_config_value(model_config, "temperature", float, 0, 2)
+    return temp if temp is not None else default_temperature
+
+
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM providers."""
 
@@ -354,18 +421,36 @@ class OpenAIAdapter(BaseLLMAdapter):
         if model_config:
             max_tokens_param = model_config.get("maxTokensParam", "max_tokens")
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
 
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
+            "temperature": resolved_temperature,
         }
 
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
             payload[max_tokens_param] = resolved_max_tokens
+
+        # Add optional config values (OpenAI supports all of these)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
 
         log.debug("Calling OpenAI API", model=model, max_tokens_param=max_tokens_param, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
@@ -461,9 +546,10 @@ class AnthropicAdapter(BaseLLMAdapter):
         if not anthropic_messages:
             anthropic_messages = [{"role": "user", "content": ""}]
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         # Note: Anthropic requires max_tokens, so use a high default if unlimited
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
         # Anthropic requires max_tokens - use 8192 as default for "unlimited"
         effective_max_tokens = resolved_max_tokens if resolved_max_tokens is not None else 8192
 
@@ -471,13 +557,22 @@ class AnthropicAdapter(BaseLLMAdapter):
             "model": model,
             "max_tokens": effective_max_tokens,
             "messages": anthropic_messages,
+            "temperature": resolved_temperature,
         }
 
         if system_parts:
             payload["system"] = "\n\n".join(system_parts)
 
-        # Anthropic supports temperature
-        payload["temperature"] = temperature
+        # Add optional config values (Anthropic supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop_sequences"] = stop_seqs
+
+        # Note: Anthropic does NOT support frequencyPenalty or presencePenalty
 
         log.debug("Calling Anthropic API", model=model, max_tokens=effective_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
@@ -562,18 +657,30 @@ class GeminiAdapter(BaseLLMAdapter):
         if not contents:
             contents = [{"role": "user", "parts": [{"text": ""}]}]
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
 
         # Build generation config
         generation_config: dict[str, Any] = {
-            "temperature": temperature,
+            "temperature": resolved_temperature,
         }
 
         # Only add maxOutputTokens if not unlimited (None)
         # For Gemini 2.5 thinking models, omitting this allows full thinking + output
         if resolved_max_tokens is not None:
             generation_config["maxOutputTokens"] = resolved_max_tokens
+
+        # Add optional config values (Google supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            generation_config["topP"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            generation_config["stopSequences"] = stop_seqs
+
+        # Note: Google does NOT support frequencyPenalty or presencePenalty
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -720,18 +827,36 @@ class XAIAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
 
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
+            "temperature": resolved_temperature,
         }
 
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
+
+        # Add optional config values (xAI supports all OpenAI-compatible options)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
 
         log.debug("Calling xAI API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
@@ -800,8 +925,9 @@ class DeepSeekAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
 
         # DeepSeek has a max of 8192 tokens for optimal quality
         if resolved_max_tokens is not None:
@@ -810,12 +936,29 @@ class DeepSeekAdapter(BaseLLMAdapter):
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
+            "temperature": resolved_temperature,
         }
 
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
+
+        # Add optional config values (DeepSeek supports all OpenAI-compatible options)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
+        if freq_penalty is not None:
+            payload["frequency_penalty"] = freq_penalty
+
+        pres_penalty = get_config_value(model_config, "presencePenalty", float, -2, 2)
+        if pres_penalty is not None:
+            payload["presence_penalty"] = pres_penalty
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
 
         log.debug("Calling DeepSeek API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
@@ -891,18 +1034,30 @@ class MistralAdapter(BaseLLMAdapter):
             "Content-Type": "application/json",
         }
 
-        # Resolve max_tokens from config (None = unlimited, number = use value)
+        # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
 
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
+            "temperature": resolved_temperature,
         }
 
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
+
+        # Add optional config values (Mistral supports topP and stopSequences)
+        top_p = get_config_value(model_config, "topP", float, 0, 1)
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        stop_seqs = get_config_value(model_config, "stopSequences", list)
+        if stop_seqs is not None and len(stop_seqs) > 0:
+            payload["stop"] = stop_seqs
+
+        # Note: Mistral does NOT support frequencyPenalty or presencePenalty
 
         log.debug("Calling Mistral API", model=model, max_tokens=resolved_max_tokens)
         data = _post_json(self.base_url, headers, payload, timeout=self.timeout)

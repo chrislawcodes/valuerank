@@ -17,6 +17,7 @@ import { Input } from '../ui/Input';
 import { Loading } from '../ui/Loading';
 import { EmptyState } from '../ui/EmptyState';
 import { ErrorMessage } from '../ui/ErrorMessage';
+import { JsonEditor } from '../ui/JsonEditor';
 import {
   LLM_PROVIDERS_QUERY,
   CREATE_LLM_MODEL_MUTATION,
@@ -380,16 +381,10 @@ function ModelFormModal({
 
   const handleApiConfigChange = (value: string) => {
     setApiConfig(value);
-    if (value.trim() === '') {
-      setApiConfigError(null);
-      return;
-    }
-    try {
-      JSON.parse(value);
-      setApiConfigError(null);
-    } catch {
-      setApiConfigError('Invalid JSON');
-    }
+  };
+
+  const handleApiConfigValidation = (isValid: boolean, error: string | null) => {
+    setApiConfigError(isValid ? null : error);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -510,15 +505,12 @@ function ModelFormModal({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 API Config (JSON)
               </label>
-              <textarea
+              <JsonEditor
                 value={apiConfig}
-                onChange={(e) => handleApiConfigChange(e.target.value)}
+                onChange={handleApiConfigChange}
+                onValidationChange={handleApiConfigValidation}
+                height="120px"
                 placeholder='{"maxTokensParam": "max_completion_tokens"}'
-                className={`w-full px-3 py-2 border rounded-md text-sm font-mono h-24 resize-none ${
-                  apiConfigError
-                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-                    : 'border-gray-300 focus:ring-teal-500 focus:border-teal-500'
-                }`}
               />
               {apiConfigError && (
                 <p className="mt-1 text-sm text-red-600">{apiConfigError}</p>
