@@ -7,9 +7,9 @@
  */
 
 import path from 'path';
-import { db, type DefinitionContent } from '@valuerank/db';
+import { db, Prisma, type DefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
-import { spawnPython } from '../../queue/spawn.js';
+import { spawnPython, type ProgressUpdate } from '../../queue/spawn.js';
 import { getScenarioExpansionModel } from '../infra-models.js';
 
 const log = createLogger('services:scenario:expand');
@@ -195,14 +195,38 @@ export async function expandScenarios(
     modelConfig,
   };
 
-  // Spawn Python worker
+  // Spawn Python worker with progress tracking
   const workerPath = path.resolve(process.cwd(), '../..', GENERATE_SCENARIOS_WORKER);
+
+  // Progress callback to update database with expansion status
+  const onProgress = async (progress: ProgressUpdate): Promise<void> => {
+    try {
+      await db.definition.update({
+        where: { id: definitionId },
+        data: {
+          expansionProgress: {
+            phase: progress.phase,
+            expectedScenarios: progress.expectedScenarios,
+            generatedScenarios: progress.generatedScenarios,
+            inputTokens: progress.inputTokens,
+            outputTokens: progress.outputTokens,
+            message: progress.message,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (err) {
+      log.warn({ err, definitionId, progress }, 'Failed to update expansion progress');
+    }
+  };
+
   const result = await spawnPython<GenerateScenariosInput, GenerateScenariosOutput>(
     workerPath,
     workerInput,
     {
       timeout: 300000, // 5 minutes
       cwd: path.resolve(process.cwd(), '../..'),
+      onProgress,
     }
   );
 
@@ -296,6 +320,12 @@ export async function expandScenarios(
   }));
 
   await db.scenario.createMany({ data: scenarioData });
+
+  // Clear expansion progress after successful completion
+  await db.definition.update({
+    where: { id: definitionId },
+    data: { expansionProgress: Prisma.JsonNull },
+  });
 
   log.info(
     {

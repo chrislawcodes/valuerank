@@ -12,6 +12,7 @@ import { UserRef } from './user.js';
 import {
   getDefinitionExpansionStatus,
   type DefinitionExpansionStatus,
+  type ExpansionProgress,
 } from '../../services/scenario/index.js';
 
 // Re-export for backward compatibility
@@ -52,6 +53,36 @@ const ExpansionJobStatusEnum = builder.enumType('ExpansionJobStatus', {
   },
 });
 
+// GraphQL type for real-time expansion progress
+const ExpansionProgressRef = builder.objectRef<ExpansionProgress>('ExpansionProgress');
+
+builder.objectType(ExpansionProgressRef, {
+  description: 'Real-time progress during scenario expansion',
+  fields: (t) => ({
+    phase: t.exposeString('phase', {
+      description: 'Current phase (starting, calling_llm, parsing, completed, failed)',
+    }),
+    expectedScenarios: t.exposeInt('expectedScenarios', {
+      description: 'Total number of scenarios expected to be generated',
+    }),
+    generatedScenarios: t.exposeInt('generatedScenarios', {
+      description: 'Number of scenarios generated so far',
+    }),
+    inputTokens: t.exposeInt('inputTokens', {
+      description: 'Number of input tokens used',
+    }),
+    outputTokens: t.exposeInt('outputTokens', {
+      description: 'Number of output tokens received',
+    }),
+    message: t.exposeString('message', {
+      description: 'Human-readable status message',
+    }),
+    updatedAt: t.exposeString('updatedAt', {
+      description: 'When this progress was last updated (ISO timestamp)',
+    }),
+  }),
+});
+
 // GraphQL type for expansion status
 const ExpansionStatusRef = builder.objectRef<DefinitionExpansionStatus>('ExpansionStatus');
 
@@ -90,6 +121,12 @@ builder.objectType(ExpansionStatusRef, {
     scenarioCount: t.exposeInt('scenarioCount', {
       description: 'Number of scenarios currently generated for this definition',
     }),
+    progress: t.field({
+      type: ExpansionProgressRef,
+      nullable: true,
+      description: 'Real-time progress during expansion (null when not actively expanding)',
+      resolve: (parent) => parent.progress,
+    }),
   }),
 });
 
@@ -99,6 +136,7 @@ type RawDefinitionRow = {
   parent_id: string | null;
   name: string;
   content: Prisma.JsonValue;
+  expansion_progress: Prisma.JsonValue | null;
   created_at: Date;
   updated_at: Date;
   last_accessed_at: Date | null;
@@ -385,7 +423,7 @@ builder.objectType(DefinitionRef, {
             JOIN ancestry a ON d.id = a.parent_id
             WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+          SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
           FROM ancestry
           WHERE id != ${definition.id}
           ORDER BY created_at ASC
@@ -396,6 +434,7 @@ builder.objectType(DefinitionRef, {
           parentId: a.parent_id,
           name: a.name,
           content: a.content,
+          expansionProgress: a.expansion_progress,
           createdAt: a.created_at,
           updatedAt: a.updated_at,
           lastAccessedAt: a.last_accessed_at,
@@ -419,7 +458,7 @@ builder.objectType(DefinitionRef, {
             JOIN tree t ON d.parent_id = t.id
             WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+          SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
           FROM tree
           WHERE id != ${definition.id}
           ORDER BY created_at DESC
@@ -430,6 +469,7 @@ builder.objectType(DefinitionRef, {
           parentId: d.parent_id,
           name: d.name,
           content: d.content,
+          expansionProgress: d.expansion_progress,
           createdAt: d.created_at,
           updatedAt: d.updated_at,
           lastAccessedAt: d.last_accessed_at,

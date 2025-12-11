@@ -4,4 +4,5 @@ export {
   getDefinitionExpansionStatus,
   type DefinitionExpansionStatus,
   type ExpansionJobStatus,
+  type ExpansionProgress,
 } from './expansion-status.js';

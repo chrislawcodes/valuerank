@@ -25,6 +25,19 @@ export type DefinitionOverrides = {
  */
 export type ExpansionJobStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'NONE';
 
+/**
+ * Real-time progress during scenario expansion.
+ */
+export type ExpansionProgress = {
+  phase: string;
+  expectedScenarios: number;
+  generatedScenarios: number;
+  inputTokens: number;
+  outputTokens: number;
+  message: string;
+  updatedAt: string;
+};
+
 export type ExpansionStatus = {
   status: ExpansionJobStatus;
   jobId: string | null;
@@ -33,6 +46,7 @@ export type ExpansionStatus = {
   completedAt: string | null;
   error: string | null;
   scenarioCount: number;
+  progress: ExpansionProgress | null;
 };
 
 export type Definition = {
@@ -194,6 +208,15 @@ export const DEFINITION_QUERY = gql`
         completedAt
         error
         scenarioCount
+        progress {
+          phase
+          expectedScenarios
+          generatedScenarios
+          inputTokens
+          outputTokens
+          message
+          updatedAt
+        }
       }
     }
   }

@@ -16,6 +16,8 @@ export type SpawnPythonOptions = {
   cwd?: string;
   /** Additional environment variables */
   env?: Record<string, string>;
+  /** Callback for progress updates from stderr (JSON lines with type="progress") */
+  onProgress?: (progress: ProgressUpdate) => void | Promise<void>;
 };
 
 export type SpawnPythonResult<T> = {
@@ -26,6 +28,40 @@ export type SpawnPythonResult<T> = {
   error: string;
   stderr?: string;
 };
+
+/**
+ * Progress update emitted by Python workers.
+ */
+export type ProgressUpdate = {
+  type: 'progress';
+  phase: string;
+  expectedScenarios: number;
+  generatedScenarios: number;
+  inputTokens: number;
+  outputTokens: number;
+  message: string;
+};
+
+/**
+ * Try to parse a line as a progress update JSON.
+ * Returns null if the line is not a valid progress update.
+ */
+function tryParseProgress(line: string): ProgressUpdate | null {
+  if (!line.trim().startsWith('{')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(line.trim());
+    if (parsed.type === 'progress') {
+      return parsed as ProgressUpdate;
+    }
+  } catch {
+    // Not valid JSON, ignore
+  }
+
+  return null;
+}
 
 /**
  * Spawns a Python process and communicates via JSON stdin/stdout.
@@ -40,7 +76,7 @@ export async function spawnPython<TInput, TOutput>(
   input: TInput,
   options: SpawnPythonOptions = {}
 ): Promise<SpawnPythonResult<TOutput>> {
-  const { timeout = 300000, cwd, env } = options;
+  const { timeout = 300000, cwd, env, onProgress } = options;
 
   log.debug({ script, timeout }, 'Spawning Python process');
 
@@ -53,6 +89,7 @@ export async function spawnPython<TInput, TOutput>(
 
     let stdout = '';
     let stderr = '';
+    let stderrBuffer = ''; // Buffer for incomplete lines
     let timeoutId: NodeJS.Timeout | null = null;
     let resolved = false;
 
@@ -86,9 +123,30 @@ export async function spawnPython<TInput, TOutput>(
       stdout += data.toString();
     });
 
-    // Collect stderr
+    // Collect stderr and parse progress updates
     pythonProcess.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      const chunk = data.toString();
+      stderr += chunk;
+
+      // Only process if we have a progress callback
+      if (onProgress) {
+        stderrBuffer += chunk;
+
+        // Process complete lines
+        const lines = stderrBuffer.split('\n');
+        // Keep the last incomplete line in the buffer
+        stderrBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const progress = tryParseProgress(line);
+          if (progress) {
+            // Call the progress callback (fire and forget, don't block)
+            Promise.resolve(onProgress(progress)).catch((err) => {
+              log.warn({ err }, 'Progress callback failed');
+            });
+          }
+        }
+      }
     });
 
     // Handle process errors
@@ -104,6 +162,16 @@ export async function spawnPython<TInput, TOutput>(
     // Handle process exit
     pythonProcess.on('close', (code) => {
       if (resolved) return;
+
+      // Process any remaining buffered stderr
+      if (onProgress && stderrBuffer) {
+        const progress = tryParseProgress(stderrBuffer);
+        if (progress) {
+          Promise.resolve(onProgress(progress)).catch((err) => {
+            log.warn({ err }, 'Progress callback failed');
+          });
+        }
+      }
 
       if (code !== 0) {
         log.warn({ script, code, stderr }, 'Python process exited with error');

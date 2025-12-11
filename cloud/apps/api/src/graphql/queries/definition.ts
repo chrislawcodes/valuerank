@@ -14,6 +14,7 @@ type RawDefinitionRow = {
   parent_id: string | null;
   name: string;
   content: Prisma.JsonValue;
+  expansion_progress: Prisma.JsonValue | null;
   created_at: Date;
   updated_at: Date;
   last_accessed_at: Date | null;
@@ -206,7 +207,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -218,6 +219,7 @@ builder.queryField('definitionAncestors', (t) =>
         parentId: a.parent_id,
         name: a.name,
         content: a.content,
+        expansionProgress: a.expansion_progress,
         createdAt: a.created_at,
         updatedAt: a.updated_at,
         lastAccessedAt: a.last_accessed_at,
@@ -270,7 +272,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -282,6 +284,7 @@ builder.queryField('definitionDescendants', (t) =>
         parentId: d.parent_id,
         name: d.name,
         content: d.content,
+        expansionProgress: d.expansion_progress,
         createdAt: d.created_at,
         updatedAt: d.updated_at,
         lastAccessedAt: d.last_accessed_at,

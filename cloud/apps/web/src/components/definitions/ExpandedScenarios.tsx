@@ -136,16 +136,45 @@ function ScenarioCard({ scenario, index, isExpanded, onToggle }: ScenarioCardPro
   );
 }
 
+function formatProgressMessage(status?: ExpansionStatus): string {
+  const progress = status?.progress;
+  if (!progress) return 'Generating...';
+
+  // Format based on phase
+  switch (progress.phase) {
+    case 'starting':
+      return `Starting... (${progress.expectedScenarios} expected)`;
+    case 'calling_llm':
+      if (progress.outputTokens > 0) {
+        return `Generating... ${(progress.outputTokens / 1000).toFixed(1)}k tokens`;
+      }
+      return `Calling LLM... (${progress.expectedScenarios} scenarios)`;
+    case 'parsing':
+      return `Parsing response... ${(progress.outputTokens / 1000).toFixed(1)}k tokens`;
+    case 'completed':
+      return `Generated ${progress.generatedScenarios} scenarios`;
+    case 'failed':
+      return progress.message || 'Failed';
+    default:
+      if (progress.message) return progress.message;
+      if (progress.outputTokens > 0) {
+        return `${(progress.outputTokens / 1000).toFixed(1)}k tokens`;
+      }
+      return 'Generating...';
+  }
+}
+
 function ExpansionStatusBadge({ status, scenarioCount }: { status?: ExpansionStatus; scenarioCount?: number }) {
   const isExpanding = status?.status === 'PENDING' || status?.status === 'ACTIVE';
   const isCompleted = status?.status === 'COMPLETED';
   const isFailed = status?.status === 'FAILED';
 
   if (isExpanding) {
+    const progressMsg = formatProgressMessage(status);
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
         <Loader2 className="w-3 h-3 animate-spin" />
-        Generating...
+        {progressMsg}
       </span>
     );
   }

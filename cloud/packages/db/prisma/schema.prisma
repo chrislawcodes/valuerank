@@ -95,14 +95,15 @@ model OAuthRefreshToken {
 // ============================================================================
 
 model Definition {
-  id             String    @id @default(cuid())
-  parentId       String?   @map("parent_id")
-  name           String
-  content        Json      @db.JsonB
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  lastAccessedAt DateTime? @map("last_accessed_at")
-  deletedAt      DateTime? @map("deleted_at")
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
 
   // Audit fields
   createdByUserId String? @map("created_by_user_id")

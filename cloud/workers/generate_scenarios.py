@@ -69,6 +69,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
+from functools import reduce
 from typing import Any, Optional
 
 import yaml
@@ -78,6 +79,34 @@ from common.llm_adapters import generate
 from common.logging import get_logger
 
 log = get_logger("generate_scenarios")
+
+
+def emit_progress(
+    phase: str,
+    expected_scenarios: int = 0,
+    generated_scenarios: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    message: str = "",
+) -> None:
+    """
+    Emit a progress update to stderr.
+
+    Progress is emitted as a JSON line with type="progress" which
+    TypeScript can parse and use to update the database.
+    """
+    progress = {
+        "type": "progress",
+        "phase": phase,
+        "expectedScenarios": expected_scenarios,
+        "generatedScenarios": generated_scenarios,
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "message": message,
+    }
+    # Write to stderr as a single line
+    sys.stderr.write(json.dumps(progress) + "\n")
+    sys.stderr.flush()
 
 
 @dataclass
@@ -337,6 +366,13 @@ def validate_input(data: dict[str, Any]) -> None:
         raise ValidationError(message="content.template is required")
 
 
+def calculate_expected_scenarios(dimensions: list[Dimension]) -> int:
+    """Calculate the expected number of scenarios from dimension combinations."""
+    if not dimensions:
+        return 0
+    return reduce(lambda x, y: x * len(y.levels), dimensions, 1)
+
+
 def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     """Execute the scenario generation."""
     definition_id = data["definitionId"]
@@ -363,9 +399,20 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     # Parse dimensions
     dimensions = parse_dimensions(raw_dimensions)
 
+    # Calculate expected scenario count
+    expected_count = calculate_expected_scenarios(dimensions)
+
+    # Emit initial progress
+    emit_progress(
+        phase="starting",
+        expected_scenarios=expected_count,
+        message=f"Starting generation with {len(dimensions)} dimensions",
+    )
+
     # If no dimensions with values, return empty - let TypeScript handle default scenario
     if not dimensions:
         log.info("No dimensions with values, returning empty", definitionId=definition_id)
+        emit_progress(phase="completed", message="No dimensions, using default scenario")
         return {
             "success": True,
             "scenarios": [],
@@ -375,6 +422,13 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     # Build prompt
     prompt = build_generation_prompt(preamble, template, dimensions, matching_rules)
     log.debug("Built generation prompt", definitionId=definition_id, promptLength=len(prompt))
+
+    # Emit progress before LLM call
+    emit_progress(
+        phase="calling_llm",
+        expected_scenarios=expected_count,
+        message=f"Calling {model_id} to generate {expected_count} scenarios...",
+    )
 
     try:
         # Call LLM using the shared adapter
@@ -395,6 +449,15 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             outputTokens=response.output_tokens,
         )
 
+        # Emit progress after LLM call
+        emit_progress(
+            phase="parsing",
+            expected_scenarios=expected_count,
+            input_tokens=response.input_tokens or 0,
+            output_tokens=response.output_tokens or 0,
+            message=f"Received {response.output_tokens or 0} tokens, parsing scenarios...",
+        )
+
         # Extract and parse YAML
         yaml_content = extract_yaml(response.content)
         log.debug("Extracted YAML", definitionId=definition_id, yamlLength=len(yaml_content))
@@ -412,6 +475,16 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             scenarioCount=len(scenarios),
         )
 
+        # Emit final progress
+        emit_progress(
+            phase="completed",
+            expected_scenarios=expected_count,
+            generated_scenarios=len(scenarios),
+            input_tokens=response.input_tokens or 0,
+            output_tokens=response.output_tokens or 0,
+            message=f"Generated {len(scenarios)} scenarios",
+        )
+
         return {
             "success": True,
             "scenarios": [s.to_dict() for s in scenarios],
@@ -424,6 +497,11 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
 
     except (WorkerError, LLMError) as err:
         log.error("Generation failed", definitionId=definition_id, err=err)
+        emit_progress(
+            phase="failed",
+            expected_scenarios=expected_count,
+            message=f"Generation failed: {err.message}",
+        )
         return {
             "success": False,
             "error": err.to_dict(),
@@ -431,6 +509,11 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     except Exception as err:
         worker_err = classify_exception(err)
         log.error("Generation failed with unexpected error", definitionId=definition_id, err=err)
+        emit_progress(
+            phase="failed",
+            expected_scenarios=expected_count,
+            message=f"Generation failed: {str(err)}",
+        )
         return {
             "success": False,
             "error": worker_err.to_dict(),

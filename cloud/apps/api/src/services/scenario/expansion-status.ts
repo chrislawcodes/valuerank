@@ -11,6 +11,20 @@ const log = createLogger('services:scenario:expansion-status');
 
 export type ExpansionJobStatus = 'pending' | 'active' | 'completed' | 'failed' | 'none';
 
+/**
+ * Real-time progress during scenario expansion.
+ * This is updated by the Python worker via stderr JSON lines.
+ */
+export type ExpansionProgress = {
+  phase: string;
+  expectedScenarios: number;
+  generatedScenarios: number;
+  inputTokens: number;
+  outputTokens: number;
+  message: string;
+  updatedAt: string;
+};
+
 export type DefinitionExpansionStatus = {
   definitionId: string;
   status: ExpansionJobStatus;
@@ -20,11 +34,14 @@ export type DefinitionExpansionStatus = {
   completedAt: Date | null;
   error: string | null;
   scenarioCount: number;
+  /** Real-time progress during expansion (null when not expanding) */
+  progress: ExpansionProgress | null;
 };
 
 /**
  * Get the expansion status for a definition.
  * Queries PgBoss job tables to find the most recent expansion job.
+ * Also fetches real-time progress from the definition's expansionProgress field.
  */
 export async function getDefinitionExpansionStatus(
   definitionId: string
@@ -49,10 +66,18 @@ export async function getDefinitionExpansionStatus(
       LIMIT 1
     `;
 
-    // Get scenario count
+    // Get scenario count and expansion progress
+    const definition = await db.definition.findUnique({
+      where: { id: definitionId },
+      select: { expansionProgress: true },
+    });
+
     const scenarioCount = await db.scenario.count({
       where: { definitionId, deletedAt: null },
     });
+
+    // Parse expansion progress from JSONB
+    const progress = definition?.expansionProgress as ExpansionProgress | null;
 
     const currentJob = currentJobs[0];
     if (currentJob) {
@@ -80,6 +105,7 @@ export async function getDefinitionExpansionStatus(
         completedAt: currentJob.completed_on,
         error,
         scenarioCount,
+        progress,
       };
     }
 
@@ -96,6 +122,7 @@ export async function getDefinitionExpansionStatus(
       completedAt: null,
       error: null,
       scenarioCount,
+      progress: null,
     };
   } catch (error) {
     log.error({ error, definitionId }, 'Failed to fetch expansion status');
@@ -114,6 +141,7 @@ export async function getDefinitionExpansionStatus(
       completedAt: null,
       error: null,
       scenarioCount,
+      progress: null,
     };
   }
 }
