@@ -10,6 +10,16 @@ import { createLogger } from '@valuerank/shared';
 const log = createLogger('services:transcript');
 
 /**
+ * Provider metadata captured from LLM API response.
+ * Contains normalized finish reason and raw provider-specific data.
+ */
+export type ProviderMetadata = {
+  provider: string;
+  finishReason: string;
+  raw: Record<string, unknown>;
+};
+
+/**
  * Turn structure from Python probe worker.
  */
 export type TranscriptTurn = {
@@ -19,6 +29,7 @@ export type TranscriptTurn = {
   targetResponse: string;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  providerMetadata?: ProviderMetadata | null;
 };
 
 /**

@@ -99,10 +99,11 @@ class Turn:
     target_response: str
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
+    provider_metadata: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "turnNumber": self.turn_number,
             "promptLabel": self.prompt_label,
             "probePrompt": self.probe_prompt,
@@ -110,6 +111,9 @@ class Turn:
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
         }
+        if self.provider_metadata is not None:
+            result["providerMetadata"] = self.provider_metadata
+        return result
 
 
 @dataclass
@@ -243,6 +247,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             target_response=response.content,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
+            provider_metadata=response.provider_metadata,
         )
         transcript.turns.append(turn)
 
@@ -286,6 +291,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 target_response=response.content,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
+                provider_metadata=response.provider_metadata,
             )
             transcript.turns.append(turn)
 

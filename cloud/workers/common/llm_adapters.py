@@ -50,15 +50,72 @@ class LLMResponse:
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     model_version: Optional[str] = None
+    provider_metadata: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "content": self.content,
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
             "modelVersion": self.model_version,
         }
+        if self.provider_metadata is not None:
+            result["providerMetadata"] = self.provider_metadata
+        return result
+
+
+# Mapping of provider-specific finish reasons to normalized values
+FINISH_REASON_MAP: dict[str, dict[str, str]] = {
+    "openai": {
+        "stop": "stop",
+        "length": "max_tokens",
+        "content_filter": "content_filter",
+        "function_call": "tool_use",
+        "tool_calls": "tool_use",
+    },
+    "anthropic": {
+        "end_turn": "stop",
+        "max_tokens": "max_tokens",
+        "stop_sequence": "stop_sequence",
+        "tool_use": "tool_use",
+    },
+    "google": {
+        "STOP": "stop",
+        "SAFETY": "safety",
+        "RECITATION": "recitation",
+        "MAX_TOKENS": "max_tokens",
+        "OTHER": "other",
+        "BLOCKLIST": "blocklist",
+        "PROHIBITED_CONTENT": "prohibited_content",
+        "SPII": "spii",
+        "MALFORMED_FUNCTION_CALL": "malformed_function_call",
+    },
+    "xai": {
+        "stop": "stop",
+        "length": "max_tokens",
+    },
+    "deepseek": {
+        "stop": "stop",
+        "length": "max_tokens",
+        "content_filter": "content_filter",
+        "tool_calls": "tool_use",
+        "insufficient_system_resource": "system_error",
+    },
+    "mistral": {
+        "stop": "stop",
+        "length": "max_tokens",
+        "tool_calls": "tool_use",
+    },
+}
+
+
+def normalize_finish_reason(provider: str, raw_reason: Optional[str]) -> str:
+    """Normalize provider-specific finish reason to a standard value."""
+    if raw_reason is None:
+        return "unknown"
+    provider_map = FINISH_REASON_MAP.get(provider, {})
+    return provider_map.get(raw_reason, raw_reason.lower())
 
 
 class BaseLLMAdapter(ABC):
@@ -268,11 +325,33 @@ class OpenAIAdapter(BaseLLMAdapter):
             usage = data.get("usage", {})
             model_version = data.get("model")  # OpenAI returns resolved model ID
 
+            # Capture provider metadata
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "openai",
+                "finishReason": normalize_finish_reason("openai", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                    "system_fingerprint": data.get("system_fingerprint"),
+                    "logprobs": choice.get("logprobs"),
+                },
+            }
+
+            # Log warning if content was filtered
+            if raw_finish_reason == "content_filter":
+                log.warn(
+                    "OpenAI content filtered",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                )
+
             return LLMResponse(
                 content=content.strip() if content else "",
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 model_version=model_version,
+                provider_metadata=provider_metadata,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(
@@ -356,11 +435,24 @@ class AnthropicAdapter(BaseLLMAdapter):
             usage = data.get("usage", {})
             model_version = data.get("model")
 
+            # Capture provider metadata
+            raw_stop_reason = data.get("stop_reason")
+            provider_metadata = {
+                "provider": "anthropic",
+                "finishReason": normalize_finish_reason("anthropic", raw_stop_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "stop_reason": raw_stop_reason,
+                    "stop_sequence": data.get("stop_sequence"),
+                },
+            }
+
             return LLMResponse(
                 content="\n".join(text_parts).strip(),
                 input_tokens=usage.get("input_tokens"),
                 output_tokens=usage.get("output_tokens"),
                 model_version=model_version,
+                provider_metadata=provider_metadata,
             )
         except (KeyError, TypeError) as exc:
             raise LLMError(
@@ -431,25 +523,95 @@ class GeminiAdapter(BaseLLMAdapter):
         data = _post_json(url, headers, payload, timeout=self.timeout)
 
         try:
-            candidates = data.get("candidates", [])
-            if not candidates:
-                raise LLMError(
-                    message="Gemini response missing candidates",
-                    code=ErrorCode.INVALID_RESPONSE,
+            # Check for prompt-level blocking first
+            prompt_feedback = data.get("promptFeedback", {})
+            prompt_block_reason = prompt_feedback.get("blockReason")
+
+            if prompt_block_reason:
+                # Prompt was blocked - no candidates will be returned
+                provider_metadata = {
+                    "provider": "google",
+                    "finishReason": normalize_finish_reason("google", prompt_block_reason),
+                    "raw": {
+                        "promptFeedback": prompt_feedback,
+                        "candidates": [],
+                    },
+                }
+                log.warn(
+                    "Gemini prompt blocked",
+                    model=model,
+                    block_reason=prompt_block_reason,
+                    safety_ratings=prompt_feedback.get("safetyRatings"),
+                )
+                # Return empty content with metadata explaining why
+                usage = data.get("usageMetadata", {})
+                return LLMResponse(
+                    content="",
+                    input_tokens=usage.get("promptTokenCount"),
+                    output_tokens=0,
+                    model_version=None,
+                    provider_metadata=provider_metadata,
                 )
 
-            parts = candidates[0].get("content", {}).get("parts", [])
+            candidates = data.get("candidates", [])
+            if not candidates:
+                # No candidates but no block reason - unexpected
+                provider_metadata = {
+                    "provider": "google",
+                    "finishReason": "unknown",
+                    "raw": {
+                        "promptFeedback": prompt_feedback,
+                        "candidates": [],
+                    },
+                }
+                log.warn("Gemini response missing candidates", model=model)
+                usage = data.get("usageMetadata", {})
+                return LLMResponse(
+                    content="",
+                    input_tokens=usage.get("promptTokenCount"),
+                    output_tokens=0,
+                    model_version=None,
+                    provider_metadata=provider_metadata,
+                )
+
+            candidate = candidates[0]
+            raw_finish_reason = candidate.get("finishReason")
+            safety_ratings = candidate.get("safetyRatings", [])
+
+            parts = candidate.get("content", {}).get("parts", [])
             texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
             content = "\n".join(text.strip() for text in texts if text.strip())
 
             # Gemini includes usage metadata
             usage = data.get("usageMetadata", {})
 
+            # Build comprehensive provider metadata
+            provider_metadata = {
+                "provider": "google",
+                "finishReason": normalize_finish_reason("google", raw_finish_reason),
+                "raw": {
+                    "finishReason": raw_finish_reason,
+                    "safetyRatings": safety_ratings,
+                    "promptFeedback": prompt_feedback,
+                },
+            }
+
+            # Log warning if response was blocked by safety
+            if raw_finish_reason and raw_finish_reason != "STOP":
+                log.warn(
+                    "Gemini non-standard finish",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                    safety_ratings=safety_ratings,
+                    content_length=len(content),
+                )
+
             return LLMResponse(
                 content=content,
                 input_tokens=usage.get("promptTokenCount"),
                 output_tokens=usage.get("candidatesTokenCount"),
                 model_version=None,  # Gemini doesn't return model version
+                provider_metadata=provider_metadata,
             )
         except (KeyError, TypeError) as exc:
             raise LLMError(
@@ -506,11 +668,24 @@ class XAIAdapter(BaseLLMAdapter):
             content = choice["message"]["content"]
             usage = data.get("usage", {})
 
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "xai",
+                "finishReason": normalize_finish_reason("xai", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                    "system_fingerprint": data.get("system_fingerprint"),
+                },
+            }
+
             return LLMResponse(
                 content=content.strip() if content else "",
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 model_version=data.get("model"),
+                provider_metadata=provider_metadata,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(
@@ -570,11 +745,31 @@ class DeepSeekAdapter(BaseLLMAdapter):
             content = choice["message"]["content"]
             usage = data.get("usage", {})
 
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "deepseek",
+                "finishReason": normalize_finish_reason("deepseek", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                },
+            }
+
+            # Log warning for content filter or system resource issues
+            if raw_finish_reason in ("content_filter", "insufficient_system_resource"):
+                log.warn(
+                    "DeepSeek non-standard finish",
+                    model=model,
+                    finish_reason=raw_finish_reason,
+                )
+
             return LLMResponse(
                 content=content.strip() if content else "",
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 model_version=data.get("model"),
+                provider_metadata=provider_metadata,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(
@@ -631,11 +826,23 @@ class MistralAdapter(BaseLLMAdapter):
             content = choice["message"]["content"]
             usage = data.get("usage", {})
 
+            # Capture provider metadata (OpenAI-compatible format)
+            raw_finish_reason = choice.get("finish_reason")
+            provider_metadata = {
+                "provider": "mistral",
+                "finishReason": normalize_finish_reason("mistral", raw_finish_reason),
+                "raw": {
+                    "id": data.get("id"),
+                    "finish_reason": raw_finish_reason,
+                },
+            }
+
             return LLMResponse(
                 content=content.strip() if content else "",
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 model_version=data.get("model"),
+                provider_metadata=provider_metadata,
             )
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(
