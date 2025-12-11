@@ -203,6 +203,8 @@
 - [X] T038 [P] Update GraphQL schema documentation for new types and queries
 - [X] T039 Run validation scenarios from quickstart.md
 - [X] T040 Performance test: verify cost predictions return < 1 second
+- [X] T042 Add estimatedCost column to transcripts table (migration)
+- [X] T043 Store costSnapshot in transcript content during probe processing
 - [ ] T041 Optional: Create backfill script to compute stats from existing runs
 
 ---
