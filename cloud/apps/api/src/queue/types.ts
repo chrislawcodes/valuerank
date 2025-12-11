@@ -5,7 +5,7 @@
  */
 
 // Job type union
-export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios';
+export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -41,8 +41,12 @@ export type ExpandScenariosJobData = {
   triggeredBy: 'create' | 'update' | 'fork';
 };
 
+export type ComputeTokenStatsJobData = {
+  runId: string;
+};
+
 // Job data union type
-export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData;
+export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -86,6 +90,13 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryBackoff: true,
     expireInSeconds: 300, // 5 minutes
     singletonKey: 'definition', // Only one expansion per definition at a time
+  },
+  'compute_token_stats': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 120, // 2 minutes - stats computation is quick
+    singletonKey: 'run', // Only one stats computation per run at a time
   },
 };
 

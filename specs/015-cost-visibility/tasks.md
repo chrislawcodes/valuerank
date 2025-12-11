@@ -145,26 +145,26 @@
 
 ### Implementation for User Story 4
 
-- [ ] T027 [P] [US4] Register `compute_token_stats` job queue in `apps/api/src/queue/types.ts`:
+- [X] T027 [P] [US4] Register `compute_token_stats` job queue in `apps/api/src/queue/types.ts`:
   - Add job type definition
   - Define job data interface (runId)
-- [ ] T028 [P] [US4] Create Python worker in `workers/jobs/compute_token_stats.py`:
+- [X] T028 [P] [US4] Create Python worker in `workers/jobs/compute_token_stats.py`:
   - Query ProbeResult for completed probes with token data
   - Group by modelId
   - Compute averages using EMA (alpha=0.3)
   - Upsert ModelTokenStatistics
-- [ ] T029 [US4] Create Node.js job handler in `apps/api/src/jobs/compute-token-stats.ts`:
+- [X] T029 [US4] Create Node.js job handler in `apps/api/src/jobs/compute-token-stats.ts`:
   - Register with PgBoss
   - Call Python worker via subprocess or HTTP
   - Handle success/failure logging
-- [ ] T030 [US4] Trigger statistics job on run completion:
+- [X] T030 [US4] Trigger statistics job on run completion:
   - Modify run status change handler to queue compute_token_stats
   - Queue only when status changes to COMPLETED
-- [ ] T031 [US4] Add Python worker tests in `workers/tests/test_compute_token_stats.py`:
+- [X] T031 [US4] Add Python worker tests in `workers/tests/test_compute_token_stats.py`:
   - Test EMA calculation
   - Test handling of missing token data
   - Test upsert logic
-- [ ] T032 [US4] Add integration test for statistics job in `apps/api/tests/jobs/compute-token-stats.test.ts`
+- [X] T032 [US4] Add integration test for statistics job in `apps/api/tests/queue/handlers/compute-token-stats.test.ts`
 
 **Checkpoint**: User Story 4 complete - statistics automatically collected
 
