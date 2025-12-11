@@ -1,4 +1,7 @@
+import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
+import { ActualCostRef } from './cost-estimate.js';
+import { computeActualCost } from '../../services/cost/estimate.js';
 
 // Shape definitions for internal types
 type ContestedScenarioShape = {
@@ -169,6 +172,44 @@ builder.objectType(AnalysisResultRef, {
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
         return output?.warnings ?? [];
+      },
+    }),
+
+    // Actual cost computed from transcripts
+    actualCost: t.field({
+      type: ActualCostRef,
+      nullable: true,
+      description: 'Actual cost computed from completed transcripts for this run',
+      resolve: async (analysis) => {
+        // Get all transcripts for this run
+        const transcripts = await db.transcript.findMany({
+          where: { runId: analysis.runId },
+          select: {
+            modelId: true,
+            content: true,
+          },
+        });
+
+        if (transcripts.length === 0) {
+          return null;
+        }
+
+        // Compute actual cost from transcripts
+        const actualCost = await computeActualCost(transcripts);
+
+        // Transform perModel from Record<string, ModelActualCost> to array with modelId
+        const perModel = Object.entries(actualCost.perModel).map(([modelId, cost]) => ({
+          modelId,
+          inputTokens: cost.inputTokens,
+          outputTokens: cost.outputTokens,
+          cost: cost.cost,
+          probeCount: cost.probeCount,
+        }));
+
+        return {
+          total: actualCost.total,
+          perModel,
+        };
       },
     }),
   }),

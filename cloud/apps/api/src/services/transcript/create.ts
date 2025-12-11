@@ -34,6 +34,17 @@ export type ProbeTranscript = {
 };
 
 /**
+ * Cost snapshot for transcript.
+ */
+export type CostSnapshot = {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  costInputPerMillion: number;
+  costOutputPerMillion: number;
+};
+
+/**
  * Input for creating a transcript.
  */
 export type CreateTranscriptInput = {
@@ -42,13 +53,14 @@ export type CreateTranscriptInput = {
   modelId: string;
   transcript: ProbeTranscript;
   definitionSnapshot?: Prisma.InputJsonValue;
+  costSnapshot?: CostSnapshot;
 };
 
 /**
  * Create a transcript record from probe worker output.
  */
 export async function createTranscript(input: CreateTranscriptInput) {
-  const { runId, scenarioId, modelId, transcript, definitionSnapshot } = input;
+  const { runId, scenarioId, modelId, transcript, definitionSnapshot, costSnapshot } = input;
 
   // Calculate duration from timestamps
   const startedAt = new Date(transcript.startedAt);
@@ -56,16 +68,24 @@ export async function createTranscript(input: CreateTranscriptInput) {
   const durationMs = completedAt.getTime() - startedAt.getTime();
 
   // Build content structure for storage (JSONB)
-  const content = {
+  // Include costSnapshot if provided for actual cost computation
+  const content: Record<string, unknown> = {
     schemaVersion: 1,
     turns: transcript.turns,
   };
 
+  if (costSnapshot) {
+    content.costSnapshot = costSnapshot;
+  }
+
   // Calculate total token count
   const tokenCount = transcript.totalInputTokens + transcript.totalOutputTokens;
 
+  // Get estimatedCost from costSnapshot if available
+  const estimatedCost = costSnapshot?.estimatedCost ?? null;
+
   log.info(
-    { runId, scenarioId, modelId, turns: transcript.turns.length, tokenCount },
+    { runId, scenarioId, modelId, turns: transcript.turns.length, tokenCount, estimatedCost },
     'Creating transcript'
   );
 
@@ -80,10 +100,11 @@ export async function createTranscript(input: CreateTranscriptInput) {
       turnCount: transcript.turns.length,
       tokenCount,
       durationMs,
+      estimatedCost,
     },
   });
 
-  log.info({ transcriptId: record.id, runId }, 'Transcript created');
+  log.info({ transcriptId: record.id, runId, estimatedCost }, 'Transcript created');
 
   return record;
 }

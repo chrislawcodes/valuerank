@@ -15,6 +15,16 @@ vi.mock('../../../src/hooks/useAvailableModels', () => ({
   useAvailableModels: vi.fn(),
 }));
 
+// Mock the useCostEstimate hook
+vi.mock('../../../src/hooks/useCostEstimate', () => ({
+  useCostEstimate: vi.fn().mockReturnValue({
+    costEstimate: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 import { useAvailableModels } from '../../../src/hooks/useAvailableModels';
 
 function createMockModel(overrides: Partial<AvailableModel> = {}): AvailableModel {
@@ -162,7 +172,7 @@ describe('RunForm', () => {
     });
   });
 
-  it('shows run summary when models are selected', async () => {
+  it('shows cost estimate section when models are selected', async () => {
     const user = userEvent.setup();
 
     render(
@@ -177,10 +187,8 @@ describe('RunForm', () => {
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));
 
-    // Should show summary (1 model x 1 scenario = 1 job at 1% default)
-    expect(screen.getByText('Run Summary')).toBeInTheDocument();
-    expect(screen.getByText(/1 model/)).toBeInTheDocument();
-    expect(screen.getByText(/1 probe job/)).toBeInTheDocument();
+    // Should show cost estimate placeholder (since mock returns null costEstimate)
+    expect(screen.getByText('Select models to see cost estimate')).toBeInTheDocument();
   });
 
   it('calls onCancel when cancel is clicked', async () => {
@@ -308,9 +316,6 @@ describe('RunForm', () => {
     await user.click(screen.getByText('GPT-4'));
     await user.click(screen.getByText('Anthropic'));
     await user.click(screen.getByText('Claude 3'));
-
-    // Summary should show 2 models
-    expect(screen.getByText(/2 models/)).toBeInTheDocument();
 
     // Submit
     await user.click(screen.getByText('Start Run'));

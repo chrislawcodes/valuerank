@@ -3,11 +3,13 @@
  *
  * Allows users to select one or more LLM models for a run.
  * Groups models by provider and shows availability status.
+ * Displays cost estimates inline with provider/model names.
  */
 
-import { useState, useCallback } from 'react';
-import { Check, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Check, ChevronDown, ChevronUp, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import type { AvailableModel } from '../../api/operations/models';
+import type { CostEstimate, ModelCostEstimate } from '../../api/operations/costs';
 
 type ModelSelectorProps = {
   models: AvailableModel[];
@@ -15,6 +17,12 @@ type ModelSelectorProps = {
   onSelectionChange: (models: string[]) => void;
   disabled?: boolean;
   loading?: boolean;
+  /** Cost estimate for SELECTED models only (used for provider totals) */
+  costEstimate?: CostEstimate | null;
+  /** Cost estimate for ALL available models (used for individual model previews) */
+  allModelsCostEstimate?: CostEstimate | null;
+  /** Whether cost estimate is loading */
+  costLoading?: boolean;
 };
 
 type GroupedModels = Record<string, AvailableModel[]>;
@@ -50,17 +58,51 @@ function formatProviderName(providerId: string): string {
   return names[providerId] ?? providerId;
 }
 
+/**
+ * Formats a cost value for display with dynamic precision.
+ */
+function formatCost(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  if (cost < 1) return `$${cost.toFixed(3)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
 export function ModelSelector({
   models,
   selectedModels,
   onSelectionChange,
   disabled = false,
   loading = false,
+  costEstimate = null,
+  allModelsCostEstimate = null,
+  costLoading = false,
 }: ModelSelectorProps) {
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
 
   const groupedModels = groupModelsByProvider(models);
   const providerIds = Object.keys(groupedModels).sort();
+
+  // Create a map of modelId -> cost estimate for individual model previews (ALL models)
+  const allModelCostMap = useMemo(() => {
+    const map = new Map<string, ModelCostEstimate>();
+    if (allModelsCostEstimate?.perModel) {
+      for (const mc of allModelsCostEstimate.perModel) {
+        map.set(mc.modelId, mc);
+      }
+    }
+    return map;
+  }, [allModelsCostEstimate]);
+
+  // Create a map of modelId -> cost estimate for selected models only (for provider totals)
+  const selectedModelCostMap = useMemo(() => {
+    const map = new Map<string, ModelCostEstimate>();
+    if (costEstimate?.perModel) {
+      for (const mc of costEstimate.perModel) {
+        map.set(mc.modelId, mc);
+      }
+    }
+    return map;
+  }, [costEstimate]);
 
   const toggleProvider = useCallback((providerId: string) => {
     setExpandedProviders((prev) => {
@@ -159,6 +201,12 @@ export function ModelSelector({
             availableInProvider.length > 0 &&
             availableInProvider.every((m) => selectedModels.includes(m.id));
 
+          // Calculate total cost for selected models in this provider
+          const providerSelectedCost = selectedInProvider.reduce((sum, model) => {
+            const mc = selectedModelCostMap.get(model.id);
+            return sum + (mc?.totalCost ?? 0);
+          }, 0);
+
           return (
             <div key={providerId}>
               {/* Provider header */}
@@ -177,6 +225,15 @@ export function ModelSelector({
                   <span className="text-sm text-gray-500">
                     {selectedInProvider.length}/{availableInProvider.length} selected
                   </span>
+                  {/* Show provider cost sum when models are selected */}
+                  {selectedInProvider.length > 0 && providerSelectedCost > 0 && (
+                    <span className="text-sm font-medium text-teal-600">
+                      {formatCost(providerSelectedCost)}
+                    </span>
+                  )}
+                  {selectedInProvider.length > 0 && costLoading && (
+                    <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                  )}
                 </div>
                 {isExpanded ? (
                   <ChevronUp className="w-5 h-5 text-gray-400" />
@@ -208,6 +265,7 @@ export function ModelSelector({
                   {providerModels.map((model) => {
                     const isSelected = selectedModels.includes(model.id);
                     const isDisabled = disabled || !model.isAvailable;
+                    const modelCost = allModelCostMap.get(model.id);
 
                     return (
                       <button
@@ -221,17 +279,33 @@ export function ModelSelector({
                         } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         disabled={isDisabled}
                       >
-                        <div>
+                        <div className="flex items-center gap-2">
                           <span className="font-medium">{model.displayName}</span>
                           {!model.isAvailable && (
-                            <span className="ml-2 text-xs text-amber-600">
+                            <span className="text-xs text-amber-600">
                               (no API key)
                             </span>
                           )}
                         </div>
-                        {isSelected && (
-                          <Check className="w-4 h-4 text-teal-600" />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {/* Show cost estimate for this model (always when available) */}
+                          {modelCost && (
+                            <span className={`text-sm flex items-center gap-1 ${isSelected ? 'text-teal-700' : 'text-gray-500'}`}>
+                              {formatCost(modelCost.totalCost)}
+                              {modelCost.isUsingFallback && (
+                                <span title="Using estimated token counts (no historical data)">
+                                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {costLoading && (
+                            <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                          )}
+                          {isSelected && (
+                            <Check className="w-4 h-4 text-teal-600" />
+                          )}
+                        </div>
                       </button>
                     );
                   })}

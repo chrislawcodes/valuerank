@@ -611,16 +611,23 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
 
 ### Running Tests
 
+**IMPORTANT: Always use turbo to run tests across all packages.** Running `npm test` or `vitest` directly in a single package may miss cross-package dependencies and fail unexpectedly.
+
 ```bash
-# Run all tests (includes db:test:setup automatically)
-npm test
+# Run all tests across all packages (RECOMMENDED)
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npx turbo run test
 
 # Run tests with coverage
-npm run test:coverage
-
-# Run specific package tests
-JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
 DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
+npx turbo run test:coverage
+
+# Run specific package tests only (when you know which package)
+cd apps/api && \
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
+JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
 npx vitest run tests/path/to/test.ts
 
 # Run Python worker tests

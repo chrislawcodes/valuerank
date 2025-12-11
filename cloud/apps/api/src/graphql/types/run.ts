@@ -7,6 +7,7 @@ import { ExecutionMetrics } from './execution-metrics.js';
 import { ProbeResultRef, ProbeResultModelSummary } from './probe-result.js';
 import { calculatePercentComplete } from '../../services/run/index.js';
 import { AnalysisResultRef } from './analysis.js';
+import { CostEstimateRef, type CostEstimateShape } from './cost-estimate.js';
 import { getAllMetrics, getTotals } from '../../services/rate-limiter/index.js';
 
 // Re-export for backward compatibility
@@ -17,6 +18,16 @@ type ProgressData = {
   total: number;
   completed: number;
   failed: number;
+};
+
+// Type for run config stored in JSONB
+type RunConfig = {
+  models?: string[];
+  samplePercentage?: number;
+  sampleSeed?: number;
+  priority?: string;
+  definitionSnapshot?: unknown;
+  estimatedCosts?: CostEstimateShape;
 };
 
 builder.objectType(RunRef, {
@@ -375,6 +386,17 @@ builder.objectType(RunRef, {
           where: { runId: run.id, status: 'FAILED' },
           orderBy: [{ modelId: 'asc' }, { errorCode: 'asc' }],
         });
+      },
+    }),
+
+    // Estimated costs calculated when run was created
+    estimatedCosts: t.field({
+      type: CostEstimateRef,
+      nullable: true,
+      description: 'Estimated cost calculated when run was created. Stored in run config for historical reference.',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return config?.estimatedCosts ?? null;
       },
     }),
   }),

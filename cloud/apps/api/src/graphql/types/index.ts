@@ -35,6 +35,9 @@ import './health.js';
 // Analysis types
 import './analysis.js';
 
+// Cost types
+import './cost-estimate.js';
+
 // Audit types
 import './audit-log.js';
 

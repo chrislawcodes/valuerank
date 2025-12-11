@@ -32,6 +32,15 @@ vi.mock('../../../src/hooks/useAvailableModels', () => ({
   }),
 }));
 
+vi.mock('../../../src/hooks/useCostEstimate', () => ({
+  useCostEstimate: () => ({
+    costEstimate: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',

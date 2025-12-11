@@ -323,9 +323,10 @@ describe('Audit Log Queries', () => {
     });
 
     it('supports pagination with cursor', async () => {
+      // Filter to only this test's entity to avoid pollution from other tests
       const firstQuery = `
-        query AuditLogs($first: Int) {
-          auditLogs(first: $first) {
+        query AuditLogs($first: Int, $filter: AuditLogFilterInput) {
+          auditLogs(first: $first, filter: $filter) {
             nodes {
               id
             }
@@ -340,7 +341,7 @@ describe('Audit Log Queries', () => {
         .set('Authorization', getAuthHeader())
         .send({
           query: firstQuery,
-          variables: { first: 2 },
+          variables: { first: 2, filter: { entityId: testDefinition.id } },
         })
         .expect(200);
 
@@ -350,8 +351,8 @@ describe('Audit Log Queries', () => {
 
       // Get second page
       const secondQuery = `
-        query AuditLogs($first: Int, $after: String) {
-          auditLogs(first: $first, after: $after) {
+        query AuditLogs($first: Int, $after: String, $filter: AuditLogFilterInput) {
+          auditLogs(first: $first, after: $after, filter: $filter) {
             nodes {
               id
             }
@@ -364,7 +365,7 @@ describe('Audit Log Queries', () => {
         .set('Authorization', getAuthHeader())
         .send({
           query: secondQuery,
-          variables: { first: 2, after: cursor },
+          variables: { first: 2, after: cursor, filter: { entityId: testDefinition.id } },
         })
         .expect(200);
 

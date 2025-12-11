@@ -16,12 +16,14 @@ import type {
   AnalyzeBasicJobData,
   AnalyzeDeepJobData,
   ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
+import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
@@ -30,7 +32,7 @@ import {
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData };
+export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData };
 
 // Handler registration info
 type HandlerRegistration = {
@@ -87,6 +89,16 @@ const handlerRegistrations: HandlerRegistration[] = [
         'expand_scenarios',
         { batchSize },
         createExpandScenariosHandler()
+      );
+    },
+  },
+  {
+    name: 'compute_token_stats',
+    register: async (boss, batchSize) => {
+      await boss.work<ComputeTokenStatsJobData>(
+        'compute_token_stats',
+        { batchSize },
+        createComputeTokenStatsHandler()
       );
     },
   },

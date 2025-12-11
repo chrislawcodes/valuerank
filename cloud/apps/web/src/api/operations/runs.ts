@@ -72,6 +72,19 @@ export type RunDefinitionTag = {
   name: string;
 };
 
+export type ActualModelCost = {
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  probeCount: number;
+};
+
+export type ActualCost = {
+  total: number;
+  perModel: ActualModelCost[];
+};
+
 export type Run = {
   id: string;
   definitionId: string;
@@ -90,6 +103,9 @@ export type Run = {
   recentTasks: TaskResult[];
   analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
   executionMetrics: ExecutionMetrics | null;
+  analysis: {
+    actualCost: ActualCost | null;
+  } | null;
   definition: {
     id: string;
     name: string;
@@ -149,6 +165,18 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       estimatedCost
       createdAt
       lastAccessedAt
+    }
+    analysis {
+      actualCost {
+        total
+        perModel {
+          modelId
+          inputTokens
+          outputTokens
+          cost
+          probeCount
+        }
+      }
     }
     recentTasks(limit: 10) {
       scenarioId

@@ -42,6 +42,33 @@ type SummarizeWorkerOutput =
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
 
 /**
+ * Queues a compute_token_stats job for cost prediction data.
+ */
+async function queueComputeTokenStats(runId: string): Promise<void> {
+  // Dynamic import to avoid circular dependency
+  const { getBoss } = await import('../boss.js');
+
+  const boss = getBoss();
+  if (!boss) {
+    log.warn({ runId }, 'Cannot queue compute_token_stats - boss not initialized');
+    return;
+  }
+
+  const jobOptions = DEFAULT_JOB_OPTIONS['compute_token_stats'];
+
+  await boss.send(
+    'compute_token_stats',
+    { runId },
+    {
+      ...jobOptions,
+      singletonKey: runId, // Only one stats computation per run
+    }
+  );
+
+  log.info({ runId }, 'Queued compute_token_stats job');
+}
+
+/**
  * Check if all transcripts for a run have been summarized.
  */
 async function checkAllSummarized(runId: string): Promise<boolean> {
@@ -56,7 +83,7 @@ async function checkAllSummarized(runId: string): Promise<boolean> {
 
 /**
  * Update run status to COMPLETED if all transcripts are summarized.
- * Also triggers basic analysis for the completed run.
+ * Also triggers basic analysis and token statistics computation for the completed run.
  */
 async function maybeCompleteRun(runId: string): Promise<void> {
   const allDone = await checkAllSummarized(runId);
@@ -77,6 +104,14 @@ async function maybeCompleteRun(runId: string): Promise<void> {
     } catch (error) {
       // Log error but don't fail - analysis can be triggered manually
       log.error({ runId, err: error }, 'Failed to trigger basic analysis');
+    }
+
+    // Trigger token statistics computation for cost prediction
+    try {
+      await queueComputeTokenStats(runId);
+    } catch (error) {
+      // Log error but don't fail - stats can be computed manually
+      log.error({ runId, err: error }, 'Failed to trigger token stats computation');
     }
   }
 }

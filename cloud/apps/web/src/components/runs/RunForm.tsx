@@ -9,7 +9,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Play, AlertCircle, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
+import { CostBreakdown } from './CostBreakdown';
 import { useAvailableModels } from '../../hooks/useAvailableModels';
+import { useCostEstimate } from '../../hooks/useCostEstimate';
 import type { StartRunInput } from '../../api/operations/runs';
 
 type RunFormProps = {
@@ -53,6 +55,40 @@ export function RunForm({
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasPreselected, setHasPreselected] = useState(false);
+
+  // Get all available model IDs for cost preview
+  const allAvailableModelIds = models.filter((m) => m.isAvailable).map((m) => m.id);
+
+  // Fetch cost estimate for ALL available models (so we can show preview costs)
+  const {
+    costEstimate: allModelsCostEstimate,
+    loading: loadingCost,
+    error: costError,
+  } = useCostEstimate({
+    definitionId,
+    models: allAvailableModelIds,
+    samplePercentage: formState.samplePercentage,
+    pause: allAvailableModelIds.length === 0,
+  });
+
+  // Filter cost estimate to only selected models for summary display
+  const costEstimate = allModelsCostEstimate
+    ? (() => {
+        const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
+          formState.selectedModels.includes(m.modelId)
+        );
+        // Only show fallback warning if ANY selected model is using fallback
+        const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
+        return {
+          ...allModelsCostEstimate,
+          total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
+          perModel: selectedPerModel,
+          isUsingFallback,
+          // Clear fallback reason if no selected models are using fallback
+          fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
+        };
+      })()
+    : null;
 
   // Pre-select default models when models load
   useEffect(() => {
@@ -134,6 +170,9 @@ export function RunForm({
             onSelectionChange={handleModelSelectionChange}
             loading={loadingModels}
             disabled={isSubmitting}
+            costEstimate={costEstimate}
+            allModelsCostEstimate={allModelsCostEstimate}
+            costLoading={loadingCost}
           />
         )}
         {validationError && (
@@ -190,18 +229,14 @@ export function RunForm({
         )}
       </div>
 
-      {/* Summary */}
-      {totalJobs !== null && totalJobs > 0 && (
-        <div className="p-4 bg-teal-50 rounded-lg">
-          <h4 className="text-sm font-medium text-teal-900 mb-1">Run Summary</h4>
-          <p className="text-sm text-teal-700">
-            {formState.selectedModels.length} model{formState.selectedModels.length !== 1 ? 's' : ''}
-            {' x '}
-            {estimatedScenarios} scenario{estimatedScenarios !== 1 ? 's' : ''}
-            {' = '}
-            <strong>{totalJobs} probe job{totalJobs !== 1 ? 's' : ''}</strong>
-          </p>
-        </div>
+      {/* Cost Estimate Summary */}
+      {formState.selectedModels.length > 0 && (
+        <CostBreakdown
+          costEstimate={costEstimate}
+          loading={loadingCost}
+          error={costError}
+          compact
+        />
       )}
 
       {/* Actions */}
