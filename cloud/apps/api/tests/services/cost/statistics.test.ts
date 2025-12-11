@@ -4,10 +4,11 @@
  * Tests statistics queries and updates.
  */
 
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { db } from '@valuerank/db';
 import {
   getTokenStatsForModels,
+  getTokenStatsForDefinition,
   getAllModelAverage,
   upsertTokenStats,
 } from '../../../src/services/cost/statistics.js';
@@ -208,7 +209,176 @@ describe('token statistics service', () => {
     });
   });
 
+  describe('getTokenStatsForDefinition', () => {
+    let testDefinitionId: string;
+
+    beforeAll(async () => {
+      // Create test definition for these tests
+      const definition = await db.definition.create({
+        data: {
+          name: `test-def-stats-${Date.now()}`,
+          content: { schema_version: 1, preamble: 'Test definition for stats' },
+        },
+      });
+      testDefinitionId = definition.id;
+    });
+
+    afterEach(async () => {
+      // Clean up all stats for our test models after each test
+      await db.modelTokenStatistics.deleteMany({
+        where: {
+          modelId: { in: [testModel1DbId, testModel2DbId, testModel3DbId] },
+        },
+      });
+    });
+
+    it('returns empty map for empty model list', async () => {
+      const result = await getTokenStatsForDefinition([], testDefinitionId);
+      expect(result.size).toBe(0);
+    });
+
+    it('returns definition-specific stats when available', async () => {
+      // Create definition-specific stats
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: testDefinitionId,
+          avgInputTokens: 800,
+          avgOutputTokens: 2000,
+          sampleCount: 50,
+        },
+      });
+
+      // Create global stats (should be ignored when def-specific exists)
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: null,
+          avgInputTokens: 500,
+          avgOutputTokens: 1500,
+          sampleCount: 100,
+        },
+      });
+
+      const result = await getTokenStatsForDefinition([testModel1Id], testDefinitionId);
+
+      expect(result.size).toBe(1);
+      expect(result.get(testModel1Id)).toBeDefined();
+      // Should return definition-specific stats, not global
+      expect(result.get(testModel1Id)?.avgInputTokens).toBe(800);
+      expect(result.get(testModel1Id)?.avgOutputTokens).toBe(2000);
+      expect(result.get(testModel1Id)?.sampleCount).toBe(50);
+    });
+
+    it('falls back to global stats when no definition-specific stats exist', async () => {
+      // Only create global stats (no definition-specific)
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: null,
+          avgInputTokens: 500,
+          avgOutputTokens: 1500,
+          sampleCount: 100,
+        },
+      });
+
+      const result = await getTokenStatsForDefinition([testModel1Id], testDefinitionId);
+
+      expect(result.size).toBe(1);
+      expect(result.get(testModel1Id)).toBeDefined();
+      // Should return global stats as fallback
+      expect(result.get(testModel1Id)?.avgInputTokens).toBe(500);
+      expect(result.get(testModel1Id)?.avgOutputTokens).toBe(1500);
+      expect(result.get(testModel1Id)?.sampleCount).toBe(100);
+    });
+
+    it('returns empty map when no stats exist at all', async () => {
+      const result = await getTokenStatsForDefinition([testModel1Id], testDefinitionId);
+      expect(result.size).toBe(0);
+    });
+
+    it('handles mixed case: some models have def stats, others only global', async () => {
+      // Model 1: has definition-specific stats
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: testDefinitionId,
+          avgInputTokens: 800,
+          avgOutputTokens: 2000,
+          sampleCount: 50,
+        },
+      });
+
+      // Model 2: only has global stats
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel2DbId,
+          definitionId: null,
+          avgInputTokens: 600,
+          avgOutputTokens: 1800,
+          sampleCount: 200,
+        },
+      });
+
+      // Model 1 also has global stats (should be ignored for model 1)
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: null,
+          avgInputTokens: 500,
+          avgOutputTokens: 1500,
+          sampleCount: 100,
+        },
+      });
+
+      const result = await getTokenStatsForDefinition(
+        [testModel1Id, testModel2Id],
+        testDefinitionId
+      );
+
+      expect(result.size).toBe(2);
+
+      // Model 1 should have definition-specific stats
+      expect(result.get(testModel1Id)?.avgInputTokens).toBe(800);
+
+      // Model 2 should fall back to global stats
+      expect(result.get(testModel2Id)?.avgInputTokens).toBe(600);
+    });
+
+    it('handles case where model has no stats anywhere (not returned)', async () => {
+      // Model 1 has definition-specific stats
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModel1DbId,
+          definitionId: testDefinitionId,
+          avgInputTokens: 800,
+          avgOutputTokens: 2000,
+          sampleCount: 50,
+        },
+      });
+
+      // Model 2 has no stats anywhere
+
+      const result = await getTokenStatsForDefinition(
+        [testModel1Id, testModel2Id],
+        testDefinitionId
+      );
+
+      // Only model 1 should be in results
+      expect(result.size).toBe(1);
+      expect(result.has(testModel1Id)).toBe(true);
+      expect(result.has(testModel2Id)).toBe(false);
+    });
+  });
+
   describe('getAllModelAverage', () => {
+    beforeEach(async () => {
+      // Clean up any existing stats before each test
+      await db.modelTokenStatistics.deleteMany({
+        where: { modelId: { in: [testModel1DbId, testModel2DbId, testModel3DbId] } },
+      });
+    });
+
     it('returns null when DB is empty', async () => {
       // Ensure no stats exist for our test models (use database UUIDs)
       await db.modelTokenStatistics.deleteMany({

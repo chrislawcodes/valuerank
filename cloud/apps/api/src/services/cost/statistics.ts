@@ -70,6 +70,93 @@ export type AllModelAverage = {
 };
 
 /**
+ * Fetches token statistics for specific models for a specific definition.
+ * Returns definition-specific stats if available, otherwise returns global stats.
+ *
+ * Fallback chain: definition stats → global stats (caller handles remaining fallbacks)
+ *
+ * @param modelIds - Array of model identifier strings to fetch stats for
+ * @param definitionId - Definition ID to get definition-specific stats for
+ * @returns Map of model identifier to ModelTokenStats
+ */
+export async function getTokenStatsForDefinition(
+  modelIds: string[],
+  definitionId: string
+): Promise<Map<string, ModelTokenStats>> {
+  if (modelIds.length === 0) {
+    return new Map();
+  }
+
+  // First, try to get definition-specific statistics
+  const definitionStats = await db.modelTokenStatistics.findMany({
+    where: {
+      model: {
+        modelId: { in: modelIds },
+      },
+      definitionId: definitionId,
+    },
+    include: {
+      model: {
+        select: { modelId: true },
+      },
+    },
+  });
+
+  // Build map from definition-specific stats
+  const result = new Map<string, ModelTokenStats>(
+    definitionStats.map((s) => [
+      s.model.modelId,
+      {
+        modelId: s.model.modelId,
+        avgInputTokens: Number(s.avgInputTokens),
+        avgOutputTokens: Number(s.avgOutputTokens),
+        sampleCount: s.sampleCount,
+        lastUpdatedAt: s.lastUpdatedAt,
+      },
+    ])
+  );
+
+  // Find models without definition-specific stats
+  const modelsWithDefStats = new Set(definitionStats.map((s) => s.model.modelId));
+  const modelsNeedingGlobalStats = modelIds.filter((id) => !modelsWithDefStats.has(id));
+
+  if (modelsNeedingGlobalStats.length > 0) {
+    // Fetch global stats for models without definition-specific stats
+    const globalStats = await db.modelTokenStatistics.findMany({
+      where: {
+        model: {
+          modelId: { in: modelsNeedingGlobalStats },
+        },
+        definitionId: null, // Global stats only
+      },
+      include: {
+        model: {
+          select: { modelId: true },
+        },
+      },
+    });
+
+    // Add global stats to result map
+    for (const s of globalStats) {
+      result.set(s.model.modelId, {
+        modelId: s.model.modelId,
+        avgInputTokens: Number(s.avgInputTokens),
+        avgOutputTokens: Number(s.avgOutputTokens),
+        sampleCount: s.sampleCount,
+        lastUpdatedAt: s.lastUpdatedAt,
+      });
+    }
+  }
+
+  log.debug(
+    { modelIds, definitionId, defStatsCount: definitionStats.length, totalFound: result.size },
+    'Fetched definition-aware token statistics'
+  );
+
+  return result;
+}
+
+/**
  * Calculates the average token counts across all models.
  * Used as fallback when a specific model has no statistics.
  *

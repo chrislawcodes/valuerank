@@ -14,7 +14,7 @@ import type {
   ModelActualCost,
 } from './types.js';
 import { FALLBACK_TOKENS } from './types.js';
-import { getTokenStatsForModels, getAllModelAverage } from './statistics.js';
+import { getTokenStatsForModels, getTokenStatsForDefinition, getAllModelAverage } from './statistics.js';
 
 const log = createLogger('services:cost:estimate');
 
@@ -108,7 +108,8 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
   const modelMap = new Map(models.map((m) => [m.modelId, m]));
 
   // Fetch token statistics for all models
-  const tokenStats = await getTokenStatsForModels(modelIds);
+  // Use definition-aware lookup which implements fallback: definition stats → global stats
+  const tokenStats = await getTokenStatsForDefinition(modelIds, definitionId);
 
   // Get all-model average as fallback
   const allModelAvg = await getAllModelAverage();

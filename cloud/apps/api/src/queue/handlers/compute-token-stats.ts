@@ -41,9 +41,16 @@ type ExistingStatsData = {
  */
 type ComputeWorkerInput = {
   runId: string;
+  definitionId: string;
   probeResults: ProbeResultData[];
   existingStats: Record<string, ExistingStatsData>;
+  existingDefinitionStats: Record<string, ExistingStatsData>;
 };
+
+/**
+ * Stats result from Python worker.
+ */
+type StatsResult = { avgInputTokens: number; avgOutputTokens: number; sampleCount: number };
 
 /**
  * Python worker output structure.
@@ -51,7 +58,8 @@ type ComputeWorkerInput = {
 type ComputeWorkerOutput =
   | {
       success: true;
-      stats: Record<string, { avgInputTokens: number; avgOutputTokens: number; sampleCount: number }>;
+      stats: Record<string, StatsResult>;
+      definitionStats: Record<string, StatsResult>;
       summary: { modelsUpdated: number; totalProbesProcessed: number; durationMs: number };
     }
   | { success: false; error: { message: string; code: string; retryable: boolean } };
@@ -71,7 +79,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Check if run exists and is completed
         const run = await db.run.findUnique({
           where: { id: runId },
-          select: { id: true, status: true },
+          select: { id: true, status: true, definitionId: true },
         });
 
         if (!run) {
@@ -118,6 +126,9 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
 
         // Fetch existing token stats for these models (by database ID)
         const dbModelIds = models.map((m) => m.id);
+        const definitionId = run.definitionId;
+
+        // Fetch global stats
         const existingStatsRecords = await db.modelTokenStatistics.findMany({
           where: {
             modelId: { in: dbModelIds },
@@ -128,10 +139,31 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
           },
         });
 
-        // Build existing stats map keyed by model identifier
+        // Fetch definition-specific stats
+        const existingDefStatsRecords = await db.modelTokenStatistics.findMany({
+          where: {
+            modelId: { in: dbModelIds },
+            definitionId: definitionId,
+          },
+          include: {
+            model: { select: { modelId: true } },
+          },
+        });
+
+        // Build existing stats map keyed by model identifier (global)
         const existingStats: Record<string, ExistingStatsData> = {};
         for (const stats of existingStatsRecords) {
           existingStats[stats.model.modelId] = {
+            avgInputTokens: Number(stats.avgInputTokens),
+            avgOutputTokens: Number(stats.avgOutputTokens),
+            sampleCount: stats.sampleCount,
+          };
+        }
+
+        // Build existing definition stats map keyed by model identifier
+        const existingDefinitionStats: Record<string, ExistingStatsData> = {};
+        for (const stats of existingDefStatsRecords) {
+          existingDefinitionStats[stats.model.modelId] = {
             avgInputTokens: Number(stats.avgInputTokens),
             avgOutputTokens: Number(stats.avgOutputTokens),
             sampleCount: stats.sampleCount,
@@ -153,7 +185,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Execute Python worker
         const result = await spawnPython<ComputeWorkerInput, ComputeWorkerOutput>(
           WORKER_PATH,
-          { runId, probeResults: probeData, existingStats },
+          { runId, definitionId, probeResults: probeData, existingStats, existingDefinitionStats },
           { cwd: path.resolve(process.cwd(), '../..'), timeout: 60000 }
         );
 
@@ -177,9 +209,11 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         }
 
         // Update database with new stats
-        const { stats, summary } = output;
-        let updatedCount = 0;
+        const { stats, definitionStats, summary } = output;
+        let globalUpdatedCount = 0;
+        let defUpdatedCount = 0;
 
+        // Update global stats
         for (const [modelIdentifier, newStats] of Object.entries(stats)) {
           const dbModelId = modelIdMap.get(modelIdentifier);
           if (!dbModelId) {
@@ -194,14 +228,34 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
             avgOutputTokens: newStats.avgOutputTokens,
             sampleCount: newStats.sampleCount,
           });
-          updatedCount++;
+          globalUpdatedCount++;
+        }
+
+        // Update definition-specific stats
+        for (const [modelIdentifier, newStats] of Object.entries(definitionStats)) {
+          const dbModelId = modelIdMap.get(modelIdentifier);
+          if (!dbModelId) {
+            log.warn({ modelIdentifier }, 'Model ID not found in database, skipping definition stats update');
+            continue;
+          }
+
+          await upsertTokenStats({
+            modelId: dbModelId,
+            definitionId: definitionId, // Definition-specific stats
+            avgInputTokens: newStats.avgInputTokens,
+            avgOutputTokens: newStats.avgOutputTokens,
+            sampleCount: newStats.sampleCount,
+          });
+          defUpdatedCount++;
         }
 
         log.info(
           {
             jobId,
             runId,
-            modelsUpdated: updatedCount,
+            definitionId,
+            globalModelsUpdated: globalUpdatedCount,
+            definitionModelsUpdated: defUpdatedCount,
             totalProbes: summary.totalProbesProcessed,
             durationMs: summary.durationMs,
           },

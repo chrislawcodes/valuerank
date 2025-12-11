@@ -5,6 +5,8 @@ Compute Token Stats Worker - Updates model token statistics after run completion
 Computes average input/output tokens per model from completed probes,
 using exponential moving average (EMA) to weight recent data.
 
+Computes BOTH global stats (across all definitions) AND definition-specific stats.
+
 Protocol:
 - Reads JSON input from stdin
 - Writes JSON output to stdout
@@ -13,6 +15,7 @@ Protocol:
 Input format:
 {
   "runId": string,
+  "definitionId": string,
   "probeResults": [
     {
       "modelId": string,
@@ -26,6 +29,13 @@ Input format:
       "avgOutputTokens": number,
       "sampleCount": number
     }
+  },
+  "existingDefinitionStats": {
+    "<modelId>": {
+      "avgInputTokens": number,
+      "avgOutputTokens": number,
+      "sampleCount": number
+    }
   }
 }
 
@@ -33,6 +43,13 @@ Output format:
 {
   "success": true,
   "stats": {
+    "<modelId>": {
+      "avgInputTokens": number,
+      "avgOutputTokens": number,
+      "sampleCount": number
+    }
+  },
+  "definitionStats": {
     "<modelId>": {
       "avgInputTokens": number,
       "avgOutputTokens": number,
@@ -231,7 +248,8 @@ def main() -> None:
             return
 
         run_id = input_data.get("runId", "unknown")
-        log.info("Processing compute_token_stats job", runId=run_id)
+        definition_id = input_data.get("definitionId", "unknown")
+        log.info("Processing compute_token_stats job", runId=run_id, definitionId=definition_id)
 
         # Validate input
         try:
@@ -243,29 +261,38 @@ def main() -> None:
 
         probe_results = input_data["probeResults"]
         existing_stats = input_data.get("existingStats", {})
+        existing_definition_stats = input_data.get("existingDefinitionStats", {})
 
         log.info(
             f"Computing stats from {len(probe_results)} probe results",
             runId=run_id,
+            definitionId=definition_id,
             probeCount=len(probe_results),
-            existingModels=len(existing_stats),
+            existingGlobalModels=len(existing_stats),
+            existingDefModels=len(existing_definition_stats),
         )
 
-        # Compute new statistics
-        new_stats = compute_stats(probe_results, existing_stats)
+        # Compute global statistics (using existing global stats)
+        new_global_stats = compute_stats(probe_results, existing_stats)
+
+        # Compute definition-specific statistics (using existing definition stats)
+        new_definition_stats = compute_stats(probe_results, existing_definition_stats)
 
         # Calculate summary
         total_probes = sum(
             len(group_probes_by_model(probe_results).get(m, {}).get("input", []))
-            for m in new_stats.keys()
+            for m in new_global_stats.keys()
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
 
         log.info(
-            f"Stats computation complete: {len(new_stats)} models updated",
+            f"Stats computation complete: {len(new_global_stats)} models updated (global), "
+            f"{len(new_definition_stats)} models updated (definition)",
             runId=run_id,
-            modelsUpdated=len(new_stats),
+            definitionId=definition_id,
+            globalModelsUpdated=len(new_global_stats),
+            definitionModelsUpdated=len(new_definition_stats),
             totalProbes=total_probes,
             durationMs=duration_ms,
         )
@@ -273,9 +300,10 @@ def main() -> None:
         # Output success result
         output = {
             "success": True,
-            "stats": new_stats,
+            "stats": new_global_stats,
+            "definitionStats": new_definition_stats,
             "summary": {
-                "modelsUpdated": len(new_stats),
+                "modelsUpdated": len(new_global_stats),
                 "totalProbesProcessed": total_probes,
                 "durationMs": duration_ms,
             },

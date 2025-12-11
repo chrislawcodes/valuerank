@@ -156,7 +156,7 @@ describe('compute-token-stats handler', () => {
 
   describe('successful stats computation', () => {
     it('creates ModelTokenStatistics with computed averages', async () => {
-      // Mock Python worker response
+      // Mock Python worker response (includes both global and definition stats)
       vi.mocked(spawnPython).mockResolvedValue({
         success: true,
         data: {
@@ -165,6 +165,13 @@ describe('compute-token-stats handler', () => {
             'test-gpt-4': {
               avgInputTokens: 150, // Average of 100, 200
               avgOutputTokens: 550, // Average of 500, 600
+              sampleCount: 2,
+            },
+          },
+          definitionStats: {
+            'test-gpt-4': {
+              avgInputTokens: 150,
+              avgOutputTokens: 550,
               sampleCount: 2,
             },
           },
@@ -179,23 +186,44 @@ describe('compute-token-stats handler', () => {
       const handler = createComputeTokenStatsHandler();
       await handler([createMockJob()]);
 
-      // Verify stats were created
-      const stats = await db.modelTokenStatistics.findFirst({
+      // Verify global stats were created
+      const globalStats = await db.modelTokenStatistics.findFirst({
         where: { modelId: testModelDbId, definitionId: null },
       });
 
-      expect(stats).not.toBeNull();
-      expect(Number(stats?.avgInputTokens)).toBe(150);
-      expect(Number(stats?.avgOutputTokens)).toBe(550);
-      expect(stats?.sampleCount).toBe(2);
+      expect(globalStats).not.toBeNull();
+      expect(Number(globalStats?.avgInputTokens)).toBe(150);
+      expect(Number(globalStats?.avgOutputTokens)).toBe(550);
+      expect(globalStats?.sampleCount).toBe(2);
+
+      // Verify definition-specific stats were created
+      const defStats = await db.modelTokenStatistics.findFirst({
+        where: { modelId: testModelDbId, definitionId: TEST_IDS.definition },
+      });
+
+      expect(defStats).not.toBeNull();
+      expect(Number(defStats?.avgInputTokens)).toBe(150);
+      expect(Number(defStats?.avgOutputTokens)).toBe(550);
+      expect(defStats?.sampleCount).toBe(2);
     });
 
     it('updates existing stats with EMA', async () => {
-      // Create existing stats
+      // Create existing global stats
       await db.modelTokenStatistics.create({
         data: {
           modelId: testModelDbId,
           definitionId: null,
+          avgInputTokens: 100,
+          avgOutputTokens: 500,
+          sampleCount: 50,
+        },
+      });
+
+      // Create existing definition stats
+      await db.modelTokenStatistics.create({
+        data: {
+          modelId: testModelDbId,
+          definitionId: TEST_IDS.definition,
           avgInputTokens: 100,
           avgOutputTokens: 500,
           sampleCount: 50,
@@ -214,6 +242,13 @@ describe('compute-token-stats handler', () => {
               sampleCount: 52,
             },
           },
+          definitionStats: {
+            'test-gpt-4': {
+              avgInputTokens: 115,
+              avgOutputTokens: 515,
+              sampleCount: 52,
+            },
+          },
           summary: {
             modelsUpdated: 1,
             totalProbesProcessed: 2,
@@ -225,15 +260,25 @@ describe('compute-token-stats handler', () => {
       const handler = createComputeTokenStatsHandler();
       await handler([createMockJob()]);
 
-      // Verify stats were updated
-      const stats = await db.modelTokenStatistics.findFirst({
+      // Verify global stats were updated
+      const globalStats = await db.modelTokenStatistics.findFirst({
         where: { modelId: testModelDbId, definitionId: null },
       });
 
-      expect(stats).not.toBeNull();
-      expect(Number(stats?.avgInputTokens)).toBe(115);
-      expect(Number(stats?.avgOutputTokens)).toBe(515);
-      expect(stats?.sampleCount).toBe(52);
+      expect(globalStats).not.toBeNull();
+      expect(Number(globalStats?.avgInputTokens)).toBe(115);
+      expect(Number(globalStats?.avgOutputTokens)).toBe(515);
+      expect(globalStats?.sampleCount).toBe(52);
+
+      // Verify definition stats were updated
+      const defStats = await db.modelTokenStatistics.findFirst({
+        where: { modelId: testModelDbId, definitionId: TEST_IDS.definition },
+      });
+
+      expect(defStats).not.toBeNull();
+      expect(Number(defStats?.avgInputTokens)).toBe(115);
+      expect(Number(defStats?.avgOutputTokens)).toBe(515);
+      expect(defStats?.sampleCount).toBe(52);
     });
   });
 

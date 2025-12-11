@@ -178,16 +178,16 @@
 
 ### Implementation for User Story 5
 
-- [ ] T033 [US5] Extend statistics queries in `apps/api/src/services/cost/statistics.ts`:
+- [X] T033 [US5] Extend statistics queries in `apps/api/src/services/cost/statistics.ts`:
   - `getTokenStatsForDefinition(modelIds, definitionId)` - definition-specific lookup
   - Fallback chain: definition stats → global model stats → all-model avg → system default
-- [ ] T034 [US5] Modify cost estimation to use definition stats when available in `apps/api/src/services/cost/estimate.ts`:
+- [X] T034 [US5] Modify cost estimation to use definition stats when available in `apps/api/src/services/cost/estimate.ts`:
   - Add optional definitionId parameter
   - Implement fallback chain
-- [ ] T035 [US5] Extend Python worker to compute per-definition stats in `workers/jobs/compute_token_stats.py`:
+- [X] T035 [US5] Extend Python worker to compute per-definition stats in `workers/jobs/compute_token_stats.py`:
   - Group by modelId AND definitionId
   - Upsert both global and definition-specific stats
-- [ ] T036 [US5] Add tests for per-definition statistics:
+- [X] T036 [US5] Add tests for per-definition statistics:
   - Test fallback chain
   - Test definition-specific averages
 
