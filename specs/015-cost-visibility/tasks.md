@@ -199,10 +199,10 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T037 [P] Run full test suite and verify 80% coverage for new code
-- [ ] T038 [P] Update GraphQL schema documentation for new types and queries
-- [ ] T039 Run validation scenarios from quickstart.md
-- [ ] T040 Performance test: verify cost predictions return < 1 second
+- [X] T037 [P] Run full test suite and verify 80% coverage for new code
+- [X] T038 [P] Update GraphQL schema documentation for new types and queries
+- [X] T039 Run validation scenarios from quickstart.md
+- [X] T040 Performance test: verify cost predictions return < 1 second
 - [ ] T041 Optional: Create backfill script to compute stats from existing runs
 
 ---
