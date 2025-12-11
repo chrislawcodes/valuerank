@@ -80,7 +80,7 @@ describe('GraphQL Definition Query', () => {
     // Create definition with runs for hasRuns filter testing
     definitionWithRuns = await db.definition.create({
       data: {
-        name: 'Definition With Runs',
+        name: 'Definition HasRunsFilter UniqueXYZ789',
         content: { schema_version: 1, preamble: 'Has runs' },
       },
     });
@@ -663,7 +663,7 @@ describe('GraphQL Definition Query', () => {
       const response = await request(app)
         .post('/graphql')
         .set('Authorization', getAuthHeader())
-        .send({ query, variables: { hasRuns: true, search: 'With Runs' } })
+        .send({ query, variables: { hasRuns: true, search: 'HasRunsFilter UniqueXYZ789' } })
         .expect(200);
 
       expect(response.body.errors).toBeUndefined();
