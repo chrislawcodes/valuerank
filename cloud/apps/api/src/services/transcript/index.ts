@@ -3,4 +3,4 @@
  */
 
 export { createTranscript, validateTranscript } from './create.js';
-export type { CreateTranscriptInput, ProbeTranscript, TranscriptTurn } from './create.js';
+export type { CreateTranscriptInput, ProbeTranscript, TranscriptTurn, CostSnapshot } from './create.js';

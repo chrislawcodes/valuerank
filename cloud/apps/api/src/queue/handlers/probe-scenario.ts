@@ -18,7 +18,7 @@ import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from '../../services/run/index.js';
 import { createTranscript, validateTranscript } from '../../services/transcript/index.js';
-import type { ProbeTranscript } from '../../services/transcript/index.js';
+import type { ProbeTranscript, CostSnapshot } from '../../services/transcript/index.js';
 import { recordProbeSuccess, recordProbeFailure } from '../../services/probe-result/index.js';
 import { LLM_PROVIDERS } from '../../config/models.js';
 import { schedule as rateLimitSchedule } from '../../services/rate-limiter/index.js';
@@ -434,13 +434,31 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       throw new Error('Invalid transcript structure');
     }
 
-    // Create transcript record
+    // Create transcript record with cost snapshot if model cost info available
+    let costSnapshot: CostSnapshot | undefined;
+    if (workerInput.modelCost) {
+      const { costInputPerMillion, costOutputPerMillion } = workerInput.modelCost;
+      const inputTokens = output.transcript.totalInputTokens;
+      const outputTokens = output.transcript.totalOutputTokens;
+      const estimatedCost =
+        (inputTokens * costInputPerMillion) / 1_000_000 +
+        (outputTokens * costOutputPerMillion) / 1_000_000;
+      costSnapshot = {
+        inputTokens,
+        outputTokens,
+        estimatedCost,
+        costInputPerMillion,
+        costOutputPerMillion,
+      };
+    }
+
     const transcriptRecord = await createTranscript({
       runId,
       scenarioId,
       modelId,
       transcript: output.transcript,
       definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+      costSnapshot,
     });
 
     // Record probe success in results table

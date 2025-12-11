@@ -223,6 +223,8 @@ model Transcript {
   turnCount          Int       @map("turn_count")
   tokenCount         Int       @map("token_count")
   durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
   createdAt          DateTime  @default(now()) @map("created_at")
   lastAccessedAt     DateTime? @map("last_accessed_at")
   // Retention (NULL = permanent, default)
