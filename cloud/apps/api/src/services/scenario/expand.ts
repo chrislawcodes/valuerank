@@ -1,18 +1,21 @@
 /**
  * Scenario Expansion Service
  *
- * Generates scenarios from a definition using LLM-based generation.
- * Uses the configured infrastructure model for scenario expansion.
- * Matches the devtool approach: builds a prompt, calls LLM, parses YAML output.
+ * Generates scenarios from a definition using the Python worker infrastructure.
+ * This delegates LLM calls to the Python worker which has robust retry logic,
+ * rate limiting, and support for all LLM providers via the database configuration.
  */
 
+import path from 'path';
 import { db, type DefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
-import { parse as parseYaml } from 'yaml';
-import { callLLM, extractYaml } from '../llm/generate.js';
+import { spawnPython } from '../../queue/spawn.js';
 import { getScenarioExpansionModel } from '../infra-models.js';
 
 const log = createLogger('services:scenario:expand');
+
+// Path to Python worker (relative to cloud/ directory)
+const GENERATE_SCENARIOS_WORKER = 'workers/generate_scenarios.py';
 
 // Scenario content structure (matches what probe worker expects)
 type ScenarioContent = {
@@ -23,35 +26,47 @@ type ScenarioContent = {
   dimensions: Record<string, number>;
 };
 
-// Frontend stores dimensions with levels (score, label, options)
-type StoredDimensionLevel = {
-  score: number;
-  label: string;
-  description?: string;
-  options?: string[];
+// Input for Python worker
+type GenerateScenariosInput = {
+  definitionId: string;
+  modelId: string;
+  content: {
+    preamble?: string;
+    template: string;
+    dimensions: unknown[];
+    matching_rules?: string;
+  };
+  config: {
+    temperature: number;
+    maxTokens: number;
+  };
+  modelConfig?: Record<string, unknown>;
 };
 
-type StoredDimension = {
-  name: string;
-  // Frontend format with levels
-  levels?: StoredDimensionLevel[];
-  // DB schema format with values
-  values?: string[];
-  description?: string;
-};
-
-// LLM-generated scenario from YAML
-type GeneratedScenario = {
-  base_id?: string;
-  category?: string;
-  subject?: string;
-  body: string;
-};
-
-// Parsed YAML structure from LLM
-type GeneratedYaml = {
-  preamble?: string;
-  scenarios: Record<string, GeneratedScenario>;
+// Output from Python worker
+type GenerateScenariosOutput = {
+  success: true;
+  scenarios: Array<{
+    name: string;
+    content: {
+      preamble?: string;
+      prompt: string;
+      dimensions: Record<string, number>;
+    };
+  }>;
+  metadata: {
+    inputTokens: number;
+    outputTokens: number;
+    modelVersion: string | null;
+  };
+} | {
+  success: false;
+  error: {
+    message: string;
+    code: string;
+    retryable: boolean;
+    details?: string;
+  };
 };
 
 export type ExpandScenariosResult = {
@@ -70,140 +85,41 @@ function normalizePreamble(preamble: string | undefined): string | undefined {
 }
 
 /**
- * Extract dimension values for prompt building.
- * Returns array of {score, label, options} for each dimension.
+ * Get model configuration from database for the specified model.
  */
-function extractDimensionValues(
-  dim: StoredDimension
-): Array<{ score: number; label: string; options: string[] }> {
-  // Frontend format with levels
-  if (dim.levels && dim.levels.length > 0) {
-    return dim.levels.map((level) => ({
-      score: level.score,
-      label: level.label,
-      options: level.options ?? [level.label],
-    }));
+async function getModelConfig(providerName: string, modelId: string): Promise<Record<string, unknown> | undefined> {
+  // Find the provider
+  const provider = await db.llmProvider.findUnique({
+    where: { name: providerName },
+  });
+
+  if (!provider) {
+    return undefined;
   }
 
-  // DB schema format with just values (assign incremental scores)
-  if (dim.values && dim.values.length > 0) {
-    return dim.values.map((value, i) => ({
-      score: i + 1,
-      label: value,
-      options: [value],
-    }));
+  // Find the model
+  const model = await db.llmModel.findUnique({
+    where: {
+      providerId_modelId: {
+        providerId: provider.id,
+        modelId: modelId,
+      },
+    },
+  });
+
+  if (!model || !model.apiConfig) {
+    return undefined;
   }
 
-  return [];
+  return model.apiConfig as Record<string, unknown>;
 }
 
 /**
- * Build the LLM prompt for scenario generation.
- * Matches the devtool's buildGenerationPrompt approach.
- */
-function buildGenerationPrompt(
-  content: DefinitionContent,
-  dimensions: StoredDimension[]
-): string {
-  const dimensionDefs = dimensions
-    .map((dim) => {
-      const values = extractDimensionValues(dim);
-      const valueLines = values
-        .map((v) => `  Score ${v.score} (${v.label}): ${v.options.join(', ')}`)
-        .join('\n');
-      return `${dim.name}:\n${valueLines}`;
-    })
-    .join('\n\n');
-
-  const placeholders = dimensions.map((d) => `[${d.name}]`).join(', ');
-  const baseId = 'scenario';
-  const category = dimensions.map((d) => d.name).join('_vs_');
-
-  // Only include preamble section if one is defined
-  const normalizedPreamble = normalizePreamble(content.preamble);
-  const hasPreamble = normalizedPreamble !== undefined;
-  const preambleSection = hasPreamble
-    ? `## Preamble (use exactly):
-${normalizedPreamble}
-
-`
-    : '';
-
-  // Build output format based on whether preamble exists
-  const outputFormat = hasPreamble
-    ? `\`\`\`yaml
-preamble: >
-  [the preamble text]
-
-scenarios:
-  ${baseId}_[Dim1Score]_[Dim2Score]_...:
-    base_id: ${baseId}
-    category: ${category}
-    subject: [descriptive title with scores]
-    body: |
-      [filled template with natural grammar]
-\`\`\``
-    : `\`\`\`yaml
-scenarios:
-  ${baseId}_[Dim1Score]_[Dim2Score]_...:
-    base_id: ${baseId}
-    category: ${category}
-    subject: [descriptive title with scores]
-    body: |
-      [filled template with natural grammar]
-\`\`\``;
-
-  return `You are a scenario generator for a moral values research project. Generate a YAML file with all valid combinations of the following dimensions.
-
-${preambleSection}## Scenario Template:
-The template uses these placeholders: ${placeholders}
-Each placeholder should be replaced with an option from the corresponding dimension score.
-
-Template:
-${content.template}
-
-## Dimensions and Scores:
-${dimensionDefs}
-
-${content.matching_rules ? `## Matching Rules:\n${content.matching_rules}` : ''}
-
-## Output Format:
-Generate valid YAML with this structure:
-${outputFormat}
-
-Generate ALL valid combinations. For each combination:
-1. Pick a random option from each dimension's score level
-2. Replace placeholders in the template
-3. Smooth the grammar so sentences flow naturally
-4. Use the naming convention: ${baseId}_[Dim1Name][Score]_[Dim2Name][Score]_...
-
-${content.matching_rules ? 'Skip combinations that violate the matching rules.' : ''}
-
-Output ONLY the YAML, no explanations.`;
-}
-
-/**
- * Parse the LLM-generated YAML into scenario data.
- */
-function parseGeneratedScenarios(yamlContent: string): GeneratedYaml | null {
-  try {
-    const parsed = parseYaml(yamlContent) as GeneratedYaml;
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-    return parsed;
-  } catch (err) {
-    log.error({ err }, 'Failed to parse generated YAML');
-    return null;
-  }
-}
-
-/**
- * Expands scenarios from a definition's content using LLM generation.
+ * Expands scenarios from a definition's content using the Python worker.
  *
  * - Deletes existing scenarios for the definition (soft delete)
- * - Calls LLM to generate scenario combinations
- * - Parses YAML output and creates scenario records
+ * - Spawns Python worker to generate scenario combinations via LLM
+ * - Creates scenario records from the result
  *
  * @param definitionId - The definition ID
  * @param content - The resolved definition content with template and dimensions
@@ -213,10 +129,10 @@ export async function expandScenarios(
   definitionId: string,
   content: DefinitionContent
 ): Promise<ExpandScenariosResult> {
-  log.info({ definitionId }, 'Expanding scenarios with LLM');
+  log.info({ definitionId }, 'Expanding scenarios via Python worker');
 
-  // Cast dimensions to our flexible type that handles both formats
-  const rawDimensions = content.dimensions as unknown as StoredDimension[] | undefined;
+  // Get dimensions
+  const rawDimensions = content.dimensions as unknown[] | undefined;
 
   log.info(
     { definitionId, hasDimensions: !!rawDimensions, dimensionCount: rawDimensions?.length, hasTemplate: !!content.template },
@@ -250,140 +166,52 @@ export async function expandScenarios(
     return { created: 1, deleted: deleteResult.count };
   }
 
-  // Filter to dimensions that have values
-  const dimensionsWithValues = rawDimensions.filter((dim) => {
-    const values = extractDimensionValues(dim);
-    return values.length > 0;
-  });
-
-  log.info(
-    { definitionId, dimensionsWithValues: dimensionsWithValues.length, dimNames: dimensionsWithValues.map(d => d.name) },
-    'Dimensions with values'
-  );
-
-  if (dimensionsWithValues.length === 0) {
-    log.debug({ definitionId }, 'Dimensions have no values, creating single scenario');
-
-    const scenarioContent: ScenarioContent = {
-      preamble: normalizePreamble(content.preamble),
-      prompt: content.template,
-      dimensions: {},
-    };
-
-    await db.scenario.create({
-      data: {
-        definitionId,
-        name: 'Default Scenario',
-        content: scenarioContent,
-      },
-    });
-
-    return { created: 1, deleted: deleteResult.count };
-  }
-
-  // Build prompt and call LLM
-  const prompt = buildGenerationPrompt(content, dimensionsWithValues);
-  log.debug({ definitionId, promptLength: prompt.length }, 'Built generation prompt');
-
   // Get the configured infrastructure model for scenario expansion
   const infraModel = await getScenarioExpansionModel();
+  const fullModelId = `${infraModel.providerName}:${infraModel.modelId}`;
+
   log.info(
-    { definitionId, provider: infraModel.providerName, model: infraModel.modelId },
+    { definitionId, provider: infraModel.providerName, model: infraModel.modelId, fullModelId },
     'Using infrastructure model for scenario expansion'
   );
 
-  try {
-    const llmResult = await callLLM(prompt, {
+  // Get model-specific API configuration from database
+  const modelConfig = await getModelConfig(infraModel.providerName, infraModel.modelId);
+
+  // Prepare input for Python worker
+  const workerInput: GenerateScenariosInput = {
+    definitionId,
+    modelId: fullModelId,
+    content: {
+      preamble: content.preamble,
+      template: content.template,
+      dimensions: rawDimensions,
+      matching_rules: content.matching_rules,
+    },
+    config: {
       temperature: 0.7,
-      maxTokens: 8192, // Use reasonable default, provider will cap if needed
-      timeoutMs: 300000, // 5 minutes - scenario expansion can take longer
-      provider: infraModel.providerName,
-      model: infraModel.modelId,
-    });
+      maxTokens: 8192,
+    },
+    modelConfig,
+  };
 
-    log.info(
-      { definitionId, responseLength: llmResult.length, preview: llmResult.slice(0, 200) },
-      'LLM response received'
-    );
-
-    // Extract and parse YAML
-    const yamlContent = extractYaml(llmResult);
-    log.info(
-      { definitionId, yamlLength: yamlContent.length, yamlPreview: yamlContent.slice(0, 300) },
-      'Extracted YAML from LLM response'
-    );
-
-    const parsed = parseGeneratedScenarios(yamlContent);
-
-    if (!parsed || !parsed.scenarios) {
-      log.error(
-        { definitionId, hasParsed: !!parsed, hasScenarios: !!(parsed?.scenarios), yamlContent: yamlContent.slice(0, 500) },
-        'Failed to parse LLM-generated scenarios'
-      );
-
-      // Fallback: create single scenario with raw template
-      const scenarioContent: ScenarioContent = {
-        preamble: normalizePreamble(content.preamble),
-        prompt: content.template,
-        dimensions: {},
-      };
-
-      await db.scenario.create({
-        data: {
-          definitionId,
-          name: 'Default Scenario',
-          content: scenarioContent,
-        },
-      });
-
-      return { created: 1, deleted: deleteResult.count };
+  // Spawn Python worker
+  const workerPath = path.resolve(process.cwd(), '../..', GENERATE_SCENARIOS_WORKER);
+  const result = await spawnPython<GenerateScenariosInput, GenerateScenariosOutput>(
+    workerPath,
+    workerInput,
+    {
+      timeout: 300000, // 5 minutes
+      cwd: path.resolve(process.cwd(), '../..'),
     }
+  );
 
-    // Create scenario records from parsed YAML
-    const scenarioEntries = Object.entries(parsed.scenarios);
-    // Only use preamble if it has actual content (not empty or whitespace-only)
-    const preamble = normalizePreamble(parsed.preamble) ?? normalizePreamble(content.preamble);
-
-    const scenarioData = scenarioEntries.map(([scenarioKey, scenario]) => {
-      // Extract dimension scores from the scenario key (e.g., scenario_Stakes1_Certainty2)
-      const dimensionScores: Record<string, number> = {};
-
-      // Parse dimension scores from key like "scenario_Stakes1_Certainty2"
-      for (const dim of dimensionsWithValues) {
-        const dimValues = extractDimensionValues(dim);
-        // Find which score level was used based on key pattern
-        for (const level of dimValues) {
-          if (scenarioKey.includes(`${dim.name}${level.score}`)) {
-            dimensionScores[dim.name] = level.score;
-            break;
-          }
-        }
-      }
-
-      const scenarioContent: ScenarioContent = {
-        preamble,
-        prompt: scenario.body,
-        dimensions: dimensionScores,
-      };
-
-      return {
-        definitionId,
-        name: scenario.subject || scenarioKey,
-        content: scenarioContent,
-      };
-    });
-
-    // Create scenarios in batch
-    await db.scenario.createMany({ data: scenarioData });
-
-    log.info(
-      { definitionId, created: scenarioData.length, deleted: deleteResult.count },
-      'Scenarios expanded via LLM'
+  // Handle spawn failure
+  if (!result.success) {
+    log.error(
+      { definitionId, error: result.error, stderr: result.stderr },
+      'Failed to spawn Python worker'
     );
-
-    return { created: scenarioData.length, deleted: deleteResult.count };
-  } catch (err) {
-    log.error({ err, definitionId, errorMessage: err instanceof Error ? err.message : String(err) }, 'LLM scenario expansion failed');
 
     // Fallback: create single scenario with raw template
     const scenarioContent: ScenarioContent = {
@@ -402,4 +230,83 @@ export async function expandScenarios(
 
     return { created: 1, deleted: deleteResult.count };
   }
+
+  const workerOutput = result.data;
+
+  // Handle worker error
+  if (!workerOutput.success) {
+    log.error(
+      { definitionId, error: workerOutput.error },
+      'Python worker returned error'
+    );
+
+    // If retryable, rethrow to trigger job retry
+    if (workerOutput.error.retryable) {
+      throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
+    }
+
+    // Non-retryable: create fallback scenario
+    const scenarioContent: ScenarioContent = {
+      preamble: normalizePreamble(content.preamble),
+      prompt: content.template,
+      dimensions: {},
+    };
+
+    await db.scenario.create({
+      data: {
+        definitionId,
+        name: 'Default Scenario',
+        content: scenarioContent,
+      },
+    });
+
+    return { created: 1, deleted: deleteResult.count };
+  }
+
+  // Handle empty scenarios (dimensions had no values)
+  if (workerOutput.scenarios.length === 0) {
+    log.debug({ definitionId }, 'Worker returned no scenarios, creating default');
+
+    const scenarioContent: ScenarioContent = {
+      preamble: normalizePreamble(content.preamble),
+      prompt: content.template,
+      dimensions: {},
+    };
+
+    await db.scenario.create({
+      data: {
+        definitionId,
+        name: 'Default Scenario',
+        content: scenarioContent,
+      },
+    });
+
+    return { created: 1, deleted: deleteResult.count };
+  }
+
+  // Create scenario records from worker output
+  const scenarioData = workerOutput.scenarios.map((scenario) => ({
+    definitionId,
+    name: scenario.name,
+    content: {
+      preamble: scenario.content.preamble,
+      prompt: scenario.content.prompt,
+      dimensions: scenario.content.dimensions,
+    } as ScenarioContent,
+  }));
+
+  await db.scenario.createMany({ data: scenarioData });
+
+  log.info(
+    {
+      definitionId,
+      created: scenarioData.length,
+      deleted: deleteResult.count,
+      inputTokens: workerOutput.metadata.inputTokens,
+      outputTokens: workerOutput.metadata.outputTokens,
+    },
+    'Scenarios expanded via Python worker'
+  );
+
+  return { created: scenarioData.length, deleted: deleteResult.count };
 }

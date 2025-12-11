@@ -1,34 +1,32 @@
 /**
  * Unit tests for Scenario Expansion Service
  *
- * Tests LLM-based scenario generation from definitions.
+ * Tests LLM-based scenario generation via Python worker.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { db } from '@valuerank/db';
 import { expandScenarios, type ExpandScenariosResult } from '../../../src/services/scenario/expand.js';
 
-// Mock the LLM generate module
-vi.mock('../../../src/services/llm/generate.js', () => ({
-  callLLM: vi.fn(),
-  extractYaml: vi.fn(),
+// Mock the spawn utility
+vi.mock('../../../src/queue/spawn.js', () => ({
+  spawnPython: vi.fn(),
 }));
 
 // Mock the infra-models module
 vi.mock('../../../src/services/infra-models.js', () => ({
   getScenarioExpansionModel: vi.fn().mockResolvedValue({
-    modelId: 'claude-3-5-haiku-20241022',
-    providerId: 'anthropic',
-    providerName: 'anthropic',
-    displayName: 'Claude 3.5 Haiku (Default)',
+    modelId: 'deepseek-chat',
+    providerId: 'deepseek',
+    providerName: 'deepseek',
+    displayName: 'DeepSeek Chat',
   }),
 }));
 
 // Import mocked functions
-import { callLLM, extractYaml } from '../../../src/services/llm/generate.js';
+import { spawnPython } from '../../../src/queue/spawn.js';
 
-const mockedCallLLM = vi.mocked(callLLM);
-const mockedExtractYaml = vi.mocked(extractYaml);
+const mockedSpawnPython = vi.mocked(spawnPython);
 
 describe('Scenario Expansion Service', () => {
   // Track created test data for cleanup
@@ -68,7 +66,7 @@ describe('Scenario Expansion Service', () => {
         const result = await expandScenarios(testDefinitionId, content);
 
         expect(result.created).toBe(1);
-        expect(mockedCallLLM).not.toHaveBeenCalled();
+        expect(mockedSpawnPython).not.toHaveBeenCalled();
 
         // Verify scenario was created
         const scenarios = await db.scenario.findMany({
@@ -82,180 +80,210 @@ describe('Scenario Expansion Service', () => {
 
       it('creates default scenario when dimensions array is empty', async () => {
         const content = {
-          template: 'A trolley is heading towards five people.',
+          template: 'Test template',
           dimensions: [],
         };
 
         const result = await expandScenarios(testDefinitionId, content);
 
         expect(result.created).toBe(1);
-        expect(mockedCallLLM).not.toHaveBeenCalled();
+        expect(mockedSpawnPython).not.toHaveBeenCalled();
       });
 
-      it('creates default scenario when template is empty', async () => {
+      it('handles empty preamble by setting it to undefined', async () => {
         const content = {
-          template: '',
-          dimensions: [{ name: 'Stakes', levels: [{ score: 1, label: 'Low' }] }],
+          template: 'Test template',
+          preamble: '   ', // whitespace only
         };
 
-        const result = await expandScenarios(testDefinitionId, content);
+        await expandScenarios(testDefinitionId, content);
 
-        expect(result.created).toBe(1);
-        expect(mockedCallLLM).not.toHaveBeenCalled();
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+        expect((scenarios[0].content as { preamble?: string }).preamble).toBeUndefined();
       });
     });
 
     describe('when content has dimensions with levels', () => {
       const contentWithDimensions = {
-        template: 'A [Stakes] situation where [Certainty] outcomes are involved.',
-        preamble: 'Ethical dilemma study',
+        template: 'A [Stakes] situation with [Certainty] outcomes.',
+        preamble: 'Test preamble',
         dimensions: [
           {
             name: 'Stakes',
             levels: [
-              { score: 1, label: 'Low', options: ['minor inconvenience', 'small loss'] },
-              { score: 2, label: 'Medium', options: ['significant harm', 'major loss'] },
-              { score: 3, label: 'High', options: ['life-threatening', 'catastrophic'] },
+              { score: 1, label: 'Low', options: ['minor', 'small'] },
+              { score: 2, label: 'Medium', options: ['significant', 'notable'] },
+              { score: 3, label: 'High', options: ['major', 'critical'] },
             ],
           },
           {
             name: 'Certainty',
             levels: [
               { score: 1, label: 'Uncertain', options: ['uncertain', 'possible'] },
-              { score: 2, label: 'Certain', options: ['certain', 'definite'] },
+              { score: 2, label: 'Likely', options: ['probable', 'likely'] },
+              { score: 3, label: 'Certain', options: ['definite', 'guaranteed'] },
             ],
           },
         ],
       };
 
-      it('calls LLM with generated prompt and parses YAML response', async () => {
-        const mockYamlResponse = `
-preamble: >
-  Ethical dilemma study
-
-scenarios:
-  scenario_Stakes1_Certainty1:
-    base_id: scenario
-    category: Stakes_vs_Certainty
-    subject: Low stakes with uncertain outcomes
-    body: |
-      A minor inconvenience situation where uncertain outcomes are involved.
-  scenario_Stakes1_Certainty2:
-    base_id: scenario
-    category: Stakes_vs_Certainty
-    subject: Low stakes with certain outcomes
-    body: |
-      A small loss situation where definite outcomes are involved.
-  scenario_Stakes2_Certainty1:
-    base_id: scenario
-    category: Stakes_vs_Certainty
-    subject: Medium stakes with uncertain outcomes
-    body: |
-      A significant harm situation where possible outcomes are involved.
-`;
-
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
+      it('spawns Python worker with correct input', async () => {
+        mockedSpawnPython.mockResolvedValue({
+          success: true,
+          data: {
+            success: true,
+            scenarios: [
+              {
+                name: 'Low stakes uncertain',
+                content: {
+                  preamble: 'Test preamble',
+                  prompt: 'A minor situation with uncertain outcomes.',
+                  dimensions: { Stakes: 1, Certainty: 1 },
+                },
+              },
+              {
+                name: 'High stakes certain',
+                content: {
+                  preamble: 'Test preamble',
+                  prompt: 'A critical situation with guaranteed outcomes.',
+                  dimensions: { Stakes: 3, Certainty: 3 },
+                },
+              },
+            ],
+            metadata: {
+              inputTokens: 500,
+              outputTokens: 1000,
+              modelVersion: 'deepseek-chat-v1',
+            },
+          },
+        });
 
         const result = await expandScenarios(testDefinitionId, contentWithDimensions);
 
-        // Verify LLM was called
-        expect(mockedCallLLM).toHaveBeenCalledOnce();
-        const prompt = mockedCallLLM.mock.calls[0][0];
-        expect(prompt).toContain('Stakes');
-        expect(prompt).toContain('Certainty');
-        expect(prompt).toContain('Score 1 (Low)');
-        expect(prompt).toContain('Score 3 (High)');
+        // Verify Python worker was called
+        expect(mockedSpawnPython).toHaveBeenCalledOnce();
 
-        // Verify options passed (now includes provider and model from infra config)
-        expect(mockedCallLLM.mock.calls[0][1]).toEqual({
-          temperature: 0.7,
-          maxTokens: 8192,
-          timeoutMs: 300000,
-          provider: 'anthropic',
-          model: 'claude-3-5-haiku-20241022',
-        });
+        // Verify input structure
+        const [workerPath, workerInput, options] = mockedSpawnPython.mock.calls[0];
+        expect(workerPath).toContain('generate_scenarios.py');
+        expect(workerInput.definitionId).toBe(testDefinitionId);
+        expect(workerInput.modelId).toBe('deepseek:deepseek-chat');
+        expect(workerInput.content.template).toBe(contentWithDimensions.template);
+        expect(workerInput.content.dimensions).toEqual(contentWithDimensions.dimensions);
+        expect(workerInput.config.temperature).toBe(0.7);
+        expect(options.timeout).toBe(300000);
 
         // Verify scenarios created
-        expect(result.created).toBe(3);
+        expect(result.created).toBe(2);
 
         const scenarios = await db.scenario.findMany({
           where: { definitionId: testDefinitionId, deletedAt: null },
         });
-        expect(scenarios).toHaveLength(3);
+        expect(scenarios).toHaveLength(2);
       });
 
-      it('extracts dimension scores from scenario keys', async () => {
-        const mockYamlResponse = `
-preamble: Test preamble
+      it('handles Python worker spawn failure with fallback', async () => {
+        mockedSpawnPython.mockResolvedValue({
+          success: false,
+          error: 'Failed to spawn process: Python not found',
+          stderr: 'python3: command not found',
+        });
 
-scenarios:
-  scenario_Stakes2_Certainty1:
-    subject: Medium uncertain
-    body: |
-      Test scenario body
-`;
+        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
 
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, contentWithDimensions);
+        // Should create fallback scenario
+        expect(result.created).toBe(1);
 
         const scenarios = await db.scenario.findMany({
           where: { definitionId: testDefinitionId, deletedAt: null },
         });
         expect(scenarios).toHaveLength(1);
+        expect(scenarios[0].name).toBe('Default Scenario');
+      });
 
-        const content = scenarios[0].content as { dimensions: Record<string, number> };
-        expect(content.dimensions.Stakes).toBe(2);
-        expect(content.dimensions.Certainty).toBe(1);
+      it('handles Python worker error response with retryable error', async () => {
+        mockedSpawnPython.mockResolvedValue({
+          success: true,
+          data: {
+            success: false,
+            error: {
+              message: 'Rate limit exceeded',
+              code: 'RATE_LIMIT',
+              retryable: true,
+            },
+          },
+        });
+
+        // Should throw to trigger job retry
+        await expect(expandScenarios(testDefinitionId, contentWithDimensions))
+          .rejects.toThrow('LLM generation failed: Rate limit exceeded');
+      });
+
+      it('handles Python worker error response with non-retryable error', async () => {
+        mockedSpawnPython.mockResolvedValue({
+          success: true,
+          data: {
+            success: false,
+            error: {
+              message: 'Invalid API key',
+              code: 'AUTH_ERROR',
+              retryable: false,
+            },
+          },
+        });
+
+        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        // Should create fallback scenario
+        expect(result.created).toBe(1);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+        expect(scenarios[0].name).toBe('Default Scenario');
+      });
+
+      it('handles empty scenarios response from worker', async () => {
+        mockedSpawnPython.mockResolvedValue({
+          success: true,
+          data: {
+            success: true,
+            scenarios: [],
+            metadata: {
+              inputTokens: 0,
+              outputTokens: 0,
+              modelVersion: null,
+            },
+          },
+        });
+
+        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        // Should create default scenario
+        expect(result.created).toBe(1);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+        expect(scenarios[0].name).toBe('Default Scenario');
       });
     });
 
-    describe('when content has dimensions with values (DB format)', () => {
-      it('converts values to levels with incremental scores', async () => {
-        const content = {
-          template: 'A [Risk] decision with [Impact] consequences.',
-          dimensions: [
-            { name: 'Risk', values: ['low risk', 'high risk'] },
-            { name: 'Impact', values: ['minor', 'major', 'severe'] },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Risk1_Impact1:
-    subject: Low risk minor impact
-    body: A low risk decision with minor consequences.
-`;
-
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        expect(mockedCallLLM).toHaveBeenCalledOnce();
-        const prompt = mockedCallLLM.mock.calls[0][0];
-        // Values format should be converted to score-based format
-        expect(prompt).toContain('Risk');
-        expect(prompt).toContain('Impact');
-      });
-    });
-
-    describe('soft delete behavior', () => {
+    describe('scenario deletion', () => {
       it('soft deletes existing scenarios before creating new ones', async () => {
         // Create existing scenario
         await db.scenario.create({
           data: {
             definitionId: testDefinitionId,
-            name: 'Existing Scenario',
-            content: { prompt: 'Old scenario' },
+            name: 'Old Scenario',
+            content: { prompt: 'Old content', dimensions: {} },
           },
         });
 
         const content = {
           template: 'New template',
-          preamble: 'New preamble',
         };
 
         const result = await expandScenarios(testDefinitionId, content);
@@ -263,320 +291,17 @@ scenarios:
         expect(result.deleted).toBe(1);
         expect(result.created).toBe(1);
 
-        // Old scenario should be soft deleted
+        // Verify old scenario is soft deleted
         const allScenarios = await db.scenario.findMany({
           where: { definitionId: testDefinitionId },
         });
         expect(allScenarios).toHaveLength(2);
 
-        const activeScenarios = allScenarios.filter((s) => s.deletedAt === null);
+        const activeScenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
         expect(activeScenarios).toHaveLength(1);
         expect(activeScenarios[0].name).toBe('Default Scenario');
-
-        const deletedScenarios = allScenarios.filter((s) => s.deletedAt !== null);
-        expect(deletedScenarios).toHaveLength(1);
-        expect(deletedScenarios[0].name).toBe('Existing Scenario');
-      });
-    });
-
-    describe('error handling', () => {
-      it('creates fallback scenario when LLM call fails', async () => {
-        const content = {
-          template: 'Template with [Dimension] placeholder.',
-          dimensions: [
-            {
-              name: 'Dimension',
-              levels: [
-                { score: 1, label: 'Low' },
-                { score: 2, label: 'High' },
-              ],
-            },
-          ],
-        };
-
-        mockedCallLLM.mockRejectedValue(new Error('API timeout'));
-
-        const result = await expandScenarios(testDefinitionId, content);
-
-        expect(result.created).toBe(1);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-        expect(scenarios).toHaveLength(1);
-        expect(scenarios[0].name).toBe('Default Scenario');
-        expect((scenarios[0].content as { prompt: string }).prompt).toBe(content.template);
-      });
-
-      it('creates fallback scenario when YAML parsing fails', async () => {
-        const content = {
-          template: 'Template text',
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        mockedCallLLM.mockResolvedValue('Invalid response without YAML');
-        mockedExtractYaml.mockReturnValue('not: valid: yaml: [broken');
-
-        const result = await expandScenarios(testDefinitionId, content);
-
-        expect(result.created).toBe(1);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-        expect(scenarios).toHaveLength(1);
-        expect(scenarios[0].name).toBe('Default Scenario');
-      });
-
-      it('creates fallback scenario when parsed YAML has no scenarios', async () => {
-        const content = {
-          template: 'Template',
-          dimensions: [
-            {
-              name: 'Dim',
-              levels: [{ score: 1, label: 'L' }],
-            },
-          ],
-        };
-
-        mockedCallLLM.mockResolvedValue('preamble: test');
-        mockedExtractYaml.mockReturnValue('preamble: test');
-
-        const result = await expandScenarios(testDefinitionId, content);
-
-        expect(result.created).toBe(1);
-      });
-    });
-
-    describe('edge cases', () => {
-      it('handles dimensions with no values', async () => {
-        const content = {
-          template: 'Template with [Empty] dimension.',
-          dimensions: [
-            { name: 'Empty', levels: [] },
-            { name: 'HasValues', levels: [{ score: 1, label: 'One' }] },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_HasValues1:
-    subject: Test
-    body: Test body
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        const result = await expandScenarios(testDefinitionId, content);
-
-        // Should only use dimension with values
-        expect(mockedCallLLM).toHaveBeenCalled();
-        const prompt = mockedCallLLM.mock.calls[0][0];
-        expect(prompt).toContain('HasValues');
-        expect(prompt).not.toContain('Empty:');
-      });
-
-      it('handles dimensions where all have no values', async () => {
-        const content = {
-          template: 'Template',
-          dimensions: [
-            { name: 'Empty1', levels: [] },
-            { name: 'Empty2', values: [] },
-          ],
-        };
-
-        const result = await expandScenarios(testDefinitionId, content);
-
-        expect(result.created).toBe(1);
-        expect(mockedCallLLM).not.toHaveBeenCalled();
-      });
-
-      it('preserves preamble from parsed YAML over definition content', async () => {
-        const content = {
-          template: 'Template',
-          preamble: 'Original preamble',
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-preamble: >
-  LLM generated preamble
-
-scenarios:
-  scenario_Test1:
-    subject: Test scenario
-    body: Body text
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        const scenarioContent = scenarios[0].content as { preamble: string };
-        expect(scenarioContent.preamble).toContain('LLM generated preamble');
-      });
-
-      it('uses subject from YAML as scenario name', async () => {
-        const content = {
-          template: 'Template',
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Test1:
-    subject: Custom Scenario Title
-    body: Body text
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        expect(scenarios[0].name).toBe('Custom Scenario Title');
-      });
-
-      it('falls back to scenario key when subject is missing', async () => {
-        const content = {
-          template: 'Template',
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Test1:
-    body: Body text only
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        expect(scenarios[0].name).toBe('scenario_Test1');
-      });
-
-      it('omits preamble from scenarios when definition has empty preamble', async () => {
-        const content = {
-          template: 'Template with [Test] value.',
-          preamble: '', // Empty preamble
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Test1:
-    subject: Test scenario
-    body: Template with One value.
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        expect(scenarios).toHaveLength(1);
-        const scenarioContent = scenarios[0].content as { preamble?: string };
-        expect(scenarioContent.preamble).toBeUndefined();
-      });
-
-      it('omits preamble when definition has whitespace-only preamble', async () => {
-        const content = {
-          template: 'Template',
-          preamble: '   \n  ', // Whitespace-only preamble
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Test1:
-    subject: Test scenario
-    body: Body text
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        const scenarioContent = scenarios[0].content as { preamble?: string };
-        expect(scenarioContent.preamble).toBeUndefined();
-      });
-
-      it('does not include preamble section in LLM prompt when preamble is empty', async () => {
-        const content = {
-          template: 'Template with [Test] placeholder.',
-          preamble: '', // Empty preamble
-          dimensions: [
-            {
-              name: 'Test',
-              levels: [{ score: 1, label: 'One' }],
-            },
-          ],
-        };
-
-        const mockYamlResponse = `
-scenarios:
-  scenario_Test1:
-    subject: Test
-    body: Template with One placeholder.
-`;
-        mockedCallLLM.mockResolvedValue(mockYamlResponse);
-        mockedExtractYaml.mockReturnValue(mockYamlResponse.trim());
-
-        await expandScenarios(testDefinitionId, content);
-
-        // Check that the LLM prompt does not include preamble instructions
-        const prompt = mockedCallLLM.mock.calls[0][0];
-        expect(prompt).not.toContain('## Preamble');
-        expect(prompt).not.toContain('preamble: >');
       });
     });
   });
