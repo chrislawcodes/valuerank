@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
-import type { Definition, Run, Transcript, Experiment, Scenario } from '@valuerank/db';
+import type { Definition, Run, Transcript, Experiment, Scenario, AnalysisResult } from '@valuerank/db';
 import { getAuthHeader } from '../../test-utils.js';
 
 const app = createServer();
@@ -731,6 +731,237 @@ describe('GraphQL Run Query', () => {
 
       expect(response.body.errors).toBeUndefined();
       expect(response.body.data.run.selectedScenarios).toContain(scenario.id);
+    });
+  });
+
+  describe('runs with hasAnalysis and analysisStatus filters', () => {
+    let analysisDef: Definition;
+    let runWithAnalysis: Run;
+    let runWithoutAnalysis: Run;
+    let runWithSupersededAnalysis: Run;
+    let currentAnalysis: AnalysisResult;
+    let supersededAnalysis: AnalysisResult;
+
+    beforeAll(async () => {
+      // Create definition for analysis testing
+      analysisDef = await db.definition.create({
+        data: {
+          name: 'Analysis Filter Test Def',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+
+      // Create run with CURRENT analysis
+      runWithAnalysis = await db.run.create({
+        data: {
+          definitionId: analysisDef.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4'] },
+          progress: { completed: 5, total: 5 },
+        },
+      });
+
+      currentAnalysis = await db.analysisResult.create({
+        data: {
+          runId: runWithAnalysis.id,
+          analysisType: 'basic',
+          inputHash: 'test-hash-1',
+          codeVersion: '1.0.0',
+          status: 'CURRENT',
+          output: { perModel: {} },
+        },
+      });
+
+      // Create run without any analysis
+      runWithoutAnalysis = await db.run.create({
+        data: {
+          definitionId: analysisDef.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4'] },
+          progress: { completed: 3, total: 3 },
+        },
+      });
+
+      // Create run with SUPERSEDED analysis
+      runWithSupersededAnalysis = await db.run.create({
+        data: {
+          definitionId: analysisDef.id,
+          status: 'COMPLETED',
+          config: { models: ['claude-3'] },
+          progress: { completed: 4, total: 4 },
+        },
+      });
+
+      supersededAnalysis = await db.analysisResult.create({
+        data: {
+          runId: runWithSupersededAnalysis.id,
+          analysisType: 'basic',
+          inputHash: 'test-hash-2',
+          codeVersion: '0.9.0',
+          status: 'SUPERSEDED',
+          output: { perModel: {} },
+        },
+      });
+    });
+
+    afterAll(async () => {
+      // Clean up in correct order
+      await db.analysisResult.deleteMany({
+        where: { id: { in: [currentAnalysis.id, supersededAnalysis.id] } },
+      });
+      await db.run.deleteMany({
+        where: { id: { in: [runWithAnalysis.id, runWithoutAnalysis.id, runWithSupersededAnalysis.id] } },
+      });
+      await db.definition.deleteMany({ where: { id: analysisDef.id } });
+    });
+
+    it('filters runs with hasAnalysis=true', async () => {
+      const query = `
+        query ListRunsWithAnalysis($hasAnalysis: Boolean, $definitionId: String) {
+          runs(hasAnalysis: $hasAnalysis, definitionId: $definitionId) {
+            id
+            status
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { hasAnalysis: true, definitionId: analysisDef.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const ids = response.body.data.runs.map((r: { id: string }) => r.id);
+      // Should include runs with any analysis (both CURRENT and SUPERSEDED)
+      expect(ids).toContain(runWithAnalysis.id);
+      expect(ids).toContain(runWithSupersededAnalysis.id);
+      // Should NOT include run without analysis
+      expect(ids).not.toContain(runWithoutAnalysis.id);
+    });
+
+    it('filters runs by analysisStatus=CURRENT', async () => {
+      const query = `
+        query ListRunsWithCurrentAnalysis($analysisStatus: String, $definitionId: String) {
+          runs(analysisStatus: $analysisStatus, definitionId: $definitionId) {
+            id
+            status
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { analysisStatus: 'CURRENT', definitionId: analysisDef.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const ids = response.body.data.runs.map((r: { id: string }) => r.id);
+      // Should only include run with CURRENT analysis
+      expect(ids).toContain(runWithAnalysis.id);
+      // Should NOT include run with SUPERSEDED analysis
+      expect(ids).not.toContain(runWithSupersededAnalysis.id);
+      // Should NOT include run without analysis
+      expect(ids).not.toContain(runWithoutAnalysis.id);
+    });
+
+    it('filters runs by analysisStatus=SUPERSEDED', async () => {
+      const query = `
+        query ListRunsWithSupersededAnalysis($analysisStatus: String, $definitionId: String) {
+          runs(analysisStatus: $analysisStatus, definitionId: $definitionId) {
+            id
+            status
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { analysisStatus: 'SUPERSEDED', definitionId: analysisDef.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const ids = response.body.data.runs.map((r: { id: string }) => r.id);
+      // Should only include run with SUPERSEDED analysis
+      expect(ids).toContain(runWithSupersededAnalysis.id);
+      // Should NOT include run with CURRENT analysis
+      expect(ids).not.toContain(runWithAnalysis.id);
+      // Should NOT include run without analysis
+      expect(ids).not.toContain(runWithoutAnalysis.id);
+    });
+
+    it('returns empty array when no runs match hasAnalysis filter', async () => {
+      // Create a definition with no runs that have analysis
+      const emptyDef = await db.definition.create({
+        data: {
+          name: 'Empty Analysis Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+
+      const runNoAnalysis = await db.run.create({
+        data: {
+          definitionId: emptyDef.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4'] },
+        },
+      });
+
+      const query = `
+        query ListRunsNoAnalysis($hasAnalysis: Boolean, $definitionId: String) {
+          runs(hasAnalysis: $hasAnalysis, definitionId: $definitionId) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { hasAnalysis: true, definitionId: emptyDef.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.runs).toHaveLength(0);
+
+      // Cleanup
+      await db.run.delete({ where: { id: runNoAnalysis.id } });
+      await db.definition.delete({ where: { id: emptyDef.id } });
+    });
+
+    it('combines hasAnalysis with other filters', async () => {
+      const query = `
+        query ListRunsCombined($hasAnalysis: Boolean, $status: String, $definitionId: String) {
+          runs(hasAnalysis: $hasAnalysis, status: $status, definitionId: $definitionId) {
+            id
+            status
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query,
+          variables: { hasAnalysis: true, status: 'COMPLETED', definitionId: analysisDef.id },
+        })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      // All returned runs should have COMPLETED status and analysis
+      for (const run of response.body.data.runs) {
+        expect(run.status).toBe('COMPLETED');
+      }
+      const ids = response.body.data.runs.map((r: { id: string }) => r.id);
+      expect(ids).toContain(runWithAnalysis.id);
+      expect(ids).toContain(runWithSupersededAnalysis.id);
     });
   });
 });

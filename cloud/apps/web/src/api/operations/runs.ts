@@ -213,8 +213,22 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
 // ============================================================================
 
 export const RUNS_QUERY = gql`
-  query Runs($definitionId: String, $status: String, $limit: Int, $offset: Int) {
-    runs(definitionId: $definitionId, status: $status, limit: $limit, offset: $offset) {
+  query Runs(
+    $definitionId: String
+    $status: String
+    $hasAnalysis: Boolean
+    $analysisStatus: String
+    $limit: Int
+    $offset: Int
+  ) {
+    runs(
+      definitionId: $definitionId
+      status: $status
+      hasAnalysis: $hasAnalysis
+      analysisStatus: $analysisStatus
+      limit: $limit
+      offset: $offset
+    ) {
       ...RunFields
     }
   }
@@ -299,6 +313,8 @@ export type StartRunInput = {
 export type RunsQueryVariables = {
   definitionId?: string;
   status?: string;
+  hasAnalysis?: boolean;
+  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   limit?: number;
   offset?: number;
 };

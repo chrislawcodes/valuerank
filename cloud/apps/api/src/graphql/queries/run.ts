@@ -1,17 +1,18 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
-import type { RunStatus } from '@valuerank/db';
+import type { RunStatus, AnalysisStatus } from '@valuerank/db';
 import { RunRef } from '../types/run.js';
 import { trackRunAccess } from '../../middleware/access-tracking.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 
-// Type for where clause
+// Type for where clause with analysis filtering
 type RunWhereInput = {
   definitionId?: string;
   experimentId?: string | null;
   status?: RunStatus;
+  id?: { in: string[] };
 };
 
 // Query: run(id: ID!) - Fetch single run by ID
@@ -68,6 +69,14 @@ builder.queryField('runs', (t) =>
         required: false,
         description: 'Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
       }),
+      hasAnalysis: t.arg.boolean({
+        required: false,
+        description: 'Filter to runs that have analysis results (any status)',
+      }),
+      analysisStatus: t.arg.string({
+        required: false,
+        description: 'Filter by analysis status (CURRENT or SUPERSEDED)',
+      }),
       limit: t.arg.int({
         required: false,
         description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
@@ -83,7 +92,15 @@ builder.queryField('runs', (t) =>
       const offset = args.offset ?? 0;
 
       ctx.log.debug(
-        { definitionId: args.definitionId, experimentId: args.experimentId, status: args.status, limit, offset },
+        {
+          definitionId: args.definitionId,
+          experimentId: args.experimentId,
+          status: args.status,
+          hasAnalysis: args.hasAnalysis,
+          analysisStatus: args.analysisStatus,
+          limit,
+          offset,
+        },
         'Listing runs'
       );
 
@@ -99,6 +116,35 @@ builder.queryField('runs', (t) =>
       }
       if (args.status) {
         where.status = args.status as RunStatus;
+      }
+
+      // Handle analysis filtering - requires subquery to find run IDs with analysis
+      if (args.hasAnalysis === true || args.analysisStatus) {
+        const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
+          deletedAt: null,
+        };
+
+        // If analysisStatus provided, filter by that specific status
+        if (args.analysisStatus) {
+          analysisWhere.status = args.analysisStatus as AnalysisStatus;
+        }
+
+        // Find all run IDs that have analysis results matching the criteria
+        const analysisResults = await db.analysisResult.findMany({
+          where: analysisWhere,
+          select: { runId: true },
+          distinct: ['runId'],
+        });
+
+        const runIdsWithAnalysis = analysisResults.map((a) => a.runId);
+
+        // If no runs have analysis, return empty array early
+        if (runIdsWithAnalysis.length === 0) {
+          ctx.log.debug({ count: 0 }, 'No runs with analysis found');
+          return [];
+        }
+
+        where.id = { in: runIdsWithAnalysis };
       }
 
       const runs = await db.run.findMany({
