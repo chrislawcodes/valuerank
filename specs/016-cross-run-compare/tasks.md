@@ -73,32 +73,32 @@
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Create useComparisonState hook in `cloud/apps/web/src/hooks/useComparisonState.ts`
+- [X] T016 [P] [US1] Create useComparisonState hook in `cloud/apps/web/src/hooks/useComparisonState.ts`
   - Parse URL params (runs, viz, model, value, display)
   - Update URL on state change
   - Handle invalid IDs gracefully
-- [ ] T017 [P] [US1] Create useComparisonData hook in `cloud/apps/web/src/hooks/useComparisonData.ts`
+- [X] T017 [P] [US1] Create useComparisonData hook in `cloud/apps/web/src/hooks/useComparisonData.ts`
   - Fetch runs with analysis using new GraphQL query
   - Handle loading/error states
   - Validate selected runs have analysis
-- [ ] T018 [US1] Create RunSelectorItem component in `cloud/apps/web/src/components/compare/RunSelectorItem.tsx`
+- [X] T018 [US1] Create RunSelectorItem component in `cloud/apps/web/src/components/compare/RunSelectorItem.tsx`
   - Display run name, definition, models, date, sample size
   - Selection checkbox/toggle
   - Analysis status indicator
-- [ ] T019 [US1] Create RunSelector component in `cloud/apps/web/src/components/compare/RunSelector.tsx`
+- [X] T019 [US1] Create RunSelector component in `cloud/apps/web/src/components/compare/RunSelector.tsx`
   - List available runs with analysis
   - Multi-select with max 10 limit
   - Search/filter functionality
   - Uses RunSelectorItem
-- [ ] T020 [US1] Create ComparisonHeader component in `cloud/apps/web/src/components/compare/ComparisonHeader.tsx`
+- [X] T020 [US1] Create ComparisonHeader component in `cloud/apps/web/src/components/compare/ComparisonHeader.tsx`
   - Display selected runs summary
   - Quick deselect chips
   - Warning if any run lacks complete analysis
-- [ ] T021 [US1] Integrate RunSelector into Compare page `cloud/apps/web/src/pages/Compare.tsx`
+- [X] T021 [US1] Integrate RunSelector into Compare page `cloud/apps/web/src/pages/Compare.tsx`
   - Wire up useComparisonState and useComparisonData
   - Left panel: RunSelector, Right panel: placeholder for visualizations
-- [ ] T022 [US1] Add tests for useComparisonState in `cloud/apps/web/tests/hooks/useComparisonState.test.ts`
-- [ ] T023 [US1] Add tests for RunSelector in `cloud/apps/web/tests/components/compare/RunSelector.test.tsx`
+- [X] T022 [US1] Add tests for useComparisonState in `cloud/apps/web/tests/hooks/useComparisonState.test.ts`
+- [X] T023 [US1] Add tests for RunSelector in `cloud/apps/web/tests/components/compare/RunSelector.test.tsx`
 
 **Checkpoint**: US1 complete - can select runs, URL updates, shareable links work
 

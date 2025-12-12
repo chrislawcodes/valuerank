@@ -4,7 +4,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import type { AnalysisResult } from '../../api/operations/analysis';
-import type { Run } from '../../api/operations/runs';
+import type { ComparisonRun } from '../../api/operations/comparison';
 
 // ============================================================================
 // URL STATE TYPES
@@ -40,15 +40,38 @@ export type ComparisonFilters = {
 // ============================================================================
 
 /**
- * Run with its analysis data for comparison
+ * Run with its analysis data for comparison.
+ * Extends ComparisonRun with derived aggregate statistics.
  */
-export type RunWithAnalysis = Run & {
+export type RunWithAnalysis = ComparisonRun & {
+  /** Full analysis result (from ComparisonRun) */
   analysis: AnalysisResult | null;
   /** Definition content for diff view */
   definitionContent?: {
     preamble: string;
     template: string;
   };
+  /** Computed aggregate statistics across all models */
+  aggregateStats?: AggregateStats;
+  /** Computed value win rates across all models */
+  valueWinRates?: ValueWinRate[];
+};
+
+/**
+ * Aggregate statistics computed from per-model data
+ */
+export type AggregateStats = {
+  overallMean: number;
+  overallStdDev: number;
+  sampleCount: number;
+};
+
+/**
+ * Value win rate computed across all models
+ */
+export type ValueWinRate = {
+  valueName: string;
+  winRate: number;
 };
 
 /**

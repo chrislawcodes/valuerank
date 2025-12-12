@@ -5,11 +5,49 @@
  * URL state: /compare?runs=id1,id2&viz=overview&model=...&display=overlay
  */
 
+import { BarChart2 } from 'lucide-react';
+import { useComparisonState } from '../hooks/useComparisonState';
+import { useComparisonData } from '../hooks/useComparisonData';
+import { RunSelector } from '../components/compare/RunSelector';
+import { ComparisonHeader } from '../components/compare/ComparisonHeader';
+import { getVisualization, PlaceholderVisualization } from '../components/compare/visualizations/registry';
+import { Loading } from '../components/ui/Loading';
+
 export function Compare() {
+  const {
+    selectedRunIds,
+    visualization,
+    filters,
+    setSelectedRunIds,
+    toggleRunSelection,
+    clearSelection,
+    setVisualization,
+    updateFilters,
+  } = useComparisonState();
+
+  const {
+    availableRuns,
+    selectedRuns,
+    statistics,
+    loadingAvailable,
+    loadingSelected,
+    error,
+    refetchAvailable,
+    missingAnalysisIds,
+  } = useComparisonData({ selectedRunIds });
+
+  // Get the current visualization component
+  const currentViz = getVisualization(visualization);
+  const VizComponent = currentViz?.component ?? PlaceholderVisualization;
+
+  // Check if we have enough runs for comparison
+  const runsWithAnalysis = selectedRuns.filter((r) => r.analysis);
+  const hasEnoughRuns = runsWithAnalysis.length >= 2;
+
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
+    <div className="p-6 h-[calc(100vh-4rem)]">
+      <div className="max-w-[1800px] mx-auto h-full flex flex-col">
+        {/* Page Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Compare Runs</h1>
           <p className="text-gray-400 mt-1">
@@ -17,37 +55,103 @@ export function Compare() {
           </p>
         </div>
 
-        {/* Placeholder for run selection and visualization */}
-        <div className="bg-[#1E1E1E] rounded-lg border border-gray-800 p-8">
-          <div className="flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-full bg-teal-500/10 flex items-center justify-center mb-4">
-              <svg
-                className="w-8 h-8 text-teal-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+        {/* Main Layout */}
+        <div className="flex-1 flex gap-6 min-h-0">
+          {/* Left Panel: Run Selector */}
+          <div className="w-80 flex-shrink-0 bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col">
+            <RunSelector
+              runs={availableRuns}
+              selectedIds={selectedRunIds}
+              loading={loadingAvailable}
+              error={error?.message}
+              onSelectionChange={setSelectedRunIds}
+              onRefresh={refetchAvailable}
+            />
+          </div>
+
+          {/* Right Panel: Comparison View */}
+          <div className="flex-1 bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col min-w-0">
+            {/* Comparison Header */}
+            <ComparisonHeader
+              runs={selectedRuns}
+              missingAnalysisIds={missingAnalysisIds}
+              onDeselect={toggleRunSelection}
+              onClearAll={clearSelection}
+            />
+
+            {/* Visualization Area */}
+            <div className="flex-1 min-h-0 overflow-auto">
+              {loadingSelected && selectedRunIds.length > 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loading size="lg" text="Loading run data..." />
+                </div>
+              ) : selectedRunIds.length === 0 ? (
+                <EmptySelectionState />
+              ) : !hasEnoughRuns ? (
+                <NotEnoughRunsState runsWithAnalysis={runsWithAnalysis.length} />
+              ) : (
+                <VizComponent
+                  runs={runsWithAnalysis}
+                  filters={filters}
+                  onFilterChange={updateFilters}
+                  statistics={statistics ?? undefined}
                 />
-              </svg>
+              )}
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">
-              Cross-Run Comparison
-            </h3>
-            <p className="text-gray-400 max-w-md">
-              Compare analysis results across multiple runs to identify patterns,
-              detect model drift, and analyze the effects of definition changes.
-            </p>
-            <p className="text-gray-500 text-sm mt-4">
-              Run selection and visualization coming soon...
-            </p>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Empty state when no runs are selected
+ */
+function EmptySelectionState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center">
+      <div className="w-16 h-16 rounded-full bg-teal-500/10 flex items-center justify-center mb-4">
+        <BarChart2 className="w-8 h-8 text-teal-500" />
+      </div>
+      <h3 className="text-lg font-medium text-white mb-2">
+        Cross-Run Comparison
+      </h3>
+      <p className="text-gray-400 max-w-md">
+        Compare analysis results across multiple runs to identify patterns,
+        detect model drift, and analyze the effects of definition changes.
+      </p>
+      <p className="text-gray-500 text-sm mt-4">
+        Select 2 or more runs from the panel to begin.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * State when selected runs don't have enough analysis data
+ */
+function NotEnoughRunsState({ runsWithAnalysis }: { runsWithAnalysis: number }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center">
+      <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+        <BarChart2 className="w-8 h-8 text-yellow-500" />
+      </div>
+      <h3 className="text-lg font-medium text-white mb-2">
+        Not Enough Data
+      </h3>
+      <p className="text-gray-400 max-w-md">
+        {runsWithAnalysis === 0 ? (
+          'None of the selected runs have analysis data.'
+        ) : runsWithAnalysis === 1 ? (
+          'Only 1 run has analysis data. Select at least 2 runs with completed analysis.'
+        ) : (
+          `Only ${runsWithAnalysis} runs have analysis. Select more runs with completed analysis.`
+        )}
+      </p>
+      <p className="text-gray-500 text-sm mt-4">
+        Runs need completed analysis before they can be compared.
+      </p>
     </div>
   );
 }
