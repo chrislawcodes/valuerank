@@ -251,6 +251,11 @@ export function RunDetail() {
           </span>
         </div>
 
+        {/* Analysis link banner */}
+        <div className="mb-6">
+          <AnalysisBanner runId={run.id} analysisStatus={run.analysisStatus} runStatus={run.status} />
+        </div>
+
         {/* Progress */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-gray-700 mb-4">Progress</h3>
@@ -302,9 +307,6 @@ export function RunDetail() {
           </div>
         )}
       </div>
-
-      {/* Analysis link banner */}
-      <AnalysisBanner runId={run.id} analysisStatus={run.analysisStatus} runStatus={run.status} />
 
       {/* Polling indicator for active runs */}
       {(isActive || isPaused) && (
