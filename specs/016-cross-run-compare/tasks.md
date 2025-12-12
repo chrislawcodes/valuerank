@@ -14,9 +14,9 @@
 
 **Purpose**: Create feature branch and verify development environment
 
-- [ ] T001 Create feature branch `feature/cross-run-compare` from main
-- [ ] T002 Verify dev environment running (`npm run dev` in cloud/)
-- [ ] T003 Verify test runs exist with completed analysis (at least 2-3)
+- [X] T001 Create feature branch `feature/cross-run-compare` from main
+- [X] T002 Verify dev environment running (`npm run dev` in cloud/)
+- [X] T003 Verify test runs exist with completed analysis (at least 2-3)
 
 **Checkpoint**: Development environment ready, test data available
 
@@ -30,36 +30,36 @@
 
 ### Types & Contracts
 
-- [ ] T004 [P] Create comparison types in `cloud/apps/web/src/components/compare/types.ts`
+- [X] T004 [P] Create comparison types in `cloud/apps/web/src/components/compare/types.ts`
   - ComparisonConfig, ComparisonFilters, RunWithAnalysis, ComparisonStatistics
-- [ ] T005 [P] Create visualization registry types in `cloud/apps/web/src/components/compare/visualizations/registry.ts`
+- [X] T005 [P] Create visualization registry types in `cloud/apps/web/src/components/compare/visualizations/registry.ts`
   - VisualizationRegistration, ComparisonVisualizationProps
-- [ ] T006 Create GraphQL operations in `cloud/apps/web/src/api/operations/comparison.ts`
+- [X] T006 Create GraphQL operations in `cloud/apps/web/src/api/operations/comparison.ts`
   - RUNS_WITH_ANALYSIS_QUERY, fragment, types
 
 ### Backend Query
 
-- [ ] T007 Add `runsWithAnalysis` query to `cloud/apps/api/src/graphql/queries/run.ts`
+- [X] T007 Add `runsWithAnalysis` query to `cloud/apps/api/src/graphql/queries/run.ts`
   - Limit to 10 runs max, use existing dataloader
-- [ ] T008 Add tests for runsWithAnalysis query in `cloud/apps/api/tests/graphql/queries/run.test.ts`
+- [X] T008 Add tests for runsWithAnalysis query in `cloud/apps/api/tests/graphql/queries/run.test.ts`
 
 ### Statistical Utilities
 
-- [ ] T009 [P] Create lib/statistics directory and index in `cloud/apps/web/src/lib/statistics/index.ts`
-- [ ] T010 [P] Implement Cohen's d calculator in `cloud/apps/web/src/lib/statistics/cohens-d.ts`
+- [X] T009 [P] Create lib/statistics directory and index in `cloud/apps/web/src/lib/statistics/index.ts`
+- [X] T010 [P] Implement Cohen's d calculator in `cloud/apps/web/src/lib/statistics/cohens-d.ts`
   - Include interpretation (negligible/small/medium/large)
-- [ ] T011 [P] Implement KS statistic calculator in `cloud/apps/web/src/lib/statistics/ks-test.ts`
+- [X] T011 [P] Implement KS statistic calculator in `cloud/apps/web/src/lib/statistics/ks-test.ts`
   - Simplified ECDF comparison
-- [ ] T012 Add tests for statistical utilities in `cloud/apps/web/tests/lib/statistics/`
+- [X] T012 Add tests for statistical utilities in `cloud/apps/web/tests/lib/statistics/`
 
 ### Navigation & Routing
 
-- [ ] T013 Add Compare tab to `cloud/apps/web/src/components/layout/NavTabs.tsx`
+- [X] T013 Add Compare tab to `cloud/apps/web/src/components/layout/NavTabs.tsx`
   - Position between Analysis and Experiments
   - Use GitCompare icon from lucide-react
-- [ ] T014 Add /compare route to `cloud/apps/web/src/App.tsx`
+- [X] T014 Add /compare route to `cloud/apps/web/src/App.tsx`
   - Protected route with Layout wrapper
-- [ ] T015 Create empty Compare page stub in `cloud/apps/web/src/pages/Compare.tsx`
+- [X] T015 Create empty Compare page stub in `cloud/apps/web/src/pages/Compare.tsx`
 
 **Checkpoint**: Foundation ready - routing works, types defined, backend query available
 

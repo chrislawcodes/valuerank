@@ -964,4 +964,231 @@ describe('GraphQL Run Query', () => {
       expect(ids).toContain(runWithSupersededAnalysis.id);
     });
   });
+
+  describe('runsWithAnalysis(ids)', () => {
+    let compareDef: Definition;
+    let compareRun1: Run;
+    let compareRun2: Run;
+    let compareRun3: Run;
+    let deletedRun: Run;
+
+    beforeAll(async () => {
+      // Create definition for comparison testing
+      compareDef = await db.definition.create({
+        data: {
+          name: 'Comparison Test Def',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+
+      // Create test runs
+      compareRun1 = await db.run.create({
+        data: {
+          definitionId: compareDef.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4'] },
+          progress: { completed: 5, total: 5 },
+        },
+      });
+
+      compareRun2 = await db.run.create({
+        data: {
+          definitionId: compareDef.id,
+          status: 'COMPLETED',
+          config: { models: ['claude-3'] },
+          progress: { completed: 3, total: 3 },
+        },
+      });
+
+      compareRun3 = await db.run.create({
+        data: {
+          definitionId: compareDef.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4', 'claude-3'] },
+          progress: { completed: 10, total: 10 },
+        },
+      });
+
+      // Create a soft-deleted run
+      deletedRun = await db.run.create({
+        data: {
+          definitionId: compareDef.id,
+          status: 'COMPLETED',
+          config: { models: ['test'] },
+          deletedAt: new Date(),
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await db.run.deleteMany({
+        where: { id: { in: [compareRun1.id, compareRun2.id, compareRun3.id, deletedRun.id] } },
+      });
+      await db.definition.deleteMany({ where: { id: compareDef.id } });
+    });
+
+    it('returns multiple runs by IDs', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+            status
+            definitionId
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [compareRun1.id, compareRun2.id] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.runsWithAnalysis).toHaveLength(2);
+
+      const ids = response.body.data.runsWithAnalysis.map((r: { id: string }) => r.id);
+      expect(ids).toContain(compareRun1.id);
+      expect(ids).toContain(compareRun2.id);
+    });
+
+    it('preserves requested order of IDs', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+          }
+        }
+      `;
+
+      // Request in specific order: run3, run1, run2
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [compareRun3.id, compareRun1.id, compareRun2.id] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.runsWithAnalysis).toHaveLength(3);
+      expect(response.body.data.runsWithAnalysis[0].id).toBe(compareRun3.id);
+      expect(response.body.data.runsWithAnalysis[1].id).toBe(compareRun1.id);
+      expect(response.body.data.runsWithAnalysis[2].id).toBe(compareRun2.id);
+    });
+
+    it('excludes soft-deleted runs', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [compareRun1.id, deletedRun.id] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      // Should only return the non-deleted run
+      expect(response.body.data.runsWithAnalysis).toHaveLength(1);
+      expect(response.body.data.runsWithAnalysis[0].id).toBe(compareRun1.id);
+    });
+
+    it('handles non-existent IDs gracefully', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [compareRun1.id, 'nonexistent-id'] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      // Should only return the existing run
+      expect(response.body.data.runsWithAnalysis).toHaveLength(1);
+      expect(response.body.data.runsWithAnalysis[0].id).toBe(compareRun1.id);
+    });
+
+    it('returns empty array for empty IDs', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.runsWithAnalysis).toHaveLength(0);
+    });
+
+    it('enforces max limit of 10 runs', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+          }
+        }
+      `;
+
+      // Create array of 11 IDs
+      const tooManyIds = [
+        compareRun1.id, compareRun2.id, compareRun3.id,
+        'id4', 'id5', 'id6', 'id7', 'id8', 'id9', 'id10', 'id11',
+      ];
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: tooManyIds } })
+        .expect(200);
+
+      // Should return error
+      expect(response.body.errors).toBeDefined();
+      expect(response.body.errors[0].message).toContain('Maximum 10 runs');
+    });
+
+    it('resolves definition relationship for each run', async () => {
+      const query = `
+        query RunsWithAnalysis($ids: [ID!]!) {
+          runsWithAnalysis(ids: $ids) {
+            id
+            definition {
+              id
+              name
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { ids: [compareRun1.id, compareRun2.id] } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      for (const run of response.body.data.runsWithAnalysis) {
+        expect(run.definition).toMatchObject({
+          id: compareDef.id,
+          name: 'Comparison Test Def',
+        });
+      }
+    });
+  });
 });
