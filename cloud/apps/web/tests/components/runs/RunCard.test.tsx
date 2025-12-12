@@ -13,6 +13,7 @@ import type { Run } from '../../../src/api/operations/runs';
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-12345678-abcd',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     experimentId: null,
     status: 'COMPLETED',
@@ -47,9 +48,10 @@ describe('RunCard', () => {
     const run = createMockRun();
     render(<RunCard run={run} />);
 
-    expect(screen.getByText('Test Definition')).toBeInTheDocument();
-    // Run ID is sliced to first 8 characters
-    expect(screen.getByText(/Run run-1234/i)).toBeInTheDocument();
+    // Run name shows in h3 as "Run: Test Definition on Jan 15, 2024"
+    expect(screen.getByText(/Run:.*Test Definition/)).toBeInTheDocument();
+    // Definition name shows in small text
+    expect(screen.getByText(/Test Definition.*·/)).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
   });
 
@@ -97,7 +99,9 @@ describe('RunCard', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<RunCard run={run} />);
 
-    expect(screen.getByText('Unnamed Definition')).toBeInTheDocument();
+    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Definition" in small text
+    expect(screen.getByText(/Run:.*Unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/Unnamed Definition.*·/)).toBeInTheDocument();
   });
 
   it('shows progress bar for completed runs', () => {

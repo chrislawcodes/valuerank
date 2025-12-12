@@ -26,6 +26,7 @@ vi.mock('react-router-dom', async () => {
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-12345678-abcd',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     experimentId: null,
     status: 'COMPLETED',
@@ -230,9 +231,10 @@ describe('Runs Page', () => {
     await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Definition A')).toBeInTheDocument();
+      // Definition name appears in multiple places (h3 and small text)
+      expect(screen.getAllByText(/Definition A/).length).toBeGreaterThan(0);
     });
-    expect(screen.getByText('Definition B')).toBeInTheDocument();
+    expect(screen.getAllByText(/Definition B/).length).toBeGreaterThan(0);
   });
 
   it('navigates to run detail when run is clicked', async () => {
@@ -257,7 +259,7 @@ describe('Runs Page', () => {
     await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Test Definition')).toBeInTheDocument();
+      expect(screen.getAllByText(/Test Definition/).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getByRole('button', { name: /Test Definition/ }));
@@ -338,7 +340,7 @@ describe('Runs Page', () => {
     await user.click(screen.getByRole('button', { name: /list view/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Definition 0')).toBeInTheDocument();
+      expect(screen.getAllByText(/Definition 0/).length).toBeGreaterThan(0);
     });
 
     // Should show pagination

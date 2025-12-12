@@ -6,6 +6,7 @@
 
 import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 'lucide-react';
 import type { Run, RunStatus } from '../../api/operations/runs';
+import { formatRunName } from '../../lib/format';
 
 type RunCardProps = {
   run: Run;
@@ -71,14 +72,14 @@ export function RunCard({ run, onClick }: RunCardProps) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-gray-900 truncate">
-                {run.definition?.name || 'Unnamed Definition'}
+                {formatRunName(run)}
               </h3>
               <span className={`text-xs px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.color}`}>
                 {statusConfig.label}
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              Run {run.id.slice(0, 8)}... · {formatDate(run.createdAt)}
+              {run.definition?.name || 'Unnamed Definition'} · {formatDate(run.createdAt)}
             </p>
           </div>
         </div>

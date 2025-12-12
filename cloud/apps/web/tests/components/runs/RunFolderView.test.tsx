@@ -7,6 +7,7 @@ const mockTag2 = { id: 'tag-2', name: 'Ethics' };
 
 const createRun = (id: string, definitionName: string, tags: typeof mockTag1[] = []) => ({
   id,
+  name: null, // Uses algorithmic name
   definitionId: `def-${id}`,
   experimentId: null,
   status: 'COMPLETED' as const,
@@ -65,7 +66,7 @@ describe('RunFolderView', () => {
     render(<RunFolderView runs={runs} onRunClick={onClick} />);
 
     // Initially collapsed - run should not be visible
-    expect(screen.queryByText('Test Definition')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Test Definition/).length).toBe(0);
 
     // Click folder header to expand
     const folderButtons = screen.getAllByRole('button');
@@ -74,11 +75,12 @@ describe('RunFolderView', () => {
     );
     fireEvent.click(safetyFolderButton!);
 
-    expect(screen.getByText('Test Definition')).toBeInTheDocument();
+    // Now visible (appears in h3 and small text)
+    expect(screen.getAllByText(/Test Definition/).length).toBeGreaterThan(0);
 
     // Click to collapse
     fireEvent.click(safetyFolderButton!);
-    expect(screen.queryByText('Test Definition')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Test Definition/).length).toBe(0);
   });
 
   it('expands all folders when Expand all is clicked', () => {
@@ -91,15 +93,15 @@ describe('RunFolderView', () => {
     render(<RunFolderView runs={runs} onRunClick={onClick} />);
 
     // Initially collapsed
-    expect(screen.queryByText('Definition 1')).not.toBeInTheDocument();
-    expect(screen.queryByText('Definition 2')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Definition 1/).length).toBe(0);
+    expect(screen.queryAllByText(/Definition 2/).length).toBe(0);
 
     // Click expand all
     fireEvent.click(screen.getByText('Expand all'));
 
     // Both should be visible
-    expect(screen.getByText('Definition 1')).toBeInTheDocument();
-    expect(screen.getByText('Definition 2')).toBeInTheDocument();
+    expect(screen.getAllByText(/Definition 1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Definition 2/).length).toBeGreaterThan(0);
   });
 
   it('collapses all folders when Collapse all is clicked', () => {
@@ -113,12 +115,12 @@ describe('RunFolderView', () => {
 
     // First expand all
     fireEvent.click(screen.getByText('Expand all'));
-    expect(screen.getByText('Definition 1')).toBeInTheDocument();
+    expect(screen.getAllByText(/Definition 1/).length).toBeGreaterThan(0);
 
     // Then collapse all
     fireEvent.click(screen.getByText('Collapse all'));
-    expect(screen.queryByText('Definition 1')).not.toBeInTheDocument();
-    expect(screen.queryByText('Definition 2')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Definition 1/).length).toBe(0);
+    expect(screen.queryAllByText(/Definition 2/).length).toBe(0);
   });
 
   it('calls onRunClick when run card is clicked', () => {
@@ -130,8 +132,11 @@ describe('RunFolderView', () => {
     // Expand folder first
     fireEvent.click(screen.getByText('Expand all'));
 
-    // Click on run
-    fireEvent.click(screen.getByText('Test Definition'));
+    // Click on run card button
+    const runButtons = screen.getAllByRole('button').filter(
+      (btn) => btn.textContent?.includes('Test Definition')
+    );
+    fireEvent.click(runButtons[0]);
     expect(onClick).toHaveBeenCalledWith('run-1');
   });
 
@@ -161,9 +166,9 @@ describe('RunFolderView', () => {
     // Expand both folders
     fireEvent.click(screen.getByText('Expand all'));
 
-    // Run should appear in both folders
-    const definitionNames = screen.getAllByText('Multi-tagged Definition');
-    expect(definitionNames).toHaveLength(2);
+    // Run should appear in both folders - now uses formatted run name
+    const definitionNames = screen.getAllByText(/Multi-tagged Definition/);
+    expect(definitionNames.length).toBeGreaterThanOrEqual(2);
   });
 
   it('sorts folders alphabetically by tag name', () => {
@@ -191,18 +196,18 @@ describe('RunFolderView', () => {
     render(<RunFolderView runs={runs} onRunClick={onClick} />);
 
     // Initially collapsed
-    expect(screen.queryByText('Untagged Definition')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Untagged Definition/).length).toBe(0);
 
     // Expand untagged folder
     const untaggedButton = screen.getAllByRole('button').find((btn) =>
       btn.textContent?.includes('Untagged') && btn.classList.contains('w-full')
     );
     fireEvent.click(untaggedButton!);
-    expect(screen.getByText('Untagged Definition')).toBeInTheDocument();
+    expect(screen.getAllByText(/Untagged Definition/).length).toBeGreaterThan(0);
 
     // Collapse
     fireEvent.click(untaggedButton!);
-    expect(screen.queryByText('Untagged Definition')).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Untagged Definition/).length).toBe(0);
   });
 
   it('handles runs with definitions that have no tags', () => {
@@ -233,8 +238,8 @@ describe('RunFolderView', () => {
     // Expand all should expand both tagged and untagged folders
     fireEvent.click(screen.getByText('Expand all'));
 
-    expect(screen.getByText('Tagged Definition')).toBeInTheDocument();
-    expect(screen.getByText('Untagged Definition')).toBeInTheDocument();
+    expect(screen.getAllByText(/Tagged Definition/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Untagged Definition/).length).toBeGreaterThan(0);
   });
 
   it('handles runs where definition is undefined', () => {

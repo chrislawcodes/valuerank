@@ -13,6 +13,7 @@ import type { Run } from '../../../src/api/operations/runs';
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-12345678-abcd',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     experimentId: null,
     status: 'COMPLETED',
@@ -51,9 +52,10 @@ describe('AnalysisCard', () => {
     const run = createMockRun();
     render(<AnalysisCard run={run} />);
 
-    expect(screen.getByText('Test Definition')).toBeInTheDocument();
-    // Run ID is sliced to first 8 characters
-    expect(screen.getByText(/Run run-1234/i)).toBeInTheDocument();
+    // Run name shows in h3 as "Run: Test Definition on Jan 15, 2024"
+    expect(screen.getByText(/Run:.*Test Definition/)).toBeInTheDocument();
+    // Definition name shows in small text
+    expect(screen.getByText(/Test Definition.*·/)).toBeInTheDocument();
   });
 
   it('shows model count', () => {
@@ -122,7 +124,9 @@ describe('AnalysisCard', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<AnalysisCard run={run} />);
 
-    expect(screen.getByText('Unnamed Definition')).toBeInTheDocument();
+    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Definition" in small text
+    expect(screen.getByText(/Run:.*Unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/Unnamed Definition.*·/)).toBeInTheDocument();
   });
 
   it('shows tags when present', () => {
@@ -171,8 +175,9 @@ describe('AnalysisCard', () => {
     });
     render(<AnalysisCard run={run} />);
 
-    // The card should show the completed date (Jan 15)
-    expect(screen.getByText(/Jan 15/i)).toBeInTheDocument();
+    // The card shows the date in multiple places (run name and small text)
+    const dateElements = screen.getAllByText(/Jan 15/i);
+    expect(dateElements.length).toBeGreaterThan(0);
   });
 
   it('uses createdAt for display date when completedAt is null', () => {
@@ -182,8 +187,9 @@ describe('AnalysisCard', () => {
     });
     render(<AnalysisCard run={run} />);
 
-    // The card should show the created date
-    expect(screen.getByText(/Jan 15/i)).toBeInTheDocument();
+    // The card shows the date in multiple places
+    const dateElements = screen.getAllByText(/Jan 15/i);
+    expect(dateElements.length).toBeGreaterThan(0);
   });
 
   it('handles null analysisStatus gracefully', () => {
