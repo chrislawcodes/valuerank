@@ -127,13 +127,13 @@
 
 **Purpose**: Final validation, edge cases, and documentation
 
-- [ ] T030 [P] Add empty state to Analysis.tsx for "No analysis results yet"
-- [ ] T031 [P] Add loading state to Analysis.tsx consistent with Runs.tsx
-- [ ] T032 Handle edge case: analysis computing/pending (show in list but indicate status)
-- [ ] T033 Handle edge case: superseded analysis (muted styling, badge)
-- [ ] T034 Run full test suite: `npm run test:coverage`
-- [ ] T035 Manual QA using quickstart.md scenarios
-- [ ] T036 Verify build succeeds: `npm run build`
+- [X] T030 [P] Add empty state to Analysis.tsx for "No analysis results yet"
+- [X] T031 [P] Add loading state to Analysis.tsx consistent with Runs.tsx
+- [X] T032 Handle edge case: analysis computing/pending (show in list but indicate status)
+- [X] T033 Handle edge case: superseded analysis (muted styling, badge)
+- [X] T034 Run full test suite: `npm run test:coverage`
+- [X] T035 Manual QA using quickstart.md scenarios
+- [X] T036 Verify build succeeds: `npm run build`
 
 **Checkpoint**: Feature complete and validated
 
