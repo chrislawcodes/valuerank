@@ -98,10 +98,10 @@
 
 ### Implementation for User Story 4
 
-- [ ] T023 [US4] Modify `apps/web/src/pages/RunDetail.tsx` - add "View Analysis" link in header area
-- [ ] T024 [US4] Modify `apps/web/src/pages/RunDetail.tsx` - remove embedded AnalysisPanel from bottom
-- [ ] T025 [US4] Handle analysis states in RunDetail.tsx: available (link), computing (status), unavailable (hidden)
-- [ ] T026 [US4] Update RunDetail tests to verify new behavior in `apps/web/src/pages/RunDetail.test.tsx`
+- [X] T023 [US4] Modify `apps/web/src/pages/RunDetail.tsx` - add "View Analysis" link in header area
+- [X] T024 [US4] Modify `apps/web/src/pages/RunDetail.tsx` - remove embedded AnalysisPanel from bottom
+- [X] T025 [US4] Handle analysis states in RunDetail.tsx: available (link), computing (status), unavailable (hidden)
+- [X] T026 [US4] Update RunDetail tests to verify new behavior in `apps/web/src/pages/RunDetail.test.tsx`
 
 **Checkpoint**: User Story 4 complete - run detail links to analysis, no embedded panel
 

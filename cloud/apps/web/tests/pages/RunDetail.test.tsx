@@ -20,16 +20,6 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
   useRunMutations: vi.fn(),
 }));
 
-vi.mock('../../src/hooks/useAnalysis', () => ({
-  useAnalysis: vi.fn().mockReturnValue({
-    analysis: null,
-    loading: false,
-    error: null,
-    rerunAnalysis: vi.fn(),
-    rerunning: false,
-  }),
-}));
-
 import { useRun } from '../../src/hooks/useRun';
 import { useRunMutations } from '../../src/hooks/useRunMutations';
 
@@ -58,9 +48,13 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     transcripts: [],
     transcriptCount: 0,
     recentTasks: [],
+    analysisStatus: null,
+    executionMetrics: null,
+    analysis: null,
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      tags: [],
     },
     ...overrides,
   };
@@ -73,6 +67,7 @@ function renderWithRouter(runId: string = 'run-123456') {
         <Route path="/runs/:id" element={<RunDetail />} />
         <Route path="/runs" element={<div>Runs List</div>} />
         <Route path="/definitions/:id" element={<div>Definition Detail</div>} />
+        <Route path="/analysis/:id" element={<div>Analysis Detail</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -82,6 +77,7 @@ describe('RunDetail', () => {
   const mockPauseRun = vi.fn();
   const mockResumeRun = vi.fn();
   const mockCancelRun = vi.fn();
+  const mockDeleteRun = vi.fn();
   const mockRefetch = vi.fn();
 
   beforeEach(() => {
@@ -91,6 +87,7 @@ describe('RunDetail', () => {
       pauseRun: mockPauseRun,
       resumeRun: mockResumeRun,
       cancelRun: mockCancelRun,
+      deleteRun: mockDeleteRun,
       loading: false,
       error: null,
     });
@@ -357,5 +354,112 @@ describe('RunDetail', () => {
     renderWithRouter();
 
     expect(screen.getByRole('button', { name: /back to runs/i })).toBeInTheDocument();
+  });
+
+  describe('Analysis Banner', () => {
+    it('shows View Analysis link for completed runs with completed analysis', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        analysisStatus: 'completed',
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByText('Analysis Complete')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /view analysis/i })).toBeInTheDocument();
+    });
+
+    it('shows computing status for analysis being computed', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        analysisStatus: 'computing',
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByText('Analysis Computing')).toBeInTheDocument();
+    });
+
+    it('shows pending status for pending analysis', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        analysisStatus: 'pending',
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByText('Analysis Pending')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /view analysis/i })).toBeInTheDocument();
+    });
+
+    it('shows failed status for failed analysis', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        analysisStatus: 'failed',
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByText('Analysis Failed')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /view analysis/i })).toBeInTheDocument();
+    });
+
+    it('does not show analysis banner for running runs without analysis', () => {
+      const run = createMockRun({
+        status: 'RUNNING',
+        analysisStatus: null,
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.queryByText(/analysis/i, { selector: 'h3' })).not.toBeInTheDocument();
+    });
+
+    it('shows analysis link for completed runs without analysis status', () => {
+      const run = createMockRun({
+        status: 'COMPLETED',
+        analysisStatus: null,
+      });
+      vi.mocked(useRun).mockReturnValue({
+        run,
+        loading: false,
+        error: null,
+        refetch: mockRefetch,
+      });
+
+      renderWithRouter();
+
+      expect(screen.getByRole('link', { name: /view analysis/i })).toBeInTheDocument();
+    });
   });
 });
