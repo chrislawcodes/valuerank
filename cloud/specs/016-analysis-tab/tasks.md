@@ -80,11 +80,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Create `apps/web/src/pages/AnalysisDetail.tsx` - detail page wrapping AnalysisPanel
-- [ ] T019 [US3] Add header with "Back to Analysis" button and "View Run" link to AnalysisDetail.tsx
-- [ ] T020 [US3] Add `/analysis/:id` route to `apps/web/src/App.tsx`
-- [ ] T021 [US3] Handle error state in AnalysisDetail.tsx for invalid/missing analysis
-- [ ] T022 [US3] Write test for AnalysisDetail in `apps/web/src/pages/AnalysisDetail.test.tsx`
+- [X] T018 [US3] Create `apps/web/src/pages/AnalysisDetail.tsx` - detail page wrapping AnalysisPanel
+- [X] T019 [US3] Add header with "Back to Analysis" button and "View Run" link to AnalysisDetail.tsx
+- [X] T020 [US3] Add `/analysis/:id` route to `apps/web/src/App.tsx`
+- [X] T021 [US3] Handle error state in AnalysisDetail.tsx for invalid/missing analysis
+- [X] T022 [US3] Write test for AnalysisDetail in `apps/web/src/pages/AnalysisDetail.test.tsx`
 
 **Checkpoint**: User Story 3 complete - analysis detail page shows all information
 
