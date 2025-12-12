@@ -9,6 +9,7 @@ import { Definitions } from './pages/Definitions';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
+import { Analysis } from './pages/Analysis';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
 import { client } from './api/client';
@@ -69,6 +70,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <RunDetail />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/analysis"
+            element={
+              <ProtectedLayout>
+                <Analysis />
               </ProtectedLayout>
             }
           />

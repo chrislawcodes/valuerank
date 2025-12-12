@@ -44,11 +44,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create `apps/web/src/hooks/useRunsWithAnalysis.ts` - hook wrapping useRuns with hasAnalysis:true
-- [ ] T009 [P] [US1] Create `apps/web/src/components/analysis/AnalysisCard.tsx` - card displaying run with analysis info
-- [ ] T010 [US1] Create `apps/web/src/pages/Analysis.tsx` - list page using useRunsWithAnalysis and AnalysisCard
-- [ ] T011 [US1] Add `/analysis` route to `apps/web/src/App.tsx`
-- [ ] T012 [US1] Write test for AnalysisCard in `apps/web/src/components/analysis/AnalysisCard.test.tsx`
+- [X] T008 [P] [US1] Create `apps/web/src/hooks/useRunsWithAnalysis.ts` - hook wrapping useRuns with hasAnalysis:true
+- [X] T009 [P] [US1] Create `apps/web/src/components/analysis/AnalysisCard.tsx` - card displaying run with analysis info
+- [X] T010 [US1] Create `apps/web/src/pages/Analysis.tsx` - list page using useRunsWithAnalysis and AnalysisCard
+- [X] T011 [US1] Add `/analysis` route to `apps/web/src/App.tsx`
+- [X] T012 [US1] Write test for AnalysisCard in `apps/web/src/components/analysis/AnalysisCard.test.tsx`
 
 **Checkpoint**: User Story 1 complete - users can browse analysis list at /analysis
 
