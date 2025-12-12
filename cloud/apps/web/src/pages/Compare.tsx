@@ -10,6 +10,7 @@ import { useComparisonState } from '../hooks/useComparisonState';
 import { useComparisonData } from '../hooks/useComparisonData';
 import { RunSelector } from '../components/compare/RunSelector';
 import { ComparisonHeader } from '../components/compare/ComparisonHeader';
+import { VisualizationNav } from '../components/compare/VisualizationNav';
 import { getVisualization, PlaceholderVisualization } from '../components/compare/visualizations/registry';
 import { Loading } from '../components/ui/Loading';
 
@@ -78,6 +79,16 @@ export function Compare() {
               onDeselect={toggleRunSelection}
               onClearAll={clearSelection}
             />
+
+            {/* Visualization Navigation */}
+            {hasEnoughRuns && (
+              <VisualizationNav
+                activeVisualization={visualization}
+                runCount={runsWithAnalysis.length}
+                onVisualizationChange={setVisualization}
+                className="mb-4"
+              />
+            )}
 
             {/* Visualization Area */}
             <div className="flex-1 min-h-0 overflow-auto">
