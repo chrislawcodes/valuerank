@@ -32,6 +32,7 @@ export { VisualizationNav } from './VisualizationNav';
 export { OverviewViz } from './visualizations/OverviewViz';
 export { DecisionsViz } from './visualizations/DecisionsViz';
 export { ValuesViz } from './visualizations/ValuesViz';
+export { TimelineViz } from './visualizations/TimelineViz';
 
 // ============================================================================
 // TYPES

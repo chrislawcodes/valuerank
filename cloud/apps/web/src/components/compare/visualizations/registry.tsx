@@ -20,12 +20,13 @@
  * ```
  */
 
-import { LayoutDashboard, BarChart3, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, BarChart3, TrendingUp, LineChart } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
 import { OverviewViz } from './OverviewViz';
 import { DecisionsViz } from './DecisionsViz';
 import { ValuesViz } from './ValuesViz';
+import { TimelineViz } from './TimelineViz';
 
 // ============================================================================
 // TYPES
@@ -158,4 +159,14 @@ registerVisualization({
   component: ValuesViz,
   minRuns: 2,
   description: 'Compare value win rates across runs with significance highlighting',
+});
+
+// Register Timeline visualization
+registerVisualization({
+  id: 'timeline',
+  label: 'Timeline',
+  icon: LineChart,
+  component: TimelineViz,
+  minRuns: 2,
+  description: 'Track model behavioral drift over time across runs',
 });

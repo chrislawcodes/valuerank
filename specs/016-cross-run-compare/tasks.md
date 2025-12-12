@@ -225,15 +225,15 @@
 
 ### Implementation for User Story 7
 
-- [ ] T042 [US7] Create TimelineViz component in `cloud/apps/web/src/components/compare/visualizations/TimelineViz.tsx`
+- [X] T042 [US7] Create TimelineViz component in `cloud/apps/web/src/components/compare/visualizations/TimelineViz.tsx`
   - Line chart with Recharts LineChart/ComposedChart
   - X-axis: run completion dates
   - Y-axis: mean decision (selectable metric)
   - Multiple lines for common models
   - Model filter for single-model view
   - Tooltips with run details and links
-- [ ] T043 [US7] Register TimelineViz in registry
-- [ ] T044 [US7] Add tests for TimelineViz in `cloud/apps/web/tests/components/compare/visualizations/TimelineViz.test.tsx`
+- [X] T043 [US7] Register TimelineViz in registry
+- [X] T044 [US7] Add tests for TimelineViz in `cloud/apps/web/tests/components/compare/visualizations/TimelineViz.test.tsx`
 
 **Checkpoint**: US7 complete - timeline shows model behavioral drift over time
 
