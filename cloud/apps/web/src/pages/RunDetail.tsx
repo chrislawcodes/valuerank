@@ -4,9 +4,10 @@
  * Displays details of a single run including progress and results.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Calendar, Clock, Play, RefreshCw, Trash2, BarChart2, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Calendar, Clock, Play, RefreshCw, Trash2, BarChart2, Loader2, Pencil, Check, X } from 'lucide-react';
+import { formatRunName } from '../lib/format';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -63,6 +64,10 @@ export function RunDetail() {
   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -70,7 +75,51 @@ export function RunDetail() {
     enablePolling: true,
   });
 
-  const { pauseRun, resumeRun, cancelRun, deleteRun } = useRunMutations();
+  const { pauseRun, resumeRun, cancelRun, deleteRun, updateRun } = useRunMutations();
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  const handleStartEditName = useCallback(() => {
+    if (run) {
+      setEditedName(run.name || '');
+      setIsEditingName(true);
+    }
+  }, [run]);
+
+  const handleCancelEditName = useCallback(() => {
+    setIsEditingName(false);
+    setEditedName('');
+  }, []);
+
+  const handleSaveName = useCallback(async () => {
+    if (!run) return;
+    setIsSavingName(true);
+    try {
+      // If name is empty, set to null (use default algorithmic name)
+      const newName = editedName.trim() || null;
+      await updateRun(run.id, { name: newName });
+      setIsEditingName(false);
+      refetch();
+    } catch (err) {
+      console.error('Failed to save run name:', err);
+    } finally {
+      setIsSavingName(false);
+    }
+  }, [run, editedName, updateRun, refetch]);
+
+  const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      void handleSaveName();
+    } else if (e.key === 'Escape') {
+      handleCancelEditName();
+    }
+  }, [handleSaveName, handleCancelEditName]);
 
   const handleExport = useCallback(async () => {
     if (!run) return;
@@ -218,9 +267,52 @@ export function RunDetail() {
               <Play className="w-5 h-5 text-teal-600" />
             </div>
             <div>
-              <h1 className="text-xl font-medium text-gray-900">
-                Run {run.id.slice(0, 8)}...
-              </h1>
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    onKeyDown={handleNameKeyDown}
+                    placeholder="Enter run name..."
+                    className="text-xl font-medium text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    disabled={isSavingName}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveName()}
+                    disabled={isSavingName}
+                    className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded"
+                    title="Save"
+                  >
+                    <Check className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelEditName}
+                    disabled={isSavingName}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                    title="Cancel"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group">
+                  <h1 className="text-xl font-medium text-gray-900">
+                    {formatRunName(run)}
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={handleStartEditName}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit name"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => navigate(`/definitions/${run.definitionId}`)}

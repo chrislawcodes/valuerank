@@ -13,6 +13,7 @@ import type { ComparisonRun } from '../../../src/api/operations/comparison';
 function createMockRun(overrides: Partial<ComparisonRun> = {}): ComparisonRun {
   return {
     id: 'run-1',
+    name: null, // Uses algorithmic name by default
     definitionId: 'def-1',
     status: 'COMPLETED',
     config: { models: ['gpt-4o', 'claude-3'] },
@@ -51,8 +52,9 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('Definition A')).toBeInTheDocument();
-      expect(screen.getByText('Definition B')).toBeInTheDocument();
+      // Uses formatRunName which shows "Run: <definition name> on <date>"
+      expect(screen.getByText(/Definition A/)).toBeInTheDocument();
+      expect(screen.getByText(/Definition B/)).toBeInTheDocument();
     });
 
     it('shows selection count', () => {
@@ -199,8 +201,9 @@ describe('RunSelector', () => {
 
       await user.type(screen.getByPlaceholderText('Search runs...'), 'Trolley');
 
-      expect(screen.getByText('Trolley Problem')).toBeInTheDocument();
-      expect(screen.queryByText('Medical Ethics')).not.toBeInTheDocument();
+      // Uses formatRunName - search by partial match
+      expect(screen.getByText(/Trolley Problem/)).toBeInTheDocument();
+      expect(screen.queryByText(/Medical Ethics/)).not.toBeInTheDocument();
     });
 
     it('shows empty search results state', async () => {

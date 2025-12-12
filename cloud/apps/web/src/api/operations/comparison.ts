@@ -32,6 +32,7 @@ export type ComparisonRunDefinition = {
 
 export type ComparisonRun = {
   id: string;
+  name: string | null;
   definitionId: string;
   status: string;
   config: {
@@ -63,6 +64,7 @@ export type ComparisonRun = {
 export const COMPARISON_RUN_LIST_FRAGMENT = gql`
   fragment ComparisonRunListFields on Run {
     id
+    name
     definitionId
     status
     config
@@ -91,6 +93,7 @@ export const COMPARISON_RUN_LIST_FRAGMENT = gql`
 export const COMPARISON_RUN_FULL_FRAGMENT = gql`
   fragment ComparisonRunFullFields on Run {
     id
+    name
     definitionId
     status
     config

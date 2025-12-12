@@ -34,6 +34,10 @@ builder.objectType(RunRef, {
   description: 'A run execution against a definition',
   fields: (t) => ({
     id: t.exposeID('id'),
+    name: t.exposeString('name', {
+      nullable: true,
+      description: 'Optional user-defined name for this run',
+    }),
     definitionId: t.exposeString('definitionId'),
     experimentId: t.exposeString('experimentId', { nullable: true }),
     status: t.exposeString('status', {

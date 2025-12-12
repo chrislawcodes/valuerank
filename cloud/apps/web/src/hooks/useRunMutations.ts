@@ -6,6 +6,7 @@ import {
   RESUME_RUN_MUTATION,
   CANCEL_RUN_MUTATION,
   DELETE_RUN_MUTATION,
+  UPDATE_RUN_MUTATION,
   type Run,
   type StartRunInput,
   type StartRunMutationVariables,
@@ -18,6 +19,9 @@ import {
   type CancelRunMutationResult,
   type DeleteRunMutationVariables,
   type DeleteRunMutationResult,
+  type UpdateRunInput,
+  type UpdateRunMutationVariables,
+  type UpdateRunMutationResult,
 } from '../api/operations/runs';
 
 type StartRunResult = {
@@ -31,6 +35,7 @@ type UseRunMutationsResult = {
   resumeRun: (runId: string) => Promise<Run>;
   cancelRun: (runId: string) => Promise<Run>;
   deleteRun: (runId: string) => Promise<boolean>;
+  updateRun: (runId: string, input: UpdateRunInput) => Promise<Run>;
   loading: boolean;
   error: Error | null;
 };
@@ -63,6 +68,11 @@ export function useRunMutations(): UseRunMutationsResult {
     DeleteRunMutationResult,
     DeleteRunMutationVariables
   >(DELETE_RUN_MUTATION);
+
+  const [updateRunResult, executeUpdateRun] = useMutation<
+    UpdateRunMutationResult,
+    UpdateRunMutationVariables
+  >(UPDATE_RUN_MUTATION);
 
   const startRun = useCallback(
     async (input: StartRunInput): Promise<StartRunResult> => {
@@ -134,20 +144,36 @@ export function useRunMutations(): UseRunMutationsResult {
     [executeDeleteRun]
   );
 
+  const updateRun = useCallback(
+    async (runId: string, input: UpdateRunInput): Promise<Run> => {
+      const result = await executeUpdateRun({ runId, input });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (!result.data?.updateRun) {
+        throw new Error('Failed to update run');
+      }
+      return result.data.updateRun;
+    },
+    [executeUpdateRun]
+  );
+
   // Combine loading and error states
   const loading =
     startRunResult.fetching ||
     pauseRunResult.fetching ||
     resumeRunResult.fetching ||
     cancelRunResult.fetching ||
-    deleteRunResult.fetching;
+    deleteRunResult.fetching ||
+    updateRunResult.fetching;
 
   const error =
     startRunResult.error ||
     pauseRunResult.error ||
     resumeRunResult.error ||
     cancelRunResult.error ||
-    deleteRunResult.error;
+    deleteRunResult.error ||
+    updateRunResult.error;
 
   return {
     startRun,
@@ -155,6 +181,7 @@ export function useRunMutations(): UseRunMutationsResult {
     resumeRun,
     cancelRun,
     deleteRun,
+    updateRun,
     loading,
     error: error ? new Error(error.message) : null,
   };

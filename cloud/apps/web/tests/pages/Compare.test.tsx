@@ -52,6 +52,7 @@ function createWrapper(initialPath = '/compare') {
 const mockAvailableRuns = [
   {
     id: 'run-1',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     status: 'COMPLETED',
     config: { models: ['openai:gpt-4o'] },
@@ -108,6 +109,7 @@ const mockAvailableRuns = [
   },
   {
     id: 'run-2',
+    name: null, // Uses algorithmic name
     definitionId: 'def-2',
     status: 'COMPLETED',
     config: { models: ['openai:gpt-4o'] },
@@ -201,8 +203,9 @@ describe('Compare Page', () => {
     it('renders run selector with available runs', () => {
       render(<Compare />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Test Definition A')).toBeInTheDocument();
-      expect(screen.getByText('Test Definition B')).toBeInTheDocument();
+      // Uses formatRunName - search by partial match
+      expect(screen.getByText(/Test Definition A/)).toBeInTheDocument();
+      expect(screen.getByText(/Test Definition B/)).toBeInTheDocument();
     });
   });
 

@@ -161,6 +161,7 @@ model DefinitionTag {
 
 model Run {
   id                 String    @id @default(cuid())
+  name               String?   @map("name")
   definitionId       String    @map("definition_id")
   experimentId       String?   @map("experiment_id")
   status             RunStatus @default(PENDING)

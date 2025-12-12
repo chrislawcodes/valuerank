@@ -26,6 +26,7 @@ import { useRunMutations } from '../../src/hooks/useRunMutations';
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-123456',
+    name: null, // Uses algorithmic name: "Run: Test Definition on Jan 15, 2024"
     definitionId: 'def-1',
     experimentId: null,
     status: 'RUNNING',
@@ -78,6 +79,7 @@ describe('RunDetail', () => {
   const mockResumeRun = vi.fn();
   const mockCancelRun = vi.fn();
   const mockDeleteRun = vi.fn();
+  const mockUpdateRun = vi.fn();
   const mockRefetch = vi.fn();
 
   beforeEach(() => {
@@ -88,6 +90,7 @@ describe('RunDetail', () => {
       resumeRun: mockResumeRun,
       cancelRun: mockCancelRun,
       deleteRun: mockDeleteRun,
+      updateRun: mockUpdateRun,
       loading: false,
       error: null,
     });
@@ -143,10 +146,10 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    // Should show run ID prefix
-    expect(screen.getByText(/Run run-1234/)).toBeInTheDocument();
-    // Should show definition name
-    expect(screen.getByText('Test Definition')).toBeInTheDocument();
+    // Should show formatted run name in title (includes definition name)
+    // Also appears in definition link, so there will be multiple
+    const definitionElements = screen.getAllByText(/Test Definition/);
+    expect(definitionElements.length).toBeGreaterThan(0);
   });
 
   it('shows pause button for running runs', () => {

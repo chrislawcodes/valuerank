@@ -7,6 +7,7 @@
 
 import { CheckCircle, Circle, AlertTriangle, BarChart2, Clock } from 'lucide-react';
 import type { ComparisonRun } from '../../api/operations/comparison';
+import { formatRunName } from '../../lib/format';
 
 type RunSelectorItemProps = {
   run: ComparisonRun;
@@ -68,10 +69,10 @@ export function RunSelectorItem({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Row 1: Definition name */}
+          {/* Row 1: Run name */}
           <div className="flex items-center gap-2">
             <h3 className="font-medium text-gray-900 truncate">
-              {run.definition?.name || 'Unnamed Definition'}
+              {formatRunName(run)}
             </h3>
             {/* Analysis status indicator */}
             {hasCurrentAnalysis && (

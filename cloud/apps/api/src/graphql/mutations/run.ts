@@ -491,3 +491,86 @@ builder.mutationField('deleteRun', (t) =>
     },
   })
 );
+
+// Input type for updateRun mutation
+const UpdateRunInput = builder.inputType('UpdateRunInput', {
+  description: 'Input for updating a run',
+  fields: (t) => ({
+    name: t.string({
+      required: false,
+      description: 'New name for the run (null to clear)',
+    }),
+  }),
+});
+
+// updateRun mutation - update run properties
+builder.mutationField('updateRun', (t) =>
+  t.field({
+    type: RunRef,
+    description: `
+      Update a run's properties.
+
+      Currently supports updating the run name.
+
+      Requires authentication.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to update',
+      }),
+      input: t.arg({
+        type: UpdateRunInput,
+        required: true,
+        description: 'The fields to update',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId, input: args.input }, 'Updating run via GraphQL');
+
+      // Check run exists and is not deleted
+      const run = await db.run.findFirst({
+        where: {
+          id: runId,
+          deletedAt: null,
+        },
+      });
+
+      if (!run) {
+        throw new NotFoundError('Run', runId);
+      }
+
+      // Build update data
+      const updateData: { name?: string | null } = {};
+
+      // Handle name update - allow null to clear
+      if ('name' in args.input) {
+        updateData.name = args.input.name ?? null;
+      }
+
+      // Update the run
+      const updated = await db.run.update({
+        where: { id: runId },
+        data: updateData,
+      });
+
+      ctx.log.info({ userId: ctx.user.id, runId, name: updated.name }, 'Run updated');
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { updates: updateData },
+      });
+
+      return updated;
+    },
+  })
+);

@@ -87,6 +87,7 @@ export type ActualCost = {
 
 export type Run = {
   id: string;
+  name: string | null;
   definitionId: string;
   experimentId: string | null;
   status: RunStatus;
@@ -120,6 +121,7 @@ export type Run = {
 export const RUN_FRAGMENT = gql`
   fragment RunFields on Run {
     id
+    name
     definitionId
     experimentId
     status
@@ -293,6 +295,15 @@ export const DELETE_RUN_MUTATION = gql`
   }
 `;
 
+export const UPDATE_RUN_MUTATION = gql`
+  mutation UpdateRun($runId: ID!, $input: UpdateRunInput!) {
+    updateRun(runId: $runId, input: $input) {
+      ...RunFields
+    }
+  }
+  ${RUN_FRAGMENT}
+`;
+
 // ============================================================================
 // INPUT TYPES
 // ============================================================================
@@ -372,4 +383,17 @@ export type DeleteRunMutationVariables = {
 
 export type DeleteRunMutationResult = {
   deleteRun: boolean;
+};
+
+export type UpdateRunInput = {
+  name?: string | null;
+};
+
+export type UpdateRunMutationVariables = {
+  runId: string;
+  input: UpdateRunInput;
+};
+
+export type UpdateRunMutationResult = {
+  updateRun: Run;
 };
