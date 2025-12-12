@@ -195,19 +195,26 @@ export function useComparisonState(): UseComparisonStateResult {
   );
 
   // Update filters (uses replaceState to avoid polluting history)
+  // Only updates params that are explicitly provided in newFilters
   const updateFilters = useCallback(
     (newFilters: Partial<ComparisonFilters>) => {
-      updateUrl(
-        {
-          [PARAM_MODEL]: newFilters.model,
-          [PARAM_VALUE]: newFilters.value,
-          [PARAM_DISPLAY]:
-            newFilters.displayMode === 'side-by-side'
-              ? 'side-by-side'
-              : undefined,
-        },
-        true
-      );
+      const updates: Record<string, string | undefined> = {};
+
+      // Only include params that are explicitly provided (not undefined)
+      if ('model' in newFilters) {
+        updates[PARAM_MODEL] = newFilters.model;
+      }
+      if ('value' in newFilters) {
+        updates[PARAM_VALUE] = newFilters.value;
+      }
+      if ('displayMode' in newFilters) {
+        updates[PARAM_DISPLAY] =
+          newFilters.displayMode === 'side-by-side'
+            ? 'side-by-side'
+            : undefined;
+      }
+
+      updateUrl(updates, true);
     },
     [updateUrl]
   );

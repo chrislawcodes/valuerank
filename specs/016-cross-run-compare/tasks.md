@@ -185,14 +185,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T036 [US5] Enhance useComparisonState to handle all filter parameters
+- [X] T036 [US5] Enhance useComparisonState to handle all filter parameters
   - viz, model, value, display mode
   - Ensure history.pushState vs replaceState used correctly
-- [ ] T037 [US5] Add browser history navigation tests in `cloud/apps/web/tests/hooks/useComparisonState.test.ts`
+- [X] T037 [US5] Add browser history navigation tests in `cloud/apps/web/tests/hooks/useComparisonState.test.ts`
   - Back/forward navigation
   - Invalid parameter handling
   - URL length edge cases
-- [ ] T038 [US5] Integration test for full comparison flow in `cloud/apps/web/tests/pages/Compare.test.tsx`
+- [X] T038 [US5] Integration test for full comparison flow in `cloud/apps/web/tests/pages/Compare.test.tsx`
 
 **Checkpoint**: US5 complete - URL captures full state, shareable links work perfectly
 
