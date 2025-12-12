@@ -115,9 +115,9 @@
 
 ### Implementation for User Story 5
 
-- [ ] T027 [US5] Modify `apps/web/src/components/layout/NavTabs.tsx` - add Analysis tab with BarChart2 icon
-- [ ] T028 [US5] Verify tab highlighting works on /analysis and /analysis/:id routes
-- [ ] T029 [US5] Update barrel export in `apps/web/src/components/analysis/index.ts`
+- [X] T027 [US5] Modify `apps/web/src/components/layout/NavTabs.tsx` - add Analysis tab with BarChart2 icon
+- [X] T028 [US5] Verify tab highlighting works on /analysis and /analysis/:id routes
+- [X] T029 [US5] Update barrel export in `apps/web/src/components/analysis/index.ts`
 
 **Checkpoint**: User Story 5 complete - navigation includes Analysis tab
 
