@@ -164,14 +164,14 @@
 
 ### Implementation for User Story 4
 
-- [ ] T033 [US4] Create ValuesViz component in `cloud/apps/web/src/components/compare/visualizations/ValuesViz.tsx`
+- [X] T033 [US4] Create ValuesViz component in `cloud/apps/web/src/components/compare/visualizations/ValuesViz.tsx`
   - Grouped bar chart (Recharts BarChart)
   - Each value has bars for each run
   - Highlight significant changes (>10% difference)
   - Click to show confidence intervals
   - Model filter integration
-- [ ] T034 [US4] Register ValuesViz in registry
-- [ ] T035 [US4] Add tests for ValuesViz in `cloud/apps/web/tests/components/compare/visualizations/ValuesViz.test.tsx`
+- [X] T034 [US4] Register ValuesViz in registry
+- [X] T035 [US4] Add tests for ValuesViz in `cloud/apps/web/tests/components/compare/visualizations/ValuesViz.test.tsx`
 
 **Checkpoint**: US4 complete - value win rate comparison shows patterns and significance
 

@@ -20,11 +20,12 @@
  * ```
  */
 
-import { LayoutDashboard, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, BarChart3, TrendingUp } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
 import { OverviewViz } from './OverviewViz';
 import { DecisionsViz } from './DecisionsViz';
+import { ValuesViz } from './ValuesViz';
 
 // ============================================================================
 // TYPES
@@ -147,4 +148,14 @@ registerVisualization({
   component: DecisionsViz,
   minRuns: 2,
   description: 'Compare decision distributions (1-5 scale) across runs with KS statistics',
+});
+
+// Register Values visualization
+registerVisualization({
+  id: 'values',
+  label: 'Values',
+  icon: TrendingUp,
+  component: ValuesViz,
+  minRuns: 2,
+  description: 'Compare value win rates across runs with significance highlighting',
 });
