@@ -62,11 +62,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [P] [US2] Create `apps/web/src/components/analysis/AnalysisListFilters.tsx` - filters for status, tags, view mode
-- [ ] T014 [P] [US2] Create `apps/web/src/components/analysis/AnalysisFolderView.tsx` - folder view grouped by definition tags
-- [ ] T015 [US2] Update `apps/web/src/pages/Analysis.tsx` - integrate AnalysisListFilters and AnalysisFolderView
-- [ ] T016 [US2] Add pagination controls to Analysis.tsx (10 per page, flat view only)
-- [ ] T017 [US2] Write test for AnalysisListFilters in `apps/web/src/components/analysis/AnalysisListFilters.test.tsx`
+- [X] T013 [P] [US2] Create `apps/web/src/components/analysis/AnalysisListFilters.tsx` - filters for status, tags, view mode
+- [X] T014 [P] [US2] Create `apps/web/src/components/analysis/AnalysisFolderView.tsx` - folder view grouped by definition tags
+- [X] T015 [US2] Update `apps/web/src/pages/Analysis.tsx` - integrate AnalysisListFilters and AnalysisFolderView
+- [X] T016 [US2] Add pagination controls to Analysis.tsx (10 per page, flat view only)
+- [X] T017 [US2] Write test for AnalysisListFilters in `apps/web/src/components/analysis/AnalysisListFilters.test.tsx`
 
 **Checkpoint**: User Story 2 complete - filtering, view modes, and pagination work
 

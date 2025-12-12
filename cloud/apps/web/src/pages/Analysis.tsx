@@ -12,20 +12,47 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisCard } from '../components/analysis/AnalysisCard';
+import { AnalysisListFilters, type AnalysisFilterState } from '../components/analysis/AnalysisListFilters';
+import { AnalysisFolderView } from '../components/analysis/AnalysisFolderView';
 import { useRunsWithAnalysis } from '../hooks/useRunsWithAnalysis';
 
 const PAGE_SIZE = 10;
 
+const defaultFilters: AnalysisFilterState = {
+  analysisStatus: '',
+  tagIds: [],
+  viewMode: 'folder',
+};
+
 export function Analysis() {
   const navigate = useNavigate();
+  const [filters, setFilters] = useState<AnalysisFilterState>(defaultFilters);
   const [page, setPage] = useState(0);
-  const [analysisStatusFilter, setAnalysisStatusFilter] = useState<'CURRENT' | 'SUPERSEDED' | ''>('');
 
   const { runs, loading, error, refetch } = useRunsWithAnalysis({
-    analysisStatus: analysisStatusFilter || undefined,
+    analysisStatus: filters.analysisStatus || undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
+
+  // Filter runs by selected tags (client-side filtering)
+  const filteredRuns = useMemo(() => {
+    if (filters.tagIds.length === 0) {
+      return runs;
+    }
+    return runs.filter((run) => {
+      const tags = run.definition?.tags ?? [];
+      return tags.some((tag) => filters.tagIds.includes(tag.id));
+    });
+  }, [runs, filters.tagIds]);
+
+  const handleFiltersChange = useCallback((newFilters: AnalysisFilterState) => {
+    setFilters(newFilters);
+    // Reset to first page when filters change (except view mode)
+    if (newFilters.analysisStatus !== filters.analysisStatus || newFilters.tagIds !== filters.tagIds) {
+      setPage(0);
+    }
+  }, [filters.analysisStatus, filters.tagIds]);
 
   const handleAnalysisClick = useCallback((runId: string) => {
     navigate(`/analysis/${runId}`);
@@ -37,11 +64,6 @@ export function Analysis() {
 
   const handleNextPage = useCallback(() => {
     setPage((p) => p + 1);
-  }, []);
-
-  const handleStatusFilterChange = useCallback((status: string) => {
-    setAnalysisStatusFilter(status as 'CURRENT' | 'SUPERSEDED' | '');
-    setPage(0);
   }, []);
 
   // Determine if there might be more pages
@@ -67,30 +89,19 @@ export function Analysis() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <label htmlFor="analysis-status-filter" className="text-sm text-gray-600">
-            Status:
-          </label>
-          <select
-            id="analysis-status-filter"
-            value={analysisStatusFilter}
-            onChange={(e) => handleStatusFilterChange(e.target.value)}
-            className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-          >
-            <option value="">All</option>
-            <option value="CURRENT">Current</option>
-            <option value="SUPERSEDED">Superseded</option>
-          </select>
-        </div>
-      </div>
+      <AnalysisListFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
       {/* Results count */}
-      {!loading && runs.length > 0 && (
+      {!loading && filteredRuns.length > 0 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500">
-            Showing {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + runs.length}
-            {analysisStatusFilter && ` (${analysisStatusFilter.toLowerCase()})`}
+            {filters.viewMode === 'flat' ? (
+              <>Showing {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + filteredRuns.length}</>
+            ) : (
+              <>{filteredRuns.length} result{filteredRuns.length !== 1 ? 's' : ''}</>
+            )}
+            {filters.tagIds.length > 0 && ' matching tags'}
+            {filters.analysisStatus && ` (${filters.analysisStatus.toLowerCase()})`}
           </span>
         </div>
       )}
@@ -100,11 +111,13 @@ export function Analysis() {
         <Loading size="lg" text="Loading analysis results..." />
       ) : error ? (
         <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
-      ) : runs.length === 0 ? (
-        <EmptyState hasStatusFilter={!!analysisStatusFilter} />
+      ) : filteredRuns.length === 0 ? (
+        <EmptyState hasStatusFilter={!!filters.analysisStatus} hasTagFilter={filters.tagIds.length > 0} />
+      ) : filters.viewMode === 'folder' ? (
+        <AnalysisFolderView runs={filteredRuns} onRunClick={handleAnalysisClick} />
       ) : (
         <div className="space-y-3">
-          {runs.map((run) => (
+          {filteredRuns.map((run) => (
             <AnalysisCard
               key={run.id}
               run={run}
@@ -114,8 +127,8 @@ export function Analysis() {
         </div>
       )}
 
-      {/* Pagination */}
-      {(hasPrevPage || hasNextPage) && (
+      {/* Pagination (only in flat view) */}
+      {filters.viewMode === 'flat' && (hasPrevPage || hasNextPage) && (
         <div className="flex items-center justify-center gap-2 pt-4">
           <Button
             variant="ghost"
@@ -147,10 +160,10 @@ export function Analysis() {
 /**
  * Empty state component.
  */
-function EmptyState({ hasStatusFilter }: { hasStatusFilter: boolean }) {
+function EmptyState({ hasStatusFilter, hasTagFilter }: { hasStatusFilter: boolean; hasTagFilter: boolean }) {
   const navigate = useNavigate();
 
-  if (hasStatusFilter) {
+  if (hasStatusFilter || hasTagFilter) {
     return (
       <div className="text-center py-12">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
@@ -160,7 +173,7 @@ function EmptyState({ hasStatusFilter }: { hasStatusFilter: boolean }) {
           No analysis found
         </h3>
         <p className="text-gray-500 mb-4">
-          No analysis results match the selected filter.
+          No analysis results match the selected filters.
         </p>
       </div>
     );
