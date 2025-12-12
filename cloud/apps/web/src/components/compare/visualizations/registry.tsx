@@ -20,10 +20,11 @@
  * ```
  */
 
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, BarChart3 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
 import { OverviewViz } from './OverviewViz';
+import { DecisionsViz } from './DecisionsViz';
 
 // ============================================================================
 // TYPES
@@ -136,4 +137,14 @@ registerVisualization({
   component: OverviewViz,
   minRuns: 2,
   description: 'High-level comparison of aggregate statistics, effect sizes, and model coverage',
+});
+
+// Register Decisions visualization
+registerVisualization({
+  id: 'decisions',
+  label: 'Decisions',
+  icon: BarChart3,
+  component: DecisionsViz,
+  minRuns: 2,
+  description: 'Compare decision distributions (1-5 scale) across runs with KS statistics',
 });

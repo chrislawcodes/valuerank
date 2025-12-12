@@ -139,18 +139,18 @@
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Create ComparisonFilters component in `cloud/apps/web/src/components/compare/ComparisonFilters.tsx`
+- [X] T029 [US3] Create ComparisonFilters component in `cloud/apps/web/src/components/compare/ComparisonFilters.tsx`
   - Model filter dropdown
   - Display mode toggle (overlay/side-by-side)
   - Sync filters with URL
-- [ ] T030 [US3] Create DecisionsViz component in `cloud/apps/web/src/components/compare/visualizations/DecisionsViz.tsx`
+- [X] T030 [US3] Create DecisionsViz component in `cloud/apps/web/src/components/compare/visualizations/DecisionsViz.tsx`
   - Histogram/bar chart with Recharts
   - Overlay mode: stacked bars with colors per run
   - Side-by-side mode: small multiples
   - KS statistic display
   - Model aggregation toggle
-- [ ] T031 [US3] Register DecisionsViz in registry
-- [ ] T032 [US3] Add tests for DecisionsViz in `cloud/apps/web/tests/components/compare/visualizations/DecisionsViz.test.tsx`
+- [X] T031 [US3] Register DecisionsViz in registry
+- [X] T032 [US3] Add tests for DecisionsViz in `cloud/apps/web/tests/components/compare/visualizations/DecisionsViz.test.tsx`
 
 **Checkpoint**: US3 complete - decision distribution comparison works with both display modes
 
