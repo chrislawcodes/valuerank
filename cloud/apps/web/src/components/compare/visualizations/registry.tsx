@@ -20,8 +20,10 @@
  * ```
  */
 
+import { LayoutDashboard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
+import { OverviewViz } from './OverviewViz';
 
 // ============================================================================
 // TYPES
@@ -121,3 +123,17 @@ export function PlaceholderVisualization({ runs }: ComparisonVisualizationProps)
     </div>
   );
 }
+
+// ============================================================================
+// REGISTER VISUALIZATIONS
+// ============================================================================
+
+// Register Overview visualization
+registerVisualization({
+  id: 'overview',
+  label: 'Overview',
+  icon: LayoutDashboard,
+  component: OverviewViz,
+  minRuns: 2,
+  description: 'High-level comparison of aggregate statistics, effect sizes, and model coverage',
+});

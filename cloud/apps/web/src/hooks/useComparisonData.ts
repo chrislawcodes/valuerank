@@ -75,6 +75,8 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
   });
 
   // Fetch selected runs with full analysis data
+  // Use network-only to ensure we get fresh data with analysis field
+  // (cache-and-network can return stale data from list query without analysis)
   const [selectedResult, refetchSelected] = useQuery<
     RunsWithAnalysisQueryResult,
     RunsWithAnalysisQueryVariables
@@ -82,7 +84,7 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
     query: RUNS_WITH_ANALYSIS_QUERY,
     variables: { ids: selectedRunIds },
     pause: selectedRunIds.length === 0,
-    requestPolicy: 'cache-and-network',
+    requestPolicy: 'network-only',
   });
 
   // Transform selected runs to RunWithAnalysis type with computed aggregates
@@ -101,14 +103,18 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
           ? computeValueWinRates(run.analysis)
           : undefined;
 
+        // Extract preamble/template from resolvedContent JSON
+        const resolvedContent = run.definition?.resolvedContent;
+        const definitionContent = resolvedContent
+          ? {
+              preamble: resolvedContent.preamble || '',
+              template: resolvedContent.template || '',
+            }
+          : undefined;
+
         return {
           ...run,
-          definitionContent: run.definition
-            ? {
-                preamble: run.definition.preamble || '',
-                template: run.definition.template || '',
-              }
-            : undefined,
+          definitionContent,
           aggregateStats,
           valueWinRates,
         };

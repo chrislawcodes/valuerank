@@ -112,19 +112,19 @@
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Create visualization registry structure in `cloud/apps/web/src/components/compare/visualizations/registry.ts`
+- [x] T024 [US2] Create visualization registry structure in `cloud/apps/web/src/components/compare/visualizations/registry.ts`
   - Registration function, lookup, list
   - Validate minRuns requirement
 - [ ] T025 [US2] Create VisualizationNav component in `cloud/apps/web/src/components/compare/VisualizationNav.tsx`
   - Tab navigation for registered visualizations
   - Disable tabs when minRuns not met
   - Sync with URL viz parameter
-- [ ] T026 [US2] Create OverviewViz component in `cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx`
+- [x] T026 [US2] Create OverviewViz component in `cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx`
   - Summary table with run stats (name, definition, models, sample size, mean)
   - Effect sizes (Cohen's d) between run pairs
   - Common vs unique models indicator
   - Hover for additional metadata
-- [ ] T027 [US2] Register OverviewViz in registry and integrate into Compare page
+- [x] T027 [US2] Register OverviewViz in registry and integrate into Compare page
 - [ ] T028 [US2] Add tests for OverviewViz in `cloud/apps/web/tests/components/compare/visualizations/OverviewViz.test.tsx`
 
 **Checkpoint**: US2 complete - overview visualization shows comparative statistics

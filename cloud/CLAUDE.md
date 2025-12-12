@@ -684,6 +684,67 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
 
 ---
 
+## Local GraphQL API Calls (curl)
+
+When debugging the local dev server, use these commands to make authenticated GraphQL calls.
+
+### Step 1: Generate a JWT Token
+
+The JWT must use `sub` (not `userId`) and the correct secret from `.env`:
+
+```bash
+# Generate token (run from cloud/ directory)
+node -e "
+const jwt = require('jsonwebtoken');
+const token = jwt.sign(
+  { sub: 'cmixy5vz90000l8tv2t6ar0vc', email: 'dev@valuerank.ai' },
+  'dev-secret-key-for-local-development-only-32chars',
+  { expiresIn: '1h' }
+);
+console.log(token);
+"
+```
+
+**Key details:**
+- **JWT Secret**: `dev-secret-key-for-local-development-only-32chars` (from `.env`)
+- **User claim**: Must use `sub` not `userId`
+- **Dev user ID**: `cmixy5vz90000l8tv2t6ar0vc`
+
+### Step 2: Make the GraphQL Call
+
+```bash
+# Set token variable (paste output from Step 1)
+TOKEN="<paste-token-here>"
+
+# Make GraphQL query
+curl -s -X POST http://localhost:3031/graphql \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"query": "query { runs(limit: 5) { id status } }"}'
+```
+
+### One-liner (copy-paste ready)
+
+```bash
+TOKEN=$(node -e "const jwt=require('jsonwebtoken');console.log(jwt.sign({sub:'cmixy5vz90000l8tv2t6ar0vc',email:'dev@valuerank.ai'},'dev-secret-key-for-local-development-only-32chars',{expiresIn:'1h'}))") && curl -s -X POST http://localhost:3031/graphql -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"query": "query { runs(limit: 5) { id status } }"}'
+```
+
+### Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Invalid token` | Wrong JWT secret or wrong claim structure | Use `sub` not `userId`, check `.env` for JWT_SECRET |
+| `UNAUTHORIZED` | No auth header or expired token | Regenerate token |
+| `Authentication required` | Login endpoint requires `/api/auth/login` not GraphQL | Use REST login endpoint |
+
+### Notes
+
+- The GraphQL endpoint is at `http://localhost:3031/graphql`
+- The REST login endpoint is at `http://localhost:3031/api/auth/login`
+- Dev password is `development` but login may fail if hash is stale - use JWT directly
+
+---
+
 ## Railway Production Deployment
 
 ### Viewing Production Logs
