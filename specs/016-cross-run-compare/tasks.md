@@ -206,9 +206,9 @@
 
 ### Implementation for User Story 6
 
-- [ ] T039 [US6] Refine registry.ts with full documentation and example registration
-- [ ] T040 [US6] Create re-export index in `cloud/apps/web/src/components/compare/index.ts`
-- [ ] T041 [US6] Add developer documentation in `cloud/apps/web/src/components/compare/README.md`
+- [X] T039 [US6] Refine registry.ts with full documentation and example registration
+- [X] T040 [US6] Create re-export index in `cloud/apps/web/src/components/compare/index.ts`
+- [X] T041 [US6] Add developer documentation in `cloud/apps/web/src/components/compare/README.md`
   - How to add new visualizations
   - Interface contract explanation
   - Example code
