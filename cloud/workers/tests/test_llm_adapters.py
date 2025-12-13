@@ -260,19 +260,19 @@ class TestDeepSeekAdapter:
         adapter: DeepSeekAdapter,
         mock_openai_compatible_response: dict[str, Any],
     ) -> None:
-        """Test that max_tokens is capped at 8192."""
+        """Test that max_tokens is capped at 64K (DeepSeek API limit)."""
         with patch("requests.post") as mock_post:
             mock_post.return_value = MockResponse(mock_openai_compatible_response, 200)
 
             adapter.generate(
                 "deepseek-chat",
                 [{"role": "user", "content": "Hello"}],
-                max_tokens=10000,
+                max_tokens=100000,
             )
 
             call_args = mock_post.call_args
             payload = call_args.kwargs.get("json") or call_args[1].get("json")
-            assert payload["max_tokens"] == 8192
+            assert payload["max_tokens"] == 65536
 
 
 class TestMistralAdapter:
