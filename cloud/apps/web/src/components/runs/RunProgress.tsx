@@ -64,8 +64,12 @@ function StatusIcon({ status }: { status: string }) {
 /**
  * Format status for display.
  */
-function formatStatus(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+function formatStatus(run: Run): string {
+  if (run.status === 'SUMMARIZING' && run.summarizeProgress) {
+    const { completed, total } = run.summarizeProgress;
+    return `Summarizing (${completed}/${total})`;
+  }
+  return run.status.charAt(0).toUpperCase() + run.status.slice(1).toLowerCase();
 }
 
 /**
@@ -110,7 +114,7 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${colors.bg} ${colors.border}`}>
           <StatusIcon status={run.status} />
           <span className={`text-sm font-medium ${colors.text}`}>
-            {formatStatus(run.status)}
+            {formatStatus(run)}
           </span>
         </div>
 

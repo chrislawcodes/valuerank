@@ -96,6 +96,24 @@ builder.objectType(RunRef, {
       },
     }),
 
+    // Summarize progress for SUMMARIZING state
+    summarizeProgress: t.field({
+      type: RunProgress,
+      nullable: true,
+      description: 'Progress information for transcript summarization (only populated in SUMMARIZING state)',
+      resolve: (run) => {
+        const progress = run.summarizeProgress as ProgressData | null;
+        if (!progress) return null;
+
+        return {
+          total: progress.total,
+          completed: progress.completed,
+          failed: progress.failed,
+          percentComplete: calculatePercentComplete(progress),
+        };
+      },
+    }),
+
     // Recent completed/failed tasks from PgBoss
     recentTasks: t.field({
       type: [TaskResult],

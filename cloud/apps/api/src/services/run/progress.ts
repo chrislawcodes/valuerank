@@ -230,6 +230,18 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
     return;
   }
 
+  // Initialize summarizeProgress
+  await db.run.update({
+    where: { id: runId },
+    data: {
+      summarizeProgress: {
+        total: transcripts.length,
+        completed: 0,
+        failed: 0,
+      },
+    },
+  });
+
   log.info({ runId, transcriptCount: transcripts.length }, 'Queueing summarize jobs');
 
   const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];
@@ -289,4 +301,71 @@ export function calculatePercentComplete(progress: ProgressData): number {
   }
   const done = progress.completed + progress.failed;
   return Math.round((done / progress.total) * 100);
+}
+
+/**
+ * Updates summarize progress atomically using PostgreSQL JSONB operators.
+ * Increments the completed or failed count for transcript summarization.
+ */
+export async function updateSummarizeProgress(
+  runId: string,
+  update: { incrementCompleted?: number; incrementFailed?: number }
+): Promise<ProgressData | null> {
+  const { incrementCompleted = 0, incrementFailed = 0 } = update;
+
+  if (incrementCompleted === 0 && incrementFailed === 0) {
+    const run = await db.run.findUnique({
+      where: { id: runId },
+      select: { summarizeProgress: true },
+    });
+    return run?.summarizeProgress as ProgressData | null;
+  }
+
+  log.debug(
+    { runId, incrementCompleted, incrementFailed },
+    'Updating summarize progress'
+  );
+
+  // Use raw SQL for atomic JSONB increment
+  const result = await db.$queryRaw<Array<{
+    id: string;
+    summarize_progress: ProgressData;
+  }>>`
+    UPDATE runs
+    SET
+      summarize_progress = jsonb_set(
+        jsonb_set(
+          summarize_progress,
+          '{completed}',
+          to_jsonb((summarize_progress->>'completed')::int + ${incrementCompleted})
+        ),
+        '{failed}',
+        to_jsonb((summarize_progress->>'failed')::int + ${incrementFailed})
+      ),
+      updated_at = NOW()
+    WHERE id = ${runId}
+    RETURNING id, summarize_progress
+  `;
+
+  const updatedRun = result[0];
+  if (!updatedRun) {
+    return null;
+  }
+
+  log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
+  return updatedRun.summarize_progress;
+}
+
+/**
+ * Increments summarize completed count by 1.
+ */
+export async function incrementSummarizeCompleted(runId: string): Promise<ProgressData | null> {
+  return updateSummarizeProgress(runId, { incrementCompleted: 1 });
+}
+
+/**
+ * Increments summarize failed count by 1.
+ */
+export async function incrementSummarizeFailed(runId: string): Promise<ProgressData | null> {
+  return updateSummarizeProgress(runId, { incrementFailed: 1 });
 }

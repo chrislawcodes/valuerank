@@ -13,6 +13,9 @@ export {
   incrementFailed,
   getProgress,
   calculatePercentComplete,
+  updateSummarizeProgress,
+  incrementSummarizeCompleted,
+  incrementSummarizeFailed,
 } from './progress.js';
 export type { ProgressUpdate, ProgressData } from './progress.js';
 

@@ -14,6 +14,7 @@ import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 import { getSummarizerModel } from '../../services/infra-models.js';
+import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -192,6 +193,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
                 summarizedAt: new Date(),
               },
             });
+            await incrementSummarizeFailed(runId);
             await maybeCompleteRun(runId);
             return;
           }
@@ -214,6 +216,9 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
           { jobId, transcriptId, decisionCode: output.summary.decisionCode },
           'Transcript summarized'
         );
+
+        // Increment summarize progress
+        await incrementSummarizeCompleted(runId);
 
         // Check if run is complete
         await maybeCompleteRun(runId);
@@ -238,6 +243,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
                 summarizedAt: new Date(),
               },
             });
+            await incrementSummarizeFailed(runId);
             await maybeCompleteRun(runId);
           } catch (updateError) {
             log.error({ jobId, transcriptId, err: updateError }, 'Failed to update transcript after summary failure');

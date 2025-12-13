@@ -168,6 +168,7 @@ model Run {
   status             RunStatus @default(PENDING)
   config             Json      @db.JsonB
   progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
   startedAt          DateTime? @map("started_at")
   completedAt        DateTime? @map("completed_at")
   createdAt          DateTime  @default(now()) @map("created_at")

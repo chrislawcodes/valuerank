@@ -94,6 +94,7 @@ export type Run = {
   config: RunConfig;
   progress: { total: number; completed: number; failed: number } | null;
   runProgress: RunProgress | null;
+  summarizeProgress: RunProgress | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -128,6 +129,12 @@ export const RUN_FRAGMENT = gql`
     config
     progress
     runProgress {
+      total
+      completed
+      failed
+      percentComplete
+    }
+    summarizeProgress {
       total
       completed
       failed

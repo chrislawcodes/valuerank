@@ -23,6 +23,15 @@ const STATUS_CONFIG: Record<RunStatus, { icon: React.ElementType; color: string;
   CANCELLED: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cancelled' },
 };
 
+function getStatusLabel(run: Run): string {
+  const statusConfig = STATUS_CONFIG[run.status];
+  if (run.status === 'SUMMARIZING' && run.summarizeProgress) {
+    const { completed, total } = run.summarizeProgress;
+    return `Summarizing (${completed}/${total})`;
+  }
+  return statusConfig.label;
+}
+
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
@@ -75,7 +84,7 @@ export function RunCard({ run, onClick }: RunCardProps) {
                 {formatRunName(run)}
               </h3>
               <span className={`text-xs px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.color}`}>
-                {statusConfig.label}
+                {getStatusLabel(run)}
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
