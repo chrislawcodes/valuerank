@@ -73,6 +73,7 @@ Error:
 import json
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 from functools import reduce
 from typing import Any, Optional
@@ -80,7 +81,7 @@ from typing import Any, Optional
 import yaml
 
 from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
-from common.llm_adapters import generate
+from common.llm_adapters import generate_stream, LLMResponse, StreamChunk
 from common.logging import get_logger
 
 log = get_logger("generate_scenarios")
@@ -453,40 +454,70 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     # 15 minute HTTP timeout for slow models like DeepSeek Reasoner
     LLM_TIMEOUT_SECONDS = 900
 
+    # Progress reporting interval (emit every N tokens or N seconds)
+    PROGRESS_TOKEN_INTERVAL = 500
+    PROGRESS_TIME_INTERVAL = 5.0  # seconds
+
     try:
-        # Call LLM using the shared adapter
+        # Stream LLM response for incremental progress
         messages = [{"role": "user", "content": prompt}]
-        response = generate(
+
+        raw_response = ""
+        input_tokens = 0
+        output_tokens = 0
+        model_version = None
+        last_progress_tokens = 0
+        last_progress_time = time.time()
+
+        for chunk in generate_stream(
             model_id,
             messages,
             temperature=temperature,
             max_tokens=max_tokens,
             model_config=model_config,
             timeout=LLM_TIMEOUT_SECONDS,
-        )
+        ):
+            raw_response = chunk.content
+            output_tokens = chunk.output_tokens
+
+            if chunk.done:
+                input_tokens = chunk.input_tokens or 0
+                model_version = chunk.model_version
+            else:
+                # Emit progress periodically during streaming
+                tokens_since_last = output_tokens - last_progress_tokens
+                time_since_last = time.time() - last_progress_time
+
+                if tokens_since_last >= PROGRESS_TOKEN_INTERVAL or time_since_last >= PROGRESS_TIME_INTERVAL:
+                    emit_progress(
+                        phase="streaming",
+                        expected_scenarios=expected_count,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        message=f"Receiving response... {output_tokens} tokens",
+                    )
+                    last_progress_tokens = output_tokens
+                    last_progress_time = time.time()
 
         log.info(
             "LLM response received",
             definitionId=definition_id,
-            responseLength=len(response.content),
-            inputTokens=response.input_tokens,
-            outputTokens=response.output_tokens,
+            responseLength=len(raw_response),
+            inputTokens=input_tokens,
+            outputTokens=output_tokens,
         )
 
         # Emit progress after LLM call
         emit_progress(
             phase="parsing",
             expected_scenarios=expected_count,
-            input_tokens=response.input_tokens or 0,
-            output_tokens=response.output_tokens or 0,
-            message=f"Received {response.output_tokens or 0} tokens, parsing scenarios...",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            message=f"Received {output_tokens} tokens, parsing scenarios...",
         )
 
-        # Capture raw response for debugging
-        raw_response = response.content
-
         # Extract and parse YAML
-        yaml_content = extract_yaml(response.content)
+        yaml_content = extract_yaml(raw_response)
         log.debug("Extracted YAML", definitionId=definition_id, yamlLength=len(yaml_content))
 
         # Parse scenarios
@@ -508,8 +539,8 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             phase="completed",
             expected_scenarios=expected_count,
             generated_scenarios=len(parse_result.scenarios),
-            input_tokens=response.input_tokens or 0,
-            output_tokens=response.output_tokens or 0,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             message=f"Generated {len(parse_result.scenarios)} scenarios",
         )
 
@@ -517,9 +548,9 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             "success": True,
             "scenarios": [s.to_dict() for s in parse_result.scenarios],
             "metadata": GenerationMetadata(
-                input_tokens=response.input_tokens or 0,
-                output_tokens=response.output_tokens or 0,
-                model_version=response.model_version,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model_version=model_version,
             ).to_dict(),
             "debug": {
                 "rawResponse": raw_response,
