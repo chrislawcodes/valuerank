@@ -15,6 +15,7 @@ type RawDefinitionRow = {
   name: string;
   content: Prisma.JsonValue;
   expansion_progress: Prisma.JsonValue | null;
+  expansion_debug: Prisma.JsonValue | null;
   created_at: Date;
   updated_at: Date;
   last_accessed_at: Date | null;
@@ -207,7 +208,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -220,6 +221,7 @@ builder.queryField('definitionAncestors', (t) =>
         name: a.name,
         content: a.content,
         expansionProgress: a.expansion_progress,
+        expansionDebug: a.expansion_debug,
         createdAt: a.created_at,
         updatedAt: a.updated_at,
         lastAccessedAt: a.last_accessed_at,
@@ -272,7 +274,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -285,6 +287,7 @@ builder.queryField('definitionDescendants', (t) =>
         name: d.name,
         content: d.content,
         expansionProgress: d.expansion_progress,
+        expansionDebug: d.expansion_debug,
         createdAt: d.created_at,
         updatedAt: d.updated_at,
         lastAccessedAt: d.last_accessed_at,

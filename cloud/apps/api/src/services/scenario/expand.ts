@@ -43,6 +43,13 @@ type GenerateScenariosInput = {
   modelConfig?: Record<string, unknown>;
 };
 
+// Debug info from Python worker for troubleshooting
+type ExpansionDebugInfo = {
+  rawResponse: string | null;
+  extractedYaml: string | null;
+  parseError: string | null;
+};
+
 // Output from Python worker
 type GenerateScenariosOutput = {
   success: true;
@@ -59,6 +66,7 @@ type GenerateScenariosOutput = {
     outputTokens: number;
     modelVersion: string | null;
   };
+  debug?: ExpansionDebugInfo;
 } | {
   success: false;
   error: {
@@ -190,7 +198,7 @@ export async function expandScenarios(
     },
     config: {
       temperature: 0.7,
-      maxTokens: 8192,
+      maxTokens: 32768, // Increased to support 125+ scenarios
     },
     modelConfig,
   };
@@ -224,7 +232,7 @@ export async function expandScenarios(
     workerPath,
     workerInput,
     {
-      timeout: 300000, // 5 minutes
+      timeout: 600000, // 10 minutes
       cwd: path.resolve(process.cwd(), '../..'),
       onProgress,
     }
@@ -236,6 +244,23 @@ export async function expandScenarios(
       { definitionId, error: result.error, stderr: result.stderr },
       'Failed to spawn Python worker'
     );
+
+    // Save debug info for spawn failure and clear stale progress
+    await db.definition.update({
+      where: { id: definitionId },
+      data: {
+        expansionProgress: Prisma.JsonNull,
+        expansionDebug: {
+          rawResponse: null,
+          extractedYaml: null,
+          parseError: `Spawn failure: ${result.error}`,
+          stderr: result.stderr,
+          timestamp: new Date().toISOString(),
+          scenariosCreated: 0,
+          modelId: fullModelId,
+        },
+      },
+    });
 
     // Fallback: create single scenario with raw template
     const scenarioContent: ScenarioContent = {
@@ -264,6 +289,23 @@ export async function expandScenarios(
       'Python worker returned error'
     );
 
+    // Save debug info for worker error and clear stale progress
+    await db.definition.update({
+      where: { id: definitionId },
+      data: {
+        expansionProgress: Prisma.JsonNull,
+        expansionDebug: {
+          rawResponse: null,
+          extractedYaml: null,
+          parseError: `Worker error: ${workerOutput.error.code} - ${workerOutput.error.message}`,
+          errorDetails: workerOutput.error.details,
+          timestamp: new Date().toISOString(),
+          scenariosCreated: 0,
+          modelId: fullModelId,
+        },
+      },
+    });
+
     // If retryable, rethrow to trigger job retry
     if (workerOutput.error.retryable) {
       throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
@@ -287,9 +329,36 @@ export async function expandScenarios(
     return { created: 1, deleted: deleteResult.count };
   }
 
-  // Handle empty scenarios (dimensions had no values)
+  // Handle empty scenarios
   if (workerOutput.scenarios.length === 0) {
-    log.debug({ definitionId }, 'Worker returned no scenarios, creating default');
+    // Check if there was a parse error - this is a real failure, not just "no dimensions"
+    const parseError = workerOutput.debug?.parseError;
+    if (parseError) {
+      log.error(
+        { definitionId, parseError, debug: workerOutput.debug },
+        'LLM returned content but YAML parsing failed'
+      );
+
+      // Save debug info for troubleshooting
+      await db.definition.update({
+        where: { id: definitionId },
+        data: {
+          expansionProgress: Prisma.JsonNull,
+          expansionDebug: {
+            ...workerOutput.debug,
+            timestamp: new Date().toISOString(),
+            scenariosCreated: 0,
+            modelId: fullModelId,
+          },
+        },
+      });
+
+      // Throw to trigger job retry - parsing might succeed with a different LLM response
+      throw new Error(`Scenario generation failed: ${parseError}`);
+    }
+
+    // No parse error means no dimensions - create default scenario
+    log.debug({ definitionId }, 'No dimensions, creating default scenario');
 
     const scenarioContent: ScenarioContent = {
       preamble: normalizePreamble(content.preamble),
@@ -302,6 +371,20 @@ export async function expandScenarios(
         definitionId,
         name: 'Default Scenario',
         content: scenarioContent,
+      },
+    });
+
+    // Save debug info for troubleshooting and clear progress
+    await db.definition.update({
+      where: { id: definitionId },
+      data: {
+        expansionProgress: Prisma.JsonNull,
+        expansionDebug: workerOutput.debug ? {
+          ...workerOutput.debug,
+          timestamp: new Date().toISOString(),
+          scenariosCreated: 0,
+          modelId: fullModelId,
+        } : Prisma.JsonNull,
       },
     });
 
@@ -321,10 +404,19 @@ export async function expandScenarios(
 
   await db.scenario.createMany({ data: scenarioData });
 
-  // Clear expansion progress after successful completion
+  // Clear expansion progress and save debug info after completion
+  // Keep debug info even for successful runs to help diagnose issues
   await db.definition.update({
     where: { id: definitionId },
-    data: { expansionProgress: Prisma.JsonNull },
+    data: {
+      expansionProgress: Prisma.JsonNull,
+      expansionDebug: workerOutput.debug ? {
+        ...workerOutput.debug,
+        timestamp: new Date().toISOString(),
+        scenariosCreated: scenarioData.length,
+        modelId: fullModelId,
+      } : Prisma.JsonNull,
+    },
   });
 
   log.info(

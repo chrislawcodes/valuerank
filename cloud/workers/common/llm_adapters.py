@@ -242,6 +242,7 @@ class BaseLLMAdapter(ABC):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         """Generate a completion from the LLM.
 
@@ -251,6 +252,7 @@ class BaseLLMAdapter(ABC):
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             model_config: Optional provider-specific configuration (e.g., API parameter names)
+            timeout: HTTP request timeout in seconds (defaults to adapter's timeout)
         """
         pass
 
@@ -402,6 +404,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -452,8 +455,9 @@ class OpenAIAdapter(BaseLLMAdapter):
         if stop_seqs is not None and len(stop_seqs) > 0:
             payload["stop"] = stop_seqs
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling OpenAI API", model=model, max_tokens_param=max_tokens_param, max_tokens=resolved_max_tokens)
-        data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
+        data = _post_json(self.base_url, headers, payload, timeout=effective_timeout)
 
         try:
             choice = data["choices"][0]
@@ -518,6 +522,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -574,8 +579,9 @@ class AnthropicAdapter(BaseLLMAdapter):
 
         # Note: Anthropic does NOT support frequencyPenalty or presencePenalty
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling Anthropic API", model=model, max_tokens=effective_max_tokens)
-        data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
+        data = _post_json(self.base_url, headers, payload, timeout=effective_timeout)
 
         try:
             content_list = data.get("content", [])
@@ -634,6 +640,7 @@ class GeminiAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -693,8 +700,9 @@ class GeminiAdapter(BaseLLMAdapter):
         url = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
         headers = {"Content-Type": "application/json"}
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling Gemini API", model=model, max_tokens=resolved_max_tokens)
-        data = _post_json(url, headers, payload, timeout=self.timeout)
+        data = _post_json(url, headers, payload, timeout=effective_timeout)
 
         try:
             # Check for prompt-level blocking first
@@ -815,6 +823,7 @@ class XAIAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -858,8 +867,9 @@ class XAIAdapter(BaseLLMAdapter):
         if stop_seqs is not None and len(stop_seqs) > 0:
             payload["stop"] = stop_seqs
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         log.debug("Calling xAI API", model=model, max_tokens=resolved_max_tokens)
-        data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
+        data = _post_json(self.base_url, headers, payload, timeout=effective_timeout)
 
         try:
             choice = data["choices"][0]
@@ -913,6 +923,7 @@ class DeepSeekAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -960,8 +971,10 @@ class DeepSeekAdapter(BaseLLMAdapter):
         if stop_seqs is not None and len(stop_seqs) > 0:
             payload["stop"] = stop_seqs
 
-        log.debug("Calling DeepSeek API", model=model, max_tokens=resolved_max_tokens)
-        data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
+        # Use provided timeout or fall back to adapter default
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Calling DeepSeek API", model=model, max_tokens=resolved_max_tokens, timeout=effective_timeout)
+        data = _post_json(self.base_url, headers, payload, timeout=effective_timeout)
 
         try:
             choice = data["choices"][0]
@@ -1022,6 +1035,7 @@ class MistralAdapter(BaseLLMAdapter):
         temperature: float = 0.7,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
             raise LLMError(
@@ -1059,8 +1073,11 @@ class MistralAdapter(BaseLLMAdapter):
 
         # Note: Mistral does NOT support frequencyPenalty or presencePenalty
 
+        # Use explicit timeout if provided, otherwise fall back to instance default
+        effective_timeout = timeout if timeout is not None else self.timeout
+
         log.debug("Calling Mistral API", model=model, max_tokens=resolved_max_tokens)
-        data = _post_json(self.base_url, headers, payload, timeout=self.timeout)
+        data = _post_json(self.base_url, headers, payload, timeout=effective_timeout)
 
         try:
             choice = data["choices"][0]
@@ -1194,6 +1211,7 @@ def generate(
     temperature: float = 0.7,
     max_tokens: int = 1024,
     model_config: Optional[dict] = None,
+    timeout: Optional[int] = None,
 ) -> LLMResponse:
     """
     Generate a completion using the appropriate adapter for the model.
@@ -1206,6 +1224,7 @@ def generate(
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
         model_config: Optional provider-specific configuration from database
+        timeout: HTTP request timeout in seconds (defaults to adapter's default)
 
     Returns:
         LLMResponse with content and token counts
@@ -1220,4 +1239,5 @@ def generate(
         temperature=temperature,
         max_tokens=max_tokens,
         model_config=model_config,
+        timeout=timeout,
     )

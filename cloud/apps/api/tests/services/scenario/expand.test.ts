@@ -173,7 +173,7 @@ describe('Scenario Expansion Service', () => {
         expect(workerInput.content.template).toBe(contentWithDimensions.template);
         expect(workerInput.content.dimensions).toEqual(contentWithDimensions.dimensions);
         expect(workerInput.config.temperature).toBe(0.7);
-        expect(options.timeout).toBe(300000);
+        expect(options.timeout).toBe(600000);
 
         // Verify scenarios created
         expect(result.created).toBe(2);

@@ -50,6 +50,11 @@ Success:
     "inputTokens": number,
     "outputTokens": number,
     "modelVersion": string | null
+  },
+  "debug": {
+    "rawResponse": string,           // Full raw LLM response
+    "extractedYaml": string | null,  // What extract_yaml() returned
+    "parseError": string | null      // Error message if YAML parsing failed
   }
 }
 
@@ -298,24 +303,34 @@ def extract_yaml(response: str) -> str:
     return response
 
 
+@dataclass
+class ParseResult:
+    """Result of parsing generated scenarios."""
+    scenarios: list[GeneratedScenario]
+    error: Optional[str] = None
+
+
 def parse_generated_scenarios(
     yaml_content: str,
     dimensions: list[Dimension],
     default_preamble: Optional[str],
-) -> list[GeneratedScenario]:
+) -> ParseResult:
     """Parse the LLM-generated YAML into scenario data."""
     try:
         parsed = yaml.safe_load(yaml_content)
     except yaml.YAMLError as err:
+        error_msg = f"YAML parse error: {str(err)}"
         log.error("Failed to parse YAML", err=str(err))
-        return []
+        return ParseResult(scenarios=[], error=error_msg)
 
     if not parsed or not isinstance(parsed, dict):
-        return []
+        error_msg = f"Invalid parsed result: expected dict, got {type(parsed).__name__}"
+        return ParseResult(scenarios=[], error=error_msg)
 
     scenarios_data = parsed.get("scenarios", {})
     if not scenarios_data:
-        return []
+        error_msg = "No 'scenarios' key found in parsed YAML"
+        return ParseResult(scenarios=[], error=error_msg)
 
     # Use preamble from YAML if present, otherwise use default
     yaml_preamble = normalize_preamble(parsed.get("preamble"))
@@ -345,7 +360,7 @@ def parse_generated_scenarios(
             dimensions=dimension_scores,
         ))
 
-    return scenarios
+    return ParseResult(scenarios=scenarios, error=None)
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -417,6 +432,11 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             "success": True,
             "scenarios": [],
             "metadata": GenerationMetadata().to_dict(),
+            "debug": {
+                "rawResponse": None,
+                "extractedYaml": None,
+                "parseError": "No dimensions with values - skipped LLM generation",
+            },
         }
 
     # Build prompt
@@ -430,6 +450,9 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
         message=f"Calling {model_id} to generate {expected_count} scenarios...",
     )
 
+    # 10 minute HTTP timeout for slow models like DeepSeek Reasoner
+    LLM_TIMEOUT_SECONDS = 600
+
     try:
         # Call LLM using the shared adapter
         messages = [{"role": "user", "content": prompt}]
@@ -439,6 +462,7 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             temperature=temperature,
             max_tokens=max_tokens,
             model_config=model_config,
+            timeout=LLM_TIMEOUT_SECONDS,
         )
 
         log.info(
@@ -458,12 +482,15 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             message=f"Received {response.output_tokens or 0} tokens, parsing scenarios...",
         )
 
+        # Capture raw response for debugging
+        raw_response = response.content
+
         # Extract and parse YAML
         yaml_content = extract_yaml(response.content)
         log.debug("Extracted YAML", definitionId=definition_id, yamlLength=len(yaml_content))
 
         # Parse scenarios
-        scenarios = parse_generated_scenarios(
+        parse_result = parse_generated_scenarios(
             yaml_content,
             dimensions,
             normalize_preamble(preamble),
@@ -472,27 +499,33 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
         log.info(
             "Scenarios generated",
             definitionId=definition_id,
-            scenarioCount=len(scenarios),
+            scenarioCount=len(parse_result.scenarios),
+            parseError=parse_result.error,
         )
 
         # Emit final progress
         emit_progress(
             phase="completed",
             expected_scenarios=expected_count,
-            generated_scenarios=len(scenarios),
+            generated_scenarios=len(parse_result.scenarios),
             input_tokens=response.input_tokens or 0,
             output_tokens=response.output_tokens or 0,
-            message=f"Generated {len(scenarios)} scenarios",
+            message=f"Generated {len(parse_result.scenarios)} scenarios",
         )
 
         return {
             "success": True,
-            "scenarios": [s.to_dict() for s in scenarios],
+            "scenarios": [s.to_dict() for s in parse_result.scenarios],
             "metadata": GenerationMetadata(
                 input_tokens=response.input_tokens or 0,
                 output_tokens=response.output_tokens or 0,
                 model_version=response.model_version,
             ).to_dict(),
+            "debug": {
+                "rawResponse": raw_response,
+                "extractedYaml": yaml_content,
+                "parseError": parse_result.error,
+            },
         }
 
     except (WorkerError, LLMError) as err:

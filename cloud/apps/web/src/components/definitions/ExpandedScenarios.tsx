@@ -164,10 +164,44 @@ function formatProgressMessage(status?: ExpansionStatus): string {
   }
 }
 
+const EXPANSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+function formatCountdown(remainingMs: number): string {
+  if (remainingMs <= 0) return '0:00';
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 function ExpansionStatusBadge({ status, scenarioCount }: { status?: ExpansionStatus; scenarioCount?: number }) {
   const isExpanding = status?.status === 'PENDING' || status?.status === 'ACTIVE';
   const isCompleted = status?.status === 'COMPLETED';
   const isFailed = status?.status === 'FAILED';
+
+  // Countdown timer state
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isExpanding || !status?.createdAt) {
+      setCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const startTime = new Date(status.createdAt!).getTime();
+      const elapsed = Date.now() - startTime;
+      const remaining = EXPANSION_TIMEOUT_MS - elapsed;
+      setCountdown(formatCountdown(remaining));
+    };
+
+    // Update immediately
+    updateCountdown();
+
+    // Update every second
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [isExpanding, status?.createdAt]);
 
   if (isExpanding) {
     const progressMsg = formatProgressMessage(status);
@@ -175,6 +209,9 @@ function ExpansionStatusBadge({ status, scenarioCount }: { status?: ExpansionSta
       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
         <Loader2 className="w-3 h-3 animate-spin" />
         {progressMsg}
+        {countdown && (
+          <span className="ml-1 font-mono text-blue-500">({countdown})</span>
+        )}
       </span>
     );
   }

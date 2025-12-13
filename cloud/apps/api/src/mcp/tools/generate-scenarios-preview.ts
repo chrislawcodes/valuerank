@@ -150,9 +150,14 @@ Use this to understand what scenarios would be created before starting a run.
 
 The preview shows how placeholders in the template are filled with dimension values.
 
+Also includes:
+- actual_scenario_count: Number of scenarios actually generated (vs expected count)
+- expansion_debug: Debug info from last expansion (raw LLM response, parse errors)
+
 Example response:
 {
   "scenario_count": 12,
+  "actual_scenario_count": 12,
   "scenarios": [
     {
       "name": "severity:low / urgency:now",
@@ -160,7 +165,12 @@ Example response:
       "body_preview": "A low severity situation requiring immediate action..."
     }
   ],
-  "sample_body": "Full text of first scenario..."
+  "sample_body": "Full text of first scenario...",
+  "expansion_debug": {
+    "rawResponse": "...",
+    "extractedYaml": "...",
+    "parseError": null
+  }
 }`,
       inputSchema: GenerateScenariosPreviewInputSchema,
     },
@@ -257,11 +267,17 @@ Example response:
           'Preview generated successfully'
         );
 
-        // Step 8: Return preview
+        // Step 8: Get actual scenario count from database
+        const actualScenarioCount = await db.scenario.count({
+          where: { definitionId: args.definition_id, deletedAt: null },
+        });
+
+        // Step 9: Return preview with expansion debug info
         return formatSuccess({
           definition_id: args.definition_id,
           definition_name: definition.name,
           scenario_count: scenarioCount,
+          actual_scenario_count: actualScenarioCount,
           scenarios,
           sample_body: sampleBody,
           dimensions: dimensions.map((d) => ({
@@ -269,6 +285,8 @@ Example response:
             value_count: d.values?.length ?? 0,
             values: d.values ?? [],
           })),
+          // Include expansion debug info if available (for diagnosing expansion failures)
+          expansion_debug: definition.expansionDebug ?? null,
         });
       } catch (err) {
         log.error({ err, requestId }, 'generate_scenarios_preview failed');

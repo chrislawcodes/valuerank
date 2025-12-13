@@ -100,6 +100,7 @@ model Definition {
   name              String
   content           Json      @db.JsonB
   expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
   lastAccessedAt    DateTime? @map("last_accessed_at")
