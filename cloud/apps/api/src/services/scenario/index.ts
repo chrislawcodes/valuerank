@@ -6,3 +6,7 @@ export {
   type ExpansionJobStatus,
   type ExpansionProgress,
 } from './expansion-status.js';
+export {
+  cancelScenarioExpansion,
+  type CancelExpansionResult,
+} from './cancel-expansion.js';

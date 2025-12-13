@@ -7,7 +7,7 @@ import {
 } from '@valuerank/db';
 import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
-import { queueScenarioExpansion } from '../../services/scenario/index.js';
+import { queueScenarioExpansion, cancelScenarioExpansion } from '../../services/scenario/index.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -596,6 +596,82 @@ builder.mutationField('regenerateScenarios', (t) =>
         jobId: queueResult.jobId,
         queued: queueResult.queued,
       };
+    },
+  })
+);
+
+// Result type for cancel expansion mutation
+type CancelExpansionResultShape = {
+  definitionId: string;
+  cancelled: boolean;
+  jobId: string | null;
+  message: string;
+};
+
+const CancelExpansionResultRef = builder.objectRef<CancelExpansionResultShape>('CancelExpansionResult');
+
+builder.objectType(CancelExpansionResultRef, {
+  description: 'Result of cancelling scenario expansion',
+  fields: (t) => ({
+    definitionId: t.exposeString('definitionId', {
+      description: 'ID of the definition',
+    }),
+    cancelled: t.exposeBoolean('cancelled', {
+      description: 'Whether an active job was cancelled',
+    }),
+    jobId: t.exposeString('jobId', {
+      nullable: true,
+      description: 'ID of the cancelled job (null if no active job)',
+    }),
+    message: t.exposeString('message', {
+      description: 'Status message',
+    }),
+  }),
+});
+
+// Mutation: cancelScenarioExpansion - cancel an in-progress expansion
+builder.mutationField('cancelScenarioExpansion', (t) =>
+  t.field({
+    type: CancelExpansionResultRef,
+    description: 'Cancel an in-progress scenario expansion for a definition.',
+    args: {
+      definitionId: t.arg.string({
+        required: true,
+        description: 'Definition ID to cancel expansion for',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { definitionId } = args;
+
+      ctx.log.debug({ definitionId }, 'Cancel scenario expansion requested');
+
+      // Verify definition exists
+      const definition = await db.definition.findUnique({
+        where: { id: definitionId, deletedAt: null },
+      });
+
+      if (!definition) {
+        throw new Error(`Definition not found: ${definitionId}`);
+      }
+
+      // Cancel the expansion
+      const result = await cancelScenarioExpansion(definitionId);
+
+      ctx.log.info(
+        { definitionId, cancelled: result.cancelled, jobId: result.jobId },
+        'Cancel expansion result'
+      );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Definition',
+        entityId: definitionId,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'cancelScenarioExpansion', cancelled: result.cancelled, jobId: result.jobId },
+      });
+
+      return result;
     },
   })
 );

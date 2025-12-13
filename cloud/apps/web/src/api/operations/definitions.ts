@@ -444,3 +444,24 @@ export type RegenerateScenariosResult = {
     queued: boolean;
   };
 };
+
+// Cancel scenario expansion mutation
+export const CANCEL_SCENARIO_EXPANSION_MUTATION = gql`
+  mutation CancelScenarioExpansion($definitionId: String!) {
+    cancelScenarioExpansion(definitionId: $definitionId) {
+      definitionId
+      cancelled
+      jobId
+      message
+    }
+  }
+`;
+
+export type CancelScenarioExpansionResult = {
+  cancelScenarioExpansion: {
+    definitionId: string;
+    cancelled: boolean;
+    jobId: string | null;
+    message: string;
+  };
+};

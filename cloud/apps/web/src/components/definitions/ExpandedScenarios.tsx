@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation } from 'urql';
-import { ChevronDown, ChevronUp, Database, RefreshCw, RotateCcw, AlertCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Database, RefreshCw, RotateCcw, AlertCircle, Loader2, CheckCircle2, XCircle, StopCircle } from 'lucide-react';
 import { useExpandedScenarios } from '../../hooks/useExpandedScenarios';
 import type { Scenario, ScenarioContent } from '../../api/operations/scenarios';
 import {
   type ExpansionStatus,
   REGENERATE_SCENARIOS_MUTATION,
   type RegenerateScenariosResult,
+  CANCEL_SCENARIO_EXPANSION_MUTATION,
+  type CancelScenarioExpansionResult,
 } from '../../api/operations/definitions';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
@@ -257,11 +259,20 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
   });
 
   const [{ fetching: regenerating }, executeRegenerate] = useMutation<RegenerateScenariosResult>(REGENERATE_SCENARIOS_MUTATION);
+  const [{ fetching: cancelling }, executeCancel] = useMutation<CancelScenarioExpansionResult>(CANCEL_SCENARIO_EXPANSION_MUTATION);
 
   const handleRegenerate = async () => {
     const result = await executeRegenerate({ definitionId });
     if (!result.error && result.data?.regenerateScenarios.queued) {
       // Notify parent to start polling for status updates
+      onRegenerateTriggered?.();
+    }
+  };
+
+  const handleCancel = async () => {
+    const result = await executeCancel({ definitionId });
+    if (!result.error) {
+      // Notify parent to refresh status
       onRegenerateTriggered?.();
     }
   };
@@ -319,16 +330,30 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
 
         {isOpen && (
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={loading || isExpanding || regenerating}
-              title="Regenerate all scenarios using LLM"
-            >
-              <RotateCcw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
-              Regenerate
-            </Button>
+            {isExpanding ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                disabled={cancelling}
+                title="Cancel scenario expansion"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <StopCircle className={`w-4 h-4 mr-1 ${cancelling ? 'animate-pulse' : ''}`} />
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={loading || regenerating}
+                title="Regenerate all scenarios using LLM"
+              >
+                <RotateCcw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
+                Regenerate
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
