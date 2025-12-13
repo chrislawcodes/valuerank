@@ -17,10 +17,10 @@ import { Settings } from './pages/Settings';
 import { client } from './api/client';
 
 // Protected layout wrapper
-function ProtectedLayout({ children }: { children: React.ReactNode }) {
+function ProtectedLayout({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
   return (
     <ProtectedRoute>
-      <Layout>{children}</Layout>
+      <Layout fullWidth={fullWidth}>{children}</Layout>
     </ProtectedRoute>
   );
 }
@@ -94,7 +94,7 @@ function App() {
           <Route
             path="/compare"
             element={
-              <ProtectedLayout>
+              <ProtectedLayout fullWidth>
                 <Compare />
               </ProtectedLayout>
             }
