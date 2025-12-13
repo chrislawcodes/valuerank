@@ -187,23 +187,16 @@ describe('Scenario Expansion Service', () => {
         expect(scenarios).toHaveLength(2);
       });
 
-      it('handles Python worker spawn failure with fallback', async () => {
+      it('handles Python worker spawn failure with error', async () => {
         mockedSpawnPython.mockResolvedValue({
           success: false,
           error: 'Failed to spawn process: Python not found',
           stderr: 'python3: command not found',
         });
 
-        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
-
-        // Should create fallback scenario
-        expect(result.created).toBe(1);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-        expect(scenarios).toHaveLength(1);
-        expect(scenarios[0].name).toBe('Default Scenario');
+        // Should throw error - no fallback scenarios
+        await expect(expandScenarios(testDefinitionId, contentWithDimensions))
+          .rejects.toThrow('Scenario expansion failed: Failed to spawn process: Python not found');
       });
 
       it('handles Python worker error response with retryable error', async () => {
@@ -237,15 +230,9 @@ describe('Scenario Expansion Service', () => {
           },
         });
 
-        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
-
-        // Should create fallback scenario
-        expect(result.created).toBe(1);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-        expect(scenarios[0].name).toBe('Default Scenario');
+        // Should throw error - no fallback scenarios
+        await expect(expandScenarios(testDefinitionId, contentWithDimensions))
+          .rejects.toThrow('LLM generation failed: Invalid API key');
       });
 
       it('handles empty scenarios response from worker', async () => {
@@ -262,15 +249,9 @@ describe('Scenario Expansion Service', () => {
           },
         });
 
-        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
-
-        // Should create default scenario
-        expect(result.created).toBe(1);
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-        expect(scenarios[0].name).toBe('Default Scenario');
+        // Should throw error - empty scenarios with dimensions is always an error
+        await expect(expandScenarios(testDefinitionId, contentWithDimensions))
+          .rejects.toThrow('Scenario generation failed: No scenarios generated from LLM response');
       });
     });
 

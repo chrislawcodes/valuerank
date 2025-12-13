@@ -97,34 +97,23 @@ function normalizePreamble(preamble: string | undefined): string | undefined {
   return preamble;
 }
 
+// Default max tokens for scenario expansion (conservative default)
+const DEFAULT_MAX_TOKENS = 8192;
+
 /**
- * Get model configuration from database for the specified model.
+ * Get maxTokens from model apiConfig, with conservative default.
  */
-async function getModelConfig(providerName: string, modelId: string): Promise<Record<string, unknown> | undefined> {
-  // Find the provider
-  const provider = await db.llmProvider.findUnique({
-    where: { name: providerName },
-  });
-
-  if (!provider) {
-    return undefined;
+function getMaxTokensFromConfig(apiConfig: Record<string, unknown> | null | undefined): number {
+  if (!apiConfig) {
+    return DEFAULT_MAX_TOKENS;
   }
 
-  // Find the model
-  const model = await db.llmModel.findUnique({
-    where: {
-      providerId_modelId: {
-        providerId: provider.id,
-        modelId: modelId,
-      },
-    },
-  });
-
-  if (!model || !model.apiConfig) {
-    return undefined;
+  const maxTokens = apiConfig.maxTokens;
+  if (typeof maxTokens === 'number' && maxTokens > 0) {
+    return maxTokens;
   }
 
-  return model.apiConfig as Record<string, unknown>;
+  return DEFAULT_MAX_TOKENS;
 }
 
 /**
@@ -237,13 +226,13 @@ export async function expandScenarios(
   const infraModel = await getScenarioExpansionModel();
   const fullModelId = `${infraModel.providerName}:${infraModel.modelId}`;
 
+  // Get maxTokens from model config (default to 8K for safety)
+  const maxTokens = getMaxTokensFromConfig(infraModel.apiConfig);
+
   log.info(
-    { definitionId, provider: infraModel.providerName, model: infraModel.modelId, fullModelId },
+    { definitionId, provider: infraModel.providerName, model: infraModel.modelId, fullModelId, maxTokens },
     'Using infrastructure model for scenario expansion'
   );
-
-  // Get model-specific API configuration from database
-  const modelConfig = await getModelConfig(infraModel.providerName, infraModel.modelId);
 
   // Prepare input for Python worker
   const workerInput: GenerateScenariosInput = {
@@ -257,9 +246,9 @@ export async function expandScenarios(
     },
     config: {
       temperature: 0.7,
-      maxTokens: 65536, // 64K to support large scenario counts
+      maxTokens,
     },
-    modelConfig,
+    modelConfig: infraModel.apiConfig ?? undefined,
   };
 
   // Spawn Python worker with progress tracking
@@ -321,22 +310,8 @@ export async function expandScenarios(
       },
     });
 
-    // Fallback: create single scenario with raw template
-    const scenarioContent: ScenarioContent = {
-      preamble: normalizePreamble(content.preamble),
-      prompt: content.template,
-      dimensions: {},
-    };
-
-    await db.scenario.create({
-      data: {
-        definitionId,
-        name: 'Default Scenario',
-        content: scenarioContent,
-      },
-    });
-
-    return { created: 1, deleted: deleteResult.count };
+    // Always throw on spawn failure - don't hide errors with fallback scenarios
+    throw new Error(`Scenario expansion failed: ${result.error}`);
   }
 
   const workerOutput = result.data;
@@ -367,89 +342,36 @@ export async function expandScenarios(
       },
     });
 
-    // If retryable, rethrow to trigger job retry
-    if (workerOutput.error.retryable) {
-      throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
-    }
-
-    // Non-retryable: create fallback scenario
-    const scenarioContent: ScenarioContent = {
-      preamble: normalizePreamble(content.preamble),
-      prompt: content.template,
-      dimensions: {},
-    };
-
-    await db.scenario.create({
-      data: {
-        definitionId,
-        name: 'Default Scenario',
-        content: scenarioContent,
-      },
-    });
-
-    return { created: 1, deleted: deleteResult.count };
+    // Always throw on worker errors - don't hide failures with fallback scenarios
+    // Both retryable and non-retryable errors should surface to the user
+    throw new Error(`LLM generation failed: ${workerOutput.error.message}`);
   }
 
-  // Handle empty scenarios
+  // Handle empty scenarios - this is always an error since we checked for dimensions earlier
   if (workerOutput.scenarios.length === 0) {
-    // Check if there was a parse error - this is a real failure, not just "no dimensions"
-    const parseError = workerOutput.debug?.parseError;
-    if (parseError) {
-      log.error(
-        { definitionId, parseError, debug: workerOutput.debug },
-        'LLM returned content but YAML parsing failed'
-      );
+    const parseError = workerOutput.debug?.parseError ?? 'No scenarios generated from LLM response';
 
-      // Save debug info for troubleshooting
-      await db.definition.update({
-        where: { id: definitionId },
-        data: {
-          expansionProgress: Prisma.JsonNull,
-          expansionDebug: {
-            ...workerOutput.debug,
-            timestamp: new Date().toISOString(),
-            scenariosCreated: 0,
-            modelId: fullModelId,
-          },
-        },
-      });
+    log.error(
+      { definitionId, parseError, debug: workerOutput.debug },
+      'LLM returned content but no scenarios were parsed'
+    );
 
-      // Throw to trigger job retry - parsing might succeed with a different LLM response
-      throw new Error(`Scenario generation failed: ${parseError}`);
-    }
-
-    // No parse error means no dimensions - create default scenario
-    log.debug({ definitionId }, 'No dimensions, creating default scenario');
-
-    const scenarioContent: ScenarioContent = {
-      preamble: normalizePreamble(content.preamble),
-      prompt: content.template,
-      dimensions: {},
-    };
-
-    await db.scenario.create({
-      data: {
-        definitionId,
-        name: 'Default Scenario',
-        content: scenarioContent,
-      },
-    });
-
-    // Save debug info for troubleshooting and clear progress
+    // Save debug info for troubleshooting
     await db.definition.update({
       where: { id: definitionId },
       data: {
         expansionProgress: Prisma.JsonNull,
-        expansionDebug: workerOutput.debug ? {
+        expansionDebug: {
           ...workerOutput.debug,
           timestamp: new Date().toISOString(),
           scenariosCreated: 0,
           modelId: fullModelId,
-        } : Prisma.JsonNull,
+        },
       },
     });
 
-    return { created: 1, deleted: deleteResult.count };
+    // Always throw - empty scenarios is an error when we have dimensions
+    throw new Error(`Scenario generation failed: ${parseError}`);
   }
 
   // Create scenario records from worker output

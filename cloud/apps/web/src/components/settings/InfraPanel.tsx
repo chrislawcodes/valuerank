@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'urql';
-import { Cpu, Settings, Check, AlertTriangle, Code } from 'lucide-react';
+import { Cpu, Settings, Check, AlertTriangle, Code, FileText } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -24,6 +24,23 @@ const INFRA_MODEL_QUERY = `
       id
       modelId
       displayName
+      provider {
+        id
+        name
+        displayName
+      }
+    }
+  }
+`;
+
+const LOWEST_COST_MODEL_QUERY = `
+  query LowestCostModel {
+    llmModels(status: ACTIVE, availableOnly: true) {
+      id
+      modelId
+      displayName
+      costInputPerMillion
+      costOutputPerMillion
       provider {
         id
         name
@@ -56,6 +73,21 @@ type InfraModelResult = {
   } | null;
 };
 
+type LowestCostModelResult = {
+  llmModels: Array<{
+    id: string;
+    modelId: string;
+    displayName: string;
+    costInputPerMillion: number;
+    costOutputPerMillion: number;
+    provider: {
+      id: string;
+      name: string;
+      displayName: string;
+    };
+  }>;
+};
+
 type CodeGenerationSettingResult = {
   systemSetting: {
     id: string;
@@ -65,11 +97,20 @@ type CodeGenerationSettingResult = {
 };
 
 export function InfraPanel() {
+  // Scenario expansion state
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [useCodeGeneration, setUseCodeGeneration] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Summarizer state
+  const [summarizerProviderId, setSummarizerProviderId] = useState<string>('');
+  const [summarizerModelId, setSummarizerModelId] = useState<string>('');
+  const [isSavingSummarizer, setIsSavingSummarizer] = useState(false);
+  const [saveSummarizerSuccess, setSaveSummarizerSuccess] = useState(false);
+
+  // Code generation state
+  const [useCodeGeneration, setUseCodeGeneration] = useState<boolean>(false);
   const [isSavingCodeGen, setIsSavingCodeGen] = useState(false);
   const [saveCodeGenSuccess, setSaveCodeGenSuccess] = useState(false);
 
@@ -81,18 +122,45 @@ export function InfraPanel() {
     variables: { purpose: 'scenario_expansion' },
   });
 
+  const [{ data: summarizerData, fetching: loadingSummarizer }, reexecuteSummarizer] =
+    useQuery<InfraModelResult>({
+      query: INFRA_MODEL_QUERY,
+      variables: { purpose: 'summarizer' },
+    });
+
+  const [{ data: lowestCostData }] = useQuery<LowestCostModelResult>({
+    query: LOWEST_COST_MODEL_QUERY,
+  });
+
   const [{ data: codeGenData, fetching: loadingCodeGen }, reexecuteCodeGen] =
     useQuery<CodeGenerationSettingResult>({ query: CODE_GENERATION_SETTING_QUERY });
 
   const [, updateSetting] = useMutation(UPDATE_SYSTEM_SETTING_MUTATION);
 
-  // Initialize selection from current config
+  // Find the lowest cost model for fallback display
+  const lowestCostModel = lowestCostData?.llmModels?.length
+    ? lowestCostData.llmModels.reduce((min, model) => {
+        const minCost = min.costInputPerMillion + min.costOutputPerMillion;
+        const modelCost = model.costInputPerMillion + model.costOutputPerMillion;
+        return modelCost < minCost ? model : min;
+      })
+    : undefined;
+
+  // Initialize scenario expansion selection from current config
   useEffect(() => {
     if (infraData?.infraModel) {
       setSelectedProviderId(infraData.infraModel.provider.id);
       setSelectedModelId(infraData.infraModel.modelId);
     }
   }, [infraData]);
+
+  // Initialize summarizer selection from current config
+  useEffect(() => {
+    if (summarizerData?.infraModel) {
+      setSummarizerProviderId(summarizerData.infraModel.provider.id);
+      setSummarizerModelId(summarizerData.infraModel.modelId);
+    }
+  }, [summarizerData]);
 
   // Initialize code generation setting
   useEffect(() => {
@@ -102,8 +170,14 @@ export function InfraPanel() {
   }, [codeGenData]);
 
   const providers = providersData?.llmProviders ?? [];
+
+  // Scenario expansion helpers
   const selectedProvider = providers.find((p) => p.id === selectedProviderId);
   const availableModels = selectedProvider?.models.filter((m) => m.status === 'ACTIVE') ?? [];
+
+  // Summarizer helpers
+  const summarizerProvider = providers.find((p) => p.id === summarizerProviderId);
+  const summarizerModels = summarizerProvider?.models.filter((m) => m.status === 'ACTIVE') ?? [];
 
   const handleProviderChange = (providerId: string) => {
     setSelectedProviderId(providerId);
@@ -114,6 +188,17 @@ export function InfraPanel() {
   const handleModelChange = (modelId: string) => {
     setSelectedModelId(modelId);
     setSaveSuccess(false);
+  };
+
+  const handleSummarizerProviderChange = (providerId: string) => {
+    setSummarizerProviderId(providerId);
+    setSummarizerModelId('');
+    setSaveSummarizerSuccess(false);
+  };
+
+  const handleSummarizerModelChange = (modelId: string) => {
+    setSummarizerModelId(modelId);
+    setSaveSummarizerSuccess(false);
   };
 
   const handleSave = async () => {
@@ -138,6 +223,29 @@ export function InfraPanel() {
 
     // Clear success message after 3 seconds
     setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleSaveSummarizer = async () => {
+    if (!summarizerProviderId || !summarizerModelId || !summarizerProvider) return;
+
+    setIsSavingSummarizer(true);
+    setSaveSummarizerSuccess(false);
+
+    await updateSetting({
+      input: {
+        key: 'infra_model_summarizer',
+        value: {
+          providerId: summarizerProvider.name,
+          modelId: summarizerModelId,
+        },
+      },
+    });
+
+    setIsSavingSummarizer(false);
+    setSaveSummarizerSuccess(true);
+    reexecuteSummarizer({ requestPolicy: 'network-only' });
+
+    setTimeout(() => setSaveSummarizerSuccess(false), 3000);
   };
 
   const handleCodeGenerationToggle = async () => {
@@ -165,7 +273,11 @@ export function InfraPanel() {
     infraData?.infraModel?.provider.id !== selectedProviderId ||
     infraData?.infraModel?.modelId !== selectedModelId;
 
-  if (loadingProviders || loadingInfra || loadingCodeGen) {
+  const hasSummarizerChanges =
+    summarizerData?.infraModel?.provider.id !== summarizerProviderId ||
+    summarizerData?.infraModel?.modelId !== summarizerModelId;
+
+  if (loadingProviders || loadingInfra || loadingCodeGen || loadingSummarizer) {
     return <Loading text="Loading configuration..." />;
   }
 
@@ -278,6 +390,112 @@ export function InfraPanel() {
         </div>
       </section>
 
+      {/* Summarizer Model Section */}
+      <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-medium text-gray-900">Transcript Summarization Model</h2>
+              <p className="text-sm text-gray-500">
+                Model used to summarize AI responses and extract decision codes
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Current Configuration */}
+          {summarizerData?.infraModel && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-500 mb-1">Currently configured:</p>
+              <p className="font-medium text-gray-900">
+                {summarizerData.infraModel.provider.displayName} / {summarizerData.infraModel.displayName}
+              </p>
+            </div>
+          )}
+
+          {!summarizerData?.infraModel && (
+            <div className="p-4 bg-blue-50 rounded-lg flex items-start gap-3">
+              <Cpu className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">Using lowest cost model</p>
+                <p className="text-sm text-blue-700">
+                  {lowestCostModel
+                    ? `${lowestCostModel.provider.displayName} / ${lowestCostModel.displayName} ($${lowestCostModel.costInputPerMillion}/M in, $${lowestCostModel.costOutputPerMillion}/M out)`
+                    : 'Will use the cheapest available model'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Provider Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
+            <select
+              value={summarizerProviderId}
+              onChange={(e) => handleSummarizerProviderChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            >
+              <option value="">Select a provider...</option>
+              {providers
+                .filter((p) => p.isEnabled)
+                .map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.displayName}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Model Selection */}
+          {summarizerProvider && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
+              <select
+                value={summarizerModelId}
+                onChange={(e) => handleSummarizerModelChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              >
+                <option value="">Select a model...</option>
+                {summarizerModels.map((model) => (
+                  <option key={model.id} value={model.modelId}>
+                    {model.displayName} ({model.modelId})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Cost Info */}
+          {summarizerModelId && summarizerProvider && (
+            <ModelCostInfo models={summarizerModels} selectedModelId={summarizerModelId} />
+          )}
+
+          {/* Save Button */}
+          <div className="flex items-center justify-between pt-4">
+            {saveSummarizerSuccess && (
+              <div className="flex items-center gap-2 text-green-600">
+                <Check className="w-4 h-4" />
+                <span className="text-sm">Configuration saved</span>
+              </div>
+            )}
+            <div className="ml-auto">
+              <Button
+                variant="primary"
+                onClick={handleSaveSummarizer}
+                disabled={!summarizerProviderId || !summarizerModelId || !hasSummarizerChanges || isSavingSummarizer}
+                isLoading={isSavingSummarizer}
+              >
+                Save Configuration
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Code Generation Section */}
       <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -370,8 +588,9 @@ export function InfraPanel() {
         <h3 className="text-sm font-medium text-blue-900 mb-2">About Infrastructure Models</h3>
         <p className="text-sm text-blue-700">
           Infrastructure models are used for internal tasks that don't directly evaluate AI behavior.
-          The scenario expansion model takes definition files (.md) and generates concrete scenarios (.yaml).
-          A cost-efficient model like Claude 3.5 Haiku or GPT-4o Mini is recommended.
+          The scenario expansion model generates concrete scenarios from definitions.
+          The summarizer model extracts decision codes and explanations from AI transcripts.
+          A cost-efficient model like Claude 3.5 Haiku or GPT-4o Mini is recommended for both.
         </p>
       </div>
     </div>

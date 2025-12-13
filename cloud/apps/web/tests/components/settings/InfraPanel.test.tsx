@@ -81,6 +81,21 @@ const mockInfraModel = {
   },
 };
 
+const mockLlmModels = [
+  {
+    id: 'model-3',
+    modelId: 'gpt-4o-mini',
+    displayName: 'GPT-4o Mini',
+    costInputPerMillion: 0.15,
+    costOutputPerMillion: 0.6,
+    provider: {
+      id: 'provider-2',
+      name: 'openai',
+      displayName: 'OpenAI',
+    },
+  },
+];
+
 const mockCodeGenSettingEnabled = {
   id: 'setting-1',
   key: 'scenario_expansion_use_code_generation',
@@ -93,6 +108,61 @@ const mockCodeGenSettingDisabled = {
   value: { enabled: false },
 };
 
+// Helper to create a query handler that returns appropriate data based on query
+function createQueryHandler(overrides: {
+  llmProviders?: unknown;
+  infraModel?: unknown;
+  summarizerModel?: unknown;
+  llmModels?: unknown;
+  systemSetting?: unknown;
+}) {
+  return vi.fn((request: { query: unknown; variables?: Record<string, unknown> }) => {
+    // Convert query to string for matching - handles both string and DocumentNode
+    const queryString = typeof request.query === 'string'
+      ? request.query
+      : JSON.stringify(request.query);
+
+    if (queryString.includes('llmProviders')) {
+      return fromValue({
+        data: { llmProviders: overrides.llmProviders ?? mockProviders },
+        stale: false,
+      });
+    }
+
+    if (queryString.includes('infraModel') || queryString.includes('InfraModel')) {
+      // Check purpose to return correct infra model
+      const purpose = request.variables?.purpose;
+      if (purpose === 'summarizer') {
+        return fromValue({
+          data: { infraModel: overrides.summarizerModel ?? null },
+          stale: false,
+        });
+      }
+      return fromValue({
+        data: { infraModel: overrides.infraModel ?? null },
+        stale: false,
+      });
+    }
+
+    if (queryString.includes('llmModels') || queryString.includes('LowestCostModel')) {
+      return fromValue({
+        data: { llmModels: overrides.llmModels ?? mockLlmModels },
+        stale: false,
+      });
+    }
+
+    if (queryString.includes('systemSetting') || queryString.includes('CodeGenerationSetting')) {
+      return fromValue({
+        data: { systemSetting: overrides.systemSetting ?? null },
+        stale: false,
+      });
+    }
+
+    // Default response
+    return fromValue({ data: {}, stale: false });
+  });
+}
+
 describe('InfraPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -100,12 +170,7 @@ describe('InfraPanel', () => {
 
   it('renders the panel header', async () => {
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: mockProviders, infraModel: mockInfraModel },
-          stale: false,
-        })
-      )
+      createQueryHandler({ infraModel: mockInfraModel })
     );
     renderInfraPanel(mockClient);
 
@@ -142,29 +207,19 @@ describe('InfraPanel', () => {
 
   it('displays current configuration when infra model is set', async () => {
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: mockProviders, infraModel: mockInfraModel },
-          stale: false,
-        })
-      )
+      createQueryHandler({ infraModel: mockInfraModel })
     );
     renderInfraPanel(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText('Currently configured:')).toBeInTheDocument();
+      expect(screen.getAllByText('Currently configured:').length).toBeGreaterThan(0);
     });
     expect(screen.getByText('Anthropic / Claude 3 Haiku')).toBeInTheDocument();
   });
 
   it('shows warning when no infra model configured', async () => {
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: mockProviders, infraModel: null },
-          stale: false,
-        })
-      )
+      createQueryHandler({ infraModel: null })
     );
     renderInfraPanel(mockClient);
 
@@ -178,20 +233,15 @@ describe('InfraPanel', () => {
 
   it('displays provider selection dropdown', async () => {
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: mockProviders, infraModel: mockInfraModel },
-          stale: false,
-        })
-      )
+      createQueryHandler({ infraModel: mockInfraModel })
     );
     renderInfraPanel(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText('Provider')).toBeInTheDocument();
+      expect(screen.getAllByText('Provider').length).toBeGreaterThan(0);
     });
-    // The select should have the placeholder option
-    expect(screen.getByText('Select a provider...')).toBeInTheDocument();
+    // The select should have the placeholder option (multiple for scenario expansion and summarizer)
+    expect(screen.getAllByText('Select a provider...').length).toBeGreaterThan(0);
   });
 
   it('shows only enabled providers in dropdown', async () => {
@@ -213,17 +263,13 @@ describe('InfraPanel', () => {
     ];
 
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: providers, infraModel: null },
-          stale: false,
-        })
-      )
+      createQueryHandler({ llmProviders: providers, infraModel: null })
     );
     renderInfraPanel(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText('Enabled Provider')).toBeInTheDocument();
+      // Enabled Provider appears in both scenario expansion and summarizer dropdowns
+      expect(screen.getAllByText('Enabled Provider').length).toBeGreaterThan(0);
     });
     // Disabled provider should not be visible in options
     expect(screen.queryByText('Disabled Provider')).not.toBeInTheDocument();
@@ -231,12 +277,7 @@ describe('InfraPanel', () => {
 
   it('displays info section about infrastructure models', async () => {
     const mockClient = createMockClient(
-      vi.fn(() =>
-        fromValue({
-          data: { llmProviders: mockProviders, infraModel: mockInfraModel },
-          stale: false,
-        })
-      )
+      createQueryHandler({ infraModel: mockInfraModel })
     );
     renderInfraPanel(mockClient);
 
@@ -249,16 +290,10 @@ describe('InfraPanel', () => {
   describe('Code Generation Section', () => {
     it('displays generation method section', async () => {
       const mockClient = createMockClient(
-        vi.fn(() =>
-          fromValue({
-            data: {
-              llmProviders: mockProviders,
-              infraModel: mockInfraModel,
-              systemSetting: mockCodeGenSettingDisabled,
-            },
-            stale: false,
-          })
-        )
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          systemSetting: mockCodeGenSettingDisabled,
+        })
       );
       renderInfraPanel(mockClient);
 
@@ -270,16 +305,10 @@ describe('InfraPanel', () => {
 
     it('shows LLM generation enabled when code gen is disabled', async () => {
       const mockClient = createMockClient(
-        vi.fn(() =>
-          fromValue({
-            data: {
-              llmProviders: mockProviders,
-              infraModel: mockInfraModel,
-              systemSetting: mockCodeGenSettingDisabled,
-            },
-            stale: false,
-          })
-        )
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          systemSetting: mockCodeGenSettingDisabled,
+        })
       );
       renderInfraPanel(mockClient);
 
@@ -290,16 +319,10 @@ describe('InfraPanel', () => {
 
     it('shows code generation enabled when setting is true', async () => {
       const mockClient = createMockClient(
-        vi.fn(() =>
-          fromValue({
-            data: {
-              llmProviders: mockProviders,
-              infraModel: mockInfraModel,
-              systemSetting: mockCodeGenSettingEnabled,
-            },
-            stale: false,
-          })
-        )
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          systemSetting: mockCodeGenSettingEnabled,
+        })
       );
       renderInfraPanel(mockClient);
 
@@ -310,16 +333,10 @@ describe('InfraPanel', () => {
 
     it('shows code generation toggle checkbox', async () => {
       const mockClient = createMockClient(
-        vi.fn(() =>
-          fromValue({
-            data: {
-              llmProviders: mockProviders,
-              infraModel: mockInfraModel,
-              systemSetting: mockCodeGenSettingDisabled,
-            },
-            stale: false,
-          })
-        )
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          systemSetting: mockCodeGenSettingDisabled,
+        })
       );
       renderInfraPanel(mockClient);
 
@@ -332,16 +349,10 @@ describe('InfraPanel', () => {
 
     it('displays trade-offs information', async () => {
       const mockClient = createMockClient(
-        vi.fn(() =>
-          fromValue({
-            data: {
-              llmProviders: mockProviders,
-              infraModel: mockInfraModel,
-              systemSetting: null,
-            },
-            stale: false,
-          })
-        )
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          systemSetting: null,
+        })
       );
       renderInfraPanel(mockClient);
 
@@ -350,6 +361,66 @@ describe('InfraPanel', () => {
       });
       expect(screen.getByText('Code Generation')).toBeInTheDocument();
       expect(screen.getByText('LLM Generation')).toBeInTheDocument();
+    });
+  });
+
+  describe('Summarizer Model Section', () => {
+    it('displays summarizer model section', async () => {
+      const mockClient = createMockClient(
+        createQueryHandler({ infraModel: mockInfraModel })
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('Transcript Summarization Model')).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(/Model used to summarize AI responses/)
+      ).toBeInTheDocument();
+    });
+
+    it('shows lowest cost model fallback when no summarizer configured', async () => {
+      const mockClient = createMockClient(
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          summarizerModel: null,
+          llmModels: mockLlmModels,
+        })
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('Using lowest cost model')).toBeInTheDocument();
+      });
+      // GPT-4o Mini may appear in multiple places (model list and cost info)
+      expect(screen.getAllByText(/GPT-4o Mini/).length).toBeGreaterThan(0);
+    });
+
+    it('shows configured summarizer model', async () => {
+      const mockSummarizerModel = {
+        id: 'model-3',
+        modelId: 'gpt-4o-mini',
+        displayName: 'GPT-4o Mini',
+        provider: {
+          id: 'provider-2',
+          name: 'openai',
+          displayName: 'OpenAI',
+        },
+      };
+
+      const mockClient = createMockClient(
+        createQueryHandler({
+          infraModel: mockInfraModel,
+          summarizerModel: mockSummarizerModel,
+        })
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        // Should show both configured messages (scenario expansion and summarizer)
+        expect(screen.getAllByText('Currently configured:').length).toBe(2);
+      });
+      expect(screen.getByText('OpenAI / GPT-4o Mini')).toBeInTheDocument();
     });
   });
 });

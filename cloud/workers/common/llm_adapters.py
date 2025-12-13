@@ -75,6 +75,7 @@ class StreamChunk:
     done: bool = False  # True if this is the final chunk
     input_tokens: Optional[int] = None  # Only available on final chunk
     model_version: Optional[str] = None  # Only available on final chunk
+    finish_reason: Optional[str] = None  # Only available on final chunk (normalized)
 
 
 # Mapping of provider-specific finish reasons to normalized values
@@ -1140,13 +1141,15 @@ class DeepSeekAdapter(BaseLLMAdapter):
 
                 data_str = line_str[6:]  # Remove "data: " prefix
                 if data_str == "[DONE]":
-                    # Final chunk
+                    # Final chunk - include normalized finish_reason
+                    normalized_finish = normalize_finish_reason("deepseek", finish_reason)
                     yield StreamChunk(
                         content=accumulated_content,
                         output_tokens=output_tokens,
                         done=True,
                         input_tokens=input_tokens,
                         model_version=model_version,
+                        finish_reason=normalized_finish,
                     )
                     return
 
@@ -1198,12 +1201,14 @@ class DeepSeekAdapter(BaseLLMAdapter):
                 output_tokens=output_tokens,
                 finish_reason=finish_reason,
             )
+            normalized_finish = normalize_finish_reason("deepseek", finish_reason)
             yield StreamChunk(
                 content=accumulated_content,
                 output_tokens=output_tokens,
                 done=True,
                 input_tokens=input_tokens,
                 model_version=model_version,
+                finish_reason=normalized_finish,
             )
 
         except Exception as exc:
@@ -1506,10 +1511,15 @@ def generate_stream(
         model_config=model_config,
         timeout=timeout,
     )
+    # Extract finish_reason from provider_metadata if available
+    finish_reason = None
+    if response.provider_metadata:
+        finish_reason = response.provider_metadata.get("finishReason")
     yield StreamChunk(
         content=response.content,
         output_tokens=response.output_tokens or 0,
         done=True,
         input_tokens=response.input_tokens,
         model_version=response.model_version,
+        finish_reason=finish_reason,
     )

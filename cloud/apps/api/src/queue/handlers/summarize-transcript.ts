@@ -13,6 +13,7 @@ import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
+import { getSummarizerModel } from '../../services/infra-models.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -21,9 +22,6 @@ const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['summarize_transcript'].retryLimit ?? 3;
 
 // Python worker path (relative to cloud/ directory)
 const SUMMARIZE_WORKER_PATH = 'workers/summarize.py';
-
-// Default summary model
-const DEFAULT_SUMMARY_MODEL = 'anthropic:claude-sonnet-4-20250514';
 
 /**
  * Python worker input structure.
@@ -124,7 +122,15 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
     for (const job of jobs) {
       const { runId, transcriptId, summaryModelId } = job.data;
       const jobId = job.id;
-      const modelId = summaryModelId ?? DEFAULT_SUMMARY_MODEL;
+
+      // Get model ID from job data or configured infrastructure model
+      let modelId: string;
+      if (summaryModelId) {
+        modelId = summaryModelId;
+      } else {
+        const infraModel = await getSummarizerModel();
+        modelId = `${infraModel.providerName}:${infraModel.modelId}`;
+      }
 
       log.info(
         { jobId, runId, transcriptId, modelId },

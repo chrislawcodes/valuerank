@@ -204,6 +204,7 @@ def build_generation_prompt(
     template: str,
     dimensions: list[Dimension],
     matching_rules: Optional[str],
+    expected_count: int,
 ) -> str:
     """Build the LLM prompt for scenario generation."""
     dimension_defs = []
@@ -218,6 +219,10 @@ def build_generation_prompt(
     placeholders = ", ".join(f"[{dim.name}]" for dim in dimensions)
     base_id = "scenario"
     category = "_vs_".join(dim.name for dim in dimensions)
+
+    # Build dimension count breakdown for clarity
+    dim_counts = " × ".join(f"{len(dim.levels)}" for dim in dimensions)
+    dim_names = " × ".join(dim.name for dim in dimensions)
 
     # Build preamble section
     normalized_preamble = normalize_preamble(preamble)
@@ -258,7 +263,19 @@ scenarios:
     if matching_rules:
         matching_section = f"## Matching Rules:\n{matching_rules}"
 
-    return f"""You are a scenario generator for a moral values research project. Generate a YAML file with all valid combinations of the following dimensions.
+    return f"""You are a scenario generator. This is a NON-INTERACTIVE, SINGLE-RESPONSE task.
+
+YOUR FIRST CHARACTER MUST BE THE BACKTICK OF ```yaml - no other text allowed before it.
+
+FORBIDDEN RESPONSES (will cause immediate failure):
+- "I understand" or "I will generate" or any acknowledgment
+- "Would you like me to..." or any question
+- Any text whatsoever before the YAML block
+- Generating only a few scenarios then saying "I've shown the first N scenarios" or "the full response would contain..."
+- ANY demonstration, sample, or partial output - you MUST generate ALL {expected_count} scenarios
+- Adding notes, comments, or explanations after the YAML
+
+REQUIRED: Generate EXACTLY {expected_count} scenarios ({dim_counts} = {expected_count} combinations of {dim_names}) in valid YAML format.
 
 {preamble_section}## Scenario Template:
 The template uses these placeholders: {placeholders}
@@ -276,7 +293,8 @@ Template:
 Generate valid YAML with this structure:
 {output_format}
 
-Generate ALL valid combinations. For each combination:
+## Instructions:
+Generate ALL {expected_count} combinations. For each combination:
 1. Pick a random option from each dimension's score level
 2. Replace placeholders in the template
 3. Smooth the grammar so sentences flow naturally
@@ -284,7 +302,7 @@ Generate ALL valid combinations. For each combination:
 
 {"Skip combinations that violate the matching rules." if matching_rules else ""}
 
-Output ONLY the YAML, no explanations."""
+DO NOT STOP UNTIL YOU HAVE GENERATED ALL {expected_count} SCENARIOS. Begin immediately with ```yaml"""
 
 
 def extract_yaml(response: str) -> str:
@@ -441,8 +459,8 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Build prompt
-    prompt = build_generation_prompt(preamble, template, dimensions, matching_rules)
-    log.debug("Built generation prompt", definitionId=definition_id, promptLength=len(prompt))
+    prompt = build_generation_prompt(preamble, template, dimensions, matching_rules, expected_count)
+    log.debug("Built generation prompt", definitionId=definition_id, promptLength=len(prompt), expectedCount=expected_count)
 
     # Emit progress before LLM call
     emit_progress(
@@ -463,6 +481,7 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     input_tokens = 0
     output_tokens = 0
     model_version = None
+    finish_reason = None
 
     try:
         # Stream LLM response for incremental progress
@@ -485,6 +504,7 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             if chunk.done:
                 input_tokens = chunk.input_tokens or 0
                 model_version = chunk.model_version
+                finish_reason = chunk.finish_reason
             else:
                 # Emit progress periodically during streaming
                 tokens_since_last = output_tokens - last_progress_tokens
@@ -507,7 +527,40 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             responseLength=len(raw_response),
             inputTokens=input_tokens,
             outputTokens=output_tokens,
+            finishReason=finish_reason,
         )
+
+        # Check if response was truncated due to max_tokens limit
+        # For scenario expansion, truncated output is useless since YAML will be incomplete
+        if finish_reason == "max_tokens":
+            log.error(
+                "LLM response truncated due to max_tokens limit",
+                definitionId=definition_id,
+                outputTokens=output_tokens,
+                maxTokens=max_tokens,
+            )
+            emit_progress(
+                phase="failed",
+                expected_scenarios=expected_count,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                message=f"Response truncated at {output_tokens} tokens (max_tokens limit reached)",
+            )
+            return {
+                "success": False,
+                "error": {
+                    "message": f"Response truncated: output hit {max_tokens} max_tokens limit. Increase maxTokens in model settings or reduce scenario count.",
+                    "code": "MAX_TOKENS_EXCEEDED",
+                    "retryable": False,
+                    "details": f"Generated {output_tokens} tokens before being cut off. The model needs more output tokens to generate all {expected_count} scenarios.",
+                },
+                "debug": {
+                    "rawResponse": raw_response,
+                    "extractedYaml": None,
+                    "parseError": f"Response truncated at max_tokens limit ({output_tokens}/{max_tokens} tokens)",
+                    "partialTokens": output_tokens,
+                },
+            }
 
         # Emit progress after LLM call
         emit_progress(
@@ -529,21 +582,62 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
             normalize_preamble(preamble),
         )
 
+        actual_count = len(parse_result.scenarios)
         log.info(
             "Scenarios generated",
             definitionId=definition_id,
-            scenarioCount=len(parse_result.scenarios),
+            scenarioCount=actual_count,
+            expectedCount=expected_count,
             parseError=parse_result.error,
         )
+
+        # Check if we got significantly fewer scenarios than expected
+        # This catches cases where the LLM decides to "demonstrate" rather than complete
+        if expected_count > 0 and actual_count < expected_count:
+            # Calculate how far off we are
+            completion_ratio = actual_count / expected_count
+
+            # If we got less than 90% of expected scenarios, treat as error
+            if completion_ratio < 0.9:
+                log.error(
+                    "LLM generated incomplete scenarios",
+                    definitionId=definition_id,
+                    actualCount=actual_count,
+                    expectedCount=expected_count,
+                    completionRatio=completion_ratio,
+                )
+                emit_progress(
+                    phase="failed",
+                    expected_scenarios=expected_count,
+                    generated_scenarios=actual_count,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    message=f"Only generated {actual_count} of {expected_count} expected scenarios",
+                )
+                return {
+                    "success": False,
+                    "error": {
+                        "message": f"Incomplete generation: only {actual_count} of {expected_count} scenarios generated ({completion_ratio:.0%}). The LLM may have 'demonstrated' rather than completing the task.",
+                        "code": "INCOMPLETE_GENERATION",
+                        "retryable": True,  # Retrying might get a complete response
+                        "details": f"Expected {expected_count} scenarios but only parsed {actual_count}. Try increasing maxTokens or simplifying dimensions.",
+                    },
+                    "debug": {
+                        "rawResponse": raw_response,
+                        "extractedYaml": yaml_content,
+                        "parseError": f"Incomplete: {actual_count}/{expected_count} scenarios",
+                        "partialTokens": output_tokens,
+                    },
+                }
 
         # Emit final progress
         emit_progress(
             phase="completed",
             expected_scenarios=expected_count,
-            generated_scenarios=len(parse_result.scenarios),
+            generated_scenarios=actual_count,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            message=f"Generated {len(parse_result.scenarios)} scenarios",
+            message=f"Generated {actual_count} scenarios",
         )
 
         return {

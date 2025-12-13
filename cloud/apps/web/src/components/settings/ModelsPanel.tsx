@@ -321,8 +321,10 @@ function ModelRow({
             )}
           </div>
           <p className="text-sm text-gray-500">
-            {model.modelId} · ${model.costInputPerMillion}/M input, ${model.costOutputPerMillion}/M
-            output
+            {model.modelId} · ${model.costInputPerMillion}/M in, ${model.costOutputPerMillion}/M out
+            {typeof model.apiConfig?.maxTokens === 'number' && (
+              <span className="ml-2">· {model.apiConfig.maxTokens.toLocaleString()} max tokens</span>
+            )}
           </p>
         </div>
       </div>
@@ -372,9 +374,20 @@ function ModelFormModal({
   const [displayName, setDisplayName] = useState(model?.displayName ?? '');
   const [costInput, setCostInput] = useState(model?.costInputPerMillion?.toString() ?? '');
   const [costOutput, setCostOutput] = useState(model?.costOutputPerMillion?.toString() ?? '');
-  const [apiConfig, setApiConfig] = useState(
-    model?.apiConfig ? JSON.stringify(model.apiConfig, null, 2) : ''
+
+  // Extract maxTokens from apiConfig for dedicated field
+  const existingMaxTokens = model?.apiConfig?.maxTokens;
+  const [maxTokens, setMaxTokens] = useState(
+    typeof existingMaxTokens === 'number' ? existingMaxTokens.toString() : ''
   );
+
+  // Filter out maxTokens from apiConfig for the JSON editor (to avoid duplication)
+  const getFilteredApiConfig = () => {
+    if (!model?.apiConfig) return '';
+    const { maxTokens: _, ...rest } = model.apiConfig as Record<string, unknown>;
+    return Object.keys(rest).length > 0 ? JSON.stringify(rest, null, 2) : '';
+  };
+  const [apiConfig, setApiConfig] = useState(getFilteredApiConfig());
   const [apiConfigError, setApiConfigError] = useState<string | null>(null);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -392,20 +405,34 @@ function ModelFormModal({
     if (apiConfigError) return;
     setIsSaving(true);
 
-    // Parse apiConfig if provided
+    // Build apiConfig by merging maxTokens with other JSON config
     let parsedApiConfig: Record<string, unknown> | null | undefined = undefined;
     if (isEditing) {
-      if (apiConfig.trim() === '') {
-        // Empty string means clear the config
-        parsedApiConfig = null;
-      } else {
+      // Start with parsed JSON config (or empty object)
+      let baseConfig: Record<string, unknown> = {};
+      if (apiConfig.trim() !== '') {
         try {
-          parsedApiConfig = JSON.parse(apiConfig);
+          baseConfig = JSON.parse(apiConfig);
         } catch {
           // Shouldn't happen due to validation
           setIsSaving(false);
           return;
         }
+      }
+
+      // Add maxTokens if provided
+      if (maxTokens.trim() !== '') {
+        const maxTokensNum = parseInt(maxTokens, 10);
+        if (!isNaN(maxTokensNum) && maxTokensNum > 0) {
+          baseConfig.maxTokens = maxTokensNum;
+        }
+      }
+
+      // Set final config (null if empty, object otherwise)
+      if (Object.keys(baseConfig).length === 0) {
+        parsedApiConfig = null;
+      } else {
+        parsedApiConfig = baseConfig;
       }
     }
 
@@ -430,8 +457,17 @@ function ModelFormModal({
     setIsSaving(false);
   };
 
+  // Check if there are any changes for editing mode
+  const hasChanges = isEditing
+    ? displayName !== (model?.displayName ?? '') ||
+      costInput !== (model?.costInputPerMillion?.toString() ?? '') ||
+      costOutput !== (model?.costOutputPerMillion?.toString() ?? '') ||
+      maxTokens !== (typeof existingMaxTokens === 'number' ? existingMaxTokens.toString() : '') ||
+      apiConfig !== getFilteredApiConfig()
+    : true;
+
   const isValid = isEditing
-    ? (displayName || costInput || costOutput || apiConfig !== (model?.apiConfig ? JSON.stringify(model.apiConfig, null, 2) : '')) && !apiConfigError
+    ? hasChanges && !apiConfigError
     : modelId && displayName && costInput && costOutput;
 
   return (
@@ -501,24 +537,39 @@ function ModelFormModal({
           )}
 
           {isEditing && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                API Config (JSON)
-              </label>
-              <JsonEditor
-                value={apiConfig}
-                onChange={handleApiConfigChange}
-                onValidationChange={handleApiConfigValidation}
-                height="120px"
-                placeholder='{"maxTokensParam": "max_completion_tokens"}'
+            <>
+              <Input
+                label="Max Output Tokens"
+                type="number"
+                min="1"
+                step="1"
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(e.target.value)}
+                placeholder="8192 (default)"
               />
-              {apiConfigError && (
-                <p className="mt-1 text-sm text-red-600">{apiConfigError}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">
-                Provider-specific configuration. Leave empty to clear.
+              <p className="-mt-3 text-xs text-gray-500">
+                Maximum tokens the model can generate. Used for scenario expansion. Leave empty for default (8192).
               </p>
-            </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Advanced API Config (JSON)
+                </label>
+                <JsonEditor
+                  value={apiConfig}
+                  onChange={handleApiConfigChange}
+                  onValidationChange={handleApiConfigValidation}
+                  height="100px"
+                  placeholder='{"maxTokensParam": "max_completion_tokens"}'
+                />
+                {apiConfigError && (
+                  <p className="mt-1 text-sm text-red-600">{apiConfigError}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Other provider-specific settings. Leave empty if not needed.
+                </p>
+              </div>
+            </>
           )}
 
           <div className="flex justify-end gap-3 pt-4">

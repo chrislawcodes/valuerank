@@ -10,13 +10,14 @@ import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('infra-models');
 
-export type InfraModelPurpose = 'scenario_expansion';
+export type InfraModelPurpose = 'scenario_expansion' | 'summarizer';
 
 export type InfraModelConfig = {
   modelId: string;
   providerId: string;
   providerName: string;
   displayName: string;
+  apiConfig?: Record<string, unknown> | null;
 };
 
 /**
@@ -77,6 +78,7 @@ export async function getInfraModel(purpose: InfraModelPurpose): Promise<InfraMo
     providerId: provider.id,
     providerName: provider.name,
     displayName: model.displayName,
+    apiConfig: model.apiConfig as Record<string, unknown> | null,
   };
 }
 
@@ -99,6 +101,64 @@ export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
     providerId: 'anthropic',
     providerName: 'anthropic',
     displayName: 'Claude 3.5 Haiku (Default)',
+    apiConfig: null,
+  };
+}
+
+/**
+ * Get the configured infrastructure model for transcript summarization.
+ * Falls back to the lowest cost active model if not configured.
+ */
+export async function getSummarizerModel(): Promise<InfraModelConfig> {
+  const configured = await getInfraModel('summarizer');
+
+  if (configured) {
+    return configured;
+  }
+
+  // Fall back to the lowest cost active model
+  log.info('No summarizer model configured, finding lowest cost model');
+
+  const lowestCostModel = await db.llmModel.findFirst({
+    where: {
+      status: 'ACTIVE',
+      provider: {
+        isEnabled: true,
+      },
+    },
+    orderBy: [
+      { costInputPerMillion: 'asc' },
+      { costOutputPerMillion: 'asc' },
+    ],
+    include: {
+      provider: true,
+    },
+  });
+
+  if (lowestCostModel) {
+    log.info(
+      { modelId: lowestCostModel.modelId, provider: lowestCostModel.provider.name },
+      'Using lowest cost model for summarization'
+    );
+
+    return {
+      modelId: lowestCostModel.modelId,
+      providerId: lowestCostModel.provider.id,
+      providerName: lowestCostModel.provider.name,
+      displayName: `${lowestCostModel.displayName} (Lowest Cost)`,
+      apiConfig: lowestCostModel.apiConfig as Record<string, unknown> | null,
+    };
+  }
+
+  // Ultimate fallback if no models exist
+  log.warn('No active models found, using hardcoded default');
+
+  return {
+    modelId: 'claude-3-5-haiku-20241022',
+    providerId: 'anthropic',
+    providerName: 'anthropic',
+    displayName: 'Claude 3.5 Haiku (Default)',
+    apiConfig: null,
   };
 }
 

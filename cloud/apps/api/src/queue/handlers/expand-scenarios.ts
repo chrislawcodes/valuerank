@@ -62,17 +62,31 @@ export function createExpandScenariosHandler(): PgBoss.WorkHandler<ExpandScenari
           'Failed to expand scenarios'
         );
 
-        // Clear stale progress and record error in debug info
+        // Clear stale progress and update debug info
         // This ensures UI doesn't show "expanding" state for failed/expired jobs
         try {
+          // Check if expand.ts already saved debug info for this error
+          // If so, preserve it (it has rawResponse) and just update the parseError format
+          const current = await db.definition.findUnique({
+            where: { id: definitionId },
+            select: { expansionDebug: true },
+          });
+
+          const existingDebug = current?.expansionDebug as Record<string, unknown> | null;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          // Preserve existing debug data (rawResponse, extractedYaml) if available
           await db.definition.update({
             where: { id: definitionId },
             data: {
               expansionProgress: Prisma.JsonNull,
               expansionDebug: {
-                rawResponse: null,
-                extractedYaml: null,
-                parseError: `Job failed: ${error instanceof Error ? error.message : String(error)}`,
+                rawResponse: existingDebug?.rawResponse ?? null,
+                extractedYaml: existingDebug?.extractedYaml ?? null,
+                parseError: `Job failed: ${errorMessage}`,
+                errorDetails: existingDebug?.errorDetails ?? null,
+                partialTokens: existingDebug?.partialTokens ?? null,
+                modelId: existingDebug?.modelId ?? null,
                 jobId,
                 timestamp: new Date().toISOString(),
                 scenariosCreated: 0,
