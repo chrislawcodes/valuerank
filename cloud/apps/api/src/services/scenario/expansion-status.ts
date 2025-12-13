@@ -98,7 +98,24 @@ export async function getDefinitionExpansionStatus(
 
       // Only return progress for active jobs, not terminal states
       // This prevents stale progress showing for failed/expired jobs
-      const activeProgress = (status === 'active' || status === 'pending') ? progress : null;
+      let activeProgress: ExpansionProgress | null = null;
+      if (status === 'active' || status === 'pending') {
+        // Check if progress is stale (no update in 20+ minutes)
+        const STALE_THRESHOLD_MS = 20 * 60 * 1000;
+        const progressAge = progress?.updatedAt
+          ? Date.now() - new Date(progress.updatedAt).getTime()
+          : Infinity;
+
+        if (progressAge < STALE_THRESHOLD_MS) {
+          activeProgress = progress;
+        } else if (progress) {
+          // Progress is stale - log warning and clear it
+          log.warn(
+            { definitionId, progressAge: Math.round(progressAge / 1000), phase: progress.phase },
+            'Clearing stale expansion progress'
+          );
+        }
+      }
 
       return {
         definitionId,
