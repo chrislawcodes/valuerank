@@ -6,7 +6,7 @@
  */
 
 import type * as PgBoss from 'pg-boss';
-import { db, resolveDefinitionContent } from '@valuerank/db';
+import { db, Prisma, resolveDefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { ExpandScenariosJobData } from '../types.js';
 import { expandScenarios } from '../../services/scenario/expand.js';
@@ -61,6 +61,27 @@ export function createExpandScenariosHandler(): PgBoss.WorkHandler<ExpandScenari
           { jobId, definitionId, triggeredBy, err: error },
           'Failed to expand scenarios'
         );
+
+        // Clear stale progress and record error in debug info
+        // This ensures UI doesn't show "expanding" state for failed/expired jobs
+        try {
+          await db.definition.update({
+            where: { id: definitionId },
+            data: {
+              expansionProgress: Prisma.JsonNull,
+              expansionDebug: {
+                rawResponse: null,
+                extractedYaml: null,
+                parseError: `Job failed: ${error instanceof Error ? error.message : String(error)}`,
+                jobId,
+                timestamp: new Date().toISOString(),
+                scenariosCreated: 0,
+              },
+            },
+          });
+        } catch (cleanupError) {
+          log.warn({ cleanupError, definitionId }, 'Failed to clear expansion progress on error');
+        }
 
         // Re-throw to trigger retry
         throw error;

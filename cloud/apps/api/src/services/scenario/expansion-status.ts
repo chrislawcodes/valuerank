@@ -96,6 +96,10 @@ export async function getDefinitionExpansionStatus(
         error = output.message ?? 'Unknown error';
       }
 
+      // Only return progress for active jobs, not terminal states
+      // This prevents stale progress showing for failed/expired jobs
+      const activeProgress = (status === 'active' || status === 'pending') ? progress : null;
+
       return {
         definitionId,
         status,
@@ -105,7 +109,7 @@ export async function getDefinitionExpansionStatus(
         completedAt: currentJob.completed_on,
         error,
         scenarioCount,
-        progress,
+        progress: activeProgress,
       };
     }
 
