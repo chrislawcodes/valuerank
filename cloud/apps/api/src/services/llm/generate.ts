@@ -142,7 +142,7 @@ async function generateDeepSeek(
   options?: LLMOptions
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxTokens = Math.min(options?.maxTokens || 8192, 8192); // DeepSeek optimal max
+  const maxTokens = Math.min(options?.maxTokens || 8192, 65536); // DeepSeek API limit is 64K
 
   log.debug({ promptLength: prompt.length, timeoutMs, maxTokens }, 'Calling DeepSeek API');
 

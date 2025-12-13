@@ -940,9 +940,9 @@ class DeepSeekAdapter(BaseLLMAdapter):
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
         resolved_temperature = resolve_temperature(model_config, temperature)
 
-        # DeepSeek has a max of 8192 tokens for optimal quality
+        # DeepSeek supports up to 64K output tokens (API limit)
         if resolved_max_tokens is not None:
-            resolved_max_tokens = min(resolved_max_tokens, 8192)
+            resolved_max_tokens = min(resolved_max_tokens, 65536)
 
         payload: dict[str, Any] = {
             "model": model,
