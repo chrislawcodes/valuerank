@@ -153,12 +153,12 @@ function TimelineTooltip({
   const point = typedPayload[0]?.payload;
 
   return (
-    <div className="bg-gray-800 p-3 shadow-lg rounded-lg border border-gray-700 max-w-xs">
+    <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200 max-w-xs">
       <div className="flex items-center gap-2 mb-2">
-        <Calendar className="w-3.5 h-3.5 text-gray-400" />
-        <span className="text-sm text-gray-300">{label}</span>
+        <Calendar className="w-3.5 h-3.5 text-gray-500" />
+        <span className="text-sm text-gray-600">{label}</span>
       </div>
-      <p className="text-sm font-medium text-white mb-2 truncate" title={point?.runName}>
+      <p className="text-sm font-medium text-gray-900 mb-2 truncate" title={point?.runName}>
         {point?.runName}
       </p>
       <div className="space-y-1 text-sm">
@@ -169,11 +169,11 @@ function TimelineTooltip({
                 className="w-2.5 h-2.5 rounded-full"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-gray-300 truncate" title={entry.name}>
+              <span className="text-gray-600 truncate" title={entry.name}>
                 {getModelDisplayName(entry.name)}
               </span>
             </div>
-            <span className="font-mono text-white">{entry.value.toFixed(2)}</span>
+            <span className="font-mono text-gray-900">{entry.value.toFixed(2)}</span>
           </div>
         ))}
       </div>
@@ -193,11 +193,11 @@ function MetricSelector({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-gray-400">Metric:</span>
+      <span className="text-sm text-gray-600">Metric:</span>
       <select
         value={selected}
         onChange={(e) => onChange(e.target.value as TimelineMetric)}
-        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+        className="bg-white border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
       >
         {METRIC_OPTIONS.map((opt) => (
           <option key={opt.id} value={opt.id}>
@@ -249,31 +249,31 @@ function TimelineSummary({
   if (trends.length === 0) return null;
 
   return (
-    <div className="bg-gray-800/50 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <h4 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
         <TrendingUp className="w-4 h-4" />
         Trend Analysis ({metric === 'mean' ? 'Mean Decision' : 'Std Deviation'})
       </h4>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {trends.map((trend) => (
-          <div key={trend!.modelId} className="bg-gray-900/50 rounded p-2">
+          <div key={trend!.modelId} className="bg-white rounded p-2 border border-gray-200">
             <div
-              className="text-xs text-gray-400 truncate mb-1"
+              className="text-xs text-gray-500 truncate mb-1"
               title={trend!.modelId}
             >
               {getModelDisplayName(trend!.modelId)}
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-lg font-bold text-white">
+              <span className="text-lg font-bold text-gray-900">
                 {trend!.lastValue.toFixed(2)}
               </span>
               <span
                 className={`text-sm font-medium ${
                   trend!.direction === 'up'
-                    ? 'text-green-400'
+                    ? 'text-green-600'
                     : trend!.direction === 'down'
-                      ? 'text-red-400'
-                      : 'text-gray-400'
+                      ? 'text-red-600'
+                      : 'text-gray-500'
                 }`}
               >
                 {trend!.change > 0 ? '+' : ''}
@@ -315,10 +315,10 @@ export function TimelineViz({ runs, filters, onFilterChange }: ComparisonVisuali
   if (data.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
-        <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-3">
-          <TrendingUp className="w-6 h-6 text-gray-500" />
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+          <TrendingUp className="w-6 h-6 text-gray-400" />
         </div>
-        <p className="text-gray-400">No timeline data available</p>
+        <p className="text-gray-600">No timeline data available</p>
         <p className="text-gray-500 text-sm mt-1">
           {filters.model
             ? `No data for model: ${filters.model}`
@@ -347,32 +347,32 @@ export function TimelineViz({ runs, filters, onFilterChange }: ComparisonVisuali
 
       {/* Warning for insufficient data */}
       {showWarning && (
-        <div className="bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-3 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-          <p className="text-sm text-yellow-200">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+          <p className="text-sm text-yellow-800">
             Only one run has data. Select more runs to see trends over time.
           </p>
         </div>
       )}
 
       {/* Chart */}
-      <div className="bg-gray-800/30 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-white mb-4">
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           {metric === 'mean' ? 'Mean Decision' : 'Standard Deviation'} Over Time
         </h3>
 
         <div style={{ height: 350 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ left: 20, right: 20, top: 20, bottom: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis
                 dataKey="dateStr"
-                tick={{ fill: '#9ca3af' }}
-                tickLine={{ stroke: '#4b5563' }}
+                tick={{ fill: '#6b7280' }}
+                tickLine={{ stroke: '#d1d5db' }}
               />
               <YAxis
-                tick={{ fill: '#9ca3af' }}
-                tickLine={{ stroke: '#4b5563' }}
+                tick={{ fill: '#6b7280' }}
+                tickLine={{ stroke: '#d1d5db' }}
                 domain={metric === 'mean' ? [1, 5] : ['auto', 'auto']}
               />
               <Tooltip content={<TimelineTooltip />} />
@@ -385,12 +385,12 @@ export function TimelineViz({ runs, filters, onFilterChange }: ComparisonVisuali
               {metric === 'mean' && (
                 <ReferenceLine
                   y={3}
-                  stroke="#4b5563"
+                  stroke="#d1d5db"
                   strokeDasharray="5 5"
                   label={{
                     value: 'Neutral',
                     position: 'right',
-                    fill: '#6b7280',
+                    fill: '#9ca3af',
                     fontSize: 10,
                   }}
                 />
@@ -418,16 +418,16 @@ export function TimelineViz({ runs, filters, onFilterChange }: ComparisonVisuali
       <TimelineSummary data={data} models={models} metric={metric} />
 
       {/* Run Legend */}
-      <div className="bg-gray-800/30 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-gray-400 mb-3">Runs in Timeline</h4>
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <h4 className="text-sm font-medium text-gray-600 mb-3">Runs in Timeline</h4>
         <div className="flex flex-wrap gap-2">
           {data.map((point) => (
             <div
               key={point.runId}
-              className="bg-gray-800/50 rounded px-2 py-1 text-xs"
+              className="bg-white rounded px-2 py-1 text-xs border border-gray-200"
             >
-              <span className="text-gray-400">{point.dateStr}:</span>{' '}
-              <span className="text-white" title={point.runName}>
+              <span className="text-gray-500">{point.dateStr}:</span>{' '}
+              <span className="text-gray-900" title={point.runName}>
                 {point.runName.length > 20
                   ? point.runName.slice(0, 20) + '...'
                   : point.runName}

@@ -123,15 +123,15 @@ function calculateKSStats(distributions: RunDecisionDistribution[]): Map<string,
 function getKSColor(interpretation: string): string {
   switch (interpretation) {
     case 'identical':
-      return 'text-gray-400';
+      return 'text-gray-500';
     case 'similar':
-      return 'text-blue-400';
+      return 'text-blue-600';
     case 'different':
-      return 'text-yellow-400';
+      return 'text-yellow-600';
     case 'very_different':
-      return 'text-red-400';
+      return 'text-red-600';
     default:
-      return 'text-gray-400';
+      return 'text-gray-500';
   }
 }
 
@@ -155,8 +155,8 @@ function OverlayTooltip({
   const typedPayload = payload as ReadonlyArray<{ dataKey: string; value: number; color: string }>;
 
   return (
-    <div className="bg-gray-800 p-3 shadow-lg rounded-lg border border-gray-700">
-      <p className="font-medium text-white mb-2">Decision {label}</p>
+    <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200">
+      <p className="font-medium text-gray-900 mb-2">Decision {label}</p>
       <div className="space-y-1 text-sm">
         {typedPayload.map((entry) => (
           <div key={entry.dataKey} className="flex items-center gap-2">
@@ -164,8 +164,8 @@ function OverlayTooltip({
               className="w-3 h-3 rounded"
               style={{ backgroundColor: entry.color }}
             />
-            <span className="text-gray-300">{runNames.get(entry.dataKey) || entry.dataKey}:</span>
-            <span className="font-medium text-white">{entry.value}</span>
+            <span className="text-gray-600">{runNames.get(entry.dataKey) || entry.dataKey}:</span>
+            <span className="font-medium text-gray-900">{entry.value}</span>
           </div>
         ))}
       </div>
@@ -191,13 +191,13 @@ function OverlayChart({
     <div style={{ height: 350 }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ left: 20, right: 20, top: 20, bottom: 30 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis
             dataKey="decision"
-            tick={{ fill: '#9ca3af' }}
+            tick={{ fill: '#6b7280' }}
             tickFormatter={(d) => `Decision ${d}`}
           />
-          <YAxis tick={{ fill: '#9ca3af' }} />
+          <YAxis tick={{ fill: '#6b7280' }} />
           <Tooltip content={(props) => <OverlayTooltip {...props} runNames={runNames} />} />
           <Legend
             formatter={(value) => runNames.get(value) || value}
@@ -238,12 +238,12 @@ function SideBySideChart({
         const color = runColors.get(dist.runId) || '#14b8a6';
 
         return (
-          <div key={dist.runId} className="bg-gray-800/50 rounded-lg p-3">
+          <div key={dist.runId} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
             <div className="mb-2">
-              <h4 className="text-sm font-medium text-white truncate" title={dist.runName}>
+              <h4 className="text-sm font-medium text-gray-900 truncate" title={dist.runName}>
                 {dist.runName}
               </h4>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500">
                 n={dist.total}, mean={dist.mean.toFixed(2)}
               </p>
             </div>
@@ -252,7 +252,7 @@ function SideBySideChart({
                 <BarChart data={data} margin={{ left: 0, right: 0, top: 5, bottom: 20 }}>
                   <XAxis
                     dataKey="decision"
-                    tick={{ fill: '#9ca3af', fontSize: 10 }}
+                    tick={{ fill: '#6b7280', fontSize: 10 }}
                     tickFormatter={(d) => String(d)}
                   />
                   <YAxis hide />
@@ -287,12 +287,12 @@ function KSStatsSummary({
   if (pairs.length === 0) return null;
 
   return (
-    <div className="bg-gray-800/50 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <h4 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
         Distribution Similarity (KS Statistic)
         <button
           title="Kolmogorov-Smirnov statistic measures the maximum distance between cumulative distributions. Lower values indicate more similar distributions."
-          className="text-gray-500 hover:text-gray-400"
+          className="text-gray-400 hover:text-gray-600"
         >
           <AlertCircle className="w-3.5 h-3.5" />
         </button>
@@ -305,8 +305,8 @@ function KSStatsSummary({
 
           return (
             <div key={key} className="flex items-center justify-between text-sm">
-              <span className="text-gray-300">
-                {name1} <span className="text-gray-500">vs</span> {name2}
+              <span className="text-gray-700">
+                {name1} <span className="text-gray-400">vs</span> {name2}
               </span>
               <span className={`font-mono ${getKSColor(ks.interpretation)}`}>
                 {ks.statistic.toFixed(3)}{' '}
@@ -358,10 +358,10 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
   if (distributions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
-        <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-3">
-          <BarChart2 className="w-6 h-6 text-gray-500" />
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+          <BarChart2 className="w-6 h-6 text-gray-400" />
         </div>
-        <p className="text-gray-400">No decision data available</p>
+        <p className="text-gray-600">No decision data available</p>
         <p className="text-gray-500 text-sm mt-1">
           {filters.model
             ? `No data for model: ${filters.model}`
@@ -383,8 +383,8 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
       />
 
       {/* Chart */}
-      <div className="bg-gray-800/30 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-white mb-4">Decision Distribution Comparison</h3>
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Decision Distribution Comparison</h3>
 
         {filters.displayMode === 'overlay' ? (
           <OverlayChart
@@ -403,12 +403,12 @@ export function DecisionsViz({ runs, filters, onFilterChange }: ComparisonVisual
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {distributions.map((dist) => (
-          <div key={dist.runId} className="bg-gray-800/50 rounded-lg p-3">
-            <div className="text-xs text-gray-400 truncate" title={dist.runName}>
+          <div key={dist.runId} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="text-xs text-gray-500 truncate" title={dist.runName}>
               {dist.runName}
             </div>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-bold text-white">{dist.mean.toFixed(2)}</span>
+              <span className="text-xl font-bold text-gray-900">{dist.mean.toFixed(2)}</span>
               <span className="text-xs text-gray-500">mean</span>
             </div>
             <div className="text-xs text-gray-500 mt-0.5">

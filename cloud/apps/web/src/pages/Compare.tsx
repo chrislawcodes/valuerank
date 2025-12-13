@@ -50,8 +50,8 @@ export function Compare() {
       <div className="h-full flex flex-col">
         {/* Page Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">Compare Runs</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Compare Runs</h1>
+          <p className="text-gray-600 mt-1">
             Select runs to compare analysis results across different configurations
           </p>
         </div>
@@ -59,7 +59,7 @@ export function Compare() {
         {/* Main Layout - Full width with 1/3 + 2/3 split */}
         <div className="flex-1 flex gap-6 min-h-0">
           {/* Left Panel: Run Selector (1/3 width) */}
-          <div className="w-1/3 min-w-[300px] max-w-[500px] bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col">
+          <div className="w-1/3 min-w-[300px] max-w-[500px] bg-white rounded-lg border border-gray-200 p-4 overflow-hidden flex flex-col shadow-sm">
             <RunSelector
               runs={availableRuns}
               selectedIds={selectedRunIds}
@@ -71,7 +71,7 @@ export function Compare() {
           </div>
 
           {/* Right Panel: Comparison View (2/3 width) */}
-          <div className="flex-1 bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col min-w-0">
+          <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4 overflow-hidden flex flex-col min-w-0 shadow-sm">
             {/* Comparison Header */}
             <ComparisonHeader
               runs={selectedRuns}
@@ -122,13 +122,13 @@ export function Compare() {
 function EmptySelectionState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center">
-      <div className="w-16 h-16 rounded-full bg-teal-500/10 flex items-center justify-center mb-4">
-        <BarChart2 className="w-8 h-8 text-teal-500" />
+      <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mb-4">
+        <BarChart2 className="w-8 h-8 text-teal-600" />
       </div>
-      <h3 className="text-lg font-medium text-white mb-2">
+      <h3 className="text-lg font-medium text-gray-900 mb-2">
         Cross-Run Comparison
       </h3>
-      <p className="text-gray-400 max-w-md">
+      <p className="text-gray-600 max-w-md">
         Compare analysis results across multiple runs to identify patterns,
         detect model drift, and analyze the effects of definition changes.
       </p>
@@ -145,13 +145,13 @@ function EmptySelectionState() {
 function NotEnoughRunsState({ runsWithAnalysis }: { runsWithAnalysis: number }) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center">
-      <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
-        <BarChart2 className="w-8 h-8 text-yellow-500" />
+      <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mb-4">
+        <BarChart2 className="w-8 h-8 text-yellow-600" />
       </div>
-      <h3 className="text-lg font-medium text-white mb-2">
+      <h3 className="text-lg font-medium text-gray-900 mb-2">
         Not Enough Data
       </h3>
-      <p className="text-gray-400 max-w-md">
+      <p className="text-gray-600 max-w-md">
         {runsWithAnalysis === 0 ? (
           'None of the selected runs have analysis data.'
         ) : runsWithAnalysis === 1 ? (

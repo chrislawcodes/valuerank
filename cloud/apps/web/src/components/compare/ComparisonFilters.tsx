@@ -127,17 +127,17 @@ export function ComparisonFilters({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-800/50 rounded-lg">
+    <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
       {/* Model filter */}
       <div className="flex items-center gap-2">
-        <label htmlFor="model-filter" className="text-sm font-medium text-gray-400">
+        <label htmlFor="model-filter" className="text-sm font-medium text-gray-600">
           Model:
         </label>
         <select
           id="model-filter"
           value={filters.model || ''}
           onChange={(e) => handleModelChange(e.target.value)}
-          className="px-3 py-1.5 text-sm bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
         >
           <option value="">All models ({allModels.length})</option>
           {commonModels.length > 0 && commonModels.length < allModels.length && (
@@ -170,14 +170,14 @@ export function ComparisonFilters({
       {/* Value filter */}
       {showValueFilter && availableValues.length > 0 && (
         <div className="flex items-center gap-2">
-          <label htmlFor="value-filter" className="text-sm font-medium text-gray-400">
+          <label htmlFor="value-filter" className="text-sm font-medium text-gray-600">
             Value:
           </label>
           <select
             id="value-filter"
             value={filters.value || ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="px-3 py-1.5 text-sm bg-gray-700 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            className="px-3 py-1.5 text-sm bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           >
             <option value="">All values</option>
             {availableValues.map((value) => (
@@ -192,15 +192,15 @@ export function ComparisonFilters({
       {/* Display mode toggle */}
       {showDisplayMode && (
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-sm font-medium text-gray-400">Display:</span>
-          <div className="flex rounded-md overflow-hidden border border-gray-600">
+          <span className="text-sm font-medium text-gray-600">Display:</span>
+          <div className="flex rounded-md overflow-hidden border border-gray-300">
             <button
               onClick={() => handleDisplayModeChange('overlay')}
               title="Overlay charts"
               className={`px-3 py-1.5 text-sm flex items-center gap-1.5 transition-colors ${
                 filters.displayMode === 'overlay'
                   ? 'bg-teal-600 text-white'
-                  : 'bg-gray-700 text-gray-400 hover:text-white'
+                  : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
               <Layers className="w-4 h-4" />
@@ -209,10 +209,10 @@ export function ComparisonFilters({
             <button
               onClick={() => handleDisplayModeChange('side-by-side')}
               title="Side-by-side charts"
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 transition-colors border-l border-gray-600 ${
+              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 transition-colors border-l border-gray-300 ${
                 filters.displayMode === 'side-by-side'
                   ? 'bg-teal-600 text-white'
-                  : 'bg-gray-700 text-gray-400 hover:text-white'
+                  : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -226,7 +226,7 @@ export function ComparisonFilters({
       {hasActiveFilters && (
         <button
           onClick={handleClearFilters}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
           title="Clear filters"
         >
           <X className="w-3 h-3" />

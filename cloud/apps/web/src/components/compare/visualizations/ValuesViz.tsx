@@ -221,8 +221,8 @@ function ValueTooltip({
   if (!active || !payload || payload.length === 0) return null;
 
   return (
-    <div className="bg-gray-800 p-3 shadow-lg rounded-lg border border-gray-700">
-      <p className="font-medium text-white mb-2">{label}</p>
+    <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200">
+      <p className="font-medium text-gray-900 mb-2">{label}</p>
       <div className="space-y-2 text-sm">
         {payload.map((entry) => {
           const runId = entry.dataKey;
@@ -236,8 +236,8 @@ function ValueTooltip({
                   className="w-3 h-3 rounded"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-gray-300">{runName}:</span>
-                <span className="font-medium text-white">
+                <span className="text-gray-600">{runName}:</span>
+                <span className="font-medium text-gray-900">
                   {(entry.value * 100).toFixed(1)}%
                 </span>
               </div>
@@ -262,8 +262,8 @@ function SignificantChanges({ comparisons, runData }: { comparisons: ValueCompar
 
   if (significant.length === 0) {
     return (
-      <div className="bg-gray-800/50 rounded-lg p-4">
-        <div className="flex items-center gap-2 text-gray-400">
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <div className="flex items-center gap-2 text-gray-600">
           <Info className="w-4 h-4" />
           <span className="text-sm">No significant differences (≥10%) found between runs</span>
         </div>
@@ -272,9 +272,9 @@ function SignificantChanges({ comparisons, runData }: { comparisons: ValueCompar
   }
 
   return (
-    <div className="bg-gray-800/50 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4 text-yellow-400" />
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <h4 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-yellow-600" />
         Significant Changes (≥10% difference)
       </h4>
       <div className="space-y-2">
@@ -289,23 +289,23 @@ function SignificantChanges({ comparisons, runData }: { comparisons: ValueCompar
 
           return (
             <div key={comparison.valueName} className="flex items-center justify-between text-sm">
-              <span className="text-white font-medium">
+              <span className="text-gray-900 font-medium">
                 {formatValueName(comparison.valueName)}
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 text-xs">
+                <span className="text-gray-500 text-xs">
                   {highestName}
                 </span>
-                <TrendingUp className="w-3 h-3 text-green-400" />
-                <span className="text-green-400 font-mono">
+                <TrendingUp className="w-3 h-3 text-green-600" />
+                <span className="text-green-600 font-mono">
                   {highest ? (highest.winRate * 100).toFixed(0) : 0}%
                 </span>
-                <span className="text-gray-500">vs</span>
-                <span className="text-red-400 font-mono">
+                <span className="text-gray-400">vs</span>
+                <span className="text-red-600 font-mono">
                   {lowest ? (lowest.winRate * 100).toFixed(0) : 0}%
                 </span>
-                <TrendingDown className="w-3 h-3 text-red-400" />
-                <span className="text-gray-400 text-xs">
+                <TrendingDown className="w-3 h-3 text-red-600" />
+                <span className="text-gray-500 text-xs">
                   {lowestName}
                 </span>
               </div>
@@ -359,10 +359,10 @@ export function ValuesViz({ runs, filters, onFilterChange }: ComparisonVisualiza
   if (runData.length === 0 || chartData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
-        <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-3">
-          <TrendingUp className="w-6 h-6 text-gray-500" />
+        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+          <TrendingUp className="w-6 h-6 text-gray-400" />
         </div>
-        <p className="text-gray-400">No value data available</p>
+        <p className="text-gray-600">No value data available</p>
         <p className="text-gray-500 text-sm mt-1">
           {filters.model
             ? `No data for model: ${filters.model}`
@@ -383,37 +383,37 @@ export function ValuesViz({ runs, filters, onFilterChange }: ComparisonVisualiza
           showDisplayMode={false}
           showValueFilter={false}
         />
-        <label className="flex items-center gap-2 text-sm text-gray-400">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
           <input
             type="checkbox"
             checked={showConfidenceIntervals}
             onChange={(e) => setShowConfidenceIntervals(e.target.checked)}
-            className="rounded border-gray-600 bg-gray-700 text-teal-500 focus:ring-teal-500"
+            className="rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500"
           />
           Show confidence intervals
         </label>
       </div>
 
       {/* Chart */}
-      <div className="bg-gray-800/30 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-white mb-4">Value Win Rate Comparison</h3>
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Value Win Rate Comparison</h3>
         <div style={{ height: 400 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
               margin={{ left: 20, right: 20, top: 20, bottom: 60 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis
                 dataKey="formattedName"
-                tick={{ fill: '#9ca3af', fontSize: 11 }}
+                tick={{ fill: '#6b7280', fontSize: 11 }}
                 angle={-45}
                 textAnchor="end"
                 height={80}
                 interval={0}
               />
               <YAxis
-                tick={{ fill: '#9ca3af' }}
+                tick={{ fill: '#6b7280' }}
                 tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
                 domain={[0, 1]}
               />
@@ -455,12 +455,12 @@ export function ValuesViz({ runs, filters, onFilterChange }: ComparisonVisualiza
             data.values.size;
 
           return (
-            <div key={data.runId} className="bg-gray-800/50 rounded-lg p-3">
-              <div className="text-xs text-gray-400 truncate" title={data.runName}>
+            <div key={data.runId} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <div className="text-xs text-gray-500 truncate" title={data.runName}>
                 {data.runName}
               </div>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-xl font-bold text-white">
+                <span className="text-xl font-bold text-gray-900">
                   {(avgWinRate * 100).toFixed(1)}%
                 </span>
                 <span className="text-xs text-gray-500">avg win rate</span>

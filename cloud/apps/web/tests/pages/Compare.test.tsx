@@ -279,7 +279,7 @@ describe('Compare Page', () => {
 
       // Overview button should have active styling (teal color class)
       const overviewBtn = screen.getByRole('button', { name: /overview/i });
-      expect(overviewBtn).toHaveClass('text-teal-400');
+      expect(overviewBtn).toHaveClass('text-teal-600');
     });
 
     it('shows decisions visualization when selected', () => {
@@ -287,7 +287,7 @@ describe('Compare Page', () => {
 
       // Decisions button should have active styling
       const decisionsBtn = screen.getByRole('button', { name: /decisions/i });
-      expect(decisionsBtn).toHaveClass('text-teal-400');
+      expect(decisionsBtn).toHaveClass('text-teal-600');
     });
 
     it('shows values visualization when selected', () => {
@@ -295,7 +295,7 @@ describe('Compare Page', () => {
 
       // Values button should have active styling
       const valuesBtn = screen.getByRole('button', { name: /values/i });
-      expect(valuesBtn).toHaveClass('text-teal-400');
+      expect(valuesBtn).toHaveClass('text-teal-600');
     });
   });
 
@@ -403,7 +403,7 @@ describe('Compare Page', () => {
       render(<Compare />, { wrapper: createWrapper('/compare?runs=run-1,run-2&viz=decisions') });
 
       const decisionsBtn = screen.getByRole('button', { name: /decisions/i });
-      expect(decisionsBtn).toHaveClass('text-teal-400');
+      expect(decisionsBtn).toHaveClass('text-teal-600');
     });
   });
 });

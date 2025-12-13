@@ -37,7 +37,7 @@ export function VisualizationNav({
   }
 
   return (
-    <div className={`flex items-center gap-1 border-b border-gray-800 ${className}`}>
+    <div className={`flex items-center gap-1 border-b border-gray-200 ${className}`}>
       {visualizations.map((viz) => {
         const Icon = viz.icon;
         const isActive = activeVisualization === viz.id;
@@ -47,10 +47,10 @@ export function VisualizationNav({
           'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
           'border-b-2 -mb-[2px]',
           isActive
-            ? 'text-teal-400 border-teal-400'
+            ? 'text-teal-600 border-teal-600'
             : isDisabled
-              ? 'text-gray-600 border-transparent cursor-not-allowed'
-              : 'text-gray-400 border-transparent hover:text-white hover:border-gray-600',
+              ? 'text-gray-400 border-transparent cursor-not-allowed'
+              : 'text-gray-600 border-transparent hover:text-gray-900 hover:border-gray-300',
         ].join(' ');
 
         return (

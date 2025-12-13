@@ -524,10 +524,10 @@ describe('OverviewViz', () => {
 
   describe('effect size coloring', () => {
     it.each([
-      { interpretation: 'negligible' as const, expectedClass: 'text-gray-400' },
-      { interpretation: 'small' as const, expectedClass: 'text-blue-400' },
-      { interpretation: 'medium' as const, expectedClass: 'text-yellow-400' },
-      { interpretation: 'large' as const, expectedClass: 'text-red-400' },
+      { interpretation: 'negligible' as const, expectedClass: 'text-gray-500' },
+      { interpretation: 'small' as const, expectedClass: 'text-blue-600' },
+      { interpretation: 'medium' as const, expectedClass: 'text-yellow-600' },
+      { interpretation: 'large' as const, expectedClass: 'text-red-600' },
     ])('applies $expectedClass for $interpretation effect size', ({ interpretation, expectedClass }) => {
       const runs = [createMockRun({ id: 'run-1' }), createMockRun({ id: 'run-2' })];
       const statistics = createMockStatistics({
