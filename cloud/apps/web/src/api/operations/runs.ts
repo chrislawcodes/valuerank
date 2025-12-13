@@ -150,7 +150,7 @@ export const RUN_FRAGMENT = gql`
     definition {
       id
       name
-      tags {
+      tags: allTags {
         id
         name
       }
