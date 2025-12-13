@@ -204,8 +204,9 @@ describe('Compare Page', () => {
       render(<Compare />, { wrapper: createWrapper() });
 
       // Uses formatRunName - search by partial match
-      expect(screen.getByText(/Test Definition A/)).toBeInTheDocument();
-      expect(screen.getByText(/Test Definition B/)).toBeInTheDocument();
+      // Definition name appears in both run name and small text, so use getAllByText
+      expect(screen.getAllByText(/Test Definition A/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Test Definition B/).length).toBeGreaterThan(0);
     });
   });
 

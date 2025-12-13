@@ -24,6 +24,7 @@ import { AlertTriangle, TrendingUp, TrendingDown, Info } from 'lucide-react';
 import type { ComparisonVisualizationProps, RunWithAnalysis, ValueComparison } from '../types';
 import type { ValueStats, ConfidenceInterval } from '../../../api/operations/analysis';
 import { ComparisonFilters } from '../ComparisonFilters';
+import { formatRunNameShort } from '../../../lib/format';
 
 // Color palette for runs (teal variations + complementary colors)
 const RUN_COLORS = [
@@ -99,7 +100,7 @@ function getRunValueData(run: RunWithAnalysis, modelFilter?: string): RunValueDa
 
   return {
     runId: run.id,
-    runName: run.definition.name || run.id.slice(0, 8),
+    runName: formatRunNameShort(run),
     values,
   };
 }

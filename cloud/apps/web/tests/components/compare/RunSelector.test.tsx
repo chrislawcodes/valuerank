@@ -53,8 +53,9 @@ describe('RunSelector', () => {
       );
 
       // Uses formatRunName which shows "Run: <definition name> on <date>"
-      expect(screen.getByText(/Definition A/)).toBeInTheDocument();
-      expect(screen.getByText(/Definition B/)).toBeInTheDocument();
+      // Definition name appears in both run name and small text, so use getAllByText
+      expect(screen.getAllByText(/Definition A/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Definition B/).length).toBeGreaterThan(0);
     });
 
     it('shows selection count', () => {
@@ -202,8 +203,9 @@ describe('RunSelector', () => {
       await user.type(screen.getByPlaceholderText('Search runs...'), 'Trolley');
 
       // Uses formatRunName - search by partial match
-      expect(screen.getByText(/Trolley Problem/)).toBeInTheDocument();
-      expect(screen.queryByText(/Medical Ethics/)).not.toBeInTheDocument();
+      // Definition name appears in both run name and small text, so use getAllByText
+      expect(screen.getAllByText(/Trolley Problem/).length).toBeGreaterThan(0);
+      expect(screen.queryAllByText(/Medical Ethics/).length).toBe(0);
     });
 
     it('shows empty search results state', async () => {

@@ -95,9 +95,9 @@ export function RunSelectorItem({
             )}
           </div>
 
-          {/* Row 2: Run ID and date */}
+          {/* Row 2: Definition name and date */}
           <p className="text-sm text-gray-500 mt-0.5 truncate">
-            {run.id.slice(0, 8)}... · {formatDate(run.createdAt)}
+            {run.definition?.name || 'Unknown'} · {formatDate(run.createdAt)}
           </p>
 
           {/* Row 3: Stats */}

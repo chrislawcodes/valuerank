@@ -13,6 +13,7 @@ import type { ComparisonRun } from '../../../../src/api/operations/comparison';
 function createMockRun(overrides: Partial<ComparisonRun & { aggregateStats?: RunWithAnalysis['aggregateStats'] }> = {}): RunWithAnalysis {
   return {
     id: 'run-1',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     status: 'COMPLETED',
     config: { models: ['openai:gpt-4o', 'anthropic:claude-3'] },
@@ -217,9 +218,10 @@ describe('OverviewViz', () => {
 
       expect(screen.getByText("Effect Sizes (Cohen's d)")).toBeInTheDocument();
       // Names appear in both summary table and effect sizes, so use getAllByText
-      expect(screen.getAllByText('Run A').length).toBeGreaterThanOrEqual(1);
+      // Run names are now formatted as "Run: <def name> on <date>"
+      expect(screen.getAllByText(/Run A/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('vs').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Run B').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/Run B/).length).toBeGreaterThanOrEqual(1);
     });
 
     it('displays effect size value and interpretation', () => {

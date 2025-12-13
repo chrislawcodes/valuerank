@@ -7,6 +7,7 @@
 
 import { X, AlertTriangle, BarChart2 } from 'lucide-react';
 import type { RunWithAnalysis } from './types';
+import { formatRunNameShort } from '../../lib/format';
 
 type ComparisonHeaderProps = {
   /** Selected runs */
@@ -99,8 +100,7 @@ function RunChip({
   hasMissingAnalysis: boolean;
   onDeselect: () => void;
 }) {
-  const name = run.definition?.name || run.id.slice(0, 8);
-  const truncatedName = name.length > 20 ? name.slice(0, 20) + '...' : name;
+  const name = formatRunNameShort(run, 20);
 
   return (
     <span
@@ -116,7 +116,7 @@ function RunChip({
       {hasMissingAnalysis && (
         <AlertTriangle className="w-3 h-3 mr-0.5" />
       )}
-      <span className="truncate max-w-[150px]">{truncatedName}</span>
+      <span className="truncate max-w-[150px]">{name}</span>
       <button
         type="button"
         onClick={(e) => {

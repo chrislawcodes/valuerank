@@ -23,6 +23,7 @@ import { AlertCircle, BarChart2 } from 'lucide-react';
 import type { ComparisonVisualizationProps, RunWithAnalysis } from '../types';
 import { ComparisonFilters } from '../ComparisonFilters';
 import { ksFromCounts, type KSResult } from '../../../lib/statistics/ks-test';
+import { formatRunNameShort } from '../../../lib/format';
 
 // Color palette for runs (teal variations + complementary colors)
 const RUN_COLORS = [
@@ -88,7 +89,7 @@ function getRunDistribution(run: RunWithAnalysis, modelFilter?: string): RunDeci
 
   return {
     runId: run.id,
-    runName: run.definition.name || run.id.slice(0, 8),
+    runName: formatRunNameShort(run),
     counts: aggregateCounts,
     total: totalSamples,
     mean: weightedSum / totalSamples,

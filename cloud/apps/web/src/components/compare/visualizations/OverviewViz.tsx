@@ -9,6 +9,7 @@
 
 import { Info, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { ComparisonVisualizationProps, EffectSizeInterpretation } from '../types';
+import { formatRunNameShort } from '../../../lib/format';
 
 /**
  * Get color class for effect size interpretation
@@ -85,8 +86,8 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
               {runs.map((run) => (
                 <tr key={run.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                   <td className="py-2 px-3">
-                    <span className="text-white font-mono text-xs">
-                      {run.id.slice(0, 8)}...
+                    <span className="text-white text-xs" title={formatRunNameShort(run)}>
+                      {formatRunNameShort(run, 25)}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-white">
@@ -147,15 +148,17 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
                 {statistics.runPairs.map((pair) => {
                   const run1 = runs.find((r) => r.id === pair.run1Id);
                   const run2 = runs.find((r) => r.id === pair.run2Id);
+                  const run1Name = run1 ? formatRunNameShort(run1, 20) : pair.run1Id.slice(0, 8);
+                  const run2Name = run2 ? formatRunNameShort(run2, 20) : pair.run2Id.slice(0, 8);
                   return (
                     <tr key={`${pair.run1Id}-${pair.run2Id}`} className="border-b border-gray-800 hover:bg-gray-800/50">
                       <td className="py-2 px-3">
                         <span className="text-white">
-                          {run1?.definition.name || pair.run1Id.slice(0, 8)}
+                          {run1Name}
                         </span>
                         <span className="text-gray-500 mx-2">vs</span>
                         <span className="text-white">
-                          {run2?.definition.name || pair.run2Id.slice(0, 8)}
+                          {run2Name}
                         </span>
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -240,8 +243,8 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
                 if (uniqueModels.length === 0) return null;
                 return (
                   <div key={run.id} className="flex items-start gap-2">
-                    <span className="text-gray-500 text-xs min-w-[60px]">
-                      {run.id.slice(0, 8)}:
+                    <span className="text-gray-500 text-xs min-w-[80px]" title={formatRunNameShort(run)}>
+                      {formatRunNameShort(run, 12)}:
                     </span>
                     <div className="flex flex-wrap gap-1">
                       {uniqueModels.map((model) => (

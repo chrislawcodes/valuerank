@@ -14,6 +14,7 @@ import type { ComparisonRun } from '../../../../src/api/operations/comparison';
 function createMockRun(overrides: Partial<ComparisonRun & { aggregateStats?: RunWithAnalysis['aggregateStats'] }> = {}): RunWithAnalysis {
   return {
     id: 'run-1',
+    name: null, // Uses algorithmic name
     definitionId: 'def-1',
     status: 'COMPLETED',
     config: { models: ['openai:gpt-4o', 'anthropic:claude-3'] },
@@ -231,8 +232,9 @@ describe('DecisionsViz', () => {
       );
 
       // Should show run names in small multiples (may appear in multiple places)
-      expect(screen.getAllByText('Run A').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Run B').length).toBeGreaterThanOrEqual(1);
+      // Run names are now formatted as "Run: <def name> on <date>"
+      expect(screen.getAllByText(/Run A/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/Run B/).length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows sample size and mean in side-by-side cards', () => {
@@ -284,8 +286,9 @@ describe('DecisionsViz', () => {
         />
       );
 
-      // The KS section should show "Run A vs Run B"
-      expect(screen.getByText('Run A')).toBeInTheDocument();
+      // The KS section should show run names vs each other
+      // Run names are now formatted as "Run: <def name> on <date>"
+      expect(screen.getAllByText(/Run A/).length).toBeGreaterThan(0);
       expect(screen.getByText('vs')).toBeInTheDocument();
     });
   });

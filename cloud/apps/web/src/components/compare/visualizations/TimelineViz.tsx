@@ -23,6 +23,7 @@ import {
 import { TrendingUp, AlertCircle, Calendar } from 'lucide-react';
 import type { ComparisonVisualizationProps, RunWithAnalysis, TimelineMetric } from '../types';
 import { ComparisonFilters } from '../ComparisonFilters';
+import { formatRunNameShort } from '../../../lib/format';
 
 // Color palette for models
 const MODEL_COLORS = [
@@ -84,7 +85,7 @@ function buildTimelineData(
       date: date.getTime(),
       dateStr: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       runId: run.id,
-      runName: run.definition?.name || run.id.slice(0, 8),
+      runName: formatRunNameShort(run),
     };
 
     for (const [modelId, modelData] of Object.entries(perModel)) {
