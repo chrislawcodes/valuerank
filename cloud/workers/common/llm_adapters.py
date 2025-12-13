@@ -10,8 +10,9 @@ Key differences from CLI version:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Generator, Optional
+import json
 import time
 
 import requests
@@ -63,6 +64,17 @@ class LLMResponse:
         if self.provider_metadata is not None:
             result["providerMetadata"] = self.provider_metadata
         return result
+
+
+@dataclass
+class StreamChunk:
+    """A chunk from a streaming LLM response."""
+
+    content: str  # The text content of this chunk
+    output_tokens: int  # Cumulative output tokens so far
+    done: bool = False  # True if this is the final chunk
+    input_tokens: Optional[int] = None  # Only available on final chunk
+    model_version: Optional[str] = None  # Only available on final chunk
 
 
 # Mapping of provider-specific finish reasons to normalized values
@@ -1014,6 +1026,150 @@ class DeepSeekAdapter(BaseLLMAdapter):
                 details=str(exc),
             )
 
+    def generate_stream(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+        model_config: Optional[dict] = None,
+        timeout: Optional[int] = None,
+    ) -> Generator[StreamChunk, None, None]:
+        """
+        Stream response from DeepSeek API, yielding chunks as they arrive.
+
+        Yields StreamChunk objects with incremental content and token counts.
+        Final chunk has done=True and includes input_tokens.
+        """
+        if not self.api_key:
+            raise LLMError(
+                message="DEEPSEEK_API_KEY is not set",
+                code=ErrorCode.MISSING_API_KEY,
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # Resolve config values
+        resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
+        resolved_temperature = resolve_temperature(model_config, temperature)
+
+        if resolved_max_tokens is not None:
+            resolved_max_tokens = min(resolved_max_tokens, 65536)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": resolved_temperature,
+            "stream": True,  # Enable streaming
+            "stream_options": {"include_usage": True},  # Get token counts in stream
+        }
+
+        if resolved_max_tokens is not None:
+            payload["max_tokens"] = resolved_max_tokens
+
+        effective_timeout = timeout if timeout is not None else self.timeout
+        log.debug("Starting DeepSeek streaming", model=model, max_tokens=resolved_max_tokens)
+
+        try:
+            response = requests.post(
+                self.base_url,
+                headers=headers,
+                json=payload,
+                timeout=effective_timeout,
+                stream=True,
+            )
+            response.raise_for_status()
+        except requests.exceptions.Timeout:
+            raise LLMError(
+                message=f"DeepSeek API timeout after {effective_timeout}s",
+                code=ErrorCode.TIMEOUT,
+                retryable=True,
+            )
+        except requests.exceptions.RequestException as exc:
+            raise LLMError(
+                message=f"DeepSeek API request failed: {exc}",
+                code=ErrorCode.API_ERROR,
+                retryable=True,
+            )
+
+        accumulated_content = ""
+        output_tokens = 0
+        input_tokens = None
+        model_version = None
+
+        try:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                line_str = line.decode("utf-8")
+                if not line_str.startswith("data: "):
+                    continue
+
+                data_str = line_str[6:]  # Remove "data: " prefix
+                if data_str == "[DONE]":
+                    # Final chunk
+                    yield StreamChunk(
+                        content=accumulated_content,
+                        output_tokens=output_tokens,
+                        done=True,
+                        input_tokens=input_tokens,
+                        model_version=model_version,
+                    )
+                    return
+
+                try:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+
+                # Extract model version from first chunk
+                if model_version is None:
+                    model_version = data.get("model")
+
+                # Handle usage info (comes in final chunk with stream_options)
+                usage = data.get("usage")
+                if usage:
+                    input_tokens = usage.get("prompt_tokens")
+                    output_tokens = usage.get("completion_tokens", output_tokens)
+
+                # Extract content delta
+                choices = data.get("choices", [])
+                if choices:
+                    delta = choices[0].get("delta", {})
+                    content_delta = delta.get("content", "")
+                    if content_delta:
+                        accumulated_content += content_delta
+                        # Estimate tokens (roughly 4 chars per token)
+                        output_tokens = max(output_tokens, len(accumulated_content) // 4)
+
+                        yield StreamChunk(
+                            content=accumulated_content,
+                            output_tokens=output_tokens,
+                            done=False,
+                        )
+
+            # Stream ended without [DONE] - yield final chunk
+            yield StreamChunk(
+                content=accumulated_content,
+                output_tokens=output_tokens,
+                done=True,
+                input_tokens=input_tokens,
+                model_version=model_version,
+            )
+
+        except Exception as exc:
+            raise LLMError(
+                message=f"Error reading DeepSeek stream: {exc}",
+                code=ErrorCode.API_ERROR,
+                retryable=True,
+                details=str(exc),
+            )
+
 
 @dataclass
 class MistralAdapter(BaseLLMAdapter):
@@ -1240,4 +1396,66 @@ def generate(
         max_tokens=max_tokens,
         model_config=model_config,
         timeout=timeout,
+    )
+
+
+def generate_stream(
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+    model_config: Optional[dict] = None,
+    timeout: Optional[int] = None,
+) -> Generator[StreamChunk, None, None]:
+    """
+    Stream a completion using the appropriate adapter for the model.
+
+    Currently only DeepSeek supports streaming. Other providers will fall back
+    to non-streaming and yield a single chunk with the complete response.
+
+    Args:
+        model: Model ID (e.g., "deepseek:deepseek-reasoner")
+        messages: List of message dicts with 'role' and 'content'
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens to generate
+        model_config: Optional provider-specific configuration from database
+        timeout: HTTP request timeout in seconds
+
+    Yields:
+        StreamChunk objects with incremental content and token counts
+    """
+    # Strip provider prefix if present
+    clean_model = model.split(":", 1)[-1] if ":" in model else model
+    provider = infer_provider(model)
+
+    # Only DeepSeek currently supports streaming
+    if provider == "deepseek":
+        adapter = get_registry().get("deepseek")
+        if isinstance(adapter, DeepSeekAdapter):
+            yield from adapter.generate_stream(
+                clean_model,
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model_config=model_config,
+                timeout=timeout,
+            )
+            return
+
+    # Fallback: use non-streaming and yield single chunk
+    response = generate(
+        model,
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        model_config=model_config,
+        timeout=timeout,
+    )
+    yield StreamChunk(
+        content=response.content,
+        output_tokens=response.output_tokens or 0,
+        done=True,
+        input_tokens=response.input_tokens,
+        model_version=response.model_version,
     )
