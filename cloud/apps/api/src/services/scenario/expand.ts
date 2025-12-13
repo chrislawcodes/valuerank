@@ -232,7 +232,7 @@ export async function expandScenarios(
     workerPath,
     workerInput,
     {
-      timeout: 600000, // 10 minutes
+      timeout: 900000, // 15 minutes
       cwd: path.resolve(process.cwd(), '../..'),
       onProgress,
     }

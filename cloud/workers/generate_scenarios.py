@@ -450,8 +450,8 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
         message=f"Calling {model_id} to generate {expected_count} scenarios...",
     )
 
-    # 10 minute HTTP timeout for slow models like DeepSeek Reasoner
-    LLM_TIMEOUT_SECONDS = 600
+    # 15 minute HTTP timeout for slow models like DeepSeek Reasoner
+    LLM_TIMEOUT_SECONDS = 900
 
     try:
         # Call LLM using the shared adapter

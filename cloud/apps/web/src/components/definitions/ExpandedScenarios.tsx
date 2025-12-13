@@ -164,7 +164,7 @@ function formatProgressMessage(status?: ExpansionStatus): string {
   }
 }
 
-const EXPANSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const EXPANSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 function formatCountdown(remainingMs: number): string {
   if (remainingMs <= 0) return '0:00';

@@ -88,7 +88,7 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 2,
     retryDelay: 10,
     retryBackoff: true,
-    expireInSeconds: 300, // 5 minutes
+    expireInSeconds: 900, // 15 minutes
     singletonKey: 'definition', // Only one expansion per definition at a time
   },
   'compute_token_stats': {
