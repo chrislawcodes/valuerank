@@ -47,7 +47,7 @@ export function Compare() {
 
   return (
     <div className="p-6 h-[calc(100vh-4rem)]">
-      <div className="max-w-[1800px] mx-auto h-full flex flex-col">
+      <div className="h-full flex flex-col">
         {/* Page Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Compare Runs</h1>
@@ -56,10 +56,10 @@ export function Compare() {
           </p>
         </div>
 
-        {/* Main Layout */}
+        {/* Main Layout - Full width with 1/3 + 2/3 split */}
         <div className="flex-1 flex gap-6 min-h-0">
-          {/* Left Panel: Run Selector */}
-          <div className="w-80 flex-shrink-0 bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col">
+          {/* Left Panel: Run Selector (1/3 width) */}
+          <div className="w-1/3 min-w-[300px] max-w-[500px] bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col">
             <RunSelector
               runs={availableRuns}
               selectedIds={selectedRunIds}
@@ -70,7 +70,7 @@ export function Compare() {
             />
           </div>
 
-          {/* Right Panel: Comparison View */}
+          {/* Right Panel: Comparison View (2/3 width) */}
           <div className="flex-1 bg-[#1E1E1E] rounded-lg border border-gray-800 p-4 overflow-hidden flex flex-col min-w-0">
             {/* Comparison Header */}
             <ComparisonHeader
