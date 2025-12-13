@@ -952,9 +952,12 @@ class DeepSeekAdapter(BaseLLMAdapter):
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
         resolved_temperature = resolve_temperature(model_config, temperature)
 
-        # DeepSeek supports up to 64K output tokens (API limit)
+        # DeepSeek max_tokens limits vary by model:
+        # - deepseek-reasoner: 64K (65536)
+        # - deepseek-chat and others: 8K (8192)
         if resolved_max_tokens is not None:
-            resolved_max_tokens = min(resolved_max_tokens, 65536)
+            max_limit = 65536 if "reasoner" in model else 8192
+            resolved_max_tokens = min(resolved_max_tokens, max_limit)
 
         payload: dict[str, Any] = {
             "model": model,
@@ -1057,8 +1060,12 @@ class DeepSeekAdapter(BaseLLMAdapter):
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)
         resolved_temperature = resolve_temperature(model_config, temperature)
 
+        # DeepSeek max_tokens limits vary by model:
+        # - deepseek-reasoner: 64K (65536)
+        # - deepseek-chat and others: 8K (8192)
         if resolved_max_tokens is not None:
-            resolved_max_tokens = min(resolved_max_tokens, 65536)
+            max_limit = 65536 if "reasoner" in model else 8192
+            resolved_max_tokens = min(resolved_max_tokens, max_limit)
 
         payload: dict[str, Any] = {
             "model": model,
@@ -1087,19 +1094,40 @@ class DeepSeekAdapter(BaseLLMAdapter):
             raise LLMError(
                 message=f"DeepSeek API timeout after {effective_timeout}s",
                 code=ErrorCode.TIMEOUT,
-                retryable=True,
+            )
+        except requests.exceptions.HTTPError as exc:
+            # Try to extract error details from response body
+            error_details = None
+            status_code = None
+            try:
+                if exc.response is not None:
+                    status_code = exc.response.status_code
+                    # For streaming responses, read the content
+                    error_body = exc.response.content.decode('utf-8', errors='replace')
+                    if error_body:
+                        error_details = error_body[:500]  # Limit size
+            except Exception:
+                pass
+
+            error_code = ErrorCode.SERVER_ERROR if status_code and status_code >= 500 else ErrorCode.VALIDATION_ERROR
+
+            raise LLMError(
+                message=f"DeepSeek API error ({status_code}): {exc}",
+                code=error_code,
+                details=error_details,
             )
         except requests.exceptions.RequestException as exc:
             raise LLMError(
                 message=f"DeepSeek API request failed: {exc}",
-                code=ErrorCode.API_ERROR,
-                retryable=True,
+                code=ErrorCode.NETWORK_ERROR,
             )
 
         accumulated_content = ""
         output_tokens = 0
         input_tokens = None
         model_version = None
+        finish_reason = None
+        chunk_count = 0
 
         try:
             for line in response.iter_lines():
@@ -1127,6 +1155,8 @@ class DeepSeekAdapter(BaseLLMAdapter):
                 except json.JSONDecodeError:
                     continue
 
+                chunk_count += 1
+
                 # Extract model version from first chunk
                 if model_version is None:
                     model_version = data.get("model")
@@ -1137,11 +1167,17 @@ class DeepSeekAdapter(BaseLLMAdapter):
                     input_tokens = usage.get("prompt_tokens")
                     output_tokens = usage.get("completion_tokens", output_tokens)
 
-                # Extract content delta
+                # Extract content delta and finish_reason
                 choices = data.get("choices", [])
                 if choices:
-                    delta = choices[0].get("delta", {})
+                    choice = choices[0]
+                    delta = choice.get("delta", {})
                     content_delta = delta.get("content", "")
+
+                    # Check for finish_reason (indicates why generation stopped)
+                    if choice.get("finish_reason"):
+                        finish_reason = choice.get("finish_reason")
+
                     if content_delta:
                         accumulated_content += content_delta
                         # Estimate tokens (roughly 4 chars per token)
@@ -1153,7 +1189,15 @@ class DeepSeekAdapter(BaseLLMAdapter):
                             done=False,
                         )
 
-            # Stream ended without [DONE] - yield final chunk
+            # Stream ended without [DONE] - log details and yield final chunk
+            log.warn(
+                "DeepSeek stream ended without [DONE]",
+                model=model,
+                chunk_count=chunk_count,
+                content_length=len(accumulated_content),
+                output_tokens=output_tokens,
+                finish_reason=finish_reason,
+            )
             yield StreamChunk(
                 content=accumulated_content,
                 output_tokens=output_tokens,
@@ -1163,11 +1207,21 @@ class DeepSeekAdapter(BaseLLMAdapter):
             )
 
         except Exception as exc:
+            # Log details about partial response before raising error
+            log.error(
+                "DeepSeek stream failed",
+                model=model,
+                error=str(exc),
+                chunk_count=chunk_count,
+                content_length=len(accumulated_content),
+                output_tokens=output_tokens,
+                finish_reason=finish_reason,
+                partial_content_preview=accumulated_content[-500:] if accumulated_content else None,
+            )
             raise LLMError(
                 message=f"Error reading DeepSeek stream: {exc}",
-                code=ErrorCode.API_ERROR,
-                retryable=True,
-                details=str(exc),
+                code=ErrorCode.NETWORK_ERROR,
+                details=f"chunks={chunk_count}, tokens~{output_tokens}, finish={finish_reason}, content_len={len(accumulated_content)}",
             )
 
 

@@ -81,6 +81,18 @@ const mockInfraModel = {
   },
 };
 
+const mockCodeGenSettingEnabled = {
+  id: 'setting-1',
+  key: 'scenario_expansion_use_code_generation',
+  value: { enabled: true },
+};
+
+const mockCodeGenSettingDisabled = {
+  id: 'setting-1',
+  key: 'scenario_expansion_use_code_generation',
+  value: { enabled: false },
+};
+
 describe('InfraPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -232,5 +244,112 @@ describe('InfraPanel', () => {
       expect(screen.getByText('About Infrastructure Models')).toBeInTheDocument();
     });
     expect(screen.getByText(/cost-efficient model.*is recommended/i)).toBeInTheDocument();
+  });
+
+  describe('Code Generation Section', () => {
+    it('displays generation method section', async () => {
+      const mockClient = createMockClient(
+        vi.fn(() =>
+          fromValue({
+            data: {
+              llmProviders: mockProviders,
+              infraModel: mockInfraModel,
+              systemSetting: mockCodeGenSettingDisabled,
+            },
+            stale: false,
+          })
+        )
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('Generation Method')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Use Code-based Generation')).toBeInTheDocument();
+    });
+
+    it('shows LLM generation enabled when code gen is disabled', async () => {
+      const mockClient = createMockClient(
+        vi.fn(() =>
+          fromValue({
+            data: {
+              llmProviders: mockProviders,
+              infraModel: mockInfraModel,
+              systemSetting: mockCodeGenSettingDisabled,
+            },
+            stale: false,
+          })
+        )
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('LLM generation enabled')).toBeInTheDocument();
+      });
+    });
+
+    it('shows code generation enabled when setting is true', async () => {
+      const mockClient = createMockClient(
+        vi.fn(() =>
+          fromValue({
+            data: {
+              llmProviders: mockProviders,
+              infraModel: mockInfraModel,
+              systemSetting: mockCodeGenSettingEnabled,
+            },
+            stale: false,
+          })
+        )
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('Code generation enabled')).toBeInTheDocument();
+      });
+    });
+
+    it('shows code generation toggle checkbox', async () => {
+      const mockClient = createMockClient(
+        vi.fn(() =>
+          fromValue({
+            data: {
+              llmProviders: mockProviders,
+              infraModel: mockInfraModel,
+              systemSetting: mockCodeGenSettingDisabled,
+            },
+            stale: false,
+          })
+        )
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        const checkbox = screen.getByRole('checkbox');
+        expect(checkbox).toBeInTheDocument();
+        expect(checkbox).not.toBeChecked();
+      });
+    });
+
+    it('displays trade-offs information', async () => {
+      const mockClient = createMockClient(
+        vi.fn(() =>
+          fromValue({
+            data: {
+              llmProviders: mockProviders,
+              infraModel: mockInfraModel,
+              systemSetting: null,
+            },
+            stale: false,
+          })
+        )
+      );
+      renderInfraPanel(mockClient);
+
+      await waitFor(() => {
+        expect(screen.getByText('Trade-offs:')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Code Generation')).toBeInTheDocument();
+      expect(screen.getByText('LLM Generation')).toBeInTheDocument();
+    });
   });
 });

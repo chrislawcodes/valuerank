@@ -21,12 +21,15 @@ vi.mock('../../../src/services/infra-models.js', () => ({
     providerName: 'deepseek',
     displayName: 'DeepSeek Chat',
   }),
+  isCodeGenerationEnabled: vi.fn().mockResolvedValue(false),
 }));
 
 // Import mocked functions
 import { spawnPython } from '../../../src/queue/spawn.js';
+import { isCodeGenerationEnabled } from '../../../src/services/infra-models.js';
 
 const mockedSpawnPython = vi.mocked(spawnPython);
+const mockedIsCodeGenerationEnabled = vi.mocked(isCodeGenerationEnabled);
 
 describe('Scenario Expansion Service', () => {
   // Track created test data for cleanup
@@ -302,6 +305,103 @@ describe('Scenario Expansion Service', () => {
         });
         expect(activeScenarios).toHaveLength(1);
         expect(activeScenarios[0].name).toBe('Default Scenario');
+      });
+    });
+
+    describe('when code generation is enabled', () => {
+      const contentWithDimensions = {
+        template: 'A [Stakes] situation with [Certainty] outcomes.',
+        preamble: 'Test preamble',
+        dimensions: [
+          {
+            name: 'Stakes',
+            levels: [
+              { score: 1, label: 'minor' },
+              { score: 2, label: 'major' },
+            ],
+          },
+          {
+            name: 'Certainty',
+            levels: [
+              { score: 1, label: 'uncertain' },
+              { score: 2, label: 'certain' },
+            ],
+          },
+        ],
+      };
+
+      beforeEach(() => {
+        mockedIsCodeGenerationEnabled.mockResolvedValue(true);
+      });
+
+      afterEach(() => {
+        mockedIsCodeGenerationEnabled.mockResolvedValue(false);
+      });
+
+      it('uses code-based expansion when setting is enabled', async () => {
+        const result = await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        // Should NOT call Python worker
+        expect(mockedSpawnPython).not.toHaveBeenCalled();
+
+        // Should create 4 scenarios (2 x 2 = 4)
+        expect(result.created).toBe(4);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+          orderBy: { name: 'asc' },
+        });
+        expect(scenarios).toHaveLength(4);
+      });
+
+      it('generates correct scenario content with code-based expansion', async () => {
+        await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: testDefinitionId, deletedAt: null },
+        });
+
+        // Find a specific scenario
+        const scenario = scenarios.find((s) => s.name === 'Stakes_1 / Certainty_2');
+        expect(scenario).toBeDefined();
+        expect((scenario?.content as { prompt: string }).prompt).toBe(
+          'A minor situation with certain outcomes.'
+        );
+        expect((scenario?.content as { preamble: string }).preamble).toBe('Test preamble');
+        expect((scenario?.content as { dimensions: Record<string, number> }).dimensions).toEqual({
+          Stakes: 1,
+          Certainty: 2,
+        });
+      });
+
+      it('saves debug info indicating code generation was used', async () => {
+        await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        const definition = await db.definition.findUnique({
+          where: { id: testDefinitionId },
+        });
+
+        expect(definition?.expansionDebug).toBeDefined();
+        expect((definition?.expansionDebug as { method: string }).method).toBe('code-generation');
+        expect((definition?.expansionDebug as { scenariosCreated: number }).scenariosCreated).toBe(4);
+      });
+
+      it('clears expansion progress after code-based expansion', async () => {
+        // Set some initial progress
+        await db.definition.update({
+          where: { id: testDefinitionId },
+          data: {
+            expansionProgress: { phase: 'starting', message: 'Starting...' },
+          },
+        });
+
+        await expandScenarios(testDefinitionId, contentWithDimensions);
+
+        const definition = await db.definition.findUnique({
+          where: { id: testDefinitionId },
+        });
+
+        expect(definition?.expansionProgress).toBeNull();
       });
     });
   });

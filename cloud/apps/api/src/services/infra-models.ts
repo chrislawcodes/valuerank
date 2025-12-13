@@ -101,3 +101,27 @@ export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
     displayName: 'Claude 3.5 Haiku (Default)',
   };
 }
+
+/**
+ * Check if code-based scenario expansion is enabled.
+ * When enabled, scenarios are generated using combinatorial logic
+ * instead of calling an LLM.
+ */
+export async function isCodeGenerationEnabled(): Promise<boolean> {
+  const key = 'scenario_expansion_use_code_generation';
+
+  const setting = await db.systemSetting.findUnique({
+    where: { key },
+  });
+
+  if (!setting) {
+    log.debug('Code generation setting not found, defaulting to false');
+    return false;
+  }
+
+  const value = setting.value as { enabled?: boolean };
+  const enabled = value?.enabled === true;
+
+  log.debug({ enabled }, 'Code generation setting');
+  return enabled;
+}

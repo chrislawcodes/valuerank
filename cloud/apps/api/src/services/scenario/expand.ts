@@ -10,7 +10,8 @@ import path from 'path';
 import { db, Prisma, type DefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { spawnPython, type ProgressUpdate } from '../../queue/spawn.js';
-import { getScenarioExpansionModel } from '../infra-models.js';
+import { getScenarioExpansionModel, isCodeGenerationEnabled } from '../infra-models.js';
+import { expandScenariosWithCode } from './expand-code.js';
 
 const log = createLogger('services:scenario:expand');
 
@@ -74,6 +75,10 @@ type GenerateScenariosOutput = {
     code: string;
     retryable: boolean;
     details?: string;
+  };
+  // Debug info is now included for failed responses too
+  debug?: ExpansionDebugInfo & {
+    partialTokens?: number;
   };
 };
 
@@ -174,6 +179,60 @@ export async function expandScenarios(
     return { created: 1, deleted: deleteResult.count };
   }
 
+  // Check if code-based generation is enabled
+  const useCodeGeneration = await isCodeGenerationEnabled();
+
+  if (useCodeGeneration) {
+    log.info({ definitionId }, 'Using code-based scenario expansion');
+
+    // Use code-based combinatorial expansion
+    const codeResult = expandScenariosWithCode({
+      preamble: content.preamble,
+      template: content.template,
+      dimensions: rawDimensions as Array<{ name: string; levels: Array<{ score: number; label: string; options?: string[] }> }>,
+      matching_rules: content.matching_rules,
+    });
+
+    if (!codeResult.success) {
+      // This shouldn't happen as code expansion always succeeds
+      log.error({ definitionId }, 'Code-based expansion failed unexpectedly');
+      throw new Error('Code-based scenario expansion failed');
+    }
+
+    // Create scenario records from code expansion result
+    const scenarioData = codeResult.scenarios.map((scenario) => ({
+      definitionId,
+      name: scenario.name,
+      content: {
+        preamble: scenario.content.preamble,
+        prompt: scenario.content.prompt,
+        dimensions: scenario.content.dimensions,
+      } as ScenarioContent,
+    }));
+
+    await db.scenario.createMany({ data: scenarioData });
+
+    // Clear expansion progress and save debug info
+    await db.definition.update({
+      where: { id: definitionId },
+      data: {
+        expansionProgress: Prisma.JsonNull,
+        expansionDebug: {
+          method: 'code-generation',
+          timestamp: new Date().toISOString(),
+          scenariosCreated: scenarioData.length,
+        },
+      },
+    });
+
+    log.info(
+      { definitionId, created: scenarioData.length, deleted: deleteResult.count },
+      'Scenarios expanded via code generation'
+    );
+
+    return { created: scenarioData.length, deleted: deleteResult.count };
+  }
+
   // Get the configured infrastructure model for scenario expansion
   const infraModel = await getScenarioExpansionModel();
   const fullModelId = `${infraModel.providerName}:${infraModel.modelId}`;
@@ -198,7 +257,7 @@ export async function expandScenarios(
     },
     config: {
       temperature: 0.7,
-      maxTokens: 32768, // Increased to support 125+ scenarios
+      maxTokens: 65536, // 64K to support large scenario counts
     },
     modelConfig,
   };
@@ -285,20 +344,22 @@ export async function expandScenarios(
   // Handle worker error
   if (!workerOutput.success) {
     log.error(
-      { definitionId, error: workerOutput.error },
+      { definitionId, error: workerOutput.error, hasDebug: !!workerOutput.debug },
       'Python worker returned error'
     );
 
     // Save debug info for worker error and clear stale progress
+    // Include partial response from worker if available
     await db.definition.update({
       where: { id: definitionId },
       data: {
         expansionProgress: Prisma.JsonNull,
         expansionDebug: {
-          rawResponse: null,
-          extractedYaml: null,
+          rawResponse: workerOutput.debug?.rawResponse ?? null,
+          extractedYaml: workerOutput.debug?.extractedYaml ?? null,
           parseError: `Worker error: ${workerOutput.error.code} - ${workerOutput.error.message}`,
           errorDetails: workerOutput.error.details,
+          partialTokens: workerOutput.debug?.partialTokens,
           timestamp: new Date().toISOString(),
           scenariosCreated: 0,
           modelId: fullModelId,

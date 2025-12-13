@@ -458,14 +458,16 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
     PROGRESS_TOKEN_INTERVAL = 500
     PROGRESS_TIME_INTERVAL = 5.0  # seconds
 
+    # Track partial response for error recovery
+    raw_response = ""
+    input_tokens = 0
+    output_tokens = 0
+    model_version = None
+
     try:
         # Stream LLM response for incremental progress
         messages = [{"role": "user", "content": prompt}]
 
-        raw_response = ""
-        input_tokens = 0
-        output_tokens = 0
-        model_version = None
         last_progress_tokens = 0
         last_progress_time = time.time()
 
@@ -560,27 +562,51 @@ def run_generation(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     except (WorkerError, LLMError) as err:
-        log.error("Generation failed", definitionId=definition_id, err=err)
+        log.error(
+            "Generation failed",
+            definitionId=definition_id,
+            err=err,
+            partialResponseLength=len(raw_response),
+        )
         emit_progress(
             phase="failed",
             expected_scenarios=expected_count,
             message=f"Generation failed: {err.message}",
         )
+        # Include partial response in debug info for troubleshooting
         return {
             "success": False,
             "error": err.to_dict(),
+            "debug": {
+                "rawResponse": raw_response if raw_response else None,
+                "extractedYaml": None,
+                "parseError": f"Stream failed: {err.message}",
+                "partialTokens": output_tokens,
+            },
         }
     except Exception as err:
         worker_err = classify_exception(err)
-        log.error("Generation failed with unexpected error", definitionId=definition_id, err=err)
+        log.error(
+            "Generation failed with unexpected error",
+            definitionId=definition_id,
+            err=err,
+            partialResponseLength=len(raw_response),
+        )
         emit_progress(
             phase="failed",
             expected_scenarios=expected_count,
             message=f"Generation failed: {str(err)}",
         )
+        # Include partial response in debug info for troubleshooting
         return {
             "success": False,
             "error": worker_err.to_dict(),
+            "debug": {
+                "rawResponse": raw_response if raw_response else None,
+                "extractedYaml": None,
+                "parseError": f"Unexpected error: {str(err)}",
+                "partialTokens": output_tokens,
+            },
         }
 
 
