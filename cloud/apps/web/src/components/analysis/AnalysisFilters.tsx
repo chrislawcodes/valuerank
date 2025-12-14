@@ -3,10 +3,12 @@
  *
  * Filter controls for analysis visualizations.
  * Allows filtering by model and value.
+ * Collapses on mobile for better space utilization.
  */
 
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 
 export type FilterState = {
   selectedModels: string[];
@@ -61,8 +63,18 @@ export function AnalysisFilters({
     });
   };
 
+  // Count active filters for mobile badge
+  const activeFilterCount =
+    filters.selectedModels.length + (filters.selectedValue ? 1 : 0);
+
   return (
-    <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+    <CollapsibleFilters
+      title="Filters"
+      hasActiveFilters={hasActiveFilters}
+      activeFilterCount={activeFilterCount}
+      onClear={handleClearFilters}
+    >
+      <div className="flex flex-wrap items-center gap-4 p-4 sm:p-0 sm:bg-transparent bg-gray-50 rounded-lg sm:border-0 border border-gray-200">
       {/* Model filter */}
       <div className="flex items-center gap-2">
         <label className="text-sm font-medium text-gray-700">Models:</label>
@@ -111,13 +123,13 @@ export function AnalysisFilters({
         </div>
       )}
 
-      {/* Clear filters */}
+      {/* Clear filters - hidden on mobile (use CollapsibleFilters clear) */}
       {hasActiveFilters && (
         <Button
           variant="secondary"
           size="sm"
           onClick={handleClearFilters}
-          className="ml-auto"
+          className="hidden sm:flex ml-auto"
         >
           <X className="w-3 h-3 mr-1" />
           Clear filters
@@ -140,7 +152,8 @@ export function AnalysisFilters({
           )}
         </div>
       )}
-    </div>
+      </div>
+    </CollapsibleFilters>
   );
 }
 

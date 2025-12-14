@@ -191,25 +191,25 @@
 
 ### Mobile Navigation
 
-- [ ] T077 [US4] Create `components/layout/MobileNav.tsx` hamburger menu component
-- [ ] T078 [US4] Add viewport detection hook `hooks/useViewport.ts`
-- [ ] T079 [US4] Update `components/layout/Layout.tsx` to conditionally render MobileNav on mobile
-- [ ] T080 [US4] Update `components/layout/Header.tsx` with hamburger trigger on mobile
+- [X] T077 [US4] Create `components/layout/MobileNav.tsx` hamburger menu component
+- [X] T078 [US4] Add viewport detection hook `hooks/useViewport.ts`
+- [X] T079 [US4] Update `components/layout/Layout.tsx` to conditionally render MobileNav on mobile
+- [X] T080 [US4] Update `components/layout/Header.tsx` with hamburger trigger on mobile
 
 ### Responsive Table Component
 
-- [ ] T081 [US4] Create `components/ui/Table.tsx` with responsive card fallback for mobile
+- [X] T081 [US4] Create `components/ui/Table.tsx` with responsive card fallback for mobile
 
 ### Filter Collapsibility
 
-- [ ] T082 [P] [US4] Update `components/runs/RunFilters.tsx` to collapse on mobile
-- [ ] T083 [P] [US4] Update `components/definitions/DefinitionFilters.tsx` to collapse on mobile
-- [ ] T084 [P] [US4] Update `components/analysis/AnalysisFilters.tsx` to collapse on mobile
-- [ ] T085 [P] [US4] Update `components/compare/ComparisonFilters.tsx` to collapse on mobile
+- [X] T082 [P] [US4] Update `components/runs/RunFilters.tsx` to collapse on mobile
+- [X] T083 [P] [US4] Update `components/definitions/DefinitionFilters.tsx` to collapse on mobile
+- [X] T084 [P] [US4] Update `components/analysis/AnalysisFilters.tsx` to collapse on mobile
+- [X] T085 [P] [US4] Update `components/compare/ComparisonFilters.tsx` to collapse on mobile
 
 ### Touch Target Sizing
 
-- [ ] T086 [US4] Audit and update touch targets to minimum 44x44px across all interactive elements
+- [X] T086 [US4] Audit and update touch targets to minimum 44x44px across all interactive elements
 
 **Checkpoint**: Mobile navigation works, no horizontal scroll at 375px
 

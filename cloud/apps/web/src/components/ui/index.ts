@@ -29,6 +29,21 @@ export type { InputProps } from './Input';
 export { Tabs, TabPanel, tabVariants, tabIconVariants } from './Tabs';
 export type { Tab, TabsProps, TabPanelProps } from './Tabs';
 
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  ResponsiveTable,
+  tableVariants,
+  tableHeadVariants,
+  tableCellVariants,
+} from './Table';
+
+export { CollapsibleFilters } from './CollapsibleFilters';
+
 // Existing components (not yet converted to CVA)
 export { Loading } from './Loading';
 export { ErrorMessage } from './ErrorMessage';

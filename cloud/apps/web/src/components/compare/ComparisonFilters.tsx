@@ -5,10 +5,12 @@
  * - Model filter dropdown (common models across runs)
  * - Display mode toggle (overlay/side-by-side)
  * - Value filter dropdown (optional, for value-focused visualizations)
+ * Collapses on mobile for better space utilization.
  */
 
 import { LayoutGrid, Layers, X } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import type { ComparisonFilters as FilterState, DisplayMode, RunWithAnalysis } from './types';
 
 type ComparisonFiltersProps = {
@@ -127,8 +129,17 @@ export function ComparisonFilters({
     });
   };
 
+  // Count active filters for mobile badge
+  const activeFilterCount = (filters.model ? 1 : 0) + (filters.value ? 1 : 0);
+
   return (
-    <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+    <CollapsibleFilters
+      title="Filters"
+      hasActiveFilters={hasActiveFilters}
+      activeFilterCount={activeFilterCount}
+      onClear={handleClearFilters}
+    >
+      <div className="flex flex-wrap items-center gap-4 p-3 sm:p-0 sm:bg-transparent bg-gray-50 rounded-lg sm:border-0 border border-gray-200">
       {/* Model filter */}
       <div className="flex items-center gap-2">
         <label htmlFor="model-filter" className="text-sm font-medium text-gray-600">
@@ -225,19 +236,20 @@ export function ComparisonFilters({
         </div>
       )}
 
-      {/* Clear filters button */}
+      {/* Clear filters button - hidden on mobile (use CollapsibleFilters clear) */}
       {hasActiveFilters && (
         <Button
           onClick={handleClearFilters}
           variant="ghost"
           size="sm"
-          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-transparent"
+          className="hidden sm:flex px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-transparent"
           title="Clear filters"
         >
           <X className="w-3 h-3 mr-1" />
           Clear
         </Button>
       )}
-    </div>
+      </div>
+    </CollapsibleFilters>
   );
 }

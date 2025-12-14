@@ -2,11 +2,13 @@
  * RunFilters Component
  *
  * Filter controls for the runs list with tag filtering and view toggle.
+ * Collapses on mobile for better space utilization.
  */
 
 import { useState, useCallback } from 'react';
 import { List, FolderTree, X, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
 import type { RunStatus } from '../../api/operations/runs';
 
@@ -74,10 +76,24 @@ export function RunFilters({ filters, onFiltersChange }: RunFiltersProps) {
 
   const selectedTags = allTags.filter((t) => filters.tagIds.includes(t.id));
 
+  // Count active filters for mobile badge
+  const activeFilterCount = (filters.status ? 1 : 0) + filters.tagIds.length;
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const handleClearAll = useCallback(() => {
+    onFiltersChange({ ...filters, status: '', tagIds: [] });
+  }, [filters, onFiltersChange]);
+
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4 flex-wrap">
-        {/* Status filter */}
+    <CollapsibleFilters
+      title="Filters"
+      hasActiveFilters={hasActiveFilters}
+      activeFilterCount={activeFilterCount}
+      onClear={handleClearAll}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Status filter */}
         <div className="flex items-center gap-2">
           <label htmlFor="status-filter" className="text-sm text-gray-600">
             Status:
@@ -170,54 +186,55 @@ export function RunFilters({ filters, onFiltersChange }: RunFiltersProps) {
           </span>
         ))}
 
-        {/* Clear tags button */}
+        {/* Clear tags button - hidden on mobile (use main clear button) */}
         {filters.tagIds.length > 0 && (
           <Button
             type="button"
             onClick={handleClearTags}
             variant="ghost"
             size="sm"
-            className="gap-1 text-gray-500 hover:text-gray-700 px-2 py-1"
+            className="hidden sm:flex gap-1 text-gray-500 hover:text-gray-700 px-2 py-1"
           >
             <X className="w-3 h-3" />
             Clear tags
           </Button>
         )}
-      </div>
+        </div>
 
-      {/* View mode toggle */}
-      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-        <Button
-          type="button"
-          onClick={() => handleViewModeChange('flat')}
-          variant="ghost"
-          size="icon"
-          className={`p-1.5 rounded-none ${
-            filters.viewMode === 'flat'
-              ? 'bg-teal-50 text-teal-600'
-              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-          }`}
-          title="List view"
-          aria-label="List view"
-        >
-          <List className="w-4 h-4" />
-        </Button>
-        <Button
-          type="button"
-          onClick={() => handleViewModeChange('folder')}
-          variant="ghost"
-          size="icon"
-          className={`p-1.5 rounded-none ${
-            filters.viewMode === 'folder'
-              ? 'bg-teal-50 text-teal-600'
-              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-          }`}
-          title="Folder view (by tag)"
-          aria-label="Folder view (by tag)"
-        >
-          <FolderTree className="w-4 h-4" />
-        </Button>
+        {/* View mode toggle */}
+        <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden self-start sm:self-auto">
+          <Button
+            type="button"
+            onClick={() => handleViewModeChange('flat')}
+            variant="ghost"
+            size="icon"
+            className={`p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 rounded-none ${
+              filters.viewMode === 'flat'
+                ? 'bg-teal-50 text-teal-600'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+            }`}
+            title="List view"
+            aria-label="List view"
+          >
+            <List className="w-4 h-4" />
+          </Button>
+          <Button
+            type="button"
+            onClick={() => handleViewModeChange('folder')}
+            variant="ghost"
+            size="icon"
+            className={`p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 rounded-none ${
+              filters.viewMode === 'folder'
+                ? 'bg-teal-50 text-teal-600'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+            }`}
+            title="Folder view (by tag)"
+            aria-label="Folder view (by tag)"
+          >
+            <FolderTree className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
-    </div>
+    </CollapsibleFilters>
   );
 }

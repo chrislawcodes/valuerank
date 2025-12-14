@@ -5,8 +5,8 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
 const selectTriggerVariants = cva(
-  // Base styles for trigger button
-  'inline-flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0',
+  // Base styles for trigger button - includes min-h-[44px] for mobile touch targets
+  'inline-flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 min-h-[44px] sm:min-h-0',
   {
     variants: {
       variant: {

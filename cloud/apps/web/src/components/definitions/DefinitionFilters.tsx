@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
 
 export type DefinitionFilterState = {
@@ -88,9 +89,23 @@ export function DefinitionFilters({
 
   const selectedTags = allTags.filter((t) => filters.tagIds.includes(t.id));
 
+  // Count active filters for mobile badge
+  const activeFilterCount =
+    (filters.search ? 1 : 0) +
+    (filters.rootOnly ? 1 : 0) +
+    (filters.hasRuns ? 1 : 0) +
+    filters.tagIds.length;
+
   return (
-    <div className={`space-y-3 ${className}`}>
-      {/* Search bar */}
+    <CollapsibleFilters
+      title="Filters"
+      hasActiveFilters={hasActiveFilters}
+      activeFilterCount={activeFilterCount}
+      onClear={handleClearFilters}
+      className={className}
+    >
+      <div className="space-y-3">
+        {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -216,21 +231,22 @@ export function DefinitionFilters({
           </span>
         ))}
 
-        {/* Clear filters button */}
+        {/* Clear filters button - hidden on mobile (use CollapsibleFilters clear) */}
         {hasActiveFilters && (
           <Button
             type="button"
             onClick={handleClearFilters}
             variant="ghost"
             size="sm"
-            className="px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-transparent"
+            className="hidden sm:flex px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-transparent"
           >
             <X className="w-4 h-4 mr-1" />
             Clear filters
           </Button>
         )}
+        </div>
       </div>
-    </div>
+    </CollapsibleFilters>
   );
 }
 
