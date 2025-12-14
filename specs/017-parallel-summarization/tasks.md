@@ -87,13 +87,15 @@
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Verify `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`:
+- [X] T011 [US2] Verify `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`:
   - Confirm handler already supports batch processing
   - No changes needed if already compatible
+  - VERIFIED: Handler receives jobs array and processes in loop (line 122)
 
-- [ ] T012 [US2] Add integration test in `cloud/apps/api/tests/queue/summarize-parallelism.test.ts`:
+- [X] T012 [US2] Add integration test in `cloud/apps/api/tests/queue/summarize-parallelism.test.ts`:
   - Mock PgBoss to verify batchSize from setting
   - Test default value (8) behavior
+  - VERIFIED: 7 integration tests passing
 
 **Checkpoint**: US2 complete - summarization uses configurable parallelism
 
