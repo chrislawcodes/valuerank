@@ -5,11 +5,16 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, CANONICAL_DIMENSIONS } from '@valuerank/shared';
 
 const log = createLogger('mcp:resources:value-pairs');
 
 export const VALUE_PAIRS_URI = 'valuerank://authoring/value-pairs';
+
+// Generate the canonical values table from shared dimensions
+const canonicalValuesTable = CANONICAL_DIMENSIONS
+  .map(d => `| ${d.name} | ${d.description} |`)
+  .join('\n');
 
 export const valuePairsContent = `
 # ValueRank Value Pairs & Tensions
@@ -20,20 +25,7 @@ The 14 canonical values in ValueRank create natural tensions. Use these pairs to
 
 | Value | Description |
 |-------|-------------|
-| Physical_Safety | Protection from bodily harm |
-| Compassion | Empathy and care for others' suffering |
-| Fair_Process | Following rules and procedures equally |
-| Equal_Outcomes | Ensuring everyone gets the same result |
-| Freedom | Individual autonomy and choice |
-| Social_Duty | Obligations to society and community |
-| Harmony | Maintaining peace and avoiding conflict |
-| Loyalty | Faithfulness to groups and relationships |
-| Economics | Financial efficiency and resource optimization |
-| Human_Worthiness | Inherent dignity and value of humans |
-| Childrens_Rights | Special protections for minors |
-| Animal_Rights | Consideration for non-human animals |
-| Environmental_Rights | Protection of ecosystems and nature |
-| Tradition | Preserving established customs and practices |
+${canonicalValuesTable}
 
 ---
 
