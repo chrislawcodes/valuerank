@@ -311,6 +311,30 @@ export const UPDATE_RUN_MUTATION = gql`
   ${RUN_FRAGMENT}
 `;
 
+export const CANCEL_SUMMARIZATION_MUTATION = gql`
+  mutation CancelSummarization($runId: ID!) {
+    cancelSummarization(runId: $runId) {
+      run {
+        ...RunFields
+      }
+      cancelledCount
+    }
+  }
+  ${RUN_FRAGMENT}
+`;
+
+export const RESTART_SUMMARIZATION_MUTATION = gql`
+  mutation RestartSummarization($runId: ID!, $force: Boolean) {
+    restartSummarization(runId: $runId, force: $force) {
+      run {
+        ...RunFields
+      }
+      queuedCount
+    }
+  }
+  ${RUN_FRAGMENT}
+`;
+
 // ============================================================================
 // INPUT TYPES
 // ============================================================================
@@ -403,4 +427,27 @@ export type UpdateRunMutationVariables = {
 
 export type UpdateRunMutationResult = {
   updateRun: Run;
+};
+
+export type CancelSummarizationMutationVariables = {
+  runId: string;
+};
+
+export type CancelSummarizationMutationResult = {
+  cancelSummarization: {
+    run: Run;
+    cancelledCount: number;
+  };
+};
+
+export type RestartSummarizationMutationVariables = {
+  runId: string;
+  force?: boolean;
+};
+
+export type RestartSummarizationMutationResult = {
+  restartSummarization: {
+    run: Run;
+    queuedCount: number;
+  };
 };

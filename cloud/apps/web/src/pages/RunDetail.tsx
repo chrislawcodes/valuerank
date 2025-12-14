@@ -14,6 +14,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { RunProgress } from '../components/runs/RunProgress';
 import { RunResults } from '../components/runs/RunResults';
 import { RunControls } from '../components/runs/RunControls';
+import { SummarizationControls } from '../components/runs/SummarizationControls';
 import { RerunDialog } from '../components/runs/RerunDialog';
 import { useRun } from '../hooks/useRun';
 import { useRunMutations } from '../hooks/useRunMutations';
@@ -75,7 +76,15 @@ export function RunDetail() {
     enablePolling: true,
   });
 
-  const { pauseRun, resumeRun, cancelRun, deleteRun, updateRun } = useRunMutations();
+  const {
+    pauseRun,
+    resumeRun,
+    cancelRun,
+    deleteRun,
+    updateRun,
+    cancelSummarization,
+    restartSummarization,
+  } = useRunMutations();
 
   // Focus input when editing starts
   useEffect(() => {
@@ -165,6 +174,26 @@ export function RunDetail() {
       setIsDeleting(false);
     }
   }, [run, deleteRun, navigate]);
+
+  const handleCancelSummarization = useCallback(async (runId: string) => {
+    const result = await cancelSummarization(runId);
+    refetch();
+    return { cancelledCount: result.cancelledCount };
+  }, [cancelSummarization, refetch]);
+
+  const handleRestartSummarization = useCallback(async (runId: string, force?: boolean) => {
+    const result = await restartSummarization(runId, force);
+    refetch();
+    return { queuedCount: result.queuedCount };
+  }, [restartSummarization, refetch]);
+
+  const handleSummarizationSuccess = useCallback((message: string) => {
+    console.log('Summarization:', message);
+  }, []);
+
+  const handleSummarizationError = useCallback((message: string) => {
+    console.error('Summarization error:', message);
+  }, []);
 
   // Loading state
   if (loading && !run) {
@@ -257,6 +286,35 @@ export function RunDetail() {
           />
         </div>
       </div>
+
+      {/* Summarization controls - shown when summarizing or when can restart */}
+      {(run.status === 'SUMMARIZING' || isTerminal) && run.transcriptCount > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-700">Summarization</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {run.status === 'SUMMARIZING'
+                  ? `Processing ${run.summarizeProgress?.completed ?? 0} of ${run.summarizeProgress?.total ?? 0} transcripts`
+                  : run.summarizeProgress
+                    ? `${run.summarizeProgress.completed} of ${run.transcriptCount} transcripts summarized`
+                    : 'Summarization not started'}
+              </p>
+            </div>
+            <SummarizationControls
+              runId={run.id}
+              status={run.status}
+              summarizeProgress={run.summarizeProgress}
+              transcriptCount={run.transcriptCount}
+              onCancelSummarization={handleCancelSummarization}
+              onRestartSummarization={handleRestartSummarization}
+              onSuccess={handleSummarizationSuccess}
+              onError={handleSummarizationError}
+              size="sm"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main content card */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

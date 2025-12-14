@@ -227,34 +227,38 @@
 
 ### Implementation for User Story 7
 
-- [ ] T026 [P] [US7] Add GraphQL operations in `cloud/apps/web/src/api/operations/summarization.ts`:
+- [X] T026 [P] [US7] Add GraphQL operations in `cloud/apps/web/src/api/operations/runs.ts`:
   - `CANCEL_SUMMARIZATION_MUTATION`
   - `RESTART_SUMMARIZATION_MUTATION`
   - Export types
+  - DONE: Added to existing runs.ts for consistency
 
-- [ ] T027 [P] [US7] Create `cloud/apps/web/src/hooks/useSummarizationMutations.ts`:
+- [X] T027 [P] [US7] Update `cloud/apps/web/src/hooks/useRunMutations.ts`:
   - `cancelSummarization(runId)` function
   - `restartSummarization(runId, force?)` function
   - Loading and error states
+  - DONE: Added to existing useRunMutations hook
 
-- [ ] T028 [US7] Create `cloud/apps/web/src/components/runs/SummarizationControls.tsx`:
+- [X] T028 [US7] Create `cloud/apps/web/src/components/runs/SummarizationControls.tsx`:
   - Cancel button with confirmation dialog (visible when summarizing with pending jobs)
   - Restart button (visible when failed/missing summaries)
   - Re-summarize All button (visible when all complete, for force mode)
   - Loading states during operations
-  - Toast notifications for results
+  - DONE: Full component with all features
 
-- [ ] T029 [US7] Update `cloud/apps/web/src/pages/RunDetail.tsx`:
+- [X] T029 [US7] Update `cloud/apps/web/src/pages/RunDetail.tsx`:
   - Import and render `SummarizationControls`
   - Pass run state, summarizeProgress
   - Position near existing RunControls
+  - DONE: Added summarization controls section
 
-- [ ] T030 [US7] Add component tests in `cloud/apps/web/tests/components/runs/SummarizationControls.test.tsx`:
+- [X] T030 [US7] Add component tests in `cloud/apps/web/tests/components/runs/SummarizationControls.test.tsx`:
   - Test button visibility based on state
   - Test confirmation dialog
   - Test loading states
+  - DONE: 24 tests covering all scenarios
 
-**Checkpoint**: US7 complete - UI buttons functional
+**Checkpoint**: US7 complete - UI buttons functional ✅
 
 ---
 

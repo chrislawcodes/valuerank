@@ -7,6 +7,8 @@ import {
   CANCEL_RUN_MUTATION,
   DELETE_RUN_MUTATION,
   UPDATE_RUN_MUTATION,
+  CANCEL_SUMMARIZATION_MUTATION,
+  RESTART_SUMMARIZATION_MUTATION,
   type Run,
   type StartRunInput,
   type StartRunMutationVariables,
@@ -22,11 +24,25 @@ import {
   type UpdateRunInput,
   type UpdateRunMutationVariables,
   type UpdateRunMutationResult,
+  type CancelSummarizationMutationVariables,
+  type CancelSummarizationMutationResult,
+  type RestartSummarizationMutationVariables,
+  type RestartSummarizationMutationResult,
 } from '../api/operations/runs';
 
 type StartRunResult = {
   run: Run;
   jobCount: number;
+};
+
+type CancelSummarizationResult = {
+  run: Run;
+  cancelledCount: number;
+};
+
+type RestartSummarizationResult = {
+  run: Run;
+  queuedCount: number;
 };
 
 type UseRunMutationsResult = {
@@ -36,6 +52,8 @@ type UseRunMutationsResult = {
   cancelRun: (runId: string) => Promise<Run>;
   deleteRun: (runId: string) => Promise<boolean>;
   updateRun: (runId: string, input: UpdateRunInput) => Promise<Run>;
+  cancelSummarization: (runId: string) => Promise<CancelSummarizationResult>;
+  restartSummarization: (runId: string, force?: boolean) => Promise<RestartSummarizationResult>;
   loading: boolean;
   error: Error | null;
 };
@@ -73,6 +91,16 @@ export function useRunMutations(): UseRunMutationsResult {
     UpdateRunMutationResult,
     UpdateRunMutationVariables
   >(UPDATE_RUN_MUTATION);
+
+  const [cancelSummarizationResult, executeCancelSummarization] = useMutation<
+    CancelSummarizationMutationResult,
+    CancelSummarizationMutationVariables
+  >(CANCEL_SUMMARIZATION_MUTATION);
+
+  const [restartSummarizationResult, executeRestartSummarization] = useMutation<
+    RestartSummarizationMutationResult,
+    RestartSummarizationMutationVariables
+  >(RESTART_SUMMARIZATION_MUTATION);
 
   const startRun = useCallback(
     async (input: StartRunInput): Promise<StartRunResult> => {
@@ -158,6 +186,34 @@ export function useRunMutations(): UseRunMutationsResult {
     [executeUpdateRun]
   );
 
+  const cancelSummarization = useCallback(
+    async (runId: string): Promise<CancelSummarizationResult> => {
+      const result = await executeCancelSummarization({ runId });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (!result.data?.cancelSummarization) {
+        throw new Error('Failed to cancel summarization');
+      }
+      return result.data.cancelSummarization;
+    },
+    [executeCancelSummarization]
+  );
+
+  const restartSummarization = useCallback(
+    async (runId: string, force?: boolean): Promise<RestartSummarizationResult> => {
+      const result = await executeRestartSummarization({ runId, force });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (!result.data?.restartSummarization) {
+        throw new Error('Failed to restart summarization');
+      }
+      return result.data.restartSummarization;
+    },
+    [executeRestartSummarization]
+  );
+
   // Combine loading and error states
   const loading =
     startRunResult.fetching ||
@@ -165,7 +221,9 @@ export function useRunMutations(): UseRunMutationsResult {
     resumeRunResult.fetching ||
     cancelRunResult.fetching ||
     deleteRunResult.fetching ||
-    updateRunResult.fetching;
+    updateRunResult.fetching ||
+    cancelSummarizationResult.fetching ||
+    restartSummarizationResult.fetching;
 
   const error =
     startRunResult.error ||
@@ -173,7 +231,9 @@ export function useRunMutations(): UseRunMutationsResult {
     resumeRunResult.error ||
     cancelRunResult.error ||
     deleteRunResult.error ||
-    updateRunResult.error;
+    updateRunResult.error ||
+    cancelSummarizationResult.error ||
+    restartSummarizationResult.error;
 
   return {
     startRun,
@@ -182,6 +242,8 @@ export function useRunMutations(): UseRunMutationsResult {
     cancelRun,
     deleteRun,
     updateRun,
+    cancelSummarization,
+    restartSummarization,
     loading,
     error: error ? new Error(error.message) : null,
   };
