@@ -53,15 +53,15 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Create `apps/api/src/mcp/tools/recover-run.ts`
+- [X] T008 [US1] Create `apps/api/src/mcp/tools/recover-run.ts`
   - Input schema: `run_id` (required)
   - Call existing `recoverRun` service or mutation
   - Return `{ success, run_id, status, action, requeued_count, run_progress }`
-- [ ] T009 [US1] Add audit logging for recover_run in `recover-run.ts`
+- [X] T009 [US1] Add audit logging for recover_run in `recover-run.ts`
   - Use `logAuditEvent` with `createOperationsAudit`
-- [ ] T010 [US1] Register tool in `apps/api/src/mcp/tools/index.ts`
+- [X] T010 [US1] Register tool in `apps/api/src/mcp/tools/index.ts`
   - Import and export `registerRecoverRunTool`
-- [ ] T011 [US1] Create tests `apps/api/tests/mcp/tools/recover-run.test.ts`
+- [X] T011 [US1] Create tests `apps/api/tests/mcp/tools/recover-run.test.ts`
   - Test successful recovery
   - Test "no recovery needed" case
   - Test NOT_FOUND error

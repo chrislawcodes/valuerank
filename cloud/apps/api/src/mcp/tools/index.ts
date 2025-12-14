@@ -52,6 +52,8 @@ import './list-system-settings.js';
 import './set-summarization-parallelism.js';
 import './cancel-summarization.js';
 import './restart-summarization.js';
+// Feature 018 - MCP Operations Tools
+import './recover-run.js';
 
 /**
  * Registers all MCP tools on the given server
