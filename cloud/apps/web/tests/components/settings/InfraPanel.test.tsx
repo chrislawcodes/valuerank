@@ -417,8 +417,8 @@ describe('InfraPanel', () => {
       renderInfraPanel(mockClient);
 
       await waitFor(() => {
-        // Should show both configured messages (scenario expansion and summarizer)
-        expect(screen.getAllByText('Currently configured:').length).toBe(2);
+        // Should show all configured messages (scenario expansion, summarizer, and parallelism)
+        expect(screen.getAllByText('Currently configured:').length).toBe(3);
       });
       expect(screen.getByText('OpenAI / GPT-4o Mini')).toBeInTheDocument();
     });

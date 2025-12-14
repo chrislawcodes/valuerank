@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'urql';
-import { Cpu, Settings, Check, AlertTriangle, Code, FileText } from 'lucide-react';
+import { Cpu, Settings, Check, AlertTriangle, Code, FileText, Layers } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -59,6 +59,24 @@ const CODE_GENERATION_SETTING_QUERY = `
     }
   }
 `;
+
+const SUMMARIZATION_PARALLELISM_QUERY = `
+  query SummarizationParallelism {
+    systemSetting(key: "infra_max_parallel_summarizations") {
+      id
+      key
+      value
+    }
+  }
+`;
+
+type SummarizationParallelismResult = {
+  systemSetting: {
+    id: string;
+    key: string;
+    value: { value?: number };
+  } | null;
+};
 
 type InfraModelResult = {
   infraModel: {
@@ -114,6 +132,11 @@ export function InfraPanel() {
   const [isSavingCodeGen, setIsSavingCodeGen] = useState(false);
   const [saveCodeGenSuccess, setSaveCodeGenSuccess] = useState(false);
 
+  // Summarization parallelism state
+  const [parallelismValue, setParallelismValue] = useState<number>(8);
+  const [isSavingParallelism, setIsSavingParallelism] = useState(false);
+  const [saveParallelismSuccess, setSaveParallelismSuccess] = useState(false);
+
   const [{ data: providersData, fetching: loadingProviders, error: providersError }] =
     useQuery<LlmProvidersQueryResult>({ query: LLM_PROVIDERS_QUERY });
 
@@ -134,6 +157,9 @@ export function InfraPanel() {
 
   const [{ data: codeGenData, fetching: loadingCodeGen }, reexecuteCodeGen] =
     useQuery<CodeGenerationSettingResult>({ query: CODE_GENERATION_SETTING_QUERY });
+
+  const [{ data: parallelismData, fetching: loadingParallelism }, reexecuteParallelism] =
+    useQuery<SummarizationParallelismResult>({ query: SUMMARIZATION_PARALLELISM_QUERY });
 
   const [, updateSetting] = useMutation(UPDATE_SYSTEM_SETTING_MUTATION);
 
@@ -168,6 +194,13 @@ export function InfraPanel() {
       setUseCodeGeneration(codeGenData.systemSetting.value?.enabled === true);
     }
   }, [codeGenData]);
+
+  // Initialize parallelism setting
+  useEffect(() => {
+    if (parallelismData?.systemSetting) {
+      setParallelismValue(parallelismData.systemSetting.value?.value ?? 8);
+    }
+  }, [parallelismData]);
 
   const providers = providersData?.llmProviders ?? [];
 
@@ -269,6 +302,31 @@ export function InfraPanel() {
     setTimeout(() => setSaveCodeGenSuccess(false), 3000);
   };
 
+  const handleParallelismChange = (value: number) => {
+    setParallelismValue(value);
+    setSaveParallelismSuccess(false);
+  };
+
+  const handleSaveParallelism = async () => {
+    if (parallelismValue < 1 || parallelismValue > 100) return;
+
+    setIsSavingParallelism(true);
+    setSaveParallelismSuccess(false);
+
+    await updateSetting({
+      input: {
+        key: 'infra_max_parallel_summarizations',
+        value: { value: parallelismValue },
+      },
+    });
+
+    setIsSavingParallelism(false);
+    setSaveParallelismSuccess(true);
+    reexecuteParallelism({ requestPolicy: 'network-only' });
+
+    setTimeout(() => setSaveParallelismSuccess(false), 3000);
+  };
+
   const hasChanges =
     infraData?.infraModel?.provider.id !== selectedProviderId ||
     infraData?.infraModel?.modelId !== selectedModelId;
@@ -277,7 +335,10 @@ export function InfraPanel() {
     summarizerData?.infraModel?.provider.id !== summarizerProviderId ||
     summarizerData?.infraModel?.modelId !== summarizerModelId;
 
-  if (loadingProviders || loadingInfra || loadingCodeGen || loadingSummarizer) {
+  const hasParallelismChanges =
+    (parallelismData?.systemSetting?.value?.value ?? 8) !== parallelismValue;
+
+  if (loadingProviders || loadingInfra || loadingCodeGen || loadingSummarizer || loadingParallelism) {
     return <Loading text="Loading configuration..." />;
   }
 
@@ -578,6 +639,80 @@ export function InfraPanel() {
                   <li>- Results may vary</li>
                 </ul>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Summarization Parallelism Section */}
+      <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+              <Layers className="w-5 h-5 text-orange-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-medium text-gray-900">Summarization Parallelism</h2>
+              <p className="text-sm text-gray-500">
+                Number of transcript summarizations to run concurrently
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Current Configuration */}
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-500 mb-1">Currently configured:</p>
+            <p className="font-medium text-gray-900">
+              {parallelismData?.systemSetting?.value?.value ?? 8} parallel jobs
+            </p>
+          </div>
+
+          {/* Parallelism Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Max Parallel Summarizations
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={parallelismValue}
+                onChange={(e) => handleParallelismChange(parseInt(e.target.value, 10) || 1)}
+                className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              />
+              <span className="text-sm text-gray-500">Range: 1-100 (default: 8)</span>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="p-4 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <p>
+              Controls how many transcript summarization jobs run at the same time.
+              Higher values speed up summarization but increase load on the summarizer model API.
+              Adjust based on your API rate limits.
+            </p>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex items-center justify-between pt-4">
+            {saveParallelismSuccess && (
+              <div className="flex items-center gap-2 text-green-600">
+                <Check className="w-4 h-4" />
+                <span className="text-sm">Configuration saved</span>
+              </div>
+            )}
+            <div className="ml-auto">
+              <Button
+                variant="primary"
+                onClick={handleSaveParallelism}
+                disabled={!hasParallelismChanges || isSavingParallelism || parallelismValue < 1 || parallelismValue > 100}
+                isLoading={isSavingParallelism}
+              >
+                Save Configuration
+              </Button>
             </div>
           </div>
         </div>
