@@ -8,9 +8,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { db } from '@valuerank/db';
 
 // Mock PgBoss for SUMMARIZING transition (which queues summarize jobs)
+const mockSend = vi.fn().mockResolvedValue('mock-job-id');
 vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: vi.fn(() => ({
-    send: vi.fn().mockResolvedValue('mock-job-id'),
+    send: mockSend,
   })),
 }));
 import {
@@ -280,6 +281,156 @@ describe('progress service', () => {
       const progress = await getProgress(run.id);
       expect(progress?.completed).toBe(5);
       expect(progress?.failed).toBe(3);
+    });
+  });
+
+  describe('summarize job queueing (T014)', () => {
+    let testDefinitionId: string;
+    let testRunId: string;
+
+    afterEach(async () => {
+      mockSend.mockClear();
+      if (testRunId) {
+        await db.transcript.deleteMany({ where: { runId: testRunId } });
+        await db.runScenarioSelection.deleteMany({ where: { runId: testRunId } });
+        await db.run.deleteMany({ where: { id: testRunId } });
+      }
+      if (testDefinitionId) {
+        await db.definition.deleteMany({ where: { id: testDefinitionId } });
+      }
+    });
+
+    async function createRunWithTranscripts(transcriptCount: number) {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Test Definition for Summarize',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      testDefinitionId = definition.id;
+      createdDefinitionIds.push(definition.id);
+
+      const run = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'RUNNING',
+          startedAt: new Date(),
+          config: { models: ['gpt-4'] },
+          progress: { total: transcriptCount, completed: transcriptCount, failed: 0 },
+        },
+      });
+      testRunId = run.id;
+      createdRunIds.push(run.id);
+
+      // Create mock scenario
+      const scenario = await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'test-scenario-' + Date.now(),
+          content: { schema_version: 1, prompt: 'Test scenario body', dimension_values: { test: 'value' } },
+        },
+      });
+
+      // Create transcripts
+      for (let i = 0; i < transcriptCount; i++) {
+        await db.transcript.create({
+          data: {
+            runId: run.id,
+            scenarioId: scenario.id,
+            modelId: 'openai:gpt-4',
+            modelVersion: 'gpt-4-0613',
+            content: { schema_version: 1, messages: [], model_response: 'test' },
+            turnCount: 1,
+            tokenCount: 100,
+            durationMs: 1000,
+          },
+        });
+      }
+
+      return run;
+    }
+
+    it('queues individual summarize job per transcript', async () => {
+      const transcriptCount = 3;
+      const run = await createRunWithTranscripts(transcriptCount);
+
+      // Increment to trigger SUMMARIZING transition (all jobs done)
+      // We need to reduce completed by 1 so the increment causes the transition
+      await db.run.update({
+        where: { id: run.id },
+        data: {
+          progress: { total: transcriptCount, completed: transcriptCount - 1, failed: 0 },
+        },
+      });
+
+      mockSend.mockClear(); // Clear any previous calls
+      await incrementCompleted(run.id);
+
+      // Should have queued one job per transcript
+      expect(mockSend).toHaveBeenCalledTimes(transcriptCount);
+    });
+
+    it('includes runId and transcriptId in job data', async () => {
+      const run = await createRunWithTranscripts(2);
+      await db.run.update({
+        where: { id: run.id },
+        data: { progress: { total: 2, completed: 1, failed: 0 } },
+      });
+
+      mockSend.mockClear();
+      await incrementCompleted(run.id);
+
+      // Verify each call has correct queue name and data structure
+      for (const call of mockSend.mock.calls) {
+        const [queueName, jobData] = call;
+        expect(queueName).toBe('summarize_transcript');
+        expect(jobData).toHaveProperty('runId', run.id);
+        expect(jobData).toHaveProperty('transcriptId');
+        expect(typeof jobData.transcriptId).toBe('string');
+      }
+    });
+
+    it('uses retry configuration from DEFAULT_JOB_OPTIONS', async () => {
+      const run = await createRunWithTranscripts(1);
+      await db.run.update({
+        where: { id: run.id },
+        data: { progress: { total: 1, completed: 0, failed: 0 } },
+      });
+
+      mockSend.mockClear();
+      await incrementCompleted(run.id);
+
+      // Verify job options were passed
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      const [, , jobOptions] = mockSend.mock.calls[0];
+
+      // Retry configuration from DEFAULT_JOB_OPTIONS['summarize_transcript']
+      expect(jobOptions).toEqual({
+        retryLimit: 3,
+        retryDelay: 10,
+        retryBackoff: true,
+        expireInSeconds: 120,
+      });
+    });
+
+    it('initializes summarizeProgress when transitioning to SUMMARIZING', async () => {
+      const transcriptCount = 3;
+      const run = await createRunWithTranscripts(transcriptCount);
+      await db.run.update({
+        where: { id: run.id },
+        data: { progress: { total: transcriptCount, completed: transcriptCount - 1, failed: 0 } },
+      });
+
+      mockSend.mockClear();
+      await incrementCompleted(run.id);
+
+      // Check summarizeProgress was initialized
+      const updatedRun = await db.run.findUnique({ where: { id: run.id } });
+      expect(updatedRun?.summarizeProgress).toEqual({
+        total: transcriptCount,
+        completed: 0,
+        failed: 0,
+      });
     });
   });
 });

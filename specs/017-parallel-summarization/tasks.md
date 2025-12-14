@@ -109,13 +109,15 @@
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Verify existing implementation in `cloud/apps/api/src/services/run/progress.ts`:
+- [X] T013 [US3] Verify existing implementation in `cloud/apps/api/src/services/run/progress.ts`:
   - `queueSummarizeJobs()` already creates individual jobs per transcript
   - Confirm retry options from `DEFAULT_JOB_OPTIONS`
+  - VERIFIED: Lines 249-254 queue individual jobs, uses retryLimit: 3, retryDelay: 10, retryBackoff: true
 
-- [ ] T014 [US3] Add test in `cloud/apps/api/tests/services/run/progress.test.ts`:
+- [X] T014 [US3] Add test in `cloud/apps/api/tests/services/run/progress.test.ts`:
   - Verify individual jobs per transcript
   - Verify retry configuration
+  - ADDED: 4 tests for job queueing (T014 describe block)
 
 **Checkpoint**: US3 complete - granular job control verified
 
