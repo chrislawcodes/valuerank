@@ -9,7 +9,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { db, type Dimension, type Prisma } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, getCanonicalDimensionNames } from '@valuerank/shared';
 import {
   validateDefinitionContent,
   validateContentStructure,
@@ -23,6 +23,9 @@ const log = createLogger('mcp:tools:create-definition');
 
 const CURRENT_SCHEMA_VERSION = 2;
 
+// Generate canonical values list from shared package
+const CANONICAL_VALUES_LIST = getCanonicalDimensionNames().join(', ');
+
 /**
  * Zod schema for dimension input
  */
@@ -34,7 +37,7 @@ const DimensionLevelSchema = z.object({
 });
 
 const DimensionSchema = z.object({
-  name: z.string().min(1).describe('Must be a VALUE name from the 14 canonical values: Physical_Safety, Compassion, Fair_Process, Equal_Outcomes, Freedom, Social_Duty, Harmony, Loyalty, Economics, Human_Worthiness, Childrens_Rights, Animal_Rights, Environmental_Rights, Tradition'),
+  name: z.string().min(1).describe(`Must be a VALUE name from the 14 canonical values: ${CANONICAL_VALUES_LIST}`),
   levels: z.array(DimensionLevelSchema).min(3).max(5).describe('REQUIRED: 3-5 intensity levels with scores 1-5'),
 });
 
@@ -123,7 +126,7 @@ Each dimension must have:
   - options: Array of alternative phrasings (randomly selected during expansion)
 
 **The 14 Canonical Values:**
-Physical_Safety, Compassion, Fair_Process, Equal_Outcomes, Freedom, Social_Duty, Harmony, Loyalty, Economics, Human_Worthiness, Childrens_Rights, Animal_Rights, Environmental_Rights, Tradition
+${CANONICAL_VALUES_LIST}
 
 **Template Rules:**
 - Use [ValueName] placeholders matching dimension names
