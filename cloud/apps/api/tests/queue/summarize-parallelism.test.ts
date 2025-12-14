@@ -113,4 +113,71 @@ describe('Summarization Parallelism Integration', () => {
       expect(configuredValue).toBe(32);
     });
   });
+
+  describe('graceful setting changes [T037]', () => {
+    it('setting changes update cache immediately for new registrations', async () => {
+      // Initial setting
+      await setMaxParallelSummarizations(8);
+      expect(await getMaxParallelSummarizations()).toBe(8);
+
+      // Change setting to new value
+      await setMaxParallelSummarizations(4);
+
+      // Cache should be updated immediately (no clear needed)
+      expect(await getMaxParallelSummarizations()).toBe(4);
+    });
+
+    it('clearSummarizationCache allows fresh reads after external changes', async () => {
+      // Set initial value
+      await setMaxParallelSummarizations(16);
+
+      // External change (simulating another process)
+      await db.systemSetting.update({
+        where: { key: SETTING_KEY },
+        data: { value: { value: 32 } },
+      });
+
+      // Still returns cached value
+      expect(await getMaxParallelSummarizations()).toBe(16);
+
+      // After clear, reads new value
+      clearSummarizationCache();
+      expect(await getMaxParallelSummarizations()).toBe(32);
+    });
+
+    it('setting update workflow: change -> clear -> new value available', async () => {
+      // Workflow that reregisterSummarizeHandler uses:
+      // 1. Set new value (updates cache)
+      // 2. Clear cache (ensures fresh read for handler registration)
+      // 3. Read value (should be new value)
+
+      await setMaxParallelSummarizations(12);
+      expect(await getMaxParallelSummarizations()).toBe(12);
+
+      // Simulate reregistration workflow
+      await setMaxParallelSummarizations(6);
+      clearSummarizationCache();
+
+      // Fresh read should return new value
+      const newBatchSize = await getMaxParallelSummarizations();
+      expect(newBatchSize).toBe(6);
+    });
+
+    it('multiple rapid setting changes settle to final value', async () => {
+      // Rapid changes (simulating user changing settings quickly)
+      await setMaxParallelSummarizations(10);
+      await setMaxParallelSummarizations(20);
+      await setMaxParallelSummarizations(15);
+      await setMaxParallelSummarizations(5);
+
+      // Final value should be the last set
+      expect(await getMaxParallelSummarizations()).toBe(5);
+
+      // Verify in database
+      const setting = await db.systemSetting.findUnique({
+        where: { key: SETTING_KEY },
+      });
+      expect((setting?.value as { value: number }).value).toBe(5);
+    });
+  });
 });
