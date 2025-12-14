@@ -43,6 +43,8 @@ X-API-Key: <api_key>
 enum RunStatus {
   PENDING
   RUNNING
+  PAUSED
+  SUMMARIZING
   COMPLETED
   FAILED
   CANCELLED

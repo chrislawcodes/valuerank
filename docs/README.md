@@ -58,7 +58,7 @@ npm run dev
 ```
 
 This starts:
-- **API server** at http://localhost:3001 (GraphQL at `/graphql`)
+- **API server** at http://localhost:3031 (GraphQL at `/graphql`)
 - **Web frontend** at http://localhost:3030
 
 ### Test Credentials
@@ -82,7 +82,7 @@ After seeding, log in with:
 ┌───────────────┐            ┌─────────────────┐            ┌───────────────┐
 │  Web Frontend │            │   GraphQL API   │            │  MCP Server   │
 │  (React/Vite) │───────────▶│   (Express)     │◀───────────│  (Stdio)      │
-│  :3030        │            │   :3001         │            │               │
+│  :3030        │            │   :3031         │            │               │
 └───────────────┘            └────────┬────────┘            └───────────────┘
                                       │
                     ┌─────────────────┼─────────────────┐
@@ -200,14 +200,16 @@ Per `specs/high-level.md`, the following stages are complete:
 | 9 | Run Execution & Basic Export | ✅ |
 | 11 | Analysis System & Visualizations | ✅ |
 | 12, 14 | MCP Read & Write Tools | ✅ |
+| 13 | Run Comparison | ✅ |
 | 15 | Data Export & CLI Compatibility | ✅ |
+| 16 (partial) | Cost Estimation & Sampling | ✅ |
 | 17 | Production Deployment (Railway) | ✅ |
-| 13 | Provider Metadata | ✅ |
+| 17 | Parallel Summarization | ✅ |
+| 18 | MCP Operations Tools | ✅ |
 
 **Deferred:**
 - Stage 10: Experiment Framework
-- Stage 13 (partial): Run Comparison & Delta Analysis
-- Stage 16: Scale & Efficiency
+- Stage 16 (remaining): Batch Processing, Cost Dashboard
 
 See [Future Features](./deferred/future-features.md) for details on deferred work.
 

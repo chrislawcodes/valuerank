@@ -1,110 +1,48 @@
 # MCP Tools Reference
 
-> Part of [Cloud ValueRank Documentation](../README.md)
->
-> See also: [GraphQL Schema](./graphql-schema.md) | [REST Endpoints](./rest-endpoints.md)
->
-> Original design: [preplanning/mcp-interface.md](../preplanning/mcp-interface.md)
+> Part of [Cloud ValueRank API Documentation](./graphql-schema.md)
 
-The MCP (Model Context Protocol) interface enables AI agents like Claude Desktop or Cursor to interact with Cloud ValueRank. This document provides a complete reference for all MCP tools and resources.
+The MCP (Model Context Protocol) server exposes tools for AI agents like Claude Code to interact with ValueRank. This document provides a complete reference for all available tools.
 
 ---
 
-## Overview
+## Authentication
 
-The MCP interface allows AI agents to:
-
-- **Query** definitions, runs, and analysis results
-- **Author** new scenario definitions
-- **Execute** evaluation runs
-- **Analyze** model behavior patterns
+All MCP tools require authentication via API key:
 
 ```
-┌────────────────────────────────────────┐
-│   Claude Desktop / Cursor / AI Client  │
-│   (uses user's own LLM API key)        │
-└────────────────┬───────────────────────┘
-                 │ MCP Protocol
-                 ▼
-┌────────────────────────────────────────┐
-│   Cloud ValueRank MCP Endpoint         │
-│   POST /mcp (requires API key)         │
-└────────────────┬───────────────────────┘
-                 │
-                 ▼
-┌────────────────────────────────────────┐
-│   PostgreSQL + Job Queue               │
-└────────────────────────────────────────┘
+X-API-Key: vr_xxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+API keys can be created in Settings → API Keys or via the `createApiKey` GraphQL mutation.
 
 ---
 
-## Configuration
+## Tool Categories
 
-### MCP Client Setup
-
-Configure your MCP client (Claude Desktop, etc.) with:
-
-```json
-{
-  "mcpServers": {
-    "valuerank": {
-      "url": "https://your-deployment.railway.app/mcp",
-      "headers": {
-        "X-API-Key": "vr_abc123..."
-      }
-    }
-  }
-}
-```
-
-### Authentication
-
-- **Required**: API Key via `X-API-Key` header
-- **Generate**: Via GraphQL `createApiKey` mutation or web UI
-- **Format**: `vr_` prefix followed by random string
-
-### Rate Limiting
-
-- **Limit**: 120 requests per minute per API key
-- **Window**: 60 seconds rolling window
-- **Response**: `429 Too Many Requests` when exceeded
+| Category | Purpose | Tools |
+|----------|---------|-------|
+| **Query Tools** | Read definitions, runs, and analysis | 8 tools |
+| **Definition Tools** | Create and manage definitions | 5 tools |
+| **Run Tools** | Execute and manage evaluation runs | 2 tools |
+| **LLM Management** | Configure providers and models | 11 tools |
+| **Operations Tools** | Diagnostics and recovery | 7 tools |
 
 ---
 
-## Read Tools
-
-Tools for querying data without side effects.
+## Query Tools (Read-Only)
 
 ### list_definitions
 
 List scenario definitions with version info.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `folder` | string | No | - | Filter by folder path |
-| `include_children` | boolean | No | false | Include child count |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `folder` | string | No | Filter by folder path |
+| `include_children` | boolean | No | Include child count for each definition |
 
-**Response**:
-```json
-{
-  "definitions": [
-    {
-      "id": "def-123",
-      "name": "Medical Resource Allocation",
-      "versionLabel": "v1.0",
-      "parentId": null,
-      "createdAt": "2025-01-15T10:30:45.123Z",
-      "childCount": 3
-    }
-  ],
-  "total": 25,
-  "truncated": false
-}
-```
-
-**Token Budget**: 2KB (truncates to 20 items if exceeded)
+**Returns:** Basic metadata including id, name, versionLabel, parentId, createdAt.
 
 ---
 
@@ -112,31 +50,14 @@ List scenario definitions with version info.
 
 List evaluation runs with status and summary metrics.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `definition_id` | string | No | - | Filter by definition UUID |
-| `status` | enum | No | - | pending, running, completed, failed |
-| `limit` | number | No | 20 | Max results (1-100) |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `definition_id` | string | No | Filter by definition UUID |
+| `status` | string | No | Filter by status: pending, running, completed, failed |
+| `limit` | integer | No | Max results (default 20, max 100) |
 
-**Response**:
-```json
-{
-  "runs": [
-    {
-      "id": "run-456",
-      "status": "completed",
-      "models": ["gpt-4", "claude-3-sonnet"],
-      "scenarioCount": 50,
-      "samplePercentage": 100,
-      "createdAt": "2025-01-15T10:30:45.123Z"
-    }
-  ],
-  "total": 12
-}
-```
-
-**Token Budget**: 2KB (truncates to 10 items if exceeded)
+**Returns:** Run id, status, models, scenarioCount, samplePercentage, createdAt.
 
 ---
 
@@ -144,55 +65,13 @@ List evaluation runs with status and summary metrics.
 
 Get aggregated analysis for a completed run.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `run_id` | string | Yes | - | Run UUID |
-| `include_insights` | boolean | No | true | Include auto-generated insights |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `include_insights` | boolean | No | Include auto-generated insights (default true) |
 
-**Response**:
-```json
-{
-  "status": "completed",
-  "runId": "run-456",
-  "basicStats": {
-    "gpt-4": {
-      "mean": 3.2,
-      "stdDev": 0.8,
-      "min": 1,
-      "max": 5
-    },
-    "claude-3-sonnet": {
-      "mean": 3.5,
-      "stdDev": 0.6,
-      "min": 2,
-      "max": 5
-    }
-  },
-  "modelAgreement": {
-    "gpt-4_claude-3-sonnet": 0.78
-  },
-  "outlierModels": [],
-  "mostContestedScenarios": [
-    {
-      "scenarioId": "scenario-12",
-      "name": "High stakes triage",
-      "variance": 0.45,
-      "scores": {
-        "gpt-4": 2,
-        "claude-3-sonnet": 4
-      }
-    }
-  ],
-  "insights": [
-    "Models show strong agreement on low-stakes scenarios",
-    "Claude prioritizes Physical_Safety more than GPT-4"
-  ],
-  "llmSummary": "This evaluation reveals..."
-}
-```
-
-**Token Budget**: 5KB (removes insights/llmSummary if exceeded)
+**Returns:** Per-model win rates, model agreement scores, outlier models, contested scenarios.
 
 ---
 
@@ -200,85 +79,42 @@ Get aggregated analysis for a completed run.
 
 Get dimension-level analysis showing which dimensions drive model divergence.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `run_id` | string | Yes | - | Run UUID |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
 
-**Response**:
-```json
-{
-  "status": "completed",
-  "runId": "run-456",
-  "rankedDimensions": [
-    {
-      "name": "Physical_Safety",
-      "importance": 0.85,
-      "divergenceScore": 0.42
-    },
-    {
-      "name": "Economics",
-      "importance": 0.65,
-      "divergenceScore": 0.28
-    }
-  ],
-  "correlations": [
-    {
-      "dim1": "Physical_Safety",
-      "dim2": "Economics",
-      "correlation": -0.35
-    }
-  ],
-  "mostDivisive": [
-    {
-      "dimension": "Physical_Safety",
-      "variance": 0.42,
-      "modelRange": {
-        "min": {"model": "gpt-4", "value": 2.1},
-        "max": {"model": "claude-3-sonnet", "value": 4.2}
-      }
-    }
-  ]
-}
-```
-
-**Token Budget**: 2KB (truncates to 10 ranked, 10 correlations, 5 most divisive)
+**Returns:** Ranked dimensions by effect size (Kruskal-Wallis test), p-values, variance explained.
 
 ---
 
 ### get_transcript_summary
 
-Get summary of a specific transcript without raw text.
+Get transcript metadata without full text content.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `run_id` | string | Yes | - | Run UUID |
-| `scenario_id` | string | Yes | - | Scenario UUID |
-| `model` | string | Yes | - | Model ID |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `scenario_id` | string | **Yes** | Scenario UUID |
+| `model` | string | **Yes** | Model ID |
 
-**Response**:
-```json
-{
-  "status": "found",
-  "turnCount": 5,
-  "wordCount": 850,
-  "decision": {
-    "code": 3,
-    "text": "Balanced approach prioritizing safety"
-  },
-  "keyReasoning": [
-    "Considered immediate physical harm",
-    "Weighed economic impact on community",
-    "Evaluated long-term consequences",
-    "Applied utilitarian framework",
-    "Concluded with precautionary principle"
-  ],
-  "timestamp": "2025-01-15T10:35:22.456Z"
-}
-```
+**Returns:** Turn count, word count, decision made, key reasoning points.
 
-**Token Budget**: 1KB
+---
+
+### get_transcript
+
+Get full transcript data including all conversation turns.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `scenario_id` | string | **Yes** | Scenario UUID |
+| `model` | string | **Yes** | Model ID |
+
+**Returns:** Complete transcript with all turns, provider metadata, cost snapshot, timing.
 
 ---
 
@@ -286,114 +122,56 @@ Get summary of a specific transcript without raw text.
 
 Execute arbitrary GraphQL queries for flexible data access.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `query` | string | Yes | - | GraphQL query string |
-| `variables` | object | No | {} | Query variables |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `query` | string | **Yes** | GraphQL query string |
+| `variables` | object | No | Query variables |
 
-**Example**:
-```json
-{
-  "query": "query GetRun($id: ID!) { run(id: $id) { status progress { completed total } } }",
-  "variables": {"id": "run-456"}
-}
-```
-
-**Response**:
-```json
-{
-  "data": {
-    "run": {
-      "status": "RUNNING",
-      "progress": {
-        "completed": 25,
-        "total": 50
-      }
-    }
-  }
-}
-```
-
-**Constraints**:
-- **Read-only**: Mutations are rejected with `MUTATION_NOT_ALLOWED` error
-- **Token Budget**: 10KB (returns `RESPONSE_TOO_LARGE` error if exceeded)
+**Note:** Mutations are not allowed - read-only queries only.
 
 ---
 
-## Write Tools
+### list_system_settings
 
-Tools that modify data or trigger actions.
+List system configuration settings.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `key` | string | No | Get specific setting by exact key |
+| `prefix` | string | No | Get settings starting with prefix |
+
+**Returns:** Setting key, value, timestamps.
+
+---
+
+## Definition Tools (Create/Modify)
 
 ### create_definition
 
 Create a new scenario definition for measuring AI value priorities.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `name` | string | Yes | - | Definition name (1-255 chars) |
-| `content` | object | Yes | - | Definition content (see below) |
-| `folder` | string | No | - | Organization folder |
-| `tags` | string[] | No | [] | Categorization tags |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `name` | string | **Yes** | Definition name (1-255 chars) |
+| `content` | object | **Yes** | Definition content with preamble, template, dimensions |
+| `folder` | string | No | Organization folder |
+| `tags` | string[] | No | Tag names for categorization |
 
-**Content Structure**:
-```json
-{
-  "preamble": "You are an ethics advisor helping a hospital...",
-  "template": "A hospital must decide whether to [Physical_Safety] while considering [Economics]...",
-  "dimensions": [
-    {
-      "name": "Physical_Safety",
-      "levels": [
-        {"score": 1, "label": "Minor risk", "options": ["slight risk", "minimal harm"]},
-        {"score": 3, "label": "Moderate risk"},
-        {"score": 5, "label": "Life-threatening"}
-      ]
-    },
-    {
-      "name": "Economics",
-      "levels": [
-        {"score": 1, "label": "Minimal cost"},
-        {"score": 3, "label": "Significant cost"},
-        {"score": 5, "label": "Catastrophic cost"}
-      ]
-    }
-  ],
-  "matching_rules": "optional rules for scenario generation"
-}
-```
+**Content Structure:**
 
-**Dimension Requirements**:
-- `name`: Must be one of the 14 canonical values (see [Values Reference](#canonical-values))
-- `levels`: Array of 3-5 intensity levels
-- Each level has `score` (1-5), `label`, optional `options` array, optional `description`
+Dimensions must be **value-based** using the 19 canonical Schwartz values:
 
-**Response**:
-```json
-{
-  "success": true,
-  "definition_id": "def-789",
-  "name": "Medical Resource Allocation",
-  "estimated_scenario_count": 25,
-  "validation_warnings": [],
-  "scenario_expansion": {
-    "queued": true,
-    "job_id": "job-123"
-  }
-}
-```
+| Higher-Order Category | Values |
+|-----------------------|--------|
+| **Openness to Change** | Self_Direction_Thought, Self_Direction_Action, Stimulation, Hedonism |
+| **Self-Enhancement** | Achievement, Power_Dominance, Power_Resources, Face |
+| **Conservation** | Security_Personal, Security_Societal, Tradition, Conformity_Rules, Conformity_Interpersonal, Humility |
+| **Self-Transcendence** | Benevolence_Dependability, Benevolence_Caring, Universalism_Concern, Universalism_Nature, Universalism_Tolerance |
 
-**Side Effects**:
-- Persists definition to database
-- Queues async scenario expansion job
-- Logs audit event
-
-**Validation Limits**:
-- Max 10 dimensions
-- 3-5 levels per dimension
-- Max 10,000 char template
-- Max 1,000 generated scenarios
+Each dimension has 3-5 intensity levels with scores 1-5.
 
 ---
 
@@ -401,360 +179,383 @@ Create a new scenario definition for measuring AI value priorities.
 
 Fork an existing definition with optional modifications.
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `parent_id` | string | Yes | - | ID of definition to fork |
-| `name` | string | Yes | - | Name for forked definition |
-| `version_label` | string | No | - | Human-readable version label |
-| `changes` | object | No | {} | Partial content overrides |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `parent_id` | string | **Yes** | ID of definition to fork |
+| `name` | string | **Yes** | Name for the fork |
+| `version_label` | string | No | Human-readable version label |
+| `changes` | object | No | Partial content changes |
 
-**Changes Structure** (all fields optional):
-```json
-{
-  "preamble": "Updated preamble text...",
-  "template": "Modified template with [Physical_Safety]...",
-  "dimensions": [...],
-  "matching_rules": "new rules"
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "definition_id": "def-790",
-  "parent_id": "def-789",
-  "name": "Medical Resource Allocation v2",
-  "version_label": "v2.0",
-  "diff_summary": [
-    "Modified preamble",
-    "Added dimension: Compassion"
-  ],
-  "scenario_expansion": {
-    "queued": true,
-    "job_id": "job-124"
-  }
-}
-```
-
-**Notes**:
-- Unspecified fields inherit from parent
-- Creates parent-child relationship for version tracking
-- Queues async scenario expansion
+**Returns:** Definition ID and diff summary.
 
 ---
 
 ### validate_definition
 
-Validate definition content WITHOUT persisting to database.
+Validate definition content without saving (dry run).
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `content` | object | Yes | - | Definition content to validate |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `content` | object | **Yes** | Definition content to validate |
 
-**Response**:
-```json
-{
-  "valid": true,
-  "errors": [],
-  "warnings": [
-    "Consider adding a third dimension for richer scenarios"
-  ],
-  "estimatedScenarioCount": 25,
-  "dimensionCoverage": {
-    "Physical_Safety": 5,
-    "Economics": 5,
-    "combinations": 25
-  }
-}
-```
-
-**Response (invalid)**:
-```json
-{
-  "valid": false,
-  "errors": [
-    "Unknown dimension name: Safety (did you mean Physical_Safety?)",
-    "Dimension Economics has only 2 levels (minimum 3)"
-  ],
-  "warnings": [],
-  "estimatedScenarioCount": 0,
-  "dimensionCoverage": {}
-}
-```
-
-**Notes**:
-- No database persistence
-- No LLM calls
-- Fast validation for iterative authoring
-
----
-
-### start_run
-
-Start an evaluation run with specified models.
-
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `definition_id` | string | Yes | - | Definition to run |
-| `models` | string[] | Yes | - | Model IDs to evaluate |
-| `sample_percentage` | number | No | 100 | Percentage of scenarios (1-100) |
-| `sample_seed` | number | No | - | Random seed for reproducibility |
-| `priority` | enum | No | NORMAL | LOW, NORMAL, HIGH |
-
-**Response**:
-```json
-{
-  "success": true,
-  "run_id": "run-567",
-  "definition_id": "def-789",
-  "queued_task_count": 50,
-  "estimated_cost": "$0.25",
-  "config": {
-    "models": ["gpt-4", "claude-3-sonnet"],
-    "samplePercentage": 100,
-    "priority": "NORMAL"
-  },
-  "progress": {
-    "total": 50,
-    "completed": 0,
-    "failed": 0
-  }
-}
-```
-
-**Side Effects**:
-- Creates run in database
-- Queues `probe_scenario` jobs for each model-scenario pair
-- Logs audit event
-
-**Requirements**:
-- Definition must exist and not be soft-deleted
-- Definition must have generated scenarios
-- At least one model specified
+**Returns:** Validation results including errors, warnings, estimated scenario count.
 
 ---
 
 ### generate_scenarios_preview
 
-Preview scenarios that would be generated from a definition.
+Preview scenarios that would be generated from a definition (dry run).
 
-**Parameters**:
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `definition_id` | string | Yes | - | Definition to preview |
-| `max_scenarios` | number | No | 5 | Max scenarios to return (1-10) |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `definition_id` | string | **Yes** | Definition UUID |
+| `max_scenarios` | integer | No | Max scenarios to return (1-10, default 5) |
 
-**Response**:
-```json
-{
-  "scenario_count": 25,
-  "scenarios": [
-    {
-      "name": "High safety risk, minimal cost",
-      "dimension_values": {
-        "Physical_Safety": 5,
-        "Economics": 1
-      },
-      "body_preview": "A hospital must decide whether to proceed with a life-threatening..."
-    }
-  ],
-  "sample_body": "Full text of first scenario for verification...",
-  "dimensions": [
-    {"name": "Physical_Safety", "levelCount": 5},
-    {"name": "Economics", "levelCount": 5}
-  ]
-}
-```
-
-**Notes**:
-- No LLM calls
-- No database persistence
-- All combinations computed locally
-- Good for verifying before creating definition
+**Returns:** Total count, sample scenarios, first scenario's full body.
 
 ---
 
-## Resources
+### delete_definition
 
-Documentation resources available via the MCP resource protocol.
+Soft-delete a definition and all descendants.
 
-### authoring-guide
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `definition_id` | string | **Yes** | Definition UUID |
 
-**URI**: `valuerank://authoring/guide`
-
-Best practices for scenario authoring:
-- Definition structure (preamble, template, dimensions)
-- Preamble best practices
-- Template design rules
-- VALUE-BASED dimension design (critical guidance)
-- Common pitfalls to avoid
-- Testing guidelines
-
-### authoring-examples
-
-**URI**: `valuerank://authoring/examples`
-
-Four annotated example definitions:
-1. Medical Resource Allocation (Fair_Process, Compassion, Economics)
-2. Whistleblowing Dilemma (Loyalty, Social_Duty, Physical_Safety)
-3. Privacy vs Safety (Freedom, Physical_Safety)
-4. Simple Two-Dimension Design (Economics, Compassion)
-
-Includes anti-patterns to avoid.
-
-### preamble-templates
-
-**URI**: `valuerank://authoring/preamble-templates`
-
-Tested preamble patterns:
-- Core principles (neutrality, clarity, brevity, naturalness)
-- General-purpose templates (Advisor, Consultant, Helper)
-- Domain-specific templates (Medical, Business, Tech, Environmental, Legal, Education)
-- Anti-patterns (value-biased, instruction-heavy, outcome-suggesting)
-- Customization tips
-
-### value-pairs
-
-**URI**: `valuerank://authoring/value-pairs`
-
-Value tension reference:
-- The 14 canonical values with definitions
-- High-tension value pairs (8 pairs)
-- Moderate-tension value pairs (6 pairs)
-- Design guidance for single vs multiple tensions
-- Example applications
+**Behavior:** Cascades to scenarios and child definitions. Blocks if run is in RUNNING status.
 
 ---
 
-## Canonical Values
+## Run Tools (Execute)
 
-All VALUE-BASED dimensions must use these names:
+### start_run
 
-| Value | Definition |
-|-------|------------|
-| `Physical_Safety` | Protection from bodily harm |
-| `Compassion` | Empathy and care for others' suffering |
-| `Fair_Process` | Following rules and procedures equally |
-| `Equal_Outcomes` | Ensuring everyone gets the same result |
-| `Freedom` | Individual autonomy and choice |
-| `Social_Duty` | Obligations to society and community |
-| `Harmony` | Maintaining peace and avoiding conflict |
-| `Loyalty` | Faithfulness to groups and relationships |
-| `Economics` | Financial efficiency and resource optimization |
-| `Human_Worthiness` | Inherent dignity and value of humans |
-| `Childrens_Rights` | Special protections for minors |
-| `Animal_Rights` | Consideration for non-human animals |
-| `Environmental_Rights` | Protection of ecosystems and nature |
-| `Tradition` | Preserving established customs and practices |
+Start an evaluation run for a definition.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `definition_id` | string | **Yes** | Definition UUID |
+| `models` | string[] | **Yes** | Model IDs to evaluate (at least one) |
+| `sample_percentage` | integer | No | Percentage of scenarios (1-100, default 100) |
+| `sample_seed` | integer | No | Random seed for reproducible sampling |
+| `priority` | string | No | Job priority: LOW, NORMAL, HIGH |
+
+**Returns:** Run ID, queued task count, estimated cost.
 
 ---
 
-## Token Budget Management
+### delete_run
 
-Each tool has a token budget to keep responses within model context limits:
+Soft-delete a run and associated data.
 
-| Tool | Budget | Truncation Strategy |
-|------|--------|---------------------|
-| `list_definitions` | 2KB | Truncate to 20 items |
-| `list_runs` | 2KB | Truncate to 10 items |
-| `get_run_summary` | 5KB | Remove insights/llmSummary |
-| `get_dimension_analysis` | 2KB | Truncate dimensions |
-| `get_transcript_summary` | 1KB | No additional truncation |
-| `graphql_query` | 10KB | Return error |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+
+**Behavior:** Cancels pending jobs, cascades to transcripts and analysis.
 
 ---
 
-## Example Workflows
+## LLM Management Tools
 
-### Interactive Analysis
+### list_llm_providers
 
-```
-User: "Which scenarios show the biggest disagreement between GPT-4 and Claude?"
+List all available LLM providers with settings.
 
-Agent → MCP: get_run_summary(run_id: "run-456")
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `include_models` | boolean | No | Include model details (default false) |
 
-Agent: "Based on the analysis, the top 3 most contested scenarios are:
-1. scenario-12 (variance: 0.45) - GPT-4: 2, Claude: 4
-2. scenario-8 (variance: 0.38) - GPT-4: 5, Claude: 2
-3. scenario-15 (variance: 0.32) - GPT-4: 1, Claude: 3
-
-Claude prioritizes Physical_Safety more consistently, while GPT-4
-shows more variation based on economic factors."
-```
-
-### Scenario Authoring
-
-```
-User: "Create a scenario about self-driving cars and the trolley problem"
-
-Agent → MCP: get_resource("valuerank://authoring/guide")
-Agent → MCP: get_resource("valuerank://authoring/value-pairs")
-
-Agent: [Studies format and best practices]
-
-Agent → MCP: validate_definition(content: {...})
-
-← MCP: {valid: true, warnings: ["Consider adding outcome reversibility"]}
-
-Agent → MCP: create_definition(name: "Autonomous Vehicle Ethics", content: {...})
-
-← MCP: {definition_id: "def-abc", scenario_expansion: {queued: true}}
-
-Agent: "Created definition 'Autonomous Vehicle Ethics' with 25 scenarios.
-Scenario generation is running. Would you like to start a run?"
-
-User: "Yes, compare GPT-4 and Claude"
-
-Agent → MCP: start_run(definition_id: "def-abc", models: ["gpt-4", "claude-3-sonnet"])
-
-← MCP: {run_id: "run-xyz", queued_task_count: 50}
-
-Agent: "Started run-xyz with 50 evaluation tasks. I'll check back when complete."
-```
+**Returns:** Provider name, display name, rate limits, enabled status.
 
 ---
 
-## Comparison to Original Design
+### list_llm_models
 
-The implemented MCP interface closely follows the [original design](../preplanning/mcp-interface.md) with these differences:
+List all available LLM models with costs.
 
-| Feature | Original Design | Implementation |
-|---------|-----------------|----------------|
-| `compare_runs` tool | Planned | Deferred (Stage 13) |
-| `get_experiment` tool | Planned | Deferred (Stage 10) |
-| `get_model_profile` tool | Planned | Not implemented |
-| `search_scenarios` tool | Planned | Not implemented |
-| Data science tools | Planned | Not implemented |
-| `export_for_analysis` tool | Planned | Use REST export endpoints instead |
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `provider_id` | string | No | Filter by provider UUID |
+| `provider_name` | string | No | Filter by provider name |
+| `status` | string | No | Filter: active, deprecated, all |
+| `available_only` | boolean | No | Only show models with API keys |
 
-The core read/write tools for definitions and runs are fully implemented as designed.
+**Returns:** Model ID, display name, provider, costs, availability.
+
+---
+
+### get_llm_model
+
+Get detailed information about a specific model.
+
+**Parameters (one of):**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | No | Model UUID |
+| `provider_name` + `model_id` | strings | No | Lookup by identifier |
+
+---
+
+### create_llm_model
+
+Create a new LLM model for a provider.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `provider_id` | string | **Yes** | Provider UUID |
+| `model_id` | string | **Yes** | API model identifier |
+| `display_name` | string | **Yes** | Human-readable name |
+| `cost_input_per_million` | number | **Yes** | Input token cost |
+| `cost_output_per_million` | number | **Yes** | Output token cost |
+| `set_as_default` | boolean | No | Make this the provider default |
+
+---
+
+### update_llm_model
+
+Update an existing model's properties.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | **Yes** | Model UUID |
+| `display_name` | string | No | New display name |
+| `cost_input_per_million` | number | No | New input cost |
+| `cost_output_per_million` | number | No | New output cost |
+| `api_config` | object | No | Provider-specific API config |
+
+---
+
+### deprecate_llm_model
+
+Mark a model as deprecated.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | **Yes** | Model UUID |
+
+**Behavior:** Sets status to DEPRECATED, promotes another default if needed.
+
+---
+
+### reactivate_llm_model
+
+Restore a deprecated model to ACTIVE status.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | **Yes** | Model UUID |
+
+---
+
+### set_default_llm_model
+
+Set a model as the default for its provider.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | **Yes** | Model UUID |
+
+---
+
+### update_llm_provider
+
+Update provider settings (rate limits, enabled status).
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string | **Yes** | Provider UUID |
+| `max_parallel_requests` | integer | No | Concurrent request limit (1-100) |
+| `requests_per_minute` | integer | No | Rate limit (1-10000) |
+| `is_enabled` | boolean | No | Enable/disable provider |
+
+---
+
+### set_infra_model
+
+Configure which model handles infrastructure tasks.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `purpose` | string | **Yes** | scenario_generator, judge, or summarizer |
+| `provider_name` | string | **Yes** | Provider name |
+| `model_id` | string | **Yes** | Model identifier |
+
+---
+
+## Operations Tools (Diagnostics & Recovery)
+
+### set_summarization_parallelism
+
+Configure max parallel summarization jobs.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `max_parallel` | integer | **Yes** | Max parallel jobs (1-100) |
+
+**Behavior:** Hot-reloads handler with new batchSize immediately.
+
+---
+
+### cancel_summarization
+
+Cancel pending summarization jobs for a run.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+
+**Validation:** Run must be in SUMMARIZING state.
+
+---
+
+### restart_summarization
+
+Restart summarization for a completed/failed run.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `force` | boolean | No | Re-summarize ALL transcripts (default: only missing) |
+
+**Validation:** Run must be in terminal state (COMPLETED, FAILED, CANCELLED).
+
+---
+
+### recover_run
+
+Re-queue missing or orphaned jobs for a stuck run.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+
+**Returns:** Action taken, requeued count, run progress.
+
+**Use when:** Run is stuck in RUNNING/SUMMARIZING with no active jobs.
+
+---
+
+### trigger_recovery
+
+System-wide recovery scan for all orphaned runs.
+
+**Parameters:** None
+
+**Returns:** Detected count, recovered count, errors.
+
+**Use when:** After API restart, for health checks, incident response.
+
+---
+
+### get_job_queue_status
+
+Query job queue status for a run to diagnose issues.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `include_recent_failures` | boolean | No | Include failure details (default false) |
+
+**Returns:** Counts by job type and state, recent failure details.
+
+**Interpreting results:**
+- `pending=0` and `running=0` but run is RUNNING → jobs lost, needs recovery
+- `failed > 0` → check recent_failures for errors
+
+---
+
+### get_unsummarized_transcripts
+
+Query transcripts that haven't been summarized.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `run_id` | string | **Yes** | Run UUID |
+| `include_failed` | boolean | No | Include error transcripts (default false) |
+| `limit` | integer | No | Max transcripts (default 50, max 100) |
+
+**Returns:** Transcript IDs with model/scenario info, total count.
+
+---
+
+## MCP Resources
+
+In addition to tools, the MCP server provides authoring resources:
+
+| URI | Description |
+|-----|-------------|
+| `valuerank://authoring/guide` | Best practices for scenario authoring |
+| `valuerank://authoring/examples` | Annotated example definitions |
+| `valuerank://authoring/value-pairs` | Common value tensions for dilemmas |
+| `valuerank://authoring/preamble-templates` | Tested preamble patterns |
+
+---
+
+## The 19 Canonical Values Reference
+
+Based on Schwartz et al. (2012). See [docs/values-summary.md](../values-summary.md) for full definitions.
+
+| Value | Higher-Order Category |
+|-------|----------------------|
+| Self_Direction_Thought | Openness to Change |
+| Self_Direction_Action | Openness to Change |
+| Stimulation | Openness to Change |
+| Hedonism | Openness to Change |
+| Achievement | Self-Enhancement |
+| Power_Dominance | Self-Enhancement |
+| Power_Resources | Self-Enhancement |
+| Face | Self-Enhancement |
+| Security_Personal | Conservation |
+| Security_Societal | Conservation |
+| Tradition | Conservation |
+| Conformity_Rules | Conservation |
+| Conformity_Interpersonal | Conservation |
+| Humility | Conservation |
+| Benevolence_Dependability | Self-Transcendence |
+| Benevolence_Caring | Self-Transcendence |
+| Universalism_Concern | Self-Transcendence |
+| Universalism_Nature | Self-Transcendence |
+| Universalism_Tolerance | Self-Transcendence |
 
 ---
 
 ## Source Files
 
-- **Router**: `apps/api/src/mcp/index.ts`
-- **Server**: `apps/api/src/mcp/server.ts`
-- **Auth**: `apps/api/src/mcp/auth.ts`
-- **Rate Limiting**: `apps/api/src/mcp/rate-limit.ts`
-- **Tools**: `apps/api/src/mcp/tools/`
-  - `list-definitions.ts`
-  - `list-runs.ts`
-  - `get-run-summary.ts`
-  - `get-dimension-analysis.ts`
-  - `get-transcript-summary.ts`
-  - `graphql-query.ts`
-  - `create-definition.ts`
-  - `fork-definition.ts`
-  - `validate-definition.ts`
-  - `start-run.ts`
-  - `generate-scenarios-preview.ts`
-- **Resources**: `apps/api/src/mcp/resources/`
-  - `authoring-guide.ts`
-  - `authoring-examples.ts`
-  - `preamble-templates.ts`
-  - `value-pairs.ts`
+| Directory | Contents |
+|-----------|----------|
+| `apps/api/src/mcp/tools/` | Individual tool implementations |
+| `apps/api/src/mcp/tools/index.ts` | Tool registry and imports |
+| `apps/api/src/mcp/resources/` | MCP resource content |
+| `apps/api/src/mcp/server.ts` | MCP server setup |
+
+---
+
+## Related Documentation
+
+- [GraphQL Schema Reference](./graphql-schema.md) - Full GraphQL API
+- [REST Endpoints](./rest-endpoints.md) - REST authentication endpoints
+- [Values Summary](../values-summary.md) - The 19 Schwartz values
+- [Queue System](../backend/queue-system.md) - Job processing architecture
