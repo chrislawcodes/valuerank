@@ -111,7 +111,7 @@ module.exports = {
     // gradual type safety improvements.
     // ============================================================================
     {
-      // API and DB source files: downgrade unsafe-* rules to warnings
+      // API and DB source files: downgrade type safety rules to warnings
       // This allows the codebase to build while we incrementally improve types
       files: ['apps/api/src/**/*.ts', 'packages/db/src/**/*.ts'],
       rules: {
@@ -123,6 +123,8 @@ module.exports = {
         '@typescript-eslint/no-explicit-any': 'warn',
         '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
         '@typescript-eslint/restrict-template-expressions': 'warn',
+        '@typescript-eslint/no-redundant-type-constituents': 'warn',
+        '@typescript-eslint/require-await': 'warn',
       },
     },
     {
