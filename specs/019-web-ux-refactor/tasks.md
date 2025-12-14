@@ -126,17 +126,17 @@
 
 **Independent Test**: Run `wc -l` on refactored files; all should be under 400 lines
 
-### AnalysisPanel Decomposition (516 → ~120 + 6 tabs)
+### AnalysisPanel Decomposition (516 → 351 lines)
 
-- [ ] T049 [US2] Create `components/analysis/tabs/` folder structure
-- [ ] T050 [P] [US2] Extract `components/analysis/tabs/OverviewTab.tsx`
-- [ ] T051 [P] [US2] Extract `components/analysis/tabs/DecisionsTab.tsx`
-- [ ] T052 [P] [US2] Extract `components/analysis/tabs/ScenariosTab.tsx`
-- [ ] T053 [P] [US2] Extract `components/analysis/tabs/ValuesTab.tsx`
-- [ ] T054 [P] [US2] Extract `components/analysis/tabs/AgreementTab.tsx`
-- [ ] T055 [P] [US2] Extract `components/analysis/tabs/MethodsTab.tsx`
-- [ ] T056 [US2] Refactor `components/analysis/AnalysisPanel.tsx` to tab orchestration only
-- [ ] T057 [US2] Create `components/analysis/tabs/index.ts` barrel export
+- [X] T049 [US2] Create `components/analysis/tabs/` folder structure
+- [X] T050 [P] [US2] Extract `components/analysis/tabs/OverviewTab.tsx`
+- [X] T051 [P] [US2] Extract `components/analysis/tabs/DecisionsTab.tsx`
+- [X] T052 [P] [US2] Extract `components/analysis/tabs/ScenariosTab.tsx`
+- [X] T053 [P] [US2] Extract `components/analysis/tabs/ValuesTab.tsx`
+- [X] T054 [P] [US2] Extract `components/analysis/tabs/AgreementTab.tsx`
+- [X] T055 [P] [US2] Extract `components/analysis/tabs/MethodsTab.tsx`
+- [X] T056 [US2] Refactor `components/analysis/AnalysisPanel.tsx` to tab orchestration only
+- [X] T057 [US2] Create `components/analysis/tabs/index.ts` barrel export
 
 ### Visualization Decomposition
 
