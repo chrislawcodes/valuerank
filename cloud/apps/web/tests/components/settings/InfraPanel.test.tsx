@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider } from 'urql';
 import { fromValue, never } from 'wonka';
-import { InfraPanel } from '../../../src/components/settings/InfraPanel';
+import { InfraPanel } from '../../../src/components/settings/infra';
 
 // Mock client factory
 function createMockClient(executeQuery: ReturnType<typeof vi.fn>) {

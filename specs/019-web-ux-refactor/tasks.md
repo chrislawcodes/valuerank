@@ -140,19 +140,19 @@
 
 ### Visualization Decomposition
 
-- [ ] T058 [US2] Create `components/compare/charts/` folder for shared chart primitives
-- [ ] T059 [P] [US2] Extract `components/compare/charts/DistributionChart.tsx` from DecisionsViz
-- [ ] T060 [P] [US2] Extract `components/compare/charts/ValueRadar.tsx` from ValuesViz
-- [ ] T061 [P] [US2] Extract `components/compare/charts/TimelineChart.tsx` from TimelineViz
-- [ ] T062 [US2] Refactor `components/compare/visualizations/ValuesViz.tsx` to composition (<400 lines)
-- [ ] T063 [US2] Refactor `components/compare/visualizations/TimelineViz.tsx` to composition (<400 lines)
-- [ ] T064 [US2] Refactor `components/compare/visualizations/DecisionsViz.tsx` to composition (<400 lines)
+- [X] T058 [US2] Create `components/compare/charts/` folder for shared chart primitives
+- [X] T059 [P] [US2] Extract `components/compare/charts/DistributionChart.tsx` from DecisionsViz
+- [X] T060 [P] [US2] Extract `components/compare/charts/ValueBarChart.tsx` from ValuesViz
+- [X] T061 [P] [US2] Extract `components/compare/charts/TimelineChart.tsx` from TimelineViz
+- [X] T062 [US2] Refactor `components/compare/visualizations/ValuesViz.tsx` to composition (340 lines)
+- [X] T063 [US2] Refactor `components/compare/visualizations/TimelineViz.tsx` to composition (252 lines)
+- [X] T064 [US2] Refactor `components/compare/visualizations/DecisionsViz.tsx` to composition (268 lines)
 
-### ExpandedScenarios Decomposition (410 → ~200 + sub-components)
+### ExpandedScenarios Decomposition (410 → 189 + sub-components)
 
-- [ ] T065 [P] [US2] Extract `components/definitions/ScenarioItem.tsx` from ExpandedScenarios
-- [ ] T066 [P] [US2] Extract `components/definitions/ScenarioDetail.tsx` from ExpandedScenarios
-- [ ] T067 [US2] Refactor `components/definitions/ExpandedScenarios.tsx` to composition (<400 lines)
+- [X] T065 [P] [US2] Extract `components/definitions/scenarios/ScenarioCard.tsx` from ExpandedScenarios
+- [X] T066 [P] [US2] Extract `components/definitions/scenarios/ExpansionStatusBadge.tsx` from ExpandedScenarios
+- [X] T067 [US2] Refactor `components/definitions/ExpandedScenarios.tsx` to composition (189 lines)
 
 **Checkpoint**: All files under 400 lines - run final verification
 
