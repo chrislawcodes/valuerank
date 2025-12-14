@@ -9,6 +9,7 @@ import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-re
 import type { Run } from '../../api/operations/runs';
 import { formatRunName } from '../../lib/format';
 import { Badge, type BadgeProps } from '../ui/Badge';
+import { Card } from '../ui/Card';
 
 type AnalysisCardProps = {
   run: Run;
@@ -56,16 +57,14 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   // Use completed date if available, otherwise created date
   const displayDate = run.completedAt || run.createdAt;
 
+  const isDisabled = analysisStatus === 'computing' || analysisStatus === 'pending';
+
   return (
-    // eslint-disable-next-line react/forbid-elements -- Card button requires custom full-width styling
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={analysisStatus === 'computing' || analysisStatus === 'pending'}
-      className={`w-full text-left bg-white rounded-lg border border-gray-200 p-4 transition-all ${
-        analysisStatus === 'computing' || analysisStatus === 'pending'
-          ? 'opacity-75 cursor-not-allowed'
-          : 'hover:border-teal-300 hover:shadow-sm cursor-pointer'
+    <Card
+      onClick={isDisabled ? undefined : onClick}
+      variant="interactive"
+      className={`w-full text-left ${
+        isDisabled ? 'opacity-75 cursor-not-allowed' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -128,6 +127,6 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
           </div>
         </div>
       </div>
-    </button>
+    </Card>
   );
 }

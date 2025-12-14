@@ -245,10 +245,10 @@
 
 ### Card Migration
 
-- [ ] T093 [US6] Update `components/definitions/DefinitionCard.tsx` to use Card as base
-- [ ] T094 [P] [US6] Update `components/runs/RunCard.tsx` to use Card as base
-- [ ] T095 [P] [US6] Update `components/analysis/AnalysisCard.tsx` to use Card as base
-- [ ] T096 [P] [US6] Update `components/compare/RunSelectorItem.tsx` to use Card as base
+- [X] T093 [US6] Update `components/definitions/DefinitionCard.tsx` to use Card as base
+- [X] T094 [P] [US6] Update `components/runs/RunCard.tsx` to use Card as base
+- [X] T095 [P] [US6] Update `components/analysis/AnalysisCard.tsx` to use Card as base
+- [X] T096 [P] [US6] Update `components/compare/RunSelectorItem.tsx` to use Card as base
 
 **Checkpoint**: All list cards use Card component with consistent hover effects
 

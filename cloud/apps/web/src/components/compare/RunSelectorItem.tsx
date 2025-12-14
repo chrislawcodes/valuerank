@@ -8,6 +8,8 @@
 import { CheckCircle, Circle, AlertTriangle, BarChart2, Clock } from 'lucide-react';
 import type { ComparisonRun } from '../../api/operations/comparison';
 import { formatRunName } from '../../lib/format';
+import { Card } from '../ui/Card';
+import { Badge } from '../ui/Badge';
 
 type RunSelectorItemProps = {
   run: ComparisonRun;
@@ -44,18 +46,17 @@ export function RunSelectorItem({
   const noAnalysis = !run.analysisStatus;
 
   return (
-    // eslint-disable-next-line react/forbid-elements -- Selectable card requires custom full-width styling
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={isDisabled}
+    <Card
+      onClick={isDisabled ? undefined : onToggle}
+      variant="interactive"
+      padding="compact"
       className={`
-        w-full text-left p-3 rounded-lg border transition-all
+        w-full text-left
         ${isSelected
           ? 'bg-teal-50 border-teal-300 ring-1 ring-teal-300'
-          : 'bg-white border-gray-200 hover:border-gray-300'
+          : ''
         }
-        ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
     >
       <div className="flex items-start gap-3">
@@ -77,22 +78,22 @@ export function RunSelectorItem({
             </h3>
             {/* Analysis status indicator */}
             {hasCurrentAnalysis && (
-              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+              <Badge variant="success" size="sm" className="gap-1">
                 <BarChart2 className="w-3 h-3" />
                 Current
-              </span>
+              </Badge>
             )}
             {hasSupersededAnalysis && (
-              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
+              <Badge variant="warning" size="sm" className="gap-1">
                 <Clock className="w-3 h-3" />
                 Superseded
-              </span>
+              </Badge>
             )}
             {noAnalysis && (
-              <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+              <Badge variant="neutral" size="sm" className="gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 No Analysis
-              </span>
+              </Badge>
             )}
           </div>
 
@@ -115,12 +116,9 @@ export function RunSelectorItem({
             {run.definition?.tags && run.definition.tags.length > 0 && (
               <div className="flex items-center gap-1">
                 {run.definition.tags.slice(0, 2).map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600"
-                  >
+                  <Badge key={tag.id} variant="tag" size="sm">
                     {tag.name}
-                  </span>
+                  </Badge>
                 ))}
                 {run.definition.tags.length > 2 && (
                   <span className="text-gray-400">+{run.definition.tags.length - 2}</span>
@@ -130,6 +128,6 @@ export function RunSelectorItem({
           </div>
         </div>
       </div>
-    </button>
+    </Card>
   );
 }

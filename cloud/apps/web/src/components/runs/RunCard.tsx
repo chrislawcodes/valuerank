@@ -8,6 +8,7 @@ import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 
 import type { Run, RunStatus } from '../../api/operations/runs';
 import { formatRunName } from '../../lib/format';
 import { Badge, type BadgeProps } from '../ui/Badge';
+import { Card } from '../ui/Card';
 
 type RunCardProps = {
   run: Run;
@@ -74,11 +75,10 @@ export function RunCard({ run, onClick }: RunCardProps) {
   const progress = run.runProgress;
 
   return (
-    // eslint-disable-next-line react/forbid-elements -- Card button requires custom full-width layout styling
-    <button
-      type="button"
+    <Card
       onClick={onClick}
-      className="w-full text-left bg-white rounded-lg border border-gray-200 p-4 hover:border-teal-300 hover:shadow-sm transition-all"
+      variant="interactive"
+      className="w-full text-left"
     >
       <div className="flex items-start justify-between gap-4">
         {/* Left: Status and Info */}
@@ -146,6 +146,6 @@ export function RunCard({ run, onClick }: RunCardProps) {
           </div>
         </div>
       )}
-    </button>
+    </Card>
   );
 }
