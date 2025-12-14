@@ -54,3 +54,12 @@ export type {
   CancelSummarizationResult,
   RestartSummarizationResult,
 } from './summarization.js';
+
+// Job Queue Service (Feature #018)
+export { getJobQueueStatus } from './job-queue.js';
+export type {
+  JobQueueStatus,
+  JobQueueStatusOptions,
+  JobTypeCounts,
+  JobFailure,
+} from './types.js';
