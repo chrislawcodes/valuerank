@@ -138,7 +138,12 @@ async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
  * Includes provider-specific probe queues for parallelism enforcement.
  */
 export async function registerHandlers(boss: PgBoss): Promise<void> {
-  const batchSize = queueConfig.workerBatchSize;
+  // Import summarization parallelism service
+  const { getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const defaultBatchSize = queueConfig.workerBatchSize;
 
   // Create standard queues first (required by PgBoss v10+)
   for (const registration of handlerRegistrations) {
@@ -149,8 +154,13 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
   // Create provider-specific probe queues
   await createProviderQueues(boss);
 
-  // Register standard handlers
+  // Register standard handlers with appropriate batchSize
   for (const registration of handlerRegistrations) {
+    // Use dynamic batchSize for summarize_transcript
+    const batchSize = registration.name === 'summarize_transcript'
+      ? await getMaxParallelSummarizations()
+      : defaultBatchSize;
+
     log.info({ jobType: registration.name, batchSize }, 'Registering handler');
     await registration.register(boss, batchSize);
   }
@@ -254,4 +264,69 @@ export async function reregisterProviderHandler(
   // 6. Reload rate limiters to pick up new settings
   await reloadLimiters();
   log.debug({ provider: providerName }, 'Rate limiters reloaded');
+}
+
+/**
+ * Re-registers the summarize_transcript queue handler with updated batchSize.
+ * Called when summarization parallelism settings are changed via MCP.
+ *
+ * This function:
+ * 1. Unregisters the existing handler (allows in-flight jobs to complete)
+ * 2. Clears the summarization parallelism cache to reload settings from DB
+ * 3. Registers a new handler with the updated batchSize
+ *
+ * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
+ * by the new handler. In-flight jobs complete normally before the handler is replaced.
+ * PgBoss's offWork() is graceful and does not abort running jobs.
+ */
+export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
+  // Import here to avoid circular dependency
+  const { clearSummarizationCache, getMaxParallelSummarizations } = await import(
+    '../../services/summarization-parallelism/index.js'
+  );
+
+  const queueName = 'summarize_transcript';
+
+  log.info({ queueName }, 'Re-registering summarize handler');
+
+  // 1. Get queue stats before unregistering (for logging)
+  let activeCount = 0;
+  let queuedCount = 0;
+  try {
+    const queues = await boss.getQueues();
+    const queueInfo = queues.find((q) => q.name === queueName);
+    if (queueInfo) {
+      activeCount = queueInfo.activeCount;
+      queuedCount = queueInfo.queuedCount;
+    }
+  } catch {
+    // Ignore errors getting stats
+  }
+
+  // 2. Unregister existing handler - this is GRACEFUL:
+  //    - Stops fetching NEW jobs from the queue
+  //    - In-flight jobs continue to completion
+  //    - Jobs in queue remain untouched
+  await boss.offWork(queueName);
+  log.info(
+    { queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+    'Unregistered existing handler (in-flight jobs will complete)'
+  );
+
+  // 3. Clear cache to force reload from database
+  clearSummarizationCache();
+
+  // 4. Load fresh parallelism setting
+  const batchSize = await getMaxParallelSummarizations();
+
+  // 5. Register new handler with updated batchSize
+  //    This immediately starts processing queued jobs with the new concurrency
+  const summarizeHandler = createSummarizeTranscriptHandler();
+
+  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize }, summarizeHandler);
+
+  log.info(
+    { queueName, batchSize },
+    'Summarize handler re-registered with new settings'
+  );
 }

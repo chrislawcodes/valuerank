@@ -14,8 +14,8 @@
 
 **Purpose**: Project initialization and branch setup
 
-- [ ] T001 Create feature branch `feat/017-parallel-summarization`
-- [ ] T002 Verify local dev environment running (`npm run dev` in cloud/)
+- [X] T001 Create feature branch `feat/017-parallel-summarization`
+- [X] T002 Verify local dev environment running (`npm run dev` in cloud/)
 
 **Checkpoint**: Branch ready, dev environment verified
 
@@ -29,24 +29,25 @@
 
 ### Summarization Parallelism Service
 
-- [ ] T003 Create `cloud/apps/api/src/services/summarization-parallelism/index.ts`:
+- [X] T003 Create `cloud/apps/api/src/services/summarization-parallelism/index.ts`:
   - `getMaxParallelSummarizations()` - Returns cached value or default 8
   - `setMaxParallelSummarizations(value)` - Updates DB and clears cache
   - `clearSummarizationCache()` - Cache invalidation
   - Cache with 60s TTL matching provider parallelism pattern
 
-- [ ] T004 Add unit tests in `cloud/apps/api/tests/services/summarization-parallelism.test.ts`
+- [X] T004 Add unit tests in `cloud/apps/api/tests/services/summarization-parallelism.test.ts`
 
 ### Handler Re-registration Support
 
-- [ ] T005 Update `cloud/apps/api/src/queue/handlers/index.ts`:
+- [X] T005 Update `cloud/apps/api/src/queue/handlers/index.ts`:
   - Add `reregisterSummarizeHandler(boss)` function
   - Follow `reregisterProviderHandler` pattern
   - Clear cache, then boss.offWork() then boss.work(newBatchSize)
 
-- [ ] T006 Update `cloud/apps/api/src/services/run/progress.ts`:
+- [X] T006 Update `cloud/apps/api/src/services/run/progress.ts`:
   - Import `getMaxParallelSummarizations`
   - Use dynamic batchSize in `queueSummarizeJobs()`
+  - NOTE: No changes needed - batchSize controls worker concurrency (handled in T005), not job queueing
 
 **Checkpoint**: Foundation ready - parallelism setting infrastructure complete
 
