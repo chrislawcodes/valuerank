@@ -29,32 +29,32 @@ export function DefinitionHeader({
   const navigate = useNavigate();
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/definitions')}>
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 -mx-1 px-1">
         <ExportButton definitionId={definitionId} hasScenarios={scenarioCount > 0} />
         <Button
           variant="ghost"
           onClick={onDelete}
-          className="text-red-600 hover:bg-red-50"
+          className="text-red-600 hover:bg-red-50 flex-shrink-0"
         >
           <Trash2 className="w-4 h-4 mr-2" />
           Delete
         </Button>
-        <Button variant="secondary" onClick={onFork}>
+        <Button variant="secondary" onClick={onFork} className="flex-shrink-0">
           <GitBranch className="w-4 h-4 mr-2" />
           Fork
         </Button>
-        <Button variant="secondary" onClick={onEdit}>
+        <Button variant="secondary" onClick={onEdit} className="flex-shrink-0">
           <Edit className="w-4 h-4 mr-2" />
           Edit
         </Button>
-        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0}>
+        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0} className="flex-shrink-0">
           <Play className="w-4 h-4 mr-2" />
           Start Run
         </Button>
