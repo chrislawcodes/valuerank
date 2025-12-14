@@ -1,58 +1,67 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '../../lib/utils';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-type ButtonSize = 'sm' | 'md' | 'lg';
+const buttonVariants = cva(
+  // Base styles applied to all variants
+  // Includes responsive min-height for touch targets (44px on mobile)
+  'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed',
+  {
+    variants: {
+      variant: {
+        primary: 'bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500',
+        secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500',
+        ghost: 'bg-transparent text-teal-600 hover:bg-teal-50 focus:ring-teal-500',
+        danger: 'bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-500',
+      },
+      size: {
+        // All sizes have min-h-[44px] on mobile, reduced on larger screens
+        sm: 'px-3 py-1.5 text-sm min-h-[44px] sm:min-h-0',
+        md: 'px-4 py-2 text-base min-h-[44px] sm:min-h-0',
+        lg: 'px-6 py-3 text-lg', // Already large enough
+        icon: 'p-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0', // Square 44px touch target on mobile
+      },
+    },
+    defaultVariants: {
+      variant: 'primary',
+      size: 'md',
+    },
+  }
+);
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  isLoading?: boolean;
-  children: ReactNode;
-};
-
-const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-teal-600 text-white hover:bg-teal-700 focus:ring-teal-500',
-  secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500',
-  ghost: 'bg-transparent text-teal-600 hover:bg-teal-50 focus:ring-teal-500',
-  danger: 'bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-500',
-};
-
-const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-base',
-  lg: 'px-6 py-3 text-lg',
-};
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    isLoading?: boolean;
+    children: ReactNode;
+  };
 
 export function Button({
-  variant = 'primary',
-  size = 'md',
+  variant,
+  size,
   isLoading = false,
   disabled,
-  className = '',
+  className,
   children,
   ...props
 }: ButtonProps) {
+  // For icon-only buttons, require aria-label for accessibility
+  const isIconOnly = size === 'icon';
+
   return (
+    // eslint-disable-next-line react/forbid-elements
     <button
-      className={`
-        inline-flex items-center justify-center
-        font-medium rounded-lg
-        focus:outline-none focus:ring-2 focus:ring-offset-2
-        transition-colors duration-150
-        disabled:opacity-50 disabled:cursor-not-allowed
-        ${variantStyles[variant]}
-        ${sizeStyles[size]}
-        ${className}
-      `}
+      className={cn(buttonVariants({ variant, size }), className)}
       disabled={disabled || isLoading}
+      aria-busy={isLoading ? 'true' : undefined}
       {...props}
     >
       {isLoading && (
         <svg
-          className="animate-spin -ml-1 mr-2 h-4 w-4"
+          className={cn('animate-spin h-4 w-4', isIconOnly ? '' : '-ml-1 mr-2')}
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <circle
             className="opacity-25"
@@ -73,3 +82,6 @@ export function Button({
     </button>
   );
 }
+
+// Export variants for external use
+export { buttonVariants };

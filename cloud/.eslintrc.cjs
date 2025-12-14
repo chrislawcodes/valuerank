@@ -81,6 +81,13 @@ module.exports = {
         // Disable strict-boolean-expressions for React code - patterns like
         // `if (userId)` instead of `if (userId != null)` are idiomatic
         '@typescript-eslint/strict-boolean-expressions': 'off',
+        // Forbid raw <button> elements - use Button component instead
+        'react/forbid-elements': ['error', {
+          forbid: [{
+            element: 'button',
+            message: 'Use <Button> from components/ui/Button instead of raw <button>',
+          }],
+        }],
       },
     },
     {

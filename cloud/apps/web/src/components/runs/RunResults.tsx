@@ -187,30 +187,36 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
       <div className="flex items-center justify-between border-b border-gray-200 pb-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">View:</span>
-          <button
+          <Button
             type="button"
             onClick={() => setViewMode('grouped')}
+            variant="ghost"
+            size="icon"
             className={`p-2 rounded ${
               viewMode === 'grouped'
                 ? 'bg-teal-100 text-teal-700'
                 : 'text-gray-500 hover:bg-gray-100'
             }`}
             title="Group by model"
+            aria-label="Group by model"
           >
             <Grid className="w-4 h-4" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => setViewMode('list')}
+            variant="ghost"
+            size="icon"
             className={`p-2 rounded ${
               viewMode === 'list'
                 ? 'bg-teal-100 text-teal-700'
                 : 'text-gray-500 hover:bg-gray-100'
             }`}
             title="Flat list"
+            aria-label="Flat list"
           >
             <List className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
         {onExport && (

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Tag as TagIcon, Plus, Check, X, ChevronDown, Link } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
 import type { Tag } from '../../api/operations/tags';
 import { useTags } from '../../hooks/useTags';
 
@@ -102,46 +104,54 @@ export function TagSelector({
       <div className="flex flex-wrap gap-1 mb-2">
         {/* Inherited tags first (read-only, purple styling) */}
         {inheritedTags.map((tag) => (
-          <span
+          <Badge
             key={`inherited-${tag.id}`}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-sm rounded-full border border-purple-200"
+            variant="inherited"
+            size="md"
+            className="gap-1 rounded-full"
             title="Inherited from parent definition"
           >
             <Link className="w-3 h-3" />
             {tag.name}
-          </span>
+          </Badge>
         ))}
         {/* Local tags (removable) */}
         {selectedTags.map((tag) => (
-          <span
+          <Badge
             key={tag.id}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 text-sm rounded-full"
+            variant="selected"
+            size="md"
+            className="gap-1 rounded-full"
           >
             {tag.name}
-            <button
+            <Button
               type="button"
               onClick={() => onTagRemove(tag.id)}
               disabled={disabled}
-              className="hover:text-teal-900 disabled:opacity-50"
+              variant="ghost"
+              size="icon"
+              className="w-4 h-4 p-0 hover:text-teal-900 hover:bg-transparent"
               aria-label={`Remove ${tag.name} tag`}
             >
               <X className="w-3 h-3" />
-            </button>
-          </span>
+            </Button>
+          </Badge>
         ))}
       </div>
 
       {/* Dropdown trigger */}
-      <button
+      <Button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        variant="secondary"
+        size="sm"
+        className="gap-2"
       >
         <TagIcon className="w-4 h-4" />
         Add Tag
         <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
+      </Button>
 
       {/* Dropdown */}
       {isOpen && (
@@ -167,6 +177,7 @@ export function TagSelector({
               <>
                 {/* Create new tag option */}
                 {canCreateNew && (
+                  // eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout
                   <button
                     type="button"
                     onClick={handleCreateTag}
@@ -182,6 +193,7 @@ export function TagSelector({
                 {/* Existing tags */}
                 {availableTags.length > 0 ? (
                   availableTags.map((tag) => (
+                    // eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout
                     <button
                       key={tag.id}
                       type="button"

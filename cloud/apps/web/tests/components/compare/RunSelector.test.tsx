@@ -180,7 +180,7 @@ describe('RunSelector', () => {
       );
 
       const button = screen.getByRole('button', { name: /Test Definition/i });
-      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-disabled', 'true');
     });
   });
 

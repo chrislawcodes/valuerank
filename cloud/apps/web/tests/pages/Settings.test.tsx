@@ -46,7 +46,7 @@ function renderSettings(mockClient: ReturnType<typeof createMockClient>) {
 
 // Helper to navigate to API Keys tab
 async function navigateToApiKeysTab() {
-  const apiKeysTab = screen.getByRole('button', { name: /API Keys/i });
+  const apiKeysTab = screen.getByRole('tab', { name: /API Keys/i });
   await userEvent.click(apiKeysTab);
 }
 

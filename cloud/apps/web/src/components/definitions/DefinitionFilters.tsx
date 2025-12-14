@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
 
 export type DefinitionFilterState = {
@@ -87,9 +89,23 @@ export function DefinitionFilters({
 
   const selectedTags = allTags.filter((t) => filters.tagIds.includes(t.id));
 
+  // Count active filters for mobile badge
+  const activeFilterCount =
+    (filters.search ? 1 : 0) +
+    (filters.rootOnly ? 1 : 0) +
+    (filters.hasRuns ? 1 : 0) +
+    filters.tagIds.length;
+
   return (
-    <div className={`space-y-3 ${className}`}>
-      {/* Search bar */}
+    <CollapsibleFilters
+      title="Filters"
+      hasActiveFilters={hasActiveFilters}
+      activeFilterCount={activeFilterCount}
+      onClear={handleClearFilters}
+      className={className}
+    >
+      <div className="space-y-3">
+        {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -100,14 +116,16 @@ export function DefinitionFilters({
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
         />
         {searchInput && (
-          <button
+          <Button
             type="button"
             onClick={() => setSearchInput('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            variant="ghost"
+            size="icon"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 p-0 text-gray-400 hover:text-gray-600 hover:bg-transparent"
             aria-label="Clear search"
           >
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -116,6 +134,7 @@ export function DefinitionFilters({
         <Filter className="w-4 h-4 text-gray-400" />
 
         {/* Root only toggle */}
+        {/* eslint-disable-next-line react/forbid-elements -- Chip toggle requires custom styling */}
         <button
           type="button"
           onClick={handleToggleRootOnly}
@@ -129,6 +148,7 @@ export function DefinitionFilters({
         </button>
 
         {/* Has runs toggle */}
+        {/* eslint-disable-next-line react/forbid-elements -- Chip toggle requires custom styling */}
         <button
           type="button"
           onClick={handleToggleHasRuns}
@@ -143,29 +163,32 @@ export function DefinitionFilters({
 
         {/* Tag filter dropdown */}
         <div className="relative">
-          <button
+          <Button
             type="button"
             onClick={() => setShowTagDropdown(!showTagDropdown)}
-            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-full border transition-colors ${
+            variant="secondary"
+            size="sm"
+            className={`rounded-full ${
               filters.tagIds.length > 0
                 ? 'bg-teal-50 border-teal-300 text-teal-700'
-                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                : ''
             }`}
           >
             Tags
             {filters.tagIds.length > 0 && (
-              <span className="inline-flex items-center justify-center w-5 h-5 bg-teal-600 text-white text-xs rounded-full">
+              <span className="inline-flex items-center justify-center w-5 h-5 bg-teal-600 text-white text-xs rounded-full ml-1">
                 {filters.tagIds.length}
               </span>
             )}
-            <ChevronDown className={`w-4 h-4 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
-          </button>
+            <ChevronDown className={`w-4 h-4 ml-1 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
+          </Button>
 
           {showTagDropdown && (
             <div className="absolute z-50 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
               <div className="max-h-48 overflow-y-auto">
                 {allTags.length > 0 ? (
                   allTags.map((tag) => (
+                    // eslint-disable-next-line react/forbid-elements -- Menu item requires custom styling
                     <button
                       key={tag.id}
                       type="button"
@@ -195,30 +218,35 @@ export function DefinitionFilters({
             className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
           >
             {tag.name}
-            <button
+            <Button
               type="button"
               onClick={() => handleTagToggle(tag.id)}
-              className="hover:text-red-600"
+              variant="ghost"
+              size="icon"
+              className="w-4 h-4 p-0 hover:text-red-600 hover:bg-transparent"
               aria-label={`Remove ${tag.name} filter`}
             >
               <X className="w-3 h-3" />
-            </button>
+            </Button>
           </span>
         ))}
 
-        {/* Clear filters button */}
+        {/* Clear filters button - hidden on mobile (use CollapsibleFilters clear) */}
         {hasActiveFilters && (
-          <button
+          <Button
             type="button"
             onClick={handleClearFilters}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+            variant="ghost"
+            size="sm"
+            className="hidden sm:flex px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-transparent"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 mr-1" />
             Clear filters
-          </button>
+          </Button>
         )}
+        </div>
       </div>
-    </div>
+    </CollapsibleFilters>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../auth/hooks';
 import { LogOut, ChevronDown } from 'lucide-react';
+import { MobileNav } from './MobileNav';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -26,6 +27,9 @@ export function Header() {
   return (
     <header className="bg-[#1A1A1A] h-14">
       <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
+        {/* Mobile navigation - hamburger menu (visible only on mobile < 640px) */}
+        <MobileNav className="mr-2" />
+
         {/* Logo */}
         <div className="flex items-center gap-2">
           <span className="text-xl font-serif font-medium text-white">
@@ -35,7 +39,9 @@ export function Header() {
 
         {/* User menu */}
         <div className="relative" ref={dropdownRef}>
+          {/* eslint-disable-next-line react/forbid-elements -- Dropdown trigger requires custom avatar + text layout */}
           <button
+            type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
           >
@@ -59,7 +65,9 @@ export function Header() {
                   {user?.email}
                 </p>
               </div>
+              {/* eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout */}
               <button
+                type="button"
                 onClick={() => {
                   setIsDropdownOpen(false);
                   logout();

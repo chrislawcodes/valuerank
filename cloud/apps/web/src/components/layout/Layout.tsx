@@ -11,6 +11,7 @@ export function Layout({ children, fullWidth = false }: LayoutProps) {
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
       <Header />
+      {/* NavTabs hidden on mobile (sm breakpoint), shown on tablet/desktop */}
       <NavTabs />
       <main className={fullWidth ? 'px-4 py-8' : 'max-w-7xl mx-auto px-4 py-8'}>
         {children}

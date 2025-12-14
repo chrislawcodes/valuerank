@@ -54,6 +54,7 @@ export function VisualizationNav({
         ].join(' ');
 
         return (
+          // eslint-disable-next-line react/forbid-elements -- Tab button requires custom semantic styling
           <button
             key={viz.id}
             onClick={() => !isDisabled && onVisualizationChange(viz.id)}

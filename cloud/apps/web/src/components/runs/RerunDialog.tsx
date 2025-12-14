@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { X, RefreshCw } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { RunForm } from './RunForm';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import type { Run, StartRunInput } from '../../api/operations/runs';
@@ -79,14 +80,16 @@ export function RerunDialog({
               </p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+            variant="ghost"
+            size="icon"
+            className="p-2 text-gray-400 hover:text-gray-600"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
 
         {/* Content */}

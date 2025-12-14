@@ -20,6 +20,7 @@ function ScenarioCard({ scenario, isExpanded, onToggle }: ScenarioCardProps) {
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
       {/* Header */}
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
       <button
         type="button"
         onClick={onToggle}
@@ -111,13 +112,15 @@ export function ScenarioPreview({
               <Eye className="w-4 h-4" />
               Scenario Preview
             </h3>
-            <button
+            <Button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-gray-600 p-0 h-auto"
             >
               Close
-            </button>
+            </Button>
           </div>
 
           {/* Error state */}

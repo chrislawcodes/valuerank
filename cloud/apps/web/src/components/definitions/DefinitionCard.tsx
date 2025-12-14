@@ -1,6 +1,8 @@
 import { FileText, GitBranch, Play, Calendar } from 'lucide-react';
 import type { Definition } from '../../api/operations/definitions';
 import { TagChips } from './TagChips';
+import { Card } from '../ui/Card';
+import { Badge } from '../ui/Badge';
 
 type DefinitionCardProps = {
   definition: Definition;
@@ -22,10 +24,10 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
   const hasChildren = childrenCount > 0;
 
   return (
-    <button
-      type="button"
+    <Card
       onClick={onClick}
-      className="w-full text-left bg-white rounded-lg border border-gray-200 p-4 hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+      variant="interactive"
+      className="w-full text-left focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -35,10 +37,10 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
         </div>
         {/* Version indicator */}
         {hasParent && (
-          <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">
+          <Badge variant="inherited" size="sm" className="flex-shrink-0 gap-1">
             <GitBranch className="w-3 h-3" />
             Fork
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -64,6 +66,6 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
           </span>
         )}
       </div>
-    </button>
+    </Card>
   );
 }

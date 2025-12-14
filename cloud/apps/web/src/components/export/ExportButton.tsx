@@ -72,17 +72,20 @@ export function ExportButton({
         onClick={() => setIsOpen(!isOpen)}
         disabled={isExporting}
         isLoading={isExporting}
-        className="gap-2"
+        className="gap-1 sm:gap-2"
+        title="Export"
       >
         <Download size={16} />
-        Export
+        <span className="hidden sm:inline">Export</span>
         <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </Button>
 
       {isOpen && (
         <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
           {/* MD Export Option */}
+          {/* eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout */}
           <button
+            type="button"
             onClick={() => handleExport('md')}
             className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
           >
@@ -94,7 +97,9 @@ export function ExportButton({
           </button>
 
           {/* YAML Export Option (future) */}
+          {/* eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout */}
           <button
+            type="button"
             onClick={() => handleExport('yaml')}
             disabled={!hasScenarios}
             className={`w-full px-4 py-2 text-left text-sm flex items-center gap-3 ${

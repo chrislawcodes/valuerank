@@ -25,15 +25,19 @@ function renderLayout(children: React.ReactNode = <div>Test Content</div>) {
 describe('Layout Component', () => {
   it('should render header', () => {
     renderLayout();
-    expect(screen.getByText('ValueRank')).toBeInTheDocument();
+    // Logo appears in both Header and MobileNav, so we check at least one exists
+    const logos = screen.getAllByText('ValueRank');
+    expect(logos.length).toBeGreaterThan(0);
   });
 
   it('should render navigation tabs', () => {
     renderLayout();
-    expect(screen.getByText('Definitions')).toBeInTheDocument();
-    expect(screen.getByText('Runs')).toBeInTheDocument();
-    expect(screen.getByText('Experiments')).toBeInTheDocument();
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+    // Navigation items appear in both NavTabs (desktop) and MobileNav (mobile)
+    // so we check at least one of each exists
+    expect(screen.getAllByText('Definitions').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Runs').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Experiments').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Settings').length).toBeGreaterThan(0);
   });
 
   it('should render children content', () => {

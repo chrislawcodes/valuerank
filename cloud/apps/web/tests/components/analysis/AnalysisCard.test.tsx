@@ -92,7 +92,7 @@ describe('AnalysisCard', () => {
     render(<AnalysisCard run={run} onClick={onClick} />);
 
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
 
     await user.click(button);
 
@@ -106,7 +106,7 @@ describe('AnalysisCard', () => {
     render(<AnalysisCard run={run} onClick={onClick} />);
 
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('renders different status badges', () => {

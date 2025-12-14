@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronRight, Folder, FolderOpen, Tag as TagIcon } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
+import { Button } from '../ui/Button';
 import type { Definition, Tag } from '../../api/operations/definitions';
 
 type DefinitionFolderViewProps = {
@@ -91,21 +92,25 @@ export function DefinitionFolderView({
       {/* Expand/Collapse all controls */}
       {tagGroups.length > 0 && (
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <button
+          <Button
             type="button"
             onClick={expandAll}
-            className="hover:text-gray-700 hover:underline"
+            variant="ghost"
+            size="sm"
+            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
           >
             Expand all
-          </button>
+          </Button>
           <span>/</span>
-          <button
+          <Button
             type="button"
             onClick={collapseAll}
-            className="hover:text-gray-700 hover:underline"
+            variant="ghost"
+            size="sm"
+            className="p-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
           >
             Collapse all
-          </button>
+          </Button>
         </div>
       )}
 
@@ -116,6 +121,7 @@ export function DefinitionFolderView({
         return (
           <div key={tag.id} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Folder header */}
+            {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
             <button
               type="button"
               onClick={() => toggleFolder(tag.id)}
@@ -157,6 +163,7 @@ export function DefinitionFolderView({
       {/* Untagged definitions */}
       {untaggedDefinitions.length > 0 && (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
+          {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
           <button
             type="button"
             onClick={() => toggleFolder('__untagged__')}

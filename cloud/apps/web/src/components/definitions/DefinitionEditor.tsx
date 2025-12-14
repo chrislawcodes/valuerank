@@ -273,6 +273,7 @@ export function DefinitionEditor({
           <div className="mt-2 flex flex-wrap gap-1">
             <span className="text-sm text-gray-500">Placeholders:</span>
             {placeholders.map((p) => (
+              // eslint-disable-next-line react/forbid-elements -- Chip button requires custom styling
               <button
                 key={p}
                 type="button"

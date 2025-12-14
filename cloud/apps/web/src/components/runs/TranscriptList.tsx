@@ -134,6 +134,7 @@ export function TranscriptList({
         return (
           <div key={modelId} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Model header */}
+            {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
             <button
               type="button"
               onClick={() => toggleModel(modelId)}
@@ -180,6 +181,7 @@ type TranscriptRowProps = {
 
 function TranscriptRow({ transcript, onSelect, compact = false }: TranscriptRowProps) {
   return (
+    // eslint-disable-next-line react/forbid-elements -- Row button requires custom full-width layout styling
     <button
       type="button"
       onClick={() => onSelect(transcript)}

@@ -8,6 +8,8 @@
 import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Run } from '../../api/operations/runs';
 import { formatRunName } from '../../lib/format';
+import { Badge, type BadgeProps } from '../ui/Badge';
+import { Card } from '../ui/Card';
 
 type AnalysisCardProps = {
   run: Run;
@@ -19,6 +21,7 @@ type AnalysisStatusConfig = {
   color: string;
   bg: string;
   label: string;
+  badgeVariant: NonNullable<BadgeProps['variant']>;
 };
 
 const DEFAULT_STATUS_CONFIG: AnalysisStatusConfig = {
@@ -26,13 +29,14 @@ const DEFAULT_STATUS_CONFIG: AnalysisStatusConfig = {
   color: 'text-gray-600',
   bg: 'bg-gray-100',
   label: 'Unknown',
+  badgeVariant: 'neutral',
 };
 
 const ANALYSIS_STATUS_CONFIG: Record<string, AnalysisStatusConfig> = {
-  completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Current' },
-  pending: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Pending' },
-  computing: { icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Computing' },
-  failed: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Failed' },
+  completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Current', badgeVariant: 'success' },
+  pending: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Pending', badgeVariant: 'info' },
+  computing: { icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Computing', badgeVariant: 'warning' },
+  failed: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Failed', badgeVariant: 'error' },
 };
 
 function formatDate(dateString: string): string {
@@ -53,15 +57,15 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   // Use completed date if available, otherwise created date
   const displayDate = run.completedAt || run.createdAt;
 
+  const isDisabled = analysisStatus === 'computing' || analysisStatus === 'pending';
+
   return (
-    <button
-      type="button"
+    <Card
       onClick={onClick}
-      disabled={analysisStatus === 'computing' || analysisStatus === 'pending'}
-      className={`w-full text-left bg-white rounded-lg border border-gray-200 p-4 transition-all ${
-        analysisStatus === 'computing' || analysisStatus === 'pending'
-          ? 'opacity-75 cursor-not-allowed'
-          : 'hover:border-teal-300 hover:shadow-sm cursor-pointer'
+      variant="interactive"
+      disabled={isDisabled}
+      className={`w-full text-left ${
+        isDisabled ? 'opacity-75 cursor-not-allowed' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -75,9 +79,9 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
               <h3 className="font-medium text-gray-900 truncate">
                 {formatRunName(run)}
               </h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.color}`}>
+              <Badge variant={statusConfig.badgeVariant} size="count">
                 {statusConfig.label}
-              </span>
+              </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
               {run.definition?.name || 'Unnamed Definition'} · {formatDate(displayDate)}
@@ -86,17 +90,14 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
             {run.definition?.tags && run.definition.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {run.definition.tags.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
-                  >
+                  <Badge key={tag.id} variant="tag" size="sm">
                     {tag.name}
-                  </span>
+                  </Badge>
                 ))}
                 {run.definition.tags.length > 3 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                  <Badge variant="tag" size="sm">
                     +{run.definition.tags.length - 3}
-                  </span>
+                  </Badge>
                 )}
               </div>
             )}
@@ -127,6 +128,6 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
           </div>
         </div>
       </div>
-    </button>
+    </Card>
   );
 }

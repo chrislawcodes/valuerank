@@ -135,6 +135,7 @@ export function MethodsDocumentation({
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
       {/* Header */}
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}

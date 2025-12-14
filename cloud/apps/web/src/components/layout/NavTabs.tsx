@@ -19,7 +19,8 @@ export function NavTabs() {
   };
 
   return (
-    <nav className="bg-[#1A1A1A] border-t border-gray-800">
+    // Hidden on mobile (< 640px), visible on tablet/desktop
+    <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
           {tabs.map((tab) => {
@@ -30,7 +31,7 @@ export function NavTabs() {
                 key={tab.path}
                 to={tab.path}
                 className={
-                  `flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                  `flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
                     isActive
                       ? 'text-white border-teal-500'
                       : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'

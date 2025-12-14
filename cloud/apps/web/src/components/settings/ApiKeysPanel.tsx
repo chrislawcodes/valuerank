@@ -159,17 +159,19 @@ function NewKeyBanner({ keyValue, onDismiss }: { keyValue: string; onDismiss: ()
         </p>
         <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg font-mono text-sm">
           <code className="flex-1 break-all">{keyValue}</code>
-          <button
+          <Button
             onClick={handleCopy}
-            className="p-2 hover:bg-gray-200 rounded transition-colors"
-            title="Copy to clipboard"
+            variant="ghost"
+            size="icon"
+            className="hover:bg-gray-200"
+            aria-label="Copy to clipboard"
           >
             {copied ? (
               <Check className="w-4 h-4 text-green-600" />
             ) : (
               <Copy className="w-4 h-4 text-gray-600" />
             )}
-          </button>
+          </Button>
         </div>
         <div className="mt-6 flex justify-end">
           <Button onClick={onDismiss} variant="primary">

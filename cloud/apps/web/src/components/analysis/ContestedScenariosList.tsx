@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
+import { Button } from '../ui/Button';
 import type { ContestedScenario } from '../../api/operations/analysis';
 
 type ContestedScenariosListProps = {
@@ -159,13 +160,15 @@ export function ContestedScenariosList({
       {scenarios.length > limit && (
         <p className="text-xs text-gray-500 text-center">
           {scenarios.length - limit} more scenarios not shown.{' '}
-          <button
+          <Button
             type="button"
             onClick={() => setLimit(Math.min(limit + 5, scenarios.length))}
-            className="text-teal-600 hover:text-teal-700"
+            variant="ghost"
+            size="sm"
+            className="px-0 py-0 h-auto text-xs text-teal-600 hover:text-teal-700 hover:bg-transparent"
           >
             Show more
-          </button>
+          </Button>
         </p>
       )}
 

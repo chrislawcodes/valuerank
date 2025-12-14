@@ -188,7 +188,9 @@ describe('DefinitionFilters', () => {
       />
     );
 
-    expect(screen.getByText('2')).toBeInTheDocument();
+    // Count badge appears in both CollapsibleFilters (mobile) and Tags button
+    const countBadges = screen.getAllByText('2');
+    expect(countBadges.length).toBeGreaterThan(0);
   });
 
   it('should show Clear filters button when filters are active', () => {

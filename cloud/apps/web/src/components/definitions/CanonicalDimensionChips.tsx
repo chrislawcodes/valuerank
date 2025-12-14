@@ -44,6 +44,7 @@ export function CanonicalDimensionChips({
           const isAdded = existingNamesLower.has(dim.name.toLowerCase());
 
           return (
+            // eslint-disable-next-line react/forbid-elements -- Chip toggle requires custom styling
             <button
               key={dim.name}
               type="button"

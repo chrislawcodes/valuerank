@@ -55,6 +55,7 @@ export function InheritanceIndicator({
               Local
             </span>
             {onClearOverride && (
+              // eslint-disable-next-line react/forbid-elements -- Link-style button requires custom underline styling
               <button
                 type="button"
                 onClick={onClearOverride}
@@ -147,6 +148,7 @@ export function InheritanceBanner({
           <span className="text-sm text-purple-800">
             This is a fork of{' '}
             {onViewParent && parentName ? (
+              // eslint-disable-next-line react/forbid-elements -- Inline link requires custom underline styling
               <button
                 type="button"
                 onClick={onViewParent}

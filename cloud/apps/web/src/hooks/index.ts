@@ -26,3 +26,6 @@ export { useExpandedScenarios } from './useExpandedScenarios';
 export { useComparisonState } from './useComparisonState';
 export { useComparisonData } from './useComparisonData';
 export { useRunsWithAnalysis } from './useRunsWithAnalysis';
+
+// Viewport hooks
+export { useViewport, useMediaQuery } from './useViewport';

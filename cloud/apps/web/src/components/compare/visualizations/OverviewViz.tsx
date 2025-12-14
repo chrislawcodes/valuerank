@@ -8,6 +8,7 @@
  */
 
 import { Info, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Button } from '../../ui/Button';
 import type { ComparisonVisualizationProps, EffectSizeInterpretation } from '../types';
 import { formatRunNameShort } from '../../../lib/format';
 
@@ -126,12 +127,15 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
         <section>
           <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
             Effect Sizes (Cohen&apos;s d)
-            <button
-              className="text-gray-400 hover:text-gray-600"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-6 h-6 p-0 text-gray-400 hover:text-gray-600 hover:bg-transparent"
               title="Cohen's d measures the standardized difference between two means. |d| < 0.2 is negligible, 0.2-0.5 is small, 0.5-0.8 is medium, > 0.8 is large."
+              aria-label="Info about Effect Sizes"
             >
               <Info className="w-4 h-4" />
-            </button>
+            </Button>
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

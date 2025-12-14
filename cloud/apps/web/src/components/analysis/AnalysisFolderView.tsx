@@ -6,6 +6,7 @@
 
 import { useState, useMemo } from 'react';
 import { ChevronRight, Folder, FolderOpen, Tag as TagIcon } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { AnalysisCard } from './AnalysisCard';
 import type { Run, RunDefinitionTag } from '../../api/operations/runs';
 
@@ -96,21 +97,25 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
       {/* Expand/Collapse all controls */}
       {(tagGroups.length > 0 || untaggedRuns.length > 0) && (
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <button
+          <Button
             type="button"
             onClick={expandAll}
-            className="hover:text-gray-700 hover:underline"
+            variant="ghost"
+            size="sm"
+            className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
           >
             Expand all
-          </button>
+          </Button>
           <span>/</span>
-          <button
+          <Button
             type="button"
             onClick={collapseAll}
-            className="hover:text-gray-700 hover:underline"
+            variant="ghost"
+            size="sm"
+            className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:underline hover:bg-transparent"
           >
             Collapse all
-          </button>
+          </Button>
         </div>
       )}
 
@@ -121,6 +126,7 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
         return (
           <div key={tag.id} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Folder header */}
+            {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
             <button
               type="button"
               onClick={() => toggleFolder(tag.id)}
@@ -162,6 +168,7 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
       {/* Untagged runs */}
       {untaggedRuns.length > 0 && (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
+          {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
           <button
             type="button"
             onClick={() => toggleFolder('__untagged__')}
