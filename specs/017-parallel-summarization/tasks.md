@@ -206,13 +206,16 @@
 
 ### Implementation for User Story 6
 
-- [ ] T023 [US6] Verify `set_summarization_parallelism` tool works (from US1)
+- [X] T023 [US6] Verify `set_summarization_parallelism` tool works (from US1)
+  - VERIFIED: 17 tests in set-summarization-parallelism.test.ts
 
-- [ ] T024 [US6] Verify `list_system_settings` shows the setting (from US1)
+- [X] T024 [US6] Verify `list_system_settings` shows the setting (from US1)
+  - VERIFIED: Tool returns default when not configured, shows setting after creation
 
-- [ ] T025 [US6] Add integration test for full MCP workflow in `cloud/apps/api/tests/mcp/tools/summarization-settings.test.ts`
+- [X] T025 [US6] Add integration test for full MCP workflow in `cloud/apps/api/tests/mcp/tools/summarization-settings.test.ts`
+  - DONE: 9 integration tests covering default -> set -> list -> verify workflow
 
-**Checkpoint**: US6 complete - MCP settings tools verified
+**Checkpoint**: US6 complete - MCP settings tools verified ✅
 
 ---
 
