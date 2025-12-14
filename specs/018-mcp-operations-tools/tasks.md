@@ -79,13 +79,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Create `apps/api/src/mcp/tools/trigger-recovery.ts`
+- [X] T012 [US2] Create `apps/api/src/mcp/tools/trigger-recovery.ts`
   - No input parameters
   - Call `recoverOrphanedRuns` from `services/run/recovery.ts`
   - Return `{ success, detected_count, recovered_count, recovered_runs, errors }`
-- [ ] T013 [US2] Add audit logging for trigger_recovery
-- [ ] T014 [US2] Register tool in `apps/api/src/mcp/tools/index.ts`
-- [ ] T015 [US2] Create tests `apps/api/tests/mcp/tools/trigger-recovery.test.ts`
+- [X] T013 [US2] Add audit logging for trigger_recovery
+- [X] T014 [US2] Register tool in `apps/api/src/mcp/tools/index.ts`
+- [X] T015 [US2] Create tests `apps/api/tests/mcp/tools/trigger-recovery.test.ts`
   - Test with multiple stuck runs
   - Test with no stuck runs
   - Test partial failure (some runs recovered, some errored)
