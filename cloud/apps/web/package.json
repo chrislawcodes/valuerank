@@ -15,15 +15,18 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@valuerank/shared": "*",
     "@monaco-editor/react": "^4.7.0",
     "@urql/exchange-auth": "^2.1.6",
+    "@valuerank/shared": "*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "graphql": "^16.8.0",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
     "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
     "urql": "^4.0.0"
   },
   "devDependencies": {

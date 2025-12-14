@@ -14,10 +14,10 @@
 
 **Purpose**: Install dependencies and create foundational utilities
 
-- [ ] T001 Create feature branch `feat/019-web-ux-refactor`
-- [ ] T002 Install CVA dependencies: `npm install class-variance-authority clsx tailwind-merge`
-- [ ] T003 Create `lib/utils.ts` with `cn()` utility function per plan.md Decision 5
-- [ ] T004 Add ESLint rule to warn on raw `<button>` elements per plan.md Decision 3
+- [X] T001 Create feature branch `feat/019-web-ux-refactor`
+- [X] T002 Install CVA dependencies: `npm install class-variance-authority clsx tailwind-merge`
+- [X] T003 Create `lib/utils.ts` with `cn()` utility function per plan.md Decision 5
+- [X] T004 Add ESLint rule to warn on raw `<button>` elements per plan.md Decision 3
 
 **Checkpoint**: Setup complete - component library work can begin
 
