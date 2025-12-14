@@ -13,6 +13,24 @@ This document defines the coding standards and architectural principles for the 
 
 **NEVER push to origin without explicit human confirmation.** Always ask before running `git push`.
 
+### Pre-push Hook
+
+A pre-push hook runs lint and build checks before allowing pushes. This catches CI failures locally.
+
+**Install the hook (one-time setup):**
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+**What it does:**
+- Runs `npx turbo lint --force` to check for ESLint errors
+- Runs `npx turbo build --force` to verify TypeScript compilation
+
+**Bypass (not recommended):**
+```bash
+git push --no-verify
+```
+
 ---
 
 ## Core Principles

@@ -1,0 +1,18 @@
+#!/bin/bash
+# Pre-push hook: Run full build before allowing push
+# This prevents pushing code that fails CI lint/typecheck
+
+set -e
+
+echo "🔍 Running pre-push checks..."
+
+# Change to cloud directory
+cd "$(git rev-parse --show-toplevel)/cloud"
+
+echo "📦 Running lint..."
+npx turbo lint --force
+
+echo "🔨 Running build..."
+npx turbo build --force
+
+echo "✅ Pre-push checks passed!"
