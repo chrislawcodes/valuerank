@@ -50,6 +50,7 @@ export {
   createValidationAudit,
   createDeleteAudit,
   createLlmAudit,
+  createSummarizationAudit,
   type AuditAction,
   type AuditEntry,
   type AuditErrorEntry,

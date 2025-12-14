@@ -12,7 +12,7 @@ import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { cancelSummarization } from '../../services/run/summarization.js';
 import {
   logAuditEvent,
-  createGenericAudit,
+  createSummarizationAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
 
@@ -102,11 +102,10 @@ function registerCancelSummarizationTool(server: McpServer): void {
 
         // Log audit event
         logAuditEvent(
-          createGenericAudit({
+          createSummarizationAudit({
             action: 'cancel_summarization',
             userId,
-            entityId: args.run_id,
-            entityType: 'run',
+            runId: args.run_id,
             requestId,
             details: {
               cancelledCount: result.cancelledCount,
@@ -132,7 +131,7 @@ function registerCancelSummarizationTool(server: McpServer): void {
         if (err instanceof RunStateError) {
           return formatError(
             'INVALID_STATE',
-            `Cannot cancel summarization: run is in ${err.currentState} state`
+            err.message
           );
         }
 

@@ -69,7 +69,9 @@ export type AuditAction =
   | 'update_llm_provider'
   | 'set_infra_model'
   // Parallel summarization (Feature #017)
-  | 'set_summarization_parallelism';
+  | 'set_summarization_parallelism'
+  | 'cancel_summarization'
+  | 'restart_summarization';
 
 /**
  * Audit entry for MCP write operations
@@ -270,6 +272,26 @@ export function createLlmAudit(params: {
     userId: params.userId,
     entityId: params.entityId,
     entityType: params.entityType,
+    requestId: params.requestId,
+    metadata: params.details,
+  };
+}
+
+/**
+ * Creates a standardized audit entry for summarization control operations.
+ */
+export function createSummarizationAudit(params: {
+  action: 'cancel_summarization' | 'restart_summarization';
+  userId: string;
+  runId: string;
+  requestId: string;
+  details?: Record<string, unknown>;
+}): AuditEntry {
+  return {
+    action: params.action,
+    userId: params.userId,
+    entityId: params.runId,
+    entityType: 'run',
     requestId: params.requestId,
     metadata: params.details,
   };

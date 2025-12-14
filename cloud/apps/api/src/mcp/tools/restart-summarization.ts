@@ -12,7 +12,7 @@ import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { restartSummarization } from '../../services/run/summarization.js';
 import {
   logAuditEvent,
-  createGenericAudit,
+  createSummarizationAudit,
 } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
 
@@ -110,11 +110,10 @@ function registerRestartSummarizationTool(server: McpServer): void {
 
         // Log audit event
         logAuditEvent(
-          createGenericAudit({
+          createSummarizationAudit({
             action: 'restart_summarization',
             userId,
-            entityId: args.run_id,
-            entityType: 'run',
+            runId: args.run_id,
             requestId,
             details: {
               queuedCount: result.queuedCount,
@@ -142,7 +141,7 @@ function registerRestartSummarizationTool(server: McpServer): void {
         if (err instanceof RunStateError) {
           return formatError(
             'INVALID_STATE',
-            `Cannot restart summarization: run is in ${err.currentState} state (must be COMPLETED, FAILED, or CANCELLED)`
+            err.message
           );
         }
 
