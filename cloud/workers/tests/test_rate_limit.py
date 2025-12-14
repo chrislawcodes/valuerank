@@ -146,7 +146,7 @@ class TestRateLimitRetry:
 
         with patch("requests.post", side_effect=mock_post):
             with patch("time.sleep"):
-                with patch("common.llm_adapters.log") as mock_log:
+                with patch("common.llm_adapters.base.log") as mock_log:
                     _post_json("http://test", {}, {})
 
                     # Verify warning was logged
