@@ -44,3 +44,13 @@ export {
   signalRunActivity,
   RECOVERY_ACTIVITY_WINDOW_MS,
 } from './scheduler.js';
+
+export {
+  cancelSummarization,
+  restartSummarization,
+} from './summarization.js';
+export type {
+  SummarizeProgress,
+  CancelSummarizationResult,
+  RestartSummarizationResult,
+} from './summarization.js';

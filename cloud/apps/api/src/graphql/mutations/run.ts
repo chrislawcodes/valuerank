@@ -15,6 +15,8 @@ import {
   cancelRun as cancelRunService,
   recoverOrphanedRun as recoverOrphanedRunService,
   triggerRecovery as triggerRecoveryService,
+  cancelSummarization as cancelSummarizationService,
+  restartSummarization as restartSummarizationService,
 } from '../../services/run/index.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
 import { createAuditLog } from '../../services/audit/index.js';
@@ -571,6 +573,163 @@ builder.mutationField('updateRun', (t) =>
       });
 
       return updated;
+    },
+  })
+);
+
+// CancelSummarizationPayload - return type for cancelSummarization mutation
+const CancelSummarizationPayload = builder.objectRef<{
+  run: { id: string };
+  cancelledCount: number;
+}>('CancelSummarizationPayload').implement({
+  description: 'Result of cancelling summarization for a run',
+  fields: (t) => ({
+    run: t.field({
+      type: RunRef,
+      description: 'The updated run',
+      resolve: async (parent, _args, ctx) => {
+        const run = await ctx.loaders.run.load(parent.run.id);
+        if (!run) {
+          throw new Error(`Run not found: ${parent.run.id}`);
+        }
+        return run;
+      },
+    }),
+    cancelledCount: t.exposeInt('cancelledCount', {
+      description: 'Number of pending summarization jobs cancelled',
+    }),
+  }),
+});
+
+// cancelSummarization mutation
+builder.mutationField('cancelSummarization', (t) =>
+  t.field({
+    type: CancelSummarizationPayload,
+    description: `
+      Cancel pending summarization jobs for a run.
+
+      Only works when run is in SUMMARIZING state.
+      Cancels pending summarize_transcript jobs in the queue.
+      Preserves already-completed summaries.
+      Transitions run to COMPLETED state.
+
+      Requires authentication.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to cancel summarization for',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      ctx.log.info({ userId: ctx.user.id, runId }, 'Cancelling summarization via GraphQL');
+
+      const result = await cancelSummarizationService(runId);
+
+      ctx.log.info(
+        { userId: ctx.user.id, runId, cancelledCount: result.cancelledCount },
+        'Summarization cancelled'
+      );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'cancelSummarization', cancelledCount: result.cancelledCount },
+      });
+
+      return {
+        run: { id: result.run.id },
+        cancelledCount: result.cancelledCount,
+      };
+    },
+  })
+);
+
+// RestartSummarizationPayload - return type for restartSummarization mutation
+const RestartSummarizationPayload = builder.objectRef<{
+  run: { id: string };
+  queuedCount: number;
+}>('RestartSummarizationPayload').implement({
+  description: 'Result of restarting summarization for a run',
+  fields: (t) => ({
+    run: t.field({
+      type: RunRef,
+      description: 'The updated run',
+      resolve: async (parent, _args, ctx) => {
+        const run = await ctx.loaders.run.load(parent.run.id);
+        if (!run) {
+          throw new Error(`Run not found: ${parent.run.id}`);
+        }
+        return run;
+      },
+    }),
+    queuedCount: t.exposeInt('queuedCount', {
+      description: 'Number of summarization jobs queued',
+    }),
+  }),
+});
+
+// restartSummarization mutation
+builder.mutationField('restartSummarization', (t) =>
+  t.field({
+    type: RestartSummarizationPayload,
+    description: `
+      Restart summarization for a run.
+
+      Only works when run is in a terminal state (COMPLETED/FAILED/CANCELLED).
+      By default, only re-queues transcripts without summaries or with errors.
+      With force=true, re-queues all transcripts.
+
+      Requires authentication.
+    `,
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'The ID of the run to restart summarization for',
+      }),
+      force: t.arg.boolean({
+        required: false,
+        description: 'If true, re-summarize all transcripts (not just failed/missing)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = String(args.runId);
+      const force = args.force ?? false;
+
+      ctx.log.info({ userId: ctx.user.id, runId, force }, 'Restarting summarization via GraphQL');
+
+      const result = await restartSummarizationService(runId, force);
+
+      ctx.log.info(
+        { userId: ctx.user.id, runId, queuedCount: result.queuedCount, force },
+        'Summarization restarted'
+      );
+
+      // Audit log (non-blocking)
+      createAuditLog({
+        action: 'ACTION',
+        entityType: 'Run',
+        entityId: runId,
+        userId: ctx.user.id,
+        metadata: { action: 'restartSummarization', queuedCount: result.queuedCount, force },
+      });
+
+      return {
+        run: { id: result.run.id },
+        queuedCount: result.queuedCount,
+      };
     },
   })
 );

@@ -131,27 +131,31 @@
 
 ### Implementation for User Story 4
 
-- [ ] T015 [US4] Create `cloud/apps/api/src/services/run/summarization.ts`:
+- [X] T015 [US4] Create `cloud/apps/api/src/services/run/summarization.ts`:
   - `cancelSummarization(runId)` function
   - Cancel pending `summarize_transcript` jobs via SQL (same pattern as `control.ts`)
   - Update `summarizeProgress` to reflect cancelled jobs
   - Return cancelled count
   - Preserve completed summaries
+  - DONE: Full implementation with state validation, job cancellation, progress update
 
-- [ ] T016 [US4] Add unit tests in `cloud/apps/api/tests/services/run/summarization.test.ts`:
+- [X] T016 [US4] Add unit tests in `cloud/apps/api/tests/services/run/summarization.test.ts`:
   - Test cancel with pending jobs
   - Test cancel on completed run (no-op)
   - Test preservation of completed summaries
+  - DONE: 9 tests for cancelSummarization (NotFoundError, RunStateError, cancellation, preservation)
 
-- [ ] T017 [US4] Add GraphQL mutation in `cloud/apps/api/src/graphql/mutations/run.ts`:
+- [X] T017 [US4] Add GraphQL mutation in `cloud/apps/api/src/graphql/mutations/run.ts`:
   - `cancelSummarization(runId: ID!)` mutation
   - Returns `CancelSummarizationPayload { run, cancelledCount }`
   - Require authentication
   - Add audit logging
+  - DONE: Full mutation with auth, logging, audit
 
-- [ ] T018 [US4] Add GraphQL tests in `cloud/apps/api/tests/graphql/mutations/cancel-summarization.test.ts`
+- [X] T018 [US4] Add GraphQL tests in `cloud/apps/api/tests/graphql/mutations/cancel-summarization.test.ts`
+  - DONE: 6 tests for cancel mutation + 8 tests for restart mutation + 1 workflow test
 
-**Checkpoint**: US4 complete - cancel summarization operational
+**Checkpoint**: US4 complete - cancel summarization operational ✅
 
 ---
 
@@ -163,7 +167,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T019 [US5] Add to `cloud/apps/api/src/services/run/summarization.ts`:
+- [X] T019 [US5] Add to `cloud/apps/api/src/services/run/summarization.ts`:
   - `restartSummarization(runId, force?)` function
   - Validate run is in terminal state (COMPLETED/FAILED/CANCELLED)
   - Cancel any pending summarize jobs first (avoid duplicates)
@@ -171,22 +175,26 @@
   - Queue new jobs
   - Update `summarizeProgress` and set status to SUMMARIZING
   - Return queued count
+  - DONE: Full implementation with all features
 
-- [ ] T020 [US5] Add unit tests for restart logic in `cloud/apps/api/tests/services/run/summarization.test.ts`:
+- [X] T020 [US5] Add unit tests for restart logic in `cloud/apps/api/tests/services/run/summarization.test.ts`:
   - Test default mode (failed only)
   - Test force mode (all transcripts)
   - Test rejection on running run
   - Test with no failed transcripts
+  - DONE: 12 tests for restartSummarization covering all cases
 
-- [ ] T021 [US5] Add GraphQL mutation in `cloud/apps/api/src/graphql/mutations/run.ts`:
+- [X] T021 [US5] Add GraphQL mutation in `cloud/apps/api/src/graphql/mutations/run.ts`:
   - `restartSummarization(runId: ID!, force: Boolean)` mutation
   - Returns `RestartSummarizationPayload { run, queuedCount }`
   - Require authentication
   - Add audit logging
+  - DONE: Full mutation with auth, logging, audit
 
-- [ ] T022 [US5] Add GraphQL tests in `cloud/apps/api/tests/graphql/mutations/restart-summarization.test.ts`
+- [X] T022 [US5] Add GraphQL tests in `cloud/apps/api/tests/graphql/mutations/restart-summarization.test.ts`
+  - DONE: Tests in cancel-summarization.test.ts cover both mutations (8 restart tests)
 
-**Checkpoint**: US5 complete - restart summarization operational
+**Checkpoint**: US5 complete - restart summarization operational ✅
 
 ---
 
