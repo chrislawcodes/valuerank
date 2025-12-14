@@ -61,8 +61,9 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
 
   return (
     <Card
-      onClick={isDisabled ? undefined : onClick}
+      onClick={onClick}
       variant="interactive"
+      disabled={isDisabled}
       className={`w-full text-left ${
         isDisabled ? 'opacity-75 cursor-not-allowed' : ''
       }`}

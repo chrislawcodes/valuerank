@@ -31,26 +31,29 @@ const cardVariants = cva(
 export type CardProps = HTMLAttributes<HTMLDivElement> &
   VariantProps<typeof cardVariants> & {
     children: ReactNode;
+    /** When true, marks the interactive card as disabled (aria-disabled, removes tabIndex) */
+    disabled?: boolean;
   };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ variant, padding, className, children, onClick, ...props }, ref) => {
+  ({ variant, padding, className, children, onClick, disabled, ...props }, ref) => {
     // Add keyboard support for interactive cards
-    const isInteractive = variant === 'interactive' || onClick !== undefined;
+    const isInteractive = (variant === 'interactive' || onClick !== undefined) && !disabled;
 
     return (
       <div
         ref={ref}
         className={cn(cardVariants({ variant: onClick ? 'interactive' : variant, padding }), className)}
-        onClick={onClick}
+        onClick={disabled ? undefined : onClick}
         onKeyDown={isInteractive ? (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>);
           }
         } : undefined}
-        role={isInteractive ? 'button' : undefined}
+        role={onClick || variant === 'interactive' ? 'button' : undefined}
         tabIndex={isInteractive ? 0 : undefined}
+        aria-disabled={disabled || undefined}
         {...props}
       >
         {children}

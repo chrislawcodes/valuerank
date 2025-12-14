@@ -29,7 +29,9 @@ describe('Header Component', () => {
 
   it('should render logo', () => {
     renderHeader();
-    expect(screen.getByText('ValueRank')).toBeInTheDocument();
+    // Logo appears in header and possibly MobileNav, so we check at least one exists
+    const logos = screen.getAllByText('ValueRank');
+    expect(logos.length).toBeGreaterThan(0);
   });
 
   it('should render user initials from name', () => {
@@ -44,22 +46,28 @@ describe('Header Component', () => {
 
   it('should open dropdown when clicking user button', async () => {
     renderHeader();
-    const userButton = screen.getByRole('button');
-    await userEvent.click(userButton);
+    // Get the user button specifically (has the user initials)
+    const userButton = screen.getByText('TU').closest('button');
+    expect(userButton).toBeTruthy();
+    await userEvent.click(userButton!);
     expect(screen.getByText('Sign out')).toBeInTheDocument();
   });
 
   it('should show user email in dropdown', async () => {
     renderHeader();
-    const userButton = screen.getByRole('button');
-    await userEvent.click(userButton);
+    // Get the user button specifically (has the user initials)
+    const userButton = screen.getByText('TU').closest('button');
+    expect(userButton).toBeTruthy();
+    await userEvent.click(userButton!);
     expect(screen.getByText('test@example.com')).toBeInTheDocument();
   });
 
   it('should call logout when clicking sign out', async () => {
     renderHeader();
-    const userButton = screen.getByRole('button');
-    await userEvent.click(userButton);
+    // Get the user button specifically (has the user initials)
+    const userButton = screen.getByText('TU').closest('button');
+    expect(userButton).toBeTruthy();
+    await userEvent.click(userButton!);
     const signOutButton = screen.getByText('Sign out');
     await userEvent.click(signOutButton);
     expect(mockLogout).toHaveBeenCalled();
@@ -67,8 +75,10 @@ describe('Header Component', () => {
 
   it('should close dropdown when clicking outside', async () => {
     renderHeader();
-    const userButton = screen.getByRole('button');
-    await userEvent.click(userButton);
+    // Get the user button specifically (has the user initials)
+    const userButton = screen.getByText('TU').closest('button');
+    expect(userButton).toBeTruthy();
+    await userEvent.click(userButton!);
     expect(screen.getByText('Sign out')).toBeInTheDocument();
 
     // Click outside (on the document body)

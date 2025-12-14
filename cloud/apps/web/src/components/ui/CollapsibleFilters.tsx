@@ -26,6 +26,8 @@ type CollapsibleFiltersProps = {
  * On desktop (>= 640px): Shows filters inline
  * On mobile (< 640px): Collapses into an expandable panel
  *
+ * Children are rendered ONCE and the container styling changes based on viewport.
+ *
  * @example
  * <CollapsibleFilters
  *   title="Filters"
@@ -50,7 +52,7 @@ export function CollapsibleFilters({
 
   return (
     <div className={cn('w-full', className)}>
-      {/* Mobile: Collapsible trigger */}
+      {/* Mobile: Collapsible trigger (hidden on desktop) */}
       <div className="sm:hidden">
         <div className="flex items-center justify-between gap-2">
           <Button
@@ -94,23 +96,23 @@ export function CollapsibleFilters({
             </Button>
           )}
         </div>
-
-        {/* Expandable content */}
-        <div
-          id="collapsible-filters-content"
-          className={cn(
-            'overflow-hidden transition-all duration-200 ease-in-out',
-            isExpanded ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
-          )}
-        >
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-            {children}
-          </div>
-        </div>
       </div>
 
-      {/* Desktop: Show filters inline */}
-      <div className="hidden sm:block">{children}</div>
+      {/* Filter content - rendered once with responsive styling */}
+      <div
+        id="collapsible-filters-content"
+        className={cn(
+          // Mobile: collapsible with animation
+          'sm:block sm:max-h-none sm:opacity-100 sm:mt-0 sm:p-0 sm:bg-transparent sm:rounded-none sm:border-0',
+          // Mobile collapsed/expanded states
+          'overflow-hidden transition-all duration-200 ease-in-out',
+          isExpanded
+            ? 'max-h-[500px] opacity-100 mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200'
+            : 'max-h-0 opacity-0 sm:overflow-visible'
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -47,9 +47,10 @@ export function RunSelectorItem({
 
   return (
     <Card
-      onClick={isDisabled ? undefined : onToggle}
+      onClick={onToggle}
       variant="interactive"
       padding="compact"
+      disabled={isDisabled}
       className={`
         w-full text-left
         ${isSelected
