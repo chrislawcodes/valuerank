@@ -83,15 +83,41 @@ builder.objectType(RunRef, {
       type: RunProgress,
       nullable: true,
       description: 'Structured progress information with percentComplete',
-      resolve: (run) => {
+      resolve: async (run) => {
         const progress = run.progress as ProgressData | null;
         if (!progress) return null;
+
+        // Query per-model counts from ProbeResult
+        const byModelResults = await db.probeResult.groupBy({
+          by: ['modelId', 'status'],
+          where: { runId: run.id },
+          _count: { _all: true },
+        });
+
+        // Aggregate by model
+        const modelMap = new Map<string, { completed: number; failed: number }>();
+        for (const result of byModelResults) {
+          const existing = modelMap.get(result.modelId) ?? { completed: 0, failed: 0 };
+          if (result.status === 'SUCCESS') {
+            existing.completed = result._count._all;
+          } else if (result.status === 'FAILED') {
+            existing.failed = result._count._all;
+          }
+          modelMap.set(result.modelId, existing);
+        }
+
+        const byModel = Array.from(modelMap.entries()).map(([modelId, counts]) => ({
+          modelId,
+          completed: counts.completed,
+          failed: counts.failed,
+        }));
 
         return {
           total: progress.total,
           completed: progress.completed,
           failed: progress.failed,
           percentComplete: calculatePercentComplete(progress),
+          byModel: byModel.length > 0 ? byModel : undefined,
         };
       },
     }),
@@ -101,15 +127,36 @@ builder.objectType(RunRef, {
       type: RunProgress,
       nullable: true,
       description: 'Progress information for transcript summarization (only populated in SUMMARIZING state)',
-      resolve: (run) => {
+      resolve: async (run) => {
         const progress = run.summarizeProgress as ProgressData | null;
         if (!progress) return null;
+
+        // Query per-model counts from Transcript
+        // Use raw query for efficient COUNT with FILTER
+        const byModelResults = await db.$queryRaw<
+          Array<{ model_id: string; completed: bigint; failed: bigint }>
+        >`
+          SELECT
+            model_id,
+            COUNT(*) FILTER (WHERE summarized_at IS NOT NULL) as completed,
+            COUNT(*) FILTER (WHERE decision_code = 'error') as failed
+          FROM transcripts
+          WHERE run_id = ${run.id}
+          GROUP BY model_id
+        `;
+
+        const byModel = byModelResults.map((row) => ({
+          modelId: row.model_id,
+          completed: Number(row.completed),
+          failed: Number(row.failed),
+        }));
 
         return {
           total: progress.total,
           completed: progress.completed,
           failed: progress.failed,
           percentComplete: calculatePercentComplete(progress),
+          byModel: byModel.length > 0 ? byModel : undefined,
         };
       },
     }),

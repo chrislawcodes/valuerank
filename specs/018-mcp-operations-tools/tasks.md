@@ -148,11 +148,11 @@
 
 ### Implementation for User Story 5
 
-- [ ] T022 [US5] Update `apps/api/src/graphql/types/run.ts`
+- [X] T022 [US5] Update `apps/api/src/graphql/types/run.ts`
   - Implement `byModel` resolver for `summarizeProgress`
   - Query: `SELECT model_id, COUNT(*) FILTER (...) FROM transcripts GROUP BY model_id`
-- [ ] T023 [US5] Update `runProgress` resolver with same `byModel` pattern
-- [ ] T024 [US5] Create tests for byModel resolver in `apps/api/tests/graphql/types/run.test.ts`
+- [X] T023 [US5] Update `runProgress` resolver with same `byModel` pattern
+- [X] T024 [US5] Create tests for byModel resolver in `apps/api/tests/graphql/types/run.test.ts`
   - Test multi-model run
   - Test single-model run
   - Test empty run

@@ -360,3 +360,301 @@ describe('Run Progress Polling', () => {
     });
   });
 });
+
+describe('Run Progress byModel field [T024]', () => {
+  const createdDefinitionIds: string[] = [];
+  const createdScenarioIds: string[] = [];
+  const createdRunIds: string[] = [];
+  const createdProbeResultIds: string[] = [];
+  const createdTranscriptIds: string[] = [];
+
+  afterEach(async () => {
+    // Clean up in reverse dependency order
+    if (createdTranscriptIds.length > 0) {
+      await db.transcript.deleteMany({ where: { id: { in: createdTranscriptIds } } });
+      createdTranscriptIds.length = 0;
+    }
+    if (createdProbeResultIds.length > 0) {
+      await db.probeResult.deleteMany({ where: { id: { in: createdProbeResultIds } } });
+      createdProbeResultIds.length = 0;
+    }
+    if (createdRunIds.length > 0) {
+      await db.runScenarioSelection.deleteMany({ where: { runId: { in: createdRunIds } } });
+      await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
+      createdRunIds.length = 0;
+    }
+    if (createdScenarioIds.length > 0) {
+      await db.scenario.deleteMany({ where: { id: { in: createdScenarioIds } } });
+      createdScenarioIds.length = 0;
+    }
+    if (createdDefinitionIds.length > 0) {
+      await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
+      createdDefinitionIds.length = 0;
+    }
+  });
+
+  async function createTestDefinition() {
+    const definition = await db.definition.create({
+      data: {
+        name: 'byModel Test Definition ' + Date.now(),
+        content: { schema_version: 1, preamble: 'Test' },
+      },
+    });
+    createdDefinitionIds.push(definition.id);
+    return definition;
+  }
+
+  async function createTestScenario(definitionId: string) {
+    const scenario = await db.scenario.create({
+      data: {
+        definitionId,
+        name: 'test-scenario-' + Date.now(),
+        content: { schema_version: 1, prompt: 'Test', dimension_values: {} },
+      },
+    });
+    createdScenarioIds.push(scenario.id);
+    return scenario;
+  }
+
+  async function createTestRun(
+    definitionId: string,
+    options?: { progress?: object; summarizeProgress?: object; status?: string }
+  ) {
+    const run = await db.run.create({
+      data: {
+        definitionId,
+        status: options?.status ?? 'RUNNING',
+        config: { models: ['openai:gpt-4o', 'anthropic:claude-3'] },
+        progress: options?.progress ?? { total: 10, completed: 5, failed: 0 },
+        summarizeProgress: options?.summarizeProgress,
+        startedAt: new Date(),
+      },
+    });
+    createdRunIds.push(run.id);
+    return run;
+  }
+
+  async function createProbeResult(
+    runId: string,
+    scenarioId: string,
+    modelId: string,
+    status: 'SUCCESS' | 'FAILED'
+  ) {
+    const result = await db.probeResult.create({
+      data: {
+        runId,
+        scenarioId,
+        modelId,
+        status,
+        errorCode: status === 'FAILED' ? 'TEST_ERROR' : null,
+      },
+    });
+    createdProbeResultIds.push(result.id);
+    return result;
+  }
+
+  async function createTranscript(
+    runId: string,
+    scenarioId: string,
+    modelId: string,
+    options?: { summarized?: boolean; failed?: boolean }
+  ) {
+    const transcript = await db.transcript.create({
+      data: {
+        runId,
+        scenarioId,
+        modelId,
+        content: { schema_version: 1, messages: [], model_response: 'test' },
+        turnCount: 1,
+        tokenCount: 100,
+        durationMs: 1000,
+        summarizedAt: options?.summarized ? new Date() : null,
+        decisionCode: options?.failed ? 'error' : options?.summarized ? '3' : null,
+      },
+    });
+    createdTranscriptIds.push(transcript.id);
+    return transcript;
+  }
+
+  describe('runProgress.byModel', () => {
+    it('returns per-model breakdown from ProbeResults', async () => {
+      const definition = await createTestDefinition();
+      // Create multiple scenarios since ProbeResult has unique constraint on (run_id, scenario_id, model_id)
+      const scenario1 = await createTestScenario(definition.id);
+      const scenario2 = await createTestScenario(definition.id);
+      const run = await createTestRun(definition.id, {
+        progress: { total: 4, completed: 3, failed: 1 },
+      });
+
+      // Create probe results for two models across different scenarios
+      await createProbeResult(run.id, scenario1.id, 'openai:gpt-4o', 'SUCCESS');
+      await createProbeResult(run.id, scenario2.id, 'openai:gpt-4o', 'SUCCESS');
+      await createProbeResult(run.id, scenario1.id, 'anthropic:claude-3', 'SUCCESS');
+      await createProbeResult(run.id, scenario2.id, 'anthropic:claude-3', 'FAILED');
+
+      const query = `
+        query GetRunProgressByModel($id: ID!) {
+          run(id: $id) {
+            runProgress {
+              total
+              completed
+              failed
+              byModel {
+                modelId
+                completed
+                failed
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: run.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+
+      const { runProgress } = response.body.data.run;
+      expect(runProgress.byModel).toHaveLength(2);
+
+      const gptModel = runProgress.byModel.find((m: { modelId: string }) => m.modelId === 'openai:gpt-4o');
+      const claudeModel = runProgress.byModel.find((m: { modelId: string }) => m.modelId === 'anthropic:claude-3');
+
+      expect(gptModel).toEqual({ modelId: 'openai:gpt-4o', completed: 2, failed: 0 });
+      expect(claudeModel).toEqual({ modelId: 'anthropic:claude-3', completed: 1, failed: 1 });
+    });
+
+    it('returns null byModel when no ProbeResults exist', async () => {
+      const definition = await createTestDefinition();
+      const run = await createTestRun(definition.id);
+
+      const query = `
+        query GetRunProgressByModel($id: ID!) {
+          run(id: $id) {
+            runProgress {
+              total
+              completed
+              byModel {
+                modelId
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: run.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.run.runProgress.byModel).toBeNull();
+    });
+  });
+
+  describe('summarizeProgress.byModel', () => {
+    it('returns per-model breakdown from Transcripts', async () => {
+      const definition = await createTestDefinition();
+      const scenario = await createTestScenario(definition.id);
+      const run = await createTestRun(definition.id, {
+        status: 'SUMMARIZING',
+        summarizeProgress: { total: 4, completed: 3, failed: 1 },
+      });
+
+      // Create transcripts for two models
+      await createTranscript(run.id, scenario.id, 'openai:gpt-4o', { summarized: true });
+      await createTranscript(run.id, scenario.id, 'openai:gpt-4o', { summarized: true });
+      await createTranscript(run.id, scenario.id, 'anthropic:claude-3', { summarized: true });
+      await createTranscript(run.id, scenario.id, 'anthropic:claude-3', { failed: true });
+
+      const query = `
+        query GetSummarizeProgressByModel($id: ID!) {
+          run(id: $id) {
+            summarizeProgress {
+              total
+              completed
+              failed
+              byModel {
+                modelId
+                completed
+                failed
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: run.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+
+      const { summarizeProgress } = response.body.data.run;
+      expect(summarizeProgress.byModel).toHaveLength(2);
+
+      const gptModel = summarizeProgress.byModel.find((m: { modelId: string }) => m.modelId === 'openai:gpt-4o');
+      const claudeModel = summarizeProgress.byModel.find((m: { modelId: string }) => m.modelId === 'anthropic:claude-3');
+
+      expect(gptModel).toEqual({ modelId: 'openai:gpt-4o', completed: 2, failed: 0 });
+      expect(claudeModel).toEqual({ modelId: 'anthropic:claude-3', completed: 1, failed: 1 });
+    });
+
+    it('returns null summarizeProgress when not in SUMMARIZING state', async () => {
+      const definition = await createTestDefinition();
+      const run = await createTestRun(definition.id, { status: 'RUNNING' });
+
+      const query = `
+        query GetSummarizeProgressByModel($id: ID!) {
+          run(id: $id) {
+            summarizeProgress {
+              total
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: run.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.run.summarizeProgress).toBeNull();
+    });
+
+    it('returns null byModel when no Transcripts exist', async () => {
+      const definition = await createTestDefinition();
+      const run = await createTestRun(definition.id, {
+        status: 'SUMMARIZING',
+        summarizeProgress: { total: 10, completed: 0, failed: 0 },
+      });
+
+      const query = `
+        query GetSummarizeProgressByModel($id: ID!) {
+          run(id: $id) {
+            summarizeProgress {
+              total
+              byModel {
+                modelId
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: run.id } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.run.summarizeProgress.byModel).toBeNull();
+    });
+  });
+});
