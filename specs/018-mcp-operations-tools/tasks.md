@@ -125,12 +125,12 @@
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] Create `apps/api/src/mcp/tools/get-unsummarized-transcripts.ts`
+- [X] T019 [US4] Create `apps/api/src/mcp/tools/get-unsummarized-transcripts.ts`
   - Input schema: `run_id`, `include_failed` (optional), `limit` (optional, default 50)
   - Query transcripts where `summarizedAt IS NULL`
   - Return `{ run_id, total_count, returned_count, transcripts }`
-- [ ] T020 [US4] Register tool in `apps/api/src/mcp/tools/index.ts`
-- [ ] T021 [US4] Create tests `apps/api/tests/mcp/tools/get-unsummarized-transcripts.test.ts`
+- [X] T020 [US4] Register tool in `apps/api/src/mcp/tools/index.ts`
+- [X] T021 [US4] Create tests `apps/api/tests/mcp/tools/get-unsummarized-transcripts.test.ts`
   - Test with unsummarized transcripts
   - Test with fully summarized run (empty result)
   - Test with `include_failed=true`
