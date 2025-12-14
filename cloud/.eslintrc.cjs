@@ -78,6 +78,9 @@ module.exports = {
         '@typescript-eslint/await-thenable': 'warn',
         // Redundant type constituents in union types
         '@typescript-eslint/no-redundant-type-constituents': 'warn',
+        // Disable strict-boolean-expressions for React code - patterns like
+        // `if (userId)` instead of `if (userId != null)` are idiomatic
+        '@typescript-eslint/strict-boolean-expressions': 'off',
       },
     },
     {
@@ -94,6 +97,14 @@ module.exports = {
         'no-console': 'off',
       },
     },
+    // ============================================================================
+    // API Server Overrides
+    // Note: Some files appear in multiple overrides - this is intentional.
+    // ESLint merges rules from all matching overrides, so a file can get
+    // rules from multiple blocks. This is used to layer concerns:
+    // - One block handles Express async patterns (misused-promises)
+    // - Another handles external API data (unsafe-* rules)
+    // ============================================================================
     {
       // Express routes use async callbacks which are technically misused promises
       // This is idiomatic Express code and safe when errors are handled
