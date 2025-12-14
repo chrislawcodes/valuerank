@@ -72,10 +72,11 @@ export function ExportButton({
         onClick={() => setIsOpen(!isOpen)}
         disabled={isExporting}
         isLoading={isExporting}
-        className="gap-2"
+        className="gap-1 sm:gap-2"
+        title="Export"
       >
         <Download size={16} />
-        Export
+        <span className="hidden sm:inline">Export</span>
         <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </Button>
 
