@@ -270,23 +270,28 @@
 
 ### Implementation for User Story 8
 
-- [ ] T031 [US8] Create `cloud/apps/api/src/mcp/tools/cancel-summarization.ts`:
+- [X] T031 [US8] Create `cloud/apps/api/src/mcp/tools/cancel-summarization.ts`:
   - Input schema: `run_id` (string, required)
   - Calls `cancelSummarization(runId)`
   - Returns success with cancelled count
+  - DONE: Full implementation with audit logging and error handling
 
-- [ ] T032 [US8] Create `cloud/apps/api/src/mcp/tools/restart-summarization.ts`:
+- [X] T032 [US8] Create `cloud/apps/api/src/mcp/tools/restart-summarization.ts`:
   - Input schema: `run_id` (string, required), `force` (boolean, default false)
   - Calls `restartSummarization(runId, force)`
   - Returns success with queued count
+  - DONE: Full implementation with audit logging and error handling
 
-- [ ] T033 [US8] Register both tools in `cloud/apps/api/src/mcp/tools/registry.ts`
+- [X] T033 [US8] Register both tools in `cloud/apps/api/src/mcp/tools/index.ts`
+  - DONE: Added imports for cancel-summarization.js and restart-summarization.js
 
-- [ ] T034 [US8] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/cancel-summarization.test.ts`
+- [X] T034 [US8] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/cancel-summarization.test.ts`
+  - DONE: 10 tests covering input, responses, errors, state transitions
 
-- [ ] T035 [US8] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/restart-summarization.test.ts`
+- [X] T035 [US8] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/restart-summarization.test.ts`
+  - DONE: 20 tests covering input, responses, errors, transitions, job queuing
 
-**Checkpoint**: US8 complete - MCP cancel/restart tools operational
+**Checkpoint**: US8 complete - MCP cancel/restart tools operational ✅
 
 ---
 

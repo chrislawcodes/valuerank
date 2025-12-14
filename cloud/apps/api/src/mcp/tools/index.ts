@@ -50,6 +50,8 @@ import './set-infra-model.js';
 import './list-system-settings.js';
 // Feature 017 - Parallel Summarization
 import './set-summarization-parallelism.js';
+import './cancel-summarization.js';
+import './restart-summarization.js';
 
 /**
  * Registers all MCP tools on the given server
