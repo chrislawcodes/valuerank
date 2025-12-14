@@ -7,20 +7,27 @@
 import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 'lucide-react';
 import type { Run, RunStatus } from '../../api/operations/runs';
 import { formatRunName } from '../../lib/format';
+import { Badge, type BadgeProps } from '../ui/Badge';
 
 type RunCardProps = {
   run: Run;
   onClick?: () => void;
 };
 
-const STATUS_CONFIG: Record<RunStatus, { icon: React.ElementType; color: string; bg: string; label: string }> = {
-  PENDING: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Pending' },
-  RUNNING: { icon: Play, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Running' },
-  PAUSED: { icon: Pause, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Paused' },
-  SUMMARIZING: { icon: FileText, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Summarizing' },
-  COMPLETED: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Completed' },
-  FAILED: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Failed' },
-  CANCELLED: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cancelled' },
+const STATUS_CONFIG: Record<RunStatus, {
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  label: string;
+  badgeVariant: NonNullable<BadgeProps['variant']>;
+}> = {
+  PENDING: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Pending', badgeVariant: 'info' },
+  RUNNING: { icon: Play, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Running', badgeVariant: 'warning' },
+  PAUSED: { icon: Pause, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Paused', badgeVariant: 'warning' },
+  SUMMARIZING: { icon: FileText, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Summarizing', badgeVariant: 'warning' },
+  COMPLETED: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Completed', badgeVariant: 'success' },
+  FAILED: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Failed', badgeVariant: 'error' },
+  CANCELLED: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cancelled', badgeVariant: 'neutral' },
 };
 
 function getStatusLabel(run: Run): string {
@@ -84,9 +91,9 @@ export function RunCard({ run, onClick }: RunCardProps) {
               <h3 className="font-medium text-gray-900 truncate">
                 {formatRunName(run)}
               </h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.color}`}>
+              <Badge variant={statusConfig.badgeVariant} size="count">
                 {getStatusLabel(run)}
-              </span>
+              </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
               {run.definition?.name || 'Unnamed Definition'} · {formatDate(run.createdAt)}

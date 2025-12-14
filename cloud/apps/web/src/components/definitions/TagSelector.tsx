@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Tag as TagIcon, Plus, Check, X, ChevronDown, Link } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
 import type { Tag } from '../../api/operations/tags';
 import { useTags } from '../../hooks/useTags';
 
@@ -103,20 +104,24 @@ export function TagSelector({
       <div className="flex flex-wrap gap-1 mb-2">
         {/* Inherited tags first (read-only, purple styling) */}
         {inheritedTags.map((tag) => (
-          <span
+          <Badge
             key={`inherited-${tag.id}`}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-600 text-sm rounded-full border border-purple-200"
+            variant="inherited"
+            size="md"
+            className="gap-1 rounded-full"
             title="Inherited from parent definition"
           >
             <Link className="w-3 h-3" />
             {tag.name}
-          </span>
+          </Badge>
         ))}
         {/* Local tags (removable) */}
         {selectedTags.map((tag) => (
-          <span
+          <Badge
             key={tag.id}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 text-sm rounded-full"
+            variant="selected"
+            size="md"
+            className="gap-1 rounded-full"
           >
             {tag.name}
             <Button
@@ -130,7 +135,7 @@ export function TagSelector({
             >
               <X className="w-3 h-3" />
             </Button>
-          </span>
+          </Badge>
         ))}
       </div>
 

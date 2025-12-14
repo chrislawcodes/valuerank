@@ -223,15 +223,15 @@
 
 ### Status Badge Migration
 
-- [ ] T087 [US5] Update `components/runs/RunCard.tsx` to use Badge for run status
-- [ ] T088 [P] [US5] Update `components/runs/RunProgress.tsx` to use Badge for status indicators
-- [ ] T089 [P] [US5] Update `components/analysis/AnalysisCard.tsx` to use Badge for status
-- [ ] T090 [P] [US5] Create status-to-variant mapping utility `lib/statusBadge.ts`
+- [X] T087 [US5] Update `components/runs/RunCard.tsx` to use Badge for run status
+- [X] T088 [P] [US5] Update `components/runs/RunProgress.tsx` to use Badge for status indicators
+- [X] T089 [P] [US5] Update `components/analysis/AnalysisCard.tsx` to use Badge for status
+- [X] T090 [P] [US5] Create status-to-variant mapping utility `lib/statusBadge.ts`
 
 ### Tag Badge Migration
 
-- [ ] T091 [US5] Update `components/definitions/TagChips.tsx` to use Badge with tag variant
-- [ ] T092 [US5] Update `components/definitions/TagSelector.tsx` to use Badge for selected tags
+- [X] T091 [US5] Update `components/definitions/TagChips.tsx` to use Badge with tag variant
+- [X] T092 [US5] Update `components/definitions/TagSelector.tsx` to use Badge for selected tags
 
 **Checkpoint**: All status indicators use Badge component with semantic colors
 

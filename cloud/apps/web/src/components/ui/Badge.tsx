@@ -14,6 +14,8 @@ const badgeVariants = cva(
         info: 'bg-blue-100 text-blue-700',
         tag: 'bg-gray-100 text-gray-600',
         neutral: 'bg-gray-100 text-gray-700',
+        inherited: 'bg-purple-50 text-purple-600 border border-purple-200',
+        selected: 'bg-teal-50 text-teal-700',
       },
       size: {
         sm: 'px-2 py-0.5 text-xs rounded',

@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Loader2, Pause, AlertCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Badge, type BadgeProps } from '../ui/Badge';
 import type { Run, RunProgress as RunProgressType } from '../../api/operations/runs';
 import { ExecutionProgress } from './ExecutionProgress';
 
@@ -17,25 +18,30 @@ type RunProgressProps = {
 };
 
 /**
- * Get status color classes.
+ * Get status color classes and badge variant.
  */
-function getStatusColor(status: string): { bg: string; text: string; border: string } {
+function getStatusColor(status: string): {
+  bg: string;
+  text: string;
+  border: string;
+  badgeVariant: NonNullable<BadgeProps['variant']>;
+} {
   switch (status) {
     case 'COMPLETED':
-      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' };
+      return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', badgeVariant: 'success' };
     case 'FAILED':
-      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' };
+      return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', badgeVariant: 'error' };
     case 'CANCELLED':
-      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
+      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200', badgeVariant: 'neutral' };
     case 'PAUSED':
-      return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
+      return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', badgeVariant: 'warning' };
     case 'SUMMARIZING':
-      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' };
+      return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeVariant: 'warning' };
     case 'RUNNING':
-      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+      return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badgeVariant: 'warning' };
     case 'PENDING':
     default:
-      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
+      return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200', badgeVariant: 'info' };
   }
 }
 
@@ -112,12 +118,14 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
     <div className="space-y-4">
       {/* Status badge and progress bar */}
       <div className="flex items-center gap-4">
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${colors.bg} ${colors.border}`}>
+        <Badge
+          variant={colors.badgeVariant}
+          size="md"
+          className="flex items-center gap-2 rounded-full"
+        >
           <StatusIcon status={run.status} />
-          <span className={`text-sm font-medium ${colors.text}`}>
-            {formatStatus(run)}
-          </span>
-        </div>
+          {formatStatus(run)}
+        </Badge>
 
         <div className="flex-1">
           <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
