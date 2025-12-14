@@ -3,30 +3,70 @@
 ## What This Project Does
 ValueRank measures how AI models prioritize moral values in ethical dilemmas. It's a "nutrition label for AI behavior" - making value alignment comparable across models.
 
+## Critical Documentation
+
+**Read these docs before making significant changes:**
+
+| Document | Purpose |
+|----------|---------|
+| [docs/values-summary.md](docs/values-summary.md) | The 19 refined Schwartz values - canonical definitions, higher-order categories, and circular structure. This is the theoretical foundation. |
+| [docs/valuerank_prd.yaml](docs/valuerank_prd.yaml) | Product requirements - user journeys, scenario design rules, Judge evaluation philosophy. |
+| [docs/README.md](docs/README.md) | Cloud platform overview - architecture, components, getting started. |
+| [cloud/CLAUDE.md](cloud/CLAUDE.md) | Cloud project constitution - coding standards, testing, database patterns. |
+
+**Key principles from the docs:**
+- Values are based on Schwartz et al. (2012), DOI: 10.1037/a0029393
+- The Judge doesn't decide right/wrong - it records which values the AI focused on
+- Scenarios must expose true value trade-offs with no procedural escape hatches
+- Opposite quadrants in the circular structure create the strongest value tensions
+
 ## Tech Stack
-- **Python 3** with PyYAML + requests
-- Multi-provider LLM support (OpenAI, Anthropic, Google, XAI, DeepSeek, Mistral)
-- ThreadPoolExecutor for concurrent processing
+
+**Cloud Platform (primary):**
+- **TypeScript/Node.js** - API server, React frontend
+- **PostgreSQL** - Database with Prisma ORM
+- **PgBoss** - Job queue for async processing
+- **Python 3** - Workers for probe, judge, summarize
+- **MCP** - AI agent integration (Claude Code, etc.)
+
+**LLM Providers:** OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral
 
 ## Project Structure
 ```
-src/
-├── probe.py          # Delivers scenarios to AI models, records transcripts
-├── judge_value.py    # Analyzes reasoning against values rubric (core logic)
-├── aggregator.py     # Merges cross-model results
-├── summary.py        # Generates per-model summaries
-├── llm_adapters.py   # Provider abstraction layer (6+ LLM providers)
-├── config_loader.py  # YAML config parsing
-├── utils.py          # Shared utilities
-└── make_blind_rubric.py  # Anonymizes rubric for blind judging
+cloud/                          # Main platform (TypeScript + Python)
+├── apps/
+│   ├── api/                    # GraphQL API server (Express)
+│   │   ├── src/
+│   │   │   ├── graphql/        # Schema, resolvers, types
+│   │   │   ├── mcp/            # MCP server (tools + resources)
+│   │   │   ├── services/       # Business logic
+│   │   │   └── queue/          # PgBoss job handlers
+│   │   └── tests/              # API tests (vitest)
+│   └── web/                    # React frontend (Vite)
+│       └── src/
+│           ├── components/     # UI components
+│           ├── pages/          # Route pages
+│           └── hooks/          # Custom hooks
+├── packages/
+│   ├── db/                     # Prisma schema + queries
+│   └── shared/                 # Logger, errors, canonical dimensions
+└── workers/                    # Python workers (probe, judge, summarize)
 
-config/
-├── runtime.yaml      # Models, threads, temperature settings
-├── values_rubric.yaml # 19 refined Schwartz values with definitions
-└── model_costs.yaml  # Token pricing per model
+docs/                           # Documentation
+├── values-summary.md           # 19 Schwartz values reference
+├── valuerank_prd.yaml          # Product requirements
+└── README.md                   # Cloud platform overview
 
-scenarios/            # Moral dilemma datasets (folder per topic)
-output/               # Generated runs (transcripts, summaries)
+config/                         # Legacy CLI config
+├── runtime.yaml                # Models, threads, temperature
+└── values_rubric.yaml          # 14 moral values (legacy)
+
+src/                            # Legacy CLI pipeline (Python)
+├── probe.py                    # Delivers scenarios to AI models
+├── llm_adapters.py             # LLM provider integrations
+└── ...
+
+devtool/                        # Standalone GUI for scenario authoring
 ```
 
 ## Pipeline Stages
@@ -34,20 +74,12 @@ output/               # Generated runs (transcripts, summaries)
 # 1. Probe - deliver scenarios to target AI models
 python3 -m src.probe --scenarios-folder scenarios/<folder> --output-dir output
 
-# 2. Judge - analyze AI reasoning against values rubric
-python3 -m src.judge_value --run-dir output/<run_id>
-
-# 3. Aggregate - merge multi-model results
-python3 -m src.aggregator --run-dir output/<run_id>
-
-# 4. Summary - generate natural language summaries
+# 2. Summary - generate natural language summaries
 python3 -m src.summary --run-dir output/<run_id> --scenarios-file scenarios/<folder>
 ```
 
 ## Key Files to Know
-- `src/judge_value.py` - Core judging logic, value matching, win-rate calculation
 - `src/llm_adapters.py` - All LLM provider integrations
-- `config/values_rubric.yaml` - The 19 moral values being measured
 - `config/runtime.yaml` - Runtime settings (which models to evaluate)
 
 ## 19 Refined Schwartz Values (by higher-order category)
