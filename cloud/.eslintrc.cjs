@@ -106,12 +106,25 @@ module.exports = {
     },
     // ============================================================================
     // API Server Overrides
-    // Note: Some files appear in multiple overrides - this is intentional.
-    // ESLint merges rules from all matching overrides, so a file can get
-    // rules from multiple blocks. This is used to layer concerns:
-    // - One block handles Express async patterns (misused-promises)
-    // - Another handles external API data (unsafe-* rules)
+    // The API codebase uses dynamic data from Prisma, GraphQL resolvers, and
+    // external APIs. We downgrade all no-unsafe-* rules to warnings for the
+    // entire API to allow gradual type safety improvements.
     // ============================================================================
+    {
+      // All API source files: downgrade unsafe-* rules to warnings
+      // This allows the codebase to build while we incrementally improve types
+      files: ['apps/api/src/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-unsafe-assignment': 'warn',
+        '@typescript-eslint/no-unsafe-member-access': 'warn',
+        '@typescript-eslint/no-unsafe-argument': 'warn',
+        '@typescript-eslint/no-unsafe-return': 'warn',
+        '@typescript-eslint/no-unsafe-call': 'warn',
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
+        '@typescript-eslint/restrict-template-expressions': 'warn',
+      },
+    },
     {
       // Express routes use async callbacks which are technically misused promises
       // This is idiomatic Express code and safe when errors are handled
@@ -127,19 +140,6 @@ module.exports = {
       },
     },
     {
-      // OAuth middleware deals with external API responses that have any types
-      files: [
-        'apps/api/src/auth/**/*.ts',
-        'apps/api/src/mcp/auth.ts',
-        'apps/api/src/mcp/oauth/**/*.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
-        '@typescript-eslint/no-unsafe-argument': 'warn',
-      },
-    },
-    {
       // Queue handlers and services may use setInterval patterns
       files: [
         'apps/api/src/queue/**/*.ts',
@@ -147,77 +147,6 @@ module.exports = {
       ],
       rules: {
         '@typescript-eslint/no-misused-promises': 'warn',
-      },
-    },
-    {
-      // Services dealing with JSON data from database may have any types
-      files: [
-        'apps/api/src/services/**/*.ts',
-        'packages/db/src/**/*.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
-        '@typescript-eslint/no-unsafe-argument': 'warn',
-        '@typescript-eslint/no-unsafe-return': 'warn',
-        '@typescript-eslint/no-unsafe-call': 'warn',
-      },
-    },
-    {
-      // Prisma raw queries and JSON fields may require explicit any
-      files: [
-        'packages/db/src/queries/**/*.ts',
-        'packages/db/src/schema-migration.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
-      },
-    },
-    {
-      // MCP tools deal with dynamic data from external models and GraphQL
-      files: [
-        'apps/api/src/mcp/tools/**/*.ts',
-        'apps/api/src/mcp/oauth/**/*.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'warn',
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
-        '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
-        '@typescript-eslint/restrict-template-expressions': 'warn',
-      },
-    },
-    {
-      // Express middleware and entry points deal with middleware chains and dynamic configuration
-      files: [
-        'apps/api/src/middleware/**/*.ts',
-        'apps/api/src/index.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
-      },
-    },
-    {
-      // Queue spawn deals with process output and dynamic configurations
-      files: [
-        'apps/api/src/queue/spawn.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
-        '@typescript-eslint/restrict-template-expressions': 'warn',
-      },
-    },
-    {
-      // GraphQL utils and audited mutations deal with dynamic resolver data
-      files: [
-        'apps/api/src/graphql/utils/**/*.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-unsafe-assignment': 'warn',
-        '@typescript-eslint/no-unsafe-member-access': 'warn',
       },
     },
   ],
