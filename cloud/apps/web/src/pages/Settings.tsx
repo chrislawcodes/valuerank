@@ -4,8 +4,8 @@ import type { Tab } from '../components/ui/Tabs';
 import { Tabs } from '../components/ui/Tabs';
 import { SystemHealth } from '../components/settings/SystemHealth';
 import { ApiKeysPanel } from '../components/settings/ApiKeysPanel';
-import { ModelsPanel } from '../components/settings/ModelsPanel';
-import { InfraPanel } from '../components/settings/InfraPanel';
+import { ModelsPanel } from '../components/settings/models';
+import { InfraPanel } from '../components/settings/infra';
 
 const TABS: Tab[] = [
   { id: 'health', label: 'System Health', icon: <Activity className="w-4 h-4" /> },

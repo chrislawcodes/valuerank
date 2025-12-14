@@ -64,25 +64,25 @@
 
 ### InfraPanel Decomposition (756 → ~150 + sub-components)
 
-- [ ] T019 [US2] Create `components/settings/infra/` folder structure
-- [ ] T020 [P] [US2] Extract `components/settings/infra/ModelSelectorCard.tsx` - single model selection UI
-- [ ] T021 [P] [US2] Extract `components/settings/infra/ExpansionSettings.tsx` - code generation toggle
-- [ ] T022 [P] [US2] Extract `components/settings/infra/ParallelismSettings.tsx` - summarization controls
-- [ ] T023 [P] [US2] Create `components/settings/infra/types.ts` - shared types
-- [ ] T024 [US2] Refactor `components/settings/infra/InfraPanel.tsx` to orchestration only (<150 lines)
-- [ ] T025 [US2] Create `components/settings/infra/index.ts` barrel export
-- [ ] T026 [US2] Update imports in `pages/Settings.tsx` to use new infra/ path
+- [X] T019 [US2] Create `components/settings/infra/` folder structure
+- [X] T020 [P] [US2] Extract `components/settings/infra/ModelSelectorCard.tsx` - single model selection UI
+- [X] T021 [P] [US2] Extract `components/settings/infra/ExpansionSettings.tsx` - code generation toggle
+- [X] T022 [P] [US2] Extract `components/settings/infra/ParallelismSettings.tsx` - summarization controls
+- [X] T023 [P] [US2] Create `components/settings/infra/types.ts` - shared types
+- [X] T024 [US2] Refactor `components/settings/infra/InfraPanel.tsx` to orchestration only (<150 lines)
+- [X] T025 [US2] Create `components/settings/infra/index.ts` barrel export
+- [X] T026 [US2] Update imports in `pages/Settings.tsx` to use new infra/ path
 
 ### ModelsPanel Decomposition (687 → ~150 + sub-components)
 
-- [ ] T027 [US2] Create `components/settings/models/` folder structure
-- [ ] T028 [P] [US2] Extract `components/settings/models/ProviderSection.tsx` - provider accordion
-- [ ] T029 [P] [US2] Extract `components/settings/models/ModelForm.tsx` - add/edit form
-- [ ] T030 [P] [US2] Extract `components/settings/models/ModelRow.tsx` - single model display
-- [ ] T031 [P] [US2] Create `components/settings/models/types.ts` - shared types
-- [ ] T032 [US2] Refactor `components/settings/models/ModelsPanel.tsx` to orchestration only
-- [ ] T033 [US2] Create `components/settings/models/index.ts` barrel export
-- [ ] T034 [US2] Update imports in `pages/Settings.tsx` to use new models/ path
+- [X] T027 [US2] Create `components/settings/models/` folder structure
+- [X] T028 [P] [US2] Extract `components/settings/models/ProviderSection.tsx` - provider accordion
+- [X] T029 [P] [US2] Extract `components/settings/models/ModelForm.tsx` - add/edit form
+- [X] T030 [P] [US2] Extract `components/settings/models/ModelRow.tsx` - single model display
+- [X] T031 [P] [US2] Create `components/settings/models/types.ts` - shared types
+- [X] T032 [US2] Refactor `components/settings/models/ModelsPanel.tsx` to orchestration only
+- [X] T033 [US2] Create `components/settings/models/index.ts` barrel export
+- [X] T034 [US2] Update imports in `pages/Settings.tsx` to use new models/ path
 
 **Checkpoint**: Settings panels under 400 lines - verify with `wc -l`
 
