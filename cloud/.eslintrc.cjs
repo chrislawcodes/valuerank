@@ -105,15 +105,15 @@ module.exports = {
       },
     },
     // ============================================================================
-    // API Server Overrides
-    // The API codebase uses dynamic data from Prisma, GraphQL resolvers, and
-    // external APIs. We downgrade all no-unsafe-* rules to warnings for the
-    // entire API to allow gradual type safety improvements.
+    // API Server and DB Package Overrides
+    // These codebases use dynamic data from Prisma, GraphQL resolvers, and
+    // external APIs. We downgrade all no-unsafe-* rules to warnings to allow
+    // gradual type safety improvements.
     // ============================================================================
     {
-      // All API source files: downgrade unsafe-* rules to warnings
+      // API and DB source files: downgrade unsafe-* rules to warnings
       // This allows the codebase to build while we incrementally improve types
-      files: ['apps/api/src/**/*.ts'],
+      files: ['apps/api/src/**/*.ts', 'packages/db/src/**/*.ts'],
       rules: {
         '@typescript-eslint/no-unsafe-assignment': 'warn',
         '@typescript-eslint/no-unsafe-member-access': 'warn',
