@@ -14,9 +14,9 @@
 
 **Purpose**: Create feature branch and verify development environment
 
-- [ ] T001 Create feature branch `feat/018-mcp-operations-tools` from main
-- [ ] T002 Verify dev environment (`npm run dev` works, PostgreSQL on 5433)
-- [ ] T003 Review existing MCP tools pattern in `apps/api/src/mcp/tools/restart-summarization.ts`
+- [X] T001 Create feature branch `feat/018-mcp-operations-tools` from main
+- [X] T002 Verify dev environment (`npm run dev` works, PostgreSQL on 5433)
+- [X] T003 Review existing MCP tools pattern in `apps/api/src/mcp/tools/restart-summarization.ts`
 
 **Checkpoint**: Development environment ready, patterns understood
 
@@ -28,18 +28,18 @@
 
 ⚠️ **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create job queue service `apps/api/src/services/run/job-queue.ts`
+- [X] T004 Create job queue service `apps/api/src/services/run/job-queue.ts`
   - Export `getJobQueueStatus(runId, options)` function
   - Query PgBoss `pgboss.job` table for job counts
   - Handle missing PgBoss tables gracefully
-- [ ] T005 [P] Create shared MCP response helpers in `apps/api/src/mcp/tools/helpers.ts`
+- [X] T005 [P] Create shared MCP response helpers in `apps/api/src/mcp/tools/helpers.ts`
   - Extract `formatError` and `formatSuccess` from existing tools
   - Add `createOperationsAudit` helper for audit logging
-- [ ] T006 [P] Add TypeScript types for job queue in `apps/api/src/services/run/types.ts`
+- [X] T006 [P] Add TypeScript types for job queue in `apps/api/src/services/run/types.ts`
   - `JobQueueStatus` type from spec
   - `JobTypeCounts` type
   - `JobFailure` type
-- [ ] T007 Create unit tests for job queue service `apps/api/tests/services/run/job-queue.test.ts`
+- [X] T007 Create unit tests for job queue service `apps/api/tests/services/run/job-queue.test.ts`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 

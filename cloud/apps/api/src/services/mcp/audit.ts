@@ -71,7 +71,13 @@ export type AuditAction =
   // Parallel summarization (Feature #017)
   | 'set_summarization_parallelism'
   | 'cancel_summarization'
-  | 'restart_summarization';
+  | 'restart_summarization'
+  // Operations tools (Feature #018)
+  | 'recover_run'
+  | 'trigger_recovery'
+  | 'get_job_queue_status'
+  | 'get_unsummarized_transcripts'
+  | 'recompute_analysis';
 
 /**
  * Audit entry for MCP write operations
