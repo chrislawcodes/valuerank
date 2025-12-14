@@ -238,6 +238,7 @@ export function RunDetail() {
                 formattedName={formatRunName(run)}
                 onSave={handleSaveName}
               />
+              {/* eslint-disable-next-line react/forbid-elements -- Link-style button with icon + text layout */}
               <button
                 type="button"
                 onClick={() => navigate(`/definitions/${run.definitionId}`)}

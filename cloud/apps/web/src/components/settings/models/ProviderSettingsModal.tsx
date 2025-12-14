@@ -50,9 +50,15 @@ export function ProviderSettingsModal({
           <h3 className="text-lg font-medium text-gray-900">
             {provider.displayName} Settings
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-gray-600 hover:bg-transparent"
+            aria-label="Close modal"
+          >
             <X className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

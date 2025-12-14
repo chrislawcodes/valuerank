@@ -1,4 +1,5 @@
 import { X, Link } from 'lucide-react';
+import { Button } from '../ui/Button';
 import type { Tag } from '../../api/operations/tags';
 
 type TagChipsProps = {
@@ -74,17 +75,19 @@ export function TagChips({
             )}
             {tag.name}
             {canRemove && (
-              <button
+              <Button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove(tag.id);
                 }}
-                className="hover:text-red-600 transition-colors rounded-full"
+                variant="ghost"
+                size="icon"
+                className="w-4 h-4 p-0 hover:text-red-600 hover:bg-transparent"
                 aria-label={`Remove ${tag.name} tag`}
               >
                 <X className="w-3 h-3" />
-              </button>
+              </Button>
             )}
           </span>
         );

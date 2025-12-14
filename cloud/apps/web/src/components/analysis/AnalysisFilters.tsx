@@ -70,6 +70,7 @@ export function AnalysisFilters({
           {availableModels.map((model) => {
             const isSelected = filters.selectedModels.includes(model);
             return (
+              // eslint-disable-next-line react/forbid-elements -- Chip toggle requires custom styling
               <button
                 key={model}
                 type="button"

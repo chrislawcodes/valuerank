@@ -52,13 +52,16 @@ export function ForkDialog({
               <GitBranch className="w-5 h-5 text-teal-600" />
               <h2 className="text-lg font-medium text-gray-900">Fork Definition</h2>
             </div>
-            <button
+            <Button
               type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-500"
+              variant="ghost"
+              size="icon"
+              className="text-gray-400 hover:text-gray-500 hover:bg-transparent"
+              aria-label="Close dialog"
             >
               <X className="w-5 h-5" />
-            </button>
+            </Button>
           </div>
 
           {/* Content */}

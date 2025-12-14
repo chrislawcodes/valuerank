@@ -82,8 +82,7 @@ module.exports = {
         // `if (userId)` instead of `if (userId != null)` are idiomatic
         '@typescript-eslint/strict-boolean-expressions': 'off',
         // Forbid raw <button> elements - use Button component instead
-        // Set to 'warn' during migration, will be promoted to 'error' after full migration
-        'react/forbid-elements': ['warn', {
+        'react/forbid-elements': ['error', {
           forbid: [{
             element: 'button',
             message: 'Use <Button> from components/ui/Button instead of raw <button>',

@@ -25,6 +25,7 @@ export function ProviderSection({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom semantic button styling */}
       <button
         onClick={onToggle}
         className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -59,17 +60,19 @@ export function ProviderSection({
       {isExpanded && (
         <div className="border-t border-gray-200">
           <div className="px-6 py-3 bg-gray-50 flex justify-between items-center">
-            <button
+            <Button
               onClick={(e) => {
                 e.stopPropagation();
                 onEditSettings();
               }}
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 group"
+              variant="ghost"
+              size="sm"
+              className="text-gray-500 hover:text-gray-700 hover:bg-transparent px-0 group"
               title="Edit rate limits"
             >
-              <Settings className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
+              <Settings className="w-4 h-4 text-gray-400 group-hover:text-gray-600 mr-1" />
               Rate limit: {provider.requestsPerMinute}/min, {provider.maxParallelRequests} parallel
-            </button>
+            </Button>
             <Button variant="ghost" size="sm" onClick={onAddModel}>
               <Plus className="w-4 h-4 mr-1" />
               Add Model

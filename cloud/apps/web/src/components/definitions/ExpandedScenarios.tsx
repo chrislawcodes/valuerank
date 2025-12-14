@@ -87,6 +87,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
   return (
     <div className={className}>
       <div className="flex items-center justify-between mb-4">
+        {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom layout */}
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}

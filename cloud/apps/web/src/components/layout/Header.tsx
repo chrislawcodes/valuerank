@@ -35,7 +35,9 @@ export function Header() {
 
         {/* User menu */}
         <div className="relative" ref={dropdownRef}>
+          {/* eslint-disable-next-line react/forbid-elements -- Dropdown trigger requires custom avatar + text layout */}
           <button
+            type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
           >
@@ -59,7 +61,9 @@ export function Header() {
                   {user?.email}
                 </p>
               </div>
+              {/* eslint-disable-next-line react/forbid-elements -- Menu item requires custom full-width layout */}
               <button
+                type="button"
                 onClick={() => {
                   setIsDropdownOpen(false);
                   logout();

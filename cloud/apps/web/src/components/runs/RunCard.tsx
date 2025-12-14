@@ -67,6 +67,7 @@ export function RunCard({ run, onClick }: RunCardProps) {
   const progress = run.runProgress;
 
   return (
+    // eslint-disable-next-line react/forbid-elements -- Card button requires custom full-width layout styling
     <button
       type="button"
       onClick={onClick}

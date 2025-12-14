@@ -58,7 +58,7 @@ describe('ImportDialog', () => {
     const user = userEvent.setup();
     render(<ImportDialog onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
-    const closeButton = screen.getByRole('button', { name: '' }); // X button has no name
+    const closeButton = screen.getByRole('button', { name: /close dialog/i });
     await user.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalled();

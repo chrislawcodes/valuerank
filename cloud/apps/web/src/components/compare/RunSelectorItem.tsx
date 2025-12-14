@@ -44,6 +44,7 @@ export function RunSelectorItem({
   const noAnalysis = !run.analysisStatus;
 
   return (
+    // eslint-disable-next-line react/forbid-elements -- Selectable card requires custom full-width styling
     <button
       type="button"
       onClick={onToggle}

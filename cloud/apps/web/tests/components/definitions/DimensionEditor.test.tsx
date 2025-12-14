@@ -157,11 +157,11 @@ describe('DimensionEditor', () => {
     );
   });
 
-  it('should toggle expansion when chevron clicked', async () => {
+  it('should toggle expansion when header clicked', async () => {
     const user = userEvent.setup();
     const dimension = createMockDimension();
 
-    render(
+    const { container } = render(
       <DimensionEditor
         dimension={dimension}
         index={0}
@@ -174,9 +174,11 @@ describe('DimensionEditor', () => {
     // Initially expanded - should show Add Level button
     expect(screen.getByRole('button', { name: /add level/i })).toBeInTheDocument();
 
-    // Click the chevron to collapse
-    const chevronButton = screen.getAllByRole('button')[0];
-    await user.click(chevronButton);
+    // Click the header div (which contains the chevron) to collapse
+    // The header is the div with cursor-pointer class
+    const header = container.querySelector('.cursor-pointer');
+    expect(header).toBeInTheDocument();
+    await user.click(header!);
 
     // Now collapsed - Add Level button should be hidden
     expect(screen.queryByRole('button', { name: /add level/i })).not.toBeInTheDocument();

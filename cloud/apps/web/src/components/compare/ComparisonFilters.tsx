@@ -8,6 +8,7 @@
  */
 
 import { LayoutGrid, Layers, X } from 'lucide-react';
+import { Button } from '../ui/Button';
 import type { ComparisonFilters as FilterState, DisplayMode, RunWithAnalysis } from './types';
 
 type ComparisonFiltersProps = {
@@ -194,6 +195,7 @@ export function ComparisonFilters({
         <div className="flex items-center gap-2 ml-auto">
           <span className="text-sm font-medium text-gray-600">Display:</span>
           <div className="flex rounded-md overflow-hidden border border-gray-300">
+            {/* eslint-disable-next-line react/forbid-elements -- Segmented control requires custom styling */}
             <button
               onClick={() => handleDisplayModeChange('overlay')}
               title="Overlay charts"
@@ -206,6 +208,7 @@ export function ComparisonFilters({
               <Layers className="w-4 h-4" />
               Overlay
             </button>
+            {/* eslint-disable-next-line react/forbid-elements -- Segmented control requires custom styling */}
             <button
               onClick={() => handleDisplayModeChange('side-by-side')}
               title="Side-by-side charts"
@@ -224,14 +227,16 @@ export function ComparisonFilters({
 
       {/* Clear filters button */}
       {hasActiveFilters && (
-        <button
+        <Button
           onClick={handleClearFilters}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          variant="ghost"
+          size="sm"
+          className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-transparent"
           title="Clear filters"
         >
-          <X className="w-3 h-3" />
+          <X className="w-3 h-3 mr-1" />
           Clear
-        </button>
+        </Button>
       )}
     </div>
   );

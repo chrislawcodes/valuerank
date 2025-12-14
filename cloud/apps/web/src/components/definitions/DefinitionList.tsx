@@ -210,10 +210,12 @@ export function DefinitionList({
         <div className="flex items-center gap-2">
           {/* View mode toggle */}
           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-            <button
+            <Button
               type="button"
               onClick={() => setViewMode('flat')}
-              className={`p-1.5 transition-colors ${
+              variant="ghost"
+              size="icon"
+              className={`p-1.5 rounded-none ${
                 viewMode === 'flat'
                   ? 'bg-teal-50 text-teal-600'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
@@ -222,11 +224,13 @@ export function DefinitionList({
               aria-label="List view"
             >
               <List className="w-4 h-4" />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setViewMode('folder')}
-              className={`p-1.5 transition-colors ${
+              variant="ghost"
+              size="icon"
+              className={`p-1.5 rounded-none ${
                 viewMode === 'folder'
                   ? 'bg-teal-50 text-teal-600'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
@@ -235,7 +239,7 @@ export function DefinitionList({
               aria-label="Folder view (by tag)"
             >
               <FolderTree className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
           <div
             onDrop={handleDrop}
@@ -292,13 +296,15 @@ export function DefinitionList({
       {!loading && definitions.length === 0 && hasActiveFilters && (
         <div className="text-center py-8">
           <p className="text-gray-500">No definitions match your filters</p>
-          <button
+          <Button
             type="button"
             onClick={() => onFiltersChange(defaultFilters)}
-            className="mt-2 text-teal-600 hover:text-teal-700 text-sm"
+            variant="ghost"
+            size="sm"
+            className="mt-2 text-teal-600 hover:text-teal-700"
           >
             Clear filters
-          </button>
+          </Button>
         </div>
       )}
 
@@ -337,34 +343,39 @@ export function DefinitionList({
               <p className="text-sm text-red-600 mt-1">{importError}</p>
               {pendingImport?.alternativeName && (
                 <div className="mt-3 flex gap-2">
-                  <button
+                  <Button
                     onClick={handleImportWithAlternativeName}
                     disabled={isImporting}
-                    className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+                    variant="primary"
+                    size="sm"
                   >
                     {isImporting ? 'Importing...' : 'Use Alternative Name'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => {
                       setPendingImport(null);
                       setImportError(null);
                     }}
-                    className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    variant="secondary"
+                    size="sm"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
-            <button
+            <Button
               onClick={() => {
                 setPendingImport(null);
                 setImportError(null);
               }}
-              className="text-red-400 hover:text-red-600 text-xl leading-none"
+              variant="ghost"
+              size="icon"
+              className="w-6 h-6 p-0 text-red-400 hover:text-red-600 hover:bg-transparent"
+              aria-label="Dismiss error"
             >
               ×
-            </button>
+            </Button>
           </div>
         </div>
       )}

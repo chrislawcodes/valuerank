@@ -29,6 +29,7 @@ export function ScenarioCard({ scenario, index, isExpanded, onToggle }: Scenario
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
       {/* Header */}
+      {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
       <button
         type="button"
         onClick={onToggle}

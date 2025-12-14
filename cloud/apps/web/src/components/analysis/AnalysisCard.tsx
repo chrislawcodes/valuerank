@@ -54,6 +54,7 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const displayDate = run.completedAt || run.createdAt;
 
   return (
+    // eslint-disable-next-line react/forbid-elements -- Card button requires custom full-width styling
     <button
       type="button"
       onClick={onClick}

@@ -210,6 +210,7 @@ export function ModelSelector({
           return (
             <div key={providerId}>
               {/* Provider header */}
+              {/* eslint-disable-next-line react/forbid-elements -- Accordion button requires custom full-width layout */}
               <button
                 type="button"
                 onClick={() => toggleProvider(providerId)}
@@ -247,6 +248,7 @@ export function ModelSelector({
                 <div className="bg-gray-50 px-4 py-2 space-y-1">
                   {/* Select all button */}
                   {availableInProvider.length > 1 && (
+                    // eslint-disable-next-line react/forbid-elements -- Menu action requires custom full-width styling
                     <button
                       type="button"
                       onClick={() => selectAllInProvider(providerId)}
@@ -268,6 +270,7 @@ export function ModelSelector({
                     const modelCost = allModelCostMap.get(model.id);
 
                     return (
+                      // eslint-disable-next-line react/forbid-elements -- Selection item requires custom full-width layout
                       <button
                         key={model.id}
                         type="button"

@@ -46,6 +46,7 @@ function TreeNodeComponent({
         </span>
 
         {/* Node button */}
+        {/* eslint-disable-next-line react/forbid-elements -- Tree node button requires custom layout styling */}
         <button
           type="button"
           onClick={() => onNodeClick?.(node.id)}

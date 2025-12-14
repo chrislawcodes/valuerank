@@ -22,6 +22,7 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
   const hasChildren = childrenCount > 0;
 
   return (
+    // eslint-disable-next-line react/forbid-elements -- Card button requires custom full-width layout styling
     <button
       type="button"
       onClick={onClick}

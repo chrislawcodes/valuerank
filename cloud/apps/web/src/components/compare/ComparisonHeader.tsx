@@ -6,6 +6,7 @@
  */
 
 import { X, AlertTriangle, BarChart2 } from 'lucide-react';
+import { Button } from '../ui/Button';
 import type { RunWithAnalysis } from './types';
 import { formatRunNameShort } from '../../lib/format';
 
@@ -63,13 +64,15 @@ export function ComparisonHeader({
           />
         ))}
         {runs.length > 1 && (
-          <button
+          <Button
             type="button"
             onClick={onClearAll}
-            className="text-xs text-gray-500 hover:text-gray-700 ml-1"
+            variant="ghost"
+            size="sm"
+            className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:bg-transparent ml-1"
           >
             Clear all
-          </button>
+          </Button>
         )}
       </div>
 
@@ -117,14 +120,16 @@ function RunChip({
         <AlertTriangle className="w-3 h-3 mr-0.5" />
       )}
       <span className="truncate max-w-[150px]">{name}</span>
-      <button
+      <Button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onDeselect();
         }}
+        variant="ghost"
+        size="icon"
         className={`
-          p-0.5 rounded-full transition-colors
+          w-5 h-5 p-0.5 rounded-full
           ${hasMissingAnalysis
             ? 'hover:bg-yellow-200'
             : 'hover:bg-teal-200'
@@ -133,7 +138,7 @@ function RunChip({
         aria-label={`Remove ${name}`}
       >
         <X className="w-3.5 h-3.5" />
-      </button>
+      </Button>
     </span>
   );
 }

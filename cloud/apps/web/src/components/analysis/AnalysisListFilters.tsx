@@ -6,6 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { List, FolderTree, X, ChevronDown } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { useTags } from '../../hooks/useTags';
 
 export type AnalysisViewMode = 'flat' | 'folder';
@@ -91,31 +92,34 @@ export function AnalysisListFilters({ filters, onFiltersChange }: AnalysisListFi
 
         {/* Tag filter dropdown */}
         <div className="relative">
-          <button
+          <Button
             type="button"
             onClick={() => setShowTagDropdown(!showTagDropdown)}
-            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+            variant="secondary"
+            size="sm"
+            className={`${
               filters.tagIds.length > 0
                 ? 'bg-teal-50 border-teal-300 text-teal-700'
-                : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                : ''
             }`}
           >
             Tags
             {filters.tagIds.length > 0 && (
-              <span className="inline-flex items-center justify-center w-5 h-5 bg-teal-600 text-white text-xs rounded-full">
+              <span className="inline-flex items-center justify-center w-5 h-5 bg-teal-600 text-white text-xs rounded-full ml-1">
                 {filters.tagIds.length}
               </span>
             )}
             <ChevronDown
-              className={`w-4 h-4 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 ml-1 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`}
             />
-          </button>
+          </Button>
 
           {showTagDropdown && (
             <div className="absolute z-50 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
               <div className="max-h-48 overflow-y-auto">
                 {allTags.length > 0 ? (
                   allTags.map((tag) => (
+                    // eslint-disable-next-line react/forbid-elements -- Menu item requires custom semantic button styling
                     <button
                       key={tag.id}
                       type="button"
@@ -147,36 +151,42 @@ export function AnalysisListFilters({ filters, onFiltersChange }: AnalysisListFi
             className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
           >
             {tag.name}
-            <button
+            <Button
               type="button"
               onClick={() => handleTagToggle(tag.id)}
-              className="hover:text-red-600"
+              variant="ghost"
+              size="icon"
+              className="w-4 h-4 p-0 hover:text-red-600 hover:bg-transparent"
               aria-label={`Remove ${tag.name} filter`}
             >
               <X className="w-3 h-3" />
-            </button>
+            </Button>
           </span>
         ))}
 
         {/* Clear tags button */}
         {filters.tagIds.length > 0 && (
-          <button
+          <Button
             type="button"
             onClick={handleClearTags}
-            className="inline-flex items-center gap-1 px-2 py-1 text-sm text-gray-500 hover:text-gray-700"
+            variant="ghost"
+            size="sm"
+            className="px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-transparent"
           >
-            <X className="w-3 h-3" />
+            <X className="w-3 h-3 mr-1" />
             Clear tags
-          </button>
+          </Button>
         )}
       </div>
 
       {/* View mode toggle */}
       <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-        <button
+        <Button
           type="button"
           onClick={() => handleViewModeChange('flat')}
-          className={`p-1.5 transition-colors ${
+          variant="ghost"
+          size="icon"
+          className={`rounded-none p-1.5 ${
             filters.viewMode === 'flat'
               ? 'bg-teal-50 text-teal-600'
               : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
@@ -185,11 +195,13 @@ export function AnalysisListFilters({ filters, onFiltersChange }: AnalysisListFi
           aria-label="List view"
         >
           <List className="w-4 h-4" />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => handleViewModeChange('folder')}
-          className={`p-1.5 transition-colors ${
+          variant="ghost"
+          size="icon"
+          className={`rounded-none p-1.5 ${
             filters.viewMode === 'folder'
               ? 'bg-teal-50 text-teal-600'
               : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
@@ -198,7 +210,7 @@ export function AnalysisListFilters({ filters, onFiltersChange }: AnalysisListFi
           aria-label="Folder view (by tag)"
         >
           <FolderTree className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
     </div>
   );

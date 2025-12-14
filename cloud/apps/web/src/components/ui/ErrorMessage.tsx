@@ -1,4 +1,5 @@
 import { AlertCircle } from 'lucide-react';
+import { Button } from './Button';
 
 type ErrorMessageProps = {
   message: string;
@@ -13,12 +14,15 @@ export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
         <div className="flex-1">
           <p className="text-sm text-red-800">{message}</p>
           {onRetry && (
-            <button
+            <Button
+              type="button"
               onClick={onRetry}
-              className="mt-2 text-sm font-medium text-red-600 hover:text-red-500"
+              variant="ghost"
+              size="sm"
+              className="mt-2 p-0 h-auto text-sm font-medium text-red-600 hover:text-red-500 hover:bg-transparent"
             >
               Try again
-            </button>
+            </Button>
           )}
         </div>
       </div>

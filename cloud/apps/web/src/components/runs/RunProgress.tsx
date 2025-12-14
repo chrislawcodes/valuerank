@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Loader2, Pause, AlertCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '../ui/Button';
 import type { Run, RunProgress as RunProgressType } from '../../api/operations/runs';
 import { ExecutionProgress } from './ExecutionProgress';
 
@@ -133,17 +134,21 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
 
         {/* Expand/collapse button for completed runs */}
         {!isActive && (
-          <button
+          <Button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            variant="ghost"
+            size="icon"
+            className="p-1 text-gray-400 hover:text-gray-600"
             title={isExpanded ? 'Collapse details' : 'Expand details'}
+            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
           >
             {isExpanded ? (
               <ChevronUp className="w-5 h-5" />
             ) : (
               <ChevronDown className="w-5 h-5" />
             )}
-          </button>
+          </Button>
         )}
       </div>
 

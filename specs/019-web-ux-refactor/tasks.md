@@ -166,18 +166,18 @@
 
 ### Button Migration by Component Area
 
-- [ ] T068 [US3] Migrate buttons in `components/settings/` to Button component
-- [ ] T069 [P] [US3] Migrate buttons in `components/analysis/` to Button component
-- [ ] T070 [P] [US3] Migrate buttons in `components/compare/` to Button component
-- [ ] T071 [P] [US3] Migrate buttons in `components/definitions/` to Button component
-- [ ] T072 [P] [US3] Migrate buttons in `components/runs/` to Button component
-- [ ] T073 [P] [US3] Migrate buttons in `components/layout/` to Button component
-- [ ] T074 [P] [US3] Migrate buttons in `pages/` to Button component
+- [X] T068 [US3] Migrate buttons in `components/settings/` to Button component
+- [X] T069 [P] [US3] Migrate buttons in `components/analysis/` to Button component
+- [X] T070 [P] [US3] Migrate buttons in `components/compare/` to Button component
+- [X] T071 [P] [US3] Migrate buttons in `components/definitions/` to Button component
+- [X] T072 [P] [US3] Migrate buttons in `components/runs/` to Button component
+- [X] T073 [P] [US3] Migrate buttons in `components/layout/` to Button component
+- [X] T074 [P] [US3] Migrate buttons in `pages/` to Button component
 
 ### Final Button Sweep
 
-- [ ] T075 [US3] Run grep to find any remaining raw buttons and migrate
-- [ ] T076 [US3] Promote ESLint rule from warn to error for raw `<button>`
+- [X] T075 [US3] Run grep to find any remaining raw buttons and migrate
+- [X] T076 [US3] Promote ESLint rule from warn to error for raw `<button>`
 
 **Checkpoint**: Zero raw buttons - verify with grep command
 

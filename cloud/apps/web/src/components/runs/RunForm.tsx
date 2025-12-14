@@ -187,6 +187,7 @@ export function RunForm({
         </label>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_OPTIONS.map((option) => (
+            // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
             <button
               key={option.value}
               type="button"
@@ -211,6 +212,7 @@ export function RunForm({
 
       {/* Advanced Options (collapsed by default) */}
       <div>
+        {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom layout */}
         <button
           type="button"
           onClick={toggleAdvanced}

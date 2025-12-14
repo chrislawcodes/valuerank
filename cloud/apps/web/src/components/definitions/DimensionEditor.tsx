@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../ui/Button';
 import type { Dimension, DimensionLevel } from '../../api/operations/definitions';
 
 type DimensionEditorProps = {
@@ -73,16 +74,13 @@ export function DimensionEditor({
         className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <button
-          type="button"
-          className="text-gray-400"
-        >
+        <span className="text-gray-400">
           {isExpanded ? (
             <ChevronDown className="w-4 h-4" />
           ) : (
             <ChevronRight className="w-4 h-4" />
           )}
-        </button>
+        </span>
 
         <input
           type="text"
@@ -101,16 +99,19 @@ export function DimensionEditor({
         </span>
 
         {canRemove && (
-          <button
+          <Button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
             }}
-            className="p-1 hover:bg-red-100 rounded"
+            variant="ghost"
+            size="icon"
+            className="p-1 hover:bg-red-100"
+            aria-label="Remove dimension"
           >
             <Trash2 className="w-4 h-4 text-red-500" />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -158,25 +159,30 @@ export function DimensionEditor({
                   placeholder="option1, option2, option3"
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
-                <button
+                <Button
                   type="button"
                   onClick={() => handleLevelRemove(levelIndex)}
                   disabled={levels.length <= 1}
-                  className="p-1 hover:bg-red-100 rounded disabled:opacity-30 disabled:cursor-not-allowed justify-self-center"
+                  variant="ghost"
+                  size="icon"
+                  className="w-6 h-6 p-1 hover:bg-red-100 justify-self-center"
+                  aria-label="Remove level"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
 
-          <button
+          <Button
             type="button"
             onClick={handleAddLevel}
-            className="mt-2 text-sm text-teal-600 hover:text-teal-700"
+            variant="ghost"
+            size="sm"
+            className="mt-2 text-teal-600 hover:text-teal-700 hover:bg-transparent p-0 h-auto"
           >
             + Add level
-          </button>
+          </Button>
         </div>
       )}
     </div>

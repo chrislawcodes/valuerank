@@ -9,6 +9,7 @@
 
 import { useMemo } from 'react';
 import { AlertCircle, BarChart2 } from 'lucide-react';
+import { Button } from '../../ui/Button';
 import type { ComparisonVisualizationProps, RunWithAnalysis } from '../types';
 import { ComparisonFilters } from '../ComparisonFilters';
 import { ksFromCounts, type KSResult } from '../../../lib/statistics/ks-test';
@@ -136,12 +137,15 @@ function KSStatsSummary({
     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
       <h4 className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
         Distribution Similarity (KS Statistic)
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-5 h-5 p-0 text-gray-400 hover:text-gray-600 hover:bg-transparent"
           title="Kolmogorov-Smirnov statistic measures the maximum distance between cumulative distributions. Lower values indicate more similar distributions."
-          className="text-gray-400 hover:text-gray-600"
+          aria-label="Info about KS Statistic"
         >
           <AlertCircle className="w-3.5 h-3.5" />
-        </button>
+        </Button>
       </h4>
       <div className="space-y-2">
         {pairs.map(([key, ks]) => {

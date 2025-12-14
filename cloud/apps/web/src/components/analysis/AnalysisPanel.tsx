@@ -304,6 +304,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-4 -mb-px">
           {TABS.map((tab) => (
+            // eslint-disable-next-line react/forbid-elements -- Tab button requires custom semantic styling
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}

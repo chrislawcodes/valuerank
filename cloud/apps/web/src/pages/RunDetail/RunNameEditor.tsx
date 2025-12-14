@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Pencil, Check, X } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 
 type RunNameEditorProps = {
   name: string | null;
@@ -73,24 +74,30 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
           className="text-xl font-medium text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           disabled={isSaving}
         />
-        <button
+        <Button
           type="button"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded"
+          variant="ghost"
+          size="icon"
+          className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50"
           title="Save"
+          aria-label="Save name"
         >
           <Check className="w-5 h-5" />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={handleCancel}
           disabled={isSaving}
-          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          variant="ghost"
+          size="icon"
+          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
           title="Cancel"
+          aria-label="Cancel editing"
         >
           <X className="w-5 h-5" />
-        </button>
+        </Button>
       </div>
     );
   }
@@ -98,14 +105,17 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
   return (
     <div className="flex items-center gap-2 group">
       <h1 className="text-xl font-medium text-gray-900">{formattedName}</h1>
-      <button
+      <Button
         type="button"
         onClick={handleStartEdit}
-        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+        variant="ghost"
+        size="icon"
+        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity"
         title="Edit name"
+        aria-label="Edit run name"
       >
         <Pencil className="w-4 h-4" />
-      </button>
+      </Button>
     </div>
   );
 }

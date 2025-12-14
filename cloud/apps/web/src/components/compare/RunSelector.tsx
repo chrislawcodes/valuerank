@@ -7,6 +7,7 @@
 
 import { useState, useMemo } from 'react';
 import { Search, RefreshCw, AlertCircle } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { RunSelectorItem } from './RunSelectorItem';
 import { Loading } from '../ui/Loading';
 import type { ComparisonRun } from '../../api/operations/comparison';
@@ -94,15 +95,18 @@ export function RunSelector({
             {selectedIds.length}/{MAX_RUNS} selected
           </span>
           {onRefresh && (
-            <button
+            <Button
               type="button"
               onClick={onRefresh}
               disabled={loading}
-              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              variant="ghost"
+              size="icon"
+              className="p-1 text-gray-400 hover:text-gray-600"
               title="Refresh runs"
+              aria-label="Refresh runs"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -122,24 +126,28 @@ export function RunSelector({
       {/* Quick actions */}
       {filteredRuns.length > 0 && (
         <div className="flex items-center gap-2 mb-3">
-          <button
+          <Button
             type="button"
             onClick={handleSelectAll}
             disabled={atLimit}
-            className="text-xs text-teal-600 hover:text-teal-700 disabled:text-gray-400"
+            variant="ghost"
+            size="sm"
+            className="px-0 py-0 h-auto text-xs text-teal-600 hover:text-teal-700 hover:bg-transparent disabled:text-gray-400"
           >
             Select all
-          </button>
+          </Button>
           {selectedIds.length > 0 && (
             <>
               <span className="text-gray-300">|</span>
-              <button
+              <Button
                 type="button"
                 onClick={handleClearSelection}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                variant="ghost"
+                size="sm"
+                className="px-0 py-0 h-auto text-xs text-gray-500 hover:text-gray-700 hover:bg-transparent"
               >
                 Clear selection
-              </button>
+              </Button>
             </>
           )}
         </div>
