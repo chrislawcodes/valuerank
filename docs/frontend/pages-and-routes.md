@@ -19,6 +19,7 @@ Cloud ValueRank uses React Router v6 for client-side routing. All routes except 
 | `/definitions/new` | `DefinitionDetail` | Yes | Create new definition (special case) |
 | `/runs` | `Runs` | Yes | List all runs with filtering |
 | `/runs/:id` | `RunDetail` | Yes | View run progress and results |
+| `/compare` | `Compare` | Yes | Cross-run comparison with visualizations |
 | `/experiments` | `Experiments` | Yes | Placeholder for Stage 10 |
 | `/settings` | `Settings` | Yes | System health, models, API keys |
 | `*` | Redirect to `/` | - | Catch-all for unknown routes |
@@ -249,6 +250,27 @@ Active tab is highlighted with a teal underline. Icons hide on small screens.
 
 **Key Code:** `pages/RunDetail.tsx`
 
+### Compare (`/compare`)
+
+**Purpose:** Cross-run comparison for analyzing differences between runs.
+
+**Features:**
+- Run selector (multi-select from available completed runs)
+- Side-by-side comparison of runs with same definition
+- Multiple visualization types (overview, decisions, scenarios, values, agreement)
+- Filter by model and display mode (overlay, side-by-side)
+- URL state preservation (`/compare?runs=id1,id2&viz=overview`)
+
+**Key Components:**
+- `RunSelector` - Multi-select completed runs
+- `ComparisonHeader` - Shows selected runs metadata
+- `VisualizationNav` - Tab navigation between viz types
+- Visualization components in `components/compare/visualizations/`
+
+**Key Code:** `pages/Compare.tsx`
+
+---
+
 ### Experiments (`/experiments`)
 
 **Purpose:** Placeholder for the Experiment Framework (Stage 10, deferred).
@@ -328,11 +350,10 @@ The original frontend design (see `docs/preplanning/frontend-design.md`) planned
 | Version Tree | Phase 2 | Implemented |
 | Analysis Dashboard | Phase 3 | Implemented |
 | API Key Manager | Phase 3 | Implemented |
-| Run Comparison | Phase 4 | Deferred (Stage 13) |
+| Run Comparison | Phase 4 | Implemented |
 
 **Key Deviations from Plan:**
 - Experiment Framework deferred to focus on core run workflow
-- Run Comparison deferred to focus on single-run analysis
 - Deep analysis (PCA, outliers) not yet implemented
 
 ---
@@ -349,6 +370,7 @@ The original frontend design (see `docs/preplanning/frontend-design.md`) planned
 | `apps/web/src/pages/DefinitionDetail.tsx` | Definition detail page |
 | `apps/web/src/pages/Runs.tsx` | Runs list page |
 | `apps/web/src/pages/RunDetail.tsx` | Run detail page |
+| `apps/web/src/pages/Compare.tsx` | Run comparison page |
 | `apps/web/src/pages/Experiments.tsx` | Experiments placeholder |
 | `apps/web/src/pages/Settings.tsx` | Settings page |
 | `apps/web/src/components/ProtectedRoute.tsx` | Auth guard |

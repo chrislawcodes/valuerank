@@ -4,13 +4,26 @@ This document describes features that were planned during the original design ph
 
 ---
 
-## Overview of Deferred Stages
+## Recently Implemented (Previously Deferred)
+
+The following features were originally deferred but have since been implemented:
+
+| Feature | Original Stage | Implemented In | Notes |
+|---------|---------------|----------------|-------|
+| **Run Comparison** | Stage 13 | `/compare` page | Side-by-side run analysis with visualizations |
+| **Cost Estimation** | Stage 10/16 | `startRun` mutation | Pre-run cost estimates based on model pricing |
+| **Actual Cost Tracking** | Stage 16 | Transcript `costSnapshot` | Per-transcript token and cost tracking |
+| **Sampling/Partial Runs** | Stage 16 | `samplePercentage` param | Run a percentage of scenarios |
+| **Parallel Summarization** | N/A | Spec 017 | Configurable parallelism with cancel/restart |
+
+---
+
+## Overview of Remaining Deferred Stages
 
 | Stage | Feature | Original Phase | Reason for Deferral |
 |-------|---------|----------------|---------------------|
 | Stage 10 | Experiment Framework | Phase 2 | Foundational pipeline prioritized first |
-| Stage 13 | Run Comparison & Delta Analysis | Phase 4 | Manual comparison suffices initially |
-| Stage 16 | Scale & Efficiency | Phase 6 | Premature optimization; wait for real scale needs |
+| Stage 16 | Scale & Efficiency (remaining) | Phase 6 | Some implemented; batch processing deferred |
 
 ---
 
@@ -24,7 +37,7 @@ This document describes features that were planned during the original design ph
 
 ### What It Was Designed to Do
 
-The Experiment Framework was conceived as the organizational foundation for tracking related experiments with cost visibility. It was described as the "primary driver for cloud migration" in the original product spec.
+The Experiment Framework was conceived as the organizational foundation for tracking related experiments. It was described as the "primary driver for cloud migration" in the original product spec.
 
 **Key Capabilities:**
 
@@ -38,16 +51,11 @@ The Experiment Framework was conceived as the organizational foundation for trac
    - Link runs to experiments for organized tracking
    - View all related work in one place
 
-3. **Cost Estimation**
-   - Show estimated cost before starting a run (model pricing × scenario count)
-   - Prevent expensive surprises during experimentation
-   - Track actual vs. estimated costs
-
-4. **Tag Inheritance**
+3. **Tag Inheritance**
    - Experiments can have tags that propagate to child definitions and runs
    - Simplify organization of related work
 
-5. **Timeline/History View**
+4. **Timeline/History View**
    - See the evolution of an experiment over time
    - Track related scenarios (e.g., "flipped perspective" variants)
 
@@ -65,7 +73,7 @@ From the product spec, the intended workflows were:
 
 2. **Manual workarounds exist** - Users can use tags and naming conventions to group related work. Less elegant, but functional.
 
-3. **Scope reduction** - Focusing on Phase 1 (CLI replication) and Phase 3 (automated analysis) delivered more immediate value.
+3. **Run Comparison fills some gaps** - The implemented `/compare` page allows comparing runs without formal experiment grouping.
 
 ### Database Schema (Already Exists)
 
@@ -98,211 +106,71 @@ When this feature is prioritized:
    - "Link to Experiment" option in run creation flow
    - Experiment timeline visualization
 
-3. **Cost Estimation**
-   - Calculate based on: `(model count) × (scenario count) × (avg tokens per scenario) × (model pricing)`
-   - Show estimate in run creation form
-   - Store `model_costs.yaml` equivalent in database (LlmModel already has cost fields)
-
-4. **Reference Specs**
+3. **Reference Specs**
    - Original design in `docs/preplanning/product-spec.md` (Phase 2 section)
    - Stage 10 was never fully specified; would need a spec document first
 
 ---
 
-## Stage 13: Run Comparison & Delta Analysis
-
-> **Original Phase:** Phase 4 - Run Comparison
->
-> **Status:** Deferred
->
-> **Dependencies:** Stage 11 (Analysis System) - Complete
-
-### What It Was Designed to Do
-
-Enable rigorous side-by-side comparison of runs with statistical analysis to quantify differences.
-
-**Key Capabilities:**
-
-1. **Run Comparison Page**
-   - Side-by-side view of two runs
-   - Delta visualization (diverging bar chart showing differences)
-   - "What Changed" diff display
-
-2. **Model Version Comparison**
-   - Compare same scenario across different model versions
-   - Example: `gemini-1.5-pro-001` vs `gemini-1.5-pro-002` on identical scenarios
-   - Track how model updates affect value priorities
-
-3. **Statistical Rigor**
-   - Effect sizes (Cohen's d) for pairwise comparisons
-   - Significance testing with p-values
-   - Multiple comparison correction (Holm-Bonferroni)
-
-4. **Tier 2 On-Demand Analysis**
-   - Correlations between dimensions and outcomes
-   - Dimension impact analysis (which dimensions drive variance)
-   - Triggered when user views comparison page
-
-### Why It Was Deferred
-
-1. **Manual comparison works** - Users can export CSVs and compare in external tools (Jupyter, R, Excel). Less convenient, but functional.
-
-2. **Phase 3 prioritized** - Getting automated Tier 1 analysis working delivered more immediate value than comparison features.
-
-3. **MCP tools filled the gap** - AI agents can query run data and help users reason about differences conversationally.
-
-### Infrastructure Already in Place
-
-Several building blocks are already implemented:
-
-- **Model versioning** - `transcripts.model_id` and `transcripts.model_version` capture version info
-- **Analysis caching** - `input_hash` pattern enables efficient re-computation
-- **Wilson confidence intervals** - Already used in Tier 1 analysis
-- **Statistical utilities** - Python workers have scipy for statistical tests
-
-### Implementation Guidance
-
-When this feature is prioritized:
-
-1. **Backend Services**
-   ```typescript
-   // apps/api/src/services/comparison/
-   ├── compare.ts         // Core comparison logic
-   ├── statistics.ts      // Effect sizes, significance tests
-   └── types.ts           // Comparison result types
-   ```
-
-2. **GraphQL Extensions**
-   ```graphql
-   type RunComparison {
-     runA: Run!
-     runB: Run!
-     deltas: [ValueDelta!]!
-     statistics: ComparisonStatistics!
-   }
-
-   type ValueDelta {
-     value: String!
-     runAScore: Float!
-     runBScore: Float!
-     delta: Float!
-     effectSize: Float
-     pValue: Float
-     significant: Boolean!
-   }
-   ```
-
-3. **Python Worker Enhancement**
-   ```python
-   # workers/compare.py
-   def compare_runs(run_a_data: dict, run_b_data: dict) -> ComparisonResult:
-       # Calculate effect sizes (Cohen's d)
-       # Perform significance tests
-       # Apply Holm-Bonferroni correction
-       pass
-   ```
-
-4. **Frontend Components**
-   - `RunComparisonPage` - Side-by-side view
-   - `DeltaChart` - Diverging bar chart showing differences
-   - `ComparisonSelector` - Pick two runs to compare
-
-5. **MCP Tool** (deferred in Stage 14)
-   - `compare_runs` tool was noted as deferred, pending Stage 13
-
-6. **Reference Specs**
-   - Original design in `docs/preplanning/product-spec.md` (Phase 4 section)
-   - Statistical methods specified in `docs/preplanning/methodology-critique.md`
-
----
-
-## Stage 16: Scale & Efficiency
+## Stage 16: Scale & Efficiency (Remaining Items)
 
 > **Original Phase:** Phase 6 - Scale & Efficiency
 >
-> **Status:** Deferred
+> **Status:** Partially Implemented
 >
 > **Dependencies:** Stage 9 (Run Execution) - Complete
 
-### What It Was Designed to Do
+### What's Been Implemented
 
-Optimize the system for cost and efficiency at scale.
+Several capabilities from the original Stage 16 design are now complete:
 
-**Key Capabilities:**
+| Capability | Status | Implementation |
+|------------|--------|----------------|
+| Sampling/Partial Runs | ✅ Implemented | `samplePercentage` in startRun |
+| Cost Estimation | ✅ Implemented | `estimateCost` query |
+| Actual Cost Tracking | ✅ Implemented | `costSnapshot` in transcripts |
+| Concurrency per Provider | ✅ Implemented | `LlmProvider.maxParallelRequests` |
+| Priority-based Jobs | ✅ Implemented | PgBoss priority queues |
 
-1. **Batch Processing**
-   - Queue large batches efficiently
-   - Reduce per-run overhead for high-volume evaluations
-   - Optimize job scheduling for throughput
+### What Remains Deferred
 
-2. **Sampling/Partial Runs**
-   - Run a percentage (e.g., 10%) for quick iteration
-   - Fast validation before committing to full runs
-   - Statistical sampling with confidence bounds
+**Batch Processing Optimization**
+- Queue large batches more efficiently
+- Reduce per-run overhead for high-volume evaluations
+- Optimize job scheduling for throughput
 
-3. **Queue Optimization**
-   - Priority-based job scheduling
-   - Concurrency tuning per provider
-   - Rate limit management across providers
+**Cost Dashboard**
+- Daily/weekly/monthly cost charts
+- Per-user cost breakdown
+- Budget thresholds with alerts
 
-4. **Cost Tracking and Reporting**
-   - Actual cost per run (tokens × pricing)
-   - Cost trends over time
-   - Budget alerts
+**Rate Limit Management**
+- Dynamic concurrency based on real-time rate limit feedback
+- Graceful degradation under load
+- Cross-run rate limit coordination
 
-### Why It Was Deferred
+### Why Remaining Items Are Deferred
 
-1. **Premature optimization** - Current scale doesn't justify the engineering investment. The system handles current workloads fine.
+1. **Current scale is sufficient** - The system handles current workloads fine with existing optimizations.
 
-2. **Cost visibility exists** - LlmModel table already has cost fields. Basic tracking is possible without new features.
+2. **Core cost visibility exists** - Users can see estimated and actual costs; dashboards can wait.
 
-3. **Manual sampling works** - Users can select a subset of scenarios or models for quick tests.
-
-### Infrastructure Already in Place
-
-- **LlmModel.inputCostPer1k / outputCostPer1k** - Cost data in database
-- **PgBoss queue** - Supports priorities and rate limiting
-- **ThreadPoolExecutor** - Python workers already parallelize within limits
-- **Provider rate limits** - LlmProvider.rateLimitPerMinute field exists
+3. **Provider limits work** - Database-driven `maxParallelRequests` provides adequate control.
 
 ### Implementation Guidance
 
 When scale demands justify this work:
 
-1. **Batch Processing**
-   ```typescript
-   // Batch job creation instead of individual jobs
-   async function queueBatchRun(config: BatchRunConfig): Promise<string[]> {
-     // Group scenarios into batches
-     // Create optimized job graph
-     // Return batch job IDs
-   }
-   ```
-
-2. **Sampling**
-   ```typescript
-   type RunConfig = {
-     definitionId: string;
-     models: string[];
-     samplePercentage?: number;  // 0-100, default 100
-     sampleSeed?: number;        // For reproducibility
-   };
-   ```
-
-3. **Cost Tracking Dashboard**
+1. **Cost Tracking Dashboard**
    - Daily/weekly/monthly cost charts
    - Per-user cost breakdown
    - Per-model cost comparison
    - Budget thresholds with alerts
 
-4. **Queue Optimization**
+2. **Queue Optimization**
    - Dynamic concurrency based on provider rate limits
    - Priority lanes for different run types
    - Graceful degradation under load
-
-5. **Reference Specs**
-   - Original design in `docs/preplanning/product-spec.md` (Phase 6 section)
-   - PgBoss docs for advanced queue patterns
 
 ---
 
@@ -312,12 +180,13 @@ When scale demands justify this work:
 
 From the original product spec, some analysis features were marked for future implementation:
 
-**Tier 2 (Originally "Required", partially deferred):**
-- Inter-model agreement (pairwise correlation using Spearman's rho)
-- Effect sizes for all pairwise comparisons
-- Multiple comparison correction
+**Tier 2 (Partially Implemented):**
+- ✅ Inter-model agreement (pairwise correlation using Spearman's rho)
+- ✅ Effect sizes for comparisons
+- ✅ Multiple comparison correction (Holm-Bonferroni)
+- ⏳ Dimension impact analysis (Kruskal-Wallis) - basic version implemented
 
-**Tier 3 (Always "Deferred"):**
+**Tier 3 (Still Deferred):**
 - PCA positioning
 - Statistical outlier detection (Mahalanobis, Isolation Forest)
 - Jackknife consistency analysis
@@ -347,19 +216,20 @@ When deciding which deferred feature to build next, consider:
 | Feature | User Pain | Engineering Effort | Dependencies |
 |---------|-----------|-------------------|--------------|
 | Experiment Framework | Medium - workarounds exist | Medium | Clean implementation |
-| Run Comparison | Medium - external tools work | Medium | Stage 11 complete |
-| Scale & Efficiency | Low - current scale fine | High | Premature without load |
+| Cost Dashboard | Low - basic tracking exists | Low | Cost data already captured |
+| Tier 3 Analysis | Low - Tier 1/2 cover most needs | High | Statistical expertise needed |
 
 **Recommended order:**
-1. **Run Comparison** - Moderate effort, builds on existing analysis work
-2. **Experiment Framework** - Improves organization, uses existing tables
-3. **Scale & Efficiency** - Only when actual scale demands it
+1. **Experiment Framework** - Improves organization, uses existing tables
+2. **Cost Dashboard** - Low effort, data already exists
+3. **Tier 3 Analysis** - Only when advanced analysis is needed
 
 ---
 
 ## Related Documentation
 
-- [Product Specification](./preplanning/product-spec.md) - Original feature priorities
-- [High-Level Implementation Plan](../specs/high-level.md) - Stage definitions
-- [Analysis System](./features/analysis.md) - What's currently implemented
-- [Runs Feature](./features/runs.md) - Current run execution capabilities
+- [Product Specification](../preplanning/product-spec.md) - Original feature priorities
+- [High-Level Implementation Plan](../../specs/high-level.md) - Stage definitions
+- [Analysis System](../features/analysis.md) - What's currently implemented
+- [Runs Feature](../features/runs.md) - Current run execution capabilities
+- [Run Comparison](../features/runs.md#run-comparison) - Implemented comparison features
