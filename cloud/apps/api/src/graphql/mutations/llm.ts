@@ -329,6 +329,29 @@ builder.mutationField('updateSystemSetting', (t) =>
 
       ctx.log.info({ key: setting.key }, 'System setting updated');
 
+      // Hot-reload summarize handler if parallelism setting changed
+      if (args.input.key === 'infra_max_parallel_summarizations' && isBossRunning()) {
+        try {
+          const { reregisterSummarizeHandler } = await import('../../queue/handlers/index.js');
+          const { clearSummarizationCache } = await import(
+            '../../services/summarization-parallelism/index.js'
+          );
+
+          // Clear cache to ensure fresh value is used
+          clearSummarizationCache();
+
+          const boss = getBoss();
+          await reregisterSummarizeHandler(boss);
+          ctx.log.info('Summarize handler re-registered with new parallelism setting');
+        } catch (err) {
+          // Log but don't fail - settings are saved, restart will apply them
+          ctx.log.error(
+            { err },
+            'Failed to re-register summarize handler (settings saved, restart required)'
+          );
+        }
+      }
+
       // Audit log (non-blocking)
       createAuditLog({
         action: 'UPDATE',

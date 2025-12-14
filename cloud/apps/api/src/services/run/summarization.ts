@@ -214,9 +214,6 @@ export async function restartSummarization(
     };
   }
 
-  // Get total transcript count for progress tracking
-  const totalTranscripts = await db.transcript.count({ where: { runId } });
-
   // Update run status to SUMMARIZING and reset progress
   const updatedProgress: SummarizeProgress = {
     total: transcriptsToQueue.length,
