@@ -73,7 +73,7 @@ builder.mutationField('recomputeAnalysis', (t) =>
       ctx.log.info({ runId, jobId }, 'Analysis job queued');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'AnalysisResult',
         entityId: runId,

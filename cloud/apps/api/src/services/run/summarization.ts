@@ -89,20 +89,12 @@ export async function cancelSummarization(runId: string): Promise<CancelSummariz
     log.warn({ runId, error }, 'Failed to cancel summarize jobs in queue');
   }
 
-  // Get current counts of completed/failed summaries
-  const [completedCount, failedCount] = await Promise.all([
-    db.transcript.count({
-      where: { runId, summarizedAt: { not: null } },
-    }),
-    db.transcript.count({
-      where: {
-        runId,
-        summarizedAt: null,
-        // A transcript is considered failed if it was attempted but not summarized
-        // For now, we can't distinguish failed from not-yet-processed, so we skip this
-      },
-    }),
-  ]);
+  // Get current counts of completed summaries
+  // Note: We can't reliably distinguish failed vs not-yet-processed transcripts,
+  // so we only count completed summaries here
+  const completedCount = await db.transcript.count({
+    where: { runId, summarizedAt: { not: null } },
+  });
 
   // Update summarizeProgress to reflect the cancellation
   // Total stays the same, but we adjust completed/failed based on actual counts

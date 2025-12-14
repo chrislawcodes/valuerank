@@ -51,15 +51,6 @@ function safeJsonObject<T extends Record<string, unknown>>(
   return null;
 }
 
-/**
- * Safe JSON array accessor
- */
-function safeJsonArray<T>(value: unknown): T[] {
-  if (Array.isArray(value)) {
-    return value as T[];
-  }
-  return [];
-}
 
 /**
  * Formats analysis result into dimension analysis output

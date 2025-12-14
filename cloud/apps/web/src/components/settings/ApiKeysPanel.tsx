@@ -6,14 +6,15 @@ import { Input } from '../ui/Input';
 import { Loading } from '../ui/Loading';
 import { EmptyState } from '../ui/EmptyState';
 import { ErrorMessage } from '../ui/ErrorMessage';
-import {
-  API_KEYS_QUERY,
-  CREATE_API_KEY_MUTATION,
-  REVOKE_API_KEY_MUTATION,
+import type {
   ApiKeysQueryResult,
   CreateApiKeyResult,
   RevokeApiKeyResult,
-  ApiKey,
+  ApiKey} from '../../api/operations/api-keys';
+import {
+  API_KEYS_QUERY,
+  CREATE_API_KEY_MUTATION,
+  REVOKE_API_KEY_MUTATION
 } from '../../api/operations/api-keys';
 
 export function ApiKeysPanel() {
@@ -154,7 +155,7 @@ function NewKeyBanner({ keyValue, onDismiss }: { keyValue: string; onDismiss: ()
           <h3 className="font-medium">API Key Created</h3>
         </div>
         <p className="text-sm text-gray-600 mb-4">
-          Copy your API key now. You won't be able to see it again!
+          Copy your API key now. You won&apos;t be able to see it again!
         </p>
         <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg font-mono text-sm">
           <code className="flex-1 break-all">{keyValue}</code>
@@ -254,7 +255,7 @@ function RevokeConfirmDialog({
           <h3 className="text-lg font-medium">Revoke API Key</h3>
         </div>
         <p className="text-gray-600 mb-6">
-          Are you sure you want to revoke <strong>"{keyName}"</strong>? This action cannot be undone
+          Are you sure you want to revoke <strong>&quot;{keyName}&quot;</strong>? This action cannot be undone
           and any services using this key will stop working.
         </p>
         <div className="flex justify-end gap-3">

@@ -100,7 +100,7 @@ builder.mutationField('createDefinition', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'Definition',
         entityId: definition.id,
@@ -213,7 +213,7 @@ builder.mutationField('forkDefinition', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'Definition',
         entityId: definition.id,
@@ -337,7 +337,7 @@ builder.mutationField('updateDefinition', (t) =>
       }
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'Definition',
         entityId: definition.id,
@@ -450,7 +450,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'Definition',
         entityId: definition.id,
@@ -508,7 +508,7 @@ builder.mutationField('deleteDefinition', (t) =>
       );
 
       // Audit log for primary definition (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'DELETE',
         entityType: 'Definition',
         entityId: id,
@@ -583,7 +583,7 @@ builder.mutationField('regenerateScenarios', (t) =>
       );
 
       // Audit log (non-blocking) - ACTION type for regeneration
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Definition',
         entityId: definitionId,
@@ -663,7 +663,7 @@ builder.mutationField('cancelScenarioExpansion', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Definition',
         entityId: definitionId,

@@ -72,7 +72,7 @@ builder.mutationField('createTag', (t) =>
       ctx.log.info({ tagId: tag.id, name: tag.name }, 'Tag created');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'Tag',
         entityId: tag.id,
@@ -122,7 +122,7 @@ builder.mutationField('deleteTag', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'DELETE',
         entityType: 'Tag',
         entityId: args.id,

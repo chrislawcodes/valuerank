@@ -1,4 +1,5 @@
-import { useState, useEffect, FormEvent } from 'react';
+import type { FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/hooks';
 import { Input } from '../components/ui/Input';

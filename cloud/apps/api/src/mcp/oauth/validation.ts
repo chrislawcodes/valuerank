@@ -4,7 +4,6 @@
  * Validates OAuth requests according to RFC specs
  */
 
-import { createLogger } from '@valuerank/shared';
 import type {
   AuthorizationRequest,
   TokenRequest,
@@ -19,8 +18,6 @@ import {
   DEFAULT_SCOPE,
 } from './constants.js';
 import { isValidCodeChallenge } from './pkce.js';
-
-const log = createLogger('mcp:oauth:validation');
 
 export interface ValidationResult<T> {
   valid: boolean;
@@ -326,10 +323,10 @@ export function validateClientRegistrationRequest(
           : undefined,
       grant_types: Array.isArray(body.grant_types) ? (body.grant_types as string[]).filter(
         (g) => g === 'authorization_code' || g === 'refresh_token'
-      ) as ('authorization_code' | 'refresh_token')[] : undefined,
+      ) : undefined,
       response_types: Array.isArray(body.response_types) ? (body.response_types as string[]).filter(
         (r) => r === 'code'
-      ) as ('code')[] : undefined,
+      ) : undefined,
       scope: typeof body.scope === 'string' ? body.scope : undefined,
     },
   };

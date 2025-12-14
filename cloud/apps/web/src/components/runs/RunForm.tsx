@@ -148,7 +148,7 @@ export function RunForm({
       ? Math.ceil((scenarioCount * formState.samplePercentage) / 100)
       : null;
 
-  const totalJobs =
+  const _totalJobs =
     estimatedScenarios !== null ? estimatedScenarios * formState.selectedModels.length : null;
 
   return (

@@ -11,11 +11,12 @@ import { Cpu, Settings, Check, AlertTriangle, Code, FileText, Layers } from 'luc
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
+import type {
+  LlmProvidersQueryResult,
+  LlmModel} from '../../api/operations/llm';
 import {
   LLM_PROVIDERS_QUERY,
-  UPDATE_SYSTEM_SETTING_MUTATION,
-  LlmProvidersQueryResult,
-  LlmModel,
+  UPDATE_SYSTEM_SETTING_MUTATION
 } from '../../api/operations/llm';
 
 const INFRA_MODEL_QUERY = `
@@ -722,7 +723,7 @@ export function InfraPanel() {
       <div className="p-4 bg-blue-50 rounded-lg">
         <h3 className="text-sm font-medium text-blue-900 mb-2">About Infrastructure Models</h3>
         <p className="text-sm text-blue-700">
-          Infrastructure models are used for internal tasks that don't directly evaluate AI behavior.
+          Infrastructure models are used for internal tasks that don&apos;t directly evaluate AI behavior.
           The scenario expansion model generates concrete scenarios from definitions.
           The summarizer model extracts decision codes and explanations from AI transcripts.
           A cost-efficient model like Claude 3.5 Haiku or GPT-4o Mini is recommended for both.

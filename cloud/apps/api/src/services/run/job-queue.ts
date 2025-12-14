@@ -7,7 +7,7 @@
 
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
-import type { JobQueueStatus, JobQueueStatusOptions, JobTypeCounts, JobFailure } from './types.js';
+import type { JobQueueStatus, JobQueueStatusOptions, JobFailure } from './types.js';
 
 const log = createLogger('services:run:job-queue');
 
@@ -19,7 +19,6 @@ const FAILED_STATES = ['failed'];
 
 // Job types we track
 const JOB_TYPES = ['probe_scenario', 'summarize_transcript', 'analyze_basic'] as const;
-type JobType = (typeof JOB_TYPES)[number];
 
 /**
  * Raw job count row from PgBoss query
@@ -177,8 +176,8 @@ async function getRecentFailures(runId: string, limit: number): Promise<JobFailu
     `;
 
     return failedJobs.map((job) => {
-      const data = job.data as Record<string, unknown>;
-      const output = job.output as Record<string, unknown> | null;
+      const data = job.data;
+      const output = job.output;
 
       // Normalize job type name
       const jobType = job.name.startsWith('probe_scenario') ? 'probe_scenario' : job.name;

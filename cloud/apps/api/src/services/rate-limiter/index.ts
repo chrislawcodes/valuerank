@@ -248,7 +248,7 @@ export function getTotals(): { totalActive: number; totalQueued: number } {
  */
 export function clearAll(): void {
   for (const limiter of providerLimiters.values()) {
-    limiter.disconnect();
+    void limiter.disconnect();
   }
   providerLimiters.clear();
   activeJobCounts.clear();
@@ -265,7 +265,7 @@ export async function reloadLimiters(): Promise<void> {
 
   // Clear existing limiters
   for (const limiter of providerLimiters.values()) {
-    limiter.disconnect();
+    void limiter.disconnect();
   }
   providerLimiters.clear();
 

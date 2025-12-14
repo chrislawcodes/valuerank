@@ -18,6 +18,12 @@ import { Loading } from '../ui/Loading';
 import { EmptyState } from '../ui/EmptyState';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { JsonEditor } from '../ui/JsonEditor';
+import type {
+  LlmProvidersQueryResult,
+  LlmProvider,
+  LlmModel,
+  CreateLlmModelInput,
+  UpdateLlmModelInput} from '../../api/operations/llm';
 import {
   LLM_PROVIDERS_QUERY,
   CREATE_LLM_MODEL_MUTATION,
@@ -25,12 +31,7 @@ import {
   DEPRECATE_LLM_MODEL_MUTATION,
   REACTIVATE_LLM_MODEL_MUTATION,
   SET_DEFAULT_LLM_MODEL_MUTATION,
-  UPDATE_LLM_PROVIDER_MUTATION,
-  LlmProvidersQueryResult,
-  LlmProvider,
-  LlmModel,
-  CreateLlmModelInput,
-  UpdateLlmModelInput,
+  UPDATE_LLM_PROVIDER_MUTATION
 } from '../../api/operations/llm';
 
 export function ModelsPanel() {
@@ -384,7 +385,7 @@ function ModelFormModal({
   // Filter out maxTokens from apiConfig for the JSON editor (to avoid duplication)
   const getFilteredApiConfig = () => {
     if (!model?.apiConfig) return '';
-    const { maxTokens: _, ...rest } = model.apiConfig as Record<string, unknown>;
+    const { maxTokens: _maxTokens, ...rest } = model.apiConfig;
     return Object.keys(rest).length > 0 ? JSON.stringify(rest, null, 2) : '';
   };
   const [apiConfig, setApiConfig] = useState(getFilteredApiConfig());

@@ -10,6 +10,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
 import { db } from '@valuerank/db';
+import type { DefinitionContent } from '@valuerank/db';
 import { createLogger, AuthenticationError, ValidationError } from '@valuerank/shared';
 
 import { parseMdToDefinition, isValidMdFormat } from '../services/import/md.js';
@@ -165,7 +166,7 @@ async function createDefinition(
   _userId: string,
   name: string,
   parsed: {
-    content: import('@valuerank/db').DefinitionContent;
+    content: DefinitionContent;
     category?: string;
     baseId?: string;
   }

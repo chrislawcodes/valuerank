@@ -120,7 +120,7 @@ type InheritanceBannerProps = {
 export function InheritanceBanner({
   isForked,
   parentName,
-  parentId,
+  parentId: _parentId,
   onViewParent,
 }: InheritanceBannerProps) {
   if (!isForked) {

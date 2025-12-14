@@ -5,7 +5,7 @@
  * Port of devtool/src/server/utils/scenarioMd.ts parser with cloud type mapping.
  */
 
-import type { DefinitionContent, Dimension, DimensionLevel } from '@valuerank/db';
+import type { DefinitionContent, DimensionLevel } from '@valuerank/db';
 import type { ParseResult, ParsedMDDefinition, ImportError } from './types.js';
 
 // ============================================================================

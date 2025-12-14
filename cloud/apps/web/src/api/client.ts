@@ -1,4 +1,5 @@
-import { createClient, cacheExchange, fetchExchange, Client, mapExchange } from 'urql';
+import type { Client} from 'urql';
+import { createClient, cacheExchange, fetchExchange, mapExchange } from 'urql';
 import { getStoredToken, clearStoredToken } from '../auth/context';
 
 // API base URL - empty string means same origin (dev), full URL for production

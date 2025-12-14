@@ -12,7 +12,7 @@ type WorkerStatusProps = {
   loading?: boolean;
 };
 
-function WorkerStatus({ worker, loading }: WorkerStatusProps) {
+function WorkerStatus({ worker, loading: _loading }: WorkerStatusProps) {
   const configuredProviders = worker.apiKeys
     ? Object.entries(worker.apiKeys)
         .filter(([, configured]) => configured)

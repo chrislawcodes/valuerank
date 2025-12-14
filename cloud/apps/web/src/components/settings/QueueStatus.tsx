@@ -53,7 +53,7 @@ function StatItem({ label, value, highlight }: { label: string; value: string | 
   );
 }
 
-export function QueueStatus({ queue, loading }: QueueStatusProps) {
+export function QueueStatus({ queue, loading: _loading }: QueueStatusProps) {
   const successRatePercent = queue.successRate !== null ? Math.round(queue.successRate * 100) : null;
 
   return (

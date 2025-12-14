@@ -4,7 +4,6 @@
  * Key-value store for system-wide configuration.
  */
 
-import { builder } from '../builder.js';
 import { SystemSettingRef } from './refs.js';
 
 SystemSettingRef.implement({

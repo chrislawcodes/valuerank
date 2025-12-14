@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { useTags } from '../../hooks/useTags';
-import type { Tag } from '../../api/operations/tags';
 
 export type DefinitionFilterState = {
   search: string;

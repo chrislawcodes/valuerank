@@ -36,7 +36,7 @@ function formatDimensions(content: ScenarioContent): string[] {
 }
 
 function ScenarioCard({ scenario, index, isExpanded, onToggle }: ScenarioCardProps) {
-  const content = scenario.content as ScenarioContent;
+  const content = scenario.content;
   const dimensions = formatDimensions(content);
 
   return (

@@ -95,7 +95,7 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
                   </td>
                   <td className="py-2 px-3">
                     <div className="flex flex-wrap gap-1">
-                      {(run.config.models as string[]).map((model) => (
+                      {(run.config.models).map((model) => (
                         <span
                           key={model}
                           className="px-1.5 py-0.5 bg-gray-100 rounded text-xs text-gray-600"

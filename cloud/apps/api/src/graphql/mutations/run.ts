@@ -113,7 +113,7 @@ builder.mutationField('startRun', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'Run',
         entityId: result.run.id,
@@ -161,7 +161,7 @@ builder.mutationField('pauseRun', (t) =>
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run paused');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,
@@ -209,7 +209,7 @@ builder.mutationField('resumeRun', (t) =>
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run resumed');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,
@@ -258,7 +258,7 @@ builder.mutationField('cancelRun', (t) =>
       ctx.log.info({ userId: ctx.user.id, runId, status: result.status }, 'Run cancelled');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,
@@ -353,7 +353,7 @@ builder.mutationField('recoverRun', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,
@@ -419,7 +419,7 @@ builder.mutationField('triggerRecovery', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'System',
         entityId: 'recovery',
@@ -482,7 +482,7 @@ builder.mutationField('deleteRun', (t) =>
       ctx.log.info({ userId: ctx.user.id, runId }, 'Run deleted (soft)');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'DELETE',
         entityType: 'Run',
         entityId: runId,
@@ -564,7 +564,7 @@ builder.mutationField('updateRun', (t) =>
       ctx.log.info({ userId: ctx.user.id, runId, name: updated.name }, 'Run updated');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'Run',
         entityId: runId,
@@ -637,7 +637,7 @@ builder.mutationField('cancelSummarization', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,
@@ -718,7 +718,7 @@ builder.mutationField('restartSummarization', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'Run',
         entityId: runId,

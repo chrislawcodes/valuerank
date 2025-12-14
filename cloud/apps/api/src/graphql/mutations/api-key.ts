@@ -76,7 +76,7 @@ builder.mutationField('createApiKey', (t) =>
       );
 
       // Audit log (non-blocking) - do not log the key value
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'ApiKey',
         entityId: apiKey.id,
@@ -146,7 +146,7 @@ builder.mutationField('revokeApiKey', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'DELETE',
         entityType: 'ApiKey',
         entityId: apiKeyId,

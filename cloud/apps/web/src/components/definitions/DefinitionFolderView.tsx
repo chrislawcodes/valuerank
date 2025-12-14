@@ -8,7 +8,7 @@ type DefinitionFolderViewProps = {
   onDefinitionClick: (definition: Definition) => void;
 };
 
-type TagFolder = {
+type _TagFolder = {
   tag: Tag;
   definitions: Definition[];
   isExpanded: boolean;

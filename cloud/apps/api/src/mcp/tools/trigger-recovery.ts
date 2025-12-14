@@ -6,7 +6,6 @@
  * with no active jobs in the queue.
  */
 
-import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createLogger } from '@valuerank/shared';

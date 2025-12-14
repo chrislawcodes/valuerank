@@ -9,7 +9,7 @@
 import type { Request, Response } from 'express';
 import { createLogger } from '@valuerank/shared';
 import type { AuthorizationServerMetadata, ProtectedResourceMetadata } from './types.js';
-import { DEFAULT_SCOPE, SUPPORTED_SCOPES } from './constants.js';
+import { SUPPORTED_SCOPES } from './constants.js';
 
 const log = createLogger('mcp:oauth:metadata');
 

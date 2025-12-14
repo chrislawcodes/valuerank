@@ -75,7 +75,7 @@ function ConcurrencyGauge({ active, max, color }: { active: number; max: number;
  * Mini progress bar for provider.
  */
 function ProviderProgressBar({ provider }: { provider: ProviderExecutionMetrics }) {
-  const { activeJobs, queuedJobs, maxParallel } = provider;
+  const { activeJobs, queuedJobs, maxParallel: _maxParallel } = provider;
   const total = activeJobs + queuedJobs;
   const progress = total > 0 ? (activeJobs / total) * 100 : 0;
 

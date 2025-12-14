@@ -1,4 +1,5 @@
-import { db, Prisma, type CreateAuditLogInput } from '@valuerank/db';
+import type { Prisma} from '@valuerank/db';
+import { db, type CreateAuditLogInput } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('audit');

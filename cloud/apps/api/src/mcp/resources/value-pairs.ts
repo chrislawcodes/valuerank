@@ -8,7 +8,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   createLogger,
-  CANONICAL_DIMENSIONS,
   HIGHER_ORDER_CATEGORIES,
   getDimensionsByHigherOrder,
   type HigherOrderCategory,

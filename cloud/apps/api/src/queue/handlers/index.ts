@@ -6,7 +6,6 @@
  */
 
 import type { PgBoss } from 'pg-boss';
-import type * as PgBossTypes from 'pg-boss';
 import { createLogger } from '@valuerank/shared';
 import { queueConfig } from '../../config.js';
 import type {

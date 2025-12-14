@@ -29,7 +29,7 @@ type ComparisonFiltersProps = {
 function getCommonModels(runs: RunWithAnalysis[]): string[] {
   if (runs.length === 0) return [];
 
-  const modelSets = runs.map((run) => new Set(run.config.models as string[]));
+  const modelSets = runs.map((run) => new Set(run.config.models));
   const firstSet = modelSets[0];
   if (!firstSet) return [];
 
@@ -46,7 +46,7 @@ function getCommonModels(runs: RunWithAnalysis[]): string[] {
 function getAllModels(runs: RunWithAnalysis[]): string[] {
   const allModels = new Set<string>();
   for (const run of runs) {
-    for (const model of run.config.models as string[]) {
+    for (const model of run.config.models) {
       allModels.add(model);
     }
   }

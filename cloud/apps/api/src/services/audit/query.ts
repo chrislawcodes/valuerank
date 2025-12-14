@@ -1,4 +1,5 @@
-import { db, type AuditLog, Prisma } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
+import { db, type AuditLog } from '@valuerank/db';
 import type { AuditLogFilters, AuditLogPagination } from './types.js';
 
 /**

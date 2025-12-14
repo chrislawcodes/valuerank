@@ -7,7 +7,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getAllModelsWithProvider, type LlmModelWithProvider } from '@valuerank/db';
+import { getAllModelsWithProvider } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { addToolRegistrar } from './registry.js';
 

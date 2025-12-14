@@ -37,7 +37,7 @@ builder.mutationField('pauseQueue', (t) =>
       await pauseQueueService();
 
       // Audit log (non-blocking) - System entity type
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'System',
         entityId: SYSTEM_ACTOR_ID,
@@ -72,7 +72,7 @@ builder.mutationField('resumeQueue', (t) =>
       await resumeQueueService();
 
       // Audit log (non-blocking) - System entity type
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'System',
         entityId: SYSTEM_ACTOR_ID,

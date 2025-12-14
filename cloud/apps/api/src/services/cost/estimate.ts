@@ -14,7 +14,7 @@ import type {
   ModelActualCost,
 } from './types.js';
 import { FALLBACK_TOKENS } from './types.js';
-import { getTokenStatsForModels, getTokenStatsForDefinition, getAllModelAverage } from './statistics.js';
+import { getTokenStatsForDefinition, getAllModelAverage } from './statistics.js';
 
 const log = createLogger('services:cost:estimate');
 

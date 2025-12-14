@@ -5,7 +5,8 @@
  */
 
 import { builder } from '../builder.js';
-import { db, Prisma } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
+import { db } from '@valuerank/db';
 import { AuditLogRef } from '../types/refs.js';
 import {
   AuditLogFilterInput,

@@ -21,7 +21,7 @@ function createDefaultLevel(index: number): DimensionLevel {
 
 export function DimensionEditor({
   dimension,
-  index,
+  index: _index,
   onChange,
   onRemove,
   canRemove,

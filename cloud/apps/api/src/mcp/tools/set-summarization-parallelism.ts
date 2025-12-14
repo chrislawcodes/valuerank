@@ -91,7 +91,7 @@ function registerSetSummarizationParallelismTool(server: McpServer): void {
     async (args, extra) => {
       const requestId = String(extra.requestId ?? crypto.randomUUID());
       const userId = 'mcp-user';
-      const maxParallel = args.max_parallel as number;
+      const maxParallel = args.max_parallel;
 
       log.debug(
         { requestId, maxParallel },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Key, Cpu, Activity, Settings2 } from 'lucide-react';
-import { Tabs, Tab } from '../components/ui/Tabs';
+import type { Tab } from '../components/ui/Tabs';
+import { Tabs } from '../components/ui/Tabs';
 import { SystemHealth } from '../components/settings/SystemHealth';
 import { ApiKeysPanel } from '../components/settings/ApiKeysPanel';
 import { ModelsPanel } from '../components/settings/ModelsPanel';

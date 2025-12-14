@@ -25,7 +25,6 @@ import {
   createRefreshToken,
   consumeRefreshToken,
   getUserByApiKey,
-  hashSecret,
 } from './storage.js';
 import { validatePkce } from './pkce.js';
 import { generateAccessToken } from './tokens.js';

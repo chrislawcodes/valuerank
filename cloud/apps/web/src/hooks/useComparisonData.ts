@@ -307,7 +307,7 @@ function computeModelSets(runs: RunWithAnalysis[]): {
   uniqueModels: Record<string, string[]>;
 } {
   const modelSets = runs.map(
-    (r) => new Set(r.config.models as string[])
+    (r) => new Set(r.config.models)
   );
 
   // Common models: intersection of all sets

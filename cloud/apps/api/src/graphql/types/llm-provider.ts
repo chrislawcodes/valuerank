@@ -5,7 +5,6 @@
  */
 
 import { db } from '@valuerank/db';
-import { builder } from '../builder.js';
 import { LlmProviderRef, LlmModelRef } from './refs.js';
 
 LlmProviderRef.implement({

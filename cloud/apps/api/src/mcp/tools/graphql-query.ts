@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { graphql, parse, validate } from 'graphql';
+import { graphql, parse } from 'graphql';
 import { createLogger } from '@valuerank/shared';
 import { schema } from '../../graphql/index.js';
 import { createDataLoaders } from '../../graphql/dataloaders/index.js';

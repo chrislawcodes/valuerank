@@ -61,7 +61,7 @@ builder.mutationField('addTagToDefinition', (t) =>
         ctx.log.info({ definitionId, tagId, tagName: tag.name }, 'Tag added to definition');
 
         // Audit log (non-blocking)
-        createAuditLog({
+        void createAuditLog({
           action: 'CREATE',
           entityType: 'DefinitionTag',
           entityId: `${definitionId}:${tagId}`,
@@ -113,7 +113,7 @@ builder.mutationField('removeTagFromDefinition', (t) =>
 
       // Audit log only if something was actually deleted (non-blocking)
       if (deleted.count > 0) {
-        createAuditLog({
+        void createAuditLog({
           action: 'DELETE',
           entityType: 'DefinitionTag',
           entityId: `${definitionId}:${tagId}`,
@@ -182,7 +182,7 @@ builder.mutationField('createAndAssignTag', (t) =>
         ctx.log.info({ tagId: tag.id, name: tag.name }, 'Tag created');
 
         // Audit log for tag creation (non-blocking)
-        createAuditLog({
+        void createAuditLog({
           action: 'CREATE',
           entityType: 'Tag',
           entityId: tag.id,
@@ -207,7 +207,7 @@ builder.mutationField('createAndAssignTag', (t) =>
         ctx.log.info({ definitionId, tagId: tag.id, tagName: tag.name }, 'Tag assigned to definition');
 
         // Audit log for tag assignment (non-blocking)
-        createAuditLog({
+        void createAuditLog({
           action: 'CREATE',
           entityType: 'DefinitionTag',
           entityId: `${definitionId}:${tag.id}`,

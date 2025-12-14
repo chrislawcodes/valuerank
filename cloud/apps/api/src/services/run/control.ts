@@ -6,7 +6,6 @@
 
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
-import { getBoss } from '../../queue/boss.js';
 
 const log = createLogger('services:run:control');
 
@@ -128,8 +127,6 @@ export async function cancelRun(runId: string): Promise<{
 
   // Cancel pending jobs in PgBoss
   try {
-    const boss = getBoss();
-
     // Query pending jobs for this run and cancel them
     // PgBoss stores jobs with data.runId, we need to cancel those
     const result = await db.$executeRaw`

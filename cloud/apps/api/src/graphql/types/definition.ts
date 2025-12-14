@@ -337,7 +337,7 @@ builder.objectType(DefinitionRef, {
     inheritedTags: t.field({
       type: [TagRef],
       description: 'Tags inherited from all ancestor definitions (union of ancestor tags)',
-      resolve: async (definition, _args, ctx) => {
+      resolve: async (definition, _args, _ctx) => {
         if (!definition.parentId) return [];
 
         // Get all ancestors using recursive CTE

@@ -6,7 +6,7 @@
  */
 
 import type { Definition, Tag } from '@prisma/client';
-import type { DefinitionContent, Dimension, DimensionLevel } from '@valuerank/db';
+import type { DefinitionContent, Dimension } from '@valuerank/db';
 import type { MDDefinition, MDDimension, MDDimensionValue, ExportResult } from './types.js';
 
 // ============================================================================

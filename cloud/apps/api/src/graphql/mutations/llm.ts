@@ -12,6 +12,7 @@ import {
   UpdateLlmProviderInput,
   UpdateSystemSettingInput,
 } from '../types/inputs/llm.js';
+import type { LlmModel } from '@valuerank/db';
 import {
   createModel,
   updateModel,
@@ -20,7 +21,6 @@ import {
   setDefaultModel,
   updateProvider,
   upsertSetting,
-  LlmModel,
 } from '@valuerank/db';
 import { createAuditLog } from '../../services/audit/index.js';
 import { getBoss, isBossRunning } from '../../queue/boss.js';
@@ -100,7 +100,7 @@ builder.mutationField('createLlmModel', (t) =>
       ctx.log.info({ modelId: model.id, apiModelId: model.modelId }, 'LLM model created');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'CREATE',
         entityType: 'LlmModel',
         entityId: model.id,
@@ -152,7 +152,7 @@ builder.mutationField('updateLlmModel', (t) =>
       ctx.log.info({ modelId: model.id }, 'LLM model updated');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'LlmModel',
         entityId: model.id,
@@ -184,7 +184,7 @@ builder.mutationField('deprecateLlmModel', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'LlmModel',
         entityId: result.model.id,
@@ -213,7 +213,7 @@ builder.mutationField('reactivateLlmModel', (t) =>
       ctx.log.info({ modelId: model.id }, 'LLM model reactivated');
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'LlmModel',
         entityId: model.id,
@@ -245,7 +245,7 @@ builder.mutationField('setDefaultLlmModel', (t) =>
       );
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'ACTION',
         entityType: 'LlmModel',
         entityId: result.model.id,
@@ -301,7 +301,7 @@ builder.mutationField('updateLlmProvider', (t) =>
       }
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'LlmProvider',
         entityId: provider.id,
@@ -353,7 +353,7 @@ builder.mutationField('updateSystemSetting', (t) =>
       }
 
       // Audit log (non-blocking)
-      createAuditLog({
+      void createAuditLog({
         action: 'UPDATE',
         entityType: 'SystemSetting',
         entityId: setting.id,

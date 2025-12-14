@@ -12,7 +12,7 @@
  */
 
 import { createLogger } from '@valuerank/shared';
-import { db, getAllProvidersWithModels, type LlmProviderWithModels } from '@valuerank/db';
+import { db, getAllProvidersWithModels } from '@valuerank/db';
 import type { PgBoss, QueueResult } from 'pg-boss';
 
 const log = createLogger('services:parallelism');
