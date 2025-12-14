@@ -80,22 +80,31 @@ describe('MCP Resources', () => {
       expect(valuePairsContent.length).toBeGreaterThan(100);
     });
 
-    it('lists all 14 canonical values', () => {
+    it('lists all 19 canonical values', () => {
       const values = [
-        'Physical_Safety',
-        'Compassion',
-        'Fair_Process',
-        'Equal_Outcomes',
-        'Freedom',
-        'Social_Duty',
-        'Harmony',
-        'Loyalty',
-        'Economics',
-        'Human_Worthiness',
-        'Childrens_Rights',
-        'Animal_Rights',
-        'Environmental_Rights',
+        // Openness to Change
+        'Self_Direction_Thought',
+        'Self_Direction_Action',
+        'Stimulation',
+        'Hedonism',
+        // Self-Enhancement
+        'Achievement',
+        'Power_Dominance',
+        'Power_Resources',
+        'Face',
+        // Conservation
+        'Security_Personal',
+        'Security_Societal',
         'Tradition',
+        'Conformity_Rules',
+        'Conformity_Interpersonal',
+        'Humility',
+        // Self-Transcendence
+        'Benevolence_Dependability',
+        'Benevolence_Caring',
+        'Universalism_Concern',
+        'Universalism_Nature',
+        'Universalism_Tolerance',
       ];
 
       for (const value of values) {
@@ -104,9 +113,16 @@ describe('MCP Resources', () => {
     });
 
     it('contains value tension pairs', () => {
-      expect(valuePairsContent).toContain('Physical_Safety vs Economics');
-      expect(valuePairsContent).toContain('Freedom vs Social_Duty');
-      expect(valuePairsContent).toContain('Compassion vs Fair_Process');
+      expect(valuePairsContent).toContain('Self_Direction_Action vs Conformity_Rules');
+      expect(valuePairsContent).toContain('Achievement vs Benevolence_Caring');
+      expect(valuePairsContent).toContain('Power_Resources vs Universalism_Nature');
+    });
+
+    it('contains higher-order category information', () => {
+      expect(valuePairsContent).toContain('Openness to Change');
+      expect(valuePairsContent).toContain('Self-Enhancement');
+      expect(valuePairsContent).toContain('Conservation');
+      expect(valuePairsContent).toContain('Self-Transcendence');
     });
   });
 

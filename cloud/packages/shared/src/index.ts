@@ -11,9 +11,13 @@ export {
 } from './errors.js';
 export {
   CANONICAL_DIMENSIONS,
+  HIGHER_ORDER_CATEGORIES,
   getCanonicalDimension,
   getCanonicalDimensionNames,
+  getDimensionsByHigherOrder,
+  getHigherOrderCategories,
   type CanonicalDimension,
   type CanonicalLevel,
+  type HigherOrderCategory,
 } from './canonical-dimensions.js';
 export { SYSTEM_ACTOR_ID } from './constants.js';

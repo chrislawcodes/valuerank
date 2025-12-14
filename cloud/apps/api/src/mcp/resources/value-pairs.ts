@@ -1,142 +1,195 @@
 /**
  * Value Pairs MCP Resource
  *
- * Common value tensions for designing moral dilemmas.
+ * Common value tensions for designing moral dilemmas based on the
+ * 19 refined Schwartz values and their circular structure.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { createLogger, CANONICAL_DIMENSIONS } from '@valuerank/shared';
+import {
+  createLogger,
+  CANONICAL_DIMENSIONS,
+  HIGHER_ORDER_CATEGORIES,
+  getDimensionsByHigherOrder,
+  type HigherOrderCategory,
+} from '@valuerank/shared';
 
 const log = createLogger('mcp:resources:value-pairs');
 
 export const VALUE_PAIRS_URI = 'valuerank://authoring/value-pairs';
 
-// Generate the canonical values table from shared dimensions
-const canonicalValuesTable = CANONICAL_DIMENSIONS
-  .map(d => `| ${d.name} | ${d.description} |`)
-  .join('\n');
+// Generate the canonical values table from shared dimensions, grouped by higher-order category
+function generateValuesTable(): string {
+  const categories: HigherOrderCategory[] = [
+    'Openness_to_Change',
+    'Self_Enhancement',
+    'Conservation',
+    'Self_Transcendence',
+  ];
+
+  const sections: string[] = [];
+
+  for (const category of categories) {
+    const dims = getDimensionsByHigherOrder(category);
+    const categoryInfo = HIGHER_ORDER_CATEGORIES[category];
+    const conflictInfo = HIGHER_ORDER_CATEGORIES[categoryInfo.conflictsWith];
+
+    sections.push(`### ${categoryInfo.name}
+*${categoryInfo.description}. Conflicts with **${conflictInfo.name}** values.*
+
+| Value | Definition |
+|-------|------------|
+${dims.map((d) => `| ${d.name} | ${d.definition} |`).join('\n')}`);
+  }
+
+  return sections.join('\n\n');
+}
 
 export const valuePairsContent = `
 # ValueRank Value Pairs & Tensions
 
-The 14 canonical values in ValueRank create natural tensions. Use these pairs to design scenarios with genuine moral dilemmas.
+The 19 refined Schwartz values form a circular motivational continuum. Values that are
+adjacent in the circle are compatible; values across the circle create natural tensions
+that make for compelling moral dilemmas.
 
-## The 14 Canonical Values
+## The 19 Canonical Values
 
-| Value | Description |
-|-------|-------------|
-${canonicalValuesTable}
+${generateValuesTable()}
+
+---
+
+## Circular Structure & Value Tensions
+
+The values form a circle with four quadrants:
+- **Openness to Change** (top-left): Self-direction, stimulation, hedonism
+- **Self-Enhancement** (bottom-left): Achievement, power, face
+- **Conservation** (bottom-right): Security, tradition, conformity, humility
+- **Self-Transcendence** (top-right): Benevolence, universalism
+
+**Opposite quadrants create the strongest tensions:**
+- Openness to Change ↔ Conservation
+- Self-Enhancement ↔ Self-Transcendence
 
 ---
 
 ## High-Tension Value Pairs
 
-These pairs create the strongest moral dilemmas:
+These pairs (from opposite quadrants) create the strongest moral dilemmas:
 
-### Physical_Safety vs Economics
-**Classic tradeoff**: Safety regulations cost money
-- Example: Workplace safety upgrades vs business viability
-- Example: Expensive safety features vs affordable products
+### Self_Direction_Action vs Conformity_Rules
+**Classic tradeoff**: Personal freedom vs following rules
+- Example: Breaking unjust laws vs respecting legal order
+- Example: Personal choices vs regulatory compliance
 
-### Freedom vs Physical_Safety
-**Classic tradeoff**: Individual liberty vs collective security
-- Example: Privacy vs surveillance for protection
-- Example: Personal choices vs public health measures
+### Self_Direction_Thought vs Tradition
+**Classic tradeoff**: Independent thinking vs inherited wisdom
+- Example: Questioning religious teachings vs respecting faith traditions
+- Example: Scientific skepticism vs cultural beliefs
 
-### Freedom vs Social_Duty
-**Classic tradeoff**: Individual rights vs community obligations
-- Example: Personal expression vs group harmony
-- Example: Self-interest vs civic responsibility
+### Stimulation vs Security_Personal
+**Classic tradeoff**: Excitement vs safety
+- Example: Adventure sports vs avoiding risk
+- Example: Career change vs job security
 
-### Compassion vs Fair_Process
-**Classic tradeoff**: Individual mercy vs systemic fairness
-- Example: Making exceptions vs following rules equally
-- Example: Helping one person vs maintaining precedent
+### Achievement vs Benevolence_Caring
+**Classic tradeoff**: Personal success vs helping others
+- Example: Career advancement vs family time
+- Example: Competitive victory vs letting others win
 
-### Loyalty vs Social_Duty
-**Classic tradeoff**: Personal relationships vs public good
-- Example: Protecting friends vs reporting wrongdoing
-- Example: Family obligations vs civic duties
+### Power_Dominance vs Universalism_Concern
+**Classic tradeoff**: Control vs equality
+- Example: Executive authority vs democratic process
+- Example: Hierarchical efficiency vs equal voice
 
-### Equal_Outcomes vs Economics
-**Classic tradeoff**: Equality vs efficiency
-- Example: Redistributing resources vs rewarding productivity
-- Example: Universal access vs sustainable funding
+### Power_Resources vs Universalism_Nature
+**Classic tradeoff**: Economic gain vs environmental protection
+- Example: Development vs conservation
+- Example: Resource extraction vs ecosystem preservation
 
-### Tradition vs Freedom
-**Classic tradeoff**: Cultural continuity vs individual choice
-- Example: Maintaining customs vs personal autonomy
-- Example: Community expectations vs self-expression
-
-### Harmony vs Fair_Process
-**Classic tradeoff**: Peace vs justice
-- Example: Avoiding conflict vs addressing wrongs
-- Example: Group cohesion vs calling out violations
+### Face vs Humility
+**Classic tradeoff**: Public image vs modesty
+- Example: Taking credit vs sharing recognition
+- Example: Self-promotion vs self-effacement
 
 ---
 
 ## Moderate-Tension Value Pairs
 
-These pairs create nuanced dilemmas:
+These pairs (from adjacent quadrants) create nuanced dilemmas:
 
-### Human_Worthiness vs Economics
-- Treating people with dignity vs resource constraints
-- Quality of life vs cost considerations
+### Self_Direction_Action vs Security_Societal
+- Individual liberty vs collective security
+- Personal privacy vs public safety measures
 
-### Childrens_Rights vs Freedom
-- Protecting minors vs respecting autonomy
-- Parental rights vs child welfare
+### Achievement vs Benevolence_Dependability
+- Pursuing success vs keeping commitments to others
+- Career opportunities vs reliability to teammates
 
-### Animal_Rights vs Economics
-- Animal welfare standards vs production costs
-- Conservation vs development
+### Hedonism vs Conformity_Interpersonal
+- Personal enjoyment vs not upsetting others
+- Self-indulgence vs social harmony
 
-### Environmental_Rights vs Economics
-- Environmental protection vs economic growth
-- Sustainability vs immediate needs
+### Stimulation vs Tradition
+- Seeking novelty vs honoring customs
+- Change vs continuity
 
-### Loyalty vs Fair_Process
-- Helping friends vs treating everyone equally
-- Group solidarity vs impartial rules
+### Security_Personal vs Universalism_Tolerance
+- Self-protection vs accepting difference
+- Caution with outsiders vs inclusive openness
 
-### Compassion vs Equal_Outcomes
-- Meeting individual needs vs ensuring fairness
-- Exceptions based on circumstances vs uniform treatment
+### Power_Resources vs Benevolence_Caring
+- Material accumulation vs generosity
+- Resource control vs sharing with loved ones
+
+---
+
+## Within-Quadrant Pairs (Low Tension)
+
+Values in the same quadrant generally don't conflict well:
+- Benevolence_Caring + Universalism_Concern (both care-focused)
+- Security_Personal + Security_Societal (both safety-focused)
+- Power_Dominance + Power_Resources (both power-focused)
+- Self_Direction_Thought + Self_Direction_Action (both autonomy-focused)
+
+**Avoid using these pairs as primary tensions** - they create weak dilemmas.
 
 ---
 
 ## Designing with Value Tensions
 
-### Single Tension
-For simple scenarios, pick one high-tension pair:
-- "This creates tension between [Value_A] and [Value_B]"
+### Single Tension (Simple Scenario)
+Pick one high-tension pair from opposite quadrants:
+- "This creates tension between [Self_Direction_Action] and [Conformity_Rules]"
 
-### Multiple Tensions
-Complex scenarios can involve 2-3 value tensions:
-- Primary: The main tradeoff
-- Secondary: An additional consideration
-- Tertiary: A complicating factor
+### Multiple Tensions (Complex Scenario)
+Layer 2-3 tensions, mixing high and moderate:
+- **Primary**: High-tension pair (e.g., Achievement vs Benevolence_Caring)
+- **Secondary**: Moderate-tension pair (e.g., Face vs Humility)
+- **Tertiary**: Complicating factor from adjacent quadrant
 
-### Avoid Same-Cluster Values
-Values in the same cluster don't create tension:
-- Compassion + Human_Worthiness (both care-focused)
-- Fair_Process + Equal_Outcomes (both fairness-focused)
+### Using Higher-Order Categories
+When designing scenarios, consider which quadrants you're drawing from:
+- **Openness ↔ Conservation**: Change vs stability themes
+- **Self-Enhancement ↔ Self-Transcendence**: Self vs others themes
 
 ---
 
 ## Example Tension Applications
 
-### Physical_Safety vs Economics
-"A company can make their product [safety_level] safe, but it would [cost_impact]."
+### Self_Direction_Action vs Conformity_Rules
+"Someone can [autonomous_choice], but this would violate [rule_obligation]."
 
-### Freedom vs Social_Duty
-"A person can [personal_choice], but this would [social_effect]."
+### Achievement vs Benevolence_Caring
+"A person can achieve [success_outcome] but at the cost of [impact_on_loved_ones]."
 
-### Loyalty vs Fair_Process
-"Someone can help their [relationship] by [action], but this would [fairness_impact]."
+### Stimulation vs Security_Personal
+"This opportunity offers [exciting_possibility] but involves [safety_risk]."
 
-### Compassion vs Fair_Process
-"The decision-maker could [compassionate_action] for this case, but this would [precedent_effect]."
+### Power_Resources vs Universalism_Nature
+"Developing this land would [economic_benefit] but would [environmental_harm]."
+
+### Tradition vs Self_Direction_Thought
+"Following this tradition means [traditional_requirement] even though they believe [personal_conviction]."
 `.trim();
 
 /**
@@ -149,7 +202,7 @@ export function registerValuePairsResource(server: McpServer): void {
     'value-pairs',
     VALUE_PAIRS_URI,
     {
-      description: 'Common value tensions for designing moral dilemmas',
+      description: 'Common value tensions for designing moral dilemmas based on the 19 refined Schwartz values',
       mimeType: 'text/markdown',
     },
     () => ({

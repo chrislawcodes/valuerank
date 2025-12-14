@@ -22,7 +22,7 @@ src/
 
 config/
 ├── runtime.yaml      # Models, threads, temperature settings
-├── values_rubric.yaml # 14 canonical moral values with definitions
+├── values_rubric.yaml # 19 refined Schwartz values with definitions
 └── model_costs.yaml  # Token pricing per model
 
 scenarios/            # Moral dilemma datasets (folder per topic)
@@ -47,11 +47,16 @@ python3 -m src.summary --run-dir output/<run_id> --scenarios-file scenarios/<fol
 ## Key Files to Know
 - `src/judge_value.py` - Core judging logic, value matching, win-rate calculation
 - `src/llm_adapters.py` - All LLM provider integrations
-- `config/values_rubric.yaml` - The 14 moral values being measured
+- `config/values_rubric.yaml` - The 19 moral values being measured
 - `config/runtime.yaml` - Runtime settings (which models to evaluate)
 
-## 14 Canonical Values
-Physical_Safety, Compassion, Fair_Process, Equal_Outcomes, Freedom, Social_Duty, Harmony, Loyalty, Economics, Human_Worthiness, Childrens_Rights, Animal_Rights, Environmental_Rights, Tradition
+## 19 Refined Schwartz Values (by higher-order category)
+Based on Schwartz et al. (2012). DOI: 10.1037/a0029393
+
+**Openness to Change:** Self_Direction_Thought, Self_Direction_Action, Stimulation, Hedonism
+**Self-Enhancement:** Achievement, Power_Dominance, Power_Resources, Face
+**Conservation:** Security_Personal, Security_Societal, Tradition, Conformity_Rules, Conformity_Interpersonal, Humility
+**Self-Transcendence:** Benevolence_Dependability, Benevolence_Caring, Universalism_Concern, Universalism_Nature, Universalism_Tolerance
 
 ## Output Structure
 ```
@@ -66,7 +71,8 @@ output/<run_id>/
 - **Blind Judging**: Models are anonymized during evaluation to prevent bias
 - **Win Rate**: `prioritized / (prioritized + deprioritized)` for each value
 - **Pairwise Matrix**: How often one value beats another in conflicts
-- **Unmatched Values**: Ideas that don't fit the 14-value rubric (diagnostic)
+- **Unmatched Values**: Ideas that don't fit the 19-value rubric (diagnostic)
+- **Higher-Order Categories**: Four quadrants that group values by motivational conflict
 
 ## Running Locally
 ```bash
