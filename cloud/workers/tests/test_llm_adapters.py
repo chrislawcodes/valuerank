@@ -272,7 +272,8 @@ class TestDeepSeekAdapter:
 
             call_args = mock_post.call_args
             payload = call_args.kwargs.get("json") or call_args[1].get("json")
-            assert payload["max_tokens"] == 65536
+            # deepseek-chat caps at 8192, deepseek-reasoner caps at 65536
+            assert payload["max_tokens"] == 8192
 
 
 class TestMistralAdapter:
