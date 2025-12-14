@@ -31,26 +31,26 @@
 
 ### Core Components
 
-- [ ] T005 [P] [US1] Refactor `components/ui/Button.tsx` to CVA pattern, add iconOnly variant
-- [ ] T006 [P] [US1] Create `components/ui/Card.tsx` with variants: default, bordered, elevated, interactive
-- [ ] T007 [P] [US1] Create `components/ui/Badge.tsx` with variants: success, warning, error, info, tag, count
-- [ ] T008 [P] [US1] Create `components/ui/Modal.tsx` with focus trap, escape handling, backdrop click
-- [ ] T009 [P] [US1] Create `components/ui/Select.tsx` with keyboard navigation and ARIA compliance
-- [ ] T010 [P] [US1] Create `components/ui/Avatar.tsx` with fallback initials
-- [ ] T011 [P] [US1] Create `components/ui/Tooltip.tsx` for contextual information
-- [ ] T012 [P] [US1] Refactor `components/ui/Input.tsx` to CVA pattern for consistency
-- [ ] T013 [P] [US1] Refactor `components/ui/Tabs.tsx` to CVA pattern for consistency
+- [X] T005 [P] [US1] Refactor `components/ui/Button.tsx` to CVA pattern, add iconOnly variant
+- [X] T006 [P] [US1] Create `components/ui/Card.tsx` with variants: default, bordered, elevated, interactive
+- [X] T007 [P] [US1] Create `components/ui/Badge.tsx` with variants: success, warning, error, info, tag, count
+- [X] T008 [P] [US1] Create `components/ui/Modal.tsx` with focus trap, escape handling, backdrop click
+- [X] T009 [P] [US1] Create `components/ui/Select.tsx` with keyboard navigation and ARIA compliance
+- [X] T010 [P] [US1] Create `components/ui/Avatar.tsx` with fallback initials
+- [X] T011 [P] [US1] Create `components/ui/Tooltip.tsx` for contextual information
+- [X] T012 [P] [US1] Refactor `components/ui/Input.tsx` to CVA pattern for consistency
+- [X] T013 [P] [US1] Refactor `components/ui/Tabs.tsx` to CVA pattern for consistency
 
 ### Component Tests
 
-- [ ] T014 [P] [US1] Create `tests/components/ui/Card.test.tsx` - variants, onClick, hover
-- [ ] T015 [P] [US1] Create `tests/components/ui/Badge.test.tsx` - variants, truncation
-- [ ] T016 [P] [US1] Create `tests/components/ui/Modal.test.tsx` - focus trap, escape, backdrop
-- [ ] T017 [P] [US1] Create `tests/components/ui/Select.test.tsx` - keyboard nav, selection
+- [X] T014 [P] [US1] Create `tests/components/ui/Card.test.tsx` - variants, onClick, hover
+- [X] T015 [P] [US1] Create `tests/components/ui/Badge.test.tsx` - variants, truncation
+- [X] T016 [P] [US1] Create `tests/components/ui/Modal.test.tsx` - focus trap, escape, backdrop
+- [X] T017 [P] [US1] Create `tests/components/ui/Select.test.tsx` - keyboard nav, selection
 
 ### Barrel Export
 
-- [ ] T018 [US1] Create `components/ui/index.ts` barrel export for all UI components
+- [X] T018 [US1] Create `components/ui/index.ts` barrel export for all UI components
 
 **Checkpoint**: Component library complete - file decomposition can now begin
 
