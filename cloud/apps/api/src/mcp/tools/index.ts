@@ -55,6 +55,7 @@ import './restart-summarization.js';
 // Feature 018 - MCP Operations Tools
 import './recover-run.js';
 import './trigger-recovery.js';
+import './get-job-queue-status.js';
 
 /**
  * Registers all MCP tools on the given server

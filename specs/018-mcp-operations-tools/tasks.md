@@ -102,12 +102,12 @@
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Create `apps/api/src/mcp/tools/get-job-queue-status.ts`
+- [X] T016 [US3] Create `apps/api/src/mcp/tools/get-job-queue-status.ts`
   - Input schema: `run_id` (required), `include_recent_failures` (optional)
   - Call `getJobQueueStatus` from `services/run/job-queue.ts`
   - Return `{ run_id, by_job_type, total_pending, total_running, ... }`
-- [ ] T017 [US3] Register tool in `apps/api/src/mcp/tools/index.ts`
-- [ ] T018 [US3] Create tests `apps/api/tests/mcp/tools/get-job-queue-status.test.ts`
+- [X] T017 [US3] Register tool in `apps/api/src/mcp/tools/index.ts`
+- [X] T018 [US3] Create tests `apps/api/tests/mcp/tools/get-job-queue-status.test.ts`
   - Test with jobs in various states
   - Test with `include_recent_failures=true`
   - Test with empty queue
