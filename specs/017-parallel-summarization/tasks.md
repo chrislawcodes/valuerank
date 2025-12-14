@@ -61,19 +61,19 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Create `cloud/apps/api/src/mcp/tools/set-summarization-parallelism.ts`:
+- [X] T007 [US1] Create `cloud/apps/api/src/mcp/tools/set-summarization-parallelism.ts`:
   - Input schema: `max_parallel` (integer, 1-100)
   - Calls `setMaxParallelSummarizations()`
   - Calls `reregisterSummarizeHandler()` for hot reload
   - Returns success with new value
 
-- [ ] T008 [US1] Register tool in `cloud/apps/api/src/mcp/tools/registry.ts`
+- [X] T008 [US1] Register tool in `cloud/apps/api/src/mcp/tools/registry.ts`
 
-- [ ] T009 [US1] Update `cloud/apps/api/src/mcp/tools/list-system-settings.ts`:
+- [X] T009 [US1] Update `cloud/apps/api/src/mcp/tools/list-system-settings.ts`:
   - Ensure `infra_max_parallel_summarizations` appears in output
   - Show default value (8) if not configured
 
-- [ ] T010 [US1] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/set-summarization-parallelism.test.ts`
+- [X] T010 [US1] Add MCP tool tests in `cloud/apps/api/tests/mcp/tools/set-summarization-parallelism.test.ts`
 
 **Checkpoint**: US1 complete - parallelism configurable via MCP
 

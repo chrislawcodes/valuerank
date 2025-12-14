@@ -48,6 +48,8 @@ import './set-default-llm-model.js';
 import './update-llm-provider.js';
 import './set-infra-model.js';
 import './list-system-settings.js';
+// Feature 017 - Parallel Summarization
+import './set-summarization-parallelism.js';
 
 /**
  * Registers all MCP tools on the given server

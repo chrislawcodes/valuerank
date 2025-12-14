@@ -80,6 +80,7 @@ function registerListSystemSettingsTool(server: McpServer): void {
 - infra_model_scenario_generator: Model for generating scenarios
 - infra_model_judge: Model for judging responses
 - infra_model_summarizer: Model for generating summaries
+- infra_max_parallel_summarizations: Max parallel summarization jobs (default: 8)
 
 **Examples:**
 - List all: \`{}\`
@@ -103,6 +104,20 @@ function registerListSystemSettingsTool(server: McpServer): void {
         // If specific key requested, return single setting
         if (args.key) {
           const setting = await getSettingByKey(args.key);
+
+          // Handle special case: return default for summarization parallelism
+          if (!setting && args.key === 'infra_max_parallel_summarizations') {
+            log.info({ requestId, key: args.key }, 'Returning default for summarization parallelism');
+            return formatSuccess({
+              setting: {
+                key: args.key,
+                value: { value: 8 },
+                is_default: true,
+                description: 'Max parallel summarization jobs (using default, not explicitly configured)',
+              },
+            });
+          }
+
           if (!setting) {
             return formatError('NOT_FOUND', `Setting not found: ${args.key}`);
           }
