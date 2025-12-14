@@ -96,23 +96,25 @@
 
 ### RunDetail Decomposition (642 → ~180 + sub-components)
 
-- [ ] T035 [US2] Create `pages/RunDetail/` folder structure
-- [ ] T036 [P] [US2] Extract `pages/RunDetail/RunHeader.tsx` - title, status, actions
-- [ ] T037 [P] [US2] Extract `pages/RunDetail/RunMetadata.tsx` - dates, duration, definition link
-- [ ] T038 [P] [US2] Extract `pages/RunDetail/DeleteConfirmModal.tsx` - confirmation dialog (use Modal)
-- [ ] T039 [US2] Refactor `pages/RunDetail/RunDetail.tsx` to page orchestration only
-- [ ] T040 [US2] Create `pages/RunDetail/index.ts` barrel export
-- [ ] T041 [US2] Update route imports in `App.tsx` to use new RunDetail/ path
+- [X] T035 [US2] Create `pages/RunDetail/` folder structure
+- [X] T036 [P] [US2] Extract `pages/RunDetail/RunHeader.tsx` - title, status, actions
+- [X] T037 [P] [US2] Extract `pages/RunDetail/RunMetadata.tsx` - dates, duration, definition link
+- [X] T038 [P] [US2] Extract `pages/RunDetail/DeleteConfirmModal.tsx` - confirmation dialog (use Modal)
+- [X] T039 [US2] Refactor `pages/RunDetail/RunDetail.tsx` to page orchestration only
+- [X] T040 [US2] Create `pages/RunDetail/index.ts` barrel export
+- [X] T041 [US2] Update route imports in `App.tsx` to use new RunDetail/ path
 
-### DefinitionDetail Decomposition (562 → ~150 + sub-components)
+### DefinitionDetail Decomposition (562 → 314 lines)
 
-- [ ] T042 [US2] Create `pages/DefinitionDetail/` folder structure
-- [ ] T043 [P] [US2] Extract `pages/DefinitionDetail/EditorPanel.tsx` - template editor
-- [ ] T044 [P] [US2] Extract `pages/DefinitionDetail/PreviewPanel.tsx` - scenario preview
-- [ ] T045 [P] [US2] Extract `pages/DefinitionDetail/ActionBar.tsx` - save/fork/delete buttons
-- [ ] T046 [US2] Refactor `pages/DefinitionDetail/DefinitionDetail.tsx` to page orchestration
-- [ ] T047 [US2] Create `pages/DefinitionDetail/index.ts` barrel export
-- [ ] T048 [US2] Update route imports in `App.tsx` to use new DefinitionDetail/ path
+- [X] T042 [US2] Create `pages/DefinitionDetail/` folder structure
+- [X] T043 [P] [US2] Extract `pages/DefinitionDetail/DefinitionHeader.tsx` - back button and actions
+- [X] T044 [P] [US2] Extract `pages/DefinitionDetail/DefinitionMetadata.tsx` - date, run count, forks
+- [X] T045 [P] [US2] Extract `pages/DefinitionDetail/DefinitionContentView.tsx` - preamble, template, dimensions
+- [X] T045b [P] [US2] Extract `pages/DefinitionDetail/DeleteDefinitionModal.tsx` - delete confirmation
+- [X] T045c [P] [US2] Extract `pages/DefinitionDetail/RunFormModal.tsx` - run form dialog
+- [X] T046 [US2] Refactor `pages/DefinitionDetail/DefinitionDetail.tsx` to page orchestration
+- [X] T047 [US2] Create `pages/DefinitionDetail/index.ts` barrel export
+- [X] T048 [US2] Update route imports in `App.tsx` to use new DefinitionDetail/ path
 
 **Checkpoint**: Page files under 400 lines - verify with `wc -l`
 
