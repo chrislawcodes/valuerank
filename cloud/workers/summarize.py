@@ -247,12 +247,7 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
                 summaryCode=summary_decision_code,
             )
 
-        # Clean the decision text by removing the "Rating: X" prefix if present
-        # Note: generate_summary() replaces newlines with spaces, so we match spaces too
         decision_text = summary_response
-        rating_line_match = re.match(r"Rating:\s*[1-5]\s*", decision_text, re.IGNORECASE)
-        if rating_line_match:
-            decision_text = decision_text[rating_line_match.end():].strip()
 
         log.info(
             "Summarization completed",

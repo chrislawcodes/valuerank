@@ -409,8 +409,8 @@ class TestRunSummarize:
 
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "4"
-        # The "Rating: X" prefix should be stripped from decision text
-        assert result["summary"]["decisionText"] == "The AI chose option 4 for safety."
+        # Decision text includes the full response from summarizer
+        assert result["summary"]["decisionText"] == "Rating: 4\n\nThe AI chose option 4 for safety."
 
     @patch("summarize.generate_summary")
     @patch("summarize.extract_decision_code")
@@ -441,37 +441,6 @@ class TestRunSummarize:
         # Should use summarizer's code (2), not initial code (1)
         assert result["summary"]["decisionCode"] == "2"
         assert "The AI chose 2" in result["summary"]["decisionText"]
-
-    @patch("summarize.generate_summary")
-    @patch("summarize.extract_decision_code")
-    def test_strips_rating_prefix_with_spaces(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
-    ) -> None:
-        """Test that Rating prefix is stripped when newlines are replaced with spaces.
-
-        In production, generate_summary() replaces newlines with spaces, so
-        'Rating: 4\\n\\nThe AI...' becomes 'Rating: 4  The AI...'.
-        The stripping logic must handle both formats.
-        """
-        from summarize import run_summarize
-
-        mock_extract.return_value = "4"
-        # Simulate what generate_summary() actually returns (newlines replaced with spaces)
-        mock_generate.return_value = "Rating: 4  The AI chose 4 for ethical reasons."
-
-        data = {
-            "transcriptId": "transcript-123",
-            "modelId": "anthropic:claude-3.5-sonnet",
-            "transcriptContent": {"turns": []},
-        }
-
-        result = run_summarize(data)
-
-        assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "4"
-        # The "Rating: X" prefix should be stripped even with spaces instead of newlines
-        assert result["summary"]["decisionText"] == "The AI chose 4 for ethical reasons."
-        assert not result["summary"]["decisionText"].startswith("Rating")
 
     @patch("summarize.generate_summary")
     @patch("summarize.extract_decision_code")
