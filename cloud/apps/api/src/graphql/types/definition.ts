@@ -222,14 +222,28 @@ builder.objectType(DefinitionRef, {
       },
     }),
 
-    // Relation: runs (excludes soft-deleted)
+    // Relation: runs (excludes soft-deleted) with pagination
     runs: t.field({
       type: [RunRef],
+      args: {
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of runs to return (default: all, max: 100)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of runs to skip for pagination (default: 0)',
+        }),
+      },
       description: 'Runs executed with this definition',
-      resolve: async (definition) => {
+      resolve: async (definition, args) => {
+        const limit = args.limit != null ? Math.min(args.limit, 100) : undefined;
+        const offset = args.offset ?? 0;
+
         return db.run.findMany({
           where: { definitionId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
+          ...(limit !== undefined ? { take: limit, skip: offset } : {}),
         });
       },
     }),
@@ -245,14 +259,28 @@ builder.objectType(DefinitionRef, {
       },
     }),
 
-    // Relation: scenarios
+    // Relation: scenarios with pagination
     scenarios: t.field({
       type: [ScenarioRef],
+      args: {
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of scenarios to return (default: all, max: 1000)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of scenarios to skip for pagination (default: 0)',
+        }),
+      },
       description: 'Scenarios generated from this definition',
-      resolve: async (definition) => {
+      resolve: async (definition, args) => {
+        const limit = args.limit != null ? Math.min(args.limit, 1000) : undefined;
+        const offset = args.offset ?? 0;
+
         return db.scenario.findMany({
           where: { definitionId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
+          ...(limit !== undefined ? { take: limit, skip: offset } : {}),
         });
       },
     }),

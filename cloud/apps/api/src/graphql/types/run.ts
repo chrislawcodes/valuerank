@@ -403,7 +403,7 @@ builder.objectType(RunRef, {
       },
     }),
 
-    // Probe results - detailed success/failure info for each model/scenario
+    // Probe results - detailed success/failure info for each model/scenario with pagination
     probeResults: t.field({
       type: [ProbeResultRef],
       args: {
@@ -414,6 +414,14 @@ builder.objectType(RunRef, {
         modelId: t.arg.string({
           required: false,
           description: 'Filter by model ID',
+        }),
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of results to return (default: all, max: 1000)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of results to skip for pagination (default: 0)',
         }),
       },
       description: 'Probe results with detailed success/failure information',
@@ -427,9 +435,14 @@ builder.objectType(RunRef, {
         if (args.modelId) {
           where.modelId = args.modelId;
         }
+
+        const limit = args.limit != null ? Math.min(args.limit, 1000) : undefined;
+        const offset = args.offset ?? 0;
+
         return db.probeResult.findMany({
           where,
           orderBy: [{ status: 'asc' }, { modelId: 'asc' }, { scenarioId: 'asc' }],
+          ...(limit !== undefined ? { take: limit, skip: offset } : {}),
         });
       },
     }),
