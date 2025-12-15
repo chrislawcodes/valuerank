@@ -386,8 +386,15 @@ describe('analyze-basic integration', () => {
       const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, number> } }> };
 
       // Verify numeric dimensions were extracted from scenario content
-      const transcript = input.transcripts.find((t) => t.scenario.dimensions['test-dimension'] !== undefined);
-      expect(transcript?.scenario.dimensions['test-dimension']).toBe(1);
+      // Both scenario 1 (dimension=1) and scenario 2 (dimension=2) should be present
+      const transcriptsWithDimension = input.transcripts.filter(
+        (t) => t.scenario.dimensions['test-dimension'] !== undefined
+      );
+      expect(transcriptsWithDimension.length).toBeGreaterThan(0);
+      // Check that the dimension values are the expected ones (1 or 2)
+      const dimensionValues = transcriptsWithDimension.map((t) => t.scenario.dimensions['test-dimension']);
+      expect(dimensionValues).toContain(1);
+      expect(dimensionValues).toContain(2);
     });
 
     it('handles transcripts without scenarios gracefully', async () => {
