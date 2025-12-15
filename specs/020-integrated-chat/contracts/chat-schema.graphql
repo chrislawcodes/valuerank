@@ -1,0 +1,278 @@
+# GraphQL Schema: Integrated AI Chat
+#
+# This schema defines the GraphQL types, queries, and mutations for the chat feature.
+# The actual streaming is handled via SSE at /api/chat/stream (not GraphQL).
+
+# =============================================================================
+# ENUMS
+# =============================================================================
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+# =============================================================================
+# TYPES
+# =============================================================================
+
+"""
+A chat conversation owned by a user.
+"""
+type ChatConversation {
+  id: ID!
+  title: String
+  modelId: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  lastMessageAt: DateTime
+
+  """
+  Messages in this conversation, ordered by createdAt ascending.
+  """
+  messages(
+    limit: Int = 50
+    offset: Int = 0
+  ): [ChatMessage!]!
+
+  """
+  Total count of messages in this conversation.
+  """
+  messageCount: Int!
+}
+
+"""
+A single message in a chat conversation.
+"""
+type ChatMessage {
+  id: ID!
+  conversationId: ID!
+  role: ChatMessageRole!
+  content: String!
+
+  """
+  MCP tool calls made by the assistant (if role is ASSISTANT).
+  """
+  toolCalls: [ToolCall!]
+
+  """
+  Results from tool calls (if role is TOOL).
+  """
+  toolResults: [ToolResult!]
+
+  """
+  Model that generated this response (for ASSISTANT messages).
+  """
+  modelId: String
+
+  """
+  Token usage for this message.
+  """
+  inputTokens: Int
+  outputTokens: Int
+
+  """
+  Response generation time in milliseconds.
+  """
+  durationMs: Int
+
+  createdAt: DateTime!
+}
+
+"""
+An MCP tool call made by the assistant.
+"""
+type ToolCall {
+  id: String!
+  name: String!
+  arguments: JSON!
+}
+
+"""
+Result from an MCP tool call.
+"""
+type ToolResult {
+  toolCallId: String!
+  content: String!
+  isError: Boolean
+}
+
+"""
+Current chat model configuration from system settings.
+"""
+type ChatModelConfig {
+  """
+  The configured model ID (e.g., "anthropic:claude-sonnet-4.5").
+  """
+  modelId: String!
+
+  """
+  Display name of the model.
+  """
+  displayName: String!
+
+  """
+  Provider name.
+  """
+  provider: String!
+}
+
+"""
+Result of ensuring the chat API key exists.
+"""
+type EnsureChatApiKeyResult {
+  """
+  The API key ID (not the raw key - that's never exposed).
+  """
+  apiKeyId: ID!
+
+  """
+  Whether a new key was created (true) or existing key found (false).
+  """
+  created: Boolean!
+}
+
+# =============================================================================
+# INPUTS
+# =============================================================================
+
+input CreateConversationInput {
+  """
+  Optional title for the conversation. Auto-generated from first message if not provided.
+  """
+  title: String
+
+  # Note: modelId is NOT an input - it's automatically set from system setting infra_model_chat
+}
+
+input UpdateConversationInput {
+  """
+  Update the conversation title. Model cannot be changed after creation.
+  """
+  title: String
+}
+
+# =============================================================================
+# QUERIES
+# =============================================================================
+
+extend type Query {
+  """
+  List the current user's chat conversations, ordered by most recent activity.
+  """
+  chatConversations(
+    limit: Int = 20
+    offset: Int = 0
+  ): [ChatConversation!]!
+
+  """
+  Get a specific conversation by ID. Returns null if not found or not owned by user.
+  """
+  chatConversation(id: ID!): ChatConversation
+
+  """
+  Get the currently configured chat model from system settings.
+  Returns the model that will be used for NEW conversations.
+  Existing conversations use their stored modelId instead.
+  """
+  chatModelConfig: ChatModelConfig!
+}
+
+# =============================================================================
+# MUTATIONS
+# =============================================================================
+
+extend type Mutation {
+  """
+  Ensure the user has an API key for chat (auto-created if missing).
+  This should be called before starting a chat session.
+  """
+  ensureChatApiKey: EnsureChatApiKeyResult!
+
+  """
+  Create a new chat conversation.
+  """
+  createChatConversation(input: CreateConversationInput): ChatConversation!
+
+  """
+  Update a conversation's title or model selection.
+  """
+  updateChatConversation(
+    id: ID!
+    input: UpdateConversationInput!
+  ): ChatConversation!
+
+  """
+  Delete a conversation (soft delete).
+  """
+  deleteChatConversation(id: ID!): Boolean!
+
+  """
+  Add a user message to a conversation.
+  This creates the message record but does NOT trigger the AI response.
+  Use the /api/chat/stream SSE endpoint to get the AI response.
+  """
+  addChatMessage(
+    conversationId: ID!
+    content: String!
+  ): ChatMessage!
+}
+
+# =============================================================================
+# REST ENDPOINT DOCUMENTATION (Not GraphQL)
+# =============================================================================
+
+# POST /api/chat/stream
+#
+# Request Headers:
+#   Authorization: Bearer <jwt>
+#   Content-Type: application/json
+#
+# Request Body:
+#   {
+#     "conversationId": "string",  // Required: conversation to add message to
+#     "content": "string",         // Required: user message content
+#     "modelId": "string"          // Optional: override conversation's model
+#   }
+#
+# Response: text/event-stream (SSE)
+#
+# Event Types:
+#   event: text
+#   data: {"text": "partial response text"}
+#
+#   event: tool_call
+#   data: {"id": "tc_123", "name": "list_runs", "arguments": {...}}
+#
+#   event: tool_result
+#   data: {"toolCallId": "tc_123", "content": "...", "isError": false}
+#
+#   event: done
+#   data: {"messageId": "msg_abc123"}
+#
+#   event: error
+#   data: {"error": "Error message", "retryable": true}
+#
+# Example SSE Stream:
+#   event: text
+#   data: {"text": "Let me "}
+#
+#   event: text
+#   data: {"text": "check your "}
+#
+#   event: text
+#   data: {"text": "recent runs."}
+#
+#   event: tool_call
+#   data: {"id": "tc_1", "name": "list_runs", "arguments": {"limit": 5}}
+#
+#   event: tool_result
+#   data: {"toolCallId": "tc_1", "content": "[{\"id\": \"run_1\", ...}]"}
+#
+#   event: text
+#   data: {"text": "\n\nYou have 5 recent runs:"}
+#
+#   event: done
+#   data: {"messageId": "clxx123abc"}
