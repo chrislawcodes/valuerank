@@ -214,6 +214,19 @@ export async function restartSummarization(
     };
   }
 
+  // Clear summarizedAt for transcripts being re-processed
+  // This ensures the job handler doesn't skip them
+  const transcriptIds = transcriptsToQueue.map((t) => t.id);
+  await db.transcript.updateMany({
+    where: { id: { in: transcriptIds } },
+    data: {
+      summarizedAt: null,
+      decisionCode: null,
+      decisionText: null,
+    },
+  });
+  log.info({ runId, count: transcriptIds.length }, 'Cleared summarizedAt for transcripts');
+
   // Update run status to SUMMARIZING and reset progress
   const updatedProgress: SummarizeProgress = {
     total: transcriptsToQueue.length,
