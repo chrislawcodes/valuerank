@@ -17,7 +17,7 @@ import { SummarizationControls } from '../../components/runs/SummarizationContro
 import { RerunDialog } from '../../components/runs/RerunDialog';
 import { useRun } from '../../hooks/useRun';
 import { useRunMutations } from '../../hooks/useRunMutations';
-import { exportRunAsCSV } from '../../api/export';
+import { exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
 import { RunHeader } from './RunHeader';
 import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
@@ -28,6 +28,7 @@ export function RunDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingTranscripts, setIsExportingTranscripts] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -69,6 +70,20 @@ export function RunDetail() {
       setExportError(message);
     } finally {
       setIsExporting(false);
+    }
+  }, [run]);
+
+  const handleExportTranscripts = useCallback(async () => {
+    if (!run) return;
+    setIsExportingTranscripts(true);
+    setExportError(null);
+    try {
+      await exportTranscriptsAsJSON(run.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Export failed';
+      setExportError(message);
+    } finally {
+      setIsExportingTranscripts(false);
     }
   }, [run]);
 
@@ -302,7 +317,13 @@ export function RunDetail() {
                 {exportError}
               </div>
             )}
-            <RunResults run={run} onExport={() => void handleExport()} isExporting={isExporting} />
+            <RunResults
+              run={run}
+              onExport={() => void handleExport()}
+              isExporting={isExporting}
+              onExportTranscripts={() => void handleExportTranscripts()}
+              isExportingTranscripts={isExportingTranscripts}
+            />
           </div>
         )}
       </div>

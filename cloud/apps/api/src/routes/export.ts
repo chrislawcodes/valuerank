@@ -4,7 +4,9 @@
  * REST endpoints for exporting run and definition data.
  *
  * GET /api/export/runs/:id/csv - Download run results as CSV
+ * GET /api/export/runs/:id/transcripts.json - Download full transcripts as JSON
  * GET /api/export/definitions/:id/md - Download definition as markdown
+ * GET /api/export/definitions/:id/scenarios.yaml - Download scenarios as YAML
  */
 
 import { Router } from 'express';
@@ -167,6 +169,121 @@ exportRouter.get(
       res.setHeader('Content-Type', `${result.mimeType}; charset=utf-8`);
       res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
       res.send(result.content);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/export/runs/:id/transcripts.json
+ *
+ * Download all transcripts for a run as a JSON file.
+ * Each transcript includes full conversation content.
+ *
+ * Requires authentication.
+ */
+exportRouter.get(
+  '/runs/:id/transcripts.json',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check authentication
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = req.params.id;
+      if (!runId) {
+        throw new NotFoundError('Run', 'missing');
+      }
+
+      log.info({ userId: req.user.id, runId }, 'Exporting transcripts as JSON');
+
+      // Verify run exists and get basic info
+      const run = await db.run.findUnique({
+        where: { id: runId },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          config: true,
+          createdAt: true,
+          completedAt: true,
+          definition: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!run) {
+        throw new NotFoundError('Run', runId);
+      }
+
+      // Get transcripts for the run with scenario relation
+      const transcripts = await db.transcript.findMany({
+        where: { runId },
+        include: {
+          scenario: {
+            select: {
+              id: true,
+              name: true,
+              content: true,
+            },
+          },
+        },
+        orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
+      });
+
+      log.info({ runId, transcriptCount: transcripts.length }, 'Transcripts fetched for JSON export');
+
+      // Build export structure
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        run: {
+          id: run.id,
+          name: run.name,
+          status: run.status,
+          config: run.config,
+          createdAt: run.createdAt,
+          completedAt: run.completedAt,
+          definition: run.definition,
+        },
+        transcriptCount: transcripts.length,
+        transcripts: transcripts.map((t) => ({
+          id: t.id,
+          modelId: t.modelId,
+          modelVersion: t.modelVersion,
+          scenario: t.scenario
+            ? {
+                id: t.scenario.id,
+                name: t.scenario.name,
+                dimensions: (t.scenario.content as { dimensions?: Record<string, unknown> } | null)?.dimensions,
+              }
+            : null,
+          content: t.content,
+          turnCount: t.turnCount,
+          tokenCount: t.tokenCount,
+          durationMs: t.durationMs,
+          estimatedCost: t.estimatedCost,
+          decisionCode: t.decisionCode,
+          decisionText: t.decisionText,
+          createdAt: t.createdAt,
+        })),
+      };
+
+      // Set response headers
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `transcripts_${runId.slice(0, 8)}_${date}.json`;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      // Send JSON response
+      res.send(JSON.stringify(exportData, null, 2));
+
+      log.info({ runId, transcriptCount: transcripts.length }, 'JSON export complete');
     } catch (err) {
       next(err);
     }
