@@ -25,6 +25,19 @@ const ListSystemSettingsInputSchema = {
     .string()
     .optional()
     .describe('Filter by key prefix (e.g., "infra_model" for all infrastructure models)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of settings to return (default: 50, max: 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('Number of settings to skip for pagination (default: 0)'),
 };
 
 /**
@@ -85,7 +98,9 @@ function registerListSystemSettingsTool(server: McpServer): void {
 **Examples:**
 - List all: \`{}\`
 - Single key: \`{"key": "infra_model_judge"}\`
-- By prefix: \`{"prefix": "infra_model"}\``,
+- By prefix: \`{"prefix": "infra_model"}\`
+
+Supports pagination via limit and offset parameters.`,
       inputSchema: ListSystemSettingsInputSchema,
     },
     async (args, extra) => {
@@ -141,8 +156,14 @@ function registerListSystemSettingsTool(server: McpServer): void {
           settings = settings.filter((s) => s.key.startsWith(args.prefix!));
         }
 
+        // Apply pagination
+        const limit = args.limit ?? 50;
+        const offset = args.offset ?? 0;
+        const totalCount = settings.length;
+        const paginatedSettings = settings.slice(offset, offset + limit);
+
         // Format response
-        const formattedSettings = settings.map((s) => ({
+        const formattedSettings = paginatedSettings.map((s) => ({
           key: s.key,
           value: s.value,
           updated_at: s.updatedAt.toISOString(),
@@ -159,7 +180,13 @@ function registerListSystemSettingsTool(server: McpServer): void {
 
         return formatSuccess({
           settings: formattedSettings,
-          total: formattedSettings.length,
+          total: totalCount,
+          returned: formattedSettings.length,
+          pagination: {
+            limit,
+            offset,
+            has_more: offset + limit < totalCount,
+          },
           filter: {
             prefix: args.prefix || null,
           },

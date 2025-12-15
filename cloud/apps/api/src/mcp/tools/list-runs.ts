@@ -34,7 +34,13 @@ const ListRunsInputSchema = {
     .min(1)
     .max(100)
     .default(20)
-    .describe('Maximum number of runs to return'),
+    .describe('Maximum number of runs to return (default: 20, max: 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('Number of runs to skip for pagination (default: 0)'),
 };
 
 /**
@@ -58,7 +64,8 @@ function registerListRunsTool(server: McpServer): void {
     {
       description: `List evaluation runs with status and summary metrics.
 Use filters to narrow results. Returns id, status, models, scenarioCount, samplePercentage, and createdAt for each run.
-Results are sorted by creation date (newest first) and limited to 2KB token budget.`,
+Results are sorted by creation date (newest first). Supports pagination via limit and offset.
+Limited to 2KB token budget.`,
       inputSchema: ListRunsInputSchema,
     },
     async (args, extra) => {
@@ -85,11 +92,15 @@ Results are sorted by creation date (newest first) and limited to 2KB token budg
           where.status = statusToPrisma[args.status];
         }
 
-        // Query runs with transcript count
+        // Query runs with transcript count and pagination
+        const limit = args.limit ?? 20;
+        const offset = args.offset ?? 0;
+
         const runs = await db.run.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          take: args.limit ?? 20,
+          take: limit,
+          skip: offset,
           include: {
             _count: {
               select: { transcripts: true },
@@ -113,6 +124,8 @@ Results are sorted by creation date (newest first) and limited to 2KB token budg
           {
             requestId,
             count: formattedRuns.length,
+            limit,
+            offset,
             truncated: response.metadata.truncated,
             executionMs: response.metadata.executionMs,
           },

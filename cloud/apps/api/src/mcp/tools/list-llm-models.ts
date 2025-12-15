@@ -48,6 +48,19 @@ const ListLlmModelsInputSchema = {
     .optional()
     .default(false)
     .describe('Only return models where the API key is configured'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of models to return (default: 50, max: 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('Number of models to skip for pagination (default: 0)'),
 };
 
 /**
@@ -102,6 +115,8 @@ function registerListLlmModelsTool(server: McpServer): void {
 - provider_name: Filter by provider name string
 - status: "active" (default), "deprecated", or "all"
 - available_only: Only show models with configured API keys
+- limit: Maximum models to return (default: 50, max: 100)
+- offset: Number of models to skip for pagination
 
 **Use Cases:**
 - Find available models for running evaluations
@@ -154,8 +169,14 @@ function registerListLlmModelsTool(server: McpServer): void {
           ? modelsWithAvailability.filter((m) => m.isAvailable)
           : modelsWithAvailability;
 
+        // Apply pagination
+        const limit = args.limit ?? 50;
+        const offset = args.offset ?? 0;
+        const paginatedModels = filteredModels.slice(offset, offset + limit);
+        const totalCount = filteredModels.length;
+
         // Format response
-        const formattedModels = filteredModels.map(({ model, isAvailable }) => ({
+        const formattedModels = paginatedModels.map(({ model, isAvailable }) => ({
           id: model.id,
           model_id: model.modelId,
           display_name: model.displayName,
@@ -189,7 +210,13 @@ function registerListLlmModelsTool(server: McpServer): void {
 
         return formatSuccess({
           models: formattedModels,
-          total: formattedModels.length,
+          total: totalCount,
+          returned: formattedModels.length,
+          pagination: {
+            limit,
+            offset,
+            has_more: offset + limit < totalCount,
+          },
           filters: {
             provider_id: args.provider_id || null,
             provider_name: args.provider_name || null,

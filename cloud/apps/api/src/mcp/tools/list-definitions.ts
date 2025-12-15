@@ -28,6 +28,19 @@ const ListDefinitionsInputSchema = {
     .boolean()
     .default(false)
     .describe('Include child count for each definition'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of definitions to return (default: 50, max: 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('Number of definitions to skip for pagination (default: 0)'),
 };
 
 /**
@@ -42,6 +55,7 @@ function registerListDefinitionsTool(server: McpServer): void {
       description: `List scenario definitions with version info.
 Returns basic metadata for browsing available definitions including id, name, versionLabel, parentId, and createdAt.
 Optionally includes child count for version tree exploration.
+Supports pagination via limit and offset parameters.
 Limited to 2KB token budget.`,
       inputSchema: ListDefinitionsInputSchema,
     },
@@ -65,11 +79,15 @@ Limited to 2KB token budget.`,
           where.name = { contains: args.folder };
         }
 
-        // Query definitions
+        // Query definitions with pagination
+        const limit = args.limit ?? 50;
+        const offset = args.offset ?? 0;
+
         const definitions = await db.definition.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          take: 50, // Max 50 definitions
+          take: limit,
+          skip: offset,
           include: args.include_children
             ? {
                 _count: { select: { children: true } },
@@ -98,6 +116,8 @@ Limited to 2KB token budget.`,
           {
             requestId,
             count: formattedDefs.length,
+            limit,
+            offset,
             truncated: response.metadata.truncated,
             executionMs: response.metadata.executionMs,
           },

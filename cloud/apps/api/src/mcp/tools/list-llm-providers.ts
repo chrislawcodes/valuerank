@@ -22,6 +22,19 @@ const ListLlmProvidersInputSchema = {
     .optional()
     .default(false)
     .describe('Include detailed model information for each provider (increases response size)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of providers to return (default: 50, max: 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe('Number of providers to skip for pagination (default: 0)'),
 };
 
 /**
@@ -73,7 +86,9 @@ function registerListLlmProvidersTool(server: McpServer): void {
 **Use Cases:**
 - Discover available providers before running evaluations
 - Check rate limit settings
-- Find providers for specific models`,
+- Find providers for specific models
+
+Supports pagination via limit and offset parameters.`,
       inputSchema: ListLlmProvidersInputSchema,
     },
     async (args, extra) => {
@@ -83,7 +98,13 @@ function registerListLlmProvidersTool(server: McpServer): void {
       log.debug({ requestId, includeModels }, 'list_llm_providers called');
 
       try {
-        const providers = await getAllProvidersWithModels();
+        const allProviders = await getAllProvidersWithModels();
+
+        // Apply pagination
+        const limit = args.limit ?? 50;
+        const offset = args.offset ?? 0;
+        const providers = allProviders.slice(offset, offset + limit);
+        const totalCount = allProviders.length;
 
         // Format response
         const formattedProviders = providers.map((provider) => {
@@ -144,7 +165,13 @@ function registerListLlmProvidersTool(server: McpServer): void {
 
         return formatSuccess({
           providers: formattedProviders,
-          total: formattedProviders.length,
+          total: totalCount,
+          returned: formattedProviders.length,
+          pagination: {
+            limit,
+            offset,
+            has_more: offset + limit < totalCount,
+          },
           include_models: includeModels,
         });
       } catch (err) {
