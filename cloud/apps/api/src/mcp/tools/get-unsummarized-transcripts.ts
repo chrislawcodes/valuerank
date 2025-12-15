@@ -28,9 +28,19 @@ const GetUnsummarizedTranscriptsInputSchema = {
     .describe('Include transcripts with error status (decisionCode = "error")'),
   limit: z
     .number()
+    .int()
+    .min(1)
+    .max(100)
     .optional()
     .default(50)
     .describe('Maximum transcripts to return (default 50, max 100)'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .default(0)
+    .describe('Number of transcripts to skip for pagination (default: 0)'),
 };
 
 /**
@@ -61,6 +71,7 @@ function registerGetUnsummarizedTranscriptsTool(server: McpServer): void {
 
 **Pagination:**
 - limit: Max transcripts to return (default 50, max 100)
+- offset: Number of transcripts to skip (default 0)
 - Response includes total_count for awareness of full dataset size
 
 **Note:** For runs with many unsummarized transcripts, the total_count tells you
@@ -72,11 +83,13 @@ how many exist even if only 'limit' are returned.`,
       const userId = 'mcp-user'; // TODO: Extract from auth context when available
       const includeFailed = args.include_failed ?? false;
       const limit = Math.min(args.limit ?? 50, 100); // Cap at 100
+      const offset = args.offset ?? 0;
 
       log.debug({
         runId: args.run_id,
         includeFailed,
         limit,
+        offset,
         requestId,
       }, 'get_unsummarized_transcripts called');
 
@@ -111,7 +124,7 @@ how many exist even if only 'limit' are returned.`,
         // Get total count
         const totalCount = await db.transcript.count({ where });
 
-        // Get transcripts with limit
+        // Get transcripts with pagination
         const transcripts = await db.transcript.findMany({
           where,
           select: {
@@ -123,6 +136,7 @@ how many exist even if only 'limit' are returned.`,
           },
           orderBy: { createdAt: 'asc' },
           take: limit,
+          skip: offset,
         });
 
         log.info({
@@ -152,6 +166,11 @@ how many exist even if only 'limit' are returned.`,
           run_id: args.run_id,
           total_count: totalCount,
           returned_count: transcripts.length,
+          pagination: {
+            limit,
+            offset,
+            has_more: offset + limit < totalCount,
+          },
           transcripts: transcripts.map(t => ({
             id: t.id,
             model_id: t.modelId,

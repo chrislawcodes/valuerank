@@ -228,7 +228,7 @@ builder.objectType(RunRef, {
       },
     }),
 
-    // Relation: transcripts with optional model filter
+    // Relation: transcripts with optional model filter and pagination
     transcripts: t.field({
       type: [TranscriptRef],
       args: {
@@ -236,8 +236,33 @@ builder.objectType(RunRef, {
           required: false,
           description: 'Filter transcripts by model ID',
         }),
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of transcripts to return (default: all, max: 1000)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of transcripts to skip for pagination (default: 0)',
+        }),
       },
       resolve: async (run, args, ctx) => {
+        // When pagination is requested, do a direct DB query instead of using dataloader
+        if (args.limit !== undefined || args.offset !== undefined) {
+          const limit = Math.min(args.limit ?? 1000, 1000);
+          const offset = args.offset ?? 0;
+
+          return db.transcript.findMany({
+            where: {
+              runId: run.id,
+              ...(args.modelId ? { modelId: args.modelId } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          });
+        }
+
+        // No pagination - use dataloader for batching
         const transcripts = await ctx.loaders.transcriptsByRun.load(run.id);
         if (args.modelId) {
           return transcripts.filter((t) => t.modelId === args.modelId);
