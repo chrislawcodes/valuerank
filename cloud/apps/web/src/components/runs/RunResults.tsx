@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Download, FileText, BarChart2, List, Grid, DollarSign } from 'lucide-react';
+import { Download, FileText, BarChart2, List, Grid, DollarSign, FileJson } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
 import { TranscriptViewer } from './TranscriptViewer';
@@ -15,6 +15,8 @@ type RunResultsProps = {
   run: Run;
   onExport?: () => void;
   isExporting?: boolean;
+  onExportTranscripts?: () => void;
+  isExportingTranscripts?: boolean;
 };
 
 type ViewMode = 'list' | 'grouped';
@@ -86,7 +88,13 @@ function calculateStats(transcripts: Transcript[], analysis: Run['analysis']) {
   };
 }
 
-export function RunResults({ run, onExport, isExporting = false }: RunResultsProps) {
+export function RunResults({
+  run,
+  onExport,
+  isExporting = false,
+  onExportTranscripts,
+  isExportingTranscripts = false,
+}: RunResultsProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
 
@@ -219,16 +227,30 @@ export function RunResults({ run, onExport, isExporting = false }: RunResultsPro
           </Button>
         </div>
 
-        {onExport && (
-          <Button
-            variant="secondary"
-            onClick={onExport}
-            disabled={isExporting}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'Export CSV'}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onExportTranscripts && (
+            <Button
+              variant="secondary"
+              onClick={onExportTranscripts}
+              disabled={isExportingTranscripts}
+              title="Download full conversation transcripts"
+            >
+              <FileJson className="w-4 h-4 mr-2" />
+              {isExportingTranscripts ? 'Exporting...' : 'Transcripts'}
+            </Button>
+          )}
+          {onExport && (
+            <Button
+              variant="secondary"
+              onClick={onExport}
+              disabled={isExporting}
+              title="Download summary results"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Transcript list */}
