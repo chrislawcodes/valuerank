@@ -188,6 +188,14 @@ def validate_input(data: dict[str, Any]) -> None:
         raise ValidationError(message="scenario.prompt cannot be empty")
 
 
+# Rating instruction to prepend to prompts for structured responses
+RATING_INSTRUCTION = (
+    "IMPORTANT: Begin your response with your rating on the first line in this exact format:\n"
+    "Rating: X\n\n"
+    "Where X is your numeric rating (1-5). Then provide your explanation.\n\n"
+)
+
+
 def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     """
     Execute the probe conversation.
@@ -226,7 +234,8 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     if preamble:
         messages.append({"role": "system", "content": preamble})
 
-    prompt = scenario["prompt"]
+    # Prepend rating instruction to ensure structured response format
+    prompt = RATING_INSTRUCTION + scenario["prompt"]
     messages.append({"role": "user", "content": prompt})
 
     try:

@@ -7,6 +7,7 @@
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, RunStateError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
+import { invalidateCache } from '../analysis/cache.js';
 
 const log = createLogger('services:run:summarization');
 
@@ -181,6 +182,13 @@ export async function restartSummarization(
     `;
   } catch (error) {
     // Ignore if PgBoss tables don't exist
+  }
+
+  // Invalidate any cached analysis results so they get recomputed
+  // with the new decision codes after summarization completes
+  const invalidatedCount = await invalidateCache(runId);
+  if (invalidatedCount > 0) {
+    log.info({ runId, invalidatedCount }, 'Invalidated cached analysis results');
   }
 
   // Get transcripts to re-summarize

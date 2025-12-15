@@ -95,11 +95,97 @@ class TestValidateInput:
         assert "turns must be an array" in exc_info.value.message
 
 
+class TestExtractDecisionCodeFromText:
+    """Tests for extract_decision_code_from_text helper function."""
+
+    def test_structured_rating_format(self) -> None:
+        """Test extraction of structured 'Rating: X' format."""
+        from summarize import extract_decision_code_from_text
+
+        result = extract_decision_code_from_text("Rating: 4\n\nThe AI chose 4 because...")
+        assert result == "4"
+
+    def test_structured_rating_case_insensitive(self) -> None:
+        """Test that structured format is case-insensitive."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("rating: 3") == "3"
+        assert extract_decision_code_from_text("RATING: 5") == "5"
+        assert extract_decision_code_from_text("Rating: 2") == "2"
+
+    def test_structured_rating_with_spaces(self) -> None:
+        """Test structured format with varying whitespace."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("Rating:4") == "4"
+        assert extract_decision_code_from_text("Rating:  3") == "3"
+        assert extract_decision_code_from_text("Rating: 5") == "5"
+
+    def test_structured_preferred_over_fallback(self) -> None:
+        """Test that structured format is preferred over fallback."""
+        from summarize import extract_decision_code_from_text
+
+        # The response mentions "1-5 scale" but the actual rating is "Rating: 2"
+        text = "Rating: 2\n\nOn a 1-5 scale, the AI chose 2 because of strong moral obligations."
+        result = extract_decision_code_from_text(text)
+        assert result == "2"
+
+    def test_fallback_when_no_structured_format(self) -> None:
+        """Test fallback to first digit when no structured format."""
+        from summarize import extract_decision_code_from_text
+
+        result = extract_decision_code_from_text("I choose 4 because...")
+        assert result == "4"
+
+    def test_bug_fix_scale_description_not_matched(self) -> None:
+        """Test that '1-5 scale' in text doesn't incorrectly extract '1'.
+
+        This tests the specific bug where a response like:
+        "On a 1-5 scale: **2 - Somewhat support**"
+        was incorrectly extracting '1' instead of '2'.
+        """
+        from summarize import extract_decision_code_from_text
+
+        # When we have structured format, it should work correctly
+        text = "Rating: 2\n\nOn a 1-5 scale, the AI chose 2."
+        assert extract_decision_code_from_text(text) == "2"
+
+    def test_returns_none_when_no_rating(self) -> None:
+        """Test None returned when no rating found."""
+        from summarize import extract_decision_code_from_text
+
+        result = extract_decision_code_from_text("This response has no numbers.")
+        assert result is None
+
+    def test_returns_none_for_empty_text(self) -> None:
+        """Test None returned for empty text."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("") is None
+        assert extract_decision_code_from_text(None) is None  # type: ignore
+
+
 class TestExtractDecisionCode:
-    """Tests for decision code extraction."""
+    """Tests for decision code extraction from transcript content."""
+
+    def test_extracts_structured_rating_from_response(self) -> None:
+        """Test extraction of structured 'Rating: X' format from transcript."""
+        from summarize import extract_decision_code
+
+        content = {
+            "turns": [
+                {
+                    "probePrompt": "Rate the scenario",
+                    "targetResponse": "Rating: 4\n\nI choose 4 because...",
+                }
+            ]
+        }
+
+        result = extract_decision_code(content)
+        assert result == "4"
 
     def test_extracts_rating_from_response(self) -> None:
-        """Test extraction of numeric rating."""
+        """Test extraction of numeric rating (fallback)."""
         from summarize import extract_decision_code
 
         content = {
@@ -300,6 +386,85 @@ class TestGenerateSummary:
 
 class TestRunSummarize:
     """Tests for run_summarize function."""
+
+    @patch("summarize.generate_summary")
+    @patch("summarize.extract_decision_code")
+    def test_successful_summarization_with_structured_rating(
+        self, mock_extract: MagicMock, mock_generate: MagicMock
+    ) -> None:
+        """Test successful summarization with structured rating from summarizer."""
+        from summarize import run_summarize
+
+        mock_extract.return_value = "4"
+        # Summarizer returns structured "Rating: X" format
+        mock_generate.return_value = "Rating: 4\n\nThe AI chose option 4 for safety."
+
+        data = {
+            "transcriptId": "transcript-123",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {"turns": []},
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
+        assert result["summary"]["decisionCode"] == "4"
+        # The "Rating: X" prefix should be stripped from decision text
+        assert result["summary"]["decisionText"] == "The AI chose option 4 for safety."
+
+    @patch("summarize.generate_summary")
+    @patch("summarize.extract_decision_code")
+    def test_summarizer_code_overrides_initial_code(
+        self, mock_extract: MagicMock, mock_generate: MagicMock
+    ) -> None:
+        """Test that summarizer's rating overrides initial extraction.
+
+        This tests the fix for the bug where transcript text like
+        "1-5 scale" was incorrectly extracted as rating 1.
+        """
+        from summarize import run_summarize
+
+        # Initial extraction incorrectly returns "1" (due to "1-5 scale" bug)
+        mock_extract.return_value = "1"
+        # Summarizer correctly identifies the rating as 2
+        mock_generate.return_value = "Rating: 2\n\nThe AI chose 2 because of moral obligations."
+
+        data = {
+            "transcriptId": "transcript-123",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {"turns": []},
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
+        # Should use summarizer's code (2), not initial code (1)
+        assert result["summary"]["decisionCode"] == "2"
+        assert "The AI chose 2" in result["summary"]["decisionText"]
+
+    @patch("summarize.generate_summary")
+    @patch("summarize.extract_decision_code")
+    def test_falls_back_to_initial_when_summarizer_has_no_rating(
+        self, mock_extract: MagicMock, mock_generate: MagicMock
+    ) -> None:
+        """Test fallback to initial code when summarizer doesn't provide rating."""
+        from summarize import run_summarize
+
+        mock_extract.return_value = "3"
+        # Summarizer doesn't include "Rating: X" format
+        mock_generate.return_value = "The AI was neutral on this issue."
+
+        data = {
+            "transcriptId": "transcript-123",
+            "modelId": "anthropic:claude-3.5-sonnet",
+            "transcriptContent": {"turns": []},
+        }
+
+        result = run_summarize(data)
+
+        assert result["success"] is True
+        # Should fall back to initial extraction since summarizer has no digit
+        assert result["summary"]["decisionCode"] == "3"
 
     @patch("summarize.generate_summary")
     @patch("summarize.extract_decision_code")

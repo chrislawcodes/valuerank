@@ -13,22 +13,29 @@ export type TranscriptWithScenario = Transcript & {
 };
 
 export type CSVRow = {
-  scenario: string;
+  transcriptId: string;
   modelName: string;
   decisionCode: string;
   decisionText: string;
+  targetResponse: string;
   variables: Record<string, number>;
 };
 
 /**
- * Base CSV column headers (matching summary.py output format).
- * Variable columns are added dynamically based on scenario dimensions.
+ * CSV column headers before variable columns.
+ * Order: Model Name first, then variable columns are inserted dynamically.
  */
-export const BASE_CSV_HEADERS = [
-  'Scenario',
-  'AI Model Name',
+export const PRE_VARIABLE_HEADERS = ['AI Model Name'] as const;
+
+/**
+ * CSV column headers after variable columns.
+ * Order: Decision Code, Decision Text, Transcript ID, Target Response
+ */
+export const POST_VARIABLE_HEADERS = [
   'Decision Code',
   'Decision Text',
+  'Transcript ID',
+  'Target Response',
 ] as const;
 
 /**
@@ -66,22 +73,29 @@ type ScenarioContent = {
   dimensions?: Record<string, number>;
 };
 
-/**
- * Extract scenario number from scenario name or generate index-based number.
- * Supports Python format: "scenario_011_FreedomBelief1..." to extract "011".
- * Falls back to padded index if pattern doesn't match.
- */
-function getScenarioNumber(transcript: TranscriptWithScenario, index: number): string {
-  const name = transcript.scenario?.name ?? '';
+// Transcript content structure with turns
+type TranscriptContent = {
+  turns?: Array<{
+    targetResponse?: string;
+  }>;
+};
 
-  // Try to match Python format: scenario_XXX_...
-  const match = name.match(/^scenario[_-]?(\d+)/i);
-  if (match && match[1]) {
-    return match[1];
+/**
+ * Extract the target response from transcript content.
+ * Combines all target responses from all turns.
+ */
+function getTargetResponse(transcript: TranscriptWithScenario): string {
+  const content = transcript.content as TranscriptContent | null;
+  if (!content?.turns || !Array.isArray(content.turns)) {
+    return '';
   }
 
-  // Fallback to index-based numbering
-  return String(index + 1).padStart(3, '0');
+  // Combine all target responses from all turns
+  const responses = content.turns
+    .map((turn) => turn.targetResponse ?? '')
+    .filter((r) => r.length > 0);
+
+  return responses.join('\n\n---\n\n');
 }
 
 /**
@@ -106,46 +120,52 @@ function getScenarioDimensions(transcript: TranscriptWithScenario): Record<strin
 /**
  * Convert a transcript to a CSV row.
  * @param transcript - The transcript with scenario data
- * @param index - The index of this transcript (for scenario numbering fallback)
  */
-export function transcriptToCSVRow(transcript: TranscriptWithScenario, index: number): CSVRow {
+export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
   return {
-    scenario: getScenarioNumber(transcript, index),
+    transcriptId: transcript.id,
     modelName: getModelName(transcript.modelId),
     decisionCode: transcript.decisionCode ?? 'pending',
     decisionText: transcript.decisionText ?? 'Summary not yet generated',
+    targetResponse: getTargetResponse(transcript),
     variables: getScenarioDimensions(transcript),
   };
 }
 
 /**
  * Format a CSV row as a string with variable columns.
+ * Column order: Model Name, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
 export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
-  const baseValues = [
-    escapeCSV(row.scenario),
-    escapeCSV(row.modelName),
-    escapeCSV(row.decisionCode),
-    escapeCSV(row.decisionText),
-  ];
+  // Pre-variable columns
+  const preVariableValues = [escapeCSV(row.modelName)];
 
-  // Add variable values in the same order as headers
+  // Variable values in the same order as headers
   const variableValues = variableNames.map((name) => {
     const value = row.variables[name];
     return escapeCSV(value ?? '');
   });
 
-  return [...baseValues, ...variableValues].join(',');
+  // Post-variable columns
+  const postVariableValues = [
+    escapeCSV(row.decisionCode),
+    escapeCSV(row.decisionText),
+    escapeCSV(row.transcriptId),
+    escapeCSV(row.targetResponse),
+  ];
+
+  return [...preVariableValues, ...variableValues, ...postVariableValues].join(',');
 }
 
 /**
  * Get CSV header line with variable columns.
+ * Column order: Model Name, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
 export function getCSVHeader(variableNames: string[]): string {
-  return [...BASE_CSV_HEADERS, ...variableNames].join(',');
+  return [...PRE_VARIABLE_HEADERS, ...variableNames, ...POST_VARIABLE_HEADERS].join(',');
 }
 
 /**
@@ -177,9 +197,7 @@ export function transcriptsToCSV(transcripts: TranscriptWithScenario[]): string 
   const variableNames = collectVariableNames(transcripts);
 
   const header = getCSVHeader(variableNames);
-  const rows = transcripts.map((t, index) =>
-    formatCSVRow(transcriptToCSVRow(t, index), variableNames)
-  );
+  const rows = transcripts.map((t) => formatCSVRow(transcriptToCSVRow(t), variableNames));
 
   return BOM + header + '\n' + rows.join('\n');
 }

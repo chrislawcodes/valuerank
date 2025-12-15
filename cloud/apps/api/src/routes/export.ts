@@ -98,10 +98,9 @@ exportRouter.get(
       // Write header with variable columns
       res.write(getCSVHeader(variableNames) + '\n');
 
-      // Stream rows with index and variable names
-      for (let i = 0; i < transcripts.length; i++) {
-        const transcript = transcripts[i]!;
-        const row = transcriptToCSVRow(transcript, i);
+      // Stream rows with variable names
+      for (const transcript of transcripts) {
+        const row = transcriptToCSVRow(transcript);
         res.write(formatCSVRow(row, variableNames) + '\n');
       }
 

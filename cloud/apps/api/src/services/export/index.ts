@@ -14,7 +14,8 @@ export {
   transcriptToCSVRow,
   formatCSVRow,
   getCSVHeader,
-  BASE_CSV_HEADERS,
+  PRE_VARIABLE_HEADERS,
+  POST_VARIABLE_HEADERS,
   type TranscriptWithScenario,
   type CSVRow,
 } from './csv.js';
