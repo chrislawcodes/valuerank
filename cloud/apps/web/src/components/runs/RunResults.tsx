@@ -119,6 +119,18 @@ export function RunResults({
             Results will appear as the run progresses
           </p>
         )}
+        {/* Show export button even when transcripts not loaded, if there are transcripts */}
+        {onExport && run.transcriptCount > 0 && (
+          <Button
+            variant="secondary"
+            onClick={onExport}
+            disabled={isExporting}
+            className="mt-4"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'Export CSV'}
+          </Button>
+        )}
       </div>
     );
   }
