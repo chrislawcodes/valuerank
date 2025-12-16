@@ -45,14 +45,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Implement Monaco DiffEditor integration in DefinitionDiff.tsx
-- [ ] T009 [US1] Add header row showing run names/definition names in DefinitionDiff.tsx
-- [ ] T010 [US1] Add Template/Preamble tab switcher in DefinitionDiff.tsx
-- [ ] T011 [US1] Handle "identical definitions" case with read-only single view in DefinitionDiff.tsx
-- [ ] T012 [US1] Handle missing definitionContent with placeholder text in DefinitionDiff.tsx
-- [ ] T013 [US1] Update DefinitionViz.tsx to route 2-run case to DefinitionDiff
-- [ ] T014 [US1] Write unit tests for DefinitionDiff in cloud/apps/web/tests/components/compare/visualizations/DefinitionDiff.test.tsx
-- [ ] T015 [US1] Write unit tests for DefinitionViz (2-run routing) in cloud/apps/web/tests/components/compare/visualizations/DefinitionViz.test.tsx
+- [X] T008 [US1] Implement Monaco DiffEditor integration in DefinitionDiff.tsx
+- [X] T009 [US1] Add header row showing run names/definition names in DefinitionDiff.tsx
+- [X] T010 [US1] Add Template/Preamble tab switcher in DefinitionDiff.tsx
+- [X] T011 [US1] Handle "identical definitions" case with read-only single view in DefinitionDiff.tsx
+- [X] T012 [US1] Handle missing definitionContent with placeholder text in DefinitionDiff.tsx
+- [X] T013 [US1] Update DefinitionViz.tsx to route 2-run case to DefinitionDiff
+- [X] T014 [US1] Write unit tests for DefinitionDiff in cloud/apps/web/tests/components/compare/visualizations/DefinitionDiff.test.tsx
+- [X] T015 [US1] Write unit tests for DefinitionViz (2-run routing) in cloud/apps/web/tests/components/compare/visualizations/DefinitionViz.test.tsx
 
 **Checkpoint**: User Story 1 complete - 2-run diff view fully functional
 
