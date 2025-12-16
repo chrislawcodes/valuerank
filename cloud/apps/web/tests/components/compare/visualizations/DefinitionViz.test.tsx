@@ -38,14 +38,14 @@ function createMockRun(overrides: Partial<ComparisonRun & RunWithAnalysis> = {})
     definition: {
       id: 'def-1',
       name: 'Test Definition',
-      preamble: 'Test preamble',
-      template: 'Test template',
       parentId: null,
       tags: [],
     },
     definitionContent: {
       template: 'Test template content',
       preamble: 'Test preamble content',
+      dimensions: [],
+      matchingRules: '',
     },
     ...overrides,
   };
@@ -89,12 +89,12 @@ describe('DefinitionViz', () => {
         createMockRun({
           id: 'run-1',
           name: 'Run One',
-          definitionContent: { template: 'Template 1', preamble: '' },
+          definitionContent: { template: 'Template 1', preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({
           id: 'run-2',
           name: 'Run Two',
-          definitionContent: { template: 'Template 2', preamble: '' },
+          definitionContent: { template: 'Template 2', preamble: '', dimensions: [], matchingRules: '' },
         }),
       ];
 

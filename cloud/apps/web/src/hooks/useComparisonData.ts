@@ -103,12 +103,18 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
           ? computeValueWinRates(run.analysis)
           : undefined;
 
-        // Extract preamble/template from resolvedContent JSON
+        // Extract full definition content from resolvedContent JSON
         const resolvedContent = run.definition?.resolvedContent;
         const definitionContent = resolvedContent
           ? {
               preamble: resolvedContent.preamble || '',
               template: resolvedContent.template || '',
+              dimensions: (resolvedContent.dimensions || []) as {
+                name: string;
+                levels?: { score: number; label: string; options?: string[] }[];
+                values?: string[];
+              }[],
+              matchingRules: resolvedContent.matching_rules || '',
             }
           : undefined;
 

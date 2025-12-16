@@ -40,6 +40,36 @@ export type ComparisonFilters = {
 // ============================================================================
 
 /**
+ * Dimension level (new format)
+ */
+export type DimensionLevel = {
+  score: number;
+  label: string;
+  options?: string[];
+};
+
+/**
+ * Dimension in definition content (supports both new and legacy formats)
+ */
+export type DefinitionDimension = {
+  name: string;
+  /** New format: structured levels with scores */
+  levels?: DimensionLevel[];
+  /** Legacy format: simple string array */
+  values?: string[];
+};
+
+/**
+ * Full definition content for diff view
+ */
+export type DefinitionContent = {
+  preamble: string;
+  template: string;
+  dimensions: DefinitionDimension[];
+  matchingRules: string;
+};
+
+/**
  * Run with its analysis data for comparison.
  * Extends ComparisonRun with derived aggregate statistics.
  */
@@ -47,10 +77,7 @@ export type RunWithAnalysis = ComparisonRun & {
   /** Full analysis result (from ComparisonRun) */
   analysis: AnalysisResult | null;
   /** Definition content for diff view */
-  definitionContent?: {
-    preamble: string;
-    template: string;
-  };
+  definitionContent?: DefinitionContent;
   /** Computed aggregate statistics across all models */
   aggregateStats?: AggregateStats;
   /** Computed value win rates across all models */

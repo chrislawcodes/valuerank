@@ -1,15 +1,15 @@
 /**
  * Definition Diff Visualization (2 runs)
  *
- * Shows side-by-side Monaco diff editor comparing definition templates
- * between exactly two runs. Supports tabs for template/preamble.
+ * Shows side-by-side Monaco diff editor comparing full definition content
+ * in markdown format between exactly two runs.
  */
 
 import { useState, useMemo } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import { FileText, Copy, Check } from 'lucide-react';
 import { Button } from '../../ui/Button';
-import type { RunWithAnalysis } from '../types';
+import type { RunWithAnalysis, DefinitionContent, DefinitionDimension } from '../types';
 import { formatRunNameShort } from '../../../lib/format';
 
 type DefinitionDiffProps = {
@@ -17,46 +17,131 @@ type DefinitionDiffProps = {
   rightRun: RunWithAnalysis;
 };
 
-type TabType = 'template' | 'preamble';
-
 /**
  * Monaco diff editor options
  */
 const DIFF_EDITOR_OPTIONS = {
   readOnly: true,
   renderSideBySide: true,
-  minimap: { enabled: true },
+  minimap: { enabled: false },
   scrollBeyondLastLine: false,
-  wordWrap: 'on' as const,
   lineNumbers: 'on' as const,
   fontSize: 13,
   automaticLayout: true,
+  // Force word wrap on both sides consistently
+  wordWrap: 'on' as const,
+  diffWordWrap: 'on' as const,
+  // Disable all highlighting
+  renderValidationDecorations: 'off' as const,
+  unicodeHighlight: {
+    ambiguousCharacters: false,
+    invisibleCharacters: false,
+    nonBasicASCII: false,
+  },
 };
+
+/**
+ * Serialize a dimension to markdown table format
+ */
+function serializeDimension(dim: DefinitionDimension): string {
+  const lines: string[] = [];
+  lines.push(`## ${dim.name}`);
+  lines.push('');
+
+  if (dim.levels && dim.levels.length > 0) {
+    lines.push('| Score | Label | Options |');
+    lines.push('|-------|-------|---------|');
+
+    const sortedLevels = [...dim.levels].sort((a, b) => a.score - b.score);
+    for (const level of sortedLevels) {
+      const options = level.options?.join(', ') || '';
+      lines.push(`| ${level.score} | ${level.label} | ${options} |`);
+    }
+  } else if (dim.values && dim.values.length > 0) {
+    // Legacy format
+    lines.push('| Value |');
+    lines.push('|-------|');
+    for (const value of dim.values) {
+      lines.push(`| ${value} |`);
+    }
+  } else {
+    lines.push('(No values defined)');
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * Convert definition content to markdown format for diff view
+ */
+function serializeDefinitionToMarkdown(
+  content: DefinitionContent | undefined,
+  definitionName: string
+): string {
+  if (!content) {
+    return '(Definition content not available)';
+  }
+
+  const lines: string[] = [];
+
+  // Header with definition name
+  lines.push(`# ${definitionName}`);
+  lines.push('');
+
+  // Preamble section
+  lines.push('## Preamble');
+  lines.push('');
+  if (content.preamble && content.preamble.trim()) {
+    lines.push(content.preamble);
+  } else {
+    lines.push('(No preamble defined)');
+  }
+  lines.push('');
+
+  // Template section
+  lines.push('## Template');
+  lines.push('');
+  if (content.template && content.template.trim()) {
+    lines.push(content.template);
+  } else {
+    lines.push('(No template defined)');
+  }
+  lines.push('');
+
+  // Dimensions section
+  if (content.dimensions && content.dimensions.length > 0) {
+    lines.push('# Dimensions');
+    lines.push('');
+    for (const dim of content.dimensions) {
+      lines.push(serializeDimension(dim));
+    }
+  }
+
+  // Matching Rules section
+  if (content.matchingRules && content.matchingRules.trim()) {
+    lines.push('# Matching Rules');
+    lines.push('');
+    lines.push(content.matchingRules);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Get definition content with fallback for missing data
  */
-function getDefinitionContent(run: RunWithAnalysis): { template: string; preamble: string } {
-  if (run.definitionContent) {
-    return {
-      template: run.definitionContent.template || '(No template defined)',
-      preamble: run.definitionContent.preamble || '',
-    };
-  }
-  return {
-    template: '(Definition content not available)',
-    preamble: '',
-  };
+function getDefinitionMarkdown(run: RunWithAnalysis): string {
+  const definitionName = run.definition?.name ?? 'Unknown Definition';
+  return serializeDefinitionToMarkdown(run.definitionContent, definitionName);
 }
 
 /**
  * Check if two definitions are identical
  */
-function areDefinitionsIdentical(
-  left: { template: string; preamble: string },
-  right: { template: string; preamble: string }
-): boolean {
-  return left.template === right.template && left.preamble === right.preamble;
+function areDefinitionsIdentical(left: string, right: string): boolean {
+  return left === right;
 }
 
 /**
@@ -107,24 +192,15 @@ function CopyButton({
  * Definition diff visualization for exactly 2 runs
  */
 export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('template');
-
-  // Extract definition content
-  const leftContent = useMemo(() => getDefinitionContent(leftRun), [leftRun]);
-  const rightContent = useMemo(() => getDefinitionContent(rightRun), [rightRun]);
-
-  // Check if preamble tab should be shown
-  const showPreambleTab = leftContent.preamble || rightContent.preamble;
+  // Convert to markdown
+  const leftMarkdown = useMemo(() => getDefinitionMarkdown(leftRun), [leftRun]);
+  const rightMarkdown = useMemo(() => getDefinitionMarkdown(rightRun), [rightRun]);
 
   // Check if definitions are identical
   const isIdentical = useMemo(
-    () => areDefinitionsIdentical(leftContent, rightContent),
-    [leftContent, rightContent]
+    () => areDefinitionsIdentical(leftMarkdown, rightMarkdown),
+    [leftMarkdown, rightMarkdown]
   );
-
-  // Get current content based on active tab
-  const currentLeft = activeTab === 'template' ? leftContent.template : leftContent.preamble;
-  const currentRight = activeTab === 'template' ? rightContent.template : rightContent.preamble;
 
   // Format run names
   const leftName = formatRunNameShort(leftRun);
@@ -163,37 +239,16 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
         </div>
       </div>
 
-      {/* Tab bar and copy buttons */}
-      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-        <div className="flex gap-1">
-          <Button
-            variant={activeTab === 'template' ? 'primary' : 'ghost'}
-            size="sm"
-            onClick={() => setActiveTab('template')}
-            className="h-8"
-          >
-            Template
-          </Button>
-          {showPreambleTab && (
-            <Button
-              variant={activeTab === 'preamble' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setActiveTab('preamble')}
-              className="h-8"
-            >
-              Preamble
-            </Button>
-          )}
-        </div>
-
+      {/* Copy buttons */}
+      <div className="flex items-center justify-end border-b border-gray-200 pb-2">
         <div className="flex gap-1">
           <CopyButton
-            content={currentLeft}
+            content={leftMarkdown}
             label="Left"
             runInfo={`Run: ${leftName} | Definition: ${leftDefName}`}
           />
           <CopyButton
-            content={currentRight}
+            content={rightMarkdown}
             label="Right"
             runInfo={`Run: ${rightName} | Definition: ${rightDefName}`}
           />
@@ -216,10 +271,10 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
       {/* Monaco Diff Editor */}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <DiffEditor
-          height="500px"
+          height="600px"
           language="plaintext"
-          original={currentLeft}
-          modified={currentRight}
+          original={leftMarkdown}
+          modified={rightMarkdown}
           options={DIFF_EDITOR_OPTIONS}
           theme="vs"
         />

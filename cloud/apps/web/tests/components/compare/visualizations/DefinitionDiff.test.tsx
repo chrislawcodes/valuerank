@@ -2,13 +2,13 @@
  * DefinitionDiff Component Tests
  *
  * Tests for the Monaco diff editor visualization for 2 runs.
+ * Now shows full definition content in markdown format.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { DefinitionDiff } from '../../../../src/components/compare/visualizations/DefinitionDiff';
-import type { RunWithAnalysis } from '../../../../src/components/compare/types';
+import type { RunWithAnalysis, DefinitionContent } from '../../../../src/components/compare/types';
 import type { ComparisonRun } from '../../../../src/api/operations/comparison';
 
 // Mock Monaco DiffEditor
@@ -20,6 +20,26 @@ vi.mock('@monaco-editor/react', () => ({
     </div>
   ),
 }));
+
+function createMockDefinitionContent(
+  overrides: Partial<DefinitionContent> = {}
+): DefinitionContent {
+  return {
+    template: 'Test template content',
+    preamble: 'Test preamble content',
+    dimensions: [
+      {
+        name: 'TestDimension',
+        levels: [
+          { score: 1, label: 'Low', options: ['low option'] },
+          { score: 5, label: 'High', options: ['high option'] },
+        ],
+      },
+    ],
+    matchingRules: '',
+    ...overrides,
+  };
+}
 
 function createMockRun(overrides: Partial<ComparisonRun & RunWithAnalysis> = {}): RunWithAnalysis {
   return {
@@ -38,15 +58,10 @@ function createMockRun(overrides: Partial<ComparisonRun & RunWithAnalysis> = {})
     definition: {
       id: 'def-1',
       name: 'Test Definition',
-      preamble: 'Test preamble',
-      template: 'Test template',
       parentId: null,
       tags: [],
     },
-    definitionContent: {
-      template: 'Test template content',
-      preamble: 'Test preamble content',
-    },
+    definitionContent: createMockDefinitionContent(),
     ...overrides,
   };
 }
@@ -57,14 +72,14 @@ describe('DefinitionDiff', () => {
   });
 
   describe('rendering', () => {
-    it('renders Monaco DiffEditor with correct content', () => {
+    it('renders Monaco DiffEditor with markdown content', () => {
       const leftRun = createMockRun({
         id: 'run-1',
-        definitionContent: { template: 'Left template', preamble: 'Left preamble' },
+        definitionContent: createMockDefinitionContent({ template: 'Left template' }),
       });
       const rightRun = createMockRun({
         id: 'run-2',
-        definitionContent: { template: 'Right template', preamble: 'Right preamble' },
+        definitionContent: createMockDefinitionContent({ template: 'Right template' }),
       });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
@@ -105,70 +120,155 @@ describe('DefinitionDiff', () => {
     });
   });
 
-  describe('tab switching', () => {
-    it('defaults to Template tab', () => {
+  describe('markdown format', () => {
+    it('includes definition name as header', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Template A', preamble: 'Preamble A' },
+        id: 'run-1',
+        definition: { ...createMockRun().definition!, name: 'My Definition' },
       });
-      const rightRun = createMockRun({
-        definitionContent: { template: 'Template B', preamble: 'Preamble B' },
-      });
+      const rightRun = createMockRun({ id: 'run-2' });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.getByTestId('diff-original')).toHaveTextContent('Template A');
-      expect(screen.getByTestId('diff-modified')).toHaveTextContent('Template B');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('# My Definition');
     });
 
-    it('switches to Preamble tab when clicked', async () => {
-      const user = userEvent.setup();
+    it('includes preamble section', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Template A', preamble: 'Preamble A' },
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({ preamble: 'Custom preamble text' }),
       });
-      const rightRun = createMockRun({
-        definitionContent: { template: 'Template B', preamble: 'Preamble B' },
-      });
+      const rightRun = createMockRun({ id: 'run-2' });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      await user.click(screen.getByText('Preamble'));
-
-      expect(screen.getByTestId('diff-original')).toHaveTextContent('Preamble A');
-      expect(screen.getByTestId('diff-modified')).toHaveTextContent('Preamble B');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('## Preamble');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('Custom preamble text');
     });
 
-    it('hides Preamble tab when both runs have no preamble', () => {
+    it('includes template section', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Template A', preamble: '' },
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({ template: 'Custom template text' }),
       });
-      const rightRun = createMockRun({
-        definitionContent: { template: 'Template B', preamble: '' },
-      });
+      const rightRun = createMockRun({ id: 'run-2' });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.queryByText('Preamble')).not.toBeInTheDocument();
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('## Template');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('Custom template text');
     });
 
-    it('shows Preamble tab when at least one run has preamble', () => {
+    it('includes dimensions section with table', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Template A', preamble: 'Has preamble' },
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({
+          dimensions: [
+            {
+              name: 'Value_A',
+              levels: [
+                { score: 1, label: 'Low stakes', options: ['option1'] },
+                { score: 3, label: 'Medium stakes', options: ['option2'] },
+              ],
+            },
+          ],
+        }),
       });
-      const rightRun = createMockRun({
-        definitionContent: { template: 'Template B', preamble: '' },
-      });
+      const rightRun = createMockRun({ id: 'run-2' });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.getByText('Preamble')).toBeInTheDocument();
+      const content = screen.getByTestId('diff-original').textContent;
+      expect(content).toContain('# Dimensions');
+      expect(content).toContain('## Value_A');
+      expect(content).toContain('| Score | Label | Options |');
+      expect(content).toContain('| 1 | Low stakes | option1 |');
+      expect(content).toContain('| 3 | Medium stakes | option2 |');
+    });
+
+    it('includes matching rules section when present', () => {
+      const leftRun = createMockRun({
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({ matchingRules: 'Custom matching rules' }),
+      });
+      const rightRun = createMockRun({ id: 'run-2' });
+
+      render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
+
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('# Matching Rules');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('Custom matching rules');
+    });
+
+    it('sorts dimension levels by score', () => {
+      const leftRun = createMockRun({
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({
+          dimensions: [
+            {
+              name: 'TestDim',
+              levels: [
+                { score: 5, label: 'High' },
+                { score: 1, label: 'Low' },
+                { score: 3, label: 'Medium' },
+              ],
+            },
+          ],
+        }),
+      });
+      const rightRun = createMockRun({ id: 'run-2' });
+
+      render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
+
+      const content = screen.getByTestId('diff-original').textContent ?? '';
+      const lowIndex = content.indexOf('| 1 | Low');
+      const mediumIndex = content.indexOf('| 3 | Medium');
+      const highIndex = content.indexOf('| 5 | High');
+
+      expect(lowIndex).toBeLessThan(mediumIndex);
+      expect(mediumIndex).toBeLessThan(highIndex);
+    });
+
+    it('handles legacy dimension format with values array', () => {
+      const leftRun = createMockRun({
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({
+          dimensions: [
+            {
+              name: 'LegacyDim',
+              values: ['Value 1', 'Value 2', 'Value 3'],
+            },
+          ],
+        }),
+      });
+      const rightRun = createMockRun({ id: 'run-2' });
+
+      render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
+
+      const content = screen.getByTestId('diff-original').textContent;
+      expect(content).toContain('## LegacyDim');
+      expect(content).toContain('| Value 1 |');
+      expect(content).toContain('| Value 2 |');
     });
   });
 
   describe('identical definitions', () => {
-    it('shows identical message when templates and preambles match', () => {
-      const content = { template: 'Same template', preamble: 'Same preamble' };
-      const leftRun = createMockRun({ definitionContent: content });
-      const rightRun = createMockRun({ definitionContent: content });
+    it('shows identical message when full content matches', () => {
+      const content = createMockDefinitionContent({
+        template: 'Same template',
+        preamble: 'Same preamble',
+        dimensions: [],
+        matchingRules: '',
+      });
+      const leftRun = createMockRun({
+        id: 'run-1',
+        definition: { ...createMockRun().definition!, name: 'Same Def' },
+        definitionContent: content,
+      });
+      const rightRun = createMockRun({
+        id: 'run-2',
+        definition: { ...createMockRun().definition!, name: 'Same Def' },
+        definitionContent: content,
+      });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
@@ -178,10 +278,12 @@ describe('DefinitionDiff', () => {
 
     it('does not show identical message when templates differ', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Template A', preamble: 'Same' },
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({ template: 'Template A' }),
       });
       const rightRun = createMockRun({
-        definitionContent: { template: 'Template B', preamble: 'Same' },
+        id: 'run-2',
+        definitionContent: createMockDefinitionContent({ template: 'Template B' }),
       });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
@@ -189,12 +291,18 @@ describe('DefinitionDiff', () => {
       expect(screen.queryByText('Definitions are identical')).not.toBeInTheDocument();
     });
 
-    it('does not show identical message when preambles differ', () => {
+    it('does not show identical message when dimensions differ', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: 'Same', preamble: 'Preamble A' },
+        id: 'run-1',
+        definitionContent: createMockDefinitionContent({
+          dimensions: [{ name: 'DimA', levels: [{ score: 1, label: 'A' }] }],
+        }),
       });
       const rightRun = createMockRun({
-        definitionContent: { template: 'Same', preamble: 'Preamble B' },
+        id: 'run-2',
+        definitionContent: createMockDefinitionContent({
+          dimensions: [{ name: 'DimB', levels: [{ score: 1, label: 'B' }] }],
+        }),
       });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
@@ -210,23 +318,37 @@ describe('DefinitionDiff', () => {
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.getByTestId('diff-original')).toHaveTextContent('(Definition content not available)');
-      expect(screen.getByTestId('diff-modified')).toHaveTextContent('(Definition content not available)');
+      expect(screen.getByTestId('diff-original')).toHaveTextContent(
+        '(Definition content not available)'
+      );
+      expect(screen.getByTestId('diff-modified')).toHaveTextContent(
+        '(Definition content not available)'
+      );
     });
 
     it('shows fallback for empty template string', () => {
       const leftRun = createMockRun({
-        definitionContent: { template: '', preamble: '' },
+        definitionContent: createMockDefinitionContent({ template: '', preamble: '' }),
       });
       const rightRun = createMockRun({
-        definitionContent: { template: 'Has content', preamble: '' },
+        definitionContent: createMockDefinitionContent({ template: 'Has content', preamble: '' }),
       });
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      // Empty string becomes "(No template defined)"
       expect(screen.getByTestId('diff-original')).toHaveTextContent('(No template defined)');
       expect(screen.getByTestId('diff-modified')).toHaveTextContent('Has content');
+    });
+
+    it('shows fallback for empty preamble string', () => {
+      const leftRun = createMockRun({
+        definitionContent: createMockDefinitionContent({ preamble: '' }),
+      });
+      const rightRun = createMockRun({ id: 'run-2' });
+
+      render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
+
+      expect(screen.getByTestId('diff-original')).toHaveTextContent('(No preamble defined)');
     });
   });
 

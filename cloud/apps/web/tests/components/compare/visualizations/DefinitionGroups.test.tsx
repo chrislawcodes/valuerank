@@ -27,14 +27,14 @@ function createMockRun(overrides: Partial<ComparisonRun & RunWithAnalysis> = {})
     definition: {
       id: 'def-1',
       name: 'Test Definition',
-      preamble: 'Test preamble',
-      template: 'Test template',
       parentId: null,
       tags: [],
     },
     definitionContent: {
       template: 'Test template content',
       preamble: 'Test preamble content',
+      dimensions: [],
+      matchingRules: '',
     },
     ...overrides,
   };
@@ -163,15 +163,15 @@ describe('DefinitionGroups', () => {
       const runs = [
         createMockRun({
           id: 'run-1',
-          definitionContent: { template: 'This is the template content', preamble: '' },
+          definitionContent: { template: 'This is the template content', preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({
           id: 'run-2',
-          definitionContent: { template: 'Different template', preamble: '' },
+          definitionContent: { template: 'Different template', preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({
           id: 'run-3',
-          definitionContent: { template: 'Another template', preamble: '' },
+          definitionContent: { template: 'Another template', preamble: '', dimensions: [], matchingRules: '' },
         }),
       ];
 
@@ -185,7 +185,7 @@ describe('DefinitionGroups', () => {
       const runs = [
         createMockRun({
           id: 'run-1',
-          definitionContent: { template: longTemplate, preamble: '' },
+          definitionContent: { template: longTemplate, preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({ id: 'run-2' }),
         createMockRun({ id: 'run-3' }),
@@ -216,7 +216,7 @@ describe('DefinitionGroups', () => {
       const runs = [
         createMockRun({
           id: 'run-1',
-          definitionContent: { template: 'Template', preamble: 'This is a preamble' },
+          definitionContent: { template: 'Template', preamble: 'This is a preamble', dimensions: [], matchingRules: '' },
         }),
         createMockRun({ id: 'run-2' }),
         createMockRun({ id: 'run-3' }),
@@ -233,17 +233,17 @@ describe('DefinitionGroups', () => {
         createMockRun({
           id: 'run-1',
           definition: sharedDef,
-          definitionContent: { template: 'Template', preamble: '' },
+          definitionContent: { template: 'Template', preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({
           id: 'run-2',
           definition: sharedDef,
-          definitionContent: { template: 'Template', preamble: '' },
+          definitionContent: { template: 'Template', preamble: '', dimensions: [], matchingRules: '' },
         }),
         createMockRun({
           id: 'run-3',
           definition: sharedDef,
-          definitionContent: { template: 'Template', preamble: '' },
+          definitionContent: { template: 'Template', preamble: '', dimensions: [], matchingRules: '' },
         }),
       ];
 
