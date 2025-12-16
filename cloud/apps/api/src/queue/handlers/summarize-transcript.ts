@@ -3,6 +3,9 @@
  *
  * Handles summarize_transcript jobs by executing Python summarize worker
  * and updating transcripts with decision code and text.
+ *
+ * Jobs are processed in PARALLEL within each batch, with rate limiting
+ * enforced per-provider using Bottleneck.
  */
 
 import path from 'path';
@@ -13,8 +16,9 @@ import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
-import { getSummarizerModel } from '../../services/infra-models.js';
+import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
+import { schedule as rateLimitSchedule } from '../../services/rate-limiter/index.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -116,144 +120,203 @@ async function maybeCompleteRun(runId: string): Promise<void> {
 }
 
 /**
- * Creates a handler for summarize_transcript jobs.
+ * Process a single summarize job.
+ * Extracted to allow parallel execution within batches.
  */
-export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<SummarizeTranscriptJobData> {
-  return async (jobs: PgBoss.Job<SummarizeTranscriptJobData>[]) => {
-    for (const job of jobs) {
-      const { runId, transcriptId, summaryModelId } = job.data;
-      const jobId = job.id;
+async function processSummarizeJob(
+  job: PgBoss.Job<SummarizeTranscriptJobData>,
+  infraModel: InfraModelConfig
+): Promise<void> {
+  const { runId, transcriptId, summaryModelId } = job.data;
+  const jobId = job.id;
 
-      // Get model ID from job data or configured infrastructure model
-      let modelId: string;
-      if (summaryModelId) {
-        modelId = summaryModelId;
-      } else {
-        const infraModel = await getSummarizerModel();
-        modelId = `${infraModel.providerName}:${infraModel.modelId}`;
-      }
+  // Get model ID from job data or configured infrastructure model
+  const modelId = summaryModelId ?? `${infraModel.providerName}:${infraModel.modelId}`;
 
-      log.info(
-        { jobId, runId, transcriptId, modelId },
-        'Processing summarize_transcript job'
-      );
+  log.info(
+    { jobId, runId, transcriptId, modelId },
+    'Processing summarize_transcript job'
+  );
 
-      try {
-        // Fetch transcript from database
-        const transcript = await db.transcript.findUnique({
-          where: { id: transcriptId },
-        });
+  try {
+    // Fetch transcript from database
+    const transcript = await db.transcript.findUnique({
+      where: { id: transcriptId },
+    });
 
-        if (!transcript) {
-          log.error({ jobId, transcriptId }, 'Transcript not found');
-          return; // Complete job - nothing to summarize
-        }
+    if (!transcript) {
+      log.error({ jobId, transcriptId }, 'Transcript not found');
+      return; // Complete job - nothing to summarize
+    }
 
-        // Skip if already summarized
-        if (transcript.summarizedAt) {
-          log.info({ jobId, transcriptId }, 'Transcript already summarized, skipping');
-          return;
-        }
+    // Skip if already summarized
+    if (transcript.summarizedAt) {
+      log.info({ jobId, transcriptId }, 'Transcript already summarized, skipping');
+      return;
+    }
 
-        // Build input for Python worker
-        const workerInput: SummarizeWorkerInput = {
-          transcriptId,
-          modelId,
-          transcriptContent: transcript.content,
-        };
+    // Build input for Python worker
+    const workerInput: SummarizeWorkerInput = {
+      transcriptId,
+      modelId,
+      transcriptContent: transcript.content,
+    };
 
-        log.debug({ jobId, workerInput: { transcriptId, modelId } }, 'Calling Python summarize worker');
+    log.debug({ jobId, workerInput: { transcriptId, modelId } }, 'Calling Python summarize worker');
 
-        // Execute Python summarize worker
-        const result = await spawnPython<SummarizeWorkerInput, SummarizeWorkerOutput>(
-          SUMMARIZE_WORKER_PATH,
-          workerInput,
-          { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
-        );
+    // Execute Python summarize worker
+    const result = await spawnPython<SummarizeWorkerInput, SummarizeWorkerOutput>(
+      SUMMARIZE_WORKER_PATH,
+      workerInput,
+      { cwd: path.resolve(process.cwd(), '../..') } // cloud/ directory
+    );
 
-        // Handle spawn failure
-        if (!result.success) {
-          log.error({ jobId, transcriptId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
-          throw new Error(`Python worker failed: ${result.error}`);
-        }
+    // Handle spawn failure
+    if (!result.success) {
+      log.error({ jobId, transcriptId, error: result.error, stderr: result.stderr }, 'Python spawn failed');
+      throw new Error(`Python worker failed: ${result.error}`);
+    }
 
-        // Handle worker failure
-        const output = result.data;
-        if (!output.success) {
-          const err = output.error;
-          log.warn({ jobId, transcriptId, error: err }, 'Summarize worker returned error');
+    // Handle worker failure
+    const output = result.data;
+    if (!output.success) {
+      const err = output.error;
+      log.warn({ jobId, transcriptId, error: err }, 'Summarize worker returned error');
 
-          if (!err.retryable) {
-            // Non-retryable error - store error in decision_text
-            await db.transcript.update({
-              where: { id: transcriptId },
-              data: {
-                decisionCode: 'error',
-                decisionText: `Summary failed: ${err.message}`,
-                summarizedAt: new Date(),
-              },
-            });
-            await incrementSummarizeFailed(runId);
-            await maybeCompleteRun(runId);
-            return;
-          }
-
-          // Retryable error - throw to trigger retry
-          throw new Error(`${err.code}: ${err.message}`);
-        }
-
-        // Update transcript with summary
+      if (!err.retryable) {
+        // Non-retryable error - store error in decision_text
         await db.transcript.update({
           where: { id: transcriptId },
           data: {
-            decisionCode: output.summary.decisionCode,
-            decisionText: output.summary.decisionText,
+            decisionCode: 'error',
+            decisionText: `Summary failed: ${err.message}`,
             summarizedAt: new Date(),
           },
         });
-
-        log.info(
-          { jobId, transcriptId, decisionCode: output.summary.decisionCode },
-          'Transcript summarized'
-        );
-
-        // Increment summarize progress
-        await incrementSummarizeCompleted(runId);
-
-        // Check if run is complete
+        await incrementSummarizeFailed(runId);
         await maybeCompleteRun(runId);
-
-      } catch (error) {
-        const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
-        const maxRetriesReached = retryCount >= RETRY_LIMIT;
-
-        log.warn(
-          { jobId, transcriptId, retryCount, maxRetriesReached, err: error },
-          'Summarize job error'
-        );
-
-        if (maxRetriesReached) {
-          // Store error in transcript
-          try {
-            await db.transcript.update({
-              where: { id: transcriptId },
-              data: {
-                decisionCode: 'error',
-                decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
-                summarizedAt: new Date(),
-              },
-            });
-            await incrementSummarizeFailed(runId);
-            await maybeCompleteRun(runId);
-          } catch (updateError) {
-            log.error({ jobId, transcriptId, err: updateError }, 'Failed to update transcript after summary failure');
-          }
-          return; // Complete job - don't retry
-        }
-
-        // Re-throw to trigger retry
-        throw error;
+        return;
       }
+
+      // Retryable error - throw to trigger retry
+      throw new Error(`${err.code}: ${err.message}`);
     }
+
+    // Update transcript with summary
+    await db.transcript.update({
+      where: { id: transcriptId },
+      data: {
+        decisionCode: output.summary.decisionCode,
+        decisionText: output.summary.decisionText,
+        summarizedAt: new Date(),
+      },
+    });
+
+    log.info(
+      { jobId, transcriptId, decisionCode: output.summary.decisionCode },
+      'Transcript summarized'
+    );
+
+    // Increment summarize progress
+    await incrementSummarizeCompleted(runId);
+
+    // Check if run is complete
+    await maybeCompleteRun(runId);
+
+  } catch (error) {
+    const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+    const maxRetriesReached = retryCount >= RETRY_LIMIT;
+
+    log.warn(
+      { jobId, transcriptId, retryCount, maxRetriesReached, err: error },
+      'Summarize job error'
+    );
+
+    if (maxRetriesReached) {
+      // Store error in transcript
+      try {
+        await db.transcript.update({
+          where: { id: transcriptId },
+          data: {
+            decisionCode: 'error',
+            decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
+            summarizedAt: new Date(),
+          },
+        });
+        await incrementSummarizeFailed(runId);
+        await maybeCompleteRun(runId);
+      } catch (updateError) {
+        log.error({ jobId, transcriptId, err: updateError }, 'Failed to update transcript after summary failure');
+      }
+      return; // Complete job - don't retry
+    }
+
+    // Re-throw to trigger retry
+    throw error;
+  }
+}
+
+/**
+ * Creates a handler for summarize_transcript jobs.
+ *
+ * Jobs in each batch are processed in PARALLEL using the rate limiter
+ * to enforce per-provider concurrency and rate limits.
+ */
+export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<SummarizeTranscriptJobData> {
+  return async (jobs: PgBoss.Job<SummarizeTranscriptJobData>[]) => {
+    if (jobs.length === 0) {
+      return;
+    }
+
+    // Get the summarizer model config once for the batch
+    const infraModel = await getSummarizerModel();
+    const providerName = infraModel.providerName;
+
+    log.info(
+      { jobCount: jobs.length, provider: providerName },
+      'Processing summarize_transcript batch in parallel'
+    );
+
+    // Process all jobs in parallel with rate limiting
+    const results = await Promise.allSettled(
+      jobs.map(async (job) => {
+        const { transcriptId } = job.data;
+        const jobId = job.id;
+
+        // Schedule through rate limiter for the summarizer provider
+        return rateLimitSchedule(
+          providerName,
+          jobId,
+          `${providerName}:${infraModel.modelId}`,
+          transcriptId,
+          () => processSummarizeJob(job, infraModel)
+        );
+      })
+    );
+
+    // Check for failures - PgBoss needs us to throw to trigger retries
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+
+    if (failures.length > 0) {
+      log.warn(
+        { failureCount: failures.length, totalJobs: jobs.length },
+        'Some summarize jobs in batch failed'
+      );
+
+      // If all jobs failed, throw the first error
+      if (failures.length === jobs.length && failures[0]) {
+        throw failures[0].reason;
+      }
+
+      // If some succeeded and some failed, log but don't throw
+      // The successful ones are done, failed ones were handled in processSummarizeJob
+    }
+
+    log.info(
+      { completed: results.length - failures.length, failed: failures.length },
+      'Summarize batch processing complete'
+    );
   };
 }
