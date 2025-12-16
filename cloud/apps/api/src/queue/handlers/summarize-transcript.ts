@@ -18,7 +18,8 @@ import { spawnPython } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
-import { schedule as rateLimitSchedule, getLimiterStats } from '../../services/rate-limiter/index.js';
+import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
+import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -278,6 +279,13 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
     const infraModel = await getSummarizerModel();
     const providerName = infraModel.providerName;
 
+    // Get summarization parallelism for rate limiter override
+    // This allows summarization to use higher concurrency than provider probe limits
+    const summarizationParallelism = await getMaxParallelSummarizations();
+    const scheduleOptions: ScheduleOptions = {
+      concurrencyOverride: summarizationParallelism,
+    };
+
     // Get rate limiter stats before processing
     const limiterStatsBefore = await getLimiterStats(providerName);
 
@@ -290,6 +298,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
         jobCount: jobs.length,
         provider: providerName,
         modelId: infraModel.modelId,
+        summarizationParallelism,
         runIds,
         rateLimiter: limiterStatsBefore,
       },
@@ -313,12 +322,14 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
 
         try {
           // Schedule through rate limiter for the summarizer provider
+          // Pass concurrencyOverride to use summarization parallelism setting
           const result = await rateLimitSchedule(
             providerName,
             jobId,
             `${providerName}:${infraModel.modelId}`,
             transcriptId,
-            () => processSummarizeJob(job, infraModel)
+            () => processSummarizeJob(job, infraModel),
+            scheduleOptions
           );
 
           const durationMs = Date.now() - jobStartTime;

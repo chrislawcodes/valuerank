@@ -78,10 +78,23 @@ export type LimiterStats = {
 
 /**
  * Get or create a Bottleneck limiter for a provider.
+ *
+ * @param providerName - The provider to get a limiter for
+ * @param concurrencyOverride - Optional override for max concurrency.
+ *   When provided, uses max(providerLimit, override) and creates a separate
+ *   limiter keyed by `${providerName}:summarize`.
  */
-async function getOrCreateLimiter(providerName: string): Promise<Bottleneck> {
+async function getOrCreateLimiter(
+  providerName: string,
+  concurrencyOverride?: number
+): Promise<Bottleneck> {
+  // Determine the limiter key - use fixed suffix for overrides to allow reload
+  const limiterKey = concurrencyOverride
+    ? `${providerName}:summarize`
+    : providerName;
+
   // Return existing limiter if available
-  const existing = providerLimiters.get(providerName);
+  const existing = providerLimiters.get(limiterKey);
   if (existing) {
     return existing;
   }
@@ -93,17 +106,41 @@ async function getOrCreateLimiter(providerName: string): Promise<Bottleneck> {
   if (!limits) {
     log.warn({ provider: providerName }, 'No limits found for provider, using defaults');
     // Default conservative limits
-    const defaultLimiter = createLimiter(providerName, {
-      maxParallelRequests: 1,
+    const effectiveConcurrency = concurrencyOverride
+      ? Math.max(1, concurrencyOverride)
+      : 1;
+    const defaultLimiter = createLimiter(limiterKey, {
+      maxParallelRequests: effectiveConcurrency,
       requestsPerMinute: 30,
       queueName: `probe_${providerName}`,
     });
-    providerLimiters.set(providerName, defaultLimiter);
+    providerLimiters.set(limiterKey, defaultLimiter);
     return defaultLimiter;
   }
 
-  const limiter = createLimiter(providerName, limits);
-  providerLimiters.set(providerName, limiter);
+  // Apply concurrency override if provided (use max of provider limit and override)
+  const effectiveLimits = concurrencyOverride
+    ? {
+        ...limits,
+        maxParallelRequests: Math.max(limits.maxParallelRequests, concurrencyOverride),
+      }
+    : limits;
+
+  if (concurrencyOverride) {
+    log.info(
+      {
+        provider: providerName,
+        limiterKey,
+        providerConcurrency: limits.maxParallelRequests,
+        override: concurrencyOverride,
+        effectiveConcurrency: effectiveLimits.maxParallelRequests,
+      },
+      'Creating rate limiter with concurrency override'
+    );
+  }
+
+  const limiter = createLimiter(limiterKey, effectiveLimits);
+  providerLimiters.set(limiterKey, limiter);
   return limiter;
 }
 
@@ -205,6 +242,18 @@ function createLimiter(providerName: string, limits: ProviderLimits): Bottleneck
 }
 
 /**
+ * Options for scheduling through the rate limiter.
+ */
+export type ScheduleOptions = {
+  /**
+   * Override the concurrency limit for this limiter.
+   * Uses max(providerLimit, override) for the effective concurrency.
+   * When provided, creates a separate limiter keyed by `${providerName}:override`.
+   */
+  concurrencyOverride?: number;
+};
+
+/**
  * Schedule a job through the rate limiter for a provider.
  */
 export async function schedule<T>(
@@ -212,9 +261,10 @@ export async function schedule<T>(
   jobId: string,
   modelId: string,
   scenarioId: string,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  options?: ScheduleOptions
 ): Promise<T> {
-  const limiter = await getOrCreateLimiter(providerName);
+  const limiter = await getOrCreateLimiter(providerName, options?.concurrencyOverride);
   const startTime = Date.now();
 
   try {
@@ -330,6 +380,40 @@ export function clearAll(): void {
   queuedJobCounts.clear();
   recentCompletionsBuffer.clear();
   log.debug('All rate limiters cleared');
+}
+
+/**
+ * Clear summarize-specific limiters.
+ * Called when summarization parallelism settings change.
+ *
+ * This gracefully disconnects summarize limiters so they can be recreated
+ * with new concurrency settings. In-flight jobs complete normally.
+ */
+export function clearSummarizeLimiters(): void {
+  const keysToRemove: string[] = [];
+
+  for (const [key, limiter] of providerLimiters.entries()) {
+    if (key.endsWith(':summarize')) {
+      log.info({ limiterKey: key }, 'Clearing summarize limiter for settings reload');
+      // Graceful disconnect - in-flight jobs complete, queued jobs are dropped
+      // (but PgBoss will retry them with the new limiter)
+      void limiter.disconnect();
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    providerLimiters.delete(key);
+    limiterConfigs.delete(key);
+    // Note: We don't clear metrics for the base provider, just the limiter
+  }
+
+  if (keysToRemove.length > 0) {
+    log.info(
+      { clearedLimiters: keysToRemove },
+      'Summarize limiters cleared - will be recreated with new settings'
+    );
+  }
 }
 
 /**

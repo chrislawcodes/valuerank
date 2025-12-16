@@ -58,12 +58,12 @@ export function ParallelismSettings({
             <input
               type="number"
               min={1}
-              max={100}
+              max={500}
               value={value}
               onChange={(e) => onChange(parseInt(e.target.value, 10) || 1)}
               className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             />
-            <span className="text-sm text-gray-500">Range: 1-100 (default: 8)</span>
+            <span className="text-sm text-gray-500">Range: 1-500 (default: 8)</span>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export function ParallelismSettings({
             <Button
               variant="primary"
               onClick={onSave}
-              disabled={!hasChanges || isSaving || value < 1 || value > 100}
+              disabled={!hasChanges || isSaving || value < 1 || value > 500}
               isLoading={isSaving}
             >
               Save Configuration

@@ -351,10 +351,15 @@ export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
   // 3. Clear cache to force reload from database
   clearSummarizationCache();
 
-  // 4. Load fresh parallelism setting
+  // 4. Clear summarize rate limiters so they're recreated with new settings
+  const { clearSummarizeLimiters } = await import('../../services/rate-limiter/index.js');
+  clearSummarizeLimiters();
+  log.debug('Summarize rate limiters cleared');
+
+  // 5. Load fresh parallelism setting
   const newBatchSize = await getMaxParallelSummarizations();
 
-  // 5. Register new handler with updated batchSize
+  // 6. Register new handler with updated batchSize
   //    This immediately starts processing queued jobs with the new concurrency
   const summarizeHandler = createSummarizeTranscriptHandler();
 
