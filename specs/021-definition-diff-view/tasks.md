@@ -85,11 +85,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Add "Copy Left" button in DefinitionDiff.tsx header
-- [ ] T023 [US3] Add "Copy Right" button in DefinitionDiff.tsx header
-- [ ] T024 [US3] Implement clipboard copy with header metadata (run/definition info)
-- [ ] T025 [US3] Add toast notification on copy success
-- [ ] T026 [US3] Write unit tests for copy functionality in DefinitionDiff.test.tsx
+- [X] T022 [US3] Add "Copy Left" button in DefinitionDiff.tsx header
+- [X] T023 [US3] Add "Copy Right" button in DefinitionDiff.tsx header
+- [X] T024 [US3] Implement clipboard copy with header metadata (run/definition info)
+- [X] T025 [US3] Add toast notification on copy success
+- [X] T026 [US3] Write unit tests for copy functionality in DefinitionDiff.test.tsx
 
 **Checkpoint**: User Story 3 complete - copy functionality works
 
@@ -99,11 +99,11 @@
 
 **Purpose**: Final quality checks and documentation
 
-- [ ] T027 [P] Run full test suite and verify 80% coverage on new files
-- [ ] T028 [P] Verify all files under 400 lines per constitution
-- [ ] T029 [P] Verify no `any` types in new TypeScript files
+- [X] T027 [P] Run full test suite and verify 80% coverage on new files
+- [X] T028 [P] Verify all files under 400 lines per constitution
+- [X] T029 [P] Verify no `any` types in new TypeScript files
 - [ ] T030 Run manual testing per quickstart.md
-- [ ] T031 Run lint and build to verify no errors
+- [X] T031 Run lint and build to verify no errors
 
 **Checkpoint**: Feature complete and ready for PR
 
