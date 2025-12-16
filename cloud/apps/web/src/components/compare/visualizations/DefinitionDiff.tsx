@@ -159,10 +159,14 @@ function CopyButton({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    const textWithHeader = `# ${runInfo}\n\n${content}`;
-    await navigator.clipboard.writeText(textWithHeader);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      const textWithHeader = `# ${runInfo}\n\n${content}`;
+      await navigator.clipboard.writeText(textWithHeader);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access denied - silently fail
+    }
   };
 
   return (
