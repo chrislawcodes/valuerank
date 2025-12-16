@@ -103,12 +103,26 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
           ? computeValueWinRates(run.analysis)
           : undefined;
 
-        // Extract preamble/template from resolvedContent JSON
+        // Extract full definition content from resolvedContent JSON
+        // Validate that resolvedContent has the expected shape before using
         const resolvedContent = run.definition?.resolvedContent;
-        const definitionContent = resolvedContent
+        const isValidContent =
+          resolvedContent &&
+          typeof resolvedContent === 'object' &&
+          ('template' in resolvedContent || 'preamble' in resolvedContent);
+
+        const definitionContent = isValidContent
           ? {
-              preamble: resolvedContent.preamble || '',
-              template: resolvedContent.template || '',
+              preamble: String(resolvedContent.preamble ?? ''),
+              template: String(resolvedContent.template ?? ''),
+              dimensions: (Array.isArray(resolvedContent.dimensions)
+                ? resolvedContent.dimensions
+                : []) as {
+                name: string;
+                levels?: { score: number; label: string; options?: string[] }[];
+                values?: string[];
+              }[],
+              matchingRules: String(resolvedContent.matching_rules ?? ''),
             }
           : undefined;
 
