@@ -85,7 +85,7 @@ describe('Summarization Parallelism Service', () => {
       await db.systemSetting.create({
         data: {
           key: SETTING_KEY,
-          value: { value: 500 },
+          value: { value: 1000 },
         },
       });
 
@@ -189,40 +189,40 @@ describe('Summarization Parallelism Service', () => {
       expect(value).toBe(1);
     });
 
-    it('accepts maximum value of 100', async () => {
-      await setMaxParallelSummarizations(100);
+    it('accepts maximum value of 500', async () => {
+      await setMaxParallelSummarizations(500);
 
       const value = await getMaxParallelSummarizations();
-      expect(value).toBe(100);
+      expect(value).toBe(500);
     });
 
     it('throws ValidationError for value below minimum', async () => {
       await expect(setMaxParallelSummarizations(0)).rejects.toThrow(
-        'max_parallel must be an integer between 1 and 100'
+        'max_parallel must be an integer between 1 and 500'
       );
     });
 
     it('throws ValidationError for value above maximum', async () => {
-      await expect(setMaxParallelSummarizations(101)).rejects.toThrow(
-        'max_parallel must be an integer between 1 and 100'
+      await expect(setMaxParallelSummarizations(501)).rejects.toThrow(
+        'max_parallel must be an integer between 1 and 500'
       );
     });
 
     it('throws ValidationError for negative value', async () => {
       await expect(setMaxParallelSummarizations(-5)).rejects.toThrow(
-        'max_parallel must be an integer between 1 and 100'
+        'max_parallel must be an integer between 1 and 500'
       );
     });
 
     it('throws ValidationError for non-integer value', async () => {
       await expect(setMaxParallelSummarizations(5.5)).rejects.toThrow(
-        'max_parallel must be an integer between 1 and 100'
+        'max_parallel must be an integer between 1 and 500'
       );
     });
 
     it('throws ValidationError for NaN', async () => {
       await expect(setMaxParallelSummarizations(NaN)).rejects.toThrow(
-        'max_parallel must be an integer between 1 and 100'
+        'max_parallel must be an integer between 1 and 500'
       );
     });
   });

@@ -1,7 +1,7 @@
 /**
  * set_summarization_parallelism MCP Tool
  *
- * Configures max parallel summarization jobs (1-100).
+ * Configures max parallel summarization jobs (1-500).
  * Updates the setting and hot-reloads the handler with new batchSize.
  */
 
@@ -22,8 +22,8 @@ const SetSummarizationParallelismInputSchema = {
     .number()
     .int()
     .min(1)
-    .max(100)
-    .describe('Maximum parallel summarization jobs (1-100)'),
+    .max(500)
+    .describe('Maximum parallel summarization jobs (1-500)'),
 };
 
 /**
@@ -64,7 +64,7 @@ function registerSetSummarizationParallelismTool(server: McpServer): void {
   server.registerTool(
     'set_summarization_parallelism',
     {
-      description: `Configure max parallel summarization jobs (1-100).
+      description: `Configure max parallel summarization jobs (1-500).
 
 **What this setting controls:**
 - Number of summarization jobs processed concurrently

@@ -23,7 +23,7 @@ const DEFAULT_PARALLELISM = 8;
 
 // Valid range for the setting
 const MIN_PARALLELISM = 1;
-const MAX_PARALLELISM = 100;
+const MAX_PARALLELISM = 500;
 
 // Cache configuration
 const CACHE_TTL_MS = 60000; // 1 minute
@@ -83,7 +83,7 @@ export async function getMaxParallelSummarizations(): Promise<number> {
 /**
  * Set the maximum parallel summarizations.
  *
- * @param value - Number between 1 and 100
+ * @param value - Number between 1 and 500
  * @throws ValidationError if value is out of range
  */
 export async function setMaxParallelSummarizations(value: number): Promise<void> {
