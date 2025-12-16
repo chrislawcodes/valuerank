@@ -20,13 +20,14 @@
  * ```
  */
 
-import { LayoutDashboard, BarChart3, TrendingUp, LineChart } from 'lucide-react';
+import { LayoutDashboard, BarChart3, TrendingUp, LineChart, FileText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { VisualizationType, ComparisonVisualizationProps } from '../types';
 import { OverviewViz } from './OverviewViz';
 import { DecisionsViz } from './DecisionsViz';
 import { ValuesViz } from './ValuesViz';
 import { TimelineViz } from './TimelineViz';
+import { DefinitionViz } from './DefinitionViz';
 
 // ============================================================================
 // TYPES
@@ -169,4 +170,14 @@ registerVisualization({
   component: TimelineViz,
   minRuns: 2,
   description: 'Track model behavioral drift over time across runs',
+});
+
+// Register Definition visualization
+registerVisualization({
+  id: 'definition',
+  label: 'Definition',
+  icon: FileText,
+  component: DefinitionViz,
+  minRuns: 2,
+  description: 'Compare definition templates between runs',
 });
