@@ -42,6 +42,40 @@ const MAX_RECENT_COMPLETIONS = 10;
 const activeJobCounts = new Map<string, number>();
 const queuedJobCounts = new Map<string, number>();
 
+// Track limiter configuration for diagnostics
+const limiterConfigs = new Map<string, {
+  maxConcurrent: number;
+  minTime: number;
+  reservoir: number;
+  requestsPerMinute: number;
+  createdAt: Date;
+}>();
+
+/**
+ * Stats returned by getLimiterStats for diagnostics.
+ */
+export type LimiterStats = {
+  exists: boolean;
+  provider: string;
+  config?: {
+    maxConcurrent: number;
+    minTime: number;
+    reservoir: number;
+    requestsPerMinute: number;
+    createdAt: string;
+  };
+  counts?: {
+    running: number;
+    queued: number;
+    done: number;
+    received: number;
+  };
+  tracking?: {
+    activeJobs: number;
+    queuedJobs: number;
+  };
+};
+
 /**
  * Get or create a Bottleneck limiter for a provider.
  */
@@ -87,8 +121,10 @@ function createLimiter(providerName: string, limits: ProviderLimits): Bottleneck
       maxConcurrent: limits.maxParallelRequests,
       requestsPerMinute: limits.requestsPerMinute,
       minTime,
+      reservoir: limits.requestsPerMinute,
+      reservoirRefreshInterval: 60000,
     },
-    'Creating rate limiter'
+    'Creating rate limiter with Bottleneck config'
   );
 
   const limiter = new Bottleneck({
@@ -100,27 +136,65 @@ function createLimiter(providerName: string, limits: ProviderLimits): Bottleneck
     reservoirRefreshAmount: limits.requestsPerMinute,
   });
 
+  // Store config for diagnostics
+  limiterConfigs.set(providerName, {
+    maxConcurrent: limits.maxParallelRequests,
+    minTime,
+    reservoir: limits.requestsPerMinute,
+    requestsPerMinute: limits.requestsPerMinute,
+    createdAt: new Date(),
+  });
+
   // Initialize metrics
   activeJobCounts.set(providerName, 0);
   queuedJobCounts.set(providerName, 0);
   recentCompletionsBuffer.set(providerName, []);
 
-  // Track queue changes
-  limiter.on('queued', () => {
+  // Track queue changes with detailed logging
+  limiter.on('queued', (info) => {
     const current = queuedJobCounts.get(providerName) ?? 0;
-    queuedJobCounts.set(providerName, current + 1);
+    const newCount = current + 1;
+    queuedJobCounts.set(providerName, newCount);
+
+    // Log when queue starts building up (every 10 jobs or first job)
+    if (newCount === 1 || newCount % 10 === 0) {
+      log.debug(
+        { provider: providerName, queuedCount: newCount, jobInfo: info },
+        'Job queued in rate limiter'
+      );
+    }
   });
 
-  limiter.on('executing', () => {
+  limiter.on('executing', (info) => {
     const queued = queuedJobCounts.get(providerName) ?? 0;
     const active = activeJobCounts.get(providerName) ?? 0;
     queuedJobCounts.set(providerName, Math.max(0, queued - 1));
-    activeJobCounts.set(providerName, active + 1);
+    const newActive = active + 1;
+    activeJobCounts.set(providerName, newActive);
+
+    // Log active count changes
+    log.debug(
+      { provider: providerName, activeCount: newActive, queuedCount: Math.max(0, queued - 1), jobInfo: info },
+      'Job executing from rate limiter'
+    );
   });
 
-  limiter.on('done', () => {
+  limiter.on('done', (info) => {
     const active = activeJobCounts.get(providerName) ?? 0;
-    activeJobCounts.set(providerName, Math.max(0, active - 1));
+    const newActive = Math.max(0, active - 1);
+    activeJobCounts.set(providerName, newActive);
+
+    log.debug(
+      { provider: providerName, activeCount: newActive, jobInfo: info },
+      'Job done in rate limiter'
+    );
+  });
+
+  limiter.on('depleted', () => {
+    log.warn(
+      { provider: providerName },
+      'Rate limiter reservoir depleted - requests will be throttled until refill'
+    );
   });
 
   limiter.on('error', (error) => {
@@ -251,6 +325,7 @@ export function clearAll(): void {
     void limiter.disconnect();
   }
   providerLimiters.clear();
+  limiterConfigs.clear();
   activeJobCounts.clear();
   queuedJobCounts.clear();
   recentCompletionsBuffer.clear();
@@ -268,6 +343,7 @@ export async function reloadLimiters(): Promise<void> {
     void limiter.disconnect();
   }
   providerLimiters.clear();
+  limiterConfigs.clear();
 
   // Pre-load all provider limiters
   const allLimits = await loadProviderLimits();
@@ -277,4 +353,45 @@ export async function reloadLimiters(): Promise<void> {
   }
 
   log.info({ providerCount: providerLimiters.size }, 'Rate limiters reloaded');
+}
+
+/**
+ * Get detailed stats for a rate limiter (for diagnostics).
+ * Returns internal Bottleneck state plus our tracking counts.
+ */
+export async function getLimiterStats(providerName: string): Promise<LimiterStats> {
+  const limiter = providerLimiters.get(providerName);
+
+  if (!limiter) {
+    return {
+      exists: false,
+      provider: providerName,
+    };
+  }
+
+  // Get Bottleneck's internal counts
+  const counts = limiter.counts();
+  const config = limiterConfigs.get(providerName);
+
+  return {
+    exists: true,
+    provider: providerName,
+    config: config ? {
+      maxConcurrent: config.maxConcurrent,
+      minTime: config.minTime,
+      reservoir: config.reservoir,
+      requestsPerMinute: config.requestsPerMinute,
+      createdAt: config.createdAt.toISOString(),
+    } : undefined,
+    counts: {
+      running: counts.RUNNING ?? 0,
+      queued: counts.QUEUED ?? 0,
+      done: counts.DONE ?? 0,
+      received: counts.RECEIVED ?? 0,
+    },
+    tracking: {
+      activeJobs: activeJobCounts.get(providerName) ?? 0,
+      queuedJobs: queuedJobCounts.get(providerName) ?? 0,
+    },
+  };
 }

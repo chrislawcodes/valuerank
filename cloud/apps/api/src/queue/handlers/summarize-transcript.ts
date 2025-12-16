@@ -18,9 +18,12 @@ import { spawnPython } from '../spawn.js';
 import { triggerBasicAnalysis } from '../../services/analysis/index.js';
 import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-models.js';
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
-import { schedule as rateLimitSchedule } from '../../services/rate-limiter/index.js';
+import { schedule as rateLimitSchedule, getLimiterStats } from '../../services/rate-limiter/index.js';
 
 const log = createLogger('queue:summarize-transcript');
+
+// Track batch processing for diagnostics
+let batchCounter = 0;
 
 // Retry limit from job options
 const RETRY_LIMIT = DEFAULT_JOB_OPTIONS['summarize_transcript'].retryLimit ?? 3;
@@ -268,40 +271,103 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
       return;
     }
 
+    const batchId = ++batchCounter;
+    const batchStartTime = Date.now();
+
     // Get the summarizer model config once for the batch
     const infraModel = await getSummarizerModel();
     const providerName = infraModel.providerName;
 
+    // Get rate limiter stats before processing
+    const limiterStatsBefore = await getLimiterStats(providerName);
+
+    // Extract unique run IDs for logging
+    const runIds = [...new Set(jobs.map(j => j.data.runId))];
+
     log.info(
-      { jobCount: jobs.length, provider: providerName },
-      'Processing summarize_transcript batch in parallel'
+      {
+        batchId,
+        jobCount: jobs.length,
+        provider: providerName,
+        modelId: infraModel.modelId,
+        runIds,
+        rateLimiter: limiterStatsBefore,
+      },
+      'Summarize batch received from PgBoss'
     );
+
+    // Track individual job timing
+    const jobTimings: Array<{ jobId: string; transcriptId: string; durationMs: number; status: string }> = [];
 
     // Process all jobs in parallel with rate limiting
     const results = await Promise.allSettled(
-      jobs.map(async (job) => {
-        const { transcriptId } = job.data;
+      jobs.map(async (job, index) => {
+        const { transcriptId, runId } = job.data;
         const jobId = job.id;
+        const jobStartTime = Date.now();
 
-        // Schedule through rate limiter for the summarizer provider
-        return rateLimitSchedule(
-          providerName,
-          jobId,
-          `${providerName}:${infraModel.modelId}`,
-          transcriptId,
-          () => processSummarizeJob(job, infraModel)
+        log.debug(
+          { batchId, jobId, transcriptId, runId, jobIndex: index, totalInBatch: jobs.length },
+          'Scheduling job through rate limiter'
         );
+
+        try {
+          // Schedule through rate limiter for the summarizer provider
+          const result = await rateLimitSchedule(
+            providerName,
+            jobId,
+            `${providerName}:${infraModel.modelId}`,
+            transcriptId,
+            () => processSummarizeJob(job, infraModel)
+          );
+
+          const durationMs = Date.now() - jobStartTime;
+          jobTimings.push({ jobId, transcriptId, durationMs, status: 'success' });
+
+          log.debug(
+            { batchId, jobId, transcriptId, durationMs },
+            'Job completed successfully'
+          );
+
+          return result;
+        } catch (error) {
+          const durationMs = Date.now() - jobStartTime;
+          jobTimings.push({ jobId, transcriptId, durationMs, status: 'error' });
+
+          log.warn(
+            { batchId, jobId, transcriptId, durationMs, err: error },
+            'Job failed in rate limiter'
+          );
+
+          throw error;
+        }
       })
     );
+
+    // Get rate limiter stats after processing
+    const limiterStatsAfter = await getLimiterStats(providerName);
 
     // Check for failures - PgBoss needs us to throw to trigger retries
     const failures = results.filter(
       (r): r is PromiseRejectedResult => r.status === 'rejected'
     );
 
+    const batchDurationMs = Date.now() - batchStartTime;
+    const avgJobDurationMs = jobTimings.length > 0
+      ? Math.round(jobTimings.reduce((sum, j) => sum + j.durationMs, 0) / jobTimings.length)
+      : 0;
+
     if (failures.length > 0) {
       log.warn(
-        { failureCount: failures.length, totalJobs: jobs.length },
+        {
+          batchId,
+          failureCount: failures.length,
+          totalJobs: jobs.length,
+          batchDurationMs,
+          avgJobDurationMs,
+          rateLimiterBefore: limiterStatsBefore,
+          rateLimiterAfter: limiterStatsAfter,
+        },
         'Some summarize jobs in batch failed'
       );
 
@@ -315,7 +381,16 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
     }
 
     log.info(
-      { completed: results.length - failures.length, failed: failures.length },
+      {
+        batchId,
+        completed: results.length - failures.length,
+        failed: failures.length,
+        batchDurationMs,
+        avgJobDurationMs,
+        jobsPerSecond: batchDurationMs > 0 ? Math.round((jobs.length / batchDurationMs) * 1000 * 10) / 10 : 0,
+        rateLimiterBefore: limiterStatsBefore,
+        rateLimiterAfter: limiterStatsAfter,
+      },
       'Summarize batch processing complete'
     );
   };

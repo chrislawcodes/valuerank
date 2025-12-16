@@ -144,6 +144,11 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 
   const defaultBatchSize = queueConfig.workerBatchSize;
 
+  log.info(
+    { defaultBatchSize, jobTypes: handlerRegistrations.map(h => h.name) },
+    'Starting handler registration'
+  );
+
   // Create standard queues first (required by PgBoss v10+)
   for (const registration of handlerRegistrations) {
     log.info({ jobType: registration.name }, 'Creating queue');
@@ -153,6 +158,9 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
   // Create provider-specific probe queues
   await createProviderQueues(boss);
 
+  // Collect handler registration details for summary log
+  const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
+
   // Register standard handlers with appropriate batchSize
   for (const registration of handlerRegistrations) {
     // Use dynamic batchSize for summarize_transcript
@@ -160,19 +168,43 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
       ? await getMaxParallelSummarizations()
       : defaultBatchSize;
 
-    log.info({ jobType: registration.name, batchSize }, 'Registering handler');
+    log.info(
+      {
+        jobType: registration.name,
+        batchSize,
+        isDynamic: registration.name === 'summarize_transcript',
+      },
+      'Registering handler with batchSize'
+    );
+
     await registration.register(boss, batchSize);
+    handlerDetails.push({ jobType: registration.name, batchSize });
   }
 
   // Register provider-specific probe handlers with parallelism limits
   const providerHandlerCount = await registerProviderProbeHandlers(boss);
 
+  // Get current queue states for logging
+  let queueStates: Array<{ name: string; activeCount: number; queuedCount: number }> = [];
+  try {
+    const queues = await boss.getQueues();
+    queueStates = queues.map(q => ({
+      name: q.name,
+      activeCount: q.activeCount,
+      queuedCount: q.queuedCount,
+    }));
+  } catch {
+    // Ignore errors getting queue states
+  }
+
   log.info(
     {
       standardHandlers: handlerRegistrations.length,
       providerHandlers: providerHandlerCount,
+      handlerDetails,
+      queueStates,
     },
-    'All handlers registered'
+    'All handlers registered - PgBoss ready'
   );
 }
 
@@ -285,8 +317,9 @@ export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
   );
 
   const queueName = 'summarize_transcript';
+  const reregisterStartTime = Date.now();
 
-  log.info({ queueName }, 'Re-registering summarize handler');
+  log.info({ queueName }, 'Starting summarize handler re-registration');
 
   // 1. Get queue stats before unregistering (for logging)
   let activeCount = 0;
@@ -302,13 +335,16 @@ export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
     // Ignore errors getting stats
   }
 
+  // Get old batch size for comparison
+  const oldBatchSize = await getMaxParallelSummarizations();
+
   // 2. Unregister existing handler - this is GRACEFUL:
   //    - Stops fetching NEW jobs from the queue
   //    - In-flight jobs continue to completion
   //    - Jobs in queue remain untouched
   await boss.offWork(queueName);
   log.info(
-    { queueName, activeJobs: activeCount, queuedJobs: queuedCount },
+    { queueName, activeJobs: activeCount, queuedJobs: queuedCount, oldBatchSize },
     'Unregistered existing handler (in-flight jobs will complete)'
   );
 
@@ -316,16 +352,25 @@ export async function reregisterSummarizeHandler(boss: PgBoss): Promise<void> {
   clearSummarizationCache();
 
   // 4. Load fresh parallelism setting
-  const batchSize = await getMaxParallelSummarizations();
+  const newBatchSize = await getMaxParallelSummarizations();
 
   // 5. Register new handler with updated batchSize
   //    This immediately starts processing queued jobs with the new concurrency
   const summarizeHandler = createSummarizeTranscriptHandler();
 
-  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize }, summarizeHandler);
+  await boss.work<SummarizeTranscriptJobData>(queueName, { batchSize: newBatchSize }, summarizeHandler);
+
+  const durationMs = Date.now() - reregisterStartTime;
 
   log.info(
-    { queueName, batchSize },
+    {
+      queueName,
+      oldBatchSize,
+      newBatchSize,
+      batchSizeChanged: oldBatchSize !== newBatchSize,
+      queuedJobsWaiting: queuedCount,
+      durationMs,
+    },
     'Summarize handler re-registered with new settings'
   );
 }
