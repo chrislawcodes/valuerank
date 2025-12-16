@@ -66,12 +66,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Implement run grouping by definition ID in DefinitionGroups.tsx
-- [ ] T017 [US2] Create card component layout with definition name, run badges, template preview in DefinitionGroups.tsx
-- [ ] T018 [US2] Add summary header showing "X definitions across Y runs" in DefinitionGroups.tsx
-- [ ] T019 [US2] Update DefinitionViz.tsx to route 3+-run case to DefinitionGroups
-- [ ] T020 [US2] Write unit tests for DefinitionGroups in cloud/apps/web/tests/components/compare/visualizations/DefinitionGroups.test.tsx
-- [ ] T021 [US2] Update DefinitionViz tests for 3+-run routing in cloud/apps/web/tests/components/compare/visualizations/DefinitionViz.test.tsx
+- [X] T016 [US2] Implement run grouping by definition ID in DefinitionGroups.tsx
+- [X] T017 [US2] Create card component layout with definition name, run badges, template preview in DefinitionGroups.tsx
+- [X] T018 [US2] Add summary header showing "X definitions across Y runs" in DefinitionGroups.tsx
+- [X] T019 [US2] Update DefinitionViz.tsx to route 3+-run case to DefinitionGroups
+- [X] T020 [US2] Write unit tests for DefinitionGroups in cloud/apps/web/tests/components/compare/visualizations/DefinitionGroups.test.tsx
+- [X] T021 [US2] Update DefinitionViz tests for 3+-run routing in cloud/apps/web/tests/components/compare/visualizations/DefinitionViz.test.tsx
 
 **Checkpoint**: User Story 2 complete - multi-run grouping view functional
 
