@@ -16,11 +16,16 @@ const log = createLogger('mcp:tools:get-transcript');
 
 /**
  * Input schema for get_transcript tool
+ *
+ * Accepts either:
+ * - transcript_id alone (direct lookup)
+ * - run_id + scenario_id + model (composite key lookup)
  */
 const GetTranscriptInputSchema = {
-  run_id: z.string().describe('Run ID (required)'),
-  scenario_id: z.string().describe('Scenario ID (required)'),
-  model: z.string().describe('Model ID (required)'),
+  transcript_id: z.string().optional().describe('Transcript ID for direct lookup (preferred)'),
+  run_id: z.string().optional().describe('Run ID (required if not using transcript_id)'),
+  scenario_id: z.string().optional().describe('Scenario ID (required if not using transcript_id)'),
+  model: z.string().optional().describe('Model ID (required if not using transcript_id)'),
 };
 
 /**
@@ -53,6 +58,7 @@ type TranscriptOutput = {
   scenarioId: string;
   model: string;
   status: 'found' | 'not_found';
+  transcriptId?: string; // Included in not_found when searching by ID
   transcript?: {
     id: string;
     modelVersion: string | null;
@@ -148,13 +154,20 @@ function registerGetTranscriptTool(server: McpServer): void {
     'get_transcript',
     {
       description: `Get the full transcript data including all conversation turns and provider metadata.
-Returns complete transcript with:
+
+**Input options (use ONE):**
+- transcript_id: Direct lookup by ID (preferred - get IDs from graphql_query)
+- run_id + scenario_id + model: Composite key lookup (legacy)
+
+**To discover transcript IDs, use graphql_query:**
+\`{ run(id: "xxx") { transcripts(limit: 10) { id modelId scenarioId } } }\`
+
+**Returns:**
 - All turns (prompt, response, token counts)
 - Provider metadata per turn (provider name, finish reason, raw API data)
 - Cost snapshot with token usage and pricing
 - Model version and timing information
 
-Use get_transcript_summary for a lighter-weight overview without full content.
 Limited to 10KB token budget.`,
       inputSchema: GetTranscriptInputSchema,
     },
@@ -163,38 +176,65 @@ Limited to 10KB token budget.`,
       const requestId = String(extra.requestId ?? 'unknown');
 
       log.debug(
-        { requestId, runId: args.run_id, scenarioId: args.scenario_id, model: args.model },
+        { requestId, transcriptId: args.transcript_id, runId: args.run_id, scenarioId: args.scenario_id, model: args.model },
         'get_transcript called'
       );
 
       try {
+        // Validate input: either transcript_id OR (run_id + scenario_id + model)
+        const hasDirectId = !!args.transcript_id;
+        const hasCompositeKey = !!args.run_id && !!args.scenario_id && !!args.model;
+
+        if (!hasDirectId && !hasCompositeKey) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  error: 'INVALID_INPUT',
+                  message: 'Provide either transcript_id OR (run_id + scenario_id + model)',
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
         // Query transcript with all fields
-        const transcript = await db.transcript.findFirst({
-          where: {
-            runId: args.run_id,
-            scenarioId: args.scenario_id,
-            modelId: args.model,
-            deletedAt: null,
-          },
-        });
+        const transcript = hasDirectId
+          ? await db.transcript.findFirst({
+              where: {
+                id: args.transcript_id,
+                deletedAt: null,
+              },
+            })
+          : await db.transcript.findFirst({
+              where: {
+                runId: args.run_id,
+                scenarioId: args.scenario_id,
+                modelId: args.model,
+                deletedAt: null,
+              },
+            });
 
         let data: TranscriptOutput;
 
         if (!transcript) {
           data = {
-            runId: args.run_id,
-            scenarioId: args.scenario_id,
-            model: args.model,
+            runId: args.run_id ?? '',
+            scenarioId: args.scenario_id ?? '',
+            model: args.model ?? '',
             status: 'not_found',
+            ...(args.transcript_id ? { transcriptId: args.transcript_id } : {}),
           };
         } else {
           const turns = extractTurns(transcript.content);
           const costSnapshot = extractCostSnapshot(transcript.content);
 
           data = {
-            runId: args.run_id,
-            scenarioId: args.scenario_id,
-            model: args.model,
+            runId: transcript.runId,
+            scenarioId: transcript.scenarioId ?? '',
+            model: transcript.modelId,
             status: 'found',
             transcript: {
               id: transcript.id,
