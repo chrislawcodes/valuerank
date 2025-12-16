@@ -27,7 +27,7 @@ export function ExpansionSettings({
             <Code className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h2 className="text-lg font-medium text-gray-900">Generation Method</h2>
+            <h2 className="text-lg font-medium text-gray-900">Scenario Expansion Method</h2>
             <p className="text-sm text-gray-500">
               Choose between LLM-based or code-based scenario generation
             </p>

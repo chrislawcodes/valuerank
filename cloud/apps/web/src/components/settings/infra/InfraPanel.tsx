@@ -202,6 +202,14 @@ export function InfraPanel() {
 
   return (
     <div className="space-y-6">
+
+      <ExpansionSettings
+        useCodeGeneration={useCodeGeneration}
+        isSaving={isSavingCodeGen}
+        saveSuccess={saveCodeGenSuccess}
+        onToggle={handleCodeGenerationToggle}
+      />
+
       <ModelSelectorCard
         title="Scenario Expansion Model"
         description="Model used for expanding scenario definitions into concrete scenarios"
@@ -236,13 +244,6 @@ export function InfraPanel() {
         hasChanges={hasSummarizerChanges}
         isSaving={isSavingSummarizer}
         saveSuccess={saveSummarizerSuccess}
-      />
-
-      <ExpansionSettings
-        useCodeGeneration={useCodeGeneration}
-        isSaving={isSavingCodeGen}
-        saveSuccess={saveCodeGenSuccess}
-        onToggle={handleCodeGenerationToggle}
       />
 
       <ParallelismSettings

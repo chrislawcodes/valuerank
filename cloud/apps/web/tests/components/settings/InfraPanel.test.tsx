@@ -298,7 +298,7 @@ describe('InfraPanel', () => {
       renderInfraPanel(mockClient);
 
       await waitFor(() => {
-        expect(screen.getByText('Generation Method')).toBeInTheDocument();
+        expect(screen.getByText('Scenario Expansion Method')).toBeInTheDocument();
       });
       expect(screen.getByText('Use Code-based Generation')).toBeInTheDocument();
     });
