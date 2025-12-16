@@ -46,11 +46,38 @@ export async function authMiddleware(
   req.user = null;
   req.authMethod = null;
 
-  // Try JWT first (Authorization header)
+  // Try Bearer token (Authorization header)
   const authHeader = req.headers.authorization;
   const token = extractBearerToken(authHeader);
 
   if (token) {
+    // Check if Bearer token is actually an API key (for LeChat compatibility)
+    if (token.startsWith('vr_')) {
+      try {
+        const user = await validateApiKey(token);
+        if (user) {
+          req.user = user;
+          req.authMethod = 'api_key';
+          log.debug({ userId: user.id }, 'API key (Bearer) authentication successful');
+          next();
+          return;
+        }
+        // Invalid API key format or not found - continue without auth
+        // (individual routes can require auth if needed)
+        next();
+        return;
+      } catch (err) {
+        if (err instanceof AuthenticationError) {
+          next(err);
+          return;
+        }
+        log.error({ err }, 'Unexpected error during API key validation');
+        next(new AuthenticationError('Invalid API key'));
+        return;
+      }
+    }
+
+    // Try as JWT
     try {
       // Verify JWT (includes 30-second clock skew tolerance)
       const payload = verifyToken(token);
