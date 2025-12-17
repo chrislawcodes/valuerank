@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -18,6 +19,14 @@ export function DimensionLevelEditor({
   onRemove,
   canRemove,
 }: DimensionLevelEditorProps) {
+  // Keep raw text for options to allow proper typing of commas and spaces
+  const [optionsText, setOptionsText] = useState(level.options?.join(', ') || '');
+
+  // Sync optionsText when level.options changes externally
+  useEffect(() => {
+    setOptionsText(level.options?.join(', ') || '');
+  }, [level.options]);
+
   const handleScoreChange = (value: string) => {
     const score = parseFloat(value);
     if (!isNaN(score)) {
@@ -33,8 +42,12 @@ export function DimensionLevelEditor({
     onChange({ ...level, description: value || undefined });
   };
 
-  const handleOptionsChange = (value: string) => {
-    const options = value
+  const handleOptionsTextChange = (value: string) => {
+    setOptionsText(value);
+  };
+
+  const handleOptionsBlur = () => {
+    const options = optionsText
       .split(',')
       .map((o) => o.trim())
       .filter((o) => o.length > 0);
@@ -93,8 +106,9 @@ export function DimensionLevelEditor({
       <div className="mt-3">
         <Input
           label="Alternative options (comma-separated)"
-          value={level.options?.join(', ') || ''}
-          onChange={(e) => handleOptionsChange(e.target.value)}
+          value={optionsText}
+          onChange={(e) => handleOptionsTextChange(e.target.value)}
+          onBlur={handleOptionsBlur}
           placeholder="e.g., minimal, negligible, trivial"
         />
       </div>

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import type { Dimension, DimensionLevel } from '../../api/operations/definitions';
 
@@ -32,6 +32,32 @@ export function DimensionEditor({
   // Ensure levels array exists (handle legacy 'values' format gracefully)
   const levels = dimension.levels ?? [];
 
+  // Track raw options text for each level to allow proper typing
+  const [optionsTextMap, setOptionsTextMap] = useState<Record<number, string>>(() => {
+    const initial: Record<number, string> = {};
+    levels.forEach((level, idx) => {
+      initial[idx] = level.options?.join(', ') || '';
+    });
+    return initial;
+  });
+
+  // Sync optionsTextMap when levels change externally
+  useEffect(() => {
+    setOptionsTextMap((prev) => {
+      const updated: Record<number, string> = {};
+      levels.forEach((level, idx) => {
+        // Only update if we don't have a pending edit (preserve user typing)
+        // Use the external value if this index didn't exist before
+        if (prev[idx] === undefined) {
+          updated[idx] = level.options?.join(', ') || '';
+        } else {
+          updated[idx] = prev[idx];
+        }
+      });
+      return updated;
+    });
+  }, [levels.length]);
+
   const handleNameChange = (name: string) => {
     onChange({ ...dimension, name });
   };
@@ -51,16 +77,35 @@ export function DimensionEditor({
 
   const handleLevelRemove = (levelIndex: number) => {
     const newLevels = levels.filter((_, i) => i !== levelIndex);
+    // Also clean up the options text map
+    setOptionsTextMap((prev) => {
+      const updated: Record<number, string> = {};
+      Object.keys(prev).forEach((key) => {
+        const idx = parseInt(key);
+        if (idx < levelIndex) {
+          updated[idx] = prev[idx] ?? '';
+        } else if (idx > levelIndex) {
+          updated[idx - 1] = prev[idx] ?? '';
+        }
+      });
+      return updated;
+    });
     onChange({ ...dimension, levels: newLevels });
   };
 
   const handleAddLevel = () => {
     const newLevel = createDefaultLevel(levels.length);
+    setOptionsTextMap((prev) => ({ ...prev, [levels.length]: '' }));
     onChange({ ...dimension, levels: [...levels, newLevel] });
   };
 
-  const handleOptionsChange = (levelIndex: number, value: string) => {
-    const options = value
+  const handleOptionsTextChange = (levelIndex: number, value: string) => {
+    setOptionsTextMap((prev) => ({ ...prev, [levelIndex]: value }));
+  };
+
+  const handleOptionsBlur = (levelIndex: number) => {
+    const text = optionsTextMap[levelIndex] || '';
+    const options = text
       .split(',')
       .map((o) => o.trim())
       .filter((o) => o.length > 0);
@@ -154,8 +199,9 @@ export function DimensionEditor({
                 />
                 <input
                   type="text"
-                  value={level.options?.join(', ') || ''}
-                  onChange={(e) => handleOptionsChange(levelIndex, e.target.value)}
+                  value={optionsTextMap[levelIndex] ?? ''}
+                  onChange={(e) => handleOptionsTextChange(levelIndex, e.target.value)}
+                  onBlur={() => handleOptionsBlur(levelIndex)}
                   placeholder="option1, option2, option3"
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
