@@ -1,284 +1,421 @@
 /**
  * create_definition Tool Tests
+ *
+ * Tests the create_definition MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
-import { db } from '@valuerank/db';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-// Mock the queue service
-vi.mock('../../../src/services/scenario/index.js', () => ({
-  queueScenarioExpansion: vi.fn().mockResolvedValue({
-    queued: true,
-    jobId: 'mock-job-id',
-  }),
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  db: {
+    definition: {
+      create: vi.fn(),
+    },
+  },
 }));
 
-// Import after mocking
+// Mock MCP services
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  validateDefinitionContent: vi.fn(),
+  validateContentStructure: vi.fn(),
+  logAuditEvent: vi.fn(),
+  createDefinitionAudit: vi.fn().mockReturnValue({ action: 'create_definition' }),
+}));
+
+// Mock scenario queue service
+vi.mock('../../../src/services/scenario/index.js', () => ({
+  queueScenarioExpansion: vi.fn(),
+}));
+
+// Import after mocks
+import { db } from '@valuerank/db';
+import {
+  validateDefinitionContent,
+  validateContentStructure,
+} from '../../../src/services/mcp/index.js';
 import { queueScenarioExpansion } from '../../../src/services/scenario/index.js';
 
 describe('create_definition tool', () => {
-  const createdDefinitionIds: string[] = [];
+  const validContent = {
+    preamble: 'I want your moral judgment. Say what you would do.',
+    template: 'You face a situation involving [Self_Direction_Action]. Rate 1-5.',
+    dimensions: [
+      {
+        name: 'Self_Direction_Action',
+        levels: [
+          { score: 1, label: 'minimal', options: ['trivial choice'] },
+          { score: 2, label: 'minor', options: ['small decision'] },
+          { score: 3, label: 'moderate', options: ['meaningful choice'] },
+          { score: 4, label: 'significant', options: ['important decision'] },
+          { score: 5, label: 'critical', options: ['life-defining choice'] },
+        ],
+      },
+    ],
+  };
 
-  afterAll(async () => {
-    // Clean up created definitions
-    for (const id of createdDefinitionIds) {
-      try {
-        await db.definition.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-  });
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+
+    // Set up default mock return values
+    vi.mocked(validateContentStructure).mockReturnValue({ valid: true });
+    vi.mocked(validateDefinitionContent).mockReturnValue({
+      valid: true,
+      errors: [],
+      warnings: [],
+      estimatedScenarioCount: 5,
+    });
+    vi.mocked(queueScenarioExpansion).mockResolvedValue({
+      queued: true,
+      jobId: 'mock-job-id',
+    });
+
+    // Dynamically import to trigger registration
+    const { registerCreateDefinitionTool } = await import(
+      '../../../src/mcp/tools/create-definition.js'
+    );
+    registerCreateDefinitionTool(mockServer);
   });
 
-  describe('direct service validation', () => {
-    it('creates definition with valid content', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'test-mcp-create-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test preamble',
-            template: 'Test template with [variable]',
-            dimensions: [
-              { name: 'variable', values: ['a', 'b'] },
-            ],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      expect(definition.id).toBeDefined();
-      expect(definition.name).toContain('test-mcp-create-');
-    });
-
-    it('stores content with schema_version', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'test-mcp-schema-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['x', 'y'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      const content = definition.content as Record<string, unknown>;
-      expect(content.schema_version).toBe(2);
-    });
-
-    it('queues scenario expansion after creation', async () => {
-      const definition = await db.definition.create({
-        data: {
-          name: 'test-mcp-queue-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [dim]',
-            dimensions: [{ name: 'dim', values: ['1', '2'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(definition.id);
-
-      // Simulate calling queueScenarioExpansion
-      const result = await queueScenarioExpansion(definition.id, 'create');
-
-      expect(queueScenarioExpansion).toHaveBeenCalledWith(definition.id, 'create');
-      expect(result.queued).toBe(true);
-      expect(result.jobId).toBe('mock-job-id');
-    });
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'create_definition',
+      expect.objectContaining({
+        description: expect.stringContaining('Create a new scenario definition'),
+        inputSchema: expect.objectContaining({
+          name: expect.any(Object),
+          content: expect.any(Object),
+        }),
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('input validation scenarios', () => {
-    describe('valid inputs', () => {
-      it('accepts minimal valid content', async () => {
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-minimal-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'You are an AI.',
-              template: 'Choose [option].',
-              dimensions: [{ name: 'option', values: ['A', 'B'] }],
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
+  it('creates definition successfully with valid content', async () => {
+    const mockDefinition = {
+      id: 'def-123',
+      name: 'Test Definition',
+    };
 
-        expect(definition.id).toBeDefined();
-      });
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
 
-      it('accepts content with multiple dimensions', async () => {
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-multi-dim-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test preamble',
-              template: '[severity] [urgency] situation',
-              dimensions: [
-                { name: 'severity', values: ['low', 'high'] },
-                { name: 'urgency', values: ['immediate', 'delayed'] },
-              ],
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-1' }
+    );
 
-        const content = definition.content as Record<string, unknown>;
-        const dimensions = content.dimensions as Array<{ name: string; values: string[] }>;
-        expect(dimensions).toHaveLength(2);
-      });
+    expect(result).not.toHaveProperty('isError');
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      it('accepts content with matching_rules', async () => {
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-rules-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test',
-              template: '[var]',
-              dimensions: [{ name: 'var', values: ['a', 'b'] }],
-              matching_rules: 'some matching rules',
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        const content = definition.content as Record<string, unknown>;
-        expect(content.matching_rules).toBe('some matching rules');
-      });
-
-      it('accepts maximum dimensions (10)', async () => {
-        const dimensions = Array(10)
-          .fill(null)
-          .map((_, i) => ({
-            name: `dim${i}`,
-            values: ['a', 'b'],
-          }));
-
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-max-dim-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test',
-              template: dimensions.map((d) => `[${d.name}]`).join(' '),
-              dimensions,
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        const content = definition.content as Record<string, unknown>;
-        expect((content.dimensions as unknown[]).length).toBe(10);
-      });
-
-      it('accepts maximum levels per dimension (10)', async () => {
-        const levels = Array(10)
-          .fill(null)
-          .map((_, i) => `level${i}`);
-
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-max-levels-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test',
-              template: '[test]',
-              dimensions: [{ name: 'test', values: levels }],
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        const content = definition.content as Record<string, unknown>;
-        const dimensions = content.dimensions as Array<{ values: string[] }>;
-        expect(dimensions[0].values).toHaveLength(10);
-      });
-    });
-
-    describe('response format', () => {
-      it('includes definition_id in success response', async () => {
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-response-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test',
-              template: '[var]',
-              dimensions: [{ name: 'var', values: ['a', 'b'] }],
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        // Simulate response format
-        const response = {
-          success: true,
-          definition_id: definition.id,
-          name: definition.name,
-          estimated_scenario_count: 2,
-        };
-
-        expect(response.definition_id).toBe(definition.id);
-        expect(response.name).toBe(definition.name);
-      });
-
-      it('includes scenario count in response', async () => {
-        const definition = await db.definition.create({
-          data: {
-            name: 'test-count-' + Date.now(),
-            content: {
-              schema_version: 2,
-              preamble: 'Test',
-              template: '[a] [b]',
-              dimensions: [
-                { name: 'a', values: ['1', '2', '3'] },
-                { name: 'b', values: ['x', 'y'] },
-              ],
-            },
-          },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        // Expected: 3 * 2 = 6 scenarios
-        const estimatedCount = 6;
-
-        const response = {
-          success: true,
-          definition_id: definition.id,
-          estimated_scenario_count: estimatedCount,
-        };
-
-        expect(response.estimated_scenario_count).toBe(6);
-      });
+    expect(response.success).toBe(true);
+    expect(response.definition_id).toBe('def-123');
+    expect(response.name).toBe('Test Definition');
+    expect(response.estimated_scenario_count).toBe(5);
+    expect(response.scenario_expansion).toEqual({
+      queued: true,
+      job_id: 'mock-job-id',
     });
   });
 
-  describe('audit logging', () => {
-    it('logs creation with correct action', async () => {
-      // This test verifies the audit log format we expect
-      const auditEntry = {
-        action: 'create_definition',
-        userId: 'mcp-user',
-        entityId: 'test-def-id',
-        entityType: 'definition',
-        requestId: 'test-request-id',
-        metadata: {
-          definitionName: 'Test Definition',
-        },
-      };
-
-      expect(auditEntry.action).toBe('create_definition');
-      expect(auditEntry.entityType).toBe('definition');
+  it('includes validation warnings in response', async () => {
+    vi.mocked(validateDefinitionContent).mockReturnValue({
+      valid: true,
+      errors: [],
+      warnings: ['Consider adding more dimensions'],
+      estimatedScenarioCount: 3,
     });
+
+    const mockDefinition = {
+      id: 'def-456',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-2' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.validation_warnings).toEqual(['Consider adding more dimensions']);
+  });
+
+  it('returns VALIDATION_ERROR when structure is invalid', async () => {
+    vi.mocked(validateContentStructure).mockReturnValue({
+      valid: false,
+      error: 'Missing required field: preamble',
+    });
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: { template: 'Test', dimensions: [] },
+      },
+      { requestId: 'req-3' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('VALIDATION_ERROR');
+    expect(response.message).toContain('Missing required field');
+  });
+
+  it('returns VALIDATION_ERROR when content validation fails', async () => {
+    vi.mocked(validateDefinitionContent).mockReturnValue({
+      valid: false,
+      errors: ['Template too long', 'Too many dimensions'],
+      warnings: [],
+      estimatedScenarioCount: 0,
+    });
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-4' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('VALIDATION_ERROR');
+    expect(response.message).toBe('Definition content is invalid');
+    expect(response.details.errors).toEqual(['Template too long', 'Too many dimensions']);
+  });
+
+  it('returns INTERNAL_ERROR on database failure', async () => {
+    vi.mocked(db.definition.create).mockRejectedValue(
+      new Error('Database connection failed')
+    );
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-5' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toContain('Database connection failed');
+  });
+
+  it('handles non-Error exception', async () => {
+    vi.mocked(db.definition.create).mockRejectedValue('string error');
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-6' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toBe('Failed to create definition');
+  });
+
+  it('generates requestId when not provided', async () => {
+    const mockDefinition = {
+      id: 'def-789',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      {}
+    );
+
+    expect(result).not.toHaveProperty('isError');
+  });
+
+  it('handles dimensions with simple values format (no levels)', async () => {
+    const contentWithSimpleValues = {
+      preamble: 'Test preamble',
+      template: 'Test template with [variable]',
+      dimensions: [
+        {
+          name: 'variable',
+          values: ['a', 'b', 'c'], // Old format without levels
+        },
+      ],
+    };
+
+    const mockDefinition = {
+      id: 'def-simple',
+      name: 'Simple Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    const result = await toolHandler(
+      {
+        name: 'Simple Definition',
+        content: contentWithSimpleValues,
+      },
+      { requestId: 'req-7' }
+    );
+
+    expect(result).not.toHaveProperty('isError');
+  });
+
+  it('handles queue failure gracefully', async () => {
+    const mockDefinition = {
+      id: 'def-queue-fail',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+    vi.mocked(queueScenarioExpansion).mockResolvedValue({
+      queued: false,
+      jobId: undefined as unknown as string,
+    });
+
+    const result = await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-8' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.success).toBe(true);
+    expect(response.scenario_expansion.queued).toBe(false);
+  });
+
+  it('adds schema_version to content', async () => {
+    const mockDefinition = {
+      id: 'def-schema',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    await toolHandler(
+      {
+        name: 'Test Definition',
+        content: validContent,
+      },
+      { requestId: 'req-9' }
+    );
+
+    expect(db.definition.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          content: expect.objectContaining({
+            schema_version: 2,
+          }),
+        }),
+      })
+    );
+  });
+
+  it('always uses current schema_version (ignores input schema_version)', async () => {
+    // Implementation explicitly constructs content without schema_version from input
+    // This ensures all definitions use the current schema version
+    const contentWithVersion = {
+      ...validContent,
+      schema_version: 1, // This will be ignored
+    };
+
+    const mockDefinition = {
+      id: 'def-version',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    await toolHandler(
+      {
+        name: 'Test Definition',
+        content: contentWithVersion,
+      },
+      { requestId: 'req-10' }
+    );
+
+    // Schema version 2 is always used (current version)
+    expect(db.definition.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          content: expect.objectContaining({
+            schema_version: 2,
+          }),
+        }),
+      })
+    );
+  });
+
+  it('includes matching_rules in content when provided', async () => {
+    const contentWithRules = {
+      ...validContent,
+      matching_rules: 'exclude: level1 with level5',
+    };
+
+    const mockDefinition = {
+      id: 'def-rules',
+      name: 'Test Definition',
+    };
+
+    vi.mocked(db.definition.create).mockResolvedValue(mockDefinition as never);
+
+    await toolHandler(
+      {
+        name: 'Test Definition',
+        content: contentWithRules,
+      },
+      { requestId: 'req-11' }
+    );
+
+    expect(db.definition.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          content: expect.objectContaining({
+            matching_rules: 'exclude: level1 with level5',
+          }),
+        }),
+      })
+    );
   });
 });

@@ -1,232 +1,288 @@
 /**
  * list_runs Tool Tests
  *
- * Tests for the list_runs MCP tool.
+ * Tests the list_runs MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  db: {
+    run: {
+      findMany: vi.fn(),
+    },
+  },
+}));
+
+// Mock MCP services
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  buildMcpResponse: vi.fn((opts) => ({
+    data: opts.data,
+    metadata: {
+      truncated: false,
+      executionMs: 10,
+    },
+  })),
+  truncateArray: vi.fn((arr, limit) => arr.slice(0, limit)),
+  formatRunListItem: vi.fn((run) => ({
+    id: run.id,
+    status: run.status.toLowerCase(),
+    models: run.config?.models || [],
+    samplePercentage: run.config?.samplePercentage || null,
+    scenarioCount: run._count?.transcripts || 0,
+    createdAt: run.createdAt?.toISOString() || new Date().toISOString(),
+  })),
+}));
+
+// Import after mock
 import { db } from '@valuerank/db';
-import { formatRunListItem } from '../../../src/services/mcp/formatters.js';
 
 describe('list_runs tool', () => {
-  // Test data IDs
-  let testDefinitionId: string;
-  let testRunIds: string[] = [];
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
 
-  beforeAll(async () => {
-    // Create a test definition
-    const definition = await db.definition.create({
-      data: {
-        name: 'test-mcp-list-runs-definition',
-        content: { scenario: 'test scenario content' },
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    // Dynamically import to trigger registration
+    const { registerListRunsTool } = await import(
+      '../../../src/mcp/tools/list-runs.js'
+    );
+    registerListRunsTool(mockServer);
+  });
+
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'list_runs',
+      expect.objectContaining({
+        description: expect.stringContaining('List evaluation runs'),
+        inputSchema: expect.objectContaining({
+          definition_id: expect.any(Object),
+          status: expect.any(Object),
+          limit: expect.any(Object),
+          offset: expect.any(Object),
+        }),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it('returns list of runs without filters', async () => {
+    const mockRuns = [
+      {
+        id: 'run-1',
+        status: 'COMPLETED',
+        config: { models: ['openai:gpt-4'], samplePercentage: 100 },
+        createdAt: new Date('2024-01-15T10:00:00Z'),
+        _count: { transcripts: 10 },
       },
-    });
-    testDefinitionId = definition.id;
+      {
+        id: 'run-2',
+        status: 'RUNNING',
+        config: { models: ['anthropic:claude-3'], samplePercentage: 50 },
+        createdAt: new Date('2024-01-14T10:00:00Z'),
+        _count: { transcripts: 5 },
+      },
+    ];
 
-    // Create test runs with different statuses
-    const runs = await Promise.all([
-      db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { models: ['openai:gpt-4', 'anthropic:claude-3'], samplePercentage: 100 },
+    vi.mocked(db.run.findMany).mockResolvedValue(mockRuns as never);
+
+    const result = await toolHandler({}, { requestId: 'req-1' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        skip: 0,
+      })
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data).toHaveLength(2);
+  });
+
+  it('filters by definition_id', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler(
+      { definition_id: 'def-123' },
+      { requestId: 'req-2' }
+    );
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          definitionId: 'def-123',
         },
-      }),
-      db.run.create({
-        data: {
-          definitionId: testDefinitionId,
+      })
+    );
+  });
+
+  it('filters by status', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler({ status: 'completed' }, { requestId: 'req-3' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          status: 'COMPLETED',
+        },
+      })
+    );
+  });
+
+  it('filters by status running', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler({ status: 'running' }, { requestId: 'req-4' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
           status: 'RUNNING',
-          config: { models: ['openai:gpt-4'], samplePercentage: 50 },
         },
-      }),
-      db.run.create({
-        data: {
-          definitionId: testDefinitionId,
+      })
+    );
+  });
+
+  it('filters by status pending', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler({ status: 'pending' }, { requestId: 'req-5' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
           status: 'PENDING',
-          config: { models: ['anthropic:claude-3'] },
         },
-      }),
-      db.run.create({
-        data: {
-          definitionId: testDefinitionId,
+      })
+    );
+  });
+
+  it('filters by status failed', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler({ status: 'failed' }, { requestId: 'req-6' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
           status: 'FAILED',
-          config: { models: ['openai:gpt-4'] },
         },
-      }),
-    ]);
-    testRunIds = runs.map((r) => r.id);
+      })
+    );
   });
 
-  afterAll(async () => {
-    // Clean up test data
-    if (testRunIds.length > 0) {
-      await db.run.deleteMany({
-        where: { id: { in: testRunIds } },
-      });
-    }
-    if (testDefinitionId) {
-      await db.definition.delete({
-        where: { id: testDefinitionId },
-      });
-    }
+  it('applies custom limit', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler({ limit: 50 }, { requestId: 'req-7' });
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 50,
+      })
+    );
   });
 
-  describe('formatRunListItem', () => {
-    it('formats a completed run correctly', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[0] },
-        include: { _count: { select: { transcripts: true } } },
-      });
+  it('applies custom offset', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
 
-      expect(run).not.toBeNull();
-      const formatted = formatRunListItem(run!);
+    await toolHandler({ offset: 20 }, { requestId: 'req-8' });
 
-      expect(formatted.id).toBe(testRunIds[0]);
-      expect(formatted.status).toBe('completed');
-      expect(formatted.models).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
-      expect(formatted.samplePercentage).toBe(100);
-      expect(formatted.scenarioCount).toBe(0); // No transcripts created
-      expect(formatted.createdAt).toBeDefined();
-    });
-
-    it('formats a running run correctly', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[1] },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      const formatted = formatRunListItem(run!);
-      expect(formatted.status).toBe('running');
-      expect(formatted.samplePercentage).toBe(50);
-    });
-
-    it('formats a pending run correctly', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[2] },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      const formatted = formatRunListItem(run!);
-      expect(formatted.status).toBe('pending');
-      expect(formatted.samplePercentage).toBeNull(); // Not set in config
-    });
-
-    it('formats a failed run correctly', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[3] },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      const formatted = formatRunListItem(run!);
-      expect(formatted.status).toBe('failed');
-    });
-
-    it('includes ISO 8601 createdAt timestamp', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[0] },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      const formatted = formatRunListItem(run!);
-      // Should be a valid ISO 8601 string
-      expect(formatted.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-      expect(new Date(formatted.createdAt).toISOString()).toBe(formatted.createdAt);
-    });
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 20,
+      })
+    );
   });
 
-  describe('query behavior', () => {
-    it('can query runs by status', async () => {
-      const completedRuns = await db.run.findMany({
-        where: { status: 'COMPLETED', deletedAt: null },
-        include: { _count: { select: { transcripts: true } } },
-      });
+  it('combines multiple filters', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
 
-      expect(completedRuns.length).toBeGreaterThanOrEqual(1);
-      completedRuns.forEach((run) => {
-        expect(run.status).toBe('COMPLETED');
-      });
-    });
+    await toolHandler(
+      {
+        definition_id: 'def-123',
+        status: 'completed',
+        limit: 10,
+        offset: 5,
+      },
+      { requestId: 'req-9' }
+    );
 
-    it('can query runs by definition_id', async () => {
-      const runs = await db.run.findMany({
-        where: { definitionId: testDefinitionId, deletedAt: null },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      expect(runs.length).toBe(4);
-      runs.forEach((run) => {
-        expect(run.definitionId).toBe(testDefinitionId);
-      });
-    });
-
-    it('respects limit parameter', async () => {
-      const runs = await db.run.findMany({
-        where: { definitionId: testDefinitionId, deletedAt: null },
-        take: 2,
-        orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      expect(runs.length).toBe(2);
-    });
-
-    it('excludes soft-deleted runs', async () => {
-      // Create and soft-delete a run
-      const softDeletedRun = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          definitionId: 'def-123',
           status: 'COMPLETED',
-          config: { models: [] },
-          deletedAt: new Date(),
         },
-      });
-
-      try {
-        const runs = await db.run.findMany({
-          where: { definitionId: testDefinitionId, deletedAt: null },
-        });
-
-        const ids = runs.map((r) => r.id);
-        expect(ids).not.toContain(softDeletedRun.id);
-      } finally {
-        // Clean up
-        await db.run.delete({ where: { id: softDeletedRun.id } });
-      }
-    });
-
-    it('orders runs by createdAt descending', async () => {
-      const runs = await db.run.findMany({
-        where: { definitionId: testDefinitionId, deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { transcripts: true } } },
-      });
-
-      // Verify descending order
-      for (let i = 0; i < runs.length - 1; i++) {
-        const current = new Date(runs[i].createdAt).getTime();
-        const next = new Date(runs[i + 1].createdAt).getTime();
-        expect(current).toBeGreaterThanOrEqual(next);
-      }
-    });
+        take: 10,
+        skip: 5,
+      })
+    );
   });
 
-  describe('response format', () => {
-    it('produces valid RunListItem shape', async () => {
-      const run = await db.run.findUnique({
-        where: { id: testRunIds[0] },
-        include: { _count: { select: { transcripts: true } } },
-      });
+  it('returns error on database failure', async () => {
+    vi.mocked(db.run.findMany).mockRejectedValue(new Error('DB connection failed'));
 
-      const formatted = formatRunListItem(run!);
+    const result = await toolHandler({}, { requestId: 'req-10' });
 
-      // Verify all required fields are present
-      expect(typeof formatted.id).toBe('string');
-      expect(['pending', 'running', 'completed', 'failed']).toContain(formatted.status);
-      expect(Array.isArray(formatted.models)).toBe(true);
-      expect(typeof formatted.scenarioCount).toBe('number');
-      expect(typeof formatted.createdAt).toBe('string');
-      // samplePercentage can be number or null
-      expect(formatted.samplePercentage === null || typeof formatted.samplePercentage === 'number').toBe(true);
-    });
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('INTERNAL_ERROR');
+  });
+
+  it('uses default values when args are undefined', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler(
+      { limit: undefined, offset: undefined },
+      { requestId: 'req-11' }
+    );
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 20,
+        skip: 0,
+      })
+    );
+  });
+
+  it('handles empty result set', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    const result = await toolHandler({}, { requestId: 'req-12' });
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data).toHaveLength(0);
+  });
+
+  it('generates requestId when not provided', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    const result = await toolHandler({}, {});
+
+    expect(result).not.toHaveProperty('isError');
   });
 });

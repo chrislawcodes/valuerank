@@ -1,505 +1,314 @@
 /**
  * delete_run Tool Tests
+ *
+ * Tests the delete_run MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { db } from '@valuerank/db';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  db: {
+    $executeRaw: vi.fn(),
+  },
+  softDeleteRun: vi.fn(),
+  getRunById: vi.fn(),
+}));
+
+// Mock audit logging
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  logAuditEvent: vi.fn(),
+  createDeleteAudit: vi.fn().mockReturnValue({ action: 'delete_run' }),
+}));
+
+// Import after mock
+import { db, softDeleteRun, getRunById } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 describe('delete_run tool', () => {
-  // Test data
-  let testDefinitionId: string;
-  let testRunId: string;
-  let testRunWithTranscriptsId: string;
-  let testRunWithAnalysisId: string;
-  let testRunningRunId: string;
-  const createdDefinitionIds: string[] = [];
-  const createdRunIds: string[] = [];
-  const createdTranscriptIds: string[] = [];
-  const createdAnalysisIds: string[] = [];
+  const testRunId = 'cmtest123456789012345678';
 
-  beforeAll(async () => {
-    // Create test definition
-    const testDef = await db.definition.create({
-      data: {
-        name: 'test-delete-run-def-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Test preamble',
-          template: 'Test template with [variable]',
-          dimensions: [{ name: 'variable', values: ['a', 'b'] }],
-        },
-      },
-    });
-    testDefinitionId = testDef.id;
-    createdDefinitionIds.push(testDef.id);
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
 
-    // Create a simple test run
-    const testRun = await db.run.create({
-      data: {
-        definitionId: testDef.id,
-        status: 'COMPLETED',
-        config: { schema_version: 1, models: ['test-model'] },
-        progress: { total: 1, completed: 1, failed: 0 },
-        completedAt: new Date(),
-      },
-    });
-    testRunId = testRun.id;
-    createdRunIds.push(testRun.id);
+  beforeEach(async () => {
+    vi.clearAllMocks();
 
-    // Create run with transcripts
-    const runWithTranscripts = await db.run.create({
-      data: {
-        definitionId: testDef.id,
-        status: 'COMPLETED',
-        config: { schema_version: 1, models: ['test-model'] },
-        progress: { total: 2, completed: 2, failed: 0 },
-        completedAt: new Date(),
-      },
-    });
-    testRunWithTranscriptsId = runWithTranscripts.id;
-    createdRunIds.push(runWithTranscripts.id);
-
-    // Create transcripts for this run
-    const transcript1 = await db.transcript.create({
-      data: {
-        runId: runWithTranscripts.id,
-        modelId: 'test-model',
-        content: { schema_version: 1, messages: [], model_response: 'test' },
-        turnCount: 1,
-        tokenCount: 100,
-        durationMs: 1000,
-      },
-    });
-    createdTranscriptIds.push(transcript1.id);
-
-    const transcript2 = await db.transcript.create({
-      data: {
-        runId: runWithTranscripts.id,
-        modelId: 'test-model',
-        content: { schema_version: 1, messages: [], model_response: 'test' },
-        turnCount: 1,
-        tokenCount: 100,
-        durationMs: 1000,
-      },
-    });
-    createdTranscriptIds.push(transcript2.id);
-
-    // Create run with analysis results
-    const runWithAnalysis = await db.run.create({
-      data: {
-        definitionId: testDef.id,
-        status: 'COMPLETED',
-        config: { schema_version: 1, models: ['test-model'] },
-        progress: { total: 1, completed: 1, failed: 0 },
-        completedAt: new Date(),
-      },
-    });
-    testRunWithAnalysisId = runWithAnalysis.id;
-    createdRunIds.push(runWithAnalysis.id);
-
-    // Create analysis result
-    const analysis = await db.analysisResult.create({
-      data: {
-        runId: runWithAnalysis.id,
-        analysisType: 'dimension_analysis',
-        inputHash: 'test-hash',
-        codeVersion: '1.0.0',
-        output: { schema_version: 1, results: {} },
-        status: 'CURRENT',
-      },
-    });
-    createdAnalysisIds.push(analysis.id);
-
-    // Create a running run
-    const runningRun = await db.run.create({
-      data: {
-        definitionId: testDef.id,
-        status: 'RUNNING',
-        config: { schema_version: 1, models: ['test-model'] },
-        progress: { total: 10, completed: 5, failed: 0 },
-        startedAt: new Date(),
-      },
-    });
-    testRunningRunId = runningRun.id;
-    createdRunIds.push(runningRun.id);
+    // Dynamically import to trigger registration
+    const { registerDeleteRunTool } = await import(
+      '../../../src/mcp/tools/delete-run.js'
+    );
+    registerDeleteRunTool(mockServer);
   });
 
-  afterAll(async () => {
-    // Clean up all created entities
-    for (const id of createdAnalysisIds) {
-      try {
-        await db.analysisResult.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-    for (const id of createdTranscriptIds) {
-      try {
-        await db.transcript.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-    for (const id of createdRunIds) {
-      try {
-        await db.run.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-    for (const id of createdDefinitionIds) {
-      try {
-        await db.definition.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-  });
-
-  describe('soft delete behavior', () => {
-    it('soft deletes a run by setting deletedAt', async () => {
-      // Create a run specifically for this test
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
-
-      // Soft delete
-      await db.run.update({
-        where: { id: run.id },
-        data: { deletedAt: new Date() },
-      });
-
-      // Verify it still exists but has deletedAt set
-      const deleted = await db.run.findUnique({ where: { id: run.id } });
-      expect(deleted).not.toBeNull();
-      expect(deleted?.deletedAt).not.toBeNull();
-    });
-
-    it('cascades soft delete to transcripts', async () => {
-      // Create run
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
-
-      // Create transcript
-      const transcript = await db.transcript.create({
-        data: {
-          runId: run.id,
-          modelId: 'test-model',
-          content: { schema_version: 1, messages: [] },
-          turnCount: 1,
-          tokenCount: 50,
-          durationMs: 500,
-        },
-      });
-      createdTranscriptIds.push(transcript.id);
-
-      const now = new Date();
-
-      // Soft delete both
-      await db.$transaction([
-        db.run.update({
-          where: { id: run.id },
-          data: { deletedAt: now },
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'delete_run',
+      expect.objectContaining({
+        description: expect.stringContaining('Soft-delete'),
+        inputSchema: expect.objectContaining({
+          run_id: expect.any(Object),
         }),
-        db.transcript.update({
-          where: { id: transcript.id },
-          data: { deletedAt: now },
-        }),
-      ]);
-
-      // Verify both are soft deleted
-      const deletedRun = await db.run.findUnique({ where: { id: run.id } });
-      const deletedTranscript = await db.transcript.findUnique({ where: { id: transcript.id } });
-
-      expect(deletedRun?.deletedAt).not.toBeNull();
-      expect(deletedTranscript?.deletedAt).not.toBeNull();
-    });
-
-    it('cascades soft delete to analysis results', async () => {
-      // Create run
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
-
-      // Create analysis result
-      const analysis = await db.analysisResult.create({
-        data: {
-          runId: run.id,
-          analysisType: 'test_type',
-          inputHash: 'test-hash-' + Date.now(),
-          codeVersion: '1.0.0',
-          output: { schema_version: 1, results: {} },
-          status: 'CURRENT',
-        },
-      });
-      createdAnalysisIds.push(analysis.id);
-
-      const now = new Date();
-
-      // Soft delete both
-      await db.$transaction([
-        db.run.update({
-          where: { id: run.id },
-          data: { deletedAt: now },
-        }),
-        db.analysisResult.update({
-          where: { id: analysis.id },
-          data: { deletedAt: now },
-        }),
-      ]);
-
-      // Verify both are soft deleted
-      const deletedRun = await db.run.findUnique({ where: { id: run.id } });
-      const deletedAnalysis = await db.analysisResult.findUnique({ where: { id: analysis.id } });
-
-      expect(deletedRun?.deletedAt).not.toBeNull();
-      expect(deletedAnalysis?.deletedAt).not.toBeNull();
-    });
-
-    it('sets status to CANCELLED for running runs', async () => {
-      // Create running run
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'RUNNING',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 10, completed: 5, failed: 0 },
-          startedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
-
-      const now = new Date();
-
-      // Soft delete with status change
-      await db.run.update({
-        where: { id: run.id },
-        data: {
-          deletedAt: now,
-          status: 'CANCELLED',
-          completedAt: now,
-        },
-      });
-
-      // Verify status changed
-      const deleted = await db.run.findUnique({ where: { id: run.id } });
-      expect(deleted?.status).toBe('CANCELLED');
-      expect(deleted?.deletedAt).not.toBeNull();
-      expect(deleted?.completedAt).not.toBeNull();
-    });
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('response format', () => {
-    it('includes expected fields in success response', () => {
-      const response = {
-        success: true,
-        run_id: 'test-run-id',
-        definition_id: 'test-def-id',
-        deleted_at: new Date().toISOString(),
-        previous_status: 'COMPLETED',
-        deleted_count: {
-          runs: 1,
-          transcripts: 5,
-          analysis_results: 2,
-        },
-        jobs_cancelled: 0,
-      };
+  it('successfully deletes a completed run', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
 
-      expect(response.success).toBe(true);
-      expect(response.run_id).toBeDefined();
-      expect(response.definition_id).toBeDefined();
-      expect(response.deleted_at).toBeDefined();
-      expect(response.deleted_count.runs).toBe(1);
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        transcripts: 5,
+        analysisResults: 2,
+      },
     });
 
-    it('includes job cancellation info for running runs', () => {
-      const response = {
-        success: true,
-        run_id: 'test-run-id',
-        definition_id: 'test-def-id',
-        deleted_at: new Date().toISOString(),
-        previous_status: 'RUNNING',
-        deleted_count: {
-          runs: 1,
-          transcripts: 3,
-          analysis_results: 0,
-        },
-        jobs_cancelled: 2,
-      };
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-1' });
 
-      expect(response.previous_status).toBe('RUNNING');
-      expect(response.jobs_cancelled).toBeGreaterThan(0);
-    });
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-    it('includes error code for not found', () => {
-      const errorResponse = {
-        error: 'NOT_FOUND',
-        message: 'Run not found: nonexistent-id',
-      };
-
-      expect(errorResponse.error).toBe('NOT_FOUND');
-    });
-
-    it('includes error code for already deleted', () => {
-      const errorResponse = {
-        error: 'ALREADY_DELETED',
-        message: 'Run is already deleted: some-id',
-      };
-
-      expect(errorResponse.error).toBe('ALREADY_DELETED');
-    });
+    expect(response.success).toBe(true);
+    expect(response.run_id).toBe(testRunId);
+    expect(response.definition_id).toBe('def-123');
+    expect(response.previous_status).toBe('COMPLETED');
+    expect(response.deleted_count.runs).toBe(1);
+    expect(response.deleted_count.transcripts).toBe(5);
+    expect(response.deleted_count.analysis_results).toBe(2);
+    expect(response.jobs_cancelled).toBe(0);
   });
 
-  describe('audit logging', () => {
-    it('logs deletion with correct action', () => {
-      const auditEntry = {
-        action: 'delete_run',
-        userId: 'mcp-user',
-        entityId: 'test-run-id',
-        entityType: 'run',
-        requestId: 'test-request-id',
-        metadata: {
-          deletedCount: {
-            primary: 1,
-            transcripts: 5,
-            analysisResults: 2,
-          },
-        },
-      };
+  it('cancels jobs for running runs', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'RUNNING',
+    };
 
-      expect(auditEntry.action).toBe('delete_run');
-      expect(auditEntry.entityType).toBe('run');
-      expect(auditEntry.metadata.deletedCount).toBeDefined();
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(db.$executeRaw).mockResolvedValue(3); // 3 jobs cancelled
+    vi.mocked(softDeleteRun).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        transcripts: 2,
+        analysisResults: 0,
+      },
     });
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-2' });
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.success).toBe(true);
+    expect(response.previous_status).toBe('RUNNING');
+    expect(response.jobs_cancelled).toBe(3);
+    expect(db.$executeRaw).toHaveBeenCalled();
   });
 
-  describe('soft-deleted runs are hidden', () => {
-    it('excludes soft-deleted runs from list queries', async () => {
-      // Create and soft-delete a run
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
+  it('cancels jobs for pending runs', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'PENDING',
+    };
 
-      await db.run.update({
-        where: { id: run.id },
-        data: { deletedAt: new Date() },
-      });
-
-      // Query with deletedAt: null filter (standard pattern)
-      const visibleRuns = await db.run.findMany({
-        where: { deletedAt: null },
-      });
-
-      // The soft-deleted run should not appear
-      const found = visibleRuns.find((r) => r.id === run.id);
-      expect(found).toBeUndefined();
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(db.$executeRaw).mockResolvedValue(5);
+    vi.mocked(softDeleteRun).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        transcripts: 0,
+        analysisResults: 0,
+      },
     });
 
-    it('excludes soft-deleted transcripts from queries', async () => {
-      // Create run and transcript
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-3' });
 
-      const transcript = await db.transcript.create({
-        data: {
-          runId: run.id,
-          modelId: 'test-model',
-          content: { schema_version: 1, messages: [] },
-          turnCount: 1,
-          tokenCount: 50,
-          durationMs: 500,
-        },
-      });
-      createdTranscriptIds.push(transcript.id);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      // Soft delete
-      await db.transcript.update({
-        where: { id: transcript.id },
-        data: { deletedAt: new Date() },
-      });
+    expect(response.success).toBe(true);
+    expect(response.previous_status).toBe('PENDING');
+    expect(response.jobs_cancelled).toBe(5);
+  });
 
-      // Query with deletedAt: null filter
-      const visibleTranscripts = await db.transcript.findMany({
-        where: { runId: run.id, deletedAt: null },
-      });
+  it('returns NOT_FOUND when run does not exist', async () => {
+    vi.mocked(getRunById).mockRejectedValue(
+      new NotFoundError('Run', testRunId)
+    );
 
-      expect(visibleTranscripts.find((t) => t.id === transcript.id)).toBeUndefined();
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-4' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('NOT_FOUND');
+    expect(response.message).toContain('not found');
+  });
+
+  it('returns ALREADY_DELETED when run is already deleted', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockRejectedValue(
+      new ValidationError('already deleted', {})
+    );
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-5' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('ALREADY_DELETED');
+  });
+
+  it('returns VALIDATION_ERROR for other validation errors', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockRejectedValue(
+      new ValidationError('some other validation error', {})
+    );
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-6' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns INTERNAL_ERROR on database failure', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockRejectedValue(new Error('Database connection failed'));
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-7' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toContain('Database connection failed');
+  });
+
+  it('returns NOT_FOUND when softDeleteRun throws NotFoundError', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockRejectedValue(
+      new NotFoundError('Run', testRunId)
+    );
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-8' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('NOT_FOUND');
+  });
+
+  it('handles job cancellation failure gracefully', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'RUNNING',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(db.$executeRaw).mockRejectedValue(new Error('PgBoss table not found'));
+    vi.mocked(softDeleteRun).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        transcripts: 2,
+        analysisResults: 0,
+      },
     });
 
-    it('excludes soft-deleted analysis results from queries', async () => {
-      // Create run and analysis
-      const run = await db.run.create({
-        data: {
-          definitionId: testDefinitionId,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-9' });
 
-      const analysis = await db.analysisResult.create({
-        data: {
-          runId: run.id,
-          analysisType: 'test_type',
-          inputHash: 'test-hash-hidden-' + Date.now(),
-          codeVersion: '1.0.0',
-          output: { schema_version: 1, results: {} },
-          status: 'CURRENT',
-        },
-      });
-      createdAnalysisIds.push(analysis.id);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      // Soft delete
-      await db.analysisResult.update({
-        where: { id: analysis.id },
-        data: { deletedAt: new Date() },
-      });
+    // Should still succeed, just with 0 jobs cancelled
+    expect(response.success).toBe(true);
+    expect(response.jobs_cancelled).toBe(0);
+  });
 
-      // Query with deletedAt: null filter
-      const visibleAnalysis = await db.analysisResult.findMany({
-        where: { runId: run.id, deletedAt: null },
-      });
+  it('generates requestId when not provided', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
 
-      expect(visibleAnalysis.find((a) => a.id === analysis.id)).toBeUndefined();
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        transcripts: 0,
+        analysisResults: 0,
+      },
     });
+
+    const result = await toolHandler({ run_id: testRunId }, {});
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.success).toBe(true);
+  });
+
+  it('handles non-Error objects in catch block', async () => {
+    const mockRun = {
+      id: testRunId,
+      definitionId: 'def-123',
+      status: 'COMPLETED',
+    };
+
+    vi.mocked(getRunById).mockResolvedValue(mockRun as never);
+    vi.mocked(softDeleteRun).mockRejectedValue('string error');
+
+    const result = await toolHandler({ run_id: testRunId }, { requestId: 'req-10' });
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toBe('Failed to delete run');
   });
 });

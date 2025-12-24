@@ -1,492 +1,329 @@
 /**
  * delete_definition Tool Tests
+ *
+ * Tests the delete_definition MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { db, softDeleteDefinition } from '@valuerank/db';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  softDeleteDefinition: vi.fn(),
+  getDefinitionById: vi.fn(),
+}));
+
+// Mock MCP services
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  logAuditEvent: vi.fn(),
+  createDeleteAudit: vi.fn().mockReturnValue({ action: 'delete_definition' }),
+}));
+
+// Import after mocks
+import { softDeleteDefinition, getDefinitionById } from '@valuerank/db';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 describe('delete_definition tool', () => {
-  // Test data
-  let testDefinitionId: string;
-  let testDefinitionWithChildId: string;
-  let testChildDefinitionId: string;
-  let testDefinitionWithRunningRunId: string;
-  const createdDefinitionIds: string[] = [];
-  const createdRunIds: string[] = [];
-  const createdScenarioIds: string[] = [];
+  const testDefinitionId = 'cmtest123456789012345678';
 
-  beforeAll(async () => {
-    // Create test definitions
-    const testDef = await db.definition.create({
-      data: {
-        name: 'test-delete-def-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Test preamble',
-          template: 'Test template with [variable]',
-          dimensions: [{ name: 'variable', values: ['a', 'b'] }],
-        },
-      },
-    });
-    testDefinitionId = testDef.id;
-    createdDefinitionIds.push(testDef.id);
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
 
-    // Create definition with child (for cascading delete test)
-    const parentDef = await db.definition.create({
-      data: {
-        name: 'test-delete-parent-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Test preamble',
-          template: 'Test template',
-          dimensions: [{ name: 'var', values: ['a'] }],
-        },
-      },
-    });
-    testDefinitionWithChildId = parentDef.id;
-    createdDefinitionIds.push(parentDef.id);
+  beforeEach(async () => {
+    vi.clearAllMocks();
 
-    const childDef = await db.definition.create({
-      data: {
-        name: 'test-delete-child-' + Date.now(),
-        parentId: parentDef.id,
-        content: {
-          schema_version: 2,
-          preamble: 'Child preamble',
-        },
-      },
-    });
-    testChildDefinitionId = childDef.id;
-    createdDefinitionIds.push(childDef.id);
-
-    // Create a scenario for the parent
-    const scenario = await db.scenario.create({
-      data: {
-        definitionId: parentDef.id,
-        name: 'test-scenario-' + Date.now(),
-        content: {
-          schema_version: 1,
-          prompt: 'Test prompt',
-          dimension_values: { var: 'a' },
-        },
-      },
-    });
-    createdScenarioIds.push(scenario.id);
-
-    // Create definition with running run
-    const defWithRun = await db.definition.create({
-      data: {
-        name: 'test-delete-with-run-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Test',
-          template: 'Test [var]',
-          dimensions: [{ name: 'var', values: ['x'] }],
-        },
-      },
-    });
-    testDefinitionWithRunningRunId = defWithRun.id;
-    createdDefinitionIds.push(defWithRun.id);
-
-    // Create a running run for this definition
-    const run = await db.run.create({
-      data: {
-        definitionId: defWithRun.id,
-        status: 'RUNNING',
-        config: {
-          schema_version: 1,
-          models: ['test-model'],
-        },
-        progress: { total: 10, completed: 5, failed: 0 },
-      },
-    });
-    createdRunIds.push(run.id);
+    // Dynamically import to trigger registration
+    const { registerDeleteDefinitionTool } = await import(
+      '../../../src/mcp/tools/delete-definition.js'
+    );
+    registerDeleteDefinitionTool(mockServer);
   });
 
-  afterAll(async () => {
-    // Clean up all created entities
-    for (const id of createdRunIds) {
-      try {
-        await db.run.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-    for (const id of createdScenarioIds) {
-      try {
-        await db.scenario.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-    for (const id of createdDefinitionIds) {
-      try {
-        await db.definition.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
-  });
-
-  describe('soft delete behavior', () => {
-    it('soft deletes a definition by setting deletedAt', async () => {
-      // Create a definition specifically for this test
-      const def = await db.definition.create({
-        data: {
-          name: 'test-soft-delete-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(def.id);
-
-      // Soft delete
-      await db.definition.update({
-        where: { id: def.id },
-        data: { deletedAt: new Date() },
-      });
-
-      // Verify it still exists but has deletedAt set
-      const deleted = await db.definition.findUnique({ where: { id: def.id } });
-      expect(deleted).not.toBeNull();
-      expect(deleted?.deletedAt).not.toBeNull();
-    });
-
-    it('cascades soft delete to child definitions', async () => {
-      // Create parent
-      const parent = await db.definition.create({
-        data: {
-          name: 'test-cascade-parent-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Parent',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(parent.id);
-
-      // Create child
-      const child = await db.definition.create({
-        data: {
-          name: 'test-cascade-child-' + Date.now(),
-          parentId: parent.id,
-          content: { schema_version: 2, preamble: 'Child' },
-        },
-      });
-      createdDefinitionIds.push(child.id);
-
-      const now = new Date();
-
-      // Soft delete both (simulating cascade)
-      await db.definition.updateMany({
-        where: { id: { in: [parent.id, child.id] } },
-        data: { deletedAt: now },
-      });
-
-      // Verify both are soft deleted
-      const deletedParent = await db.definition.findUnique({ where: { id: parent.id } });
-      const deletedChild = await db.definition.findUnique({ where: { id: child.id } });
-
-      expect(deletedParent?.deletedAt).not.toBeNull();
-      expect(deletedChild?.deletedAt).not.toBeNull();
-    });
-
-    it('cascades soft delete to associated scenarios', async () => {
-      // Create definition
-      const def = await db.definition.create({
-        data: {
-          name: 'test-cascade-scenario-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(def.id);
-
-      // Create scenario
-      const scenario = await db.scenario.create({
-        data: {
-          definitionId: def.id,
-          name: 'test-scenario-cascade-' + Date.now(),
-          content: {
-            schema_version: 1,
-            prompt: 'Test',
-            dimension_values: { var: 'a' },
-          },
-        },
-      });
-      createdScenarioIds.push(scenario.id);
-
-      const now = new Date();
-
-      // Soft delete definition and scenario
-      await db.$transaction([
-        db.definition.update({
-          where: { id: def.id },
-          data: { deletedAt: now },
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'delete_definition',
+      expect.objectContaining({
+        description: expect.stringContaining('Soft-delete'),
+        inputSchema: expect.objectContaining({
+          definition_id: expect.any(Object),
         }),
-        db.scenario.update({
-          where: { id: scenario.id },
-          data: { deletedAt: now },
-        }),
-      ]);
+      }),
+      expect.any(Function)
+    );
+  });
 
-      // Verify both are soft deleted
-      const deletedDef = await db.definition.findUnique({ where: { id: def.id } });
-      const deletedScenario = await db.scenario.findUnique({ where: { id: scenario.id } });
+  it('successfully deletes a definition', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
 
-      expect(deletedDef?.deletedAt).not.toBeNull();
-      expect(deletedScenario?.deletedAt).not.toBeNull();
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        scenarios: 10,
+        runs: 2,
+        transcripts: 50,
+      },
     });
 
-    it('cascades soft delete to runs, transcripts, and analysis results', async () => {
-      // Create definition
-      const def = await db.definition.create({
-        data: {
-          name: 'test-cascade-runs-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(def.id);
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-1' }
+    );
 
-      // Create a completed run
-      const run = await db.run.create({
-        data: {
-          definitionId: def.id,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test-model'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
+    expect(result).not.toHaveProperty('isError');
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      // Create a transcript
-      const transcript = await db.transcript.create({
-        data: {
-          runId: run.id,
-          modelId: 'test-model',
-          content: { schema_version: 1, messages: [], model_response: 'test' },
-          turnCount: 1,
-          tokenCount: 100,
-          durationMs: 1000,
-        },
-      });
-
-      // Create an analysis result
-      const analysis = await db.analysisResult.create({
-        data: {
-          runId: run.id,
-          analysisType: 'test',
-          inputHash: 'hash123',
-          codeVersion: '1.0.0',
-          output: { test: true },
-          status: 'CURRENT',
-        },
-      });
-
-      // Use the softDeleteDefinition function
-      const result = await softDeleteDefinition(def.id);
-
-      // Verify all counts are returned
-      expect(result.deletedCount.definitions).toBe(1);
-      expect(result.deletedCount.runs).toBe(1);
-      expect(result.deletedCount.transcripts).toBe(1);
-      expect(result.deletedCount.analysisResults).toBe(1);
-
-      // Verify the run is soft deleted
-      const deletedRun = await db.run.findUnique({ where: { id: run.id } });
-      expect(deletedRun?.deletedAt).not.toBeNull();
-
-      // Verify the transcript is soft deleted
-      const deletedTranscript = await db.transcript.findUnique({ where: { id: transcript.id } });
-      expect(deletedTranscript?.deletedAt).not.toBeNull();
-
-      // Verify the analysis result is soft deleted
-      const deletedAnalysis = await db.analysisResult.findUnique({ where: { id: analysis.id } });
-      expect(deletedAnalysis?.deletedAt).not.toBeNull();
+    expect(response.success).toBe(true);
+    expect(response.definition_id).toBe(testDefinitionId);
+    expect(response.name).toBe('Test Definition');
+    expect(response.deleted_count).toEqual({
+      scenarios: 10,
+      runs: 2,
+      transcripts: 50,
     });
   });
 
-  describe('validation', () => {
-    it('blocks deletion when definition has running runs', async () => {
-      // Check that there's a running run
-      const runningRunCount = await db.run.count({
-        where: {
-          definitionId: testDefinitionWithRunningRunId,
-          status: 'RUNNING',
-          deletedAt: null,
-        },
-      });
+  it('returns NOT_FOUND when definition does not exist', async () => {
+    vi.mocked(getDefinitionById).mockRejectedValue(
+      new NotFoundError('Definition', testDefinitionId)
+    );
 
-      expect(runningRunCount).toBeGreaterThan(0);
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-2' }
+    );
 
-      // The actual softDeleteDefinition function would throw an error
-      // We verify the condition that would trigger the error
-    });
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-    it('allows deletion when runs are completed', async () => {
-      // Create definition with completed run
-      const def = await db.definition.create({
-        data: {
-          name: 'test-completed-run-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(def.id);
-
-      // Create completed run
-      const run = await db.run.create({
-        data: {
-          definitionId: def.id,
-          status: 'COMPLETED',
-          config: { schema_version: 1, models: ['test'] },
-          progress: { total: 1, completed: 1, failed: 0 },
-          completedAt: new Date(),
-        },
-      });
-      createdRunIds.push(run.id);
-
-      // Check no running runs
-      const runningCount = await db.run.count({
-        where: {
-          definitionId: def.id,
-          status: 'RUNNING',
-          deletedAt: null,
-        },
-      });
-
-      expect(runningCount).toBe(0);
-
-      // Should be allowed to delete
-      await db.definition.update({
-        where: { id: def.id },
-        data: { deletedAt: new Date() },
-      });
-
-      const deleted = await db.definition.findUnique({ where: { id: def.id } });
-      expect(deleted?.deletedAt).not.toBeNull();
-    });
+    expect(response.error).toBe('NOT_FOUND');
+    expect(response.message).toContain(testDefinitionId);
   });
 
-  describe('response format', () => {
-    it('includes expected fields in success response', () => {
-      const response = {
-        success: true,
-        definition_id: 'test-id',
-        name: 'Test Definition',
-        deleted_at: new Date().toISOString(),
-        deleted_count: {
-          definitions: 2,
-        },
-      };
+  it('returns HAS_RUNNING_RUNS when definition has running runs', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
 
-      expect(response.success).toBe(true);
-      expect(response.definition_id).toBeDefined();
-      expect(response.deleted_at).toBeDefined();
-      expect(response.deleted_count.definitions).toBeGreaterThan(0);
-    });
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
 
-    it('includes error code for running runs', () => {
-      const errorResponse = {
-        error: 'HAS_RUNNING_RUNS',
-        message: 'Cannot delete definition with running runs',
-        details: { runningRunCount: 2 },
-      };
+    // Create error with context structure that matches what the tool expects
+    // The tool checks err.context.runningRunCount directly
+    const error = new ValidationError('Cannot delete with running runs', {});
+    (error as unknown as { context: Record<string, unknown> }).context = { runningRunCount: 3 };
+    vi.mocked(softDeleteDefinition).mockRejectedValue(error);
 
-      expect(errorResponse.error).toBe('HAS_RUNNING_RUNS');
-      expect(errorResponse.details.runningRunCount).toBeGreaterThan(0);
-    });
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-3' }
+    );
 
-    it('includes error code for not found', () => {
-      const errorResponse = {
-        error: 'NOT_FOUND',
-        message: 'Definition not found: nonexistent-id',
-      };
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      expect(errorResponse.error).toBe('NOT_FOUND');
-    });
-
-    it('includes error code for already deleted', () => {
-      const errorResponse = {
-        error: 'ALREADY_DELETED',
-        message: 'Definition is already deleted: some-id',
-      };
-
-      expect(errorResponse.error).toBe('ALREADY_DELETED');
-    });
+    expect(response.error).toBe('HAS_RUNNING_RUNS');
+    expect(response.message).toContain('running runs');
+    expect(response.details.runningRunCount).toBe(3);
   });
 
-  describe('audit logging', () => {
-    it('logs deletion with correct action', () => {
-      const auditEntry = {
-        action: 'delete_definition',
-        userId: 'mcp-user',
-        entityId: 'test-def-id',
-        entityType: 'definition',
-        requestId: 'test-request-id',
-        metadata: {
-          deletedCount: {
-            primary: 1,
-            scenarios: 3,
-          },
-        },
-      };
+  it('returns ALREADY_DELETED when definition is already deleted', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
 
-      expect(auditEntry.action).toBe('delete_definition');
-      expect(auditEntry.entityType).toBe('definition');
-      expect(auditEntry.metadata.deletedCount).toBeDefined();
-    });
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockRejectedValue(
+      new ValidationError('Definition already deleted', {})
+    );
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-4' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('ALREADY_DELETED');
   });
 
-  describe('soft-deleted definitions are hidden', () => {
-    it('excludes soft-deleted definitions from list queries', async () => {
-      // Create and soft-delete a definition
-      const def = await db.definition.create({
-        data: {
-          name: 'test-hidden-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Test',
-            template: 'Test [var]',
-            dimensions: [{ name: 'var', values: ['a'] }],
-          },
-        },
-      });
-      createdDefinitionIds.push(def.id);
+  it('returns VALIDATION_ERROR for other validation errors', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
 
-      await db.definition.update({
-        where: { id: def.id },
-        data: { deletedAt: new Date() },
-      });
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockRejectedValue(
+      new ValidationError('Some other validation issue', {})
+    );
 
-      // Query with deletedAt: null filter (standard pattern)
-      const visibleDefs = await db.definition.findMany({
-        where: { deletedAt: null },
-      });
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-5' }
+    );
 
-      // The soft-deleted definition should not appear
-      const found = visibleDefs.find((d) => d.id === def.id);
-      expect(found).toBeUndefined();
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns NOT_FOUND when softDeleteDefinition throws NotFoundError', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
+
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockRejectedValue(
+      new NotFoundError('Definition', testDefinitionId)
+    );
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-6' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('NOT_FOUND');
+  });
+
+  it('returns INTERNAL_ERROR on database failure', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
+
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockRejectedValue(
+      new Error('Database connection failed')
+    );
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-7' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toContain('Database connection failed');
+  });
+
+  it('handles non-Error exception', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
+
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockRejectedValue('string error');
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-8' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toBe('Failed to delete definition');
+  });
+
+  it('generates requestId when not provided', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
+
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        scenarios: 5,
+        runs: 1,
+        transcripts: 25,
+      },
     });
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      {}
+    );
+
+    expect(result).not.toHaveProperty('isError');
+  });
+
+  it('propagates non-NotFoundError from getDefinitionById', async () => {
+    vi.mocked(getDefinitionById).mockRejectedValue(
+      new Error('Database timeout')
+    );
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-9' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toContain('Database timeout');
+  });
+
+  it('includes deleted_at timestamp in response', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+    };
+
+    vi.mocked(getDefinitionById).mockResolvedValue(mockDefinition as never);
+    vi.mocked(softDeleteDefinition).mockResolvedValue({
+      deletedAt: new Date('2024-01-15T10:00:00Z'),
+      deletedCount: {
+        scenarios: 0,
+        runs: 0,
+        transcripts: 0,
+      },
+    });
+
+    const result = await toolHandler(
+      { definition_id: testDefinitionId },
+      { requestId: 'req-10' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.deleted_at).toBeDefined();
+    // Should be a valid ISO date string
+    expect(new Date(response.deleted_at).toISOString()).toBe(response.deleted_at);
   });
 });

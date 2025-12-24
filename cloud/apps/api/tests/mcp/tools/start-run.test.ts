@@ -1,279 +1,596 @@
 /**
  * start_run Tool Tests
+ *
+ * Tests the start_run MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  db: {
+    definition: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
+// Mock run service (from index.js not start.js)
+vi.mock('../../../src/services/run/index.js', () => ({
+  startRun: vi.fn(),
+}));
+
+// Mock audit logging
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  logAuditEvent: vi.fn(),
+  createRunAudit: vi.fn().mockReturnValue({ action: 'start_run' }),
+}));
+
+// Import after mock
 import { db } from '@valuerank/db';
-import { TEST_USER } from '../../test-utils.js';
-
-// Mock the queue boss
-vi.mock('../../../src/queue/boss.js', () => ({
-  getBoss: vi.fn().mockReturnValue({
-    send: vi.fn().mockResolvedValue('mock-job-id'),
-  }),
-}));
-
-// Mock scheduler - prevent actual interval management in tests
-vi.mock('../../../src/services/run/scheduler.js', () => ({
-  signalRunActivity: vi.fn(),
-  startRecoveryScheduler: vi.fn(),
-  stopRecoveryScheduler: vi.fn(),
-  isRecoverySchedulerRunning: vi.fn().mockReturnValue(false),
-  triggerRecovery: vi.fn(),
-  RECOVERY_ACTIVITY_WINDOW_MS: 60 * 60 * 1000,
-}));
-
-// Import after mocking
 import { startRun } from '../../../src/services/run/index.js';
+import { NotFoundError, ValidationError } from '@valuerank/shared';
 
 describe('start_run tool', () => {
-  let testDefinitionId: string;
-  let testScenarioIds: string[] = [];
-  const createdRunIds: string[] = [];
+  const testDefinitionId = 'cmtest123456789012345678';
 
-  beforeAll(async () => {
-    // Ensure test user exists
-    await db.user.upsert({
-      where: { id: TEST_USER.id },
-      create: {
-        id: TEST_USER.id,
-        email: TEST_USER.email,
-        passwordHash: 'test-hash',
-      },
-      update: {},
-    });
-    // Create test definition
-    const definition = await db.definition.create({
-      data: {
-        name: 'test-start-run-def-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Test preamble',
-          template: '[variable]',
-          dimensions: [{ name: 'variable', values: ['a', 'b', 'c'] }],
-        },
-      },
-    });
-    testDefinitionId = definition.id;
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
 
-    // Create test scenarios
-    for (let i = 0; i < 3; i++) {
-      const scenario = await db.scenario.create({
-        data: {
-          definitionId: testDefinitionId,
-          name: `test-scenario-${i}-${Date.now()}`,
-          content: {
-            schema_version: 1,
-            prompt: `Test prompt ${i}`,
-            dimension_values: { variable: ['a', 'b', 'c'][i] },
-          },
-        },
-      });
-      testScenarioIds.push(scenario.id);
-    }
-  });
-
-  afterAll(async () => {
-    // Clean up runs first
-    for (const runId of createdRunIds) {
-      try {
-        await db.runScenarioSelection.deleteMany({ where: { runId } });
-        await db.run.delete({ where: { id: runId } });
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Clean up scenarios
-    for (const scenarioId of testScenarioIds) {
-      try {
-        await db.scenario.delete({ where: { id: scenarioId } });
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Clean up definition
-    try {
-      await db.definition.delete({ where: { id: testDefinitionId } });
-    } catch {
-      // Ignore
-    }
-  });
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+
+    // Dynamically import to trigger registration
+    const { registerStartRunTool } = await import(
+      '../../../src/mcp/tools/start-run.js'
+    );
+    registerStartRunTool(mockServer);
   });
 
-  describe('successful run start', () => {
-    it('starts run with valid inputs', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'start_run',
+      expect.objectContaining({
+        description: expect.stringContaining('Start an evaluation run'),
+        inputSchema: expect.objectContaining({
+          definition_id: expect.any(Object),
+          models: expect.any(Object),
+        }),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it('successfully starts a run', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }, { id: 'scenario-2' }],
+    };
+
+    const mockRunResult = {
+      run: {
+        id: 'run-123',
+        progress: { total: 10, completed: 0, failed: 0 },
+      },
+      jobCount: 10,
+      estimatedCosts: {
+        total: 0.50,
+        scenarioCount: 10,
+        perModel: [
+          {
+            modelId: 'openai:gpt-4',
+            displayName: 'GPT-4',
+            totalCost: 0.50,
+            inputTokens: 1000,
+            outputTokens: 9000,
+            isUsingFallback: false,
+          },
+        ],
+        isUsingFallback: false,
+        basedOnSampleCount: 100,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: TEST_USER.id,
-      });
+      },
+      { requestId: 'req-1' }
+    );
 
-      createdRunIds.push(result.run.id);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      expect(result.run.id).toBeDefined();
-      expect(result.run.status).toBe('PENDING');
-      expect(result.run.definitionId).toBe(testDefinitionId);
-      expect(result.jobCount).toBe(3); // 3 scenarios × 1 model
-    });
+    expect(response.success).toBe(true);
+    expect(response.run_id).toBe('run-123');
+    expect(response.queued_task_count).toBe(10);
+    expect(response.estimated_cost).toBeDefined();
+  });
 
-    it('starts run with multiple models', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
-        models: ['openai:gpt-4', 'anthropic:claude-3-opus'],
-        userId: TEST_USER.id,
-      });
+  it('starts run with sample percentage', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
 
-      createdRunIds.push(result.run.id);
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.05,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
 
-      expect(result.jobCount).toBe(6); // 3 scenarios × 2 models
-    });
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
 
-    it('respects sample_percentage', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
+    await toolHandler(
+      {
+        definition_id: testDefinitionId,
         models: ['openai:gpt-4'],
-        samplePercentage: 34, // Should sample ~1 scenario from 3
+        sample_percentage: 10,
+      },
+      { requestId: 'req-2' }
+    );
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        samplePercentage: 10,
+      })
+    );
+  });
+
+  it('starts run with priority', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.50,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+        priority: 'HIGH',
+      },
+      { requestId: 'req-3' }
+    );
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priority: 'HIGH',
+      })
+    );
+  });
+
+  it('starts run with sample seed', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.05,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+        sample_percentage: 10,
+        sample_seed: 42,
+      },
+      { requestId: 'req-4' }
+    );
+
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
         sampleSeed: 42,
-        userId: TEST_USER.id,
-      });
+      })
+    );
+  });
 
-      createdRunIds.push(result.run.id);
+  it('returns NOT_FOUND when definition does not exist', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(null);
 
-      // With 34% of 3 scenarios, should get at least 1
-      expect(result.jobCount).toBeGreaterThanOrEqual(1);
-      expect(result.jobCount).toBeLessThanOrEqual(3);
-    });
-
-    it('creates correct progress tracking', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: TEST_USER.id,
-      });
+      },
+      { requestId: 'req-5' }
+    );
 
-      createdRunIds.push(result.run.id);
-
-      expect(result.run.progress).toEqual({
-        total: 3,
-        completed: 0,
-        failed: 0,
-      });
-    });
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('NOT_FOUND');
   });
 
-  describe('validation errors', () => {
-    it('throws for non-existent definition', async () => {
-      await expect(
-        startRun({
-          definitionId: '00000000-0000-0000-0000-000000000000',
-          models: ['openai:gpt-4'],
-          userId: TEST_USER.id,
-        })
-      ).rejects.toThrow();
-    });
+  it('returns NOT_FOUND when definition is soft-deleted', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Deleted Definition',
+      deletedAt: new Date(),
+      scenarios: [],
+    };
 
-    it('throws for empty models array', async () => {
-      await expect(
-        startRun({
-          definitionId: testDefinitionId,
-          models: [],
-          userId: TEST_USER.id,
-        })
-      ).rejects.toThrow('At least one model');
-    });
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
 
-    it('throws for invalid sample_percentage', async () => {
-      await expect(
-        startRun({
-          definitionId: testDefinitionId,
-          models: ['openai:gpt-4'],
-          samplePercentage: 0, // Invalid
-          userId: TEST_USER.id,
-        })
-      ).rejects.toThrow();
-
-      await expect(
-        startRun({
-          definitionId: testDefinitionId,
-          models: ['openai:gpt-4'],
-          samplePercentage: 101, // Invalid
-          userId: TEST_USER.id,
-        })
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('job queuing', () => {
-    it('queues correct number of jobs', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
-        models: ['openai:gpt-4', 'anthropic:claude-3-sonnet'],
-        userId: TEST_USER.id,
-      });
-
-      createdRunIds.push(result.run.id);
-
-      // 3 scenarios × 2 models = 6 jobs
-      expect(result.jobCount).toBe(6);
-    });
-
-    it('stores run config with models', async () => {
-      const models = ['openai:gpt-4', 'anthropic:claude-3-opus'];
-      const result = await startRun({
-        definitionId: testDefinitionId,
-        models,
-        userId: TEST_USER.id,
-      });
-
-      createdRunIds.push(result.run.id);
-
-      const config = result.run.config as Record<string, unknown>;
-      expect(config.models).toEqual(models);
-    });
-  });
-
-  describe('response format', () => {
-    it('returns expected fields', async () => {
-      const result = await startRun({
-        definitionId: testDefinitionId,
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
         models: ['openai:gpt-4'],
-        userId: TEST_USER.id,
-      });
+      },
+      { requestId: 'req-6' }
+    );
 
-      createdRunIds.push(result.run.id);
-
-      expect(result).toHaveProperty('run');
-      expect(result).toHaveProperty('jobCount');
-      expect(result.run).toHaveProperty('id');
-      expect(result.run).toHaveProperty('status');
-      expect(result.run).toHaveProperty('definitionId');
-      expect(result.run).toHaveProperty('progress');
-      expect(result.run).toHaveProperty('createdAt');
-    });
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('NOT_FOUND');
   });
 
-  describe('audit logging', () => {
-    it('includes expected audit fields', () => {
-      const auditEntry = {
-        action: 'start_run',
-        userId: 'mcp-user',
-        entityId: 'run-123',
-        entityType: 'run',
-        requestId: 'req-456',
-        metadata: {
-          definitionId: 'def-789',
-          models: ['openai:gpt-4'],
-          samplePercentage: 100,
-        },
-      };
+  it('returns VALIDATION_ERROR when no scenarios exist', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [], // No scenarios
+    };
 
-      expect(auditEntry.action).toBe('start_run');
-      expect(auditEntry.metadata?.models).toEqual(['openai:gpt-4']);
-    });
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-7' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('VALIDATION_ERROR');
+    expect(response.message).toContain('no scenarios');
+  });
+
+  it('handles startRun validation errors', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockRejectedValue(
+      new ValidationError('Invalid model configuration', {})
+    );
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['invalid:model'],
+      },
+      { requestId: 'req-8' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('VALIDATION_ERROR');
+  });
+
+  it('handles startRun NotFoundError', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockRejectedValue(
+      new NotFoundError('Model', 'openai:gpt-5')
+    );
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-5'],
+      },
+      { requestId: 'req-9' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('NOT_FOUND');
+  });
+
+  it('returns INTERNAL_ERROR on database failure', async () => {
+    vi.mocked(db.definition.findUnique).mockRejectedValue(
+      new Error('DB connection failed')
+    );
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-10' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('INTERNAL_ERROR');
+  });
+
+  it('handles non-Error exception', async () => {
+    vi.mocked(db.definition.findUnique).mockRejectedValue('string error');
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-11' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toBe('Failed to start run');
+  });
+
+  it('generates requestId when not provided', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.50,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      {}
+    );
+
+    expect(result).not.toHaveProperty('isError');
+  });
+
+  it('passes undefined sample percentage to service (service handles defaults)', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.50,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-12' }
+    );
+
+    // Tool passes values through to service, service handles defaults
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        samplePercentage: undefined,
+      })
+    );
+  });
+
+  it('passes undefined priority to service (service handles defaults)', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.50,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: false,
+        basedOnSampleCount: 10,
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-13' }
+    );
+
+    // Tool passes values through to service, service handles defaults
+    expect(startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priority: undefined,
+      })
+    );
+  });
+
+  it('includes cost estimate with fallback reason when using fallback', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.10,
+        scenarioCount: 1,
+        perModel: [
+          {
+            modelId: 'openai:gpt-4',
+            displayName: 'GPT-4',
+            totalCost: 0.10,
+            inputTokens: 100,
+            outputTokens: 900,
+            isUsingFallback: true,
+          },
+        ],
+        isUsingFallback: true,
+        basedOnSampleCount: 0, // No historical data
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-14' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.estimated_cost.using_fallback).toBe(true);
+    expect(response.estimated_cost.fallback_reason).toContain('No historical token data');
+  });
+
+  it('includes partial fallback reason when some models lack data', async () => {
+    const mockDefinition = {
+      id: testDefinitionId,
+      name: 'Test Definition',
+      deletedAt: null,
+      scenarios: [{ id: 'scenario-1' }],
+    };
+
+    const mockRunResult = {
+      run: { id: 'run-123', progress: { total: 1, completed: 0, failed: 0 } },
+      jobCount: 1,
+      estimatedCosts: {
+        total: 0.10,
+        scenarioCount: 1,
+        perModel: [],
+        isUsingFallback: true,
+        basedOnSampleCount: 50, // Some historical data, but fallback for some models
+      },
+    };
+
+    vi.mocked(db.definition.findUnique).mockResolvedValue(mockDefinition as never);
+    vi.mocked(startRun).mockResolvedValue(mockRunResult as never);
+
+    const result = await toolHandler(
+      {
+        definition_id: testDefinitionId,
+        models: ['openai:gpt-4'],
+      },
+      { requestId: 'req-15' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.estimated_cost.using_fallback).toBe(true);
+    expect(response.estimated_cost.fallback_reason).toContain('Some models lack');
   });
 });

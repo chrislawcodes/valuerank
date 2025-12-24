@@ -1,258 +1,482 @@
 /**
  * fork_definition Tool Tests
+ *
+ * Tests the fork_definition MCP tool handler.
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
-import { db } from '@valuerank/db';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-// Mock the queue service
-vi.mock('../../../src/services/scenario/index.js', () => ({
-  queueScenarioExpansion: vi.fn().mockResolvedValue({
-    queued: true,
-    jobId: 'mock-job-id',
-  }),
+// Mock db before importing the tool
+vi.mock('@valuerank/db', () => ({
+  db: {
+    definition: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+  },
+  createPartialContent: vi.fn((content) => ({ schema_version: 2, ...content })),
+  createInheritingContent: vi.fn(() => ({ schema_version: 2 })),
 }));
 
-// Import after mocking
+// Mock MCP services
+vi.mock('../../../src/services/mcp/index.js', () => ({
+  validateDefinitionContent: vi.fn(),
+  logAuditEvent: vi.fn(),
+  createDefinitionAudit: vi.fn().mockReturnValue({ action: 'fork_definition' }),
+}));
+
+// Mock scenario queue service
+vi.mock('../../../src/services/scenario/index.js', () => ({
+  queueScenarioExpansion: vi.fn(),
+}));
+
+// Import after mocks
+import { db, createPartialContent, createInheritingContent } from '@valuerank/db';
+import { validateDefinitionContent } from '../../../src/services/mcp/index.js';
 import { queueScenarioExpansion } from '../../../src/services/scenario/index.js';
 
 describe('fork_definition tool', () => {
-  let parentDefinitionId: string;
-  const createdDefinitionIds: string[] = [];
+  const testParentId = 'parent-123';
 
-  beforeAll(async () => {
-    // Create parent definition to fork from
-    const parent = await db.definition.create({
-      data: {
-        name: 'test-fork-parent-' + Date.now(),
-        content: {
-          schema_version: 2,
-          preamble: 'Parent preamble',
-          template: 'Parent template with [variable]',
-          dimensions: [
-            { name: 'variable', values: ['option1', 'option2'] },
-          ],
-          matching_rules: 'Parent rules',
+  const parentDefinition = {
+    id: testParentId,
+    name: 'Parent Definition',
+    deletedAt: null,
+    content: {
+      preamble: 'Parent preamble',
+      template: 'Parent template with [dimension]',
+      dimensions: [
+        { name: 'dimension', values: ['a', 'b'] },
+      ],
+      matching_rules: 'parent rules',
+    },
+  };
+
+  // Mock server and capture the registered handler
+  let toolHandler: (
+    args: Record<string, unknown>,
+    extra: Record<string, unknown>
+  ) => Promise<unknown>;
+  const mockServer = {
+    registerTool: vi.fn((name, config, handler) => {
+      toolHandler = handler;
+    }),
+  } as unknown as McpServer;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    // Set up default mock return values
+    vi.mocked(validateDefinitionContent).mockReturnValue({
+      valid: true,
+      errors: [],
+      warnings: [],
+      estimatedScenarioCount: 4,
+    });
+    vi.mocked(queueScenarioExpansion).mockResolvedValue({
+      queued: true,
+      jobId: 'mock-job-id',
+    });
+
+    // Dynamically import to trigger registration
+    const { registerForkDefinitionTool } = await import(
+      '../../../src/mcp/tools/fork-definition.js'
+    );
+    registerForkDefinitionTool(mockServer);
+  });
+
+  it('registers the tool with correct name and schema', () => {
+    expect(mockServer.registerTool).toHaveBeenCalledWith(
+      'fork_definition',
+      expect.objectContaining({
+        description: expect.stringContaining('Fork an existing definition'),
+        inputSchema: expect.objectContaining({
+          parent_id: expect.any(Object),
+          name: expect.any(Object),
+        }),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it('forks definition with no changes (full inheritance)', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-123',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-1' }
+    );
+
+    expect(result).not.toHaveProperty('isError');
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.success).toBe(true);
+    expect(response.definition_id).toBe('fork-123');
+    expect(response.parent_id).toBe(testParentId);
+    expect(response.diff_summary).toEqual(['No changes - created exact copy']);
+    expect(createInheritingContent).toHaveBeenCalled();
+  });
+
+  it('forks definition with preamble change', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-preamble',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          preamble: 'New preamble',
         },
       },
-    });
-    parentDefinitionId = parent.id;
-    createdDefinitionIds.push(parent.id);
+      { requestId: 'req-2' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.success).toBe(true);
+    expect(response.diff_summary).toContain('Preamble modified');
+    expect(createPartialContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preamble: 'New preamble',
+      })
+    );
   });
 
-  afterAll(async () => {
-    // Clean up created definitions (children first, then parent)
-    for (const id of createdDefinitionIds.reverse()) {
-      try {
-        await db.definition.delete({ where: { id } });
-      } catch {
-        // Ignore if already deleted
-      }
-    }
+  it('forks definition with template change', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-template',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          template: 'New template',
+        },
+      },
+      { requestId: 'req-3' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.diff_summary).toContain('Template modified');
   });
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it('forks definition with dimension change (same count)', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-dims',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          dimensions: [
+            { name: 'new_dim', values: ['x', 'y'] },
+          ],
+        },
+      },
+      { requestId: 'req-4' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.diff_summary).toContain('Dimensions modified');
   });
 
-  describe('successful fork', () => {
-    it('creates fork with parent relationship', async () => {
-      const fork = await db.definition.create({
-        data: {
-          name: 'test-fork-child-' + Date.now(),
-          content: { schema_version: 2 }, // Minimal inheriting content
-          parentId: parentDefinitionId,
-        },
-      });
-      createdDefinitionIds.push(fork.id);
+  it('forks definition with dimension change (different count)', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-dims-count',
+      name: 'Forked Definition',
+    } as never);
 
-      expect(fork.id).toBeDefined();
-      expect(fork.parentId).toBe(parentDefinitionId);
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          dimensions: [
+            { name: 'dim1', values: ['a', 'b'] },
+            { name: 'dim2', values: ['c', 'd'] },
+          ],
+        },
+      },
+      { requestId: 'req-5' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.diff_summary).toContain('Dimensions changed: 1 → 2');
+  });
+
+  it('forks definition with matching_rules change', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-rules',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          matching_rules: 'new rules',
+        },
+      },
+      { requestId: 'req-6' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.diff_summary).toContain('Matching rules modified');
+  });
+
+  it('includes version_label in response', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-version',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        version_label: 'v2-higher-stakes',
+      },
+      { requestId: 'req-7' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.version_label).toBe('v2-higher-stakes');
+  });
+
+  it('returns NOT_FOUND when parent does not exist', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(null);
+
+    const result = await toolHandler(
+      {
+        parent_id: 'nonexistent-id',
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-8' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('NOT_FOUND');
+    expect(response.message).toContain('nonexistent-id');
+  });
+
+  it('returns NOT_FOUND when parent is soft-deleted', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue({
+      ...parentDefinition,
+      deletedAt: new Date(),
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-9' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('NOT_FOUND');
+  });
+
+  it('returns VALIDATION_ERROR when merged content is invalid', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(validateDefinitionContent).mockReturnValue({
+      valid: false,
+      errors: ['Template too long', 'Invalid dimension'],
+      warnings: [],
+      estimatedScenarioCount: 0,
     });
 
-    it('creates fork with partial content changes', async () => {
-      const fork = await db.definition.create({
-        data: {
-          name: 'test-fork-partial-' + Date.now(),
-          content: {
-            schema_version: 2,
-            template: 'Modified template [variable]', // Only override template
-          },
-          parentId: parentDefinitionId,
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {
+          template: 'A very long template...',
         },
-      });
-      createdDefinitionIds.push(fork.id);
+      },
+      { requestId: 'req-10' }
+    );
 
-      const content = fork.content as Record<string, unknown>;
-      expect(content.template).toBe('Modified template [variable]');
-      expect(content.preamble).toBeUndefined(); // Inherits from parent
-    });
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-    it('creates fork with all content changes', async () => {
-      const fork = await db.definition.create({
-        data: {
-          name: 'test-fork-full-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'New preamble',
-            template: 'New template [newvar]',
-            dimensions: [{ name: 'newvar', values: ['x', 'y', 'z'] }],
-            matching_rules: 'New rules',
-          },
-          parentId: parentDefinitionId,
-        },
-      });
-      createdDefinitionIds.push(fork.id);
+    expect(response.error).toBe('VALIDATION_ERROR');
+    expect(response.message).toBe('Merged content is invalid');
+    expect(response.details.errors).toEqual(['Template too long', 'Invalid dimension']);
+  });
 
-      const content = fork.content as Record<string, unknown>;
-      expect(content.preamble).toBe('New preamble');
-      expect(content.template).toBe('New template [newvar]');
-      expect(content.dimensions).toEqual([{ name: 'newvar', values: ['x', 'y', 'z'] }]);
-    });
+  it('returns INTERNAL_ERROR on database failure', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockRejectedValue(
+      new Error('Database connection failed')
+    );
 
-    it('queues scenario expansion after fork', async () => {
-      const fork = await db.definition.create({
-        data: {
-          name: 'test-fork-queue-' + Date.now(),
-          content: { schema_version: 2 },
-          parentId: parentDefinitionId,
-        },
-      });
-      createdDefinitionIds.push(fork.id);
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-11' }
+    );
 
-      const result = await queueScenarioExpansion(fork.id, 'fork');
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-      expect(queueScenarioExpansion).toHaveBeenCalledWith(fork.id, 'fork');
-      expect(result.queued).toBe(true);
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toContain('Database connection failed');
+  });
+
+  it('handles non-Error exception', async () => {
+    vi.mocked(db.definition.findUnique).mockRejectedValue('string error');
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-12' }
+    );
+
+    expect(result).toHaveProperty('isError', true);
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.error).toBe('INTERNAL_ERROR');
+    expect(response.message).toBe('Failed to fork definition');
+  });
+
+  it('generates requestId when not provided', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-no-req',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      {}
+    );
+
+    expect(result).not.toHaveProperty('isError');
+  });
+
+  it('queues scenario expansion after fork', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-queue',
+      name: 'Forked Definition',
+    } as never);
+
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-13' }
+    );
+
+    expect(queueScenarioExpansion).toHaveBeenCalledWith('fork-queue', 'fork');
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+
+    expect(response.scenario_expansion).toEqual({
+      queued: true,
+      job_id: 'mock-job-id',
     });
   });
 
-  describe('parent validation', () => {
-    it('fails when parent does not exist', async () => {
-      const nonExistentId = '00000000-0000-0000-0000-000000000000';
+  it('creates definition with parent_id link', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-link',
+      name: 'Forked Definition',
+    } as never);
 
-      const parent = await db.definition.findUnique({
-        where: { id: nonExistentId },
-      });
+    await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+      },
+      { requestId: 'req-14' }
+    );
 
-      expect(parent).toBeNull();
-    });
-
-    it('fails when parent is soft-deleted', async () => {
-      // Create and soft-delete a parent
-      const deletedParent = await db.definition.create({
-        data: {
-          name: 'test-deleted-parent-' + Date.now(),
-          content: {
-            schema_version: 2,
-            preamble: 'Deleted',
-            template: '[var]',
-            dimensions: [{ name: 'var', values: ['a', 'b'] }],
-          },
-          deletedAt: new Date(),
-        },
-      });
-      createdDefinitionIds.push(deletedParent.id);
-
-      // Query with soft-delete check
-      const parent = await db.definition.findUnique({
-        where: { id: deletedParent.id },
-      });
-
-      expect(parent?.deletedAt).not.toBeNull();
-    });
+    expect(db.definition.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          parentId: testParentId,
+        }),
+      })
+    );
   });
 
-  describe('version tree', () => {
-    it('can query parent-child relationship', async () => {
-      const fork = await db.definition.create({
-        data: {
-          name: 'test-version-child-' + Date.now(),
-          content: { schema_version: 2 },
-          parentId: parentDefinitionId,
-        },
-      });
-      createdDefinitionIds.push(fork.id);
+  it('handles empty changes object as no changes', async () => {
+    vi.mocked(db.definition.findUnique).mockResolvedValue(parentDefinition as never);
+    vi.mocked(db.definition.create).mockResolvedValue({
+      id: 'fork-empty-changes',
+      name: 'Forked Definition',
+    } as never);
 
-      // Query children of parent
-      const children = await db.definition.findMany({
-        where: { parentId: parentDefinitionId },
-      });
+    const result = await toolHandler(
+      {
+        parent_id: testParentId,
+        name: 'Forked Definition',
+        changes: {},
+      },
+      { requestId: 'req-15' }
+    );
 
-      expect(children.length).toBeGreaterThan(0);
-      expect(children.some((c) => c.id === fork.id)).toBe(true);
-    });
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
 
-    it('supports deep fork chains', async () => {
-      // Create fork of fork
-      const level1 = await db.definition.create({
-        data: {
-          name: 'test-level1-' + Date.now(),
-          content: { schema_version: 2 },
-          parentId: parentDefinitionId,
-        },
-      });
-      createdDefinitionIds.push(level1.id);
-
-      const level2 = await db.definition.create({
-        data: {
-          name: 'test-level2-' + Date.now(),
-          content: { schema_version: 2 },
-          parentId: level1.id,
-        },
-      });
-      createdDefinitionIds.push(level2.id);
-
-      expect(level1.parentId).toBe(parentDefinitionId);
-      expect(level2.parentId).toBe(level1.id);
-    });
-  });
-
-  describe('diff summary', () => {
-    it('shows changed fields', () => {
-      // Test diff calculation logic
-      const calculateDiffSummary = (
-        changes: Record<string, unknown> | undefined,
-        _parentContent: Record<string, unknown>
-      ): string[] => {
-        const diffs: string[] = [];
-
-        if (!changes || Object.keys(changes).length === 0) {
-          return ['No changes - created exact copy'];
-        }
-
-        if (changes.preamble !== undefined) diffs.push('Preamble modified');
-        if (changes.template !== undefined) diffs.push('Template modified');
-        if (changes.dimensions !== undefined) diffs.push('Dimensions modified');
-        if (changes.matching_rules !== undefined) diffs.push('Matching rules modified');
-
-        return diffs.length > 0 ? diffs : ['No changes - created exact copy'];
-      };
-
-      expect(calculateDiffSummary(undefined, {})).toEqual(['No changes - created exact copy']);
-      expect(calculateDiffSummary({ template: 'new' }, {})).toEqual(['Template modified']);
-      expect(
-        calculateDiffSummary({ preamble: 'new', dimensions: [] }, {})
-      ).toEqual(['Preamble modified', 'Dimensions modified']);
-    });
-  });
-
-  describe('audit logging', () => {
-    it('logs fork with parent_id', () => {
-      const auditEntry = {
-        action: 'fork_definition',
-        userId: 'mcp-user',
-        entityId: 'child-def-id',
-        entityType: 'definition',
-        requestId: 'test-request-id',
-        metadata: {
-          parentId: 'parent-def-id',
-          definitionName: 'Forked Definition',
-        },
-      };
-
-      expect(auditEntry.action).toBe('fork_definition');
-      expect(auditEntry.metadata?.parentId).toBe('parent-def-id');
-    });
+    expect(response.diff_summary).toEqual(['No changes - created exact copy']);
+    expect(createInheritingContent).toHaveBeenCalled();
   });
 });

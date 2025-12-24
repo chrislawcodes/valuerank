@@ -176,6 +176,7 @@ describe('DimensionLevelEditor', () => {
 
     const optionsInput = screen.getByDisplayValue('minimal, negligible');
     fireEvent.change(optionsInput, { target: { value: 'low, minimal, trivial' } });
+    fireEvent.blur(optionsInput);
 
     expect(onChange).toHaveBeenCalledWith({
       ...mockLevel,
@@ -199,6 +200,7 @@ describe('DimensionLevelEditor', () => {
 
     const optionsInput = screen.getByDisplayValue('minimal, negligible');
     fireEvent.change(optionsInput, { target: { value: '' } });
+    fireEvent.blur(optionsInput);
 
     expect(onChange).toHaveBeenCalledWith({
       ...mockLevel,
@@ -338,6 +340,7 @@ describe('DimensionLevelEditor', () => {
 
     const optionsInput = screen.getByDisplayValue('minimal, negligible');
     fireEvent.change(optionsInput, { target: { value: '  option1  ,  option2  ' } });
+    fireEvent.blur(optionsInput);
 
     expect(onChange).toHaveBeenCalledWith({
       ...mockLevel,
@@ -361,6 +364,7 @@ describe('DimensionLevelEditor', () => {
 
     const optionsInput = screen.getByDisplayValue('minimal, negligible');
     fireEvent.change(optionsInput, { target: { value: 'option1, , option2, ' } });
+    fireEvent.blur(optionsInput);
 
     expect(onChange).toHaveBeenCalledWith({
       ...mockLevel,
