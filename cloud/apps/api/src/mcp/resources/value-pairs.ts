@@ -156,15 +156,18 @@ Values in the same quadrant generally don't conflict well:
 
 ## Designing with Value Tensions
 
-### Single Tension (Simple Scenario)
+### Recommended: Two Dimensions (Best Results)
 Pick one high-tension pair from opposite quadrants:
 - "This creates tension between [Self_Direction_Action] and [Conformity_Rules]"
 
-### Multiple Tensions (Complex Scenario)
-Layer 2-3 tensions, mixing high and moderate:
+This gives you 25 scenarios (5 levels × 5 levels) - ideal for clear analysis.
+
+### Advanced: Multiple Tensions (Use Sparingly)
+For complex research, you can layer tensions:
 - **Primary**: High-tension pair (e.g., Achievement vs Benevolence_Caring)
-- **Secondary**: Moderate-tension pair (e.g., Face vs Humility)
-- **Tertiary**: Complicating factor from adjacent quadrant
+- **Secondary**: Additional complicating factor
+
+Note: Each additional dimension multiplies scenarios (3 dims × 5 levels = 125 scenarios).
 
 ### Using Higher-Order Categories
 When designing scenarios, consider which quadrants you're drawing from:

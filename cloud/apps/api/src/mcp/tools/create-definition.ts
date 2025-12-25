@@ -47,7 +47,7 @@ const DimensionSchema = z.object({
 const ContentSchema = z.object({
   preamble: z.string().min(1).describe('Instructions for the AI being evaluated. Ask for moral judgment and value tradeoff explanation.'),
   template: z.string().min(1).max(10000).describe('Scenario body with [ValueName] placeholders. Include a 1-5 judgment scale.'),
-  dimensions: z.array(DimensionSchema).max(10).describe('VALUE-BASED dimensions only (1-3 recommended). Each named after a canonical value with 5 intensity levels.'),
+  dimensions: z.array(DimensionSchema).max(10).describe('VALUE-BASED dimensions only (1-2 recommended). Each named after a canonical value with 5 intensity levels.'),
   matching_rules: z.string().optional().describe('Optional scenario generation rules'),
 });
 
