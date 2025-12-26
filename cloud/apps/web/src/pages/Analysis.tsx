@@ -64,9 +64,9 @@ export function Analysis() {
   }, [navigate]);
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
           Analysis
         </h1>
@@ -82,34 +82,38 @@ export function Analysis() {
       </div>
 
       {/* Filters */}
-      <AnalysisListFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      <div className="mb-6">
+        <AnalysisListFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      </div>
 
-      {/* Content */}
-      {loading ? (
-        <Loading size="lg" text="Loading analysis results..." />
-      ) : error ? (
-        <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
-      ) : filteredRuns.length === 0 ? (
-        <EmptyState hasStatusFilter={!!filters.analysisStatus} hasTagFilter={filters.tagIds.length > 0} />
-      ) : filters.viewMode === 'folder' ? (
-        <VirtualizedAnalysisFolderView
-          runs={filteredRuns}
-          onRunClick={handleAnalysisClick}
-          hasNextPage={hasNextPage}
-          loadingMore={loadingMore}
-          totalCount={totalCount}
-          onLoadMore={loadMore}
-        />
-      ) : (
-        <VirtualizedAnalysisList
-          runs={filteredRuns}
-          onRunClick={handleAnalysisClick}
-          hasNextPage={hasNextPage}
-          loadingMore={loadingMore}
-          totalCount={totalCount}
-          onLoadMore={loadMore}
-        />
-      )}
+      {/* Content - fills remaining height */}
+      <div className="flex-1 min-h-0">
+        {loading ? (
+          <Loading size="lg" text="Loading analysis results..." />
+        ) : error ? (
+          <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
+        ) : filteredRuns.length === 0 ? (
+          <EmptyState hasStatusFilter={!!filters.analysisStatus} hasTagFilter={filters.tagIds.length > 0} />
+        ) : filters.viewMode === 'folder' ? (
+          <VirtualizedAnalysisFolderView
+            runs={filteredRuns}
+            onRunClick={handleAnalysisClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        ) : (
+          <VirtualizedAnalysisList
+            runs={filteredRuns}
+            onRunClick={handleAnalysisClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        )}
+      </div>
     </div>
   );
 }

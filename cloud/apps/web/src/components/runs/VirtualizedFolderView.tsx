@@ -215,9 +215,9 @@ export function VirtualizedFolderView({
   const visibleItems = virtualizer.getVirtualItems();
 
   return (
-    <div className="space-y-2">
+    <div className="h-full flex flex-col">
       {/* Header with controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-gray-500">
           {runs.length}
           {totalCount !== null && runs.length < totalCount && <> of {totalCount}</>} runs
@@ -252,7 +252,7 @@ export function VirtualizedFolderView({
       {/* Virtualized scroll container */}
       <div
         ref={parentRef}
-        className="h-[600px] overflow-auto"
+        className="flex-1 min-h-0 overflow-auto"
         style={{ contain: 'strict' }}
       >
         <div

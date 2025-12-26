@@ -64,9 +64,9 @@ export function Runs() {
   }, [navigate]);
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
           Runs
         </h1>
@@ -82,34 +82,38 @@ export function Runs() {
       </div>
 
       {/* Filters */}
-      <RunFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      <div className="mb-6">
+        <RunFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      </div>
 
-      {/* Content */}
-      {loading ? (
-        <Loading size="lg" text="Loading runs..." />
-      ) : error ? (
-        <ErrorMessage message={`Failed to load runs: ${error.message}`} />
-      ) : filteredRuns.length === 0 ? (
-        <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
-      ) : filters.viewMode === 'folder' ? (
-        <VirtualizedFolderView
-          runs={filteredRuns}
-          onRunClick={handleRunClick}
-          hasNextPage={hasNextPage}
-          loadingMore={loadingMore}
-          totalCount={totalCount}
-          onLoadMore={loadMore}
-        />
-      ) : (
-        <VirtualizedRunList
-          runs={filteredRuns}
-          onRunClick={handleRunClick}
-          hasNextPage={hasNextPage}
-          loadingMore={loadingMore}
-          totalCount={totalCount}
-          onLoadMore={loadMore}
-        />
-      )}
+      {/* Content - fills remaining height */}
+      <div className="flex-1 min-h-0">
+        {loading ? (
+          <Loading size="lg" text="Loading runs..." />
+        ) : error ? (
+          <ErrorMessage message={`Failed to load runs: ${error.message}`} />
+        ) : filteredRuns.length === 0 ? (
+          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
+        ) : filters.viewMode === 'folder' ? (
+          <VirtualizedFolderView
+            runs={filteredRuns}
+            onRunClick={handleRunClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        ) : (
+          <VirtualizedRunList
+            runs={filteredRuns}
+            onRunClick={handleRunClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        )}
+      </div>
     </div>
   );
 }

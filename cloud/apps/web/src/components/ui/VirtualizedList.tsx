@@ -36,8 +36,6 @@ type VirtualizedListProps<T extends { id: string }> = {
   estimatedRowHeight?: number;
   /** Gap between items in pixels */
   gap?: number;
-  /** Height of the container (CSS value) */
-  height?: string;
   /** Label for the items (e.g., "runs", "results") */
   itemLabel?: string;
   /** Custom class name for the container */
@@ -53,7 +51,6 @@ export function VirtualizedList<T extends { id: string }>({
   onLoadMore,
   estimatedRowHeight = DEFAULT_ROW_HEIGHT,
   gap = DEFAULT_GAP,
-  height = '600px',
   itemLabel = 'items',
   className = '',
 }: VirtualizedListProps<T>) {
@@ -99,9 +96,9 @@ export function VirtualizedList<T extends { id: string }>({
   }, [handleScroll]);
 
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className={`h-full flex flex-col ${className}`}>
       {/* Results info */}
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-gray-500 mb-2">
         Showing {items.length}
         {totalCount !== null && <> of {totalCount}</>} {itemLabel}
       </div>
@@ -109,8 +106,8 @@ export function VirtualizedList<T extends { id: string }>({
       {/* Virtualized scroll container */}
       <div
         ref={parentRef}
-        className="overflow-auto rounded-lg"
-        style={{ height, contain: 'strict' }}
+        className="flex-1 min-h-0 overflow-auto rounded-lg"
+        style={{ contain: 'strict' }}
       >
         <div
           style={{
