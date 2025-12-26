@@ -6,11 +6,12 @@
  * Supports infinite scroll to load more results.
  */
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, Folder, FolderOpen, Tag as TagIcon, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { AnalysisCard } from './AnalysisCard';
+import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import type { Run, RunDefinitionTag } from '../../api/operations/runs';
 
 type VirtualizedAnalysisFolderViewProps = {
@@ -57,7 +58,6 @@ function isRunItem(item: VirtualItem): item is RunItem {
 const FOLDER_HEADER_HEIGHT = 44;
 const ANALYSIS_CARD_HEIGHT = 100;
 const GAP = 8;
-const LOAD_MORE_THRESHOLD = 200;
 
 /**
  * Groups runs by their definition's tags.
@@ -89,7 +89,12 @@ export function VirtualizedAnalysisFolderView({
   totalCount,
   onLoadMore,
 }: VirtualizedAnalysisFolderViewProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  // Use throttled infinite scroll hook
+  const parentRef = useInfiniteScroll({
+    hasNextPage,
+    loadingMore,
+    onLoadMore,
+  });
 
   // Track which folders are expanded (default: first folder expanded)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
@@ -202,24 +207,6 @@ export function VirtualizedAnalysisFolderView({
   const collapseAll = useCallback(() => {
     setExpandedFolders(new Set());
   }, []);
-
-  // Trigger load more when scrolling near the end
-  useEffect(() => {
-    const scrollElement = parentRef.current;
-    if (!scrollElement) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollElement;
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
-      if (distanceFromBottom < LOAD_MORE_THRESHOLD && hasNextPage && !loadingMore) {
-        onLoadMore();
-      }
-    };
-
-    scrollElement.addEventListener('scroll', handleScroll);
-    return () => scrollElement.removeEventListener('scroll', handleScroll);
-  }, [hasNextPage, loadingMore, onLoadMore]);
 
   if (tagGroups.length === 0 && untaggedRuns.length === 0) {
     return null;
