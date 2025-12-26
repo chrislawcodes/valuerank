@@ -176,9 +176,13 @@ describe('Compare Page', () => {
       selectedRuns: [],
       statistics: null,
       loadingAvailable: false,
+      loadingMoreAvailable: false,
+      hasNextPage: false,
+      totalCount: 2,
       loadingSelected: false,
       error: null,
       refetchAvailable: vi.fn(),
+      loadMoreAvailable: vi.fn(),
       missingAnalysisIds: [],
     });
   });
@@ -203,10 +207,10 @@ describe('Compare Page', () => {
     it('renders run selector with available runs', () => {
       render(<Compare />, { wrapper: createWrapper() });
 
-      // Uses formatRunName - search by partial match
-      // Definition name appears in both run name and small text, so use getAllByText
-      expect(screen.getAllByText(/Test Definition A/).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/Test Definition B/).length).toBeGreaterThan(0);
+      // RunSelector uses virtualization, so items don't render in JSDOM
+      // Instead check that the count display shows the correct number
+      // With totalCount set, displays "X of Y runs"
+      expect(screen.getByText(/2 of 2 runs/)).toBeInTheDocument();
     });
   });
 
@@ -217,9 +221,13 @@ describe('Compare Page', () => {
         selectedRuns: [mockAvailableRuns[0]],
         statistics: null,
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -240,9 +248,13 @@ describe('Compare Page', () => {
           summary: { totalRuns: 2, totalSamples: 200, meanDecisionRange: [3.0, 3.5] },
         },
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -267,9 +279,13 @@ describe('Compare Page', () => {
           summary: { totalRuns: 2, totalSamples: 200, meanDecisionRange: [3.0, 3.5] },
         },
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
     });
@@ -306,9 +322,13 @@ describe('Compare Page', () => {
         selectedRuns: [],
         statistics: null,
         loadingAvailable: true,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: null,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -324,9 +344,13 @@ describe('Compare Page', () => {
         selectedRuns: [],
         statistics: null,
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: true,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -343,9 +367,13 @@ describe('Compare Page', () => {
         selectedRuns: [],
         statistics: null,
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: null,
         loadingSelected: false,
         error: new Error('Failed to load runs'),
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -367,9 +395,13 @@ describe('Compare Page', () => {
           summary: { totalRuns: 2, totalSamples: 200, meanDecisionRange: [3.0, 3.5] },
         },
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 
@@ -394,9 +426,13 @@ describe('Compare Page', () => {
           summary: { totalRuns: 2, totalSamples: 200, meanDecisionRange: [3.0, 3.5] },
         },
         loadingAvailable: false,
+        loadingMoreAvailable: false,
+        hasNextPage: false,
+        totalCount: 2,
         loadingSelected: false,
         error: null,
         refetchAvailable: vi.fn(),
+        loadMoreAvailable: vi.fn(),
         missingAnalysisIds: [],
       });
 

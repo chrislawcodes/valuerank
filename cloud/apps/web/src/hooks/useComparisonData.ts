@@ -1,20 +1,19 @@
 /**
  * Hook for fetching comparison data
  *
- * Handles fetching both available runs and selected runs with full analysis data.
+ * Handles fetching both available runs (with infinite scroll) and
+ * selected runs with full analysis data.
  */
 
 import { useQuery } from 'urql';
 import { useMemo } from 'react';
 import {
   RUNS_WITH_ANALYSIS_QUERY,
-  COMPARISON_RUNS_LIST_QUERY,
   type ComparisonRun,
   type RunsWithAnalysisQueryVariables,
   type RunsWithAnalysisQueryResult,
-  type ComparisonRunsListQueryVariables,
-  type ComparisonRunsListQueryResult,
 } from '../api/operations/comparison';
+import { useInfiniteComparisonRuns } from './useInfiniteComparisonRuns';
 import type { AnalysisResult, PerModelStats } from '../api/operations/analysis';
 import type {
   RunWithAnalysis,
@@ -42,12 +41,20 @@ type UseComparisonDataResult = {
   statistics: ComparisonStatistics | null;
   /** Loading state for available runs */
   loadingAvailable: boolean;
+  /** Loading more available runs (infinite scroll) */
+  loadingMoreAvailable: boolean;
+  /** Whether there are more available runs to load */
+  hasNextPage: boolean;
+  /** Total count of available runs */
+  totalCount: number | null;
   /** Loading state for selected runs */
   loadingSelected: boolean;
   /** Error from either query */
   error: Error | null;
   /** Refetch available runs */
   refetchAvailable: () => void;
+  /** Load more available runs */
+  loadMoreAvailable: () => void;
   /** Refetch selected runs */
   refetchSelected: () => void;
   /** IDs of selected runs that have no analysis */
@@ -60,18 +67,19 @@ type UseComparisonDataResult = {
 export function useComparisonData(options: UseComparisonDataOptions): UseComparisonDataResult {
   const { selectedRunIds, definitionId, onlyCurrent = true } = options;
 
-  // Fetch available runs for selection
-  const [availableResult, refetchAvailable] = useQuery<
-    ComparisonRunsListQueryResult,
-    ComparisonRunsListQueryVariables
-  >({
-    query: COMPARISON_RUNS_LIST_QUERY,
-    variables: {
-      definitionId,
-      analysisStatus: onlyCurrent ? 'CURRENT' : undefined,
-      limit: 50,
-    },
-    requestPolicy: 'cache-and-network',
+  // Use infinite scroll hook for available runs
+  const {
+    runs: availableRuns,
+    loading: loadingAvailable,
+    loadingMore: loadingMoreAvailable,
+    error: availableError,
+    hasNextPage,
+    totalCount,
+    loadMore: loadMoreAvailable,
+    refetch: refetchAvailable,
+  } = useInfiniteComparisonRuns({
+    definitionId,
+    analysisStatus: onlyCurrent ? 'CURRENT' : undefined,
   });
 
   // Fetch selected runs with full analysis data
@@ -166,20 +174,24 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
   }, [selectedRuns]);
 
   // Combine errors
-  const error = availableResult.error
-    ? new Error(availableResult.error.message)
+  const error = availableError
+    ? availableError
     : selectedResult.error
       ? new Error(selectedResult.error.message)
       : null;
 
   return {
-    availableRuns: availableResult.data?.runs ?? [],
+    availableRuns,
     selectedRuns,
     statistics,
-    loadingAvailable: availableResult.fetching,
+    loadingAvailable,
+    loadingMoreAvailable,
+    hasNextPage,
+    totalCount,
     loadingSelected: selectedResult.fetching,
     error,
-    refetchAvailable: () => refetchAvailable({ requestPolicy: 'network-only' }),
+    refetchAvailable,
+    loadMoreAvailable,
     refetchSelected: () => refetchSelected({ requestPolicy: 'network-only' }),
     missingAnalysisIds,
   };

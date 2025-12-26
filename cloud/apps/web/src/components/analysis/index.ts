@@ -12,6 +12,8 @@ export { AnalysisCard } from './AnalysisCard';
 export { AnalysisListFilters } from './AnalysisListFilters';
 export type { AnalysisFilterState, AnalysisViewMode } from './AnalysisListFilters';
 export { AnalysisFolderView } from './AnalysisFolderView';
+export { VirtualizedAnalysisList } from './VirtualizedAnalysisList';
+export { VirtualizedAnalysisFolderView } from './VirtualizedAnalysisFolderView';
 
 // Stats and charts
 export { StatCard } from './StatCard';

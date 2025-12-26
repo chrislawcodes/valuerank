@@ -10,6 +10,8 @@ export { RunCard } from './RunCard';
 export { RunControls } from './RunControls';
 export { RunFilters, type RunFilterState } from './RunFilters';
 export { RunFolderView } from './RunFolderView';
+export { VirtualizedRunList } from './VirtualizedRunList';
+export { VirtualizedFolderView } from './VirtualizedFolderView';
 export { RunForm } from './RunForm';
 export { RunProgress } from './RunProgress';
 export { RunResults } from './RunResults';

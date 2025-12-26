@@ -1,20 +1,24 @@
 /**
  * Runs Page
  *
- * Displays a list of all evaluation runs with filtering, pagination,
- * and optional folder view grouped by definition tags.
+ * Displays a list of all evaluation runs with filtering and virtualized
+ * infinite scroll. Supports folder view grouped by definition tags or
+ * flat list view.
  */
 
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { RunCard, RunFilters, RunFolderView, type RunFilterState } from '../components/runs';
-import { useRuns } from '../hooks/useRuns';
-
-const PAGE_SIZE = 10;
+import {
+  RunFilters,
+  VirtualizedRunList,
+  VirtualizedFolderView,
+  type RunFilterState,
+} from '../components/runs';
+import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
 
 const defaultFilters: RunFilterState = {
   status: '',
@@ -25,12 +29,19 @@ const defaultFilters: RunFilterState = {
 export function Runs() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<RunFilterState>(defaultFilters);
-  const [page, setPage] = useState(0);
 
-  const { runs, loading, error, refetch } = useRuns({
+  // Use infinite scroll hook for efficient data loading
+  const {
+    runs,
+    loading,
+    loadingMore,
+    error,
+    hasNextPage,
+    totalCount,
+    loadMore,
+    refetch,
+  } = useInfiniteRuns({
     status: filters.status || undefined,
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
   });
 
   // Filter runs by selected tags (client-side filtering)
@@ -46,110 +57,63 @@ export function Runs() {
 
   const handleFiltersChange = useCallback((newFilters: RunFilterState) => {
     setFilters(newFilters);
-    // Reset to first page when filters change (except view mode)
-    if (newFilters.status !== filters.status || newFilters.tagIds !== filters.tagIds) {
-      setPage(0);
-    }
-  }, [filters.status, filters.tagIds]);
+  }, []);
 
   const handleRunClick = useCallback((runId: string) => {
     navigate(`/runs/${runId}`);
   }, [navigate]);
 
-  const handlePrevPage = useCallback(() => {
-    setPage((p) => Math.max(0, p - 1));
-  }, []);
-
-  const handleNextPage = useCallback(() => {
-    setPage((p) => p + 1);
-  }, []);
-
-  // Determine if there might be more pages
-  const hasNextPage = runs.length === PAGE_SIZE;
-  const hasPrevPage = page > 0;
-
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
           Runs
         </h1>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => refetch()}
-          disabled={loading}
+          onClick={refetch}
+          disabled={loading || loadingMore}
         >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {/* Filters */}
-      <RunFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      <div className="mb-6">
+        <RunFilters filters={filters} onFiltersChange={handleFiltersChange} />
+      </div>
 
-      {/* Results count */}
-      {!loading && filteredRuns.length > 0 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">
-            {filters.viewMode === 'flat' ? (
-              <>Showing {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + filteredRuns.length}</>
-            ) : (
-              <>{filteredRuns.length} run{filteredRuns.length !== 1 ? 's' : ''}</>
-            )}
-            {filters.tagIds.length > 0 && ' matching tags'}
-          </span>
-        </div>
-      )}
-
-      {/* Content */}
-      {loading && runs.length === 0 ? (
-        <Loading size="lg" text="Loading runs..." />
-      ) : error ? (
-        <ErrorMessage message={`Failed to load runs: ${error.message}`} />
-      ) : filteredRuns.length === 0 ? (
-        <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
-      ) : filters.viewMode === 'folder' ? (
-        <RunFolderView runs={filteredRuns} onRunClick={handleRunClick} />
-      ) : (
-        <div className="space-y-3">
-          {filteredRuns.map((run) => (
-            <RunCard
-              key={run.id}
-              run={run}
-              onClick={() => handleRunClick(run.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination (only in flat view) */}
-      {filters.viewMode === 'flat' && (hasPrevPage || hasNextPage) && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handlePrevPage}
-            disabled={!hasPrevPage || loading}
-          >
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Previous
-          </Button>
-          <span className="text-sm text-gray-500 px-4">
-            Page {page + 1}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleNextPage}
-            disabled={!hasNextPage || loading}
-          >
-            Next
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
-        </div>
-      )}
+      {/* Content - fills remaining height */}
+      <div className="flex-1 min-h-0">
+        {loading ? (
+          <Loading size="lg" text="Loading runs..." />
+        ) : error ? (
+          <ErrorMessage message={`Failed to load runs: ${error.message}`} />
+        ) : filteredRuns.length === 0 ? (
+          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
+        ) : filters.viewMode === 'folder' ? (
+          <VirtualizedFolderView
+            runs={filteredRuns}
+            onRunClick={handleRunClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        ) : (
+          <VirtualizedRunList
+            runs={filteredRuns}
+            onRunClick={handleRunClick}
+            hasNextPage={hasNextPage}
+            loadingMore={loadingMore}
+            totalCount={totalCount}
+            onLoadMore={loadMore}
+          />
+        )}
+      </div>
     </div>
   );
 }
