@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@tanstack/react-virtual": "^3.13.13",
     "@urql/exchange-auth": "^2.1.6",
     "@valuerank/shared": "*",
     "class-variance-authority": "^0.7.1",

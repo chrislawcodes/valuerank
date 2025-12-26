@@ -31,9 +31,13 @@ export function Compare() {
     selectedRuns,
     statistics,
     loadingAvailable,
+    loadingMoreAvailable,
+    hasNextPage,
+    totalCount,
     loadingSelected,
     error,
     refetchAvailable,
+    loadMoreAvailable,
     missingAnalysisIds,
   } = useComparisonData({ selectedRunIds });
 
@@ -64,9 +68,13 @@ export function Compare() {
               runs={availableRuns}
               selectedIds={selectedRunIds}
               loading={loadingAvailable}
+              loadingMore={loadingMoreAvailable}
+              hasNextPage={hasNextPage}
+              totalCount={totalCount}
               error={error?.message}
               onSelectionChange={setSelectedRunIds}
               onRefresh={refetchAvailable}
+              onLoadMore={loadMoreAvailable}
             />
           </div>
 

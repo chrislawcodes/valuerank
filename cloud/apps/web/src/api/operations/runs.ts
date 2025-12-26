@@ -244,6 +244,22 @@ export const RUNS_QUERY = gql`
   ${RUN_FRAGMENT}
 `;
 
+export const RUN_COUNT_QUERY = gql`
+  query RunCount(
+    $definitionId: String
+    $status: String
+    $hasAnalysis: Boolean
+    $analysisStatus: String
+  ) {
+    runCount(
+      definitionId: $definitionId
+      status: $status
+      hasAnalysis: $hasAnalysis
+      analysisStatus: $analysisStatus
+    )
+  }
+`;
+
 export const RUN_QUERY = gql`
   query Run($id: ID!) {
     run(id: $id) {
@@ -363,6 +379,17 @@ export type RunsQueryVariables = {
 
 export type RunsQueryResult = {
   runs: Run[];
+};
+
+export type RunCountQueryVariables = {
+  definitionId?: string;
+  status?: string;
+  hasAnalysis?: boolean;
+  analysisStatus?: 'CURRENT' | 'SUPERSEDED';
+};
+
+export type RunCountQueryResult = {
+  runCount: number;
 };
 
 export type RunQueryVariables = {

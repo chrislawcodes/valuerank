@@ -1,22 +1,24 @@
 /**
  * Analysis Page
  *
- * Displays a list of runs with analysis results, with filtering, pagination,
- * and optional folder view grouped by definition tags.
+ * Displays a list of runs with analysis results, with filtering and
+ * virtualized infinite scroll. Supports folder view grouped by definition
+ * tags or flat list view.
  */
 
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart2, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { AnalysisCard } from '../components/analysis/AnalysisCard';
-import { AnalysisListFilters, type AnalysisFilterState } from '../components/analysis/AnalysisListFilters';
-import { AnalysisFolderView } from '../components/analysis/AnalysisFolderView';
-import { useRunsWithAnalysis } from '../hooks/useRunsWithAnalysis';
-
-const PAGE_SIZE = 10;
+import {
+  AnalysisListFilters,
+  VirtualizedAnalysisList,
+  VirtualizedAnalysisFolderView,
+  type AnalysisFilterState,
+} from '../components/analysis';
+import { useInfiniteRunsWithAnalysis } from '../hooks/useInfiniteRunsWithAnalysis';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -27,12 +29,19 @@ const defaultFilters: AnalysisFilterState = {
 export function Analysis() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<AnalysisFilterState>(defaultFilters);
-  const [page, setPage] = useState(0);
 
-  const { runs, loading, error, refetch } = useRunsWithAnalysis({
+  // Use infinite scroll hook for efficient data loading
+  const {
+    runs,
+    loading,
+    loadingMore,
+    error,
+    hasNextPage,
+    totalCount,
+    loadMore,
+    refetch,
+  } = useInfiniteRunsWithAnalysis({
     analysisStatus: filters.analysisStatus || undefined,
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
   });
 
   // Filter runs by selected tags (client-side filtering)
@@ -48,27 +57,11 @@ export function Analysis() {
 
   const handleFiltersChange = useCallback((newFilters: AnalysisFilterState) => {
     setFilters(newFilters);
-    // Reset to first page when filters change (except view mode)
-    if (newFilters.analysisStatus !== filters.analysisStatus || newFilters.tagIds !== filters.tagIds) {
-      setPage(0);
-    }
-  }, [filters.analysisStatus, filters.tagIds]);
+  }, []);
 
   const handleAnalysisClick = useCallback((runId: string) => {
     navigate(`/analysis/${runId}`);
   }, [navigate]);
-
-  const handlePrevPage = useCallback(() => {
-    setPage((p) => Math.max(0, p - 1));
-  }, []);
-
-  const handleNextPage = useCallback(() => {
-    setPage((p) => p + 1);
-  }, []);
-
-  // Determine if there might be more pages
-  const hasNextPage = runs.length === PAGE_SIZE;
-  const hasPrevPage = page > 0;
 
   return (
     <div className="space-y-6">
@@ -80,10 +73,10 @@ export function Analysis() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => refetch()}
-          disabled={loading}
+          onClick={refetch}
+          disabled={loading || loadingMore}
         >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -91,67 +84,31 @@ export function Analysis() {
       {/* Filters */}
       <AnalysisListFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
-      {/* Results count */}
-      {!loading && filteredRuns.length > 0 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">
-            {filters.viewMode === 'flat' ? (
-              <>Showing {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + filteredRuns.length}</>
-            ) : (
-              <>{filteredRuns.length} result{filteredRuns.length !== 1 ? 's' : ''}</>
-            )}
-            {filters.tagIds.length > 0 && ' matching tags'}
-            {filters.analysisStatus && ` (${filters.analysisStatus.toLowerCase()})`}
-          </span>
-        </div>
-      )}
-
       {/* Content */}
-      {loading && runs.length === 0 ? (
+      {loading ? (
         <Loading size="lg" text="Loading analysis results..." />
       ) : error ? (
         <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
       ) : filteredRuns.length === 0 ? (
         <EmptyState hasStatusFilter={!!filters.analysisStatus} hasTagFilter={filters.tagIds.length > 0} />
       ) : filters.viewMode === 'folder' ? (
-        <AnalysisFolderView runs={filteredRuns} onRunClick={handleAnalysisClick} />
+        <VirtualizedAnalysisFolderView
+          runs={filteredRuns}
+          onRunClick={handleAnalysisClick}
+          hasNextPage={hasNextPage}
+          loadingMore={loadingMore}
+          totalCount={totalCount}
+          onLoadMore={loadMore}
+        />
       ) : (
-        <div className="space-y-3">
-          {filteredRuns.map((run) => (
-            <AnalysisCard
-              key={run.id}
-              run={run}
-              onClick={() => handleAnalysisClick(run.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination (only in flat view) */}
-      {filters.viewMode === 'flat' && (hasPrevPage || hasNextPage) && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handlePrevPage}
-            disabled={!hasPrevPage || loading}
-          >
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Previous
-          </Button>
-          <span className="text-sm text-gray-500 px-4">
-            Page {page + 1}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleNextPage}
-            disabled={!hasNextPage || loading}
-          >
-            Next
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
-        </div>
+        <VirtualizedAnalysisList
+          runs={filteredRuns}
+          onRunClick={handleAnalysisClick}
+          hasNextPage={hasNextPage}
+          loadingMore={loadingMore}
+          totalCount={totalCount}
+          onLoadMore={loadMore}
+        />
       )}
     </div>
   );
