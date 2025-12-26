@@ -76,3 +76,29 @@ builder.queryField('tag', (t) =>
     },
   })
 );
+
+// Query: tagCount - Get count of tags matching filters
+builder.queryField('tagCount', (t) =>
+  t.field({
+    type: 'Int',
+    description: 'Get the count of tags matching the specified filters. Useful for pagination.',
+    args: {
+      search: t.arg.string({
+        required: false,
+        description: 'Search tags by name (contains match)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ search: args.search }, 'Counting tags');
+
+      const where = args.search
+        ? { name: { contains: args.search.toLowerCase(), mode: 'insensitive' as const } }
+        : {};
+
+      const count = await db.tag.count({ where });
+
+      ctx.log.debug({ count }, 'Tag count fetched');
+      return count;
+    },
+  })
+);

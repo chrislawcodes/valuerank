@@ -300,3 +300,93 @@ builder.queryField('definitionDescendants', (t) =>
     },
   })
 );
+
+// Query: definitionCount - Get count of definitions matching filters
+builder.queryField('definitionCount', (t) =>
+  t.field({
+    type: 'Int',
+    description: 'Get the count of definitions matching the specified filters. Useful for pagination.',
+    args: {
+      rootOnly: t.arg.boolean({
+        required: false,
+        description: 'If true, count only root definitions (no parent)',
+      }),
+      search: t.arg.string({
+        required: false,
+        description: 'Search by definition name (case-insensitive contains)',
+      }),
+      tagIds: t.arg.idList({
+        required: false,
+        description: 'Filter by tag IDs (OR logic - matches any of the tags)',
+      }),
+      hasRuns: t.arg.boolean({
+        required: false,
+        description: 'Only definitions that have been used in runs',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug(
+        { rootOnly: args.rootOnly, search: args.search, tagIds: args.tagIds, hasRuns: args.hasRuns },
+        'Counting definitions'
+      );
+
+      // Build where clause - always filter out soft-deleted definitions
+      const where: Prisma.DefinitionWhereInput = {
+        deletedAt: null,
+      };
+
+      if (args.rootOnly) {
+        where.parentId = null;
+      }
+
+      if (args.search) {
+        where.name = { contains: args.search, mode: 'insensitive' };
+      }
+
+      if (args.tagIds && args.tagIds.length > 0) {
+        // Tag filtering with inheritance support - same logic as definitions query
+        const tagIdStrings = args.tagIds.map(String);
+
+        const matchingDefinitions = await db.$queryRaw<{ id: string }[]>`
+          WITH RECURSIVE
+          direct_tagged AS (
+            SELECT DISTINCT dt.definition_id as id
+            FROM definition_tags dt
+            WHERE dt.tag_id = ANY(${tagIdStrings}::text[])
+            AND dt.deleted_at IS NULL
+          ),
+          inherited AS (
+            SELECT d.id, d.parent_id
+            FROM definitions d
+            JOIN direct_tagged dt ON d.id = dt.id
+            WHERE d.deleted_at IS NULL
+            UNION ALL
+            SELECT d.id, d.parent_id
+            FROM definitions d
+            JOIN inherited i ON d.parent_id = i.id
+            WHERE d.deleted_at IS NULL
+          )
+          SELECT DISTINCT id FROM inherited
+        `;
+
+        const matchingIds = matchingDefinitions.map((d) => d.id);
+
+        if (matchingIds.length === 0) {
+          ctx.log.debug({ count: 0 }, 'No definitions match tag filter');
+          return 0;
+        }
+
+        where.id = { in: matchingIds };
+      }
+
+      if (args.hasRuns) {
+        where.runs = { some: {} };
+      }
+
+      const count = await db.definition.count({ where });
+
+      ctx.log.debug({ count }, 'Definition count fetched');
+      return count;
+    },
+  })
+);

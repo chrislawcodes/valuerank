@@ -2,6 +2,9 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { AnalysisResultRef } from '../types/analysis.js';
 
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 10;
+
 // Query: analysis(runId: ID!) - Fetch analysis result for a run
 builder.queryField('analysis', (t) =>
   t.field({
@@ -42,8 +45,7 @@ builder.queryField('analysisHistory', (t) =>
       runId: t.arg.id({ required: true, description: 'Run ID' }),
       limit: t.arg.int({
         required: false,
-        defaultValue: 10,
-        description: 'Maximum number of results (default: 10)',
+        description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
       }),
       offset: t.arg.int({
         required: false,
@@ -52,7 +54,7 @@ builder.queryField('analysisHistory', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const runId = String(args.runId);
-      const limit = args.limit ?? 10;
+      const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
       const offset = args.offset ?? 0;
 
       ctx.log.debug({ runId, limit, offset }, 'Fetching analysis history');
@@ -65,6 +67,32 @@ builder.queryField('analysisHistory', (t) =>
       });
 
       return analyses;
+    },
+  })
+);
+
+// Query: analysisHistoryCount - Get count of analysis versions for a run
+builder.queryField('analysisHistoryCount', (t) =>
+  t.field({
+    type: 'Int',
+    description: 'Get the count of analysis versions for a run. Useful for pagination.',
+    args: {
+      runId: t.arg.id({
+        required: true,
+        description: 'Run ID to count analysis versions for',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const runId = String(args.runId);
+
+      ctx.log.debug({ runId }, 'Counting analysis history');
+
+      const count = await db.analysisResult.count({
+        where: { runId },
+      });
+
+      ctx.log.debug({ runId, count }, 'Analysis history count fetched');
+      return count;
     },
   })
 );
