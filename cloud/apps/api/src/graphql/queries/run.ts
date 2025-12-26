@@ -213,3 +213,93 @@ builder.queryField('runsWithAnalysis', (t) =>
     },
   })
 );
+
+// Query: runCount - Get count of runs matching filters
+builder.queryField('runCount', (t) =>
+  t.field({
+    type: 'Int',
+    description: 'Get the count of runs matching the specified filters. Useful for pagination.',
+    args: {
+      definitionId: t.arg.string({
+        required: false,
+        description: 'Filter by definition ID',
+      }),
+      experimentId: t.arg.string({
+        required: false,
+        description: 'Filter by experiment ID',
+      }),
+      status: t.arg.string({
+        required: false,
+        description: 'Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
+      }),
+      hasAnalysis: t.arg.boolean({
+        required: false,
+        description: 'Filter to runs that have analysis results (any status)',
+      }),
+      analysisStatus: t.arg.string({
+        required: false,
+        description: 'Filter by analysis status (CURRENT or SUPERSEDED)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug(
+        {
+          definitionId: args.definitionId,
+          experimentId: args.experimentId,
+          status: args.status,
+          hasAnalysis: args.hasAnalysis,
+          analysisStatus: args.analysisStatus,
+        },
+        'Counting runs'
+      );
+
+      // Build where clause (always exclude soft-deleted runs)
+      const where: RunWhereInput & { deletedAt: null } = {
+        deletedAt: null,
+      };
+      if (args.definitionId) {
+        where.definitionId = args.definitionId;
+      }
+      if (args.experimentId) {
+        where.experimentId = args.experimentId;
+      }
+      if (args.status) {
+        where.status = args.status as RunStatus;
+      }
+
+      // Handle analysis filtering - requires subquery to find run IDs with analysis
+      if (args.hasAnalysis === true || args.analysisStatus) {
+        const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
+          deletedAt: null,
+        };
+
+        // If analysisStatus provided, filter by that specific status
+        if (args.analysisStatus) {
+          analysisWhere.status = args.analysisStatus as AnalysisStatus;
+        }
+
+        // Find all run IDs that have analysis results matching the criteria
+        const analysisResults = await db.analysisResult.findMany({
+          where: analysisWhere,
+          select: { runId: true },
+          distinct: ['runId'],
+        });
+
+        const runIdsWithAnalysis = analysisResults.map((a) => a.runId);
+
+        // If no runs have analysis, return 0 early
+        if (runIdsWithAnalysis.length === 0) {
+          ctx.log.debug({ count: 0 }, 'No runs with analysis found');
+          return 0;
+        }
+
+        where.id = { in: runIdsWithAnalysis };
+      }
+
+      const count = await db.run.count({ where });
+
+      ctx.log.debug({ count }, 'Run count fetched');
+      return count;
+    },
+  })
+);
