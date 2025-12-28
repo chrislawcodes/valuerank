@@ -29,4 +29,4 @@ jobs:
             - Security concerns
             - Consistency with existing codebase patterns
             Provide constructive feedback with specific suggestions for improvement.
-          claude_args: "--max-turns 5"
+          claude_args: "--max-turns 15"
