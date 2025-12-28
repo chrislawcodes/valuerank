@@ -23,10 +23,14 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            Review this pull request. Focus on:
+            Review this pull request by reading the changed files. Focus on:
             - Code quality and best practices
             - Potential bugs or edge cases
             - Security concerns
             - Consistency with existing codebase patterns
+
+            IMPORTANT: This is a code review only. Do NOT run tests, builds, or any shell commands.
+            Just read the diff and relevant source files, then provide your review as a PR comment.
+
             Provide constructive feedback with specific suggestions for improvement.
-          claude_args: "--max-turns 15"
+          claude_args: "--max-turns 10"
