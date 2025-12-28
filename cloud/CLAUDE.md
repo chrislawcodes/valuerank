@@ -4,6 +4,8 @@ This document defines the coding standards and architectural principles for the 
 
 ## Git Workflow
 
+> **Note:** This project uses a dual-repo setup. See [Repository Workflow](../CLAUDE.md#repository-workflow) in the main CLAUDE.md for details on the dev fork vs authoritative repo.
+
 **ALWAYS use Pull Requests to merge changes to main.** Never commit directly to main.
 
 1. Create a feature branch before making changes

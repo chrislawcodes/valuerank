@@ -3,6 +3,43 @@
 ## What This Project Does
 ValueRank measures how AI models prioritize moral values in ethical dilemmas. It's a "nutrition label for AI behavior" - making value alignment comparable across models.
 
+## Repository Workflow
+
+This project uses a dual-repository setup:
+
+| Repository | Purpose |
+|------------|---------|
+| [codemonkeychris/valuerank](https://github.com/codemonkeychris/valuerank) | **Development fork** - active dev work happens here |
+| [chrislawcodes/valuerank](https://github.com/chrislawcodes/valuerank) | **Authoritative repo** - issue tracking, PRs for review |
+
+**Railway deployment** pulls from `codemonkeychris/valuerank`.
+
+### Git Remote Setup
+
+```bash
+# Origin = dev fork (where you push)
+git remote add origin git@github.com:codemonkeychris/valuerank.git
+
+# Upstream = authoritative repo (for syncing)
+git remote add upstream git@github.com:chrislawcodes/valuerank.git
+```
+
+### Syncing Changes to Upstream
+
+After merging features to main in the dev fork:
+
+```bash
+# Fetch upstream state
+git fetch upstream
+
+# Push dev main to upstream main
+git push upstream main
+```
+
+### Creating Issues
+
+Create issues on the **authoritative repo** (chrislawcodes/valuerank) so they're visible for project tracking.
+
 ## Critical Documentation
 
 **Read these docs before making significant changes:**
