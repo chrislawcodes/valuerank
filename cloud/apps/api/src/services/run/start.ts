@@ -45,11 +45,27 @@ export type StartRunResult = {
 };
 
 /**
+ * Generates a numeric hash from a string (for deterministic seeding).
+ * Uses DJB2-style hash algorithm.
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash | 0; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
  * Deterministically samples scenarios based on percentage and seed.
+ * When no seed is provided, derives one from definitionId for reproducibility.
  */
 function sampleScenarios(
   scenarioIds: string[],
   percentage: number,
+  definitionId: string,
   seed?: number
 ): string[] {
   if (percentage >= 100) {
@@ -71,8 +87,9 @@ function sampleScenarios(
     };
   };
 
-  // Use provided seed or current timestamp for non-deterministic sampling
-  const random = seededRandom(seed ?? Date.now());
+  // Use provided seed or derive from definitionId for reproducible sampling
+  const effectiveSeed = seed ?? hashString(definitionId);
+  const random = seededRandom(effectiveSeed);
 
   // Fisher-Yates shuffle with seeded random, then take first N
   const shuffled = [...scenarioIds];
@@ -157,9 +174,9 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     }
   }
 
-  // Sample scenarios
+  // Sample scenarios (deterministic by default - same definition + % = same sample)
   const allScenarioIds = definition.scenarios.map((s) => s.id);
-  const selectedScenarioIds = sampleScenarios(allScenarioIds, samplePercentage, sampleSeed);
+  const selectedScenarioIds = sampleScenarios(allScenarioIds, samplePercentage, definitionId, sampleSeed);
 
   log.debug(
     { definitionId, totalScenarios: allScenarioIds.length, sampledScenarios: selectedScenarioIds.length },

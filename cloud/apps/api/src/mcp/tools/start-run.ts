@@ -36,7 +36,7 @@ const StartRunInputSchema = {
     .number()
     .int()
     .optional()
-    .describe('Random seed for reproducible sampling'),
+    .describe('Optional seed to override default deterministic sampling'),
   priority: z
     .enum(['LOW', 'NORMAL', 'HIGH'])
     .default('NORMAL')
@@ -97,9 +97,14 @@ Returns run_id, queued task count, and estimated cost.
 
 Use sample_percentage to run a subset of scenarios:
 - 100 (default): All scenarios
-- 10: 10% of scenarios (random sample)
+- 10: 10% of scenarios
 
-Use sample_seed for reproducible sampling across runs.
+Sampling is deterministic by default - same definition + same percentage
+always selects the same scenarios across runs. This ensures consistent
+comparison across models and reruns.
+
+Use sample_seed to override the default deterministic sampling with a
+custom seed (useful for exploring different scenario subsets).
 
 Example:
 {
