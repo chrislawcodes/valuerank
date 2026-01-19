@@ -324,7 +324,11 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
       <div className="min-h-[400px]">
         {activeTab === 'overview' && <OverviewTab perModel={filteredPerModel} />}
         {activeTab === 'decisions' && (
-          <DecisionsTab visualizationData={analysis.visualizationData} perModel={filteredPerModel} />
+          <DecisionsTab
+            visualizationData={analysis.visualizationData}
+            perModel={filteredPerModel}
+            varianceAnalysis={analysis.varianceAnalysis}
+          />
         )}
         {activeTab === 'scenarios' && (
           <ScenariosTab

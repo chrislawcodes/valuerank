@@ -13,6 +13,7 @@ export type ProbeScenarioJobData = {
   scenarioId: string;
   modelId: string;
   modelVersion?: string;
+  sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
   config: {
     temperature: number;
     maxTurns: number;

@@ -60,6 +60,7 @@ type StartRunArgs = {
   models: string[];
   samplePercentage?: number | null;
   sampleSeed?: number | null;
+  samplesPerScenario?: number | null;
   priority?: string | null;
   experimentId?: string | number | null;
 };
@@ -102,6 +103,7 @@ builder.mutationField('startRun', (t) =>
         models: input.models,
         samplePercentage: input.samplePercentage ?? undefined,
         sampleSeed: input.sampleSeed ?? undefined,
+        samplesPerScenario: input.samplesPerScenario ?? undefined,
         priority: input.priority ?? 'NORMAL',
         experimentId: input.experimentId ? String(input.experimentId) : undefined,
         userId,

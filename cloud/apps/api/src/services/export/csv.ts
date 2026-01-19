@@ -15,6 +15,7 @@ export type TranscriptWithScenario = Transcript & {
 export type CSVRow = {
   transcriptId: string;
   modelName: string;
+  sampleIndex: number;
   decisionCode: string;
   decisionText: string;
   targetResponse: string;
@@ -23,9 +24,9 @@ export type CSVRow = {
 
 /**
  * CSV column headers before variable columns.
- * Order: Model Name first, then variable columns are inserted dynamically.
+ * Order: Model Name, Sample Index, then variable columns are inserted dynamically.
  */
-export const PRE_VARIABLE_HEADERS = ['AI Model Name'] as const;
+export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Sample Index'] as const;
 
 /**
  * CSV column headers after variable columns.
@@ -125,6 +126,7 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
   return {
     transcriptId: transcript.id,
     modelName: getModelName(transcript.modelId),
+    sampleIndex: transcript.sampleIndex,
     decisionCode: transcript.decisionCode ?? 'pending',
     decisionText: transcript.decisionText ?? 'Summary not yet generated',
     targetResponse: getTargetResponse(transcript),
@@ -134,13 +136,13 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
 
 /**
  * Format a CSV row as a string with variable columns.
- * Column order: Model Name, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
+ * Column order: Model Name, Sample Index, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
 export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
-  // Pre-variable columns
-  const preVariableValues = [escapeCSV(row.modelName)];
+  // Pre-variable columns (Model Name, Sample Index)
+  const preVariableValues = [escapeCSV(row.modelName), escapeCSV(row.sampleIndex)];
 
   // Variable values in the same order as headers
   const variableValues = variableNames.map((name) => {
@@ -161,7 +163,7 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
 
 /**
  * Get CSV header line with variable columns.
- * Column order: Model Name, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
+ * Column order: Model Name, Sample Index, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
 export function getCSVHeader(variableNames: string[]): string {

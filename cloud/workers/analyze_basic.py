@@ -52,6 +52,7 @@ from common.logging import get_logger
 from stats.basic_stats import aggregate_transcripts_by_model, compute_visualization_data
 from stats.model_comparison import compute_model_agreement
 from stats.dimension_impact import compute_dimension_analysis
+from stats.variance_analysis import compute_variance_analysis
 
 log = get_logger("analyze_basic")
 
@@ -246,6 +247,9 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     # Compute dimension impact analysis
     dimension_analysis = compute_dimension_analysis(transcripts)
 
+    # Compute variance analysis (for multi-sample runs)
+    variance_analysis = compute_variance_analysis(transcripts)
+
     # Find most contested scenarios
     contested = find_contested_scenarios(transcripts)
 
@@ -271,6 +275,7 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
             "perModel": per_model,
             "modelAgreement": model_agreement,
             "dimensionAnalysis": dimension_analysis,
+            "varianceAnalysis": variance_analysis,  # Multi-sample variance metrics
             "mostContestedScenarios": contested,
             "visualizationData": visualization_data,
             "methodsUsed": {
@@ -279,6 +284,7 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
                 "pValueCorrection": "holm_bonferroni",
                 "effectSize": "cohens_d",
                 "dimensionTest": "kruskal_wallis",
+                "varianceMetrics": "sample_variance",
                 "alpha": 0.05,
                 "codeVersion": CODE_VERSION,
             },

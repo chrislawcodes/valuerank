@@ -350,11 +350,11 @@ async function buildWorkerInput(
  * Extracted to allow parallel execution within batches.
  */
 async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
-  const { runId, scenarioId, modelId, config } = job.data;
+  const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
   const jobId = job.id;
 
   log.info(
-    { jobId, runId, scenarioId, modelId, config },
+    { jobId, runId, scenarioId, modelId, sampleIndex, config },
     'Processing probe_scenario job'
   );
 
@@ -415,6 +415,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           runId,
           scenarioId,
           modelId,
+          sampleIndex,
           errorCode: err.code,
           errorMessage: err.message,
           retryCount: 0,
@@ -456,6 +457,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       runId,
       scenarioId,
       modelId,
+      sampleIndex,
       transcript: output.transcript,
       definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
       costSnapshot,
@@ -471,6 +473,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       runId,
       scenarioId,
       modelId,
+      sampleIndex,
       transcriptId: transcriptRecord.id,
       durationMs,
       inputTokens: output.transcript.totalInputTokens,
@@ -529,6 +532,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           runId,
           scenarioId,
           modelId,
+          sampleIndex,
           errorCode,
           errorMessage,
           retryCount,

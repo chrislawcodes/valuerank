@@ -25,6 +25,7 @@ type RunFormProps = {
 type RunFormState = {
   selectedModels: string[];
   samplePercentage: number;
+  samplesPerScenario: number;
   showAdvanced: boolean;
 };
 
@@ -34,6 +35,13 @@ const SAMPLE_OPTIONS = [
   { value: 25, label: '25%' },
   { value: 50, label: '50%' },
   { value: 100, label: '100% (full run)' },
+];
+
+const SAMPLES_PER_SCENARIO_OPTIONS = [
+  { value: 1, label: '1 (standard)' },
+  { value: 3, label: '3' },
+  { value: 5, label: '5' },
+  { value: 10, label: '10' },
 ];
 
 export function RunForm({
@@ -50,6 +58,7 @@ export function RunForm({
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
     samplePercentage: 1, // Default to 1% for testing per user's request
+    samplesPerScenario: 1, // Default to 1 sample (standard single-sample run)
     showAdvanced: false,
   });
 
@@ -68,6 +77,7 @@ export function RunForm({
     definitionId,
     models: allAvailableModelIds,
     samplePercentage: formState.samplePercentage,
+    samplesPerScenario: formState.samplesPerScenario,
     pause: allAvailableModelIds.length === 0,
   });
 
@@ -112,6 +122,10 @@ export function RunForm({
     setFormState((prev) => ({ ...prev, samplePercentage: value }));
   }, []);
 
+  const handleSamplesPerScenarioChange = useCallback((value: number) => {
+    setFormState((prev) => ({ ...prev, samplesPerScenario: value }));
+  }, []);
+
   const toggleAdvanced = useCallback(() => {
     setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));
   }, []);
@@ -131,6 +145,7 @@ export function RunForm({
         definitionId,
         models: formState.selectedModels,
         samplePercentage: formState.samplePercentage,
+        samplesPerScenario: formState.samplesPerScenario,
       };
 
       try {
@@ -148,8 +163,10 @@ export function RunForm({
       ? Math.ceil((scenarioCount * formState.samplePercentage) / 100)
       : null;
 
-  const _totalJobs =
-    estimatedScenarios !== null ? estimatedScenarios * formState.selectedModels.length : null;
+  const totalJobs =
+    estimatedScenarios !== null
+      ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
+      : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -224,9 +241,38 @@ export function RunForm({
 
         {formState.showAdvanced && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
-            <p className="text-sm text-gray-500">
-              Advanced options will be available in a future release.
-            </p>
+            {/* Samples per Scenario (Multi-Sample Runs) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Samples per Scenario
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Run multiple samples per scenario to measure model consistency and variance.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
+                  // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleSamplesPerScenarioChange(option.value)}
+                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${
+                      formState.samplesPerScenario === option.value
+                        ? 'border-teal-500 bg-teal-50 text-teal-700'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={isSubmitting}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {formState.samplesPerScenario > 1 && totalJobs !== null && (
+                <p className="mt-2 text-sm text-gray-500">
+                  {totalJobs} total probes ({estimatedScenarios} scenarios × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

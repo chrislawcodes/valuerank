@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ModelConsistencyChart } from '../../../src/components/analysis/ModelConsistencyChart';
-import type { PerModelStats } from '../../../src/api/operations/analysis';
+import type { PerModelStats, VarianceAnalysis } from '../../../src/api/operations/analysis';
 
 function createMockPerModel(): Record<string, PerModelStats> {
   return {
@@ -120,5 +120,111 @@ describe('ModelConsistencyChart', () => {
     render(<ModelConsistencyChart perModel={perModel} />);
 
     expect(screen.getByText('Model Decision Consistency')).toBeInTheDocument();
+  });
+
+  describe('multi-sample variance', () => {
+    function createMockVarianceAnalysis(): VarianceAnalysis {
+      return {
+        isMultiSample: true,
+        samplesPerScenario: 5,
+        perModel: {
+          'gpt-4': {
+            totalSamples: 50,
+            uniqueScenarios: 10,
+            samplesPerScenario: 5,
+            avgWithinScenarioVariance: 0.0225, // stdDev = 0.15
+            maxWithinScenarioVariance: 0.04,
+            consistencyScore: 0.92,
+            perScenario: {},
+          },
+          'claude-3': {
+            totalSamples: 50,
+            uniqueScenarios: 10,
+            samplesPerScenario: 5,
+            avgWithinScenarioVariance: 0.0625, // stdDev = 0.25
+            maxWithinScenarioVariance: 0.09,
+            consistencyScore: 0.85,
+            perScenario: {},
+          },
+        },
+        mostVariableScenarios: [
+          {
+            scenarioId: 'scenario-1',
+            scenarioName: 'High Variance Scenario',
+            mean: 2.5,
+            stdDev: 0.8,
+            variance: 0.64,
+            range: 3.0,
+            sampleCount: 5,
+          },
+        ],
+        leastVariableScenarios: [
+          {
+            scenarioId: 'scenario-2',
+            scenarioName: 'Low Variance Scenario',
+            mean: 3.0,
+            stdDev: 0.1,
+            variance: 0.01,
+            range: 0.5,
+            sampleCount: 5,
+          },
+        ],
+      };
+    }
+
+    it('shows multi-sample indicator when variance data is provided', () => {
+      const perModel = createMockPerModel();
+      const varianceAnalysis = createMockVarianceAnalysis();
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />);
+
+      expect(screen.getByText(/Multi-sample run: 5 samples per scenario/)).toBeInTheDocument();
+    });
+
+    it('displays variance analysis section for multi-sample runs', () => {
+      const perModel = createMockPerModel();
+      const varianceAnalysis = createMockVarianceAnalysis();
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />);
+
+      expect(screen.getByText('Multi-Sample Variance Analysis')).toBeInTheDocument();
+    });
+
+    it('shows most variable scenarios section', () => {
+      const perModel = createMockPerModel();
+      const varianceAnalysis = createMockVarianceAnalysis();
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />);
+
+      expect(screen.getByText('Most Variable Scenarios')).toBeInTheDocument();
+      expect(screen.getByText('High Variance Scenario')).toBeInTheDocument();
+    });
+
+    it('shows most stable scenarios section', () => {
+      const perModel = createMockPerModel();
+      const varianceAnalysis = createMockVarianceAnalysis();
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />);
+
+      expect(screen.getByText('Most Stable Scenarios')).toBeInTheDocument();
+      expect(screen.getByText('Low Variance Scenario')).toBeInTheDocument();
+    });
+
+    it('does not show multi-sample section when varianceAnalysis is null', () => {
+      const perModel = createMockPerModel();
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={null} />);
+
+      expect(screen.queryByText('Multi-Sample Variance Analysis')).not.toBeInTheDocument();
+    });
+
+    it('does not show multi-sample section when isMultiSample is false', () => {
+      const perModel = createMockPerModel();
+      const varianceAnalysis: VarianceAnalysis = {
+        isMultiSample: false,
+        samplesPerScenario: 1,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+      };
+      render(<ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />);
+
+      expect(screen.queryByText('Multi-Sample Variance Analysis')).not.toBeInTheDocument();
+    });
   });
 });

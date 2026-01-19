@@ -26,6 +26,10 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'Seed for deterministic sampling (optional)',
     }),
+    samplesPerScenario: t.int({
+      required: false,
+      description: 'Number of samples per scenario-model pair for multi-sample runs (1-100, default 1). Higher values measure response variance.',
+    }),
     priority: t.string({
       required: false,
       description: 'Priority level: LOW, NORMAL (default), HIGH',

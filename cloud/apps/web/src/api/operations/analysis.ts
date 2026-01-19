@@ -90,6 +90,46 @@ export type VisualizationData = {
   modelScenarioMatrix: Record<string, Record<string, number>>;
 };
 
+// Variance analysis from multi-sample runs (samplesPerScenario > 1)
+export type ScenarioVarianceStats = {
+  scenarioId: string;
+  scenarioName: string;
+  modelId?: string;
+  mean: number;
+  stdDev: number;
+  variance: number;
+  range: number;
+  sampleCount: number;
+};
+
+export type PerScenarioVarianceStats = {
+  sampleCount: number;
+  mean: number;
+  stdDev: number;
+  variance: number;
+  min: number;
+  max: number;
+  range: number;
+};
+
+export type ModelVarianceStats = {
+  totalSamples: number;
+  uniqueScenarios: number;
+  samplesPerScenario: number;
+  avgWithinScenarioVariance: number;
+  maxWithinScenarioVariance: number;
+  consistencyScore: number;
+  perScenario: Record<string, PerScenarioVarianceStats>;
+};
+
+export type VarianceAnalysis = {
+  isMultiSample: boolean;
+  samplesPerScenario: number;
+  perModel: Record<string, ModelVarianceStats>;
+  mostVariableScenarios: ScenarioVarianceStats[];
+  leastVariableScenarios: ScenarioVarianceStats[];
+};
+
 export type AnalysisResult = {
   id: string;
   runId: string;
@@ -104,6 +144,7 @@ export type AnalysisResult = {
   modelAgreement: ModelAgreement;
   dimensionAnalysis: DimensionAnalysis | null;
   visualizationData: VisualizationData | null;
+  varianceAnalysis: VarianceAnalysis | null;
   mostContestedScenarios: ContestedScenario[];
   methodsUsed: MethodsUsed;
   warnings: AnalysisWarning[];
@@ -128,6 +169,7 @@ export const ANALYSIS_RESULT_FRAGMENT = gql`
     modelAgreement
     dimensionAnalysis
     visualizationData
+    varianceAnalysis
     mostContestedScenarios {
       scenarioId
       scenarioName

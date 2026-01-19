@@ -26,7 +26,7 @@ type UseCostEstimateResult = {
  * @param options.pause - Pause the query
  */
 export function useCostEstimate(options: UseCostEstimateOptions): UseCostEstimateResult {
-  const { definitionId, models, samplePercentage = 100, pause = false } = options;
+  const { definitionId, models, samplePercentage = 100, samplesPerScenario = 1, pause = false } = options;
 
   // Pause if no models selected
   const shouldPause = pause || models.length === 0;
@@ -37,6 +37,7 @@ export function useCostEstimate(options: UseCostEstimateOptions): UseCostEstimat
       definitionId,
       models,
       samplePercentage,
+      samplesPerScenario,
     },
     pause: shouldPause,
     requestPolicy: 'cache-and-network',

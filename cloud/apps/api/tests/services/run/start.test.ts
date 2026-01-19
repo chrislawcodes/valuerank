@@ -243,6 +243,134 @@ describe('startRun service', () => {
       expect(scenarioIds1).toEqual(scenarioIds2);
     });
 
+    it('produces deterministic results without seed (derives from definitionId)', async () => {
+      // Create definition with scenarios
+      const definition = await db.definition.create({
+        data: {
+          name: 'Default Deterministic Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const scenarioData = Array.from({ length: 20 }, (_, i) => ({
+        definitionId: definition.id,
+        name: `Scenario ${i + 1}`,
+        content: { test: i + 1 },
+      }));
+
+      await db.scenario.createMany({ data: scenarioData });
+
+      // Run twice WITHOUT seed - should still be deterministic
+      const result1 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        // No sampleSeed - should derive from definitionId
+        userId: testUserId,
+      });
+      createdRunIds.push(result1.run.id);
+
+      const result2 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        // No sampleSeed - should derive from definitionId
+        userId: testUserId,
+      });
+      createdRunIds.push(result2.run.id);
+
+      // Both should have same job count
+      expect(result1.jobCount).toBe(result2.jobCount);
+
+      // Check that scenario selections are the same
+      const selections1 = await db.runScenarioSelection.findMany({
+        where: { runId: result1.run.id },
+        orderBy: { scenarioId: 'asc' },
+      });
+      const selections2 = await db.runScenarioSelection.findMany({
+        where: { runId: result2.run.id },
+        orderBy: { scenarioId: 'asc' },
+      });
+
+      const scenarioIds1 = selections1.map((s) => s.scenarioId);
+      const scenarioIds2 = selections2.map((s) => s.scenarioId);
+
+      expect(scenarioIds1).toEqual(scenarioIds2);
+    });
+
+    it('produces different samples for different definitions', async () => {
+      // Create two definitions with identical scenario names
+      const def1 = await db.definition.create({
+        data: {
+          name: 'Definition 1 for Hash Test',
+          content: { schema_version: 1, preamble: 'Test 1' },
+        },
+      });
+      createdDefinitionIds.push(def1.id);
+
+      const def2 = await db.definition.create({
+        data: {
+          name: 'Definition 2 for Hash Test',
+          content: { schema_version: 1, preamble: 'Test 2' },
+        },
+      });
+      createdDefinitionIds.push(def2.id);
+
+      // Create identical scenarios for both definitions
+      const scenarioNames = Array.from({ length: 20 }, (_, i) => `Scenario ${i + 1}`);
+
+      await db.scenario.createMany({
+        data: scenarioNames.map((name, i) => ({
+          definitionId: def1.id,
+          name,
+          content: { test: i + 1 },
+        })),
+      });
+
+      await db.scenario.createMany({
+        data: scenarioNames.map((name, i) => ({
+          definitionId: def2.id,
+          name,
+          content: { test: i + 1 },
+        })),
+      });
+
+      // Run both at 30% without seed
+      const result1 = await startRun({
+        definitionId: def1.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        userId: testUserId,
+      });
+      createdRunIds.push(result1.run.id);
+
+      const result2 = await startRun({
+        definitionId: def2.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        userId: testUserId,
+      });
+      createdRunIds.push(result2.run.id);
+
+      // Get scenario names for comparison (since IDs will differ)
+      const selections1 = await db.runScenarioSelection.findMany({
+        where: { runId: result1.run.id },
+        include: { scenario: { select: { name: true } } },
+      });
+      const selections2 = await db.runScenarioSelection.findMany({
+        where: { runId: result2.run.id },
+        include: { scenario: { select: { name: true } } },
+      });
+
+      const names1 = selections1.map((s) => s.scenario.name).sort();
+      const names2 = selections2.map((s) => s.scenario.name).sort();
+
+      // Different definitions should produce different samples
+      // (unless extremely unlucky hash collision)
+      expect(names1).not.toEqual(names2);
+    });
+
     it('samples at least one scenario even at very low percentage', async () => {
       const definition = await db.definition.create({
         data: {
@@ -869,6 +997,260 @@ describe('startRun service', () => {
 
       // Should calculate cost for 50% of scenarios (5)
       expect(result.estimatedCosts.scenarioCount).toBe(5);
+    });
+  });
+
+  describe('multi-sample runs (samplesPerScenario)', () => {
+    it('creates correct number of jobs for multi-sample runs', async () => {
+      // Create definition with 2 scenarios
+      const definition = await db.definition.create({
+        data: {
+          name: 'Multi-Sample Test Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+        ],
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4', 'claude-3'],
+        samplesPerScenario: 3,
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // 2 scenarios × 2 models × 3 samples = 12 jobs
+      expect(result.jobCount).toBe(12);
+      expect(result.run.progress.total).toBe(12);
+    });
+
+    it('defaults samplesPerScenario to 1 (single sample behavior)', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Default Sample Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+        ],
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        // No samplesPerScenario specified
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      // 2 scenarios × 1 model × 1 sample (default) = 2 jobs
+      expect(result.jobCount).toBe(2);
+      expect(result.run.progress.total).toBe(2);
+    });
+
+    it('stores samplesPerScenario in run config', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Config Store Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplesPerScenario: 5,
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const config = result.run.config as Record<string, unknown>;
+      expect(config.samplesPerScenario).toBe(5);
+    });
+
+    it('throws ValidationError for samplesPerScenario < 1', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Invalid Sample Low Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      await expect(
+        startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          samplesPerScenario: 0,
+          userId: testUserId,
+        })
+      ).rejects.toThrow(ValidationError);
+
+      await expect(
+        startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          samplesPerScenario: -1,
+          userId: testUserId,
+        })
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('throws ValidationError for samplesPerScenario > 100', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Invalid Sample High Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Test Scenario',
+          content: { test: 1 },
+        },
+      });
+
+      await expect(
+        startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          samplesPerScenario: 101,
+          userId: testUserId,
+        })
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('deterministic sampling is independent of samplesPerScenario', async () => {
+      // Create definition with scenarios
+      const definition = await db.definition.create({
+        data: {
+          name: 'Deterministic Sample Independence Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const scenarioData = Array.from({ length: 20 }, (_, i) => ({
+        definitionId: definition.id,
+        name: `Scenario ${i + 1}`,
+        content: { test: i + 1 },
+      }));
+
+      await db.scenario.createMany({ data: scenarioData });
+
+      // Run with samplesPerScenario=1 at 30%
+      const result1 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        samplesPerScenario: 1,
+        userId: testUserId,
+      });
+      createdRunIds.push(result1.run.id);
+
+      // Run with samplesPerScenario=5 at 30%
+      const result2 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplePercentage: 30,
+        samplesPerScenario: 5,
+        userId: testUserId,
+      });
+      createdRunIds.push(result2.run.id);
+
+      // Both should select the same scenarios (but different job counts)
+      const selections1 = await db.runScenarioSelection.findMany({
+        where: { runId: result1.run.id },
+        orderBy: { scenarioId: 'asc' },
+      });
+      const selections2 = await db.runScenarioSelection.findMany({
+        where: { runId: result2.run.id },
+        orderBy: { scenarioId: 'asc' },
+      });
+
+      const scenarioIds1 = selections1.map((s) => s.scenarioId);
+      const scenarioIds2 = selections2.map((s) => s.scenarioId);
+
+      // Same scenarios selected
+      expect(scenarioIds1).toEqual(scenarioIds2);
+
+      // But different job counts (6 scenarios: 6 vs 30 jobs)
+      expect(result1.jobCount).toBe(6); // 6 scenarios × 1 model × 1 sample
+      expect(result2.jobCount).toBe(30); // 6 scenarios × 1 model × 5 samples
+    });
+
+    it('multiplies cost estimate by samplesPerScenario', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Multi-Sample Cost Test',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: definition.id, name: 'Scenario 1', content: { test: 1 } },
+          { definitionId: definition.id, name: 'Scenario 2', content: { test: 2 } },
+        ],
+      });
+
+      // Run with samplesPerScenario=1
+      const result1 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplesPerScenario: 1,
+        userId: testUserId,
+      });
+      createdRunIds.push(result1.run.id);
+
+      // Run with samplesPerScenario=5
+      const result5 = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        samplesPerScenario: 5,
+        userId: testUserId,
+      });
+      createdRunIds.push(result5.run.id);
+
+      // Cost should scale linearly with samples
+      // Note: both use fallback costs so ratio should be exactly 5x
+      expect(result5.estimatedCosts.total).toBeCloseTo(result1.estimatedCosts.total * 5, 5);
     });
   });
 

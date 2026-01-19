@@ -25,6 +25,7 @@ type RunConfig = {
   models?: string[];
   samplePercentage?: number;
   sampleSeed?: number;
+  samplesPerScenario?: number; // Multi-sample: number of samples per scenario-model pair
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
@@ -290,6 +291,16 @@ builder.objectType(RunRef, {
           select: { scenarioId: true },
         });
         return selections.map((s) => s.scenarioId);
+      },
+    }),
+
+    // Multi-sample configuration
+    samplesPerScenario: t.field({
+      type: 'Int',
+      description: 'Number of samples per scenario-model pair for multi-sample runs. Default is 1 for single-sample runs.',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return config?.samplesPerScenario ?? 1;
       },
     }),
 

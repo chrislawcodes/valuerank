@@ -359,6 +359,7 @@ export type StartRunInput = {
   definitionId: string;
   models: string[];
   samplePercentage?: number;
+  samplesPerScenario?: number;
   sampleSeed?: number;
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
   experimentId?: string;
