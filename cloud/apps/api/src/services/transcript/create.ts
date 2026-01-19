@@ -62,6 +62,7 @@ export type CreateTranscriptInput = {
   runId: string;
   scenarioId: string;
   modelId: string;
+  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
   transcript: ProbeTranscript;
   definitionSnapshot?: Prisma.InputJsonValue;
   costSnapshot?: CostSnapshot;
@@ -71,7 +72,7 @@ export type CreateTranscriptInput = {
  * Create a transcript record from probe worker output.
  */
 export async function createTranscript(input: CreateTranscriptInput) {
-  const { runId, scenarioId, modelId, transcript, definitionSnapshot, costSnapshot } = input;
+  const { runId, scenarioId, modelId, sampleIndex = 0, transcript, definitionSnapshot, costSnapshot } = input;
 
   // Calculate duration from timestamps
   const startedAt = new Date(transcript.startedAt);
@@ -96,7 +97,7 @@ export async function createTranscript(input: CreateTranscriptInput) {
   const estimatedCost = costSnapshot?.estimatedCost ?? null;
 
   log.info(
-    { runId, scenarioId, modelId, turns: transcript.turns.length, tokenCount, estimatedCost },
+    { runId, scenarioId, modelId, sampleIndex, turns: transcript.turns.length, tokenCount, estimatedCost },
     'Creating transcript'
   );
 
@@ -105,6 +106,7 @@ export async function createTranscript(input: CreateTranscriptInput) {
       runId,
       scenarioId,
       modelId,
+      sampleIndex,
       modelVersion: transcript.modelVersion,
       definitionSnapshot: definitionSnapshot ?? Prisma.JsonNull,
       content: content as Prisma.InputJsonValue,

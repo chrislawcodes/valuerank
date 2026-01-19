@@ -34,11 +34,52 @@ type VisualizationDataShape = {
   modelScenarioMatrix: Record<string, Record<string, number>>;
 };
 
+// Types for variance analysis from multi-sample runs
+type PerScenarioVarianceStats = {
+  sampleCount: number;
+  mean: number;
+  stdDev: number;
+  variance: number;
+  min: number;
+  max: number;
+  range: number;
+};
+
+type ModelVarianceStatsShape = {
+  totalSamples: number;
+  uniqueScenarios: number;
+  samplesPerScenario: number;
+  avgWithinScenarioVariance: number;
+  maxWithinScenarioVariance: number;
+  consistencyScore: number;
+  perScenario: Record<string, PerScenarioVarianceStats>;
+};
+
+type ScenarioVarianceEntry = {
+  scenarioId: string;
+  scenarioName: string;
+  modelId?: string;
+  variance: number;
+  stdDev: number;
+  range: number;
+  sampleCount: number;
+  mean: number;
+};
+
+type VarianceAnalysisShape = {
+  isMultiSample: boolean;
+  samplesPerScenario: number;
+  perModel: Record<string, ModelVarianceStatsShape>;
+  mostVariableScenarios: ScenarioVarianceEntry[];
+  leastVariableScenarios: ScenarioVarianceEntry[];
+};
+
 // Type for output data stored in JSONB
 type AnalysisOutput = {
   perModel: Record<string, unknown>;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis?: Record<string, unknown>;
+  varianceAnalysis?: VarianceAnalysisShape;
   visualizationData?: VisualizationDataShape;
   mostContestedScenarios: ContestedScenarioShape[];
   methodsUsed: Record<string, unknown>;
@@ -172,6 +213,16 @@ builder.objectType(AnalysisResultRef, {
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
         return output?.warnings ?? [];
+      },
+    }),
+
+    varianceAnalysis: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Variance analysis from multi-sample runs (when samplesPerScenario > 1)',
+      resolve: (analysis) => {
+        const output = analysis.output as AnalysisOutput | null;
+        return output?.varianceAnalysis ?? null;
       },
     }),
 

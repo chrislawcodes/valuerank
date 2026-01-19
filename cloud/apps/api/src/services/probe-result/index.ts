@@ -17,6 +17,7 @@ export type RecordSuccessInput = {
   runId: string;
   scenarioId: string;
   modelId: string;
+  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
   transcriptId: string;
   durationMs: number;
   inputTokens: number;
@@ -30,6 +31,7 @@ export type RecordFailureInput = {
   runId: string;
   scenarioId: string;
   modelId: string;
+  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
   errorCode: string;
   errorMessage: string;
   retryCount?: number;
@@ -37,20 +39,21 @@ export type RecordFailureInput = {
 
 /**
  * Records a successful probe result.
- * Creates or updates the probe_results record for this run/scenario/model combination.
+ * Creates or updates the probe_results record for this run/scenario/model/sampleIndex combination.
  */
 export async function recordProbeSuccess(input: RecordSuccessInput): Promise<void> {
-  const { runId, scenarioId, modelId, transcriptId, durationMs, inputTokens, outputTokens } = input;
+  const { runId, scenarioId, modelId, sampleIndex = 0, transcriptId, durationMs, inputTokens, outputTokens } = input;
 
   try {
     await db.probeResult.upsert({
       where: {
-        runId_scenarioId_modelId: { runId, scenarioId, modelId },
+        runId_scenarioId_modelId_sampleIndex: { runId, scenarioId, modelId, sampleIndex },
       },
       create: {
         runId,
         scenarioId,
         modelId,
+        sampleIndex,
         status: 'SUCCESS',
         transcriptId,
         durationMs,
@@ -70,10 +73,10 @@ export async function recordProbeSuccess(input: RecordSuccessInput): Promise<voi
       },
     });
 
-    log.debug({ runId, scenarioId, modelId, transcriptId }, 'Recorded probe success');
+    log.debug({ runId, scenarioId, modelId, sampleIndex, transcriptId }, 'Recorded probe success');
   } catch (err) {
     // Log but don't fail the job - probe result recording is supplementary
-    log.error({ runId, scenarioId, modelId, err }, 'Failed to record probe success');
+    log.error({ runId, scenarioId, modelId, sampleIndex, err }, 'Failed to record probe success');
   }
 }
 
@@ -82,7 +85,7 @@ export async function recordProbeSuccess(input: RecordSuccessInput): Promise<voi
  * Creates or updates the probe_results record with error details.
  */
 export async function recordProbeFailure(input: RecordFailureInput): Promise<void> {
-  const { runId, scenarioId, modelId, errorCode, errorMessage, retryCount = 0 } = input;
+  const { runId, scenarioId, modelId, sampleIndex = 0, errorCode, errorMessage, retryCount = 0 } = input;
 
   // Truncate error message if too long (to avoid DB issues)
   const truncatedMessage = errorMessage.length > 2000
@@ -92,12 +95,13 @@ export async function recordProbeFailure(input: RecordFailureInput): Promise<voi
   try {
     await db.probeResult.upsert({
       where: {
-        runId_scenarioId_modelId: { runId, scenarioId, modelId },
+        runId_scenarioId_modelId_sampleIndex: { runId, scenarioId, modelId, sampleIndex },
       },
       create: {
         runId,
         scenarioId,
         modelId,
+        sampleIndex,
         status: 'FAILED',
         errorCode,
         errorMessage: truncatedMessage,
@@ -117,10 +121,10 @@ export async function recordProbeFailure(input: RecordFailureInput): Promise<voi
       },
     });
 
-    log.debug({ runId, scenarioId, modelId, errorCode }, 'Recorded probe failure');
+    log.debug({ runId, scenarioId, modelId, sampleIndex, errorCode }, 'Recorded probe failure');
   } catch (err) {
     // Log but don't fail the job - probe result recording is supplementary
-    log.error({ runId, scenarioId, modelId, err }, 'Failed to record probe failure');
+    log.error({ runId, scenarioId, modelId, sampleIndex, err }, 'Failed to record probe failure');
   }
 }
 

@@ -169,6 +169,7 @@ describe('RunForm', () => {
       definitionId: 'def-1',
       models: ['gpt-4'],
       samplePercentage: 25,
+      samplesPerScenario: 1,
     });
   });
 
@@ -324,6 +325,7 @@ describe('RunForm', () => {
       definitionId: 'def-1',
       models: ['gpt-4', 'claude-3'],
       samplePercentage: 1,
+      samplesPerScenario: 1,
     });
   });
 });

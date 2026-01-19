@@ -40,6 +40,7 @@ export type EstimateCostInput = {
   definitionId: string;
   models: string[];
   samplePercentage?: number;
+  samplesPerScenario?: number;
 };
 
 // ============================================================================
@@ -47,8 +48,8 @@ export type EstimateCostInput = {
 // ============================================================================
 
 export const ESTIMATE_COST_QUERY = gql`
-  query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int) {
-    estimateCost(definitionId: $definitionId, models: $models, samplePercentage: $samplePercentage) {
+  query EstimateCost($definitionId: ID!, $models: [String!]!, $samplePercentage: Int, $samplesPerScenario: Int) {
+    estimateCost(definitionId: $definitionId, models: $models, samplePercentage: $samplePercentage, samplesPerScenario: $samplesPerScenario) {
       total
       scenarioCount
       basedOnSampleCount

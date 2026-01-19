@@ -21,6 +21,7 @@ export type StartRunInput = {
   models: string[];
   samplePercentage?: number;
   sampleSeed?: number;
+  samplesPerScenario?: number; // Number of samples per scenario-model pair (1-100, default 1)
   priority?: string;
   experimentId?: string;
   userId: string;
@@ -119,13 +120,14 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     models,
     samplePercentage = 100,
     sampleSeed,
+    samplesPerScenario = 1,
     priority = 'NORMAL',
     experimentId,
     userId,
   } = input;
 
   log.info(
-    { definitionId, modelCount: models.length, samplePercentage, sampleSeed, experimentId, userId },
+    { definitionId, modelCount: models.length, samplePercentage, sampleSeed, samplesPerScenario, experimentId, userId },
     'Starting new run'
   );
 
@@ -137,6 +139,11 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   // Validate samplePercentage
   if (samplePercentage < 1 || samplePercentage > 100) {
     throw new ValidationError('samplePercentage must be between 1 and 100');
+  }
+
+  // Validate samplesPerScenario
+  if (samplesPerScenario < 1 || samplesPerScenario > 100) {
+    throw new ValidationError('samplesPerScenario must be between 1 and 100');
   }
 
   // Validate priority
@@ -183,14 +190,15 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     'Scenarios sampled'
   );
 
-  // Calculate total job count
-  const totalJobs = selectedScenarioIds.length * models.length;
+  // Calculate total job count (scenarios × models × samples)
+  const totalJobs = selectedScenarioIds.length * models.length * samplesPerScenario;
 
   // Calculate cost estimate before creating run
   const costEstimate = await estimateCost({
     definitionId,
     modelIds: models,
     samplePercentage,
+    samplesPerScenario,
   });
 
   log.debug(
@@ -203,6 +211,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     models,
     samplePercentage,
     sampleSeed,
+    samplesPerScenario,
     priority,
     definitionSnapshot: definition.content,
     estimatedCosts: costEstimate,
@@ -251,6 +260,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   };
 
   // Create jobs with provider-specific queue routing for parallelism enforcement
+  // For multi-sample runs, create samplesPerScenario jobs per scenario-model pair
   type JobEntry = { queueName: string; data: ProbeScenarioJobData; options: typeof jobOptions };
   const jobs: JobEntry[] = [];
 
@@ -259,19 +269,23 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     const queueName = await getQueueNameForModel(modelId);
 
     for (const scenarioId of selectedScenarioIds) {
-      jobs.push({
-        queueName,
-        data: {
-          runId: run.id,
-          scenarioId,
-          modelId,
-          config: {
-            temperature: 0.7, // Default, can be configured later
-            maxTurns: 10,
+      // Create N jobs for multi-sample runs (one per sample)
+      for (let sampleIndex = 0; sampleIndex < samplesPerScenario; sampleIndex++) {
+        jobs.push({
+          queueName,
+          data: {
+            runId: run.id,
+            scenarioId,
+            modelId,
+            sampleIndex,
+            config: {
+              temperature: 0.7, // Default, can be configured later
+              maxTurns: 10,
+            },
           },
-        },
-        options: jobOptions,
-      });
+          options: jobOptions,
+        });
+      }
     }
   }
 
@@ -282,13 +296,16 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
   log.debug({ runId: run.id, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
 
-  // Send jobs to provider-specific queues
+  // Send jobs to provider-specific queues in parallel chunks
+  // This improves startup time for large multi-sample runs (e.g., 10 scenarios × 5 models × 10 samples = 500 jobs)
   const jobIds: string[] = [];
-  for (const job of jobs) {
-    const jobId = await boss.send(job.queueName, job.data, job.options);
-    if (jobId) {
-      jobIds.push(jobId);
-    }
+  const chunkSize = 50;
+  for (let i = 0; i < jobs.length; i += chunkSize) {
+    const chunk = jobs.slice(i, i + chunkSize);
+    const chunkIds = await Promise.all(
+      chunk.map((job) => boss.send(job.queueName, job.data, job.options))
+    );
+    jobIds.push(...chunkIds.filter((id): id is string => id !== null));
   }
 
   log.info(

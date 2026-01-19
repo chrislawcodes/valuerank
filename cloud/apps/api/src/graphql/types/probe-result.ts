@@ -18,6 +18,9 @@ builder.objectType(ProbeResultRef, {
     runId: t.exposeString('runId'),
     scenarioId: t.exposeString('scenarioId'),
     modelId: t.exposeString('modelId'),
+    sampleIndex: t.exposeInt('sampleIndex', {
+      description: 'Index within sample set for multi-sample runs (0 to N-1). Always 0 for single-sample runs.',
+    }),
     status: t.exposeString('status', {
       description: 'SUCCESS or FAILED',
     }),

@@ -121,9 +121,9 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
-    // Headers: Model, Variables (alphabetical), Decision Code, Decision Text, Transcript ID, Target Response
+    // Headers: Model, Sample Index, Variables (alphabetical), Decision Code, Decision Text, Transcript ID, Target Response
     expect(headerLine).toBe(
-      'AI Model Name,Certainty,Stakes,Decision Code,Decision Text,Transcript ID,Target Response'
+      'AI Model Name,Sample Index,Certainty,Stakes,Decision Code,Decision Text,Transcript ID,Target Response'
     );
   });
 
@@ -145,11 +145,11 @@ describe('CSV Export Endpoint', () => {
     // Check for decision codes
     expect(dataLines.some((l) => l.includes(',1,'))).toBe(true);
     expect(dataLines.some((l) => l.includes(',2,'))).toBe(true);
-    // Model name should be first column (no scenario column anymore)
-    expect(dataLines.some((l) => l.startsWith('gpt-4o,'))).toBe(true);
-    expect(dataLines.some((l) => l.startsWith('claude-3-5-sonnet,'))).toBe(true);
-    // Variable values come after model name: Certainty=2, Stakes=1
-    expect(dataLines.some((l) => l.includes('gpt-4o,2,1,'))).toBe(true);
+    // Model name should be first column followed by sample index (no scenario column anymore)
+    expect(dataLines.some((l) => l.startsWith('gpt-4o,0,'))).toBe(true);
+    expect(dataLines.some((l) => l.startsWith('claude-3-5-sonnet,0,'))).toBe(true);
+    // Variable values come after model name and sample index: Certainty=2, Stakes=1
+    expect(dataLines.some((l) => l.includes('gpt-4o,0,2,1,'))).toBe(true);
   });
 
   it('sets correct Content-Disposition header', async () => {
@@ -266,6 +266,7 @@ describe('CSV Serialization Helper', () => {
       scenarioId: 'scenario-456',
       modelId: 'anthropic:gpt-4o-20241120',
       modelVersion: 'gpt-4o-2024-11-20',
+      sampleIndex: 0,
       content: {
         turns: [{ targetResponse: 'I choose option A' }],
       },
@@ -291,11 +292,12 @@ describe('CSV Serialization Helper', () => {
     const formatted = formatCSVRow(row, ['Certainty', 'Stakes']);
 
     expect(row.transcriptId).toBe('test-id');
+    expect(row.sampleIndex).toBe(0);
     expect(formatted).toContain('gpt-4o');
     // Scores read directly from content.dimensions
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
-    // Format: Model, Certainty, Stakes, DecisionCode, DecisionText, TranscriptId, TargetResponse
-    expect(formatted).toContain('gpt-4o,2,1,1,AI chose safety,test-id');
+    // Format: Model, SampleIndex, Certainty, Stakes, DecisionCode, DecisionText, TranscriptId, TargetResponse
+    expect(formatted).toContain('gpt-4o,0,2,1,1,AI chose safety,test-id');
     expect(row.targetResponse).toBe('I choose option A');
   });
 
@@ -307,6 +309,7 @@ describe('CSV Serialization Helper', () => {
       id: 'transcript-123',
       modelId: 'gpt-4o',
       scenarioId: 'test',
+      sampleIndex: 0,
       content: { turns: [] },
       scenario: {
         id: 'test',
@@ -320,6 +323,7 @@ describe('CSV Serialization Helper', () => {
     const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
 
     expect(row.transcriptId).toBe('transcript-123');
+    expect(row.sampleIndex).toBe(0);
     // Full names with numeric scores from content.dimensions
     expect(row.variables).toEqual({ Freedom: 1, Tradition: 2, Harmony: 3 });
   });
@@ -332,6 +336,7 @@ describe('CSV Serialization Helper', () => {
       runId: 'run-123',
       scenarioId: 'scenario-456',
       modelId: 'gpt-4o',
+      sampleIndex: 2,
       content: { turns: [] },
       scenario: {
         id: 'scenario-456',
@@ -345,6 +350,7 @@ describe('CSV Serialization Helper', () => {
     const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
 
     expect(row.transcriptId).toBe('test-transcript-id');
+    expect(row.sampleIndex).toBe(2);
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
   });
 
@@ -356,6 +362,7 @@ describe('CSV Serialization Helper', () => {
       runId: 'run-123',
       scenarioId: 'scenario-456',
       modelId: 'gpt-4o',
+      sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'scenario-456', name: 'Test', content: {} },
       decisionCode: null,
@@ -383,6 +390,7 @@ describe('CSV Serialization Helper', () => {
       id: 'transcript-id',
       modelId: 'anthropic:claude-3-5-sonnet-20241022',
       scenarioId: 'test',
+      sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'test', name: 'scenario_001', content: { dimensions: { Freedom: 3 } } },
       decisionCode: '1',
@@ -401,6 +409,7 @@ describe('CSV Serialization Helper', () => {
       id: 'transcript-id',
       modelId: 'gpt-4o',
       scenarioId: 'test',
+      sampleIndex: 0,
       content: { turns: [] },
       scenario: { id: 'test', name: 'Simple description', content: {} },
       decisionCode: '1',
@@ -411,9 +420,9 @@ describe('CSV Serialization Helper', () => {
     const formatted = formatCSVRow(row, ['Stakes', 'Certainty']);
 
     // Variable values should be empty when no dimensions
-    // Format ends with: DecisionCode,DecisionText,TranscriptId,TargetResponse
-    // With empty Stakes and Certainty, we get: model,,DecisionCode,...
-    expect(formatted).toContain('gpt-4o,,');
+    // Format: Model,SampleIndex,Stakes,Certainty,DecisionCode,...
+    // With empty Stakes and Certainty, we get: model,0,,,DecisionCode,...
+    expect(formatted).toContain('gpt-4o,0,,');
     expect(row.variables).toEqual({});
   });
 
@@ -425,6 +434,7 @@ describe('CSV Serialization Helper', () => {
       id: 'transcript-id',
       modelId: 'gpt-4o',
       scenarioId: 'test',
+      sampleIndex: 0,
       content: { turns: [] },
       scenario: {
         id: 'test',
@@ -448,6 +458,7 @@ describe('CSV Serialization Helper', () => {
       id: 'transcript-id',
       modelId: 'gpt-4o',
       scenarioId: 'test',
+      sampleIndex: 0,
       content: {
         turns: [
           { targetResponse: 'First response' },
@@ -463,5 +474,27 @@ describe('CSV Serialization Helper', () => {
 
     // Multiple responses are joined with separator
     expect(row.targetResponse).toBe('First response\n\n---\n\nSecond response');
+  });
+
+  it('includes sample index in CSV row for multi-sample runs', async () => {
+    const { transcriptToCSVRow, formatCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      id: 'transcript-id',
+      modelId: 'gpt-4o',
+      scenarioId: 'test',
+      sampleIndex: 3,
+      content: { turns: [] },
+      scenario: { id: 'test', name: 'Test', content: { dimensions: { Stakes: 2 } } },
+      decisionCode: '1',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
+    const formatted = formatCSVRow(row, ['Stakes']);
+
+    expect(row.sampleIndex).toBe(3);
+    // Format: Model,SampleIndex,Stakes,DecisionCode,...
+    expect(formatted).toContain('gpt-4o,3,2,1');
   });
 });

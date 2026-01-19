@@ -31,6 +31,7 @@ type TranscriptData = {
   id: string;
   modelId: string;
   scenarioId: string;
+  sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
   summary: {
     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
   };
@@ -55,6 +56,13 @@ type AnalysisOutput = {
   perModel: Record<string, unknown>;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis: Record<string, unknown>;
+  varianceAnalysis: {
+    isMultiSample: boolean;
+    samplesPerScenario: number;
+    perModel: Record<string, unknown>;
+    mostVariableScenarios: Array<Record<string, unknown>>;
+    leastVariableScenarios: Array<Record<string, unknown>>;
+  };
   mostContestedScenarios: Array<{
     scenarioId: string;
     scenarioName: string;
@@ -159,6 +167,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               id: t.id,
               modelId: t.modelId,
               scenarioId: t.scenarioId as string,
+              sampleIndex: t.sampleIndex,
               summary: { score },
               scenario: {
                 name: t.scenario!.name,

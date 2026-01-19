@@ -37,6 +37,13 @@ const StartRunInputSchema = {
     .int()
     .optional()
     .describe('Optional seed to override default deterministic sampling'),
+  samples_per_scenario: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(1)
+    .describe('Number of samples per scenario-model pair (1-100, default 1). Higher values measure response variance.'),
   priority: z
     .enum(['LOW', 'NORMAL', 'HIGH'])
     .default('NORMAL')
@@ -106,6 +113,10 @@ comparison across models and reruns.
 Use sample_seed to override the default deterministic sampling with a
 custom seed (useful for exploring different scenario subsets).
 
+Use samples_per_scenario for multi-sample runs to measure response variance:
+- 1 (default): Single sample per scenario-model pair
+- 5: Five samples per pair (5x the jobs and cost)
+
 Example:
 {
   "definition_id": "abc123",
@@ -164,6 +175,7 @@ Example:
           models: args.models,
           samplePercentage: args.sample_percentage,
           sampleSeed: args.sample_seed,
+          samplesPerScenario: args.samples_per_scenario,
           priority: args.priority,
           userId,
         });
@@ -228,6 +240,7 @@ Example:
             models: args.models,
             sample_percentage: args.sample_percentage,
             sample_seed: args.sample_seed,
+            samples_per_scenario: args.samples_per_scenario,
             priority: args.priority,
           },
           progress: {

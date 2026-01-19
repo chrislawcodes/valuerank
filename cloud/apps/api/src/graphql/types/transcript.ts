@@ -14,6 +14,9 @@ builder.objectType(TranscriptRef, {
       description: 'The model identifier used for this transcript',
     }),
     modelVersion: t.exposeString('modelVersion', { nullable: true }),
+    sampleIndex: t.exposeInt('sampleIndex', {
+      description: 'Index within sample set for multi-sample runs (0 to N-1). Always 0 for single-sample runs.',
+    }),
     definitionSnapshot: t.expose('definitionSnapshot', { type: 'JSON', nullable: true }),
     content: t.expose('content', { type: 'JSON' }),
     turnCount: t.exposeInt('turnCount'),

@@ -98,6 +98,7 @@ export type EstimateCostInput = {
   definitionId: string;
   modelIds: string[];
   samplePercentage?: number;
+  samplesPerScenario?: number; // Multi-sample: number of samples per scenario-model pair
 };
 
 /**

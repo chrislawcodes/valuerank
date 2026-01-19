@@ -50,9 +50,9 @@ function calculateCost(tokens: number, pricePerMillion: number): number {
  * @returns Complete cost estimate with per-model breakdown
  */
 export async function estimateCost(input: EstimateCostInput): Promise<CostEstimate> {
-  const { definitionId, modelIds, samplePercentage = 100 } = input;
+  const { definitionId, modelIds, samplePercentage = 100, samplesPerScenario = 1 } = input;
 
-  log.info({ definitionId, modelIds, samplePercentage }, 'Estimating cost');
+  log.info({ definitionId, modelIds, samplePercentage, samplesPerScenario }, 'Estimating cost');
 
   // Validate inputs
   if (modelIds.length === 0) {
@@ -154,9 +154,9 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
       log.debug({ modelId }, 'Using system default for cost estimate');
     }
 
-    // Calculate total tokens for the run
-    const totalInputTokens = scenarioCount * avgInputTokens;
-    const totalOutputTokens = scenarioCount * avgOutputTokens;
+    // Calculate total tokens for the run (multiply by samplesPerScenario for multi-sample runs)
+    const totalInputTokens = scenarioCount * avgInputTokens * samplesPerScenario;
+    const totalOutputTokens = scenarioCount * avgOutputTokens * samplesPerScenario;
 
     // Calculate costs
     const inputCost = calculateCost(totalInputTokens, Number(model.costInputPerMillion));

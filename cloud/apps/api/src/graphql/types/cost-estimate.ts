@@ -206,9 +206,14 @@ builder.queryField('estimateCost', (t) =>
         defaultValue: 100,
         description: 'Sample percentage (1-100, default 100)',
       }),
+      samplesPerScenario: t.arg.int({
+        required: false,
+        defaultValue: 1,
+        description: 'Number of samples per scenario-model pair for multi-sample runs (1-100, default 1)',
+      }),
     },
     resolve: async (_, args) => {
-      const { definitionId, models, samplePercentage } = args;
+      const { definitionId, models, samplePercentage, samplesPerScenario } = args;
 
       // Resolve model identifiers from various formats
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
@@ -273,6 +278,7 @@ builder.queryField('estimateCost', (t) =>
         definitionId: String(definitionId),
         modelIds,
         samplePercentage: samplePercentage ?? 100,
+        samplesPerScenario: samplesPerScenario ?? 1,
       });
     },
   })

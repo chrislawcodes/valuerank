@@ -220,6 +220,8 @@ model Transcript {
   // Model versioning (renamed from target_model for consistency)
   modelId            String    @map("model_id")
   modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
   // Definition snapshot (captures exact definition at run time)
   definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
   // Transcript content
@@ -247,6 +249,7 @@ model Transcript {
   @@index([scenarioId])
   @@index([modelId])
   @@index([deletedAt])
+  @@index([sampleIndex])
   @@map("transcripts")
 }
 
@@ -292,6 +295,8 @@ model ProbeResult {
   runId       String            @map("run_id")
   scenarioId  String            @map("scenario_id")
   modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
   status      ProbeResultStatus
   // Success fields
   transcriptId   String?        @map("transcript_id")
@@ -309,11 +314,13 @@ model ProbeResult {
   run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
   scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
-  @@unique([runId, scenarioId, modelId])
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
   @@index([runId])
   @@index([scenarioId])
   @@index([modelId])
   @@index([status])
+  @@index([sampleIndex])
   @@map("probe_results")
 }
 
