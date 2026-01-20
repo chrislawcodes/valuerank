@@ -4,6 +4,7 @@
  * REST endpoints for exporting run and definition data.
  *
  * GET /api/export/runs/:id/csv - Download run results as CSV
+ * GET /api/export/runs/:id/xlsx - Download run results as Excel with charts
  * GET /api/export/runs/:id/transcripts.json - Download full transcripts as JSON
  * GET /api/export/definitions/:id/md - Download definition as markdown
  * GET /api/export/definitions/:id/scenarios.yaml - Download scenarios as YAML
@@ -13,7 +14,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
 import { db, resolveDefinitionContent } from '@valuerank/db';
-import { createLogger, AuthenticationError, NotFoundError } from '@valuerank/shared';
+import { createLogger, AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 
 import {
   getCSVHeader,
@@ -23,6 +24,7 @@ import {
 } from '../services/export/csv.js';
 import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
+import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
 
 const log = createLogger('export');
 
@@ -112,6 +114,122 @@ exportRouter.get(
     }
   }
 );
+
+/**
+ * GET /api/export/runs/:id/xlsx
+ *
+ * Download run results as Excel file with charts.
+ * Includes multiple worksheets: Raw Data, Model Summary, Charts, and analysis.
+ *
+ * Requires authentication.
+ * Run must be in COMPLETED status.
+ */
+exportRouter.get(
+  '/runs/:id/xlsx',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Check authentication
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runId = req.params.id;
+      if (!runId) {
+        throw new NotFoundError('Run', 'missing');
+      }
+
+      log.info({ userId: req.user.id, runId }, 'Exporting run as XLSX');
+
+      // Verify run exists and check status
+      const run = await db.run.findUnique({
+        where: { id: runId },
+        select: { id: true, status: true, name: true, createdAt: true },
+      });
+
+      if (!run) {
+        throw new NotFoundError('Run', runId);
+      }
+
+      // Require COMPLETED status for export
+      if (run.status !== 'COMPLETED') {
+        throw new ValidationError(
+          `Run must be in COMPLETED status to export. Current status: ${run.status}`
+        );
+      }
+
+      // Get transcripts for the run with scenario relation
+      const transcripts = await db.transcript.findMany({
+        where: { runId },
+        include: { scenario: true },
+        orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
+      });
+
+      // Check for empty run
+      if (transcripts.length === 0) {
+        throw new ValidationError('Cannot export run with no transcripts');
+      }
+
+      log.info({ runId, transcriptCount: transcripts.length }, 'Transcripts fetched for XLSX export');
+
+      // Get analysis results if available
+      const analysisResult = await db.analysisResult.findFirst({
+        where: { runId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Build export data - we need to cast the run since we only selected specific fields
+      const exportData: RunExportData = {
+        run: run as RunExportData['run'],
+        transcripts,
+        analysisResult: analysisResult?.output
+          ? parseAnalysisOutput(analysisResult.output)
+          : undefined,
+      };
+
+      // Generate Excel export
+      const result = await generateExcelExport(exportData, {
+        runId,
+        includeAnalysis: true,
+        includeMethods: true,
+        includeCharts: true,
+      });
+
+      // Set response headers
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.setHeader('Content-Length', result.buffer.length);
+
+      log.info(
+        { runId, filename: result.filename, bufferSize: result.buffer.length },
+        'XLSX export complete'
+      );
+
+      // Send buffer
+      res.send(result.buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Parse analysis output JSON into typed structure.
+ * Returns undefined if parsing fails.
+ */
+function parseAnalysisOutput(output: unknown): RunExportData['analysisResult'] | undefined {
+  if (!output || typeof output !== 'object') {
+    return undefined;
+  }
+
+  const parsed = output as Record<string, unknown>;
+  type AnalysisResult = NonNullable<RunExportData['analysisResult']>;
+
+  return {
+    modelAgreement: parsed.modelAgreement as AnalysisResult['modelAgreement'],
+    contestedScenarios: parsed.contestedScenarios as AnalysisResult['contestedScenarios'],
+    dimensionImpact: parsed.dimensionImpact as AnalysisResult['dimensionImpact'],
+  };
+}
 
 /**
  * GET /api/export/definitions/:id/md

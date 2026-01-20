@@ -34,3 +34,14 @@ export {
   serializeScenariosToYaml,
   generateYamlFilename,
 } from './yaml.js';
+
+// XLSX export
+export {
+  generateExcelExport,
+  generateXlsxFilename,
+  XLSX_MIME_TYPE,
+  type XlsxExportOptions,
+  type XlsxExportResult,
+  type RunExportData,
+  type TranscriptWithScenario as XlsxTranscriptWithScenario,
+} from './xlsx/index.js';

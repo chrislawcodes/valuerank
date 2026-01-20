@@ -279,7 +279,7 @@ describe('RunForm', () => {
     await user.click(screen.getByText('Show advanced options'));
 
     expect(screen.getByText('Hide advanced options')).toBeInTheDocument();
-    expect(screen.getByText('Advanced options will be available in a future release.')).toBeInTheDocument();
+    expect(screen.getByText('Samples per Scenario')).toBeInTheDocument();
   });
 
   it('enables submit button when models are selected', async () => {

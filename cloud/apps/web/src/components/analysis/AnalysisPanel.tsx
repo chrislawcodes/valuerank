@@ -5,8 +5,8 @@
  * Shows per-model statistics, win rates, and warnings.
  */
 
-import { useMemo, useState } from 'react';
-import { BarChart2, AlertCircle, Clock, RefreshCw, Loader2, Info } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import { BarChart2, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -24,6 +24,7 @@ import {
   type AnalysisTab,
 } from './tabs';
 import { useAnalysis } from '../../hooks/useAnalysis';
+import { exportRunAsXLSX, getODataFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
 type AnalysisPanelProps = {
@@ -173,6 +174,33 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
     selectedModels: [],
     selectedValue: null,
   });
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [odataLinkCopied, setOdataLinkCopied] = useState(false);
+
+  const handleExportExcel = useCallback(async () => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      await exportRunAsXLSX(runId);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [runId]);
+
+  const handleCopyODataLink = useCallback(async () => {
+    const url = getODataFeedUrl(runId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setOdataLinkCopied(true);
+      setTimeout(() => setOdataLinkCopied(false), 2000);
+    } catch {
+      // Fallback: show the URL in an alert if clipboard fails
+      window.prompt('Copy this OData URL for Excel:', url);
+    }
+  }, [runId]);
 
   const availableModels = useMemo(
     () => (analysis ? Object.keys(analysis.perModel).sort() : []),
@@ -251,15 +279,49 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             </p>
           </div>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
-          {recomputing ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
-          )}
-          Recompute
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => void handleExportExcel()} disabled={isExporting}>
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+            )}
+            Export Excel
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleCopyODataLink()}
+            title="Copy OData URL for Excel's 'From OData Feed' feature"
+          >
+            {odataLinkCopied ? (
+              <Check className="w-4 h-4 mr-2 text-green-600" />
+            ) : (
+              <Link2 className="w-4 h-4 mr-2" />
+            )}
+            {odataLinkCopied ? 'Copied!' : 'OData Link'}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
+            {recomputing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Recompute
+          </Button>
+        </div>
       </div>
+
+      {/* Export Error */}
+      {exportError && (
+        <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg mb-6">
+          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">Export failed</p>
+            <p className="text-xs text-red-600 mt-1">{exportError}</p>
+          </div>
+        </div>
+      )}
 
       {/* Warnings */}
       {analysis.warnings.length > 0 && (

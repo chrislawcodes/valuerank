@@ -46,8 +46,36 @@ export async function authMiddleware(
   req.user = null;
   req.authMethod = null;
 
-  // Try Bearer token (Authorization header)
+  // Try Bearer token or Basic auth (Authorization header)
   const authHeader = req.headers.authorization;
+
+  // Check for Basic auth (for Excel OData connector)
+  // Format: "Basic base64(username:password)" where password is the API key
+  if (authHeader?.startsWith('Basic ')) {
+    const base64Credentials = authHeader.slice(6);
+    try {
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const colonIndex = credentials.indexOf(':');
+      if (colonIndex > -1) {
+        const password = credentials.slice(colonIndex + 1);
+
+        // Use password as API key
+        if (password.startsWith('vr_')) {
+          const user = await validateApiKey(password);
+          if (user) {
+            req.user = user;
+            req.authMethod = 'api_key';
+            log.debug({ userId: user.id }, 'Basic auth (API key) successful');
+            next();
+            return;
+          }
+        }
+      }
+    } catch {
+      // Invalid base64, continue to try other methods
+    }
+  }
+
   const token = extractBearerToken(authHeader);
 
   if (token) {
