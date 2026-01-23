@@ -17,5 +17,23 @@ services:
       timeout: 5s
       retries: 5
 
+  pgbouncer:
+    image: edoburu/pgbouncer
+    container_name: valuerank-pgbouncer
+    environment:
+      # PostgreSQL connection
+      DATABASE_URL: postgres://valuerank:valuerank@postgres:5432/valuerank
+      # PgBouncer settings
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: 20
+      MAX_CLIENT_CONN: 200
+      # Auth
+      AUTH_TYPE: plain
+    ports:
+      - "6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:

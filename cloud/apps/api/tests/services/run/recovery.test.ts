@@ -306,6 +306,58 @@ describe('run recovery service', () => {
       expect(mockBoss.send).toHaveBeenCalled();
     });
 
+    it('requeues missing samples in multi-sample runs', async () => {
+      const definition = await createTestDefinition();
+      const scenario = await createTestScenario(definition.id);
+
+      // Create a multi-sample run (3 samples per scenario)
+      const samplesPerScenario = 3;
+      const run = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'RUNNING',
+          config: { models: ['openai:gpt-4o'], samplesPerScenario },
+          progress: { total: 3, completed: 1, failed: 0 }, // 1 of 3 completed
+          startedAt: new Date(),
+        },
+      });
+      createdRunIds.push(run.id);
+
+      // Create scenario selection
+      await db.runScenarioSelection.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+        },
+      });
+
+      // Create only 1 transcript (sample index 0), leaving 2 missing
+      const transcript = await db.transcript.create({
+        data: {
+          runId: run.id,
+          modelId: 'openai:gpt-4o',
+          scenarioId: scenario.id,
+          sampleIndex: 0,
+          content: { schema_version: 1, messages: [], model_response: 'test' },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+      createdTranscriptIds.push(transcript.id);
+
+      const result = await recoverOrphanedRun(run.id);
+
+      expect(result.action).toBe('requeued_probes');
+      expect(result.requeuedCount).toBe(2); // Should requeue samples 1 and 2
+
+      // Verify the job data includes sampleIndex
+      expect(mockBoss.send).toHaveBeenCalledTimes(2);
+      const sendCalls = mockBoss.send.mock.calls;
+      const sampleIndices = sendCalls.map((call) => call[1].sampleIndex).sort();
+      expect(sampleIndices).toEqual([1, 2]); // Missing samples 1 and 2
+    });
+
     it('handles run in SUMMARIZING with no pending jobs', async () => {
       const definition = await createTestDefinition();
       const run = await createTestRun(

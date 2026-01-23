@@ -465,47 +465,132 @@ export async function getRunWithTranscripts(id: string) {
 
 ## Database Connections
 
-The project uses PostgreSQL running in Docker on port **5433** (not the default 5432).
+The project uses PostgreSQL with **PgBouncer** for connection pooling. This prevents connection exhaustion during high-concurrency operations (e.g., parallel probe jobs).
+
+### Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   API       │────▶│  PgBouncer  │────▶│  PostgreSQL │
+│  (Prisma)   │     │  (port 6432)│     │  (port 5433)│
+└─────────────┘     └─────────────┘     └─────────────┘
+```
 
 ### Connection URLs
 
-| Environment | Database URL |
-|-------------|-------------|
-| **Development** | `postgresql://valuerank:valuerank@localhost:5433/valuerank` |
-| **Test** | `postgresql://valuerank:valuerank@localhost:5433/valuerank_test` |
+| Purpose | Port | URL |
+|---------|------|-----|
+| **Application** (via PgBouncer) | 6432 | `postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true` |
+| **Migrations** (direct) | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank` |
+| **Test database** | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank_test` |
+
+### Environment Variables
+
+```bash
+# Application uses pooled connection
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+
+# Migrations use direct connection (required - Prisma Migrate doesn't support poolers)
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+```
+
+The `?pgbouncer=true` flag disables Prisma's prepared statements, which don't work with transaction-mode pooling.
 
 ### Credentials
 
 - **User**: `valuerank`
 - **Password**: `valuerank`
 - **Host**: `localhost`
-- **Port**: `5433`
+- **Ports**: `6432` (PgBouncer), `5433` (PostgreSQL direct)
 
 ### Starting the Database
 
 ```bash
-# From cloud/ directory
-docker-compose up -d postgres
+# From cloud/ directory - starts both PostgreSQL and PgBouncer
+docker-compose up -d
 
-# Verify it's running
-docker ps | grep valuerank-postgres
+# Verify both are running
+docker ps | grep valuerank
+
+# Check PgBouncer is accepting connections
+docker exec valuerank-pgbouncer pg_isready -h localhost -p 6432 -U valuerank
 ```
+
+### Upgrading Existing Local Environments
+
+If you're upgrading from a version without PgBouncer:
+
+1. Update your `.env` file:
+   ```bash
+   # OLD (direct connection)
+   DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+
+   # NEW (via PgBouncer)
+   DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
+   DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
+   ```
+
+2. Restart docker-compose to start PgBouncer:
+   ```bash
+   docker-compose down
+   docker-compose up -d
+   ```
+
+3. Verify PgBouncer is running:
+   ```bash
+   docker exec valuerank-pgbouncer pg_isready -h localhost -p 6432 -U valuerank
+   ```
+
+### PgBouncer Configuration (Local)
+
+The local PgBouncer runs in **transaction mode** with these settings:
+- `PGBOUNCER_POOL_MODE=transaction` - Connection returned after each transaction
+- `PGBOUNCER_DEFAULT_POOL_SIZE=20` - Max connections to PostgreSQL per database
+- `PGBOUNCER_MAX_CLIENT_CONN=200` - Max client connections PgBouncer accepts
+
+### Monitoring PgBouncer
+
+Check connection pool stats locally:
+
+```bash
+# View pool statistics (connections per database)
+docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW POOLS'
+
+# View aggregate stats (total queries, wait time, etc.)
+docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW STATS'
+
+# View connected clients
+docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW CLIENTS'
+
+# View server connections to PostgreSQL
+docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW SERVERS'
+```
+
+Key metrics to watch:
+- `cl_active` - Active client connections (should stay below `max_client_conn`)
+- `sv_active` - Active server connections (should stay below `default_pool_size`)
+- `sv_idle` - Idle server connections (available for reuse)
+- `avg_wait_time` - Average wait time for a connection (should be < 1ms)
 
 ### Running Commands with Database Access
 
-Always set the appropriate DATABASE_URL for the target database:
-
 ```bash
-# Development database
-DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" npx prisma studio
+# Development database (via PgBouncer)
+DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true" npx prisma studio
 
-# Test database
+# Direct connection for migrations
+DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
+  npx prisma migrate dev --schema packages/db/prisma/schema.prisma
+
+# Test database (direct - no pooler needed for tests)
 DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" npx prisma studio
 ```
 
 ### Prisma Schema Location
 
-The Prisma schema is at `packages/db/prisma/schema.prisma`. When running Prisma commands from the `cloud/` directory, specify the schema path:
+The Prisma schema is at `packages/db/prisma/schema.prisma`. It uses two connection URLs:
+- `url` - Points to PgBouncer for runtime queries
+- `directUrl` - Points to PostgreSQL directly for migrations
 
 ```bash
 npx prisma migrate dev --schema packages/db/prisma/schema.prisma
@@ -797,6 +882,53 @@ After deploying schema changes that add new tables needing seed data:
 ```bash
 railway shell --service api
 npx tsx packages/db/prisma/seed.ts
+```
+
+### Setting Up PgBouncer on Railway
+
+PgBouncer prevents database connection exhaustion during high-concurrency operations.
+
+**1. Add PgBouncer Service**
+
+Use Railway's template or add a new service with the Bitnami PgBouncer image:
+
+```
+Image: bitnami/pgbouncer:latest
+```
+
+**2. Configure PgBouncer Environment Variables**
+
+```bash
+# PostgreSQL connection (use Railway's internal networking)
+POSTGRESQL_HOST=${{Postgres.RAILWAY_PRIVATE_DOMAIN}}
+POSTGRESQL_PORT=5432
+POSTGRESQL_USERNAME=postgres
+POSTGRESQL_PASSWORD=${{Postgres.POSTGRES_PASSWORD}}
+POSTGRESQL_DATABASE=railway
+
+# PgBouncer settings
+PGBOUNCER_POOL_MODE=transaction
+PGBOUNCER_DEFAULT_POOL_SIZE=20
+PGBOUNCER_MAX_CLIENT_CONN=200
+PGBOUNCER_IGNORE_STARTUP_PARAMETERS=extra_float_digits
+PGBOUNCER_AUTH_TYPE=plain
+```
+
+**3. Update API Service Environment Variables**
+
+```bash
+# Application uses PgBouncer (internal Railway networking)
+DATABASE_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@${{PgBouncer.RAILWAY_PRIVATE_DOMAIN}}:6432/railway?pgbouncer=true
+
+# Migrations use direct PostgreSQL connection
+DIRECT_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/railway
+```
+
+**4. Verify Connection**
+
+```bash
+railway logs --service pgbouncer --lines 50
+# Should see: "LOG listening on 0.0.0.0:6432"
 ```
 
 ---

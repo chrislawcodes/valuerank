@@ -158,12 +158,13 @@ async function countJobsForRun(runId: string): Promise<{ pending: number; active
 }
 
 /**
- * Finds which scenario+model combinations are missing transcripts for a run.
+ * Finds which scenario+model+sampleIndex combinations are missing transcripts for a run.
+ * Handles multi-sample runs where samplesPerScenario > 1.
  */
 async function findMissingProbes(
   runId: string
-): Promise<Array<{ scenarioId: string; modelId: string }>> {
-  // Get run config to know which models were requested
+): Promise<Array<{ scenarioId: string; modelId: string; sampleIndex: number }>> {
+  // Get run config to know which models were requested and samples per scenario
   const run = await db.run.findUnique({
     where: { id: runId },
     select: {
@@ -178,29 +179,32 @@ async function findMissingProbes(
     return [];
   }
 
-  const config = run.config as { models: string[] };
+  const config = run.config as { models: string[]; samplesPerScenario?: number };
   const models = config.models || [];
+  const samplesPerScenario = config.samplesPerScenario ?? 1;
   const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
 
-  // Get existing transcripts for this run
+  // Get existing transcripts for this run (include sampleIndex for multi-sample runs)
   const existingTranscripts = await db.transcript.findMany({
     where: { runId },
-    select: { scenarioId: true, modelId: true },
+    select: { scenarioId: true, modelId: true, sampleIndex: true },
   });
 
-  // Build set of existing scenario+model pairs
-  const existingPairs = new Set(
-    existingTranscripts.map((t) => `${t.scenarioId}:${t.modelId}`)
+  // Build set of existing scenario+model+sampleIndex triples
+  const existingTriples = new Set(
+    existingTranscripts.map((t) => `${t.scenarioId}:${t.modelId}:${t.sampleIndex}`)
   );
 
-  // Find missing pairs
-  const missing: Array<{ scenarioId: string; modelId: string }> = [];
+  // Find missing triples
+  const missing: Array<{ scenarioId: string; modelId: string; sampleIndex: number }> = [];
 
   for (const modelId of models) {
     for (const scenarioId of scenarioIds) {
-      const key = `${scenarioId}:${modelId}`;
-      if (!existingPairs.has(key)) {
-        missing.push({ scenarioId, modelId });
+      for (let sampleIndex = 0; sampleIndex < samplesPerScenario; sampleIndex++) {
+        const key = `${scenarioId}:${modelId}:${sampleIndex}`;
+        if (!existingTriples.has(key)) {
+          missing.push({ scenarioId, modelId, sampleIndex });
+        }
       }
     }
   }
@@ -210,10 +214,11 @@ async function findMissingProbes(
 
 /**
  * Re-queues missing probe jobs for an orphaned run.
+ * Handles multi-sample runs by including sampleIndex in job data.
  */
 async function requeueMissingProbes(
   runId: string,
-  missingProbes: Array<{ scenarioId: string; modelId: string }>
+  missingProbes: Array<{ scenarioId: string; modelId: string; sampleIndex: number }>
 ): Promise<number> {
   const boss = getBoss();
   if (!boss) {
@@ -223,7 +228,7 @@ async function requeueMissingProbes(
   const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
   let queuedCount = 0;
 
-  for (const { scenarioId, modelId } of missingProbes) {
+  for (const { scenarioId, modelId, sampleIndex } of missingProbes) {
     const queueName = await getQueueNameForModel(modelId);
 
     await boss.send(
@@ -232,6 +237,7 @@ async function requeueMissingProbes(
         runId,
         scenarioId,
         modelId,
+        sampleIndex,
         config: {
           temperature: 0.7,
           maxTurns: 10,
@@ -358,10 +364,11 @@ export async function recoverOrphanedRun(
     data: { updatedAt: new Date() },
   });
 
-  log.info(
-    { runId, requeuedCount, missingProbes: missingProbes.length },
-    'Recovered orphaned run'
-  );
+  // Log details about missing probes (include full details if small number)
+  const logDetails = missingProbes.length <= 10
+    ? { runId, requeuedCount, missingProbes }
+    : { runId, requeuedCount, missingCount: missingProbes.length, sample: missingProbes.slice(0, 5) };
+  log.info(logDetails, 'Recovered orphaned run');
 
   return { action: 'requeued_probes', requeuedCount };
 }

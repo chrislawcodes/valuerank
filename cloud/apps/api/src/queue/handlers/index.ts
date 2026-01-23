@@ -16,6 +16,7 @@ import type {
   AnalyzeDeepJobData,
   ExpandScenariosJobData,
   ComputeTokenStatsJobData,
+  ProbeDeadLetterJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
@@ -23,6 +24,7 @@ import { createAnalyzeBasicHandler } from './analyze-basic.js';
 import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
+import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
@@ -31,7 +33,10 @@ import {
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData };
+export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData };
+
+// Dead letter queue name for probe jobs
+const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
 
 // Handler registration info
 type HandlerRegistration = {
@@ -101,6 +106,16 @@ const handlerRegistrations: HandlerRegistration[] = [
       );
     },
   },
+  {
+    name: 'probe_dead_letter',
+    register: async (boss, batchSize) => {
+      await boss.work<ProbeDeadLetterJobData>(
+        PROBE_DEAD_LETTER_QUEUE,
+        { batchSize },
+        createProbeDeadLetterHandler()
+      );
+    },
+  },
 ];
 
 /**
@@ -149,14 +164,26 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
     'Starting handler registration'
   );
 
-  // Create standard queues first (required by PgBoss v10+)
+  // Create dead letter queue FIRST (required before queues that reference it)
+  log.info({ jobType: PROBE_DEAD_LETTER_QUEUE }, 'Creating dead letter queue');
+  await boss.createQueue(PROBE_DEAD_LETTER_QUEUE);
+
+  // Create standard queues (required by PgBoss v10+)
   for (const registration of handlerRegistrations) {
+    // Skip dead letter queue - already created above
+    if (registration.name === 'probe_dead_letter') continue;
+
     log.info({ jobType: registration.name }, 'Creating queue');
-    await boss.createQueue(registration.name);
+    // Add dead letter queue for probe_scenario
+    if (registration.name === 'probe_scenario') {
+      await boss.createQueue(registration.name, { deadLetter: PROBE_DEAD_LETTER_QUEUE });
+    } else {
+      await boss.createQueue(registration.name);
+    }
   }
 
-  // Create provider-specific probe queues
-  await createProviderQueues(boss);
+  // Create provider-specific probe queues with dead letter support
+  await createProviderQueues(boss, PROBE_DEAD_LETTER_QUEUE);
 
   // Collect handler registration details for summary log
   const handlerDetails: Array<{ jobType: string; batchSize: number }> = [];
