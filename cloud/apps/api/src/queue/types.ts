@@ -5,7 +5,7 @@
  */
 
 // Job type union
-export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats';
+export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -46,7 +46,10 @@ export type ComputeTokenStatsJobData = {
   runId: string;
 };
 
-// Job data union type
+// Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
+export type ProbeDeadLetterJobData = ProbeScenarioJobData;
+
+// Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
 export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData;
 
 // Job options interface
@@ -65,7 +68,7 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 3,
     retryDelay: 5,
     retryBackoff: true,
-    expireInSeconds: 300, // 5 minutes
+    expireInSeconds: 600, // 10 minutes - Gemini can be slow
   },
   'summarize_transcript': {
     retryLimit: 3,
@@ -98,6 +101,10 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryBackoff: true,
     expireInSeconds: 120, // 2 minutes - stats computation is quick
     singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'probe_dead_letter': {
+    retryLimit: 0, // Don't retry dead letter jobs - just log and record
+    expireInSeconds: 300,
   },
 };
 

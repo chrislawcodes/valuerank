@@ -129,7 +129,7 @@ export async function getProviderForModel(modelId: string): Promise<string | nul
 export async function getQueueNameForModel(modelId: string): Promise<string> {
   const providerName = await getProviderForModel(modelId);
 
-  if (!providerName) {
+  if (providerName === null) {
     log.warn({ modelId }, 'Unknown model, using default queue');
     return 'probe_scenario'; // Fall back to default queue
   }
@@ -156,11 +156,14 @@ export async function getAllProviderQueues(): Promise<Map<string, ProviderLimits
 /**
  * Create provider-specific queues in PgBoss.
  * Should be called during orchestrator startup.
+ *
+ * @param boss - PgBoss instance
+ * @param deadLetterQueue - Optional dead letter queue name for failed/expired jobs
  */
-export async function createProviderQueues(boss: PgBoss): Promise<void> {
+export async function createProviderQueues(boss: PgBoss, deadLetterQueue?: string): Promise<void> {
   const limits = await loadProviderLimits();
 
-  log.info({ providerCount: limits.size }, 'Creating provider-specific probe queues');
+  log.info({ providerCount: limits.size, deadLetterQueue }, 'Creating provider-specific probe queues');
 
   for (const [providerName, providerLimits] of limits) {
     const queueName = providerLimits.queueName;
@@ -170,8 +173,12 @@ export async function createProviderQueues(boss: PgBoss): Promise<void> {
       'Creating provider queue'
     );
 
-    // Create queue (idempotent in PgBoss v10+)
-    await boss.createQueue(queueName);
+    // Create queue with dead letter option if specified (idempotent in PgBoss v10+)
+    if (deadLetterQueue !== undefined) {
+      await boss.createQueue(queueName, { deadLetter: deadLetterQueue });
+    } else {
+      await boss.createQueue(queueName);
+    }
   }
 
   log.info('Provider queues created');
