@@ -890,46 +890,51 @@ PgBouncer prevents database connection exhaustion during high-concurrency operat
 
 **1. Add PgBouncer Service**
 
-Use Railway's template or add a new service with the Bitnami PgBouncer image:
+Create a new Docker service named `pgbouncer-pool` with the edoburu/pgbouncer image:
 
 ```
-Image: bitnami/pgbouncer:latest
+Image: edoburu/pgbouncer
 ```
 
 **2. Configure PgBouncer Environment Variables**
 
 ```bash
-# PostgreSQL connection (use Railway's internal networking)
-POSTGRESQL_HOST=${{Postgres.RAILWAY_PRIVATE_DOMAIN}}
-POSTGRESQL_PORT=5432
-POSTGRESQL_USERNAME=postgres
-POSTGRESQL_PASSWORD=${{Postgres.POSTGRES_PASSWORD}}
-POSTGRESQL_DATABASE=railway
+# PostgreSQL connection URL (Railway's internal networking)
+DATABASE_URL=postgres://postgres:${{Postgres.POSTGRES_PASSWORD}}@postgres.railway.internal:5432/railway
 
 # PgBouncer settings
-PGBOUNCER_POOL_MODE=transaction
-PGBOUNCER_DEFAULT_POOL_SIZE=20
-PGBOUNCER_MAX_CLIENT_CONN=200
-PGBOUNCER_IGNORE_STARTUP_PARAMETERS=extra_float_digits
-PGBOUNCER_AUTH_TYPE=plain
+POOL_MODE=transaction
+DEFAULT_POOL_SIZE=20
+MAX_CLIENT_CONN=200
+
+# SCRAM-SHA-256 authentication support (required for Railway PostgreSQL)
+AUTH_TYPE=scram-sha-256
+AUTH_USER=postgres
+AUTH_QUERY=SELECT usename, passwd FROM pg_shadow WHERE usename=$1
 ```
 
 **3. Update API Service Environment Variables**
 
 ```bash
-# Application uses PgBouncer (internal Railway networking)
-DATABASE_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@${{PgBouncer.RAILWAY_PRIVATE_DOMAIN}}:6432/railway?pgbouncer=true
+# Application uses PgBouncer (note: edoburu image uses port 5432, not 6432)
+DATABASE_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@pgbouncer-pool.railway.internal:5432/railway?pgbouncer=true
 
 # Migrations use direct PostgreSQL connection
-DIRECT_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/railway
+DIRECT_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@postgres.railway.internal:5432/railway
 ```
 
 **4. Verify Connection**
 
 ```bash
-railway logs --service pgbouncer --lines 50
-# Should see: "LOG listening on 0.0.0.0:6432"
+railway logs --service pgbouncer-pool --lines 50
+# Should see: "LOG listening on 0.0.0.0:5432"
+# And stats lines showing xacts/s and queries/s
 ```
+
+**Key Notes:**
+- The `edoburu/pgbouncer` image uses port 5432 by default (not 6432)
+- Railway PostgreSQL requires SCRAM-SHA-256 authentication
+- The `AUTH_QUERY` setting enables PgBouncer to authenticate via PostgreSQL's user database
 
 ---
 
