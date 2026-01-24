@@ -76,10 +76,48 @@ odataRouter.get(
 );
 
 /**
+ * Extract dimension names from a definition's content.
+ * Returns unique dimension names found in the dimensions array.
+ */
+function extractDimensionNames(content: unknown): string[] {
+  if (!content || typeof content !== 'object') {
+    return [];
+  }
+
+  const typedContent = content as { dimensions?: Array<{ name?: string }> };
+  const dimensions = typedContent.dimensions;
+
+  if (!Array.isArray(dimensions)) {
+    return [];
+  }
+
+  const names = dimensions
+    .map((d) => d?.name)
+    .filter((name): name is string => typeof name === 'string' && name.length > 0);
+
+  // Deduplicate dimension names
+  return Array.from(new Set(names));
+}
+
+/**
+ * Escape XML special characters.
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * GET /api/odata/runs/:id/$metadata
  *
  * OData metadata document in CSDL XML format.
  * Excel requires XML metadata, not JSON.
+ *
+ * Dynamically includes dimension columns based on the run's definition.
  */
 odataRouter.get(
   '/runs/:id/\\$metadata',
@@ -95,15 +133,33 @@ odataRouter.get(
         throw new NotFoundError('Run', 'missing');
       }
 
-      // Verify run exists
+      // Fetch run with its definition to get dimension names
       const run = await db.run.findUnique({
         where: { id: runId },
-        select: { id: true },
+        select: {
+          id: true,
+          definition: {
+            select: { content: true },
+          },
+        },
       });
 
       if (!run) {
         throw new NotFoundError('Run', runId);
       }
+
+      // Extract dimension names from the definition content
+      // Guard against missing definition relation (shouldn't happen but be defensive)
+      const dimensionNames = run.definition
+        ? extractDimensionNames(run.definition.content)
+        : [];
+
+      log.debug({ runId, dimensionNames }, 'Generating OData metadata with dimensions');
+
+      // Generate dimension property declarations for the metadata
+      const dimensionProperties = dimensionNames
+        .map((name) => `        <Property Name="${escapeXml(name)}" Type="Edm.Int32"/>`)
+        .join('\n');
 
       // Return CSDL XML metadata (required by Excel)
       res.setHeader('OData-Version', '4.0');
@@ -130,6 +186,7 @@ odataRouter.get(
         <Property Name="durationMs" Type="Edm.Int32"/>
         <Property Name="estimatedCost" Type="Edm.Decimal"/>
         <Property Name="createdAt" Type="Edm.DateTimeOffset" Nullable="false"/>
+${dimensionProperties}
       </EntityType>
       <EntityContainer Name="Container">
         <EntitySet Name="Transcripts" EntityType="ValueRank.Transcript"/>
