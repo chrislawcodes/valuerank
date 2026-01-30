@@ -152,7 +152,7 @@ function EmptyState({ hasStatusFilter, hasTagFilter }: { hasStatusFilter: boolea
         Complete a run to generate analysis results.
       </p>
       <Button onClick={() => navigate('/runs')}>
-        Go to Runs
+        Go to Trials
       </Button>
     </div>
   );

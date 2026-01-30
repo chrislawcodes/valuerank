@@ -63,7 +63,7 @@ describe('ExpandedScenarios', () => {
 
     render(<ExpandedScenarios definitionId="def-1" />);
 
-    expect(screen.getByText('Database Scenarios')).toBeInTheDocument();
+    expect(screen.getByText('Database Narratives')).toBeInTheDocument();
     // Should not show scenarios list when collapsed
     expect(screen.queryByText('Loading scenarios...')).not.toBeInTheDocument();
   });
@@ -155,7 +155,7 @@ describe('ExpandedScenarios', () => {
     render(<ExpandedScenarios definitionId="def-1" />);
 
     // Click to expand
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     expect(screen.getByText('My Test Scenario')).toBeInTheDocument();
   });
@@ -174,7 +174,7 @@ describe('ExpandedScenarios', () => {
     render(<ExpandedScenarios definitionId="def-1" />);
 
     // Click to expand
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     expect(screen.getByText('Loading scenarios...')).toBeInTheDocument();
   });
@@ -193,7 +193,7 @@ describe('ExpandedScenarios', () => {
     render(<ExpandedScenarios definitionId="def-1" />);
 
     // Click to expand
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     expect(screen.getByText('Network error')).toBeInTheDocument();
   });
@@ -212,9 +212,9 @@ describe('ExpandedScenarios', () => {
     render(<ExpandedScenarios definitionId="def-1" />);
 
     // Click to expand
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
-    expect(screen.getByText(/No scenarios found/)).toBeInTheDocument();
+    expect(screen.getByText(/No narratives found/)).toBeInTheDocument();
   });
 
   it('shows scenario content when expanded', async () => {
@@ -239,7 +239,7 @@ describe('ExpandedScenarios', () => {
     render(<ExpandedScenarios definitionId="def-1" />);
 
     // Expand the scenarios list
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     // Expand individual scenario
     await user.click(screen.getByText('Test Scenario'));
@@ -273,7 +273,7 @@ describe('ExpandedScenarios', () => {
 
     render(<ExpandedScenarios definitionId="def-1" />);
 
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
     await user.click(screen.getByText('Test Scenario'));
 
     expect(screen.getByText('Followups (2)')).toBeInTheDocument();
@@ -295,7 +295,7 @@ describe('ExpandedScenarios', () => {
 
     render(<ExpandedScenarios definitionId="def-1" />);
 
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     const refreshButton = screen.getByRole('button', { name: /refresh/i });
     await user.click(refreshButton);
@@ -319,7 +319,7 @@ describe('ExpandedScenarios', () => {
 
     render(<ExpandedScenarios definitionId="def-1" onRegenerateTriggered={onRegenerateTriggered} />);
 
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     const regenerateButton = screen.getByRole('button', { name: /regenerate/i });
     await user.click(regenerateButton);
@@ -340,7 +340,7 @@ describe('ExpandedScenarios', () => {
 
     render(<ExpandedScenarios definitionId="def-1" />);
 
-    await user.click(screen.getByText('Database Scenarios'));
+    await user.click(screen.getByText('Database Narratives'));
 
     expect(screen.getByText('Showing 1 of 100 scenarios')).toBeInTheDocument();
   });

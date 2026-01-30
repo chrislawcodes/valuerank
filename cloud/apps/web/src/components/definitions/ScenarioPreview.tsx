@@ -27,7 +27,7 @@ function ScenarioCard({ scenario, isExpanded, onToggle }: ScenarioCardProps) {
         className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
       >
         <span className="font-medium text-gray-700">
-          Scenario {scenario.id}
+          Narrative {scenario.id}
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">
@@ -96,7 +96,7 @@ export function ScenarioPreview({
         disabled={!!error && !content}
       >
         <Eye className="w-4 h-4 mr-2" />
-        Preview Scenarios
+        Preview Narratives
         {totalCount > 0 && (
           <span className="ml-2 px-1.5 py-0.5 bg-gray-200 text-gray-700 text-xs rounded">
             {totalCount}
@@ -110,7 +110,7 @@ export function ScenarioPreview({
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-gray-900 flex items-center gap-2">
               <Eye className="w-4 h-4" />
-              Scenario Preview
+              Narrative Preview
             </h3>
             <Button
               type="button"
@@ -139,7 +139,7 @@ export function ScenarioPreview({
             <>
               {/* Summary */}
               <p className="text-sm text-gray-500 mb-4">
-                Showing {displayedCount} of {totalCount} possible scenario
+                Showing {displayedCount} of {totalCount} possible narratives
                 {totalCount !== 1 ? 's' : ''}
                 {totalCount > displayedCount && (
                   <span className="text-gray-400">
@@ -170,7 +170,7 @@ export function ScenarioPreview({
           {/* Empty state */}
           {!error && scenarios.length === 0 && (
             <p className="text-sm text-gray-500 text-center py-4">
-              Add dimensions with levels to preview scenarios
+              Add attributes with levels to preview narratives
             </p>
           )}
         </div>

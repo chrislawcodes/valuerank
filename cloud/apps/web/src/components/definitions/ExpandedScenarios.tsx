@@ -94,7 +94,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
           className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
         >
           <Database className="w-4 h-4" />
-          <span>Database Scenarios</span>
+          <span>Database Narratives</span>
           {totalCount > 0 && (
             <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">
               {totalCount}
@@ -116,7 +116,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
                 size="sm"
                 onClick={handleCancel}
                 disabled={cancelling}
-                title="Cancel scenario expansion"
+                title="Cancel narrative expansion"
                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
               >
                 <StopCircle className={`w-4 h-4 mr-1 ${cancelling ? 'animate-pulse' : ''}`} />
@@ -128,7 +128,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
                 size="sm"
                 onClick={handleRegenerate}
                 disabled={loading || regenerating}
-                title="Regenerate all scenarios using LLM"
+                title="Regenerate all narratives using LLM"
               >
                 <RotateCcw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
                 Regenerate
@@ -150,7 +150,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
       {isOpen && (
         <div className="space-y-3">
           {loading && scenarios.length === 0 && (
-            <Loading text="Loading scenarios..." />
+            <Loading text="Loading narratives..." />
           )}
 
           {error && (
@@ -162,7 +162,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
               <div className="flex items-center gap-2 text-gray-600">
                 <AlertCircle className="w-4 h-4" />
                 <p className="text-sm">
-                  No scenarios found. Generate scenarios by saving this vignette.
+                  No narratives found. Generate narratives by saving this vignette.
                 </p>
               </div>
             </div>
@@ -180,7 +180,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
 
           {totalCount > scenarios.length && (
             <p className="text-sm text-gray-500 text-center py-2">
-              Showing {scenarios.length} of {totalCount} scenarios
+              Showing {scenarios.length} of {totalCount} narratives
             </p>
           )}
         </div>

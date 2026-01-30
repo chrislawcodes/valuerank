@@ -30,11 +30,11 @@ type RunFormState = {
 };
 
 const SAMPLE_OPTIONS = [
-  { value: 1, label: '1% (test run)' },
+  { value: 1, label: '1% (test trial)' },
   { value: 10, label: '10%' },
   { value: 25, label: '25%' },
   { value: 50, label: '50%' },
-  { value: 100, label: '100% (full run)' },
+  { value: 100, label: '100% (full trial)' },
 ];
 
 const SAMPLES_PER_SCENARIO_OPTIONS = [
@@ -84,20 +84,20 @@ export function RunForm({
   // Filter cost estimate to only selected models for summary display
   const costEstimate = allModelsCostEstimate
     ? (() => {
-        const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
-          formState.selectedModels.includes(m.modelId)
-        );
-        // Only show fallback warning if ANY selected model is using fallback
-        const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
-        return {
-          ...allModelsCostEstimate,
-          total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
-          perModel: selectedPerModel,
-          isUsingFallback,
-          // Clear fallback reason if no selected models are using fallback
-          fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
-        };
-      })()
+      const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
+        formState.selectedModels.includes(m.modelId)
+      );
+      // Only show fallback warning if ANY selected model is using fallback
+      const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
+      return {
+        ...allModelsCostEstimate,
+        total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
+        perModel: selectedPerModel,
+        isUsingFallback,
+        // Clear fallback reason if no selected models are using fallback
+        fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
+      };
+    })()
     : null;
 
   // Pre-select default models when models load
@@ -209,11 +209,10 @@ export function RunForm({
               key={option.value}
               type="button"
               onClick={() => handleSampleChange(option.value)}
-              className={`px-3 py-2 text-sm rounded-md border transition-colors ${
-                formState.samplePercentage === option.value
-                  ? 'border-teal-500 bg-teal-50 text-teal-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplePercentage === option.value
+                ? 'border-teal-500 bg-teal-50 text-teal-700'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               disabled={isSubmitting}
             >
               {option.label}
@@ -256,11 +255,10 @@ export function RunForm({
                     key={option.value}
                     type="button"
                     onClick={() => handleSamplesPerScenarioChange(option.value)}
-                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${
-                      formState.samplesPerScenario === option.value
-                        ? 'border-teal-500 bg-teal-50 text-teal-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplesPerScenario === option.value
+                      ? 'border-teal-500 bg-teal-50 text-teal-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isSubmitting}
                   >
                     {option.label}
@@ -309,7 +307,7 @@ export function RunForm({
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              Start Run
+              Start Trial
             </>
           )}
         </Button>

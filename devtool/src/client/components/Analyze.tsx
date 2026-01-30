@@ -229,7 +229,7 @@ export function Analyze() {
     { id: 'decision-dist', label: 'Decision Distribution', icon: <BarChart3 size={16} /> },
     { id: 'model-variance', label: 'Model Consistency', icon: <TrendingUp size={16} /> },
     { id: 'scenario-heatmap', label: 'Scenario Comparison', icon: <Grid3X3 size={16} /> },
-    { id: 'dimension-analysis', label: 'Dimension Impact', icon: <GitBranch size={16} /> },
+    { id: 'dimension-analysis', label: 'Attribute Impact', icon: <GitBranch size={16} /> },
     { id: 'deep-analysis', label: 'Deep Analysis', icon: <Microscope size={16} /> },
   ];
 
@@ -265,7 +265,7 @@ export function Analyze() {
                 <button
                   onClick={clearDroppedFile}
                   className="ml-1 p-0.5 hover:bg-orange-200 rounded"
-                  title="Clear and return to server runs"
+                  title="Clear and return to server trials"
                 >
                   <X size={14} />
                 </button>
@@ -279,7 +279,7 @@ export function Analyze() {
                   onChange={(e) => setSelectedRun(e.target.value)}
                   className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {runs.length === 0 && <option value="">No runs available</option>}
+                  {runs.length === 0 && <option value="">No trials available</option>}
                   {runs.map((run) => (
                     <option key={run.name} value={run.name}>
                       {run.name}
@@ -289,7 +289,7 @@ export function Analyze() {
                 <button
                   onClick={() => loadRuns()}
                   className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                  title="Refresh runs"
+                  title="Refresh trials"
                 >
                   <RefreshCw size={16} />
                 </button>
@@ -327,11 +327,10 @@ export function Analyze() {
               <button
                 key={viz.id}
                 onClick={() => setActiveViz(viz.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
-                  activeViz === viz.id
-                    ? 'bg-gray-100 text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${activeViz === viz.id
+                  ? 'bg-gray-100 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 {viz.icon}
                 <span>{viz.label}</span>
@@ -368,7 +367,7 @@ export function Analyze() {
             <div className="text-center">
               <Upload size={48} className="mx-auto mb-4 opacity-50" />
               <p className="text-lg mb-2">Drop a CSV file here to analyze</p>
-              <p className="text-sm">or select a run from the dropdown above</p>
+              <p className="text-sm">or select a trial from the dropdown above</p>
             </div>
           </div>
         )}
@@ -422,7 +421,7 @@ export function Analyze() {
               <div className="flex items-center justify-center h-64">
                 <div className="flex flex-col items-center gap-3 text-gray-500">
                   <RefreshCw size={24} className="animate-spin" />
-                  <span>Running deep statistical analysis...</span>
+                  <span>Running trial analysis...</span>
                   <span className="text-sm text-gray-400">This may take a moment</span>
                 </div>
               </div>
@@ -433,7 +432,7 @@ export function Analyze() {
                 <div className="text-center">
                   <Microscope size={48} className="mx-auto mb-4 opacity-50" />
                   <p className="text-lg mb-2">Load data to run deep analysis</p>
-                  <p className="text-sm">Drop a CSV file or select a run from the dropdown</p>
+                  <p className="text-sm">Drop a CSV file or select a trial from the dropdown</p>
                 </div>
               </div>
             )}

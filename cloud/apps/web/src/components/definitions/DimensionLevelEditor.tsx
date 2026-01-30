@@ -75,7 +75,7 @@ export function DimensionLevelEditor({
 
       <div className="grid grid-cols-2 gap-3">
         <Input
-          label="Score"
+          label="Level"
           type="number"
           step="0.1"
           value={level.score}

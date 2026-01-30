@@ -153,7 +153,7 @@ export function DimensionAnalysis({ data }: { data: ExtendedAggregateData }) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <p className="text-gray-500 text-center">
-          No dimension columns found in the data. Ensure your CSV has dimension columns beyond the standard fields.
+          No attribute columns found in the data. Ensure your CSV has attribute columns beyond the standard fields.
         </p>
       </div>
     );
@@ -165,9 +165,9 @@ export function DimensionAnalysis({ data }: { data: ExtendedAggregateData }) {
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold">Dimension Impact on Decisions</h3>
+            <h3 className="text-lg font-semibold">Attribute Impact on Decisions</h3>
             <p className="text-sm text-gray-500 mt-1">
-              How model decisions change as the selected dimension value increases
+              How model decisions change as the selected attribute value increases
             </p>
           </div>
           <select
@@ -260,7 +260,7 @@ export function DimensionAnalysis({ data }: { data: ExtendedAggregateData }) {
             </div>
           </>
         ) : (
-          <p className="text-gray-400 text-center py-8">No data available for this dimension</p>
+          <p className="text-gray-400 text-center py-8">No data available for this attribute</p>
         )}
       </div>
 
@@ -300,7 +300,7 @@ export function DimensionAnalysis({ data }: { data: ExtendedAggregateData }) {
           </div>
 
           <div className="bg-orange-50 rounded-lg p-4">
-            <h4 className="font-medium text-orange-900 mb-2">Most Divisive Dimensions</h4>
+            <h4 className="font-medium text-orange-900 mb-2">Most Divisive Attributes</h4>
             <p className="text-xs text-orange-700 mb-2">Models disagree most about these dimensions</p>
             <div className="space-y-2">
               {divisiveDimensions.slice(0, 3).map((d, i) => (

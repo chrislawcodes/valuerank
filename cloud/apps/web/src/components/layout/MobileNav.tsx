@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 
 const navItems = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
-  { name: 'Runs', path: '/runs', icon: Play },
+  { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },
   { name: 'Experiments', path: '/experiments', icon: FlaskConical },

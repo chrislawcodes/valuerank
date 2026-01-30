@@ -34,9 +34,9 @@ const COMMANDS: CommandConfig[] = [
   {
     name: 'Probe',
     command: 'probe',
-    description: 'Deliver scenarios to target AI models and record transcripts',
+    description: 'Deliver narratives to target AI models and record transcripts',
     args: [
-      { key: 'scenarios-folder', label: 'Scenarios Folder', placeholder: 'scenarios/User Preference', required: true, type: 'scenarios-folder' },
+      { key: 'scenarios-folder', label: 'Narratives Folder', placeholder: 'scenarios/User Preference', required: true, type: 'scenarios-folder' },
       { key: 'output-dir', label: 'Output Directory', placeholder: 'output' },
     ],
   },
@@ -45,8 +45,8 @@ const COMMANDS: CommandConfig[] = [
     command: 'summary',
     description: 'Generate natural language summaries',
     args: [
-      { key: 'run-dir', label: 'Run Directory', placeholder: 'output/run_id', required: true, type: 'run-dir' },
-      { key: 'scenarios-file', label: 'Scenarios Folder', placeholder: 'scenarios/folder', type: 'scenarios-folder' },
+      { key: 'run-dir', label: 'Trial Directory', placeholder: 'output/run_id', required: true, type: 'run-dir' },
+      { key: 'scenarios-file', label: 'Narratives Folder', placeholder: 'scenarios/folder', type: 'scenarios-folder' },
     ],
     hasModelSelector: true,
     modelArgKey: 'summary-model',
@@ -422,11 +422,10 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
             <button
               key={cmd.command}
               onClick={() => setSelectedCommand(cmd)}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                selectedCommand.command === cmd.command
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${selectedCommand.command === cmd.command
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               {cmd.name}
             </button>
@@ -452,7 +451,7 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   }
                   className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded text-sm"
                 >
-                  <option value="">Select a run...</option>
+                  <option value="">Select a trial...</option>
                   {runs.map((run) => (
                     <option key={run} value={`output/${run}`}>
                       {run}
@@ -529,16 +528,15 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   const providerTotal =
                     costEstimate && isActive
                       ? Array.from(selectedSet).reduce((sum, id) => {
-                          const value = costEstimate.breakdown?.[id] ?? 0;
-                          return sum + value;
-                        }, 0)
+                        const value = costEstimate.breakdown?.[id] ?? 0;
+                        return sum + value;
+                      }, 0)
                       : null;
                   return (
                     <div
                       key={group.providerId}
-                      className={`flex-1 min-w-[220px] border rounded-lg p-3 bg-gray-50 ${
-                        isActive ? 'border-blue-400 bg-blue-50/40' : 'border-gray-200'
-                      }`}
+                      className={`flex-1 min-w-[220px] border rounded-lg p-3 bg-gray-50 ${isActive ? 'border-blue-400 bg-blue-50/40' : 'border-gray-200'
+                        }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span
@@ -626,14 +624,14 @@ export function PipelineRunner({ scenariosFolder }: PipelineRunnerProps) {
                   disabled={!selectedCommand}
                 >
                   <Play size={16} />
-                  Run
+                  Run Trial
                 </button>
                 <span className="mt-1 text-xs text-gray-500">
                   {estimatingCost
                     ? 'Estimating cost...'
                     : costEstimate
-                    ? `Est. cost ${formatCost(costEstimate.total)}`
-                    : 'Est. cost unavailable'}
+                      ? `Est. cost ${formatCost(costEstimate.total)}`
+                      : 'Est. cost unavailable'}
                 </span>
               </>
             )}

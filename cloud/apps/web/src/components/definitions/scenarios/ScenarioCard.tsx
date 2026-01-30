@@ -36,7 +36,7 @@ export function ScenarioCard({ scenario, index, isExpanded, onToggle }: Scenario
         className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
       >
         <span className="font-medium text-gray-700">
-          {scenario.name || `Scenario ${index + 1}`}
+          {scenario.name || `Narrative ${index + 1}`}
         </span>
         <div className="flex items-center gap-2">
           {dimensions.length > 0 && (
