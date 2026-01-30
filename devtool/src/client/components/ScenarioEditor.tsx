@@ -1,3 +1,4 @@
+```
 import { useState, useEffect } from 'react';
 import { scenarios, config, type ScenarioFile, type Scenario } from '../lib/api';
 import { Save, Plus, Trash2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
@@ -17,8 +18,8 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const [expandedScenarios, setExpandedScenarios] = useState<Set<string>>(new Set());
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Shared metadata (same for all scenarios)
-  const [sharedBaseId, setSharedBaseId] = useState('scenario_001');
+  // Shared metadata (same for all narratives)
+  const [sharedBaseId, setSharedBaseId] = useState('narrative_001');
   const [sharedCategory, setSharedCategory] = useState('');
 
   useEffect(() => {
@@ -31,13 +32,13 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
       setLoading(true);
       const fileData = await scenarios.getFile(folder, filename);
       setData(fileData);
-      // Expand all scenarios by default
+      // Expand all narratives by default
       setExpandedScenarios(new Set(Object.keys(fileData.scenarios)));
 
-      // Extract shared metadata from first scenario
+      // Extract shared metadata from first narrative
       const firstScenario = Object.values(fileData.scenarios)[0];
       if (firstScenario) {
-        setSharedBaseId(firstScenario.base_id || 'scenario_001');
+        setSharedBaseId(firstScenario.base_id || 'narrative_001');
         setSharedCategory(firstScenario.category || '');
       }
 
@@ -67,7 +68,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
       setHasChanges(false);
       onSaved?.();
     } catch (e) {
-      setError(`Failed to save: ${e}`);
+      setError(`Failed to save: ${ e } `);
     } finally {
       setSaving(false);
     }
@@ -82,7 +83,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const updateSharedBaseId = (base_id: string) => {
     if (!data) return;
     setSharedBaseId(base_id);
-    // Update all scenarios
+    // Update all narratives
     const updatedScenarios = { ...data.scenarios };
     for (const key of Object.keys(updatedScenarios)) {
       updatedScenarios[key] = { ...updatedScenarios[key], base_id };
@@ -94,7 +95,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const updateSharedCategory = (category: string) => {
     if (!data) return;
     setSharedCategory(category);
-    // Update all scenarios
+    // Update all narratives
     const updatedScenarios = { ...data.scenarios };
     for (const key of Object.keys(updatedScenarios)) {
       updatedScenarios[key] = { ...updatedScenarios[key], category };
@@ -117,7 +118,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
 
   const deleteScenario = (key: string) => {
     if (!data) return;
-    if (!confirm(`Delete scenario "${key}"?`)) return;
+    if (!confirm(`Delete narrative "${key}" ? `)) return;
     const newScenarios = { ...data.scenarios };
     delete newScenarios[key];
     setData({ ...data, scenarios: newScenarios });
@@ -127,12 +128,12 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const duplicateScenario = (key: string) => {
     if (!data) return;
     const scenario = data.scenarios[key];
-    const newKey = `${key}_copy`;
+    const newKey = `${ key } _copy`;
     setData({
       ...data,
       scenarios: {
         ...data.scenarios,
-        [newKey]: { ...scenario, subject: `${scenario.subject} (copy)` },
+        [newKey]: { ...scenario, subject: `${ scenario.subject } (copy)` },
       },
     });
     setExpandedScenarios((prev) => new Set([...prev, newKey]));
@@ -143,7 +144,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
     if (!data) return;
     const existingKeys = Object.keys(data.scenarios);
     const baseNum = existingKeys.length + 1;
-    const newKey = `scenario_new_${baseNum}`;
+    const newKey = `narrative_new_${ baseNum } `;
     setData({
       ...data,
       scenarios: {
@@ -151,8 +152,8 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
         [newKey]: {
           base_id: sharedBaseId,
           category: sharedCategory,
-          subject: 'New Scenario',
-          body: 'Enter scenario description here...',
+          subject: 'New Narrative',
+          body: 'Enter narrative description here...',
         },
       },
     });
@@ -173,7 +174,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   };
 
   if (loading) {
-    return <div className="p-8 text-gray-500">Loading scenario...</div>;
+    return <div className="p-8 text-gray-500">Loading narrative...</div>;
   }
 
   if (error) {
@@ -188,7 +189,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   }
 
   if (!data) {
-    return <div className="p-8 text-gray-500">No scenario loaded</div>;
+    return <div className="p-8 text-gray-500">No narrative loaded</div>;
   }
 
   const scenarioKeys = Object.keys(data.scenarios);
@@ -239,7 +240,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
           <h3 className="text-sm font-medium text-gray-700 mb-3">
             Shared Metadata
             <span className="text-gray-400 font-normal ml-2">
-              (Applied to all scenarios)
+              (Applied to all narratives)
             </span>
           </h3>
           <div className="grid grid-cols-2 gap-4">
@@ -252,7 +253,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
                 value={sharedBaseId}
                 onChange={(e) => updateSharedBaseId(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                placeholder="scenario_001"
+                placeholder="narrative_001"
               />
             </div>
             <div>
@@ -270,18 +271,18 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
           </div>
         </div>
 
-        {/* Scenarios */}
+        {/* Narratives */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-medium text-gray-700">
-              Scenarios ({scenarioKeys.length})
+              Narratives ({scenarioKeys.length})
             </h3>
             <button
               onClick={addScenario}
               className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
             >
               <Plus size={14} />
-              Add Scenario
+              Add Narrative
             </button>
           </div>
 
@@ -294,7 +295,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
                 key={key}
                 className="bg-white rounded-lg border border-gray-200 overflow-hidden"
               >
-                {/* Scenario Header */}
+                {/* Narrative Header */}
                 <div
                   className="flex items-center gap-3 p-3 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100"
                   onClick={() => toggleScenario(key)}
@@ -326,7 +327,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
                   </div>
                 </div>
 
-                {/* Scenario Body */}
+                {/* Narrative Body */}
                 {isExpanded && (
                   <div className="p-4 space-y-4">
                     <div>
