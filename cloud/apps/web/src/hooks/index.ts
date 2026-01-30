@@ -1,4 +1,4 @@
-// Custom hooks for Definition Management
+// Custom hooks for Vignette Management
 export { useDefinition } from './useDefinition';
 export { useDefinitions } from './useDefinitions';
 export { useDefinitionMutations } from './useDefinitionMutations';

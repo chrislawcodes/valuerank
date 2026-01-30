@@ -157,11 +157,11 @@ export function DefinitionGroups({ runs }: DefinitionGroupsProps) {
           </div>
           <div>
             <div className="font-medium text-gray-900">
-              {uniqueDefinitions} definition{uniqueDefinitions !== 1 ? 's' : ''} across {totalRuns} runs
+              {uniqueDefinitions} vignette{uniqueDefinitions !== 1 ? 's' : ''} across {totalRuns} runs
             </div>
             <div className="text-sm text-gray-500">
               {uniqueDefinitions === 1
-                ? 'All selected runs use the same definition'
+                ? 'All selected runs use the same vignette'
                 : 'Select exactly 2 runs to see a detailed diff view'}
             </div>
           </div>

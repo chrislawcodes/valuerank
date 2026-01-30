@@ -162,7 +162,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
               <div className="flex items-center gap-2 text-gray-600">
                 <AlertCircle className="w-4 h-4" />
                 <p className="text-sm">
-                  No scenarios found. Generate scenarios by saving this definition.
+                  No scenarios found. Generate scenarios by saving this vignette.
                 </p>
               </div>
             </div>

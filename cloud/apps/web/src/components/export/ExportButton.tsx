@@ -91,7 +91,7 @@ export function ExportButton({
           >
             <FileText size={16} className="text-gray-400" />
             <div>
-              <div className="font-medium">Definition (Markdown)</div>
+              <div className="font-medium">Vignette (Markdown)</div>
               <div className="text-xs text-gray-500">Devtool-compatible format</div>
             </div>
           </button>

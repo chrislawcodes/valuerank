@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
 const navItems = [
-  { name: 'Definitions', path: '/definitions', icon: FileText },
+  { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Runs', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },

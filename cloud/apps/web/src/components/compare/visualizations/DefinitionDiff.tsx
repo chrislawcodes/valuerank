@@ -80,7 +80,7 @@ function serializeDefinitionToMarkdown(
   definitionName: string
 ): string {
   if (!content) {
-    return '(Definition content not available)';
+    return '(Vignette content not available)';
   }
 
   const lines: string[] = [];
@@ -133,7 +133,7 @@ function serializeDefinitionToMarkdown(
  * Get definition content with fallback for missing data
  */
 function getDefinitionMarkdown(run: RunWithAnalysis): string {
-  const definitionName = run.definition?.name ?? 'Unknown Definition';
+  const definitionName = run.definition?.name ?? 'Unknown Vignette';
   return serializeDefinitionToMarkdown(run.definitionContent, definitionName);
 }
 
@@ -249,12 +249,12 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
           <CopyButton
             content={leftMarkdown}
             label="Left"
-            runInfo={`Run: ${leftName} | Definition: ${leftDefName}`}
+            runInfo={`Run: ${leftName} | Vignette: ${leftDefName}`}
           />
           <CopyButton
             content={rightMarkdown}
             label="Right"
-            runInfo={`Run: ${rightName} | Definition: ${rightDefName}`}
+            runInfo={`Run: ${rightName} | Vignette: ${rightDefName}`}
           />
         </div>
       </div>
@@ -264,9 +264,9 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
         <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 flex items-center gap-3">
           <FileText className="w-5 h-5 text-teal-600 flex-shrink-0" />
           <div>
-            <div className="font-medium text-teal-800">Definitions are identical</div>
+            <div className="font-medium text-teal-800">Vignettes are identical</div>
             <div className="text-sm text-teal-600">
-              Both runs use the same definition content
+              Both runs use the same vignette content
             </div>
           </div>
         </div>

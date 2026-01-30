@@ -210,7 +210,7 @@ export function DefinitionEditor({
 
       {/* Name */}
       <Input
-        label="Definition Name"
+        label="Vignette Name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g., Ethical Dilemma Scenarios v1"
@@ -374,7 +374,7 @@ export function DefinitionEditor({
       <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
         <Button type="submit" variant="primary" isLoading={isSaving}>
           <Save className="w-4 h-4 mr-2" />
-          {mode === 'create' ? 'Create Definition' : 'Save Changes'}
+          {mode === 'create' ? 'Create Vignette' : 'Save Changes'}
         </Button>
         <Button
           type="button"

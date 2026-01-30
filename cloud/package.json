@@ -16,7 +16,7 @@
     "db:migrate": "npm run migrate --workspace=@valuerank/db",
     "db:generate": "npm run generate --workspace=@valuerank/db",
     "db:studio": "npm run studio --workspace=@valuerank/db",
-    "db:push": "npm run push --workspace=@valuerank/db",
+    "db:push": "npx prisma db push --schema=./packages/db/prisma/schema.prisma",
     "db:seed": "npx prisma db seed --schema=packages/db/prisma/schema.prisma",
     "db:test:setup": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
     "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --force-reset --skip-generate",

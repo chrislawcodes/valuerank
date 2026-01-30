@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { FileText, Play, BarChart2, GitCompare, FlaskConical, Settings } from 'lucide-react';
 
 const tabs = [
-  { name: 'Definitions', path: '/definitions', icon: FileText },
+  { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Runs', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },

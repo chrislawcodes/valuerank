@@ -188,12 +188,12 @@ export function DefinitionList({
     return (
       <EmptyState
         icon={FileText}
-        title="No definitions yet"
-        description="Create your first scenario definition to get started with AI moral values evaluation."
+        title="No vignettes yet"
+        description="Create your first scenario vignette to get started with AI moral values evaluation."
         action={
           onCreateNew
             ? {
-                label: 'Create Definition',
+                label: 'Create Vignette',
                 onClick: onCreateNew,
               }
             : undefined
@@ -206,7 +206,7 @@ export function DefinitionList({
     <div className="space-y-4">
       {/* Header with create button and view toggle */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-medium text-gray-900">Definitions</h2>
+        <h2 className="text-lg font-medium text-gray-900">Vignettes</h2>
         <div className="flex items-center gap-2">
           {/* View mode toggle */}
           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
@@ -272,7 +272,7 @@ export function DefinitionList({
           {onCreateNew && (
             <Button onClick={onCreateNew} variant="primary" size="sm">
               <Plus className="w-4 h-4 mr-1" />
-              New Definition
+              New Vignette
             </Button>
           )}
         </div>
@@ -287,7 +287,7 @@ export function DefinitionList({
       {/* Results count */}
       {!loading && (
         <p className="text-sm text-gray-500">
-          {definitions.length} definition{definitions.length !== 1 ? 's' : ''}
+          {definitions.length} vignette{definitions.length !== 1 ? 's' : ''}
           {hasActiveFilters && ' matching filters'}
         </p>
       )}
@@ -295,7 +295,7 @@ export function DefinitionList({
       {/* No results with filters */}
       {!loading && definitions.length === 0 && hasActiveFilters && (
         <div className="text-center py-8">
-          <p className="text-gray-500">No definitions match your filters</p>
+          <p className="text-gray-500">No vignettes match your filters</p>
           <Button
             type="button"
             onClick={() => onFiltersChange(defaultFilters)}

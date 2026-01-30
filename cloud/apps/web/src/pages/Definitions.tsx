@@ -28,9 +28,7 @@ export function Definitions() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
-        Definitions
-      </h1>
+      <h2 className="text-lg font-medium text-gray-900">Vignettes</h2>
       <DefinitionList
         definitions={definitions}
         loading={loading}

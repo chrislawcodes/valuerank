@@ -1,4 +1,4 @@
-// Definition Management UI Components
+// Vignette Management UI Components
 export { DefinitionCard } from './DefinitionCard';
 export { DefinitionEditor } from './DefinitionEditor';
 export { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';

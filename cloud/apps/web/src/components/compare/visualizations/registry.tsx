@@ -175,9 +175,9 @@ registerVisualization({
 // Register Definition visualization
 registerVisualization({
   id: 'definition',
-  label: 'Definition',
+  label: 'Vignette',
   icon: FileText,
   component: DefinitionViz,
   minRuns: 2,
-  description: 'Compare definition templates between runs',
+  description: 'Compare vignette templates between runs',
 });

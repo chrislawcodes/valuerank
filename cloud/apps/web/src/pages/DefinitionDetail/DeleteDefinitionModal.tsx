@@ -28,13 +28,13 @@ export function DeleteDefinitionModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Delete Definition</h2>
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Delete Vignette</h2>
         <p className="text-gray-600 mb-2">
           Are you sure you want to delete &quot;{definitionName}&quot;?
         </p>
         {childCount > 0 && (
           <p className="text-amber-600 text-sm mb-4">
-            This will also delete {childCount} forked definition
+            This will also delete {childCount} forked vignette
             {childCount !== 1 ? 's' : ''}.
           </p>
         )}

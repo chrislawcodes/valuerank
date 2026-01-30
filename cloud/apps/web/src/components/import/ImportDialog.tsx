@@ -139,7 +139,7 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
             <div className="flex items-center gap-2">
               <Upload className="w-5 h-5 text-teal-600" />
-              <h2 className="text-lg font-medium text-gray-900">Import Definition</h2>
+              <h2 className="text-lg font-medium text-gray-900">Import Vignette</h2>
             </div>
             <Button
               type="button"
@@ -163,16 +163,16 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
                   Import Successful!
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  Definition &ldquo;{importedName}&rdquo; has been imported.
+                  Vignette &ldquo;{importedName}&rdquo; has been imported.
                 </p>
                 <Button variant="primary" onClick={handleGoToDefinition}>
-                  Go to Definition
+                  Go to Vignette
                 </Button>
               </div>
             ) : (
               <>
                 <p className="text-sm text-gray-600 mb-4">
-                  Import a definition from a markdown (.md) file. The file should be in
+                  Import a vignette from a markdown (.md) file. The file should be in
                   devtool-compatible format with frontmatter and sections.
                 </p>
 
