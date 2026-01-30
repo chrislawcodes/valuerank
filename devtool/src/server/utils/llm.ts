@@ -24,9 +24,10 @@ export interface LLMOptions {
 // Load API keys from environment or .env file
 export async function loadEnvFile(): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
+  const envPath = path.join(PROJECT_ROOT, 'cloud', '.env');
   try {
-    const envPath = path.join(PROJECT_ROOT, '.env');
     const content = await fs.readFile(envPath, 'utf-8');
+    log.info(`Loading .env from ${envPath}`);
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
@@ -35,15 +36,15 @@ export async function loadEnvFile(): Promise<Record<string, string>> {
           const key = trimmed.slice(0, eqIndex).trim();
           let value = trimmed.slice(eqIndex + 1).trim();
           if ((value.startsWith('"') && value.endsWith('"')) ||
-              (value.startsWith("'") && value.endsWith("'"))) {
+            (value.startsWith("'") && value.endsWith("'"))) {
             value = value.slice(1, -1);
           }
           env[key] = value;
         }
       }
     }
-  } catch {
-    // .env file not found
+  } catch (e) {
+    log.error(`Failed to load .env from ${envPath}: ${e}`);
   }
   return env;
 }
@@ -121,6 +122,78 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
     const data = await response.json() as { choices: Array<{ message: { content: string } }> };
     return data.choices[0].message.content;
   },
+
+  google: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const model = options?.model || 'gemini-1.5-flash';
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: options?.temperature ?? 0.7,
+          maxOutputTokens: options?.maxTokens || 4096,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Google API error: ${error}`);
+    }
+
+    const data = await response.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
+    return data.candidates[0].content.parts[0].text;
+  },
+
+  deepseek: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options?.model || 'deepseek-chat',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`DeepSeek API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+    return data.choices[0].message.content;
+  },
+
+  mistral: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options?.model || 'mistral-large-latest',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Mistral API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+    return data.choices[0].message.content;
+  },
+
 };
 
 // Build providers list from shared config, adding generate functions
