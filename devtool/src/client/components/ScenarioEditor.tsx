@@ -1,4 +1,3 @@
-```
 import { useState, useEffect } from 'react';
 import { scenarios, config, type ScenarioFile, type Scenario } from '../lib/api';
 import { Save, Plus, Trash2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
@@ -68,7 +67,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
       setHasChanges(false);
       onSaved?.();
     } catch (e) {
-      setError(`Failed to save: ${ e } `);
+      setError(`Failed to save: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -118,7 +117,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
 
   const deleteScenario = (key: string) => {
     if (!data) return;
-    if (!confirm(`Delete narrative "${key}" ? `)) return;
+    if (!confirm(`Delete narrative "${key}"?`)) return;
     const newScenarios = { ...data.scenarios };
     delete newScenarios[key];
     setData({ ...data, scenarios: newScenarios });
@@ -128,12 +127,12 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
   const duplicateScenario = (key: string) => {
     if (!data) return;
     const scenario = data.scenarios[key];
-    const newKey = `${ key } _copy`;
+    const newKey = `${key}_copy`;
     setData({
       ...data,
       scenarios: {
         ...data.scenarios,
-        [newKey]: { ...scenario, subject: `${ scenario.subject } (copy)` },
+        [newKey]: { ...scenario, subject: `${scenario.subject} (copy)` },
       },
     });
     setExpandedScenarios((prev) => new Set([...prev, newKey]));
@@ -144,7 +143,7 @@ export function ScenarioEditor({ folder, filename, onSaved }: ScenarioEditorProp
     if (!data) return;
     const existingKeys = Object.keys(data.scenarios);
     const baseNum = existingKeys.length + 1;
-    const newKey = `narrative_new_${ baseNum } `;
+    const newKey = `narrative_new_${baseNum}`;
     setData({
       ...data,
       scenarios: {
