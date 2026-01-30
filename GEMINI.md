@@ -201,3 +201,15 @@ For multi-step features, use the feature development skill workflow:
 4. **feature-implement** - Execute tasks phase-by-phase with automatic progress tracking
 
 This workflow ensures proper planning, documentation, and incremental commits for larger features.
+
+## Terminology
+
+### "Vignette" vs. "Definition"
+
+To improve user-friendliness, the term "Definition" in the user interface has been renamed to "Vignette". However, to minimize churn in the codebase and database, the underlying code, types, and database schema still use the term "Definition".
+
+-   **Vignette:** User-facing term.
+-   **Definition:** Internal, code-level term.
+
+New contributors should be aware of this distinction when working on the codebase.
+

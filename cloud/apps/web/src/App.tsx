@@ -1,3 +1,5 @@
+// NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
+// However, the underlying codebase, API, and database still use the term "Definition".
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';

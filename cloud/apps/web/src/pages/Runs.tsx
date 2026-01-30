@@ -152,7 +152,8 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
         Start your first evaluation run from a vignette.
       </p>
       <Button onClick={() => navigate('/definitions')}>
-                Go to Vignettes
-              </Button>    </div>
+        Go to Vignettes
+      </Button>
+    </div>
   );
 }

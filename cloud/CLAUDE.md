@@ -949,3 +949,15 @@ Error handling: Custom AppError classes
 Imports:        Node → External → Internal → Relative
 Prod logs:      railway logs --service api
 ```
+
+## Terminology
+
+### "Vignette" vs. "Definition"
+
+To improve user-friendliness, the term "Definition" in the user interface has been renamed to "Vignette". However, to minimize churn in the codebase and database, the underlying code, types, and database schema still use the term "Definition".
+
+-   **Vignette:** User-facing term.
+-   **Definition:** Internal, code-level term.
+
+New contributors should be aware of this distinction when working on the codebase.
+
