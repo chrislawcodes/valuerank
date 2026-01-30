@@ -41,7 +41,7 @@ npm run dev
 
 This launches:
 - **Client** (Vite): http://localhost:5173
-- **Server** (Express): http://localhost:3030
+- **Server** (Express): http://localhost:3032
 
 Open your browser to **http://localhost:5173** to use the app.
 
@@ -71,7 +71,7 @@ devtool/
 │   ├── client/          # React frontend (port 5173)
 │   │   ├── App.tsx      # Main app with tabs: Editor, Generator, Runner, Analyze
 │   │   └── components/  # UI components
-│   └── server/          # Express API (port 3030)
+│   └── server/          # Express API (port 3032)
 │       ├── routes/      # API endpoints
 │       └── utils/       # Shared utilities
 ├── scripts/

@@ -43,8 +43,12 @@ export async function loadEnvFile(): Promise<Record<string, string>> {
         }
       }
     }
-  } catch (e) {
-    log.error(`Failed to load .env from ${envPath}: ${e}`);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      log.debug(`.env file not found at ${envPath}, skipping`);
+    } else {
+      log.error(`Error reading .env from ${envPath}: ${err.message}`);
+    }
   }
   return env;
 }
@@ -71,8 +75,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`xAI API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid xAI response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
   anthropic: async (prompt: string, apiKey: string, options?: LLMOptions) => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -95,8 +103,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`Anthropic API error: ${error}`);
     }
 
-    const data = await response.json() as { content: Array<{ text: string }> };
-    return data.content[0].text;
+    const data = await response.json() as { content?: Array<{ text?: string }> };
+    const text = data.content?.[0]?.text;
+    if (!text) {
+      throw new Error(`Invalid Anthropic response structure: ${JSON.stringify(data)}`);
+    }
+    return text;
   },
 
   openai: async (prompt: string, apiKey: string, options?: LLMOptions) => {
@@ -119,8 +131,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`OpenAI API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid OpenAI response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
 
   google: async (prompt: string, apiKey: string, options?: LLMOptions) => {
@@ -142,8 +158,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`Google API error: ${error}`);
     }
 
-    const data = await response.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-    return data.candidates[0].content.parts[0].text;
+    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error(`Invalid Google response structure: ${JSON.stringify(data)}`);
+    }
+    return text;
   },
 
   deepseek: async (prompt: string, apiKey: string, options?: LLMOptions) => {
@@ -166,8 +186,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`DeepSeek API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid DeepSeek response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
 
   mistral: async (prompt: string, apiKey: string, options?: LLMOptions) => {
@@ -190,8 +214,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`Mistral API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid Mistral response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
 
 };
