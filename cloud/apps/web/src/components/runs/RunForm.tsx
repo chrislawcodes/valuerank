@@ -1,7 +1,7 @@
 /**
  * RunForm Component
  *
- * Form for creating a new evaluation run with model selection
+ * Form for creating a new evaluation trial with model selection
  * and configuration options.
  */
 
@@ -58,7 +58,7 @@ export function RunForm({
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
     samplePercentage: 1, // Default to 1% for testing per user's request
-    samplesPerScenario: 1, // Default to 1 sample (standard single-sample run)
+    samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
     showAdvanced: false,
   });
 
@@ -221,7 +221,7 @@ export function RunForm({
         </div>
         {estimatedScenarios !== null && (
           <p className="mt-2 text-sm text-gray-500">
-            ~{estimatedScenarios} scenario{estimatedScenarios !== 1 ? 's' : ''} will be probed
+            ~{estimatedScenarios} narrative{estimatedScenarios !== 1 ? 's' : ''} will be probed
           </p>
         )}
       </div>
@@ -243,10 +243,10 @@ export function RunForm({
             {/* Samples per Scenario (Multi-Sample Runs) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Samples per Scenario
+                Samples per Narrative
               </label>
               <p className="text-xs text-gray-500 mb-2">
-                Run multiple samples per scenario to measure model consistency and variance.
+                Run multiple samples per narrative to measure model consistency and variance.
               </p>
               <div className="flex flex-wrap gap-2">
                 {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
@@ -267,7 +267,7 @@ export function RunForm({
               </div>
               {formState.samplesPerScenario > 1 && totalJobs !== null && (
                 <p className="mt-2 text-sm text-gray-500">
-                  {totalJobs} total probes ({estimatedScenarios} scenarios × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
+                  {totalJobs} total probes ({estimatedScenarios} narratives × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
                 </p>
               )}
             </div>
@@ -303,7 +303,7 @@ export function RunForm({
           disabled={isSubmitting || formState.selectedModels.length === 0}
         >
           {isSubmitting ? (
-            'Starting Run...'
+            'Starting Trial...'
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />

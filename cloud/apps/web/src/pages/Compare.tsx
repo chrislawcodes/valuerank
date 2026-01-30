@@ -125,7 +125,7 @@ export function Compare() {
             <div className="flex-1 min-h-0 overflow-auto">
               {loadingSelected && selectedRunIds.length > 0 ? (
                 <div className="flex items-center justify-center h-full">
-                  <Loading size="lg" text="Loading run data..." />
+                  <Loading size="lg" text="Loading trial data..." />
                 </div>
               ) : selectedRunIds.length === 0 ? (
                 <EmptySelectionState />

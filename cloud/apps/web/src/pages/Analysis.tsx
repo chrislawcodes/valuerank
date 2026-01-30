@@ -149,7 +149,7 @@ function EmptyState({ hasStatusFilter, hasTagFilter }: { hasStatusFilter: boolea
         No analysis results yet
       </h3>
       <p className="text-gray-500 mb-4">
-        Complete a run to generate analysis results.
+        Complete a trial to generate analysis results.
       </p>
       <Button onClick={() => navigate('/runs')}>
         Go to Trials
