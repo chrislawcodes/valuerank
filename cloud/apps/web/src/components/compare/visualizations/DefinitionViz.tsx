@@ -25,7 +25,7 @@ export function DefinitionViz({ runs }: ComparisonVisualizationProps) {
         </div>
         <p className="text-gray-600">Select at least 2 runs</p>
         <p className="text-gray-500 text-sm mt-1">
-          Definition comparison requires 2 or more runs
+          Vignette comparison requires 2 or more runs
         </p>
       </div>
     );

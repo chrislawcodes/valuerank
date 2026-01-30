@@ -126,8 +126,8 @@ export function VariableImpactChart({ dimensionAnalysis }: VariableImpactChartPr
         <div>
           <p className="text-sm font-medium text-gray-700">Dimension Analysis Unavailable</p>
           <p className="text-xs text-gray-500 mt-1">
-            This analysis requires a definition with multiple dimensions.
-            Create a definition with varying dimension levels to see which variables have the most impact.
+            This analysis requires a vignette with multiple dimensions.
+            Create a vignette with varying dimension levels to see which variables have the most impact.
           </p>
         </div>
       </div>

@@ -184,12 +184,12 @@ export function DefinitionDetail() {
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate('/definitions')}>
             <ArrowLeft className="w-4 h-4 mr-1" />
-            Back to Definitions
+            Back to Vignettes
           </Button>
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h1 className="text-xl font-medium text-gray-900 mb-6">Create New Definition</h1>
+          <h1 className="text-xl font-medium text-gray-900 mb-6">Create New Vignette</h1>
 
           <DefinitionEditor
             mode="create"
@@ -212,7 +212,7 @@ export function DefinitionDetail() {
             Back
           </Button>
         </div>
-        <Loading size="lg" text="Loading definition..." />
+        <Loading size="lg" text="Loading vignette..." />
       </div>
     );
   }
@@ -227,7 +227,7 @@ export function DefinitionDetail() {
             Back
           </Button>
         </div>
-        <ErrorMessage message={`Failed to load definition: ${error.message}`} />
+        <ErrorMessage message={`Failed to load vignette: ${error.message}`} />
       </div>
     );
   }
@@ -242,7 +242,7 @@ export function DefinitionDetail() {
             Back
           </Button>
         </div>
-        <ErrorMessage message="Definition not found" />
+        <ErrorMessage message="Vignette not found" />
       </div>
     );
   }
@@ -259,7 +259,7 @@ export function DefinitionDetail() {
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h1 className="text-xl font-medium text-gray-900 mb-6">Edit Definition</h1>
+          <h1 className="text-xl font-medium text-gray-900 mb-6">Edit Vignette</h1>
 
           <DefinitionEditor
             mode="edit"

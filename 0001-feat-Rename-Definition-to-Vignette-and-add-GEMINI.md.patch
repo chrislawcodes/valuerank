@@ -1,0 +1,1665 @@
+From 87d1d4156530645e58ffd50e2d50d29c12fb2a14 Mon Sep 17 00:00:00 2001
+From: Chris Law <chrislaw@gmail.com>
+Date: Fri, 30 Jan 2026 11:06:33 -0800
+Subject: [PATCH] feat: Rename Definition to Vignette and add GEMINI.md
+
+- Renames all user-facing instances of "Definition" to "Vignette" in the web UI.
+- Copies CLAUDE.md to GEMINI.md to provide Gemini-specific instructions.
+---
+ GEMINI.md                                     | 203 ++++
+ cloud/GEMINI.md                               | 952 ++++++++++++++++++
+ .../analysis/VariableImpactChart.tsx          |   4 +-
+ .../compare/visualizations/DefinitionDiff.tsx |  12 +-
+ .../visualizations/DefinitionGroups.tsx       |   4 +-
+ .../compare/visualizations/DefinitionViz.tsx  |   2 +-
+ .../compare/visualizations/OverviewViz.tsx    |   2 +-
+ .../compare/visualizations/registry.tsx       |   4 +-
+ .../definitions/DefinitionEditor.tsx          |   4 +-
+ .../components/definitions/DefinitionList.tsx |  14 +-
+ .../definitions/ExpandedScenarios.tsx         |   2 +-
+ .../src/components/definitions/ForkDialog.tsx |   6 +-
+ .../web/src/components/definitions/index.ts   |   2 +-
+ .../src/components/export/ExportButton.tsx    |   2 +-
+ .../src/components/import/ImportDialog.tsx    |   8 +-
+ .../web/src/components/layout/MobileNav.tsx   |   2 +-
+ .../web/src/components/layout/NavTabs.tsx     |   2 +-
+ cloud/apps/web/src/hooks/index.ts             |   2 +-
+ .../DefinitionDetail/DefinitionDetail.tsx     |  12 +-
+ .../DeleteDefinitionModal.tsx                 |   4 +-
+ cloud/apps/web/src/pages/Definitions.tsx      |   4 +-
+ cloud/apps/web/src/pages/Runs.tsx             |   7 +-
+ cloud/package.json                            |   2 +-
+ 23 files changed, 1204 insertions(+), 52 deletions(-)
+ create mode 100644 GEMINI.md
+ create mode 100644 cloud/GEMINI.md
+
+diff --git a/GEMINI.md b/GEMINI.md
+new file mode 100644
+index 0000000..8ca52a1
+--- /dev/null
++++ b/GEMINI.md
+@@ -0,0 +1,203 @@
++# ValueRank - AI Moral Values Evaluation Framework
++
++## What This Project Does
++ValueRank measures how AI models prioritize moral values in ethical dilemmas. It's a "nutrition label for AI behavior" - making value alignment comparable across models.
++
++## Repository Workflow
++
++This project uses a dual-repository setup:
++
++| Repository | Purpose |
++|------------|---------|
++| [codemonkeychris/valuerank](https://github.com/codemonkeychris/valuerank) | **Primary dev repo** - all PRs and active development happen here |
++| [chrislawcodes/valuerank](https://github.com/chrislawcodes/valuerank) | **Mirror/archive** - issue tracking only, synced from dev repo |
++
++**Railway deployment** pulls from `codemonkeychris/valuerank`.
++
++### Pull Requests
++
++**IMPORTANT: Always create PRs against `codemonkeychris/valuerank`**, never against `chrislawcodes/valuerank`.
++
++```bash
++# Create PR on the dev repo
++gh pr create --repo codemonkeychris/valuerank
++```
++
++### Git Remote Setup
++
++```bash
++# Origin = dev repo (where you push and create PRs)
++git remote add origin git@github.com:codemonkeychris/valuerank.git
++
++# Upstream = mirror repo (for syncing after merges)
++git remote add upstream git@github.com:chrislawcodes/valuerank.git
++```
++
++### Syncing Changes to Mirror
++
++After merging PRs to main in the dev repo, sync to the mirror:
++
++```bash
++# Fetch upstream state
++git fetch upstream
++
++# Push dev main to upstream main
++git push upstream main
++```
++
++### Creating Issues
++
++Create issues on `chrislawcodes/valuerank` for project tracking and visibility.
++
++## Critical Documentation
++
++**Read these docs before making significant changes:**
++
++| Document | Purpose |
++|----------|---------|
++| [docs/values-summary.md](docs/values-summary.md) | The 19 refined Schwartz values - canonical definitions, higher-order categories, and circular structure. This is the theoretical foundation. |
++| [docs/valuerank_prd.yaml](docs/valuerank_prd.yaml) | Product requirements - user journeys, scenario design rules, Judge evaluation philosophy. |
++| [docs/README.md](docs/README.md) | Cloud platform overview - architecture, components, getting started. |
++| [cloud/CLAUDE.md](cloud/CLAUDE.md) | Cloud project constitution - coding standards, testing, database patterns. |
++
++**Key principles from the docs:**
++- Values are based on Schwartz et al. (2012), DOI: 10.1037/a0029393
++- The Judge doesn't decide right/wrong - it records which values the AI focused on
++- Scenarios must expose true value trade-offs with no procedural escape hatches
++- Opposite quadrants in the circular structure create the strongest value tensions
++
++## Tech Stack
++
++**Cloud Platform (primary):**
++- **TypeScript/Node.js** - API server, React frontend
++- **PostgreSQL** - Database with Prisma ORM
++- **PgBoss** - Job queue for async processing
++- **Python 3** - Workers for probe, judge, summarize
++- **MCP** - AI agent integration (Claude Code, etc.)
++
++**LLM Providers:** OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral
++
++## Project Structure
++```
++cloud/                          # Main platform (TypeScript + Python)
++├── apps/
++│   ├── api/                    # GraphQL API server (Express)
++│   │   ├── src/
++│   │   │   ├── graphql/        # Schema, resolvers, types
++│   │   │   ├── mcp/            # MCP server (tools + resources)
++│   │   │   ├── services/       # Business logic
++│   │   │   └── queue/          # PgBoss job handlers
++│   │   └── tests/              # API tests (vitest)
++│   └── web/                    # React frontend (Vite)
++│       └── src/
++│           ├── components/     # UI components
++│           ├── pages/          # Route pages
++│           └── hooks/          # Custom hooks
++├── packages/
++│   ├── db/                     # Prisma schema + queries
++│   └── shared/                 # Logger, errors, canonical dimensions
++└── workers/                    # Python workers (probe, judge, summarize)
++
++docs/                           # Documentation
++├── values-summary.md           # 19 Schwartz values reference
++├── valuerank_prd.yaml          # Product requirements
++└── README.md                   # Cloud platform overview
++
++config/                         # Legacy CLI config
++├── runtime.yaml                # Models, threads, temperature
++└── values_rubric.yaml          # 14 moral values (legacy)
++
++src/                            # Legacy CLI pipeline (Python)
++├── probe.py                    # Delivers scenarios to AI models
++├── llm_adapters.py             # LLM provider integrations
++└── ...
++
++devtool/                        # Standalone GUI for scenario authoring
++```
++
++## Pipeline Stages
++```bash
++# 1. Probe - deliver scenarios to target AI models
++python3 -m src.probe --scenarios-folder scenarios/<folder> --output-dir output
++
++# 2. Summary - generate natural language summaries
++python3 -m src.summary --run-dir output/<run_id> --scenarios-file scenarios/<folder>
++```
++
++## Key Files to Know
++- `src/llm_adapters.py` - All LLM provider integrations
++- `config/runtime.yaml` - Runtime settings (which models to evaluate)
++
++## 19 Refined Schwartz Values (by higher-order category)
++Based on Schwartz et al. (2012). DOI: 10.1037/a0029393
++
++**Openness to Change:** Self_Direction_Thought, Self_Direction_Action, Stimulation, Hedonism
++**Self-Enhancement:** Achievement, Power_Dominance, Power_Resources, Face
++**Conservation:** Security_Personal, Security_Societal, Tradition, Conformity_Rules, Conformity_Interpersonal, Humility
++**Self-Transcendence:** Benevolence_Dependability, Benevolence_Caring, Universalism_Concern, Universalism_Nature, Universalism_Tolerance
++
++## Output Structure
++```
++output/<run_id>/
++├── transcript.<scenario>.<model>.<run_id>.md  # Raw dialogue
++├── summary.<anon_model>.yaml                  # Per-model value scores
++├── summary.aggregated.yaml                    # Cross-model comparison
++└── run_manifest.yaml                          # Model ID mapping
++```
++
++## Key Concepts
++- **Blind Judging**: Models are anonymized during evaluation to prevent bias
++- **Win Rate**: `prioritized / (prioritized + deprioritized)` for each value
++- **Pairwise Matrix**: How often one value beats another in conflicts
++- **Unmatched Values**: Ideas that don't fit the 19-value rubric (diagnostic)
++- **Higher-Order Categories**: Four quadrants that group values by motivational conflict
++
++## Running Locally
++```bash
++pip install -r requirements.txt
++# Configure config/runtime.yaml with target_models and judge_model
++# Run pipeline stages as needed
++```
++
++## DevTool (GUI)
++Web-based GUI for authoring scenarios and running the pipeline.
++
++**Tech Stack**: React + TypeScript + Vite (client), Express + TypeScript (server)
++
++**Structure**:
++```
++devtool/
++├── src/client/          # React UI (port 5173)
++│   ├── App.tsx          # Main layout: Editor, Runner, Settings tabs
++│   └── components/      # ScenarioEditor, ScenarioGenerator, PipelineRunner
++└── src/server/          # Express API (port 3030)
++    └── routes/
++        ├── scenarios.ts # CRUD for scenario YAML files
++        ├── generator.ts # LLM-powered scenario generation from .md definitions
++        └── runner.ts    # Spawns Python pipeline processes (SSE output)
++```
++
++**Key Concepts**:
++- `.md` files = scenario **definitions** (template + dimensions for AI generation)
++- `.yaml` files = **scenarios** (actual dilemmas sent to models)
++
++**Running**:
++```bash
++cd devtool && npm install && npm run dev
++# Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in .env
++```
++
++## Claude Code Agent Instructions
++
++### Testing and Coverage
++- Use the **test-runner-json** agent when running tests. This provides structured JSON output for test results.
++- Use the **coverage-analyzer** agent for code coverage analysis and reporting.
++
++### Complex Feature Development
++For multi-step features, use the feature development skill workflow:
++1. **feature-spec** - Create a specification with prioritized user stories and requirements
++2. **feature-plan** - Generate a technical implementation plan with architecture decisions
++3. **feature-tasks** - Break down the plan into executable tasks with dependency tracking
++4. **feature-implement** - Execute tasks phase-by-phase with automatic progress tracking
++
++This workflow ensures proper planning, documentation, and incremental commits for larger features.
+diff --git a/cloud/GEMINI.md b/cloud/GEMINI.md
+new file mode 100644
+index 0000000..550a542
+--- /dev/null
++++ b/cloud/GEMINI.md
+@@ -0,0 +1,952 @@
++# Cloud ValueRank - Project Constitution
++
++This document defines the coding standards and architectural principles for the Cloud ValueRank project. All code contributions must adhere to these guidelines.
++
++## Git Workflow
++
++> **Note:** This project uses a dual-repo setup. See [Repository Workflow](../CLAUDE.md#repository-workflow) in the main CLAUDE.md for details on the dev fork vs authoritative repo.
++
++**ALWAYS use Pull Requests to merge changes to main.** Never commit directly to main.
++
++1. Create a feature branch before making changes
++2. Commit changes to the feature branch
++3. Push the branch and create a PR via `gh pr create`
++4. Wait for human review/approval before merging
++
++**NEVER push to origin without explicit human confirmation.** Always ask before running `git push`.
++
++### Pre-push Hook
++
++A pre-push hook runs lint and build checks before allowing pushes. This catches CI failures locally.
++
++**Install the hook (one-time setup):**
++```bash
++./scripts/hooks/install-hooks.sh
++```
++
++**What it does:**
++- Runs `npx turbo lint --force` to check for ESLint errors
++- Runs `npx turbo build --force` to verify TypeScript compilation
++
++**Bypass (not recommended):**
++```bash
++git push --no-verify
++```
++
++---
++
++## Core Principles
++
++1. **Small, focused files** - Easy to read, test, and maintain
++2. **Type safety** - Catch errors at compile time, not runtime
++3. **Test coverage** - Confidence to refactor and deploy
++4. **Observable** - Debug issues in production without guessing
++
++---
++
++## File Size Limits
++
++| File Type | Max Lines | Rationale |
++|-----------|-----------|-----------|
++| Route handlers | 400 | Single responsibility per route file |
++| Services/business logic | 400 | Split into smaller modules if growing |
++| Utilities | 400 | Pure functions, single purpose |
++| React components | 400 | Extract hooks/subcomponents if larger |
++| Test files | 400 | Can be longer due to setup/fixtures |
++| Type definitions | 400 | Split by domain if growing |
++
++**When a file exceeds limits:**
++1. Extract helper functions to separate modules
++2. Split into logical sub-modules
++3. Create a folder with `index.ts` re-exporting
++
++```
++# Bad: one large file
++services/runs.ts (500 lines)
++
++# Good: split by concern
++services/runs/
++├── index.ts        # Re-exports public API
++├── create.ts       # createRun logic
++├── query.ts        # listRuns, getRun
++├── analysis.ts     # runAnalysis, getResults
++└── types.ts        # Run-specific types
++```
++
++---
++
++## TypeScript Standards
++
++### No `any` Types
++
++```typescript
++// Bad
++function processData(data: any): any { ... }
++
++// Good
++function processData(data: RunConfig): ProcessedRun { ... }
++
++// If type is truly unknown, use proper typing
++function parseJson(input: string): unknown { ... }
++function handleError(err: unknown): void { ... }
++```
++
++### Strict Mode Required
++
++```json
++// tsconfig.json
++{
++  "compilerOptions": {
++    "strict": true,
++    "noImplicitAny": true,
++    "strictNullChecks": true,
++    "noUncheckedIndexedAccess": true
++  }
++}
++```
++
++### Type Inference vs Explicit Types
++
++```typescript
++// Let TypeScript infer when obvious
++const count = 0;  // inferred as number
++const items = []; // Bad - inferred as never[]
++const items: string[] = []; // Good - explicit for empty arrays
++
++// Always type function signatures
++function calculateScore(run: Run, model: string): number { ... }
++
++// Always type exported interfaces
++export interface RunConfig {
++  definitionId: string;
++  models: string[];
++  samplePercentage?: number;
++}
++```
++
++### Prefer Types Over Interfaces for Data
++
++```typescript
++// Use type for data shapes
++type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
++
++type Run = {
++  id: string;
++  status: RunStatus;
++  createdAt: Date;
++};
++
++// Use interface for contracts/services
++interface RunService {
++  create(config: RunConfig): Promise<Run>;
++  getById(id: string): Promise<Run | null>;
++}
++```
++
++---
++
++## Testing Requirements
++
++### Coverage Targets
++
++| Metric | Minimum | Target |
++|--------|---------|--------|
++| Line coverage | 80% | 90% |
++| Branch coverage | 75% | 85% |
++| Function coverage | 80% | 90% |
++
++### Test Structure
++
++```typescript
++// tests/services/runs.test.ts
++describe('RunService', () => {
++  describe('create', () => {
++    it('creates a run with valid config', async () => { ... });
++    it('throws on invalid definition ID', async () => { ... });
++    it('queues probe jobs for each model-scenario pair', async () => { ... });
++  });
++
++  describe('getById', () => {
++    it('returns run when exists', async () => { ... });
++    it('returns null when not found', async () => { ... });
++  });
++});
++```
++
++### Test Files Location
++
++```
++apps/api/
++├── src/
++│   └── services/
++│       └── runs.ts
++└── tests/
++    └── services/
++        └── runs.test.ts
++```
++
++### What to Test
++
++- **Always test**: Business logic, data transformations, edge cases
++- **Mock**: Database, external APIs, LLM providers
++- **Integration tests**: API routes with test database
++- **Skip**: Simple getters, direct ORM pass-through
++
++---
++
++## Logging Standards
++
++### Logger Abstraction
++
++All logging goes through a centralized logger - never use `console.log` directly.
++
++```typescript
++// packages/shared/src/logger.ts
++import pino from 'pino';
++
++export const logger = pino({
++  level: process.env.LOG_LEVEL || 'info',
++  transport: process.env.NODE_ENV === 'development'
++    ? { target: 'pino-pretty' }
++    : undefined,
++});
++
++export function createLogger(context: string) {
++  return logger.child({ context });
++}
++```
++
++### Usage in Services
++
++```typescript
++// services/runs.ts
++import { createLogger } from '@valuerank/shared';
++
++const log = createLogger('runs');
++
++export async function createRun(config: RunConfig): Promise<Run> {
++  log.info({ definitionId: config.definitionId, models: config.models }, 'Creating run');
++
++  try {
++    const run = await db.runs.create({ ... });
++    log.info({ runId: run.id, taskCount: tasks.length }, 'Run created, tasks queued');
++    return run;
++  } catch (err) {
++    log.error({ err, config }, 'Failed to create run');
++    throw err;
++  }
++}
++```
++
++### Log Levels
++
++| Level | Use For |
++|-------|---------|
++| `error` | Exceptions, failed operations that need attention |
++| `warn` | Recoverable issues, deprecations, retry attempts |
++| `info` | Key business events (run started, completed, user action) |
++| `debug` | Detailed flow info, useful for local debugging |
++| `trace` | Very verbose, rarely used |
++
++### Structured Logging Rules
++
++```typescript
++// Always use structured data, not string interpolation
++// Bad
++log.info(`User ${userId} created run ${runId}`);
++
++// Good
++log.info({ userId, runId }, 'User created run');
++
++// Include correlation IDs for request tracing
++log.info({ requestId, runId, action: 'create' }, 'Processing request');
++
++// Log errors with full context
++log.error({ err, runId, modelId, scenarioId }, 'Probe task failed');
++```
++
++### Request Logging Middleware
++
++```typescript
++// middleware/requestLogger.ts
++export function requestLogger(req, res, next) {
++  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
++  req.log = logger.child({ requestId, path: req.path, method: req.method });
++
++  req.log.info('Request started');
++
++  res.on('finish', () => {
++    req.log.info({ status: res.statusCode, duration: Date.now() - start }, 'Request completed');
++  });
++
++  next();
++}
++```
++
++---
++
++## Code Organization
++
++### Import Order
++
++```typescript
++// 1. Node built-ins
++import { readFile } from 'fs/promises';
++import path from 'path';
++
++// 2. External packages
++import express from 'express';
++import { z } from 'zod';
++
++// 3. Internal packages (@valuerank/*)
++import { logger } from '@valuerank/shared';
++import { db } from '@valuerank/db';
++
++// 4. Relative imports
++import { validateRunConfig } from './validation';
++import type { RunConfig } from './types';
++```
++
++### Folder Structure per App
++
++```
++apps/api/src/
++├── routes/           # Express route handlers
++├── services/         # Business logic
++├── middleware/       # Express middleware
++├── jobs/             # PgBoss job handlers
++├── validation/       # Zod schemas
++└── types/            # TypeScript types
++
++apps/web/src/
++├── components/       # React components
++├── hooks/            # Custom hooks
++├── pages/            # Route pages
++├── services/         # API client functions
++└── types/            # TypeScript types
++```
++
++---
++
++## Error Handling
++
++### Custom Error Classes
++
++```typescript
++// errors.ts
++export class AppError extends Error {
++  constructor(
++    message: string,
++    public code: string,
++    public statusCode: number = 500,
++    public context?: Record<string, unknown>
++  ) {
++    super(message);
++    this.name = 'AppError';
++  }
++}
++
++export class NotFoundError extends AppError {
++  constructor(resource: string, id: string) {
++    super(`${resource} not found: ${id}`, 'NOT_FOUND', 404, { resource, id });
++  }
++}
++
++export class ValidationError extends AppError {
++  constructor(message: string, details: unknown) {
++    super(message, 'VALIDATION_ERROR', 400, { details });
++  }
++}
++```
++
++### Error Handling in Routes
++
++```typescript
++// Always catch and forward to error middleware
++router.post('/runs', async (req, res, next) => {
++  try {
++    const run = await runService.create(req.body);
++    res.json(run);
++  } catch (err) {
++    next(err);
++  }
++});
++
++// Global error handler
++app.use((err, req, res, next) => {
++  req.log.error({ err }, 'Request failed');
++
++  if (err instanceof AppError) {
++    res.status(err.statusCode).json({ error: err.code, message: err.message });
++  } else {
++    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' });
++  }
++});
++```
++
++---
++
++## Database Access
++
++### Use Prisma with Type Safety
++
++```typescript
++// Always use typed queries
++const run = await prisma.run.findUnique({
++  where: { id: runId },
++  include: { transcripts: true },
++});
++
++// Use transactions for multi-step operations
++await prisma.$transaction(async (tx) => {
++  const run = await tx.run.create({ ... });
++  await tx.job.createMany({ ... });
++  return run;
++});
++```
++
++### Soft Delete Pattern
++
++Entities that support deletion use **soft delete** via a `deletedAt` timestamp column. Records are never physically deleted - instead, `deletedAt` is set to the current timestamp.
++
++**Tables with soft delete:**
++- `definitions` - `deletedAt`
++- `definition_tags` - `deletedAt`
++- `scenarios` - `deletedAt`
++
++**Required query patterns:**
++
++```typescript
++// ALWAYS filter out soft-deleted records in queries
++const definitions = await prisma.definition.findMany({
++  where: { deletedAt: null },  // Required!
++});
++
++// When "deleting", set deletedAt instead of using delete()
++await prisma.definition.update({
++  where: { id: definitionId },
++  data: { deletedAt: new Date() },
++});
++
++// For cascading soft delete, update related records too
++await prisma.$transaction([
++  prisma.definition.update({
++    where: { id: definitionId },
++    data: { deletedAt: new Date() },
++  }),
++  prisma.definitionTag.updateMany({
++    where: { definitionId },
++    data: { deletedAt: new Date() },
++  }),
++]);
++```
++
++**GraphQL layer requirements:**
++- `deletedAt` field is **NOT exposed** in GraphQL schema
++- All GraphQL resolvers must filter `deletedAt: null` automatically
++- Deleted records are invisible to API consumers
++
++### Query Helpers in packages/db
++
++```typescript
++// packages/db/src/queries/runs.ts
++export async function getRunWithTranscripts(id: string) {
++  return prisma.run.findUnique({
++    where: { id },
++    include: {
++      transcripts: true,
++      definition: true,
++    },
++  });
++}
++```
++
++---
++
++## Database Connections
++
++The project uses PostgreSQL with **PgBouncer** for connection pooling. This prevents connection exhaustion during high-concurrency operations (e.g., parallel probe jobs).
++
++### Architecture
++
++```
++┌─────────────┐     ┌─────────────┐     ┌─────────────┐
++│   API       │────▶│  PgBouncer  │────▶│  PostgreSQL │
++│  (Prisma)   │     │  (port 6432)│     │  (port 5433)│
++└─────────────┘     └─────────────┘     └─────────────┘
++```
++
++### Connection URLs
++
++| Purpose | Port | URL |
++|-----------|------|-----|
++| **Application** (via PgBouncer) | 6432 | `postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true` |
++| **Migrations** (direct) | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank` |
++| **Test database** | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank_test` |
++
++### Environment Variables
++
++```bash
++# Application uses pooled connection
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
++
++# Migrations use direct connection (required - Prisma Migrate doesn't support poolers)
++DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
++```
++
++The `?pgbouncer=true` flag disables Prisma's prepared statements, which don't work with transaction-mode pooling.
++
++### Credentials
++
++- **User**: `valuerank`
++- **Password**: `valuerank`
++- **Host**: `localhost`
++- **Ports**: `6432` (PgBouncer), `5433` (PostgreSQL direct)
++
++### Starting the Database
++
++```bash
++# From cloud/ directory - starts both PostgreSQL and PgBouncer
++docker-compose up -d
++
++# Verify both are running
++docker ps | grep valuerank
++
++# Check PgBouncer is accepting connections
++docker exec valuerank-pgbouncer pg_isready -h localhost -p 6432 -U valuerank
++```
++
++### Upgrading Existing Local Environments
++
++If you're upgrading from a version without PgBouncer:
++
++1. Update your `.env` file:
++   ```bash
++   # OLD (direct connection)
++   DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
++
++   # NEW (via PgBouncer)
++   DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true"
++   DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank"
++   ```
++
++2. Restart docker-compose to start PgBouncer:
++   ```bash
++   docker-compose down
++   docker-compose up -d
++   ```
++
++3. Verify PgBouncer is running:
++   ```bash
++   docker exec valuerank-pgbouncer pg_isready -h localhost -p 6432 -U valuerank
++   ```
++
++### PgBouncer Configuration (Local)
++
++The local PgBouncer runs in **transaction mode** with these settings:
++- `PGBOUNCER_POOL_MODE=transaction` - Connection returned after each transaction
++- `PGBOUNCER_DEFAULT_POOL_SIZE=20` - Max connections to PostgreSQL per database
++- `PGBOUNCER_MAX_CLIENT_CONN=200` - Max client connections PgBouncer accepts
++
++### Monitoring PgBouncer
++
++Check connection pool stats locally:
++
++```bash
++# View pool statistics (connections per database)
++docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW POOLS'
++
++# View aggregate stats (total queries, wait time, etc.)
++docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW STATS'
++
++# View connected clients
++docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW CLIENTS'
++
++# View server connections to PostgreSQL
++docker exec valuerank-pgbouncer psql -p 6432 -U valuerank pgbouncer -c 'SHOW SERVERS'
++```
++
++Key metrics to watch:
++- `cl_active` - Active client connections (should stay below `max_client_conn`)
++- `sv_active` - Active server connections (should stay below `default_pool_size`)
++- `sv_idle` - Idle server connections (available for reuse)
++- `avg_wait_time` - Average wait time for a connection (should be < 1ms)
++
++### Running Commands with Database Access
++
++```bash
++# Development database (via PgBouncer)
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true" npx prisma studio
++
++# Direct connection for migrations
++DIRECT_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma migrate dev --schema packages/db/prisma/schema.prisma
++
++# Test database (direct - no pooler needed for tests)
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" npx prisma studio
++```
++
++### Prisma Schema Location
++
++The Prisma schema is at `packages/db/prisma/schema.prisma`. It uses two connection URLs:
++- `url` - Points to PgBouncer for runtime queries
++- `directUrl` - Points to PostgreSQL directly for migrations
++
++```bash
++npx prisma migrate dev --schema packages/db/prisma/schema.prisma
++```
++
++---
++
++## Schema Changes (Migrations)
++
++**IMPORTANT: Always use Prisma Migrate for schema changes, never `db push`.**
++
++Migrations are version-controlled SQL files that track schema evolution. Production deployments run `prisma migrate deploy` automatically on startup.
++
++### Creating a Migration
++
++When you modify `packages/db/prisma/schema.prisma`, create a migration:
++
++```bash
++# Create migration with descriptive name
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma migrate dev --name add_feature_tables --schema packages/db/prisma/schema.prisma
++```
++
++This will:
++1. Generate SQL in `packages/db/prisma/migrations/<timestamp>_<name>/migration.sql`
++2. Apply the migration to your local database
++3. Regenerate Prisma Client
++
++### Migration Naming Convention
++
++Use descriptive, snake_case names:
++- `add_oauth_tables` - Adding new tables
++- `add_user_preferences` - Adding columns
++- `rename_status_column` - Renaming
++- `add_index_on_created_at` - Performance improvements
++
++### Applying Migrations
++
++```bash
++# Development - creates and applies migration interactively
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma migrate dev --schema packages/db/prisma/schema.prisma
++
++# Production - applies pending migrations (non-interactive)
++DATABASE_URL="..." npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
++
++# Check migration status
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma migrate status --schema packages/db/prisma/schema.prisma
++```
++
++### Production Deployment
++
++Migrations auto-deploy on Railway. The API start script runs:
++```bash
++prisma migrate deploy --schema ../db/prisma/schema.prisma && node dist/index.js
++```
++
++### Handling Existing Schema (db push recovery)
++
++If you accidentally used `db push` and need to create a migration retroactively:
++
++```bash
++# 1. Create migration file manually in packages/db/prisma/migrations/<timestamp>_<name>/
++# 2. Mark it as applied (since db push already modified the schema):
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma migrate resolve --applied <migration_name> --schema packages/db/prisma/schema.prisma
++```
++
++### Why Migrations Over db push
++
++| `migrate dev` | `db push` |
++|---------------|-----------|
++| Creates versioned SQL files | No history |
++| Safe for production | Development only |
++| Supports rollback planning | Destructive |
++| Team collaboration | Local only |
++| CI/CD friendly | Manual sync needed |
++
++---
++
++## Test Database Provisioning
++
++### Required Environment Variables for Tests
++
++```bash
++JWT_SECRET="test-secret-that-is-at-least-32-characters-long"
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test"
++```
++
++### Setup Test Database (Quick)
++
++Use the built-in npm scripts which handle everything:
++
++```bash
++# From cloud/ directory - sets up schema and runs tests
++npm test
++
++# Or just set up the test database schema
++npm run db:test:setup
++```
++
++### Setup Test Database (Manual)
++
++If tests fail with schema errors, apply migrations to the test database:
++
++```bash
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
++  npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
++```
++
++### Reset Test Database (Clean Slate)
++
++If tests have data pollution issues, reset and re-apply migrations:
++
++```bash
++npm run db:test:reset
++
++# Or manually:
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
++  npx prisma migrate reset --schema packages/db/prisma/schema.prisma --force
++```
++
++### Running Tests
++
++**IMPORTANT: Always use turbo to run tests across all packages.** Running `npm test` or `vitest` directly in a single package may miss cross-package dependencies and fail unexpectedly.
++
++```bash
++# Run all tests across all packages (RECOMMENDED)
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
++JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
++npx turbo run test
++
++# Run tests with coverage
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
++JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
++npx turbo run test:coverage
++
++# Run specific package tests only (when you know which package)
++cd apps/api && \
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank_test" \
++JWT_SECRET="test-secret-that-is-at-least-32-characters-long" \
++npx vitest run tests/path/to/test.ts
++
++# Run Python worker tests
++cd workers && PYTHONPATH=. pytest tests/ -v
++```
++
++### Test User Account
++
++The seed script creates a development user:
++
++- **Email**: `dev@valuerank.ai`
++- **Password**: `development`
++
++To seed the development database:
++
++```bash
++DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
++  npx prisma db seed --schema packages/db/prisma/schema.prisma
++```
++
++### Troubleshooting Test Failures
++
++1. **"column X does not exist"** - Schema out of sync:
++   ```bash
++   npm run db:test:setup
++   ```
++
++2. **Foreign key constraint violations** - Data pollution from previous runs:
++   ```bash
++   npm run db:test:reset
++   ```
++
++3. **"PgBoss not initialized"** - Test needs to mock `getBoss`:
++   ```typescript
++   vi.mock('../../../src/queue/boss.js', () => ({
++     getBoss: vi.fn().mockReturnValue({
++       send: vi.fn().mockResolvedValue('mock-job-id'),
++     }),
++   }));
++   ```
++
++4. **Test isolation issues** - Use unique IDs or upsert:
++   ```typescript
++   // Use timestamp in test data names
++   const testId = 'test-' + Date.now();
++
++   // Or use upsert for shared fixtures
++   await db.tag.upsert({
++     where: { name: 'test-tag' },
++     update: {}, 
++     create: { name: 'test-tag' },
++   });
++   ```
++
++---
++
++## Local GraphQL API Calls (curl)
++
++When debugging the local dev server, use these commands to make authenticated GraphQL calls.
++
++### Step 1: Generate a JWT Token
++
++The JWT must use `sub` (not `userId`) and the correct secret from `.env`:
++
++```bash
++# Generate token (run from cloud/ directory)
++node -e "
++const jwt = require('jsonwebtoken');
++const token = jwt.sign(
++  { sub: 'cmixy5vz90000l8tv2t6ar0vc', email: 'dev@valuerank.ai' },
++  'dev-secret-key-for-local-development-only-32chars',
++  { expiresIn: '1h' }
++);
++console.log(token);
++"
++```
++
++**Key details:**
++- **JWT Secret**: `dev-secret-key-for-local-development-only-32chars` (from `.env`)
++- **User claim**: Must use `sub` not `userId`
++- **Dev user ID**: `cmixy5vz90000l8tv2t6ar0vc`
++
++### Step 2: Make the GraphQL Call
++
++```bash
++# Set token variable (paste output from Step 1)
++TOKEN="<paste-token-here>"
++
++# Make GraphQL query
++curl -s -X POST http://localhost:3031/graphql \
++  -H "Content-Type: application/json" \
++  -H "Authorization: Bearer $TOKEN" \
++  -d '{"query": "query { runs(limit: 5) { id status } }"}'
++```
++
++### One-liner (copy-paste ready)
++
++```bash
++TOKEN=$(node -e "const jwt=require('jsonwebtoken');console.log(jwt.sign({sub:'cmixy5vz90000l8tv2t6ar0vc',email:'dev@valuerank.ai'},'dev-secret-key-for-local-development-only-32chars',{expiresIn:'1h'}))" ) && curl -s -X POST http://localhost:3031/graphql -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"query": "query { runs(limit: 5) { id status } }"}'
++```
++
++### Common Errors
++
++| Error | Cause | Fix |
++|-------|-------|-----|
++| `Invalid token` | Wrong JWT secret or wrong claim structure | Use `sub` not `userId`, check `.env` for JWT_SECRET |
++| `UNAUTHORIZED` | No auth header or expired token | Regenerate token |
++| `Authentication required` | Login endpoint requires `/api/auth/login` not GraphQL | Use REST login endpoint |
++
++### Notes
++
++- The GraphQL endpoint is at `http://localhost:3031/graphql`
++- The REST login endpoint is at `http://localhost:3031/api/auth/login`
++- Dev password is `development` but login may fail if hash is stale - use JWT directly
++
++---
++
++## Railway Production Deployment
++
++### Viewing Production Logs
++
++```bash
++# API service logs
++railway logs --service api --lines 100
++
++# Web service logs
++railway logs --service web --lines 100
++
++# Postgres logs
++railway logs --service postgres --lines 100
++```
++
++### SSH into Production
++
++```bash
++# API container
++railway shell --service api
++
++# Postgres container (then use: psql -U postgres -d railway)
++railway shell --service postgres
++```
++
++### Running Seeds in Production
++
++After deploying schema changes that add new tables needing seed data:
++
++```bash
++railway shell --service api
++npx tsx packages/db/prisma/seed.ts
++```
++
++### Setting Up PgBouncer on Railway
++
++PgBouncer prevents database connection exhaustion during high-concurrency operations.
++
++**1. Add PgBouncer Service**
++
++Create a new Docker service named `pgbouncer-pool` with the edoburu/pgbouncer image:
++
++```
++Image: edoburu/pgbouncer
++```
++
++**2. Configure PgBouncer Environment Variables**
++
++```bash
++# PostgreSQL connection URL (Railway's internal networking)
++DATABASE_URL=postgres://postgres:${{Postgres.POSTGRES_PASSWORD}}@postgres.railway.internal:5432/railway
++
++# PgBouncer settings
++POOL_MODE=transaction
++DEFAULT_POOL_SIZE=20
++MAX_CLIENT_CONN=200
++
++# SCRAM-SHA-256 authentication support (required for Railway PostgreSQL)
++AUTH_TYPE=scram-sha-256
++AUTH_USER=postgres
++AUTH_QUERY=SELECT usename, passwd FROM pg_shadow WHERE usename=$1
++```
++
++**3. Update API Service Environment Variables**
++
++```bash
++# Application uses PgBouncer (note: edoburu image uses port 5432, not 6432)
++DATABASE_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@pgbouncer-pool.railway.internal:5432/railway?pgbouncer=true
++
++# Migrations use direct PostgreSQL connection
++DIRECT_URL=postgresql://postgres:${{Postgres.POSTGRES_PASSWORD}}@postgres.railway.internal:5432/railway
++```
++
++**4. Verify Connection**
++
++```bash
++railway logs --service pgbouncer-pool --lines 50
++# Should see: "LOG listening on 0.0.0.0:5432"
++# And stats lines showing xacts/s and queries/s
++```
++
++**Key Notes:**
++- The `edoburu/pgbouncer` image uses port 5432 by default (not 6432)
++- Railway PostgreSQL requires SCRAM-SHA-256 authentication
++- The `AUTH_QUERY` setting enables PgBouncer to authenticate via PostgreSQL's user database
++
++---
++
++## Quick Reference
++
++```
++File size:      < 400 lines
++any types:      NEVER (use unknown if truly unknown)
++Test coverage:  80% minimum
++Console.log:    NEVER (use logger)
++Error handling: Custom AppError classes
++Imports:        Node → External → Internal → Relative
++Prod logs:      railway logs --service api
++```
++
+diff --git a/cloud/apps/web/src/components/analysis/VariableImpactChart.tsx b/cloud/apps/web/src/components/analysis/VariableImpactChart.tsx
+index 84cc2a6..0b6be16 100644
+--- a/cloud/apps/web/src/components/analysis/VariableImpactChart.tsx
++++ b/cloud/apps/web/src/components/analysis/VariableImpactChart.tsx
+@@ -126,8 +126,8 @@ export function VariableImpactChart({ dimensionAnalysis }: VariableImpactChartPr
+         <div>
+           <p className="text-sm font-medium text-gray-700">Dimension Analysis Unavailable</p>
+           <p className="text-xs text-gray-500 mt-1">
+-            This analysis requires a definition with multiple dimensions.
+-            Create a definition with varying dimension levels to see which variables have the most impact.
++            This analysis requires a vignette with multiple dimensions.
++            Create a vignette with varying dimension levels to see which variables have the most impact.
+           </p>
+         </div>
+       </div>
+diff --git a/cloud/apps/web/src/components/compare/visualizations/DefinitionDiff.tsx b/cloud/apps/web/src/components/compare/visualizations/DefinitionDiff.tsx
+index fd3a230..a63698d 100644
+--- a/cloud/apps/web/src/components/compare/visualizations/DefinitionDiff.tsx
++++ b/cloud/apps/web/src/components/compare/visualizations/DefinitionDiff.tsx
+@@ -80,7 +80,7 @@ function serializeDefinitionToMarkdown(
+   definitionName: string
+ ): string {
+   if (!content) {
+-    return '(Definition content not available)';
++    return '(Vignette content not available)';
+   }
+ 
+   const lines: string[] = [];
+@@ -133,7 +133,7 @@ function serializeDefinitionToMarkdown(
+  * Get definition content with fallback for missing data
+  */
+ function getDefinitionMarkdown(run: RunWithAnalysis): string {
+-  const definitionName = run.definition?.name ?? 'Unknown Definition';
++  const definitionName = run.definition?.name ?? 'Unknown Vignette';
+   return serializeDefinitionToMarkdown(run.definitionContent, definitionName);
+ }
+ 
+@@ -249,12 +249,12 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
+           <CopyButton
+             content={leftMarkdown}
+             label="Left"
+-            runInfo={`Run: ${leftName} | Definition: ${leftDefName}`}
++            runInfo={`Run: ${leftName} | Vignette: ${leftDefName}`}
+           />
+           <CopyButton
+             content={rightMarkdown}
+             label="Right"
+-            runInfo={`Run: ${rightName} | Definition: ${rightDefName}`}
++            runInfo={`Run: ${rightName} | Vignette: ${rightDefName}`}
+           />
+         </div>
+       </div>
+@@ -264,9 +264,9 @@ export function DefinitionDiff({ leftRun, rightRun }: DefinitionDiffProps) {
+         <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 flex items-center gap-3">
+           <FileText className="w-5 h-5 text-teal-600 flex-shrink-0" />
+           <div>
+-            <div className="font-medium text-teal-800">Definitions are identical</div>
++            <div className="font-medium text-teal-800">Vignettes are identical</div>
+             <div className="text-sm text-teal-600">
+-              Both runs use the same definition content
++              Both runs use the same vignette content
+             </div>
+           </div>
+         </div>
+diff --git a/cloud/apps/web/src/components/compare/visualizations/DefinitionGroups.tsx b/cloud/apps/web/src/components/compare/visualizations/DefinitionGroups.tsx
+index bd31dac..625b7f2 100644
+--- a/cloud/apps/web/src/components/compare/visualizations/DefinitionGroups.tsx
++++ b/cloud/apps/web/src/components/compare/visualizations/DefinitionGroups.tsx
+@@ -157,11 +157,11 @@ export function DefinitionGroups({ runs }: DefinitionGroupsProps) {
+           </div>
+           <div>
+             <div className="font-medium text-gray-900">
+-              {uniqueDefinitions} definition{uniqueDefinitions !== 1 ? 's' : ''} across {totalRuns} runs
++              {uniqueDefinitions} vignette{uniqueDefinitions !== 1 ? 's' : ''} across {totalRuns} runs
+             </div>
+             <div className="text-sm text-gray-500">
+               {uniqueDefinitions === 1
+-                ? 'All selected runs use the same definition'
++                ? 'All selected runs use the same vignette'
+                 : 'Select exactly 2 runs to see a detailed diff view'}
+             </div>
+           </div>
+diff --git a/cloud/apps/web/src/components/compare/visualizations/DefinitionViz.tsx b/cloud/apps/web/src/components/compare/visualizations/DefinitionViz.tsx
+index 17cbc30..d42f719 100644
+--- a/cloud/apps/web/src/components/compare/visualizations/DefinitionViz.tsx
++++ b/cloud/apps/web/src/components/compare/visualizations/DefinitionViz.tsx
+@@ -25,7 +25,7 @@ export function DefinitionViz({ runs }: ComparisonVisualizationProps) {
+         </div>
+         <p className="text-gray-600">Select at least 2 runs</p>
+         <p className="text-gray-500 text-sm mt-1">
+-          Definition comparison requires 2 or more runs
++          Vignette comparison requires 2 or more runs
+         </p>
+       </div>
+     );
+diff --git a/cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx b/cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx
+index 18275c1..24b927b 100644
+--- a/cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx
++++ b/cloud/apps/web/src/components/compare/visualizations/OverviewViz.tsx
+@@ -76,7 +76,7 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps)
+             <thead>
+               <tr className="border-b border-gray-200">
+                 <th className="text-left py-2 px-3 text-gray-600 font-medium">Run</th>
+-                <th className="text-left py-2 px-3 text-gray-600 font-medium">Definition</th>
++                <th className="text-left py-2 px-3 text-gray-600 font-medium">Vignette</th>
+                 <th className="text-left py-2 px-3 text-gray-600 font-medium">Models</th>
+                 <th className="text-right py-2 px-3 text-gray-600 font-medium">Samples</th>
+                 <th className="text-right py-2 px-3 text-gray-600 font-medium">Mean</th>
+diff --git a/cloud/apps/web/src/components/compare/visualizations/registry.tsx b/cloud/apps/web/src/components/compare/visualizations/registry.tsx
+index 4d6123b..bf48ac0 100644
+--- a/cloud/apps/web/src/components/compare/visualizations/registry.tsx
++++ b/cloud/apps/web/src/components/compare/visualizations/registry.tsx
+@@ -175,9 +175,9 @@ registerVisualization({
+ // Register Definition visualization
+ registerVisualization({
+   id: 'definition',
+-  label: 'Definition',
++  label: 'Vignette',
+   icon: FileText,
+   component: DefinitionViz,
+   minRuns: 2,
+-  description: 'Compare definition templates between runs',
++  description: 'Compare vignette templates between runs',
+ });
+diff --git a/cloud/apps/web/src/components/definitions/DefinitionEditor.tsx b/cloud/apps/web/src/components/definitions/DefinitionEditor.tsx
+index bd64219..68a2195 100644
+--- a/cloud/apps/web/src/components/definitions/DefinitionEditor.tsx
++++ b/cloud/apps/web/src/components/definitions/DefinitionEditor.tsx
+@@ -210,7 +210,7 @@ export function DefinitionEditor({
+ 
+       {/* Name */}
+       <Input
+-        label="Definition Name"
++        label="Vignette Name"
+         value={name}
+         onChange={(e) => setName(e.target.value)}
+         placeholder="e.g., Ethical Dilemma Scenarios v1"
+@@ -374,7 +374,7 @@ export function DefinitionEditor({
+       <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+         <Button type="submit" variant="primary" isLoading={isSaving}>
+           <Save className="w-4 h-4 mr-2" />
+-          {mode === 'create' ? 'Create Definition' : 'Save Changes'}
++          {mode === 'create' ? 'Create Vignette' : 'Save Changes'}
+         </Button>
+         <Button
+           type="button"
+diff --git a/cloud/apps/web/src/components/definitions/DefinitionList.tsx b/cloud/apps/web/src/components/definitions/DefinitionList.tsx
+index d5b59c9..08a4e08 100644
+--- a/cloud/apps/web/src/components/definitions/DefinitionList.tsx
++++ b/cloud/apps/web/src/components/definitions/DefinitionList.tsx
+@@ -188,12 +188,12 @@ export function DefinitionList({
+     return (
+       <EmptyState
+         icon={FileText}
+-        title="No definitions yet"
+-        description="Create your first scenario definition to get started with AI moral values evaluation."
++        title="No vignettes yet"
++        description="Create your first scenario vignette to get started with AI moral values evaluation."
+         action={
+           onCreateNew
+             ? {
+-                label: 'Create Definition',
++                label: 'Create Vignette',
+                 onClick: onCreateNew,
+               }
+             : undefined
+@@ -206,7 +206,7 @@ export function DefinitionList({
+     <div className="space-y-4">
+       {/* Header with create button and view toggle */}
+       <div className="flex items-center justify-between">
+-        <h2 className="text-lg font-medium text-gray-900">Definitions</h2>
++        <h2 className="text-lg font-medium text-gray-900">Vignettes</h2>
+         <div className="flex items-center gap-2">
+           {/* View mode toggle */}
+           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+@@ -272,7 +272,7 @@ export function DefinitionList({
+           {onCreateNew && (
+             <Button onClick={onCreateNew} variant="primary" size="sm">
+               <Plus className="w-4 h-4 mr-1" />
+-              New Definition
++              New Vignette
+             </Button>
+           )}
+         </div>
+@@ -287,7 +287,7 @@ export function DefinitionList({
+       {/* Results count */}
+       {!loading && (
+         <p className="text-sm text-gray-500">
+-          {definitions.length} definition{definitions.length !== 1 ? 's' : ''}
++          {definitions.length} vignette{definitions.length !== 1 ? 's' : ''}
+           {hasActiveFilters && ' matching filters'}
+         </p>
+       )}
+@@ -295,7 +295,7 @@ export function DefinitionList({
+       {/* No results with filters */}
+       {!loading && definitions.length === 0 && hasActiveFilters && (
+         <div className="text-center py-8">
+-          <p className="text-gray-500">No definitions match your filters</p>
++          <p className="text-gray-500">No vignettes match your filters</p>
+           <Button
+             type="button"
+             onClick={() => onFiltersChange(defaultFilters)}
+diff --git a/cloud/apps/web/src/components/definitions/ExpandedScenarios.tsx b/cloud/apps/web/src/components/definitions/ExpandedScenarios.tsx
+index e9b9fc8..d2dc9c5 100644
+--- a/cloud/apps/web/src/components/definitions/ExpandedScenarios.tsx
++++ b/cloud/apps/web/src/components/definitions/ExpandedScenarios.tsx
+@@ -162,7 +162,7 @@ export function ExpandedScenarios({ definitionId, expansionStatus, onRegenerateT
+               <div className="flex items-center gap-2 text-gray-600">
+                 <AlertCircle className="w-4 h-4" />
+                 <p className="text-sm">
+-                  No scenarios found. Generate scenarios by saving this definition.
++                  No scenarios found. Generate scenarios by saving this vignette.
+                 </p>
+               </div>
+             </div>
+diff --git a/cloud/apps/web/src/components/definitions/ForkDialog.tsx b/cloud/apps/web/src/components/definitions/ForkDialog.tsx
+index 4b983fe..a602066 100644
+--- a/cloud/apps/web/src/components/definitions/ForkDialog.tsx
++++ b/cloud/apps/web/src/components/definitions/ForkDialog.tsx
+@@ -50,7 +50,7 @@ export function ForkDialog({
+           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+             <div className="flex items-center gap-2">
+               <GitBranch className="w-5 h-5 text-teal-600" />
+-              <h2 className="text-lg font-medium text-gray-900">Fork Definition</h2>
++              <h2 className="text-lg font-medium text-gray-900">Fork Vignette</h2>
+             </div>
+             <Button
+               type="button"
+@@ -69,7 +69,7 @@ export function ForkDialog({
+             <div className="px-6 py-4">
+               <p className="text-sm text-gray-600 mb-4">
+                 Create a new variant of <strong>{originalName}</strong>. The fork will
+-                inherit all content from the parent definition.
++                inherit all content from the parent vignette.
+               </p>
+ 
+               {/* Inheritance explanation */}
+@@ -100,7 +100,7 @@ export function ForkDialog({
+                   setName(e.target.value);
+                   setError(null);
+                 }}
+-                placeholder="Enter a name for the forked definition"
++                placeholder="Enter a name for the forked vignette"
+                 error={error || undefined}
+                 disabled={isForking}
+                 autoFocus
+diff --git a/cloud/apps/web/src/components/definitions/index.ts b/cloud/apps/web/src/components/definitions/index.ts
+index 5aa4b6a..82d8b4f 100644
+--- a/cloud/apps/web/src/components/definitions/index.ts
++++ b/cloud/apps/web/src/components/definitions/index.ts
+@@ -1,4 +1,4 @@
+-// Definition Management UI Components
++// Vignette Management UI Components
+ export { DefinitionCard } from './DefinitionCard';
+ export { DefinitionEditor } from './DefinitionEditor';
+ export { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
+diff --git a/cloud/apps/web/src/components/export/ExportButton.tsx b/cloud/apps/web/src/components/export/ExportButton.tsx
+index 65582e5..44ff631 100644
+--- a/cloud/apps/web/src/components/export/ExportButton.tsx
++++ b/cloud/apps/web/src/components/export/ExportButton.tsx
+@@ -91,7 +91,7 @@ export function ExportButton({
+           >
+             <FileText size={16} className="text-gray-400" />
+             <div>
+-              <div className="font-medium">Definition (Markdown)</div>
++              <div className="font-medium">Vignette (Markdown)</div>
+               <div className="text-xs text-gray-500">Devtool-compatible format</div>
+             </div>
+           </button>
+diff --git a/cloud/apps/web/src/components/import/ImportDialog.tsx b/cloud/apps/web/src/components/import/ImportDialog.tsx
+index 4ee573a..bfe32a1 100644
+--- a/cloud/apps/web/src/components/import/ImportDialog.tsx
++++ b/cloud/apps/web/src/components/import/ImportDialog.tsx
+@@ -139,7 +139,7 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
+           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+             <div className="flex items-center gap-2">
+               <Upload className="w-5 h-5 text-teal-600" />
+-              <h2 className="text-lg font-medium text-gray-900">Import Definition</h2>
++              <h2 className="text-lg font-medium text-gray-900">Import Vignette</h2>
+             </div>
+             <Button
+               type="button"
+@@ -163,16 +163,16 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
+                   Import Successful!
+                 </h3>
+                 <p className="text-gray-600 mb-6">
+-                  Definition &ldquo;{importedName}&rdquo; has been imported.
++                  Vignette &ldquo;{importedName}&rdquo; has been imported.
+                 </p>
+                 <Button variant="primary" onClick={handleGoToDefinition}>
+-                  Go to Definition
++                  Go to Vignette
+                 </Button>
+               </div>
+             ) : (
+               <>
+                 <p className="text-sm text-gray-600 mb-4">
+-                  Import a definition from a markdown (.md) file. The file should be in
++                  Import a vignette from a markdown (.md) file. The file should be in
+                   devtool-compatible format with frontmatter and sections.
+                 </p>
+ 
+diff --git a/cloud/apps/web/src/components/layout/MobileNav.tsx b/cloud/apps/web/src/components/layout/MobileNav.tsx
+index e118019..a314eec 100644
+--- a/cloud/apps/web/src/components/layout/MobileNav.tsx
++++ b/cloud/apps/web/src/components/layout/MobileNav.tsx
+@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
+ import { cn } from '../../lib/utils';
+ 
+ const navItems = [
+-  { name: 'Definitions', path: '/definitions', icon: FileText },
++  { name: 'Vignettes', path: '/definitions', icon: FileText },
+   { name: 'Runs', path: '/runs', icon: Play },
+   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
+   { name: 'Compare', path: '/compare', icon: GitCompare },
+diff --git a/cloud/apps/web/src/components/layout/NavTabs.tsx b/cloud/apps/web/src/components/layout/NavTabs.tsx
+index a35746d..65cca75 100644
+--- a/cloud/apps/web/src/components/layout/NavTabs.tsx
++++ b/cloud/apps/web/src/components/layout/NavTabs.tsx
+@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
+ import { FileText, Play, BarChart2, GitCompare, FlaskConical, Settings } from 'lucide-react';
+ 
+ const tabs = [
+-  { name: 'Definitions', path: '/definitions', icon: FileText },
++  { name: 'Vignettes', path: '/definitions', icon: FileText },
+   { name: 'Runs', path: '/runs', icon: Play },
+   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
+   { name: 'Compare', path: '/compare', icon: GitCompare },
+diff --git a/cloud/apps/web/src/hooks/index.ts b/cloud/apps/web/src/hooks/index.ts
+index d2419a6..4da0c4c 100644
+--- a/cloud/apps/web/src/hooks/index.ts
++++ b/cloud/apps/web/src/hooks/index.ts
+@@ -1,4 +1,4 @@
+-// Custom hooks for Definition Management
++// Custom hooks for Vignette Management
+ export { useDefinition } from './useDefinition';
+ export { useDefinitions } from './useDefinitions';
+ export { useDefinitionMutations } from './useDefinitionMutations';
+diff --git a/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx b/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
+index b20bda6..70cbd96 100644
+--- a/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
++++ b/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
+@@ -184,12 +184,12 @@ export function DefinitionDetail() {
+         <div className="flex items-center gap-4">
+           <Button variant="ghost" size="sm" onClick={() => navigate('/definitions')}>
+             <ArrowLeft className="w-4 h-4 mr-1" />
+-            Back to Definitions
++            Back to Vignettes
+           </Button>
+         </div>
+ 
+         <div className="bg-white rounded-lg border border-gray-200 p-6">
+-          <h1 className="text-xl font-medium text-gray-900 mb-6">Create New Definition</h1>
++          <h1 className="text-xl font-medium text-gray-900 mb-6">Create New Vignette</h1>
+ 
+           <DefinitionEditor
+             mode="create"
+@@ -212,7 +212,7 @@ export function DefinitionDetail() {
+             Back
+           </Button>
+         </div>
+-        <Loading size="lg" text="Loading definition..." />
++        <Loading size="lg" text="Loading vignette..." />
+       </div>
+     );
+   }
+@@ -227,7 +227,7 @@ export function DefinitionDetail() {
+             Back
+           </Button>
+         </div>
+-        <ErrorMessage message={`Failed to load definition: ${error.message}`} />
++        <ErrorMessage message={`Failed to load vignette: ${error.message}`} />
+       </div>
+     );
+   }
+@@ -242,7 +242,7 @@ export function DefinitionDetail() {
+             Back
+           </Button>
+         </div>
+-        <ErrorMessage message="Definition not found" />
++        <ErrorMessage message="Vignette not found" />
+       </div>
+     );
+   }
+@@ -259,7 +259,7 @@ export function DefinitionDetail() {
+         </div>
+ 
+         <div className="bg-white rounded-lg border border-gray-200 p-6">
+-          <h1 className="text-xl font-medium text-gray-900 mb-6">Edit Definition</h1>
++          <h1 className="text-xl font-medium text-gray-900 mb-6">Edit Vignette</h1>
+ 
+           <DefinitionEditor
+             mode="edit"
+diff --git a/cloud/apps/web/src/pages/DefinitionDetail/DeleteDefinitionModal.tsx b/cloud/apps/web/src/pages/DefinitionDetail/DeleteDefinitionModal.tsx
+index edd525b..28f0763 100644
+--- a/cloud/apps/web/src/pages/DefinitionDetail/DeleteDefinitionModal.tsx
++++ b/cloud/apps/web/src/pages/DefinitionDetail/DeleteDefinitionModal.tsx
+@@ -28,13 +28,13 @@ export function DeleteDefinitionModal({
+   return (
+     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+       <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+-        <h2 className="text-lg font-medium text-gray-900 mb-4">Delete Definition</h2>
++        <h2 className="text-lg font-medium text-gray-900 mb-4">Delete Vignette</h2>
+         <p className="text-gray-600 mb-2">
+           Are you sure you want to delete &quot;{definitionName}&quot;?
+         </p>
+         {childCount > 0 && (
+           <p className="text-amber-600 text-sm mb-4">
+-            This will also delete {childCount} forked definition
++            This will also delete {childCount} forked vignette
+             {childCount !== 1 ? 's' : ''}.
+           </p>
+         )}
+diff --git a/cloud/apps/web/src/pages/Definitions.tsx b/cloud/apps/web/src/pages/Definitions.tsx
+index c769d8c..d4b5eb9 100644
+--- a/cloud/apps/web/src/pages/Definitions.tsx
++++ b/cloud/apps/web/src/pages/Definitions.tsx
+@@ -28,9 +28,7 @@ export function Definitions() {
+ 
+   return (
+     <div className="space-y-6">
+-      <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
+-        Definitions
+-      </h1>
++      <h2 className="text-lg font-medium text-gray-900">Vignettes</h2>
+       <DefinitionList
+         definitions={definitions}
+         loading={loading}
+diff --git a/cloud/apps/web/src/pages/Runs.tsx b/cloud/apps/web/src/pages/Runs.tsx
+index a5c00ad..a5bc672 100644
+--- a/cloud/apps/web/src/pages/Runs.tsx
++++ b/cloud/apps/web/src/pages/Runs.tsx
+@@ -149,11 +149,10 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
+         No runs yet
+       </h3>
+       <p className="text-gray-500 mb-4">
+-        Start your first evaluation run from a definition.
++        Start your first evaluation run from a vignette.
+       </p>
+       <Button onClick={() => navigate('/definitions')}>
+-        Go to Definitions
+-      </Button>
+-    </div>
++                Go to Vignettes
++              </Button>    </div>
+   );
+ }
+diff --git a/cloud/package.json b/cloud/package.json
+index 1adac0b..f73382e 100644
+--- a/cloud/package.json
++++ b/cloud/package.json
+@@ -16,7 +16,7 @@
+     "db:migrate": "npm run migrate --workspace=@valuerank/db",
+     "db:generate": "npm run generate --workspace=@valuerank/db",
+     "db:studio": "npm run studio --workspace=@valuerank/db",
+-    "db:push": "npm run push --workspace=@valuerank/db",
++    "db:push": "npx prisma db push --schema=./packages/db/prisma/schema.prisma",
+     "db:seed": "npx prisma db seed --schema=packages/db/prisma/schema.prisma",
+     "db:test:setup": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
+     "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --force-reset --skip-generate",
+-- 
+2.50.1 (Apple Git-155)
+

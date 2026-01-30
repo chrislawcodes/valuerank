@@ -479,7 +479,7 @@ The project uses PostgreSQL with **PgBouncer** for connection pooling. This prev
 ### Connection URLs
 
 | Purpose | Port | URL |
-|---------|------|-----|
+|-----------|------|-----|
 | **Application** (via PgBouncer) | 6432 | `postgresql://valuerank:valuerank@localhost:6432/valuerank?pgbouncer=true` |
 | **Migrations** (direct) | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank` |
 | **Test database** | 5433 | `postgresql://valuerank:valuerank@localhost:5433/valuerank_test` |
@@ -782,7 +782,7 @@ DATABASE_URL="postgresql://valuerank:valuerank@localhost:5433/valuerank" \
    // Or use upsert for shared fixtures
    await db.tag.upsert({
      where: { name: 'test-tag' },
-     update: {},
+     update: {}, 
      create: { name: 'test-tag' },
    });
    ```
@@ -831,7 +831,7 @@ curl -s -X POST http://localhost:3031/graphql \
 ### One-liner (copy-paste ready)
 
 ```bash
-TOKEN=$(node -e "const jwt=require('jsonwebtoken');console.log(jwt.sign({sub:'cmixy5vz90000l8tv2t6ar0vc',email:'dev@valuerank.ai'},'dev-secret-key-for-local-development-only-32chars',{expiresIn:'1h'}))") && curl -s -X POST http://localhost:3031/graphql -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"query": "query { runs(limit: 5) { id status } }"}'
+TOKEN=$(node -e "const jwt=require('jsonwebtoken');console.log(jwt.sign({sub:'cmixy5vz90000l8tv2t6ar0vc',email:'dev@valuerank.ai'},'dev-secret-key-for-local-development-only-32chars',{expiresIn:'1h'}))" ) && curl -s -X POST http://localhost:3031/graphql -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"query": "query { runs(limit: 5) { id status } }"}'
 ```
 
 ### Common Errors
@@ -949,6 +949,7 @@ Error handling: Custom AppError classes
 Imports:        Node → External → Internal → Relative
 Prod logs:      railway logs --service api
 ```
+
 
 ## Terminology
 

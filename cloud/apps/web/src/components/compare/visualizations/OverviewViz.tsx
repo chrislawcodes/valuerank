@@ -76,7 +76,7 @@ export function OverviewViz({ runs, statistics }: ComparisonVisualizationProps) 
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-2 px-3 text-gray-600 font-medium">Run</th>
-                <th className="text-left py-2 px-3 text-gray-600 font-medium">Definition</th>
+                <th className="text-left py-2 px-3 text-gray-600 font-medium">Vignette</th>
                 <th className="text-left py-2 px-3 text-gray-600 font-medium">Models</th>
                 <th className="text-right py-2 px-3 text-gray-600 font-medium">Samples</th>
                 <th className="text-right py-2 px-3 text-gray-600 font-medium">Mean</th>

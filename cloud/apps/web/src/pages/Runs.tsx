@@ -149,10 +149,10 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
         No runs yet
       </h3>
       <p className="text-gray-500 mb-4">
-        Start your first evaluation run from a definition.
+        Start your first evaluation run from a vignette.
       </p>
       <Button onClick={() => navigate('/definitions')}>
-        Go to Definitions
+        Go to Vignettes
       </Button>
     </div>
   );
