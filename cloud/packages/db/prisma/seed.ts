@@ -20,6 +20,9 @@ const prisma = new PrismaClient();
 // LLM PROVIDER SEED DATA
 // ============================================================================
 
+// Note: Some model names below (e.g. gpt-5, claude-haiku-4-5) are placeholders
+// for future model compatibility testing and do not necessarily represent
+// currently available API models.
 const llmProviders = [
   {
     name: 'openai',
