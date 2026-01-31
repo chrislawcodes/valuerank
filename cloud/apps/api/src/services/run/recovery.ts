@@ -462,7 +462,7 @@ export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; 
     SELECT id, name, data->>'runId' as run_id
     FROM pgboss.job
     WHERE state = 'active'
-      AND started_on < NOW() - INTERVAL '5 minutes'
+      AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
       AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
   `;
 
