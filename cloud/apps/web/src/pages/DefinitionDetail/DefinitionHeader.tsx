@@ -53,9 +53,9 @@ export function DefinitionHeader({
           <Edit className="w-4 h-4 sm:mr-2" />
           <span className="hidden sm:inline">Edit</span>
         </Button>
-        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0} title="Start Run">
+        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0} title="Start Trial">
           <Play className="w-4 h-4 sm:mr-2" />
-          <span className="hidden sm:inline">Start Run</span>
+          <span className="hidden sm:inline">Start Trial</span>
         </Button>
       </div>
     </div>

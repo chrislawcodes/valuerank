@@ -135,7 +135,7 @@ export function DimensionEditor({
             handleNameChange(e.target.value);
           }}
           onClick={(e) => e.stopPropagation()}
-          placeholder="Dimension name"
+          placeholder="Attribute name"
           className="flex-1 px-2 py-1 text-sm font-medium border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
         />
 

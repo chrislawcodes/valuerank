@@ -59,7 +59,7 @@ export function ScenarioCard({ scenario, index, isExpanded, onToggle }: Scenario
           {/* Dimension values */}
           {dimensions.length > 0 && (
             <div>
-              <p className="text-xs text-gray-500 mb-2">Dimension Values</p>
+              <p className="text-xs text-gray-500 mb-2">Attribute Values</p>
               <div className="flex flex-wrap gap-2">
                 {dimensions.map((dim) => (
                   <span
