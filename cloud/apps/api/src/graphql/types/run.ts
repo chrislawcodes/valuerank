@@ -152,11 +152,16 @@ builder.objectType(RunRef, {
           failed: Number(row.failed),
         }));
 
+        // Calculate totals dynamically from the actual transcript counts
+        // This avoids race conditions where the stored JSON progress drifts from reality (e.g., getting 7/6)
+        const dynamicCompleted = byModel.reduce((sum, m) => sum + m.completed, 0);
+        const dynamicFailed = byModel.reduce((sum, m) => sum + m.failed, 0);
+
         return {
           total: progress.total,
-          completed: progress.completed,
-          failed: progress.failed,
-          percentComplete: calculatePercentComplete(progress),
+          completed: dynamicCompleted,
+          failed: dynamicFailed,
+          percentComplete: Math.min(100, Math.round(((dynamicCompleted + dynamicFailed) / progress.total) * 100)),
           byModel: byModel.length > 0 ? byModel : undefined,
         };
       },
@@ -372,8 +377,21 @@ builder.objectType(RunRef, {
           // PgBoss tables may not exist
         }
 
-        // No analysis and no pending job - run may not be completed yet
-        return run.status === 'COMPLETED' ? 'pending' : null;
+        // No analysis and no recognized job state
+        // If run is completed and older than 5 minutes, assume analysis failed to start/complete (orphaned)
+        if (run.completedAt) {
+          const completedAt = new Date(run.completedAt);
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+          if (completedAt < fiveMinutesAgo) {
+            return 'failed';
+          }
+
+          // Otherwise, it might be just finished and job is about to be queued
+          return 'pending';
+        }
+
+        return null; // Not completed yet, so no analysis expected
       },
     }),
 

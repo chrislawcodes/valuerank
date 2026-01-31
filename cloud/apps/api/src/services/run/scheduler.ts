@@ -12,7 +12,12 @@
  */
 
 import { createLogger } from '@valuerank/shared';
-import { recoverOrphanedRuns, RECOVERY_INTERVAL_MS, runStartupRecovery } from './recovery.js';
+import {
+  recoverOrphanedRuns,
+  detectAndRecoverStuckJobs,
+  RECOVERY_INTERVAL_MS,
+  runStartupRecovery
+} from './recovery.js';
 
 const log = createLogger('services:run:scheduler');
 
@@ -35,13 +40,15 @@ async function runRecoveryJob(): Promise<void> {
   isRecovering = true;
   try {
     const result = await recoverOrphanedRuns();
+    const zombieResult = await detectAndRecoverStuckJobs();
 
-    if (result.detected.length > 0 || result.errors.length > 0) {
+    if (result.detected.length > 0 || result.errors.length > 0 || zombieResult.recovered > 0) {
       log.info(
         {
           detected: result.detected.length,
           recovered: result.recovered.length,
-          errors: result.errors.length,
+          zombiesKilled: zombieResult.recovered,
+          errors: result.errors.length + zombieResult.errors,
         },
         'Recovery job completed'
       );

@@ -71,7 +71,8 @@ class GeminiAdapter(BaseLLMAdapter):
 
         # Only add maxOutputTokens if not unlimited (None)
         # For Gemini 2.5 thinking models, omitting this allows full thinking + output
-        if resolved_max_tokens is not None:
+        # (Default 1024 is too low for thinking models)
+        if resolved_max_tokens is not None and not model.startswith("gemini-2.5"):
             generation_config["maxOutputTokens"] = resolved_max_tokens
 
         # Add optional config values (Google supports topP and stopSequences)
@@ -85,9 +86,19 @@ class GeminiAdapter(BaseLLMAdapter):
 
         # Note: Google does NOT support frequencyPenalty or presencePenalty
 
+        # Disable safety filters to prevent empty responses on ethical scenarios
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE"},
+        ]
+
         payload: dict[str, Any] = {
             "contents": contents,
             "generationConfig": generation_config,
+            "safetySettings": safety_settings,
         }
 
         if system_parts:

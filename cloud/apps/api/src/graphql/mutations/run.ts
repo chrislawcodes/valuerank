@@ -98,9 +98,14 @@ builder.mutationField('startRun', (t) =>
         'Starting run via GraphQL'
       );
 
+      // Alias legacy model IDs
+      const models = input.models.map(m =>
+        m === 'gemini-2.5-flash-preview-05-20' ? 'gemini-2.5-flash-preview-09-2025' : m
+      );
+
       const result = await startRunService({
         definitionId: String(input.definitionId),
-        models: input.models,
+        models: models,
         samplePercentage: input.samplePercentage ?? undefined,
         sampleSeed: input.sampleSeed ?? undefined,
         samplesPerScenario: input.samplesPerScenario ?? undefined,

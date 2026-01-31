@@ -36,6 +36,7 @@ export type ProviderExecutionMetrics = {
   maxParallel: number;
   requestsPerMinute: number;
   recentCompletions: CompletionEvent[];
+  activeModelIds: string[];
 };
 
 export type ExecutionMetrics = {
@@ -201,6 +202,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
         queuedJobs
         maxParallel
         requestsPerMinute
+        activeModelIds
         recentCompletions {
           modelId
           scenarioId

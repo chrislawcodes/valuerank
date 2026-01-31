@@ -107,7 +107,12 @@ async function maybeCompleteRun(runId: string): Promise<void> {
 
     // Trigger basic analysis for the completed run
     try {
-      await triggerBasicAnalysis(runId);
+      const prompted = await triggerBasicAnalysis(runId);
+      if (prompted) {
+        log.info({ runId }, 'Analysis triggered successfully');
+      } else {
+        log.warn({ runId }, 'Analysis not triggered - no qualify transcripts?');
+      }
     } catch (error) {
       // Log error but don't fail - analysis can be triggered manually
       log.error({ runId, err: error }, 'Failed to trigger basic analysis');
