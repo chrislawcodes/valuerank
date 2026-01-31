@@ -43,7 +43,7 @@ function createDefaultContent(): DefinitionContent {
 function createDefaultDimension(): Dimension {
   return {
     name: '',
-    levels: [createDefaultLevel(0)],
+    levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
   };
 }
 
