@@ -125,12 +125,8 @@ export function DefinitionEditor({
   const handleAddCanonicalDimension = useCallback((canonical: CanonicalDimension) => {
     const dimension: Dimension = {
       name: canonical.name,
-      levels: canonical.levels.map((level) => ({
-        score: level.score,
-        label: level.label,
-        description: undefined,
-        options: [...level.options],
-      })),
+      // Always use the standard 5 levels with default text
+      levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
     };
     setContent((prev) => ({
       ...prev,
