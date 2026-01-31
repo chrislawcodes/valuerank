@@ -104,12 +104,10 @@ export function DimensionEditor({
   };
 
   const handleOptionsBlur = (levelIndex: number) => {
-    const text = optionsTextMap[levelIndex] || '';
-    const options = text
-      .split(',')
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0);
-    handleLevelChange(levelIndex, { options: options.length > 0 ? options : undefined });
+    const text = optionsTextMap[levelIndex]?.trim() || '';
+    // Treat as single text entry, do not split by comma
+    const options = text.length > 0 ? [text] : undefined;
+    handleLevelChange(levelIndex, { options });
   };
 
   return (
@@ -164,10 +162,9 @@ export function DimensionEditor({
       {isExpanded && (
         <div className="p-3">
           {/* Grid Header */}
-          <div className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 mb-1 px-1">
-            <span className="text-xs text-gray-500">Score</span>
-            <span className="text-xs text-gray-500">Label</span>
-            <span className="text-xs text-gray-500">Options (comma-separated)</span>
+          <div className="grid grid-cols-[4rem_1fr_1.5rem] gap-2 mb-1 px-1">
+            <span className="text-xs text-gray-500">Level</span>
+            <span className="text-xs text-gray-500">Text</span>
             <span></span>
           </div>
 
@@ -176,7 +173,7 @@ export function DimensionEditor({
             {levels.map((level, levelIndex) => (
               <div
                 key={levelIndex}
-                className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 items-center"
+                className="grid grid-cols-[4rem_1fr_1.5rem] gap-2 items-center"
               >
                 <input
                   type="number"
@@ -192,17 +189,10 @@ export function DimensionEditor({
                 />
                 <input
                   type="text"
-                  value={level.label}
-                  onChange={(e) => handleLevelChange(levelIndex, { label: e.target.value })}
-                  placeholder="Label"
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-                <input
-                  type="text"
                   value={optionsTextMap[levelIndex] ?? ''}
                   onChange={(e) => handleOptionsTextChange(levelIndex, e.target.value)}
                   onBlur={() => handleOptionsBlur(levelIndex)}
-                  placeholder="option1, option2, option3"
+                  placeholder="Enter description text"
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
                 <Button
