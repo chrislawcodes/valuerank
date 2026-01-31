@@ -5,6 +5,9 @@ import { startOrchestrator, stopOrchestrator } from './queue/index.js';
 
 const log = createLogger('api');
 
+// Force restart to pick up Gemini token fix
+
+
 async function main() {
   const app = createServer();
 

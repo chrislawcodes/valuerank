@@ -152,6 +152,24 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     throw new ValidationError(`Invalid priority: ${priority}. Must be one of: ${validPriorities.join(', ')}`);
   }
 
+  // Validate that all requested models are ACTIVE
+  const activeModels = await db.llmModel.findMany({
+    where: {
+      modelId: { in: models },
+      status: 'ACTIVE',
+    },
+    select: { modelId: true },
+  });
+
+  const activeModelIds = activeModels.map(m => m.modelId);
+  const invalidModelIds = models.filter(m => !activeModelIds.includes(m));
+
+  if (invalidModelIds.length > 0) {
+    throw new ValidationError(
+      `The following models are not active or valid: ${invalidModelIds.join(', ')}. Please refresh your page to get the latest model list.`
+    );
+  }
+
   // Fetch definition with scenarios (filtering out deleted)
   const definition = await db.definition.findUnique({
     where: { id: definitionId },

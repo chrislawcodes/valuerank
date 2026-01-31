@@ -59,9 +59,8 @@ function ConcurrencyGauge({ active, max, color }: { active: number; max: number;
       {slots.map((isActive, i) => (
         <div
           key={i}
-          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-            isActive ? `${color} animate-pulse` : 'bg-gray-200'
-          }`}
+          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${isActive ? `${color} animate-pulse` : 'bg-gray-200'
+            }`}
         />
       ))}
       <span className="ml-1.5 text-xs text-gray-500 tabular-nums">
@@ -127,6 +126,19 @@ function ProviderCard({ provider }: { provider: ProviderExecutionMetrics }) {
           <span className="ml-auto text-amber-600">+{provider.queuedJobs} queued</span>
         )}
       </div>
+
+      {/* Active Models Display */}
+      {provider.activeModelIds && provider.activeModelIds.length > 0 && (
+        <div className="mb-2 text-xs">
+          <span className="text-gray-500 font-medium">Active: </span>
+          <span className="text-gray-700">
+            {provider.activeModelIds.slice(0, 3).join(', ')}
+            {provider.activeModelIds.length > 3 && (
+              <span className="text-gray-400"> +{provider.activeModelIds.length - 3} more</span>
+            )}
+          </span>
+        </div>
+      )}
 
       {/* Progress bar */}
       <ProviderProgressBar provider={provider} />

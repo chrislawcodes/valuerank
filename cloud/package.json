@@ -36,5 +36,8 @@
   "packageManager": "npm@10.2.0",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "prisma": {
+    "seed": "tsx packages/db/prisma/seed.ts"
   }
 }

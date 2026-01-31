@@ -24,30 +24,39 @@ export interface LLMOptions {
 // Load API keys from environment or .env file
 export async function loadEnvFile(): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
-  const envPath = path.join(PROJECT_ROOT, 'cloud', '.env');
-  try {
-    const content = await fs.readFile(envPath, 'utf-8');
-    log.info(`Loading .env from ${envPath}`);
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const eqIndex = trimmed.indexOf('=');
-        if (eqIndex > 0) {
-          const key = trimmed.slice(0, eqIndex).trim();
-          let value = trimmed.slice(eqIndex + 1).trim();
-          if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
+  const pathsToCheck = [
+    path.join(PROJECT_ROOT, '.env'),
+    path.join(PROJECT_ROOT, 'cloud', '.env')
+  ];
+
+  for (const envPath of pathsToCheck) {
+    try {
+      const content = await fs.readFile(envPath, 'utf-8');
+      log.info(`Loading .env from ${envPath}`);
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const eqIndex = trimmed.indexOf('=');
+          if (eqIndex > 0) {
+            const key = trimmed.slice(0, eqIndex).trim();
+            let value = trimmed.slice(eqIndex + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+              (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.slice(1, -1);
+            }
+            // Don't overwrite if already set (root .env takes precedence if both exist, but here we process in order)
+            if (!env[key]) {
+              env[key] = value;
+            }
           }
-          env[key] = value;
         }
       }
-    }
-  } catch (err: any) {
-    if (err.code === 'ENOENT') {
-      log.debug(`.env file not found at ${envPath}, skipping`);
-    } else {
-      log.error(`Error reading .env from ${envPath}: ${err.message}`);
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        log.debug(`.env file not found at ${envPath}, skipping`);
+      } else {
+        log.error(`Error reading .env from ${envPath}: ${err.message}`);
+      }
     }
   }
   return env;

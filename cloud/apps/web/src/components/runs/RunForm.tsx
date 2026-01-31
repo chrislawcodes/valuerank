@@ -57,7 +57,7 @@ export function RunForm({
 
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
-    samplePercentage: 1, // Default to 1% for testing per user's request
+    samplePercentage: 1, // Default to 1% (test trial)
     samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
     showAdvanced: false,
   });

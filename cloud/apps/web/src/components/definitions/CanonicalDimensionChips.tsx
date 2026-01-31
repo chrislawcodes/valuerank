@@ -32,7 +32,7 @@ export function CanonicalDimensionChips({
     <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-medium text-gray-700">
-          Canonical Dimensions
+          Canonical Attributes
         </h4>
         <span className="text-xs text-gray-400">
           Click to add with pre-filled levels
@@ -54,12 +54,11 @@ export function CanonicalDimensionChips({
               className={`
                 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm
                 transition-colors
-                ${
-                  isAdded
-                    ? 'bg-teal-100 text-teal-700 cursor-default'
-                    : disabled
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 cursor-pointer'
+                ${isAdded
+                  ? 'bg-teal-100 text-teal-700 cursor-default'
+                  : disabled
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-700 cursor-pointer'
                 }
               `}
             >

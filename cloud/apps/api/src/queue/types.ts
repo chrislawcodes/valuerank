@@ -68,7 +68,7 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryLimit: 3,
     retryDelay: 5,
     retryBackoff: true,
-    expireInSeconds: 600, // 10 minutes - Gemini can be slow
+    expireInSeconds: 420, // 7 minutes - covers 5m timeout + buffer
   },
   'summarize_transcript': {
     retryLimit: 3,

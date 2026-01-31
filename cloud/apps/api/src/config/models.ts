@@ -123,7 +123,7 @@ export function isProviderConfigured(envKey: string): boolean {
  * Check if a provider is available by name.
  */
 export function isProviderAvailable(providerName: string): boolean {
-  const envKey = PROVIDER_ENV_KEYS[providerName];
+  const envKey = PROVIDER_ENV_KEYS[providerName.toLowerCase()];
   if (!envKey) return false;
   return isProviderConfigured(envKey);
 }

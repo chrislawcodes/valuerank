@@ -24,6 +24,7 @@ export type ProviderMetrics = {
   maxParallel: number;
   requestsPerMinute: number;
   recentCompletions: CompletionEvent[];
+  activeModelIds: string[];
 };
 
 export type CompletionEvent = {
@@ -34,6 +35,8 @@ export type CompletionEvent = {
   durationMs: number;
 };
 
+// ProviderMetrics type updated
+
 // Circular buffer for recent completions per provider
 const recentCompletionsBuffer = new Map<string, CompletionEvent[]>();
 const MAX_RECENT_COMPLETIONS = 10;
@@ -41,6 +44,9 @@ const MAX_RECENT_COMPLETIONS = 10;
 // Active job tracking
 const activeJobCounts = new Map<string, number>();
 const queuedJobCounts = new Map<string, number>();
+
+// Track active models per provider (Provider -> ModelId -> Count)
+const activeModelCounts = new Map<string, Map<string, number>>();
 
 // Track limiter configuration for diagnostics
 const limiterConfigs = new Map<string, {
@@ -121,9 +127,9 @@ async function getOrCreateLimiter(
   // Apply concurrency override if provided (use max of provider limit and override)
   const effectiveLimits = concurrencyOverride
     ? {
-        ...limits,
-        maxParallelRequests: Math.max(limits.maxParallelRequests, concurrencyOverride),
-      }
+      ...limits,
+      maxParallelRequests: Math.max(limits.maxParallelRequests, concurrencyOverride),
+    }
     : limits;
 
   if (concurrencyOverride) {
@@ -268,7 +274,30 @@ export async function schedule<T>(
   const startTime = Date.now();
 
   try {
-    const result = await limiter.schedule({ id: jobId }, fn);
+    // Wrap function to track active model during execution phase
+    const wrappedFn = async () => {
+      // Increment active count for this model
+      let providerModels = activeModelCounts.get(providerName);
+      if (!providerModels) {
+        providerModels = new Map<string, number>();
+        activeModelCounts.set(providerName, providerModels);
+      }
+      providerModels.set(modelId, (providerModels.get(modelId) ?? 0) + 1);
+
+      try {
+        return await fn();
+      } finally {
+        // Decrement active count for this model
+        const currentCount = providerModels.get(modelId) ?? 0;
+        if (currentCount <= 1) {
+          providerModels.delete(modelId);
+        } else {
+          providerModels.set(modelId, currentCount - 1);
+        }
+      }
+    };
+
+    const result = await limiter.schedule({ id: jobId }, wrappedFn);
 
     // Record successful completion
     recordCompletion(providerName, {
@@ -323,6 +352,7 @@ export async function getAllMetrics(): Promise<ProviderMetrics[]> {
       maxParallel: limits.maxParallelRequests,
       requestsPerMinute: limits.requestsPerMinute,
       recentCompletions: recentCompletionsBuffer.get(providerName) ?? [],
+      activeModelIds: Array.from(activeModelCounts.get(providerName)?.keys() ?? []),
     });
   }
 
@@ -347,6 +377,7 @@ export async function getProviderMetrics(providerName: string): Promise<Provider
     maxParallel: limits.maxParallelRequests,
     requestsPerMinute: limits.requestsPerMinute,
     recentCompletions: recentCompletionsBuffer.get(providerName) ?? [],
+    activeModelIds: Array.from(activeModelCounts.get(providerName)?.keys() ?? []),
   };
 }
 
@@ -378,6 +409,7 @@ export function clearAll(): void {
   limiterConfigs.clear();
   activeJobCounts.clear();
   queuedJobCounts.clear();
+  activeModelCounts.clear();
   recentCompletionsBuffer.clear();
   log.debug('All rate limiters cleared');
 }

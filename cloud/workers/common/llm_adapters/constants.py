@@ -5,7 +5,7 @@ Constants and configuration for LLM adapters.
 from typing import Optional
 
 # HTTP configuration
-DEFAULT_TIMEOUT = 60
+DEFAULT_TIMEOUT = 300
 MAX_HTTP_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 2.0
 

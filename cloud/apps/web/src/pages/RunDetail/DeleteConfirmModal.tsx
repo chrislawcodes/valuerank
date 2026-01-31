@@ -25,9 +25,9 @@ export function DeleteConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Run?</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Trial?</h3>
         <p className="text-sm text-gray-500 mb-4">
-          This will delete the run and all associated transcripts and analysis data. This action
+          This will delete the trial and all associated transcripts and analysis data. This action
           cannot be undone.
         </p>
         <div className="flex justify-end gap-3">

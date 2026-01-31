@@ -53,8 +53,10 @@ class OpenAIAdapter(BaseLLMAdapter):
         # Newer OpenAI models (gpt-5.1, o1, o3) require "max_completion_tokens"
         # Older models use "max_tokens"
         max_tokens_param = "max_tokens"
-        if model_config:
-            max_tokens_param = model_config.get("maxTokensParam", "max_tokens")
+        if model_config and "maxTokensParam" in model_config:
+            max_tokens_param = model_config["maxTokensParam"]
+        elif model.startswith(("gpt-5", "o1", "o3")):
+            max_tokens_param = "max_completion_tokens"
 
         # Resolve config values (model_config overrides function args)
         resolved_max_tokens = resolve_max_tokens(model_config, max_tokens)

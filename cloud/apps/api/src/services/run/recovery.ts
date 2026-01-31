@@ -439,5 +439,60 @@ export async function recoverOrphanedRuns(): Promise<RecoveryResult> {
  */
 export async function runStartupRecovery(): Promise<RecoveryResult> {
   log.info('Running startup recovery for orphaned runs');
-  return recoverOrphanedRuns();
+  // Run both standard recovery and zombie detection
+  const result = await recoverOrphanedRuns();
+  const zombieResult = await detectAndRecoverStuckJobs();
+
+  if (zombieResult.recovered > 0) {
+    log.info({ count: zombieResult.recovered }, 'Startup recovery killed zombie jobs');
+  }
+
+  return result;
+}
+
+/**
+ * Detects and recovers stuck jobs (zombies) that have been active for too long.
+ * This is a failsafe for when PgBoss expiration mechanisms fail or job handlers crash silently.
+ */
+export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; errors: number }> {
+  // Find jobs active for > 5 minutes (user requested tight watchdog)
+  const ZOMBIE_THRESHOLD_MINUTES = 5;
+
+  const stuckJobs = await db.$queryRaw<Array<{ id: string; name: string; run_id: string }>>`
+    SELECT id, name, data->>'runId' as run_id
+    FROM pgboss.job
+    WHERE state = 'active'
+      AND started_on < NOW() - (${ZOMBIE_THRESHOLD_MINUTES} || ' minutes')::interval
+      AND (name = 'probe_scenario' OR name LIKE 'probe_scenario_%')
+  `;
+
+  if (stuckJobs.length === 0) {
+    return { recovered: 0, errors: 0 };
+  }
+
+  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
+
+  let recovered = 0;
+  let errors = 0;
+
+  for (const job of stuckJobs) {
+    try {
+      // Force fail the job
+      await db.$executeRaw`
+        UPDATE pgboss.job 
+        SET state = 'failed', 
+            output = '{"error": "Zombie job detected and killed by watchdog (active > 15m)"}',
+            completed_on = NOW()
+        WHERE id = ${job.id}::uuid
+      `;
+
+      log.info({ jobId: job.id, runId: job.run_id }, 'Killed zombie job');
+      recovered++;
+    } catch (err) {
+      log.error({ jobId: job.id, err }, 'Failed to kill zombie job');
+      errors++;
+    }
+  }
+
+  return { recovered, errors };
 }

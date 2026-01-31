@@ -20,70 +20,68 @@ const prisma = new PrismaClient();
 // LLM PROVIDER SEED DATA
 // ============================================================================
 
+// Note: Some model names below (e.g. gpt-5, claude-haiku-4-5) are placeholders
+// for future model compatibility testing and do not necessarily represent
+// currently available API models.
 const llmProviders = [
   {
     name: 'openai',
     displayName: 'OpenAI',
-    maxParallelRequests: 5,
+    maxParallelRequests: 10,
     requestsPerMinute: 60,
     models: [
-      { modelId: 'gpt-4o-mini', displayName: 'GPT-4o Mini', costInput: 0.15, costOutput: 0.60, isDefault: true },
-      { modelId: 'gpt-4o', displayName: 'GPT-4o', costInput: 2.50, costOutput: 10.00 },
-      { modelId: 'gpt-4.1', displayName: 'GPT-4.1', costInput: 2.00, costOutput: 8.00 },
-      { modelId: 'o1', displayName: 'o1', costInput: 15.00, costOutput: 60.00 },
-      { modelId: 'o1-mini', displayName: 'o1 Mini', costInput: 1.10, costOutput: 4.40 },
-      { modelId: 'o3-mini', displayName: 'o3 Mini', costInput: 1.10, costOutput: 4.40 },
+      { modelId: 'gpt-5-mini', displayName: 'GPT-5 Mini', costInput: 0.25, costOutput: 2.00 },
+      { modelId: 'gpt-5.1', displayName: 'GPT-5.1', costInput: 1.25, costOutput: 10.00, isDefault: true },
     ],
   },
   {
     name: 'anthropic',
     displayName: 'Anthropic',
-    maxParallelRequests: 3,
-    requestsPerMinute: 40,
+    maxParallelRequests: 10,
+    requestsPerMinute: 60,
     models: [
-      { modelId: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4', costInput: 3.00, costOutput: 15.00, isDefault: true },
-      { modelId: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', costInput: 0.80, costOutput: 4.00 },
-      { modelId: 'claude-opus-4-20250514', displayName: 'Claude Opus 4', costInput: 15.00, costOutput: 75.00 },
+      { modelId: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5', costInput: 1.00, costOutput: 5.00 },
+      { modelId: 'claude-sonnet-4-5', displayName: 'Claude Sonnet 4.5', costInput: 3.00, costOutput: 15.00, isDefault: true },
     ],
   },
   {
     name: 'google',
     displayName: 'Google',
-    maxParallelRequests: 1,
-    requestsPerMinute: 10,
+    maxParallelRequests: 10,
+    requestsPerMinute: 60,
     models: [
-      { modelId: 'gemini-2.5-pro-preview-06-05', displayName: 'Gemini 2.5 Pro', costInput: 1.25, costOutput: 10.00, isDefault: true },
-      { modelId: 'gemini-2.5-flash-preview-05-20', displayName: 'Gemini 2.5 Flash', costInput: 0.15, costOutput: 0.60 },
+      { modelId: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', costInput: 1.25, costOutput: 10.00, isDefault: true },
+      { modelId: 'gemini-2.5-flash-preview-09-2025', displayName: 'Gemini 2.5 Flash', costInput: 0.30, costOutput: 2.50 },
     ],
   },
   {
     name: 'xai',
     displayName: 'xAI',
-    maxParallelRequests: 2,
-    requestsPerMinute: 30,
+    maxParallelRequests: 10,
+    requestsPerMinute: 60,
     models: [
-      { modelId: 'grok-3-mini-fast', displayName: 'Grok 3 Mini Fast', costInput: 0.30, costOutput: 0.50, isDefault: true },
-      { modelId: 'grok-3', displayName: 'Grok 3', costInput: 3.00, costOutput: 15.00 },
+      { modelId: 'grok-4-1-fast-reasoning', displayName: 'Grok 4.1 Fast Reasoning', costInput: 0.20, costOutput: 0.50, isDefault: true },
+      { modelId: 'grok-4-0709', displayName: 'Grok 4', costInput: 3.00, costOutput: 15.00 },
     ],
   },
   {
     name: 'deepseek',
     displayName: 'DeepSeek',
-    maxParallelRequests: 2,
-    requestsPerMinute: 30,
+    maxParallelRequests: 10,
+    requestsPerMinute: 60,
     models: [
-      { modelId: 'deepseek-chat', displayName: 'DeepSeek Chat', costInput: 0.14, costOutput: 0.28, isDefault: true },
-      { modelId: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner', costInput: 0.55, costOutput: 2.19 },
+      { modelId: 'deepseek-chat', displayName: 'DeepSeek Chat', costInput: 0.28, costOutput: 0.42, isDefault: true },
+      { modelId: 'deepseek-reasoner', displayName: 'DeepSeek Reasoner', costInput: 0.28, costOutput: 0.42 },
     ],
   },
   {
     name: 'mistral',
     displayName: 'Mistral',
-    maxParallelRequests: 2,
-    requestsPerMinute: 30,
+    maxParallelRequests: 10,
+    requestsPerMinute: 60,
     models: [
-      { modelId: 'mistral-large-2411', displayName: 'Mistral Large', costInput: 2.00, costOutput: 6.00, isDefault: true },
-      { modelId: 'mistral-small-2503', displayName: 'Mistral Small', costInput: 0.20, costOutput: 0.60 },
+      { modelId: 'mistral-large-2512', displayName: 'Mistral Large (Dec 2025)', costInput: 0.50, costOutput: 1.50, isDefault: true },
+      { modelId: 'mistral-small-2503', displayName: 'Mistral Small', costInput: 0.60, costOutput: 2.40 },
     ],
   },
 ];
@@ -376,7 +374,7 @@ async function main() {
       analysisType: 'value_comparison',
       inputHash: 'abc123',
       codeVersion: '1.0.0',
-      output: analysisOutput,
+      output: analysisOutput as any, // Cast to any to avoid strict InputJsonValue mismatch
       status: 'CURRENT',
     },
   });
@@ -414,7 +412,8 @@ async function main() {
 main()
   .catch((e) => {
     console.error('Seed failed:', e);
-    process.exit(1);
+    // process.exit(1); // Removed to avoid missing @types/node error in CI
+    throw e;
   })
   .finally(async () => {
     await prisma.$disconnect();

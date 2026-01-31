@@ -50,6 +50,7 @@ export const ProviderExecutionMetrics = builder.objectRef<{
     completedAt: Date;
     durationMs: number;
   }>;
+  activeModelIds: string[];
 }>('ProviderExecutionMetrics').implement({
   description: 'Execution metrics for a specific LLM provider',
   fields: (t) => ({
@@ -73,6 +74,11 @@ export const ProviderExecutionMetrics = builder.objectRef<{
       description: 'Recent job completions (last 10)',
       resolve: (parent) => parent.recentCompletions,
     }),
+    activeModelIds: t.field({
+      type: ['String'],
+      description: 'List of currently active model IDs for this provider',
+      resolve: (parent) => parent.activeModelIds,
+    }),
   }),
 });
 
@@ -91,6 +97,7 @@ export const ExecutionMetrics = builder.objectRef<{
       completedAt: Date;
       durationMs: number;
     }>;
+    activeModelIds: string[];
   }>;
   totalActive: number;
   totalQueued: number;

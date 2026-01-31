@@ -218,7 +218,12 @@ builder.queryField('estimateCost', (t) =>
       // Resolve model identifiers from various formats
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
       const modelIds: string[] = [];
-      for (const modelInput of models) {
+      for (let modelInput of models) {
+        // Alias legacy Gemini Flash ID
+        if (modelInput === 'gemini-2.5-flash-preview-05-20') {
+          modelInput = 'gemini-2.5-flash-preview-09-2025';
+        }
+
         // Check if it's a database UUID (cuid format: starts with 'c', ~25 chars, alphanumeric)
         // CUIDs look like: "clxx1234567890abcdefgh" - they don't contain dashes
         const isCuid = /^c[a-z0-9]{20,}$/i.test(modelInput);
