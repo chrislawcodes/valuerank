@@ -374,7 +374,7 @@ async function main() {
       analysisType: 'value_comparison',
       inputHash: 'abc123',
       codeVersion: '1.0.0',
-      output: analysisOutput,
+      output: analysisOutput as any, // Cast to any to avoid strict InputJsonValue mismatch
       status: 'CURRENT',
     },
   });
@@ -412,7 +412,8 @@ async function main() {
 main()
   .catch((e) => {
     console.error('Seed failed:', e);
-    process.exit(1);
+    // process.exit(1); // Removed to avoid missing @types/node error in CI
+    throw e;
   })
   .finally(async () => {
     await prisma.$disconnect();
