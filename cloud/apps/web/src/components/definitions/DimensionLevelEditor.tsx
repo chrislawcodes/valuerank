@@ -47,11 +47,9 @@ export function DimensionLevelEditor({
   };
 
   const handleOptionsBlur = () => {
-    const options = optionsText
-      .split(',')
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0);
-    onChange({ ...level, options: options.length > 0 ? options : undefined });
+    const text = optionsText.trim();
+    const options = text.length > 0 ? [text] : undefined;
+    onChange({ ...level, options });
   };
 
   return (
@@ -73,7 +71,7 @@ export function DimensionLevelEditor({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <Input
           label="Level"
           type="number"
@@ -81,12 +79,6 @@ export function DimensionLevelEditor({
           value={level.score}
           onChange={(e) => handleScoreChange(e.target.value)}
           placeholder="e.g., 1.0"
-        />
-        <Input
-          label="Label"
-          value={level.label}
-          onChange={(e) => handleLabelChange(e.target.value)}
-          placeholder="e.g., Low Risk"
         />
       </div>
 
@@ -105,11 +97,11 @@ export function DimensionLevelEditor({
 
       <div className="mt-3">
         <Input
-          label="Alternative options (comma-separated)"
+          label="Text"
           value={optionsText}
           onChange={(e) => handleOptionsTextChange(e.target.value)}
           onBlur={handleOptionsBlur}
-          placeholder="e.g., minimal, negligible, trivial"
+          placeholder="Enter description text"
         />
       </div>
     </div>
