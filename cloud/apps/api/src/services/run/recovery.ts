@@ -470,7 +470,7 @@ export async function detectAndRecoverStuckJobs(): Promise<{ recovered: number; 
     return { recovered: 0, errors: 0 };
   }
 
-  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 15m)');
+  log.warn({ count: stuckJobs.length }, 'Detected zombie jobs (active > 5m)');
 
   let recovered = 0;
   let errors = 0;
