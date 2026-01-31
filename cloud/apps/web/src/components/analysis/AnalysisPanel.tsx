@@ -24,7 +24,7 @@ import {
   type AnalysisTab,
 } from './tabs';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import { exportRunAsXLSX, getODataFeedUrl } from '../../api/export';
+import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
 type AnalysisPanelProps = {
@@ -177,6 +177,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [odataLinkCopied, setOdataLinkCopied] = useState(false);
+  const [csvLinkCopied, setCsvLinkCopied] = useState(false);
 
   const handleExportExcel = useCallback(async () => {
     setIsExporting(true);
@@ -199,6 +200,18 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
     } catch {
       // Fallback: show the URL in an alert if clipboard fails
       window.prompt('Copy this OData URL for Excel:', url);
+    }
+  }, [runId]);
+
+  const handleCopyCSVLink = useCallback(async () => {
+    const url = getCSVFeedUrl(runId) + '?apiKey=YOUR_API_KEY_HERE';
+    try {
+      await navigator.clipboard.writeText(url);
+      setCsvLinkCopied(true);
+      setTimeout(() => setCsvLinkCopied(false), 2000);
+      // Optional: Could toast here to remind user to replace key
+    } catch {
+      window.prompt('Copy this CSV URL for Google Sheets IMPORTDATA (Replace YOUR_API_KEY_HERE):', url);
     }
   }, [runId]);
 
@@ -301,6 +314,19 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             )}
             {odataLinkCopied ? 'Copied!' : 'OData Link'}
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleCopyCSVLink()}
+            title="Copy CSV URL for Google Sheets IMPORTDATA"
+          >
+            {csvLinkCopied ? (
+              <Check className="w-4 h-4 mr-2 text-green-600" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+            )}
+            {csvLinkCopied ? 'Copied!' : 'CSV Feed'}
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
             {recomputing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -370,11 +396,10 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'border-teal-500 text-teal-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.id
+                ? 'border-teal-500 text-teal-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               {tab.label}
             </button>

@@ -28,6 +28,18 @@ export function getODataFeedUrl(runId: string): string {
 }
 
 /**
+ * Get the CSV feed URL for a run.
+ * This URL allows direct import into Google Sheets via IMPORTDATA.
+ *
+ * @param runId - The run ID
+ * @returns The CSV feed URL template (user needs to append api key)
+ */
+export function getCSVFeedUrl(runId: string): string {
+  const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+  return `${baseUrl}/api/csv/runs/${runId}`;
+}
+
+/**
  * Get authentication token from local storage.
  */
 function getAuthToken(): string | null {
