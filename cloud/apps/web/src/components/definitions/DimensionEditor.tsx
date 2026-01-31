@@ -11,12 +11,21 @@ type DimensionEditorProps = {
   canRemove: boolean;
 };
 
+const DEFAULT_LEVEL_TEXTS = [
+  'negligible',
+  'minimal',
+  'moderate',
+  'substantial',
+  'full',
+];
+
 function createDefaultLevel(index: number): DimensionLevel {
+  const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
     label: '',
     description: undefined,
-    options: undefined,
+    options: text ? [text] : undefined,
   };
 }
 
@@ -95,7 +104,8 @@ export function DimensionEditor({
 
   const handleAddLevel = () => {
     const newLevel = createDefaultLevel(levels.length);
-    setOptionsTextMap((prev) => ({ ...prev, [levels.length]: '' }));
+    const defaultText = newLevel.options?.[0] || '';
+    setOptionsTextMap((prev) => ({ ...prev, [levels.length]: defaultText }));
     onChange({ ...dimension, levels: [...levels, newLevel] });
   };
 

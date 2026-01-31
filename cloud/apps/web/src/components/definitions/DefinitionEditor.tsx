@@ -47,12 +47,21 @@ function createDefaultDimension(): Dimension {
   };
 }
 
+const DEFAULT_LEVEL_TEXTS = [
+  'negligible',
+  'minimal',
+  'moderate',
+  'substantial',
+  'full',
+];
+
 function createDefaultLevel(index: number): DimensionLevel {
+  const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
     label: '',
     description: undefined,
-    options: undefined,
+    options: text ? [text] : undefined,
   };
 }
 
