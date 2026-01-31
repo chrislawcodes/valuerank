@@ -202,18 +202,16 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
         if (result.actualCount === result.expectedCount) {
           setGenerationStatus({
             type: 'success',
-            message: `Generated ${result.actualCount} scenarios (expected ${result.expectedCount})${
-              result.usedFallback ? ' using deterministic fallback.' : '.'
-            }`,
+            message: `Generated ${result.actualCount} narratives (expected ${result.expectedCount})${result.usedFallback ? ' using deterministic fallback.' : '.'
+              }`,
           });
         } else {
           setGenerationStatus({
             type: 'warning',
-            message: `Expected ${result.expectedCount} scenarios but generated ${result.actualCount}. ${
-              result.usedFallback
-                ? 'Deterministic fallback output was used; please review and adjust the template/dimensions if needed.'
-                : 'Please review the YAML output or regenerate.'
-            }`,
+            message: `Expected ${result.expectedCount} narratives but generated ${result.actualCount}. ${result.usedFallback
+              ? 'Deterministic fallback output was used; please review and adjust the template/dimensions if needed.'
+              : 'Please review the YAML output or regenerate.'
+              }`,
           });
         }
       } else {
@@ -235,7 +233,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
   const addDimension = async (name?: string) => {
     await saveIfDirty();
 
-    const dimName = name || `Dimension_${definitionRef.current.dimensions.length + 1}`;
+    const dimName = name || `Attribute_${definitionRef.current.dimensions.length + 1}`;
 
     // Check if we have canonical dimension data for this value
     const canonical = name ? canonicalDimensions[name] : null;
@@ -245,10 +243,10 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
     });
     const values = canonical
       ? canonical.levels.map((level) => ({
-          score: level.score,
-          label: level.label,
-          options: [...level.options],
-        }))
+        score: level.score,
+        label: level.label,
+        options: [...level.options],
+      }))
       : defaultScoreEntries;
 
     setDefinition((prev) => ({
@@ -385,11 +383,10 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
       )}
       {generationStatus && !error && (
         <div
-          className={`mx-4 mt-2 p-3 border rounded text-sm ${
-            generationStatus.type === 'warning'
-              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
-              : 'bg-green-50 border-green-200 text-green-800'
-          }`}
+          className={`mx-4 mt-2 p-3 border rounded text-sm ${generationStatus.type === 'warning'
+            ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+            }`}
         >
           {generationStatus.message}
         </div>
@@ -447,7 +444,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
           {/* Template */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Scenario Template
+              Narrative
               <span className="text-gray-400 font-normal ml-2">
                 (Use [dimension_name] placeholders - type [ for autocomplete)
               </span>
@@ -500,7 +497,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
               className="w-full h-24 p-3 border border-gray-300 rounded font-mono text-sm resize-y"
-              placeholder="e.g., Only generate scenarios where Economics score >= 3 when Environment score = 5"
+              placeholder="e.g., Only generate narratives where Economics level >= 3 when Environment level = 5"
             />
           </div>
 
@@ -508,7 +505,7 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
           <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
             <h4 className="text-sm font-medium text-gray-600 mb-2">
               Canonical Values
-              <span className="text-gray-400 font-normal ml-2">(click to add as dimension)</span>
+              <span className="text-gray-400 font-normal ml-2">(click to add as attribute)</span>
             </h4>
             <div className="flex flex-wrap gap-1">
               {canonicalValues.map((v) => {
@@ -520,11 +517,10 @@ export function ScenarioGenerator({ folder, name, isNew, onSaved, onClose }: Sce
                     key={v}
                     onClick={() => !isAdded && addDimension(v)}
                     disabled={isAdded}
-                    className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                      isAdded
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer'
-                    }`}
+                    className={`px-2 py-0.5 rounded text-xs transition-colors ${isAdded
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer'
+                      }`}
                   >
                     {v}
                     {isAdded && ' ✓'}

@@ -31,7 +31,7 @@ export function DefinitionContentView({ content }: DefinitionContentViewProps) {
 
       {/* Template */}
       <div>
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Scenario Template</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Narrative</h3>
         <pre className="text-gray-600 bg-gray-50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
           {template}
         </pre>
@@ -41,7 +41,7 @@ export function DefinitionContentView({ content }: DefinitionContentViewProps) {
       {dimensions.length > 0 && (
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-2">
-            Dimensions ({dimensions.length})
+            Attributes ({dimensions.length})
           </h3>
           <div className="space-y-3">
             {dimensions.map((dim, index) => (

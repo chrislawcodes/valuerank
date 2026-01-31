@@ -194,7 +194,7 @@ export function RunSelector({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-gray-700">Select Runs</h2>
+        <h2 className="text-sm font-medium text-gray-700">Select Trials</h2>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">
             {selectedIds.length}/{MAX_RUNS} selected
@@ -207,8 +207,8 @@ export function RunSelector({
               variant="ghost"
               size="icon"
               className="p-1 text-gray-400 hover:text-gray-600"
-              title="Refresh runs"
-              aria-label="Refresh runs"
+              title="Refresh trials"
+              aria-label="Refresh trials"
             >
               <RefreshCw className={`w-4 h-4 ${loading || loadingMore ? 'animate-spin' : ''}`} />
             </Button>
@@ -224,7 +224,7 @@ export function RunSelector({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search runs..."
+            placeholder="Search trials..."
             className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
         </div>
@@ -296,7 +296,7 @@ export function RunSelector({
             {!isFiltered && totalCount !== null && totalCount !== undefined && (
               <> of {totalCount}</>
             )}{' '}
-            runs
+            trials
           </span>
         </div>
       )}
@@ -316,7 +316,7 @@ export function RunSelector({
         style={{ contain: 'strict' }}
       >
         {loading && runs.length === 0 ? (
-          <Loading size="sm" text="Loading runs..." />
+          <Loading size="sm" text="Loading trials..." />
         ) : filteredRuns.length === 0 ? (
           <EmptyState hasFilter={isFiltered} totalRuns={runs.length} />
         ) : (
@@ -361,14 +361,14 @@ export function RunSelector({
         {loadingMore && (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="w-4 h-4 animate-spin text-teal-600 mr-2" />
-            <span className="text-xs text-gray-500">Loading more runs...</span>
+            <span className="text-xs text-gray-500">Loading more trials...</span>
           </div>
         )}
 
         {/* End of list indicator */}
         {!hasNextPage && runs.length > 0 && !isFiltered && (
           <div className="text-center py-2 text-xs text-gray-400">
-            All runs loaded
+            All trials loaded
           </div>
         )}
       </div>
@@ -376,7 +376,7 @@ export function RunSelector({
       {/* Selection limit warning */}
       {atLimit && (
         <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
-          Maximum {MAX_RUNS} runs can be compared at once.
+          Maximum {MAX_RUNS} trials can be compared at once.
         </div>
       )}
     </div>
@@ -391,7 +391,7 @@ function EmptyState({ hasFilter, totalRuns }: { hasFilter: boolean; totalRuns: n
     return (
       <div className="text-center py-8">
         <Search className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-        <p className="text-sm text-gray-500">No runs match your filters.</p>
+        <p className="text-sm text-gray-500">No trials match your filters.</p>
       </div>
     );
   }
@@ -400,9 +400,9 @@ function EmptyState({ hasFilter, totalRuns }: { hasFilter: boolean; totalRuns: n
     return (
       <div className="text-center py-8">
         <AlertCircle className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-        <p className="text-sm text-gray-500 mb-1">No runs with analysis found.</p>
+        <p className="text-sm text-gray-500 mb-1">No trials with analysis found.</p>
         <p className="text-xs text-gray-400">
-          Complete a run and generate analysis to compare results.
+          Complete a trial and generate analysis to compare results.
         </p>
       </div>
     );

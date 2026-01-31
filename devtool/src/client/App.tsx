@@ -89,8 +89,8 @@ function App() {
     const file = editorState.mode === 'yaml'
       ? editorState.file
       : editorState.mode === 'definition' || editorState.mode === 'new-definition'
-      ? `${editorState.file}.md`
-      : undefined;
+        ? `${editorState.file}.md`
+        : undefined;
     updateUrl(view, editorState.folder || undefined, file);
   }, [view, editorState]);
 
@@ -211,44 +211,40 @@ function App() {
         <nav className="flex items-center gap-1">
           <button
             onClick={() => setView('editor')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              view === 'editor'
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${view === 'editor'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-700'
-            }`}
+              }`}
           >
             <FileText size={18} />
             Editor
           </button>
           <button
             onClick={() => setView('runner')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              view === 'runner'
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${view === 'runner'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-700'
-            }`}
+              }`}
           >
             <Terminal size={18} />
             Runner
           </button>
           <button
             onClick={() => setView('analyze')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              view === 'analyze'
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${view === 'analyze'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-700'
-            }`}
+              }`}
           >
             <BarChart3 size={18} />
             Analyze
           </button>
           <button
             onClick={() => setView('settings')}
-            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-              view === 'settings'
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${view === 'settings'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-700'
-            }`}
+              }`}
           >
             <Settings size={18} />
             Settings
@@ -272,8 +268,8 @@ function App() {
                   editorState.mode === 'yaml'
                     ? editorState.file
                     : editorState.mode === 'definition'
-                    ? `${editorState.file}.md`
-                    : undefined
+                      ? `${editorState.file}.md`
+                      : undefined
                 }
               />
             </aside>
@@ -362,11 +358,11 @@ function App() {
                 </div>
               </div>
 
-              {/* Canonical Dimensions Section */}
+              {/* Canonical Attributes Section */}
               <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
-                <h3 className="font-semibold mb-4">Canonical Dimensions</h3>
+                <h3 className="font-semibold mb-4">Canonical Attributes</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Define the moral dimensions used for scenario generation. Changes are saved automatically on blur.
+                  Define the moral attributes used for scenario generation. Changes are saved automatically on blur.
                 </p>
                 <div className="flex gap-4">
                   {/* Dimension List (Left Pane) */}
@@ -376,11 +372,10 @@ function App() {
                         <button
                           key={name}
                           onClick={() => setSelectedDimension(name)}
-                          className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                            selectedDimension === name
+                          className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${selectedDimension === name
                               ? 'bg-blue-100 text-blue-800'
                               : 'hover:bg-gray-100 text-gray-700'
-                          }`}
+                            }`}
                         >
                           {name.replace(/_/g, ' ')}
                         </button>
@@ -407,14 +402,14 @@ function App() {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Score Levels
+                            Levels
                           </label>
                           <div className="space-y-3">
                             {dimensions[selectedDimension].levels.map((level, idx) => (
                               <div key={idx} className="p-3 bg-gray-50 rounded-md">
                                 <div className="flex items-center gap-3 mb-2">
                                   <span className="text-sm font-medium text-gray-500 w-16">
-                                    Score {level.score}
+                                    Level {level.score}
                                   </span>
                                   <input
                                     type="text"
@@ -441,7 +436,7 @@ function App() {
                     )}
                     {!selectedDimension && (
                       <div className="text-gray-400 text-sm">
-                        Select a dimension to edit
+                        Select an attribute to edit
                       </div>
                     )}
                   </div>
@@ -474,7 +469,7 @@ function App() {
                   <div className="flex items-start gap-3">
                     <span className="text-orange-600 font-mono">.md</span>
                     <span className="text-gray-600">
-                      Scenario definition files. These define dimensions and templates for generating
+                      Scenario definition files. These define attributes and templates for generating
                       scenario combinations.
                     </span>
                   </div>

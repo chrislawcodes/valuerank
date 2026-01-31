@@ -37,10 +37,10 @@ export function ComparisonHeader({
           <BarChart2 className="w-5 h-5 text-gray-400" />
           <div>
             <p className="text-sm font-medium text-gray-700">
-              Select runs to compare
+              Select trials to compare
             </p>
             <p className="text-xs text-gray-500 mt-0.5">
-              Choose 2 or more runs from the list to start comparing
+              Choose 2 or more trials from the list to start comparing
             </p>
           </div>
         </div>
@@ -53,7 +53,7 @@ export function ComparisonHeader({
       {/* Selected runs chips */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-gray-700">
-          Comparing {runs.length} run{runs.length !== 1 ? 's' : ''}:
+          Comparing {runs.length} trial{runs.length !== 1 ? 's' : ''}:
         </span>
         {runs.map((run) => (
           <RunChip
@@ -82,8 +82,8 @@ export function ComparisonHeader({
           <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0" />
           <p className="text-xs text-yellow-700">
             {missingAnalysisIds.length === 1
-              ? '1 run is missing analysis and will be excluded from comparisons.'
-              : `${missingAnalysisIds.length} runs are missing analysis and will be excluded from comparisons.`}
+              ? '1 trial is missing analysis and will be excluded from comparisons.'
+              : `${missingAnalysisIds.length} trials are missing analysis and will be excluded from comparisons.`}
           </p>
         </div>
       )}

@@ -129,7 +129,7 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
     }));
 
     if (loading) {
-      return <div className="p-4 text-gray-500">Loading scenarios...</div>;
+      return <div className="p-4 text-gray-500">Loading vignettes...</div>;
     }
 
     if (error) {
@@ -146,7 +146,7 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
     return (
       <div className="h-full overflow-auto">
         <div className="p-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-700">Scenarios</h2>
+          <h2 className="font-semibold text-gray-700">Vignettes</h2>
           <button
             className="p-1 hover:bg-gray-100 rounded"
             title="Create new folder"
@@ -172,9 +172,8 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                 {/* Folder Header */}
                 <div className="flex items-center">
                   <button
-                    className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-gray-100 ${
-                      selectedFolder === folder && !selectedFile ? 'bg-blue-50' : ''
-                    }`}
+                    className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-gray-100 ${selectedFolder === folder && !selectedFile ? 'bg-blue-50' : ''
+                      }`}
                     onClick={() => toggleFolder(folder)}
                   >
                     {isExpanded ? (
@@ -189,7 +188,7 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                   </button>
                   <button
                     className="p-1.5 hover:bg-orange-100 rounded mr-1"
-                    title="New scenario definition"
+                    title="New Vignette"
                     onClick={(e) => {
                       e.stopPropagation();
                       onCreateNew(folder);
@@ -208,11 +207,10 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                       return (
                         <div key={file} className="group flex items-center">
                           <button
-                            className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
-                              selectedFolder === folder && selectedFile === file
+                            className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${selectedFolder === folder && selectedFile === file
                                 ? 'bg-orange-100 text-orange-800'
                                 : ''
-                            }`}
+                              }`}
                             onClick={() => onSelectDefinition(folder, name, false)}
                           >
                             <Wand2 size={14} className="text-orange-600" />
@@ -238,11 +236,10 @@ export const ScenarioList = forwardRef<ScenarioListHandle, ScenarioListProps>(
                     {contents.files.map((file) => (
                       <div key={file} className="group flex items-center">
                         <button
-                          className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${
-                            selectedFolder === folder && selectedFile === file
+                          className={`flex-1 flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 ${selectedFolder === folder && selectedFile === file
                               ? 'bg-blue-100 text-blue-700'
                               : ''
-                          }`}
+                            }`}
                           onClick={() => onSelectYaml(folder, file)}
                         >
                           <FileText size={14} className="text-gray-400" />

@@ -77,7 +77,7 @@ export function RunControls({
 
   const handleCancel = async () => {
     const confirmed = window.confirm(
-      'Are you sure you want to cancel this run? This cannot be undone.'
+      'Are you sure you want to cancel this trial? This cannot be undone.'
     );
     if (!confirmed) return;
 
@@ -100,7 +100,7 @@ export function RunControls({
           size={buttonSize}
           onClick={() => void handlePause()}
           disabled={disabled || isLoading}
-          aria-label="Pause run"
+          aria-label="Pause trial"
         >
           {pauseLoading ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -118,7 +118,7 @@ export function RunControls({
           size={buttonSize}
           onClick={() => void handleResume()}
           disabled={disabled || isLoading}
-          aria-label="Resume run"
+          aria-label="Resume trial"
         >
           {resumeLoading ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -137,7 +137,7 @@ export function RunControls({
           onClick={() => void handleCancel()}
           disabled={disabled || isLoading}
           className="text-red-600 hover:bg-red-50"
-          aria-label="Cancel run"
+          aria-label="Cancel trial"
         >
           {cancelLoading ? (
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

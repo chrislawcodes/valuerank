@@ -31,11 +31,11 @@ function formatProgressMessage(status?: ExpansionStatus): string {
       if (progress.outputTokens > 0) {
         return `Generating... ${(progress.outputTokens / 1000).toFixed(1)}k tokens`;
       }
-      return `Calling LLM... (${progress.expectedScenarios} scenarios)`;
+      return `Calling LLM... (${progress.expectedScenarios} narratives)`;
     case 'parsing':
       return `Parsing response... ${(progress.outputTokens / 1000).toFixed(1)}k tokens`;
     case 'completed':
-      return `Generated ${progress.generatedScenarios} scenarios`;
+      return `Generated ${progress.generatedScenarios} narratives`;
     case 'failed':
       return progress.message || 'Failed';
     default:

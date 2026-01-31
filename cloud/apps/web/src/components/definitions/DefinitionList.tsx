@@ -189,13 +189,13 @@ export function DefinitionList({
       <EmptyState
         icon={FileText}
         title="No vignettes yet"
-        description="Create your first scenario vignette to get started with AI moral values evaluation."
+        description="Create your first vignette to get started with AI moral values evaluation."
         action={
           onCreateNew
             ? {
-                label: 'Create Vignette',
-                onClick: onCreateNew,
-              }
+              label: 'Create Vignette',
+              onClick: onCreateNew,
+            }
             : undefined
         }
       />
@@ -215,11 +215,10 @@ export function DefinitionList({
               onClick={() => setViewMode('flat')}
               variant="ghost"
               size="icon"
-              className={`p-1.5 rounded-none ${
-                viewMode === 'flat'
+              className={`p-1.5 rounded-none ${viewMode === 'flat'
                   ? 'bg-teal-50 text-teal-600'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              }`}
+                }`}
               title="List view"
               aria-label="List view"
             >
@@ -230,11 +229,10 @@ export function DefinitionList({
               onClick={() => setViewMode('folder')}
               variant="ghost"
               size="icon"
-              className={`p-1.5 rounded-none ${
-                viewMode === 'folder'
+              className={`p-1.5 rounded-none ${viewMode === 'folder'
                   ? 'bg-teal-50 text-teal-600'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              }`}
+                }`}
               title="Folder view (by tag)"
               aria-label="Folder view (by tag)"
             >

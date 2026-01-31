@@ -18,9 +18,9 @@ export function ScenarioHeatmap({ data }: { data: AggregateData }) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold mb-2">Model Behavior by Scenario</h3>
+      <h3 className="text-lg font-semibold mb-2">Model Behavior by Narrative</h3>
       <p className="text-sm text-gray-500 mb-6">
-        Heatmap showing average decision per model (rows) across scenarios (columns).
+        Heatmap showing average decision per model (rows) across narratives (columns).
         Green = lower decisions (1-2), Yellow = neutral (3), Red = higher decisions (4-5).
       </p>
 
@@ -91,7 +91,7 @@ export function ScenarioHeatmap({ data }: { data: AggregateData }) {
       {/* Scenario insights */}
       {scenarios.length > 0 && (
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h4 className="font-medium mb-3">Scenario Insights</h4>
+          <h4 className="font-medium mb-3">Narrative Insights</h4>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-500 mb-1">Highest model agreement:</p>

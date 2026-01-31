@@ -3,7 +3,7 @@ import { FileText, Play, BarChart2, GitCompare, FlaskConical, Settings } from 'l
 
 const tabs = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
-  { name: 'Runs', path: '/runs', icon: Play },
+  { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },
   { name: 'Experiments', path: '/experiments', icon: FlaskConical },
@@ -31,10 +31,9 @@ export function NavTabs() {
                 key={tab.path}
                 to={tab.path}
                 className={
-                  `flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${
-                    isActive
-                      ? 'text-white border-teal-500'
-                      : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+                  `flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
+                    ? 'text-white border-teal-500'
+                    : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
                   }`
                 }
               >

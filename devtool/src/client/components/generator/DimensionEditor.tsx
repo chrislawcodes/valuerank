@@ -31,13 +31,13 @@ export function DimensionEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-700">Dimensions ({dimensions.length})</h3>
+        <h3 className="font-semibold text-gray-700">Attributes ({dimensions.length})</h3>
         <button
           onClick={() => onAdd()}
           className="flex items-center gap-1 px-3 py-1.5 text-sm bg-orange-700 text-white rounded hover:bg-orange-800"
         >
           <Plus size={14} />
-          Add Dimension
+          Add Attribute
         </button>
       </div>
 
@@ -65,7 +65,7 @@ export function DimensionEditor({
                 onFocus={onFocus}
                 onBlur={onBlur}
                 className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm font-medium"
-                placeholder="Dimension name"
+                placeholder="Attribute name"
               />
               <span className="text-xs text-gray-500">{dim.values.length} values</span>
               <button
@@ -82,13 +82,13 @@ export function DimensionEditor({
             {isExpanded && (
               <div className="p-3">
                 <div className="grid grid-cols-[4rem_1fr_2rem] gap-2 mb-1 px-1">
-                  <span className="text-xs text-gray-500">Score</span>
+                  <span className="text-xs text-gray-500">Level</span>
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     Phrase
                     <span className="relative inline-flex items-center text-gray-400 cursor-help group">
                       <Info size={12} />
                       <span className="absolute left-0 top-full z-10 hidden w-52 rounded bg-gray-900 px-2 py-1 text-[10px] text-white group-hover:block">
-                        This is the exact sentence fragment that will be inserted into the generated scenario for this score.
+                        This is the exact sentence fragment that will be inserted into the generated scenario for this level.
                       </span>
                     </span>
                   </div>
@@ -131,7 +131,7 @@ export function DimensionEditor({
                   onClick={() => onAddValue(dimIndex)}
                   className="mt-2 text-sm text-orange-700 hover:text-orange-800"
                 >
-                  + Add score level
+                  + Add level
                 </button>
               </div>
             )}

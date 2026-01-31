@@ -38,7 +38,7 @@ export function RunHeader({
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/runs')}>
           <ArrowLeft className="w-4 h-4 mr-1" />
-          Back to Runs
+          Back to Trials
         </Button>
       </div>
       <div className="flex items-center gap-2">
@@ -46,7 +46,7 @@ export function RunHeader({
         {isTerminal && (
           <Button variant="secondary" onClick={onRerun}>
             <RefreshCw className="w-4 h-4 mr-2" />
-            Re-run
+            Run again
           </Button>
         )}
         {/* Delete button - shown for terminal states */}

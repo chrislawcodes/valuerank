@@ -90,15 +90,14 @@ function InsightsPanel({ insights }: { insights: DeepAnalysisInsight[] }) {
       {sortedInsights.map((insight, i) => (
         <div
           key={i}
-          className={`flex items-start gap-3 p-4 rounded-lg border ${
-            insight.severity === 'alert'
-              ? 'bg-red-50 border-red-200'
-              : insight.severity === 'warning'
+          className={`flex items-start gap-3 p-4 rounded-lg border ${insight.severity === 'alert'
+            ? 'bg-red-50 border-red-200'
+            : insight.severity === 'warning'
               ? 'bg-amber-50 border-amber-200'
               : insight.severity === 'success'
-              ? 'bg-green-50 border-green-200'
-              : 'bg-blue-50 border-blue-200'
-          }`}
+                ? 'bg-green-50 border-green-200'
+                : 'bg-blue-50 border-blue-200'
+            }`}
         >
           <InsightIcon severity={insight.severity} />
           <div>
@@ -203,12 +202,12 @@ function PCAVisualization({ data }: { data: DeepAnalysisResult }) {
   );
 }
 
-// Dimension Variance Chart
-function DimensionVarianceChart({ data }: { data: DeepAnalysisResult }) {
+// Attribute Variance Chart
+function AttributeVarianceChart({ data }: { data: DeepAnalysisResult }) {
   const dimAnalysis = data.dimension_analysis;
 
   if (!dimAnalysis || !dimAnalysis.ranked_by_variance) {
-    return <p className="text-gray-500">No dimension analysis available</p>;
+    return <p className="text-gray-500">No attribute analysis available</p>;
   }
 
   const chartData = dimAnalysis.ranked_by_variance.slice(0, 10).map((d) => ({
@@ -220,7 +219,7 @@ function DimensionVarianceChart({ data }: { data: DeepAnalysisResult }) {
   return (
     <div>
       <p className="text-sm text-gray-500 mb-4">
-        Dimensions ranked by how much they cause models to diverge. Higher variance = more disagreement.
+        Attributes ranked by how much they cause models to diverge. Higher variance = more disagreement.
       </p>
 
       <div style={{ height: 300 }}>
@@ -310,22 +309,20 @@ function OutlierDetection({ data }: { data: DeepAnalysisResult }) {
             {ranking.map((item, i) => (
               <tr
                 key={i}
-                className={`border-b border-gray-100 ${
-                  item.outlier_indicators >= 2 ? 'bg-red-50' : ''
-                }`}
+                className={`border-b border-gray-100 ${item.outlier_indicators >= 2 ? 'bg-red-50' : ''
+                  }`}
               >
                 <td className="py-2 px-3 font-medium truncate max-w-[200px]" title={item.model}>
                   {item.model}
                 </td>
                 <td className="text-center py-2 px-3">
                   <span
-                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold ${
-                      item.outlier_indicators >= 2
-                        ? 'bg-red-500'
-                        : item.outlier_indicators === 1
+                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold ${item.outlier_indicators >= 2
+                      ? 'bg-red-500'
+                      : item.outlier_indicators === 1
                         ? 'bg-amber-500'
                         : 'bg-gray-300'
-                    }`}
+                      }`}
                   >
                     {item.outlier_indicators}
                   </span>
@@ -336,11 +333,10 @@ function OutlierDetection({ data }: { data: DeepAnalysisResult }) {
                 <td className="text-center py-2 px-3">
                   {item.isolation_forest ? (
                     <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs ${
-                        item.isolation_forest.is_outlier
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}
+                      className={`inline-block px-2 py-0.5 rounded text-xs ${item.isolation_forest.is_outlier
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                        }`}
                     >
                       {item.isolation_forest.is_outlier ? 'Outlier' : 'Normal'}
                     </span>
@@ -351,11 +347,10 @@ function OutlierDetection({ data }: { data: DeepAnalysisResult }) {
                 <td className="text-center py-2 px-3">
                   {item.jackknife ? (
                     <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs ${
-                        item.jackknife.increases_variance
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
+                      className={`inline-block px-2 py-0.5 rounded text-xs ${item.jackknife.increases_variance
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-600'
+                        }`}
                     >
                       {item.jackknife.increases_variance ? 'High Influence' : 'Normal'}
                     </span>
@@ -423,7 +418,7 @@ function InterModelAgreement({ data }: { data: DeepAnalysisResult }) {
       {/* Most contested scenarios */}
       {contested.length > 0 && (
         <div>
-          <h4 className="font-medium text-gray-700 mb-3">Most Contested Scenarios</h4>
+          <h4 className="font-medium text-gray-700 mb-3">Most Contested Narratives</h4>
           <div className="space-y-2">
             {contested.slice(0, 5).map((item, i) => (
               <div
@@ -531,9 +526,9 @@ function CorrelationMatrix({ data }: { data: DeepAnalysisResult }) {
       {/* Most divisive dimensions */}
       {divisive.length > 0 && (
         <div>
-          <h4 className="font-medium text-gray-700 mb-3">Most Divisive Dimensions</h4>
+          <h4 className="font-medium text-gray-700 mb-3">Most Divisive Attributes</h4>
           <p className="text-sm text-gray-500 mb-3">
-            Dimensions where models disagree most about correlation direction
+            Attributes where models disagree most about correlation direction
           </p>
           <div className="space-y-2">
             {divisive.slice(0, 5).map((item, i) => (
@@ -617,8 +612,8 @@ export function DeepAnalysis({ data }: DeepAnalysisProps) {
           <h2 className="text-xl font-bold text-gray-900">Deep Statistical Analysis</h2>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <span>{metadata?.model_count || 0} models</span>
-            <span>{metadata?.scenario_count || 0} scenarios</span>
-            <span>{metadata?.dimension_count || 0} dimensions</span>
+            <span>{metadata?.scenario_count || 0} narratives</span>
+            <span>{metadata?.dimension_count || 0} attributes</span>
             <span>{metadata?.total_rows?.toLocaleString() || 0} data points</span>
           </div>
         </div>
@@ -684,8 +679,8 @@ export function DeepAnalysis({ data }: DeepAnalysisProps) {
       </Section>
 
       {/* Dimension Variance */}
-      <Section title="Dimension Impact" icon={<GitBranch size={20} className="text-amber-500" />}>
-        <DimensionVarianceChart data={data} />
+      <Section title="Attribute Impact" icon={<GitBranch size={20} className="text-amber-500" />}>
+        <AttributeVarianceChart data={data} />
       </Section>
 
       {/* Outlier Detection */}
@@ -699,7 +694,7 @@ export function DeepAnalysis({ data }: DeepAnalysisProps) {
       </Section>
 
       {/* Correlations */}
-      <Section title="Dimension-Model Correlations" icon={<TrendingUp size={20} className="text-blue-500" />} defaultOpen={false}>
+      <Section title="Attribute-Model Correlations" icon={<TrendingUp size={20} className="text-blue-500" />} defaultOpen={false}>
         <CorrelationMatrix data={data} />
       </Section>
 

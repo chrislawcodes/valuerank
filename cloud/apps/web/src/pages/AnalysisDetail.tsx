@@ -62,7 +62,7 @@ export function AnalysisDetail() {
             Back
           </Button>
         </div>
-        <ErrorMessage message="Run not found" />
+        <ErrorMessage message="Trial not found" />
       </div>
     );
   }
@@ -77,14 +77,14 @@ export function AnalysisDetail() {
             No Analysis Available
           </h3>
           <p className="text-gray-500 mb-4">
-            This run does not have analysis data. Analysis is computed for completed runs.
+            This trial does not have analysis data. Analysis is computed for completed trials.
           </p>
           <Link
             to={`/runs/${run.id}`}
             className="inline-flex items-center text-teal-600 hover:text-teal-700"
           >
             <Play className="w-4 h-4 mr-1" />
-            View Run Details
+            View Trial Details
           </Link>
         </div>
       </div>
@@ -122,7 +122,7 @@ function Header({
         <div className="text-sm text-gray-500">
           {definitionName || 'Unnamed Definition'}
           <span className="mx-1">•</span>
-          <span className="font-mono">Run {runId.slice(0, 8)}...</span>
+          <span className="font-mono">Trial {runId.slice(0, 8)}...</span>
         </div>
       </div>
       <Link
@@ -130,7 +130,7 @@ function Header({
         className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700"
       >
         <Play className="w-4 h-4" />
-        View Run
+        View Trial
       </Link>
     </div>
   );

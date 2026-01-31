@@ -187,7 +187,7 @@ export function RunDetail() {
             Back
           </Button>
         </div>
-        <ErrorMessage message="Run not found" />
+        <ErrorMessage message="Trial not found" />
       </div>
     );
   }
@@ -216,6 +216,7 @@ export function RunDetail() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-gray-700">Summarization</h3>
+              <p className="text-xs text-gray-500 mb-2">Attribute Values</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {run.status === 'SUMMARIZING'
                   ? `Processing ${run.summarizeProgress?.completed ?? 0} of ${run.summarizeProgress?.total ?? 0} transcripts`
@@ -231,8 +232,8 @@ export function RunDetail() {
               transcriptCount={run.transcriptCount}
               onCancelSummarization={handleCancelSummarization}
               onRestartSummarization={handleRestartSummarization}
-              onSuccess={() => {}}
-              onError={() => {}}
+              onSuccess={() => { }}
+              onError={() => { }}
               size="sm"
             />
           </div>
@@ -286,7 +287,7 @@ export function RunDetail() {
 
         {/* Configuration */}
         <div className="border-t border-gray-200 pt-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Configuration</h3>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Start Evaluation Trial</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Models:</span>
@@ -311,7 +312,7 @@ export function RunDetail() {
         {/* Results section */}
         {(isTerminal || run.transcriptCount > 0) && (
           <div className="border-t border-gray-200 pt-6 mt-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">Results</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Trial?</h3>
             {exportError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {exportError}
@@ -331,7 +332,7 @@ export function RunDetail() {
       {/* Polling indicator for active runs */}
       {(isActive || isPaused) && (
         <div className="text-center text-sm text-gray-500">
-          {isActive ? 'Updating every 5 seconds...' : 'Run is paused'}
+          {isActive ? 'Updating every 5 seconds...' : 'Trial is paused'}
         </div>
       )}
 

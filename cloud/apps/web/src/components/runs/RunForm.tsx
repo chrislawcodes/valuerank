@@ -1,7 +1,7 @@
 /**
  * RunForm Component
  *
- * Form for creating a new evaluation run with model selection
+ * Form for creating a new evaluation trial with model selection
  * and configuration options.
  */
 
@@ -30,11 +30,11 @@ type RunFormState = {
 };
 
 const SAMPLE_OPTIONS = [
-  { value: 1, label: '1% (test run)' },
+  { value: 1, label: '1% (test trial)' },
   { value: 10, label: '10%' },
   { value: 25, label: '25%' },
   { value: 50, label: '50%' },
-  { value: 100, label: '100% (full run)' },
+  { value: 100, label: '100% (full trial)' },
 ];
 
 const SAMPLES_PER_SCENARIO_OPTIONS = [
@@ -58,7 +58,7 @@ export function RunForm({
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
     samplePercentage: 1, // Default to 1% for testing per user's request
-    samplesPerScenario: 1, // Default to 1 sample (standard single-sample run)
+    samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
     showAdvanced: false,
   });
 
@@ -84,20 +84,20 @@ export function RunForm({
   // Filter cost estimate to only selected models for summary display
   const costEstimate = allModelsCostEstimate
     ? (() => {
-        const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
-          formState.selectedModels.includes(m.modelId)
-        );
-        // Only show fallback warning if ANY selected model is using fallback
-        const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
-        return {
-          ...allModelsCostEstimate,
-          total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
-          perModel: selectedPerModel,
-          isUsingFallback,
-          // Clear fallback reason if no selected models are using fallback
-          fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
-        };
-      })()
+      const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
+        formState.selectedModels.includes(m.modelId)
+      );
+      // Only show fallback warning if ANY selected model is using fallback
+      const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
+      return {
+        ...allModelsCostEstimate,
+        total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
+        perModel: selectedPerModel,
+        isUsingFallback,
+        // Clear fallback reason if no selected models are using fallback
+        fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
+      };
+    })()
     : null;
 
   // Pre-select default models when models load
@@ -209,11 +209,10 @@ export function RunForm({
               key={option.value}
               type="button"
               onClick={() => handleSampleChange(option.value)}
-              className={`px-3 py-2 text-sm rounded-md border transition-colors ${
-                formState.samplePercentage === option.value
-                  ? 'border-teal-500 bg-teal-50 text-teal-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplePercentage === option.value
+                ? 'border-teal-500 bg-teal-50 text-teal-700'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               disabled={isSubmitting}
             >
               {option.label}
@@ -222,7 +221,7 @@ export function RunForm({
         </div>
         {estimatedScenarios !== null && (
           <p className="mt-2 text-sm text-gray-500">
-            ~{estimatedScenarios} scenario{estimatedScenarios !== 1 ? 's' : ''} will be probed
+            ~{estimatedScenarios} narrative{estimatedScenarios !== 1 ? 's' : ''} will be probed
           </p>
         )}
       </div>
@@ -244,10 +243,10 @@ export function RunForm({
             {/* Samples per Scenario (Multi-Sample Runs) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Samples per Scenario
+                Samples per Narrative
               </label>
               <p className="text-xs text-gray-500 mb-2">
-                Run multiple samples per scenario to measure model consistency and variance.
+                Run multiple samples per narrative to measure model consistency and variance.
               </p>
               <div className="flex flex-wrap gap-2">
                 {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
@@ -256,11 +255,10 @@ export function RunForm({
                     key={option.value}
                     type="button"
                     onClick={() => handleSamplesPerScenarioChange(option.value)}
-                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${
-                      formState.samplesPerScenario === option.value
-                        ? 'border-teal-500 bg-teal-50 text-teal-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplesPerScenario === option.value
+                      ? 'border-teal-500 bg-teal-50 text-teal-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     disabled={isSubmitting}
                   >
                     {option.label}
@@ -269,7 +267,7 @@ export function RunForm({
               </div>
               {formState.samplesPerScenario > 1 && totalJobs !== null && (
                 <p className="mt-2 text-sm text-gray-500">
-                  {totalJobs} total probes ({estimatedScenarios} scenarios × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
+                  {totalJobs} total probes ({estimatedScenarios} narratives × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
                 </p>
               )}
             </div>
@@ -305,11 +303,11 @@ export function RunForm({
           disabled={isSubmitting || formState.selectedModels.length === 0}
         >
           {isSubmitting ? (
-            'Starting Run...'
+            'Starting Trial...'
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              Start Run
+              Start Trial
             </>
           )}
         </Button>

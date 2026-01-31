@@ -213,7 +213,7 @@ export function DefinitionEditor({
         label="Vignette Name"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="e.g., Ethical Dilemma Scenarios v1"
+        placeholder="e.g., Ethical Dilemma Narratives v1"
         error={errors.name}
         disabled={isSaving}
       />
@@ -245,7 +245,7 @@ export function DefinitionEditor({
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="block text-sm font-medium text-gray-700">
-            Scenario Template
+            Narrative
           </label>
           <InheritanceIndicator
             isOverridden={effectiveOverrides.template}
@@ -293,7 +293,7 @@ export function DefinitionEditor({
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <label className="block text-sm font-medium text-gray-700">
-              Dimensions
+              Attributes
             </label>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
               1-2 recommended
@@ -301,7 +301,7 @@ export function DefinitionEditor({
             <InheritanceIndicator
               isOverridden={effectiveOverrides.dimensions}
               isForked={isForked}
-              fieldName="Dimensions"
+              fieldName="Attributes"
               onClearOverride={onClearOverride ? () => onClearOverride('dimensions') : undefined}
             />
           </div>
@@ -313,7 +313,7 @@ export function DefinitionEditor({
             disabled={isSaving}
           >
             <Plus className="w-4 h-4 mr-1" />
-            Add Custom Dimension
+            Add Custom Attribute
           </Button>
         </div>
 
@@ -328,15 +328,15 @@ export function DefinitionEditor({
 
         {(content.dimensions ?? []).length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-            <p className="text-sm text-gray-500 mb-2">No dimensions yet</p>
+            <p className="text-sm text-gray-500 mb-2">No attributes yet</p>
             <p className="text-xs text-gray-400">
-              Click a canonical dimension above or add a custom one
+              Click a canonical attribute above or add a custom one
             </p>
           </div>
         ) : (content.dimensions ?? []).length > 2 ? (
           <>
             <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
-              You have {(content.dimensions ?? []).length} dimensions. Consider using 1-2 for clearer analysis and fewer scenarios.
+              You have {(content.dimensions ?? []).length} attributes. Consider using 1-2 for clearer analysis and fewer scenarios.
             </div>
             <div className="space-y-4">
               {(content.dimensions ?? []).map((dimension, index) => (

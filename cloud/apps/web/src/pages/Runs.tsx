@@ -68,7 +68,7 @@ export function Runs() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
-          Runs
+          Trials
         </h1>
         <Button
           variant="ghost"
@@ -89,9 +89,9 @@ export function Runs() {
       {/* Content - fills remaining height */}
       <div className="flex-1 min-h-0">
         {loading ? (
-          <Loading size="lg" text="Loading runs..." />
+          <Loading size="lg" text="Loading trials..." />
         ) : error ? (
-          <ErrorMessage message={`Failed to load runs: ${error.message}`} />
+          <ErrorMessage message={`Failed to load trials: ${error.message}`} />
         ) : filteredRuns.length === 0 ? (
           <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
         ) : filters.viewMode === 'folder' ? (
@@ -131,10 +131,10 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
           <Play className="w-8 h-8 text-gray-400" />
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">
-          No runs found
+          No trials found
         </h3>
         <p className="text-gray-500 mb-4">
-          No runs match the selected filters.
+          No trials match the selected filters.
         </p>
       </div>
     );
@@ -146,10 +146,10 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
         <Play className="w-8 h-8 text-teal-600" />
       </div>
       <h3 className="text-lg font-medium text-gray-900 mb-2">
-        No runs yet
+        No trials yet
       </h3>
       <p className="text-gray-500 mb-4">
-        Start your first evaluation run from a vignette.
+        Start your first evaluation trial from a vignette.
       </p>
       <Button onClick={() => navigate('/definitions')}>
         Go to Vignettes
