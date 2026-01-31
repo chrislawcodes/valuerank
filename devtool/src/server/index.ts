@@ -1,14 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import scenariosRouter from './routes/scenarios.js';
 import configRouter from './routes/config.js';
 import runnerRouter from './routes/runner.js';
 import generatorRouter from './routes/generator.js';
 import analysisRouter from './routes/analysis.js';
 import { createLogger } from './utils/logger.js';
+import { DEVTOOL_ROOT } from './utils/paths.js';
 
 const app = express();
-const PORT = process.env.PORT || 3030;
+const PORT = process.env.PORT || 3032;
 const log = createLogger('server');
 
 app.use(cors());
@@ -45,6 +47,19 @@ app.use('/api/analysis', analysisRouter);
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve static files from the client dist directory
+const clientDistPath = path.join(DEVTOOL_ROOT, 'dist', 'client');
+app.use(express.static(clientDistPath));
+
+// Catch-all route to serve index.html for SPA routing
+app.get('*', (req, res, next) => {
+  // If it looks like an API request but wasn't caught by the routers, pass it on
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
 app.listen(PORT, () => {

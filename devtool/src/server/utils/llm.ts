@@ -32,6 +32,7 @@ export async function loadEnvFile(): Promise<Record<string, string>> {
   for (const envPath of pathsToCheck) {
     try {
       const content = await fs.readFile(envPath, 'utf-8');
+      log.info(`Loading .env from ${envPath}`);
       for (const line of content.split('\n')) {
         const trimmed = line.trim();
         if (trimmed && !trimmed.startsWith('#')) {
@@ -44,16 +45,18 @@ export async function loadEnvFile(): Promise<Record<string, string>> {
               value = value.slice(1, -1);
             }
             // Don't overwrite if already set (root .env takes precedence if both exist, but here we process in order)
-            // Actually, usually specific overrides general.
-            // Let's simply merge them.
             if (!env[key]) {
               env[key] = value;
             }
           }
         }
       }
-    } catch {
-      // .env file not found in this location
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        log.debug(`.env file not found at ${envPath}, skipping`);
+      } else {
+        log.error(`Error reading .env from ${envPath}: ${err.message}`);
+      }
     }
   }
   return env;
@@ -81,8 +84,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`xAI API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid xAI response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
   anthropic: async (prompt: string, apiKey: string, options?: LLMOptions) => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -105,8 +112,12 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`Anthropic API error: ${error}`);
     }
 
-    const data = await response.json() as { content: Array<{ text: string }> };
-    return data.content[0].text;
+    const data = await response.json() as { content?: Array<{ text?: string }> };
+    const text = data.content?.[0]?.text;
+    if (!text) {
+      throw new Error(`Invalid Anthropic response structure: ${JSON.stringify(data)}`);
+    }
+    return text;
   },
 
   openai: async (prompt: string, apiKey: string, options?: LLMOptions) => {
@@ -129,9 +140,97 @@ const generateFunctions: Record<string, (prompt: string, apiKey: string, options
       throw new Error(`OpenAI API error: ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0].message.content;
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid OpenAI response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
   },
+
+  google: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const model = options?.model || 'gemini-1.5-flash';
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: options?.temperature ?? 0.7,
+          maxOutputTokens: options?.maxTokens || 4096,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Google API error: ${error}`);
+    }
+
+    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error(`Invalid Google response structure: ${JSON.stringify(data)}`);
+    }
+    return text;
+  },
+
+  deepseek: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options?.model || 'deepseek-chat',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`DeepSeek API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid DeepSeek response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
+  },
+
+  mistral: async (prompt: string, apiKey: string, options?: LLMOptions) => {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options?.model || 'mistral-large-latest',
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Mistral API error: ${error}`);
+    }
+
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Invalid Mistral response structure: ${JSON.stringify(data)}`);
+    }
+    return content;
+  },
+
 };
 
 // Build providers list from shared config, adding generate functions
