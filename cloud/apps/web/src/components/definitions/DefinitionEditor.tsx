@@ -176,11 +176,12 @@ export function DefinitionEditor({
       if (levels.length === 0) {
         newErrors[`dimension-${i}`] = 'At least one level is required';
       }
-      levels.forEach((level, j) => {
-        if (!level.label.trim()) {
-          newErrors[`dimension-${i}-level-${j}`] = 'Level label is required';
-        }
-      });
+      // Label validation removed as labels are no longer editable in UI
+      // levels.forEach((level, j) => {
+      //   if (!level.label.trim()) {
+      //     newErrors[`dimension-${i}-level-${j}`] = 'Level label is required';
+      //   }
+      // });
     });
 
     setErrors(newErrors);

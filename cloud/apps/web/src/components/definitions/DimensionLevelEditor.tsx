@@ -20,11 +20,11 @@ export function DimensionLevelEditor({
   canRemove,
 }: DimensionLevelEditorProps) {
   // Keep raw text for options to allow proper typing of commas and spaces
-  const [optionsText, setOptionsText] = useState(level.options?.join(', ') || '');
+  const [optionsText, setOptionsText] = useState(level.options?.[0] || '');
 
   // Sync optionsText when level.options changes externally
   useEffect(() => {
-    setOptionsText(level.options?.join(', ') || '');
+    setOptionsText(level.options?.[0] || '');
   }, [level.options]);
 
   const handleScoreChange = (value: string) => {
@@ -34,9 +34,7 @@ export function DimensionLevelEditor({
     }
   };
 
-  const handleLabelChange = (value: string) => {
-    onChange({ ...level, label: value });
-  };
+
 
   const handleDescriptionChange = (value: string) => {
     onChange({ ...level, description: value || undefined });

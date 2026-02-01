@@ -45,7 +45,7 @@ export function DimensionEditor({
   const [optionsTextMap, setOptionsTextMap] = useState<Record<number, string>>(() => {
     const initial: Record<number, string> = {};
     levels.forEach((level, idx) => {
-      initial[idx] = level.options?.join(', ') || '';
+      initial[idx] = level.options?.[0] || '';
     });
     return initial;
   });
@@ -58,7 +58,7 @@ export function DimensionEditor({
         // Only update if we don't have a pending edit (preserve user typing)
         // Use the external value if this index didn't exist before
         if (prev[idx] === undefined) {
-          updated[idx] = level.options?.join(', ') || '';
+          updated[idx] = level.options?.[0] || '';
         } else {
           updated[idx] = prev[idx];
         }

@@ -26,9 +26,9 @@ describe('DimensionLevelEditor', () => {
 
     expect(screen.getByText('Level 1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Low Risk')).toBeInTheDocument();
+
     expect(screen.getByDisplayValue('A low risk scenario')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('minimal, negligible')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('minimal')).toBeInTheDocument();
   });
 
   it('displays correct level index', () => {
@@ -91,28 +91,7 @@ describe('DimensionLevelEditor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('calls onChange when label is changed', () => {
-    const onChange = vi.fn();
-    const onRemove = vi.fn();
 
-    render(
-      <DimensionLevelEditor
-        level={mockLevel}
-        index={0}
-        onChange={onChange}
-        onRemove={onRemove}
-        canRemove={true}
-      />
-    );
-
-    const labelInput = screen.getByDisplayValue('Low Risk');
-    fireEvent.change(labelInput, { target: { value: 'Medium Risk' } });
-
-    expect(onChange).toHaveBeenCalledWith({
-      ...mockLevel,
-      label: 'Medium Risk',
-    });
-  });
 
   it('calls onChange when description is changed', () => {
     const onChange = vi.fn();
@@ -174,13 +153,14 @@ describe('DimensionLevelEditor', () => {
       />
     );
 
-    const optionsInput = screen.getByDisplayValue('minimal, negligible');
-    fireEvent.change(optionsInput, { target: { value: 'low, minimal, trivial' } });
+    const optionsInput = screen.getByDisplayValue('minimal');
+    fireEvent.change(optionsInput, { target: { value: 'new text' } });
     fireEvent.blur(optionsInput);
 
     expect(onChange).toHaveBeenCalledWith({
       ...mockLevel,
-      options: ['low', 'minimal', 'trivial'],
+      // Now treated as a single text entry, not split by comma
+      options: ['new text'],
     });
   });
 
@@ -198,7 +178,7 @@ describe('DimensionLevelEditor', () => {
       />
     );
 
-    const optionsInput = screen.getByDisplayValue('minimal, negligible');
+    const optionsInput = screen.getByDisplayValue('minimal');
     fireEvent.change(optionsInput, { target: { value: '' } });
     fireEvent.blur(optionsInput);
 
@@ -297,7 +277,7 @@ describe('DimensionLevelEditor', () => {
       />
     );
 
-    const optionsInput = screen.getByPlaceholderText('e.g., minimal, negligible, trivial');
+    const optionsInput = screen.getByPlaceholderText('Enter description text');
     expect(optionsInput).toHaveValue('');
   });
 
@@ -324,51 +304,7 @@ describe('DimensionLevelEditor', () => {
     });
   });
 
-  it('trims whitespace from options', () => {
-    const onChange = vi.fn();
-    const onRemove = vi.fn();
 
-    render(
-      <DimensionLevelEditor
-        level={mockLevel}
-        index={0}
-        onChange={onChange}
-        onRemove={onRemove}
-        canRemove={true}
-      />
-    );
 
-    const optionsInput = screen.getByDisplayValue('minimal, negligible');
-    fireEvent.change(optionsInput, { target: { value: '  option1  ,  option2  ' } });
-    fireEvent.blur(optionsInput);
 
-    expect(onChange).toHaveBeenCalledWith({
-      ...mockLevel,
-      options: ['option1', 'option2'],
-    });
-  });
-
-  it('filters out empty options', () => {
-    const onChange = vi.fn();
-    const onRemove = vi.fn();
-
-    render(
-      <DimensionLevelEditor
-        level={mockLevel}
-        index={0}
-        onChange={onChange}
-        onRemove={onRemove}
-        canRemove={true}
-      />
-    );
-
-    const optionsInput = screen.getByDisplayValue('minimal, negligible');
-    fireEvent.change(optionsInput, { target: { value: 'option1, , option2, ' } });
-    fireEvent.blur(optionsInput);
-
-    expect(onChange).toHaveBeenCalledWith({
-      ...mockLevel,
-      options: ['option1', 'option2'],
-    });
-  });
 });
