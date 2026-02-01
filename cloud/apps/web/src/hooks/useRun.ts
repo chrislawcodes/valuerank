@@ -60,7 +60,7 @@ export function useRun({ id, pause = false, enablePolling = true }: UseRunOption
     if (enablePolling && isActive && !pause) {
       pollIntervalRef.current = setInterval(() => {
         reexecuteQuery({ requestPolicy: 'network-only' });
-      }, 5000); // Poll every 5 seconds
+      }, 1000); // Poll every 1 second
     }
 
     // Cleanup on unmount or when dependencies change
