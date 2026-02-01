@@ -43,16 +43,19 @@ function createDefaultContent(): DefinitionContent {
 function createDefaultDimension(): Dimension {
   return {
     name: '',
-    levels: [createDefaultLevel(0)],
+    levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
   };
 }
 
+import { DEFAULT_LEVEL_TEXTS } from './constants';
+
 function createDefaultLevel(index: number): DimensionLevel {
+  const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
-    label: '',
+    label: text, // Populate label with text to satisfy backend requirement
     description: undefined,
-    options: undefined,
+    options: text ? [text] : undefined,
   };
 }
 
@@ -125,12 +128,8 @@ export function DefinitionEditor({
   const handleAddCanonicalDimension = useCallback((canonical: CanonicalDimension) => {
     const dimension: Dimension = {
       name: canonical.name,
-      levels: canonical.levels.map((level) => ({
-        score: level.score,
-        label: level.label,
-        description: undefined,
-        options: [...level.options],
-      })),
+      // Always use the standard 5 levels with default text
+      levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
     };
     setContent((prev) => ({
       ...prev,
@@ -171,9 +170,12 @@ export function DefinitionEditor({
       if (levels.length === 0) {
         newErrors[`dimension-${i}`] = 'At least one level is required';
       }
+
+      // Validate that each level has at least one option text
       levels.forEach((level, j) => {
-        if (!level.label.trim()) {
-          newErrors[`dimension-${i}-level-${j}`] = 'Level label is required';
+        const optionText = level.options?.[0]?.trim();
+        if (!optionText) {
+          newErrors[`dimension-${i}-level-${j}`] = 'Level text is required';
         }
       });
     });

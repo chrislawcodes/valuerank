@@ -54,7 +54,7 @@ describe('DefinitionEditor', () => {
       );
 
       // Template editor section exists (Monaco editor doesn't use placeholder attribute)
-      expect(screen.getByText('Scenario Template')).toBeInTheDocument();
+      expect(screen.getByText('Narrative')).toBeInTheDocument();
     });
 
     it('should render Add Custom Dimension button', () => {
@@ -67,7 +67,7 @@ describe('DefinitionEditor', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: /add custom dimension/i })
+        screen.getByRole('button', { name: /add custom attribute/i })
       ).toBeInTheDocument();
     });
   });
@@ -93,7 +93,7 @@ describe('DefinitionEditor', () => {
       expect(screen.getByDisplayValue('This is the preamble')).toBeInTheDocument();
       // Monaco editor content can't be checked with getByDisplayValue
       // Just verify the template section is present
-      expect(screen.getByText('Scenario Template')).toBeInTheDocument();
+      expect(screen.getByText('Narrative')).toBeInTheDocument();
     });
   });
 
@@ -110,7 +110,7 @@ describe('DefinitionEditor', () => {
         />
       );
 
-      const submitButton = screen.getByRole('button', { name: /create definition/i });
+      const submitButton = screen.getByRole('button', { name: /create vignette/i });
       await user.click(submitButton);
 
       expect(screen.getByText('Name is required')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('DefinitionEditor', () => {
       const nameInput = screen.getByPlaceholderText(/ethical dilemma/i);
       await user.type(nameInput, 'Test Definition');
 
-      const submitButton = screen.getByRole('button', { name: /create definition/i });
+      const submitButton = screen.getByRole('button', { name: /create vignette/i });
       await user.click(submitButton);
 
       expect(screen.getByText('Template is required')).toBeInTheDocument();
@@ -150,7 +150,7 @@ describe('DefinitionEditor', () => {
         />
       );
 
-      expect(screen.getByText('No dimensions yet')).toBeInTheDocument();
+      expect(screen.getByText('No attributes yet')).toBeInTheDocument();
     });
 
     it('should add dimension when Add Custom Dimension clicked', async () => {
@@ -164,11 +164,11 @@ describe('DefinitionEditor', () => {
         />
       );
 
-      const addButton = screen.getByRole('button', { name: /add custom dimension/i });
+      const addButton = screen.getByRole('button', { name: /add custom attribute/i });
       await user.click(addButton);
 
       expect(
-        screen.getByPlaceholderText(/dimension name/i)
+        screen.getByPlaceholderText(/attribute name/i)
       ).toBeInTheDocument();
       expect(screen.queryByText('No dimensions yet')).not.toBeInTheDocument();
     });
@@ -196,7 +196,7 @@ describe('DefinitionEditor', () => {
       const nameInput = screen.getByPlaceholderText(/ethical dilemma/i);
       await user.type(nameInput, 'Test Definition');
 
-      const submitButton = screen.getByRole('button', { name: /create definition/i });
+      const submitButton = screen.getByRole('button', { name: /create vignette/i });
       await user.click(submitButton);
 
       await waitFor(() => {
@@ -272,7 +272,7 @@ describe('DefinitionEditor', () => {
         />
       );
 
-      const submitButton = screen.getByRole('button', { name: /create definition/i });
+      const submitButton = screen.getByRole('button', { name: /create vignette/i });
       expect(submitButton).toBeDisabled();
     });
   });
