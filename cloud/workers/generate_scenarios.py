@@ -8,14 +8,13 @@ Protocol:
 - Logs structured JSON to stderr
 """
 
+import itertools
 import json
+import random
 import re
 import sys
-import time
-import random
-import itertools
 from dataclasses import dataclass, field
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List, Optional
 
 from common.errors import ErrorCode, ValidationError, classify_exception
 from common.logging import get_logger
@@ -27,7 +26,7 @@ log = get_logger("generate_scenarios")
 class DimensionLevel:
     """A level within a dimension."""
     score: int
-    label: string
+    label: str
     options: List[str] = field(default_factory=list)
 
 
