@@ -5,6 +5,7 @@ import cors from 'cors';
 import { healthRouter } from './health.js';
 import { authRouter } from './routes/auth.js';
 import { exportRouter } from './routes/export.js';
+import { csvRouter } from './routes/csv.js';
 import { importRouter } from './routes/import.js';
 import { odataRouter } from './routes/odata.js';
 import { authMiddleware, graphqlAuthMiddleware } from './auth/index.js';
@@ -56,6 +57,7 @@ export function createServer() {
   app.use('/health', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/export', exportRouter);
+  app.use('/api/csv', csvRouter);
   app.use('/api/import', importRouter);
   app.use('/api/odata', odataRouter);
 

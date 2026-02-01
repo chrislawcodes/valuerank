@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState, useCallback } from 'react';
-import { BarChart2, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
+import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -24,7 +24,7 @@ import {
   type AnalysisTab,
 } from './tabs';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import { exportRunAsXLSX, getODataFeedUrl } from '../../api/export';
+import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
 type AnalysisPanelProps = {
@@ -132,32 +132,47 @@ function AnalysisPending({
 function AnalysisEmpty({
   onRunAnalysis,
   isRunning,
+  status,
 }: {
   onRunAnalysis?: () => void;
   isRunning?: boolean;
+  status: string | null | undefined;
 }) {
+  const isFailed = status === 'failed';
+
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Info className="w-8 h-8 text-gray-400 mb-4" />
-      <h3 className="text-lg font-medium text-gray-900 mb-2">Analysis Not Available</h3>
-      <p className="text-sm text-gray-500 max-w-md mb-4">
-        Analysis has not been computed for this run yet, or there were not enough successful
-        transcripts with decision codes.
+      <div className="mx-auto h-12 w-12 text-gray-400 flex items-center justify-center">
+        {isFailed ? (
+          <AlertCircle className="w-12 h-12 text-amber-500" />
+        ) : (
+          <BarChart3 className="w-12 h-12 text-gray-300" />
+        )}
+      </div>
+      <h3 className="mt-4 text-lg font-medium text-gray-900">
+        {isFailed ? 'Analysis Failed' : 'Analysis Not Available'}
+      </h3>
+      <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+        {isFailed
+          ? 'The analysis computation failed. This may be due to insufficient valid transcript data or a system error.'
+          : 'Analysis has not been computed for this run yet, or there were not enough successful transcripts with decision codes.'}
       </p>
       {onRunAnalysis && (
-        <Button variant="primary" size="sm" onClick={onRunAnalysis} disabled={isRunning}>
-          {isRunning ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Running Analysis...
-            </>
-          ) : (
-            <>
-              <BarChart2 className="w-4 h-4 mr-2" />
-              Run Analysis
-            </>
-          )}
-        </Button>
+        <div className="mt-6">
+          <Button variant="primary" size="sm" onClick={onRunAnalysis} disabled={isRunning}>
+            {isRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Running Analysis...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                {isFailed ? 'Retry Analysis' : 'Run Analysis'}
+              </>
+            )}
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -177,6 +192,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [odataLinkCopied, setOdataLinkCopied] = useState(false);
+  const [csvLinkCopied, setCsvLinkCopied] = useState(false);
 
   const handleExportExcel = useCallback(async () => {
     setIsExporting(true);
@@ -199,6 +215,18 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
     } catch {
       // Fallback: show the URL in an alert if clipboard fails
       window.prompt('Copy this OData URL for Excel:', url);
+    }
+  }, [runId]);
+
+  const handleCopyCSVLink = useCallback(async () => {
+    const url = getCSVFeedUrl(runId) + '?apiKey=YOUR_API_KEY_HERE';
+    try {
+      await navigator.clipboard.writeText(url);
+      setCsvLinkCopied(true);
+      setTimeout(() => setCsvLinkCopied(false), 2000);
+      // Optional: Could toast here to remind user to replace key
+    } catch {
+      window.prompt('Copy this CSV URL for Google Sheets IMPORTDATA (Replace YOUR_API_KEY_HERE):', url);
     }
   }, [runId]);
 
@@ -256,7 +284,11 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
   if (!analysis) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <AnalysisEmpty onRunAnalysis={() => void recompute()} isRunning={recomputing} />
+        <AnalysisEmpty
+          onRunAnalysis={() => void recompute()}
+          isRunning={recomputing}
+          status={analysisStatus}
+        />
       </div>
     );
   }
@@ -300,6 +332,19 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
               <Link2 className="w-4 h-4 mr-2" />
             )}
             {odataLinkCopied ? 'Copied!' : 'OData Link'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleCopyCSVLink()}
+            title="Copy CSV URL for Google Sheets IMPORTDATA"
+          >
+            {csvLinkCopied ? (
+              <Check className="w-4 h-4 mr-2 text-green-600" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+            )}
+            {csvLinkCopied ? 'Copied!' : 'CSV Feed'}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
             {recomputing ? (
@@ -370,11 +415,10 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'border-teal-500 text-teal-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              className={`py-2 px-1 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.id
+                ? 'border-teal-500 text-teal-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
             >
               {tab.label}
             </button>

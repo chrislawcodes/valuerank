@@ -132,9 +132,12 @@ export async function authMiddleware(
     }
   }
 
-  // Try API key (X-API-Key header)
-  const apiKey = req.headers['x-api-key'];
-  if (typeof apiKey === 'string' && apiKey.length > 0) {
+  // Try API key (X-API-Key header or apiKey query param)
+  const headerKey = req.headers['x-api-key'];
+  const queryKey = req.query.apiKey;
+  const apiKey = (typeof headerKey === 'string' ? headerKey : typeof queryKey === 'string' ? queryKey : '');
+
+  if (apiKey.length > 0) {
     try {
       const user = await validateApiKey(apiKey);
       if (user) {
