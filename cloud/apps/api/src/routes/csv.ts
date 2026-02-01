@@ -3,7 +3,7 @@
  *
  * REST endpoint for streaming CSV data directly (not as attachment).
  * Designed for Google Sheets IMPORTDATA compatibility.
- * authentication: apiKey query param or Authorization header.
+ * Public access: No authentication required.
  *
  * GET /api/csv/runs/:id - Stream run results as text/csv
  */
@@ -36,17 +36,15 @@ csvRouter.get(
     '/runs/:id',
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         try {
-            // Check authentication
-            if (!req.user) {
-                throw new AuthenticationError('Authentication required');
-            }
+            // Public route - no authentication required for IMPORTDATA support
+            // (Removed req.user check)
 
             const runId = req.params.id;
             if (!runId) {
                 throw new NotFoundError('Run', 'missing');
             }
 
-            log.info({ userId: req.user.id, runId }, 'CSV feed request');
+            log.info({ runId }, 'CSV feed request');
 
             // Verify run exists
             const run = await db.run.findUnique({
