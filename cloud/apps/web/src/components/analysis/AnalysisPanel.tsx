@@ -209,10 +209,17 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
 
     if (decisionDim?.levels?.length === 5) {
       const labels: Record<string, string> = {};
+      let validCount = 0;
+
       decisionDim.levels.forEach((level) => {
-        labels[String(level.score)] = level.label;
+        if (level?.score != null && level?.label?.trim()) {
+          labels[String(level.score)] = level.label;
+          validCount++;
+        }
       });
-      return labels;
+
+      // Only use if we got all 5 valid labels
+      if (validCount === 5) return labels;
     }
 
     // 2. Derive labels from Attribute names (e.g. "Privacy" vs "Security")
