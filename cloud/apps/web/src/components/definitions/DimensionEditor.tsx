@@ -11,19 +11,13 @@ type DimensionEditorProps = {
   canRemove: boolean;
 };
 
-const DEFAULT_LEVEL_TEXTS = [
-  'negligible',
-  'minimal',
-  'moderate',
-  'substantial',
-  'full',
-];
+import { DEFAULT_LEVEL_TEXTS } from './constants';
 
 function createDefaultLevel(index: number): DimensionLevel {
   const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
-    label: '',
+    label: text, // Populate label with text to satisfy backend requirement
     description: undefined,
     options: text ? [text] : undefined,
   };
@@ -117,7 +111,8 @@ export function DimensionEditor({
     const text = optionsTextMap[levelIndex]?.trim() || '';
     // Treat as single text entry, do not split by comma
     const options = text.length > 0 ? [text] : undefined;
-    handleLevelChange(levelIndex, { options });
+    // Also update label to keep data consistent since we don't edit label separately
+    handleLevelChange(levelIndex, { options, label: text });
   };
 
   return (
@@ -145,6 +140,7 @@ export function DimensionEditor({
           onClick={(e) => e.stopPropagation()}
           placeholder="Attribute name"
           className="flex-1 px-2 py-1 text-sm font-medium border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+          aria-label="Attribute name"
         />
 
         <span className="text-xs text-gray-500">
@@ -173,9 +169,9 @@ export function DimensionEditor({
         <div className="p-3">
           {/* Grid Header */}
           <div className="grid grid-cols-[4rem_1fr_1.5rem] gap-2 mb-1 px-1">
-            <span className="text-xs text-gray-500">Level</span>
-            <span className="text-xs text-gray-500">Text</span>
-            <span></span>
+            <span className="text-xs text-gray-500" role="columnheader">Level</span>
+            <span className="text-xs text-gray-500" role="columnheader">Text</span>
+            <span role="columnheader"><span className="sr-only">Actions</span></span>
           </div>
 
           {/* Level Rows */}

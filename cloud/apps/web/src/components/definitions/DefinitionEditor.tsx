@@ -47,19 +47,13 @@ function createDefaultDimension(): Dimension {
   };
 }
 
-const DEFAULT_LEVEL_TEXTS = [
-  'negligible',
-  'minimal',
-  'moderate',
-  'substantial',
-  'full',
-];
+import { DEFAULT_LEVEL_TEXTS } from './constants';
 
 function createDefaultLevel(index: number): DimensionLevel {
   const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
-    label: '',
+    label: text, // Populate label with text to satisfy backend requirement
     description: undefined,
     options: text ? [text] : undefined,
   };
@@ -176,12 +170,14 @@ export function DefinitionEditor({
       if (levels.length === 0) {
         newErrors[`dimension-${i}`] = 'At least one level is required';
       }
-      // Label validation removed as labels are no longer editable in UI
-      // levels.forEach((level, j) => {
-      //   if (!level.label.trim()) {
-      //     newErrors[`dimension-${i}-level-${j}`] = 'Level label is required';
-      //   }
-      // });
+
+      // Validate that each level has at least one option text
+      levels.forEach((level, j) => {
+        const optionText = level.options?.[0]?.trim();
+        if (!optionText) {
+          newErrors[`dimension-${i}-level-${j}`] = 'Level text is required';
+        }
+      });
     });
 
     setErrors(newErrors);
