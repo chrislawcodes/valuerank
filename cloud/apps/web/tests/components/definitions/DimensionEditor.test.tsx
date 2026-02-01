@@ -16,7 +16,7 @@ function createMockDimension(overrides: Partial<Dimension> = {}): Dimension {
 }
 
 describe('DimensionEditor', () => {
-  it('should render dimension name input', () => {
+  it('should render attribute name input', () => {
     const dimension = createMockDimension({ name: 'test-dimension' });
     render(
       <DimensionEditor
@@ -63,7 +63,7 @@ describe('DimensionEditor', () => {
     expect(screen.getByText('1 level')).toBeInTheDocument();
   });
 
-  it('should call onChange when dimension name changes', async () => {
+  it('should call onChange when attribute name changes', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const dimension = createMockDimension({ name: '' });
@@ -78,7 +78,7 @@ describe('DimensionEditor', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText(/dimension name/i);
+    const input = screen.getByPlaceholderText(/attribute name/i);
     await user.type(input, 'a');
 
     expect(onChange).toHaveBeenCalled();

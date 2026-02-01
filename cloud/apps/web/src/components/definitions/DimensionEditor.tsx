@@ -11,12 +11,15 @@ type DimensionEditorProps = {
   canRemove: boolean;
 };
 
+import { DEFAULT_LEVEL_TEXTS } from './constants';
+
 function createDefaultLevel(index: number): DimensionLevel {
+  const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
   return {
     score: index + 1,
-    label: '',
+    label: text, // Populate label with text to satisfy backend requirement
     description: undefined,
-    options: undefined,
+    options: text ? [text] : undefined,
   };
 }
 
@@ -36,7 +39,7 @@ export function DimensionEditor({
   const [optionsTextMap, setOptionsTextMap] = useState<Record<number, string>>(() => {
     const initial: Record<number, string> = {};
     levels.forEach((level, idx) => {
-      initial[idx] = level.options?.join(', ') || '';
+      initial[idx] = level.options?.[0] || '';
     });
     return initial;
   });
@@ -49,7 +52,7 @@ export function DimensionEditor({
         // Only update if we don't have a pending edit (preserve user typing)
         // Use the external value if this index didn't exist before
         if (prev[idx] === undefined) {
-          updated[idx] = level.options?.join(', ') || '';
+          updated[idx] = level.options?.[0] || '';
         } else {
           updated[idx] = prev[idx];
         }
@@ -95,7 +98,8 @@ export function DimensionEditor({
 
   const handleAddLevel = () => {
     const newLevel = createDefaultLevel(levels.length);
-    setOptionsTextMap((prev) => ({ ...prev, [levels.length]: '' }));
+    const defaultText = newLevel.options?.[0] || '';
+    setOptionsTextMap((prev) => ({ ...prev, [levels.length]: defaultText }));
     onChange({ ...dimension, levels: [...levels, newLevel] });
   };
 
@@ -104,12 +108,11 @@ export function DimensionEditor({
   };
 
   const handleOptionsBlur = (levelIndex: number) => {
-    const text = optionsTextMap[levelIndex] || '';
-    const options = text
-      .split(',')
-      .map((o) => o.trim())
-      .filter((o) => o.length > 0);
-    handleLevelChange(levelIndex, { options: options.length > 0 ? options : undefined });
+    const text = optionsTextMap[levelIndex]?.trim() || '';
+    // Treat as single text entry, do not split by comma
+    const options = text.length > 0 ? [text] : undefined;
+    // Also update label to keep data consistent since we don't edit label separately
+    handleLevelChange(levelIndex, { options, label: text });
   };
 
   return (
@@ -137,6 +140,7 @@ export function DimensionEditor({
           onClick={(e) => e.stopPropagation()}
           placeholder="Attribute name"
           className="flex-1 px-2 py-1 text-sm font-medium border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
+          aria-label="Attribute name"
         />
 
         <span className="text-xs text-gray-500">
@@ -164,11 +168,10 @@ export function DimensionEditor({
       {isExpanded && (
         <div className="p-3">
           {/* Grid Header */}
-          <div className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 mb-1 px-1">
-            <span className="text-xs text-gray-500">Score</span>
-            <span className="text-xs text-gray-500">Label</span>
-            <span className="text-xs text-gray-500">Options (comma-separated)</span>
-            <span></span>
+          <div className="grid grid-cols-[4rem_1fr_1.5rem] gap-2 mb-1 px-1">
+            <span className="text-xs text-gray-500" role="columnheader">Level</span>
+            <span className="text-xs text-gray-500" role="columnheader">Text</span>
+            <span role="columnheader"><span className="sr-only">Actions</span></span>
           </div>
 
           {/* Level Rows */}
@@ -176,7 +179,7 @@ export function DimensionEditor({
             {levels.map((level, levelIndex) => (
               <div
                 key={levelIndex}
-                className="grid grid-cols-[3.5rem_1fr_2fr_1.5rem] gap-2 items-center"
+                className="grid grid-cols-[4rem_1fr_1.5rem] gap-2 items-center"
               >
                 <input
                   type="number"
@@ -192,17 +195,10 @@ export function DimensionEditor({
                 />
                 <input
                   type="text"
-                  value={level.label}
-                  onChange={(e) => handleLevelChange(levelIndex, { label: e.target.value })}
-                  placeholder="Label"
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-                <input
-                  type="text"
                   value={optionsTextMap[levelIndex] ?? ''}
                   onChange={(e) => handleOptionsTextChange(levelIndex, e.target.value)}
                   onBlur={() => handleOptionsBlur(levelIndex)}
-                  placeholder="option1, option2, option3"
+                  placeholder="Enter description text"
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
                 <Button

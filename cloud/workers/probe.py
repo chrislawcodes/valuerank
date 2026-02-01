@@ -188,6 +188,38 @@ def validate_input(data: dict[str, Any]) -> None:
         raise ValidationError(message="scenario.prompt cannot be empty")
 
 
+
+def run_probe(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Execute the probe conversation.
+
+    Args:
+        data: Validated probe worker input
+
+    Returns:
+        Success response with transcript or error response
+    """
+    run_id = data["runId"]
+    scenario_id = data["scenarioId"]
+    model_id = data["modelId"]
+    scenario = data["scenario"]
+    config = data.get("config", {})
+    model_cost = data.get("modelCost")  # Optional cost configuration
+    model_config = data.get("modelConfig")  # Optional API configuration
+
+    temperature = config.get("temperature", 0.7)
+    max_tokens = config.get("maxTokens", 1024)
+    max_turns = config.get("maxTurns", 10)
+
+    log.info(
+        "Starting probe",
+        runId=run_id,
+        scenarioId=scenario_id,
+        modelId=model_id,
+    )
+
+    transcript = Transcript(started_at=datetime.now(timezone.utc))
+
     # Build initial conversation with prompt
     messages: list[dict[str, str]] = []
 

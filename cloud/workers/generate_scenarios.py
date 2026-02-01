@@ -1,118 +1,25 @@
 #!/usr/bin/env python3
 """
-Scenario Generation Worker - Expands definition templates into scenarios using LLM.
+Scenario Generation Worker - Expands definition templates into scenarios using deterministic substitution.
 
 Protocol:
 - Reads JSON input from stdin
 - Writes JSON output to stdout
 - Logs structured JSON to stderr
-
-Input format (GenerateScenariosInput):
-{
-  "definitionId": string,
-  "modelId": string,  // e.g., "deepseek:deepseek-reasoner" or "anthropic:claude-3-5-haiku-20241022"
-  "content": {
-    "preamble": string | null,
-    "template": string,
-    "dimensions": [
-      {
-        "name": string,
-        "levels": [{ "score": number, "label": string, "options": [string] }]
-      }
-    ],
-    "matching_rules": string | null
-  },
-  "config": {
-    "temperature": number,  // default: 0.7
-    "maxTokens": number     // default: 8192
-  },
-  "modelConfig": {  // Optional - provider-specific API configuration from database
-    "maxTokensParam": string,  // e.g., "max_completion_tokens" for newer OpenAI models
-    ...
-  }
-}
-
-Output format (GenerateScenariosOutput):
-Success:
-{
-  "success": true,
-  "scenarios": [
-    {
-      "name": string,
-      "content": {
-        "preamble": string | null,
-        "prompt": string,
-        "dimensions": { [dimName]: number }
-      }
-    }
-  ],
-  "metadata": {
-    "inputTokens": number,
-    "outputTokens": number,
-    "modelVersion": string | null
-  },
-  "debug": {
-    "rawResponse": string,           // Full raw LLM response
-    "extractedYaml": string | null,  // What extract_yaml() returned
-    "parseError": string | null      // Error message if YAML parsing failed
-  }
-}
-
-Error:
-{
-  "success": false,
-  "error": {
-    "message": string,
-    "code": string,
-    "retryable": boolean,
-    "details": string | null
-  }
-}
 """
 
+import itertools
 import json
+import random
 import re
 import sys
-import time
 from dataclasses import dataclass, field
-from functools import reduce
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
-import yaml
-
-from common.errors import ErrorCode, LLMError, ValidationError, WorkerError, classify_exception
-from common.llm_adapters import generate_stream, LLMResponse, StreamChunk
+from common.errors import ErrorCode, ValidationError, classify_exception
 from common.logging import get_logger
 
 log = get_logger("generate_scenarios")
-
-
-def emit_progress(
-    phase: str,
-    expected_scenarios: int = 0,
-    generated_scenarios: int = 0,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
-    message: str = "",
-) -> None:
-    """
-    Emit a progress update to stderr.
-
-    Progress is emitted as a JSON line with type="progress" which
-    TypeScript can parse and use to update the database.
-    """
-    progress = {
-        "type": "progress",
-        "phase": phase,
-        "expectedScenarios": expected_scenarios,
-        "generatedScenarios": generated_scenarios,
-        "inputTokens": input_tokens,
-        "outputTokens": output_tokens,
-        "message": message,
-    }
-    # Write to stderr as a single line
-    sys.stderr.write(json.dumps(progress) + "\n")
-    sys.stderr.flush()
 
 
 @dataclass
@@ -120,59 +27,17 @@ class DimensionLevel:
     """A level within a dimension."""
     score: int
     label: str
-    options: list[str] = field(default_factory=list)
+    options: List[str] = field(default_factory=list)
 
 
 @dataclass
 class Dimension:
     """A scenario dimension with levels."""
     name: str
-    levels: list[DimensionLevel] = field(default_factory=list)
+    levels: List[DimensionLevel] = field(default_factory=list)
 
 
-@dataclass
-class GeneratedScenario:
-    """A scenario generated from the template."""
-    name: str
-    preamble: Optional[str]
-    prompt: str
-    dimensions: dict[str, int]  # dimension name -> score
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON output."""
-        return {
-            "name": self.name,
-            "content": {
-                "preamble": self.preamble,
-                "prompt": self.prompt,
-                "dimensions": self.dimensions,
-            },
-        }
-
-
-@dataclass
-class GenerationMetadata:
-    """Metadata about the LLM generation."""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    model_version: Optional[str] = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "inputTokens": self.input_tokens,
-            "outputTokens": self.output_tokens,
-            "modelVersion": self.model_version,
-        }
-
-
-def normalize_preamble(preamble: Optional[str]) -> Optional[str]:
-    """Normalize preamble - returns None if empty or whitespace-only."""
-    if not preamble or not preamble.strip():
-        return None
-    return preamble
-
-
-def parse_dimensions(raw_dimensions: list[dict[str, Any]]) -> list[Dimension]:
+def parse_dimensions(raw_dimensions: List[Dict[str, Any]]) -> List[Dimension]:
     """Parse dimension data from input."""
     dimensions = []
     for raw_dim in raw_dimensions:
@@ -199,557 +64,205 @@ def parse_dimensions(raw_dimensions: list[dict[str, Any]]) -> list[Dimension]:
     return dimensions
 
 
-def build_generation_prompt(
-    preamble: Optional[str],
+def normalize_preamble(preamble: Optional[str]) -> Optional[str]:
+    """Normalize preamble - returns None if empty or whitespace-only."""
+    if not preamble or not preamble.strip():
+        return None
+    return preamble
+
+
+def get_option_for_level(level: DimensionLevel) -> str:
+    """Get a random option from the level, or label if no options."""
+    if level.options:
+        return random.choice(level.options)
+    return level.label
+
+
+def get_specific_option(dim: Dimension, score: int) -> str:
+    """Get option for a specific score in a dimension."""
+    for level in dim.levels:
+        if level.score == int(score):
+            return get_option_for_level(level)
+    return f"[{dim.name}_Score{score}]"  # Fallback if not found
+
+
+def fill_template(
     template: str,
-    dimensions: list[Dimension],
-    matching_rules: Optional[str],
-    expected_count: int,
+    combination: List[Dict[str, Any]],
+    dimensions_map: Dict[str, Dimension]
 ) -> str:
-    """Build the LLM prompt for scenario generation."""
-    dimension_defs = []
-    for dim in dimensions:
-        value_lines = [
-            f"  Score {level.score} ({level.label}): {', '.join(level.options)}"
-            for level in dim.levels
-        ]
-        dimension_defs.append(f"{dim.name}:\n" + "\n".join(value_lines))
+    """
+    Replace template placeholders with dimension values.
+    
+    1. Context-Aware Substitution: Handles numbered lists like "5 - [DimName]"
+       by using the specific score's option.
+    2. Explicit Score Substitution: Handles [DimName_ScoreX].
+    3. Standard Substitution: Replaces [DimName] with the current combination's value.
+    """
+    result = template
 
-    dimension_text = "\n\n".join(dimension_defs)
-    placeholders = ", ".join(f"[{dim.name}]" for dim in dimensions)
-    base_id = "scenario"
-    category = "_vs_".join(dim.name for dim in dimensions)
+    # Pass 1: Context-Aware Substitution (Scale detection)
+    # Looks for lines starting with a number, followed by punctuation, then text containing [DimName]
+    # Regex: Start of line or newline, capture number, separator, content, [DimName]
+    # We iterate over dimensions to find them in the text
+    
+    for dim_name, dim in dimensions_map.items():
+        # Pattern for "5 - [DimName]" or "1. [DimName]"
+        # Group 1: The Score (number)
+        # Group 2: The separator and prefix text
+        pattern = re.compile(
+            r'(^|\n)\s*(\d+)(\s*[-.)]\s*.*?)\[(' + re.escape(dim_name) + r')\]',
+            re.IGNORECASE
+        )
+        
+        def replace_scale_match(match):
+            prefix = match.group(1)
+            score = match.group(2)
+            separator = match.group(3)
+            # dim_matched = match.group(4)
+            
+            # Find the option for this score
+            option = get_specific_option(dim, score)
+            
+            return f"{prefix}{score}{separator}{option}"
 
-    # Build dimension count breakdown for clarity
-    dim_counts = " × ".join(f"{len(dim.levels)}" for dim in dimensions)
-    dim_names = " × ".join(dim.name for dim in dimensions)
+        result = pattern.sub(replace_scale_match, result)
+    
+    # Pass 2: Explicit Score Substitution [DimName_ScoreX]
+    for dim_name, dim in dimensions_map.items():
+        pattern = re.compile(r'\[' + re.escape(dim_name) + r'_Score(\d+)\]', re.IGNORECASE)
+        
+        def replace_explicit_match(match):
+            score = match.group(1)
+            return get_specific_option(dim, score)
+            
+        result = pattern.sub(replace_explicit_match, result)
 
-    # Build preamble section
-    normalized_preamble = normalize_preamble(preamble)
-    has_preamble = normalized_preamble is not None
-    preamble_section = ""
-    if has_preamble:
-        preamble_section = f"""## Preamble (use exactly):
-{normalized_preamble}
+    # Pass 3: Standard Substitution
+    for item in combination:
+        dim_name = item['name']
+        level = item['level']
+        option = get_option_for_level(level)
+        
+        # Replace [DimName] case-insensitive
+        pattern = re.compile(r'\[' + re.escape(dim_name) + r'\]', re.IGNORECASE)
+        result = pattern.sub(option, result)
 
-"""
-
-    # Build output format
-    if has_preamble:
-        output_format = f"""```yaml
-preamble: >
-  [the preamble text]
-
-scenarios:
-  {base_id}_[Dim1Score]_[Dim2Score]_...:
-    base_id: {base_id}
-    category: {category}
-    subject: [descriptive title with scores]
-    body: |
-      [filled template with natural grammar]
-```"""
-    else:
-        output_format = f"""```yaml
-scenarios:
-  {base_id}_[Dim1Score]_[Dim2Score]_...:
-    base_id: {base_id}
-    category: {category}
-    subject: [descriptive title with scores]
-    body: |
-      [filled template with natural grammar]
-```"""
-
-    matching_section = ""
-    if matching_rules:
-        matching_section = f"## Matching Rules:\n{matching_rules}"
-
-    return f"""You are a scenario generator. This is a NON-INTERACTIVE, SINGLE-RESPONSE task.
-
-YOUR FIRST CHARACTER MUST BE THE BACKTICK OF ```yaml - no other text allowed before it.
-
-FORBIDDEN RESPONSES (will cause immediate failure):
-- "I understand" or "I will generate" or any acknowledgment
-- "Would you like me to..." or any question
-- Any text whatsoever before the YAML block
-- Generating only a few scenarios then saying "I've shown the first N scenarios" or "the full response would contain..."
-- ANY demonstration, sample, or partial output - you MUST generate ALL {expected_count} scenarios
-- Adding notes, comments, or explanations after the YAML
-
-REQUIRED: Generate EXACTLY {expected_count} scenarios ({dim_counts} = {expected_count} combinations of {dim_names}) in valid YAML format.
-
-{preamble_section}## Scenario Template:
-The template uses these placeholders: {placeholders}
-Each placeholder should be replaced with an option from the corresponding dimension score.
-
-Template:
-{template}
-
-## Dimensions and Scores:
-{dimension_text}
-
-{matching_section}
-
-## Output Format:
-Generate valid YAML with this structure:
-{output_format}
-
-## Instructions:
-Generate ALL {expected_count} combinations. For each combination:
-1. Pick a random option from each dimension's score level
-2. Replace placeholders in the template
-3. Smooth the grammar so sentences flow naturally
-4. Use the naming convention: {base_id}_[Dim1Name][Score]_[Dim2Name][Score]_...
-
-{"Skip combinations that violate the matching rules." if matching_rules else ""}
-
-DO NOT STOP UNTIL YOU HAVE GENERATED ALL {expected_count} SCENARIOS. Begin immediately with ```yaml"""
+    return result
 
 
-def extract_yaml(response: str) -> str:
-    """Extract YAML content from LLM response."""
-    # Try to find yaml/yml code block
-    yaml_match = re.search(r"```ya?ml\n(.*?)```", response, re.DOTALL)
-    if yaml_match:
-        return yaml_match.group(1).strip()
-
-    # Try to find content starting with "preamble:" or "scenarios:"
-    for marker in ["preamble:", "scenarios:"]:
-        idx = response.find(marker)
-        if idx != -1:
-            return response[idx:].strip()
-
-    # Return as-is if no markers found
-    return response
+def generate_scenario_name(combination: List[Dict[str, Any]]) -> str:
+    """Generate scenario name: Dim1_ScoreX / Dim2_ScoreY"""
+    parts = []
+    for item in combination:
+        parts.append(f"{item['name']}_{item['level'].score}")
+    return " / ".join(parts)
 
 
-@dataclass
-class ParseResult:
-    """Result of parsing generated scenarios."""
-    scenarios: list[GeneratedScenario]
-    error: Optional[str] = None
-
-
-def parse_generated_scenarios(
-    yaml_content: str,
-    dimensions: list[Dimension],
-    default_preamble: Optional[str],
-) -> ParseResult:
-    """Parse the LLM-generated YAML into scenario data."""
-    try:
-        parsed = yaml.safe_load(yaml_content)
-    except yaml.YAMLError as err:
-        error_msg = f"YAML parse error: {str(err)}"
-        log.error("Failed to parse YAML", err=str(err))
-        return ParseResult(scenarios=[], error=error_msg)
-
-    if not parsed or not isinstance(parsed, dict):
-        error_msg = f"Invalid parsed result: expected dict, got {type(parsed).__name__}"
-        return ParseResult(scenarios=[], error=error_msg)
-
-    scenarios_data = parsed.get("scenarios", {})
-    if not scenarios_data:
-        error_msg = "No 'scenarios' key found in parsed YAML"
-        return ParseResult(scenarios=[], error=error_msg)
-
-    # Use preamble from YAML if present, otherwise use default
-    yaml_preamble = normalize_preamble(parsed.get("preamble"))
-    preamble = yaml_preamble if yaml_preamble else default_preamble
-
-    scenarios = []
-    for scenario_key, scenario_data in scenarios_data.items():
-        if not isinstance(scenario_data, dict):
-            continue
-
-        body = scenario_data.get("body", "")
-        if not body:
-            continue
-
-        # Extract dimension scores from the scenario key (e.g., scenario_Stakes1_Certainty2)
-        dimension_scores: dict[str, int] = {}
-        for dim in dimensions:
-            for level in dim.levels:
-                if f"{dim.name}{level.score}" in scenario_key:
-                    dimension_scores[dim.name] = level.score
-                    break
-
-        scenarios.append(GeneratedScenario(
-            name=scenario_data.get("subject", scenario_key),
-            preamble=preamble,
-            prompt=body,
-            dimensions=dimension_scores,
-        ))
-
-    return ParseResult(scenarios=scenarios, error=None)
-
-
-def validate_input(data: dict[str, Any]) -> None:
+def validate_input(data: Dict[str, Any]) -> None:
     """Validate worker input."""
-    required = ["definitionId", "modelId", "content"]
-    for field_name in required:
-        if field_name not in data:
-            raise ValidationError(
-                message=f"Missing required field: {field_name}",
-                details=f"Input must include: {', '.join(required)}",
-            )
-
-    content = data["content"]
+    if "definitionId" not in data:
+        raise ValidationError("Missing required field: definitionId")
+    
+    content = data.get("content")
     if not isinstance(content, dict):
-        raise ValidationError(message="content must be an object")
+        raise ValidationError("content must be an object")
 
     if "template" not in content:
-        raise ValidationError(message="content.template is required")
+        raise ValidationError("content.template is required")
 
 
-def calculate_expected_scenarios(dimensions: list[Dimension]) -> int:
-    """Calculate the expected number of scenarios from dimension combinations."""
-    if not dimensions:
-        return 0
-    return reduce(lambda x, y: x * len(y.levels), dimensions, 1)
-
-
-def run_generation(data: dict[str, Any]) -> dict[str, Any]:
-    """Execute the scenario generation."""
+def run_generation(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute the deterministic scenario generation."""
     definition_id = data["definitionId"]
-    model_id = data["modelId"]
-    content = data["content"]
-    config = data.get("config", {})
-    model_config = data.get("modelConfig")
-
-    temperature = config.get("temperature", 0.7)
-    max_tokens = config.get("maxTokens", 8192)
-
-    preamble = content.get("preamble")
+    content = data.get("content", {})
+    
     template = content.get("template", "")
     raw_dimensions = content.get("dimensions", [])
-    matching_rules = content.get("matching_rules")
-
+    
     log.info(
-        "Starting scenario generation",
+        "Starting deterministic scenario generation",
         definitionId=definition_id,
-        modelId=model_id,
         dimensionCount=len(raw_dimensions),
     )
 
     # Parse dimensions
     dimensions = parse_dimensions(raw_dimensions)
+    dimensions_map = {d.name: d for d in dimensions}
 
-    # Calculate expected scenario count
-    expected_count = calculate_expected_scenarios(dimensions)
-
-    # Emit initial progress
-    emit_progress(
-        phase="starting",
-        expected_scenarios=expected_count,
-        message=f"Starting generation with {len(dimensions)} dimensions",
+    # Generate all combinations (Cartesian product)
+    # Each element in product is a tuple of levels corresponding to dimensions
+    
+    # Prepare lists of levels
+    levels_lists = []
+    for dim in dimensions:
+        # Store as dict to keep track of dimension name
+        dim_levels = [{'name': dim.name, 'level': lvl} for lvl in dim.levels]
+        levels_lists.append(dim_levels)
+    
+    combinations = list(itertools.product(*levels_lists)) if levels_lists else [[]]
+    
+    log.info(
+        "Generated dimension combinations",
+        combinationCount=len(combinations)
     )
 
-    # If no dimensions with values, return empty - let TypeScript handle default scenario
-    if not dimensions:
-        log.info("No dimensions with values, returning empty", definitionId=definition_id)
-        emit_progress(phase="completed", message="No dimensions, using default scenario")
-        return {
-            "success": True,
-            "scenarios": [],
-            "metadata": GenerationMetadata().to_dict(),
-            "debug": {
-                "rawResponse": None,
-                "extractedYaml": None,
-                "parseError": "No dimensions with values - skipped LLM generation",
-            },
-        }
-
-    # Build prompt
-    prompt = build_generation_prompt(preamble, template, dimensions, matching_rules, expected_count)
-    log.debug("Built generation prompt", definitionId=definition_id, promptLength=len(prompt), expectedCount=expected_count)
-
-    # Emit progress before LLM call
-    emit_progress(
-        phase="calling_llm",
-        expected_scenarios=expected_count,
-        message=f"Calling {model_id} to generate {expected_count} scenarios...",
-    )
-
-    # 15 minute HTTP timeout for slow models like DeepSeek Reasoner
-    LLM_TIMEOUT_SECONDS = 900
-
-    # Progress reporting interval (emit every N tokens or N seconds)
-    PROGRESS_TOKEN_INTERVAL = 500
-    PROGRESS_TIME_INTERVAL = 5.0  # seconds
-
-    # Track partial response for error recovery
-    raw_response = ""
-    input_tokens = 0
-    output_tokens = 0
-    model_version = None
-    finish_reason = None
-
-    try:
-        # Stream LLM response for incremental progress
-        messages = [{"role": "user", "content": prompt}]
-
-        last_progress_tokens = 0
-        last_progress_time = time.time()
-
-        for chunk in generate_stream(
-            model_id,
-            messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model_config=model_config,
-            timeout=LLM_TIMEOUT_SECONDS,
-        ):
-            raw_response = chunk.content
-            output_tokens = chunk.output_tokens
-
-            if chunk.done:
-                input_tokens = chunk.input_tokens or 0
-                model_version = chunk.model_version
-                finish_reason = chunk.finish_reason
-            else:
-                # Emit progress periodically during streaming
-                tokens_since_last = output_tokens - last_progress_tokens
-                time_since_last = time.time() - last_progress_time
-
-                if tokens_since_last >= PROGRESS_TOKEN_INTERVAL or time_since_last >= PROGRESS_TIME_INTERVAL:
-                    emit_progress(
-                        phase="streaming",
-                        expected_scenarios=expected_count,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        message=f"Receiving response... {output_tokens} tokens",
-                    )
-                    last_progress_tokens = output_tokens
-                    last_progress_time = time.time()
-
-        log.info(
-            "LLM response received",
-            definitionId=definition_id,
-            responseLength=len(raw_response),
-            inputTokens=input_tokens,
-            outputTokens=output_tokens,
-            finishReason=finish_reason,
-        )
-
-        # Check if response was truncated due to max_tokens limit
-        # For scenario expansion, truncated output is useless since YAML will be incomplete
-        if finish_reason == "max_tokens":
-            log.error(
-                "LLM response truncated due to max_tokens limit",
-                definitionId=definition_id,
-                outputTokens=output_tokens,
-                maxTokens=max_tokens,
-            )
-            emit_progress(
-                phase="failed",
-                expected_scenarios=expected_count,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                message=f"Response truncated at {output_tokens} tokens (max_tokens limit reached)",
-            )
-            return {
-                "success": False,
-                "error": {
-                    "message": f"Response truncated: output hit {max_tokens} max_tokens limit. Increase maxTokens in model settings or reduce scenario count.",
-                    "code": "MAX_TOKENS_EXCEEDED",
-                    "retryable": False,
-                    "details": f"Generated {output_tokens} tokens before being cut off. The model needs more output tokens to generate all {expected_count} scenarios.",
-                },
-                "debug": {
-                    "rawResponse": raw_response,
-                    "extractedYaml": None,
-                    "parseError": f"Response truncated at max_tokens limit ({output_tokens}/{max_tokens} tokens)",
-                    "partialTokens": output_tokens,
-                },
+    generated_scenarios = []
+    
+    for combo_tuple in combinations:
+        # combo_tuple is a tuple of dicts: ({name: 'A', level: ...}, {name: 'B', level: ...})
+        combo_list = list(combo_tuple)
+        
+        # Build dimension scores map
+        dim_scores = {}
+        for item in combo_list:
+            dim_scores[item['name']] = item['level'].score
+            
+        # Fill template
+        prompt = fill_template(template, combo_list, dimensions_map)
+        
+        # Build Name
+        name = generate_scenario_name(combo_list)
+        
+        generated_scenarios.append({
+            "name": name,
+            "content": {
+                "preamble": normalize_preamble(content.get("preamble")),
+                "prompt": prompt,
+                "dimensions": dim_scores
             }
+        })
 
-        # Emit progress after LLM call
-        emit_progress(
-            phase="parsing",
-            expected_scenarios=expected_count,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            message=f"Received {output_tokens} tokens, parsing scenarios...",
-        )
-
-        # Extract and parse YAML
-        yaml_content = extract_yaml(raw_response)
-        log.debug("Extracted YAML", definitionId=definition_id, yamlLength=len(yaml_content))
-
-        # Parse scenarios
-        parse_result = parse_generated_scenarios(
-            yaml_content,
-            dimensions,
-            normalize_preamble(preamble),
-        )
-
-        actual_count = len(parse_result.scenarios)
-        log.info(
-            "Scenarios generated",
-            definitionId=definition_id,
-            scenarioCount=actual_count,
-            expectedCount=expected_count,
-            parseError=parse_result.error,
-        )
-
-        # Check if we got significantly fewer scenarios than expected
-        # This catches cases where the LLM decides to "demonstrate" rather than complete
-        if expected_count > 0 and actual_count < expected_count:
-            # Calculate how far off we are
-            completion_ratio = actual_count / expected_count
-
-            # If we got less than 90% of expected scenarios, treat as error
-            if completion_ratio < 0.9:
-                log.error(
-                    "LLM generated incomplete scenarios",
-                    definitionId=definition_id,
-                    actualCount=actual_count,
-                    expectedCount=expected_count,
-                    completionRatio=completion_ratio,
-                )
-                emit_progress(
-                    phase="failed",
-                    expected_scenarios=expected_count,
-                    generated_scenarios=actual_count,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    message=f"Only generated {actual_count} of {expected_count} expected scenarios",
-                )
-                return {
-                    "success": False,
-                    "error": {
-                        "message": f"Incomplete generation: only {actual_count} of {expected_count} scenarios generated ({completion_ratio:.0%}). The LLM may have 'demonstrated' rather than completing the task.",
-                        "code": "INCOMPLETE_GENERATION",
-                        "retryable": True,  # Retrying might get a complete response
-                        "details": f"Expected {expected_count} scenarios but only parsed {actual_count}. Try increasing maxTokens or simplifying dimensions.",
-                    },
-                    "debug": {
-                        "rawResponse": raw_response,
-                        "extractedYaml": yaml_content,
-                        "parseError": f"Incomplete: {actual_count}/{expected_count} scenarios",
-                        "partialTokens": output_tokens,
-                    },
-                }
-
-        # Emit final progress
-        emit_progress(
-            phase="completed",
-            expected_scenarios=expected_count,
-            generated_scenarios=actual_count,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            message=f"Generated {actual_count} scenarios",
-        )
-
-        return {
-            "success": True,
-            "scenarios": [s.to_dict() for s in parse_result.scenarios],
-            "metadata": GenerationMetadata(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                model_version=model_version,
-            ).to_dict(),
-            "debug": {
-                "rawResponse": raw_response,
-                "extractedYaml": yaml_content,
-                "parseError": parse_result.error,
-            },
+    return {
+        "success": True,
+        "scenarios": generated_scenarios,
+        "metadata": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "modelVersion": "deterministic"
+        },
+        "debug": {
+            "rawResponse": None,
+            "extractedYaml": None,
+            "parseError": None
         }
-
-    except (WorkerError, LLMError) as err:
-        log.error(
-            "Generation failed",
-            definitionId=definition_id,
-            err=err,
-            partialResponseLength=len(raw_response),
-        )
-        emit_progress(
-            phase="failed",
-            expected_scenarios=expected_count,
-            message=f"Generation failed: {err.message}",
-        )
-        # Include partial response in debug info for troubleshooting
-        return {
-            "success": False,
-            "error": err.to_dict(),
-            "debug": {
-                "rawResponse": raw_response if raw_response else None,
-                "extractedYaml": None,
-                "parseError": f"Stream failed: {err.message}",
-                "partialTokens": output_tokens,
-            },
-        }
-    except Exception as err:
-        worker_err = classify_exception(err)
-        log.error(
-            "Generation failed with unexpected error",
-            definitionId=definition_id,
-            err=err,
-            partialResponseLength=len(raw_response),
-        )
-        emit_progress(
-            phase="failed",
-            expected_scenarios=expected_count,
-            message=f"Generation failed: {str(err)}",
-        )
-        # Include partial response in debug info for troubleshooting
-        return {
-            "success": False,
-            "error": worker_err.to_dict(),
-            "debug": {
-                "rawResponse": raw_response if raw_response else None,
-                "extractedYaml": None,
-                "parseError": f"Unexpected error: {str(err)}",
-                "partialTokens": output_tokens,
-            },
-        }
+    }
 
 
 def main() -> None:
-    """Main entry point - read from stdin, write to stdout."""
+    """Main entry point."""
     try:
-        # Read JSON input from stdin
         input_data = sys.stdin.read()
         if not input_data.strip():
-            result = {
-                "success": False,
-                "error": {
-                    "message": "No input provided",
-                    "code": ErrorCode.VALIDATION_ERROR.value,
-                    "retryable": False,
-                },
-            }
-            print(json.dumps(result))
+            print(json.dumps({
+                "success": False, 
+                "error": {"message": "No input provided", "code": ErrorCode.VALIDATION_ERROR.value}
+            }))
             return
 
-        try:
-            data = json.loads(input_data)
-        except json.JSONDecodeError as err:
-            result = {
-                "success": False,
-                "error": {
-                    "message": f"Invalid JSON input: {err}",
-                    "code": ErrorCode.VALIDATION_ERROR.value,
-                    "retryable": False,
-                },
-            }
-            print(json.dumps(result))
-            return
-
-        # Validate input
-        try:
-            validate_input(data)
-        except ValidationError as err:
-            result = {
-                "success": False,
-                "error": err.to_dict(),
-            }
-            print(json.dumps(result))
-            return
-
-        # Run generation
+        data = json.loads(input_data)
+        validate_input(data)
         result = run_generation(data)
-
-        # Output result
         print(json.dumps(result))
 
     except Exception as err:
@@ -759,9 +272,8 @@ def main() -> None:
             "error": {
                 "message": str(err),
                 "code": ErrorCode.UNKNOWN.value,
-                "retryable": True,
-                "details": type(err).__name__,
-            },
+                "retryable": False
+            }
         }
         print(json.dumps(result))
 

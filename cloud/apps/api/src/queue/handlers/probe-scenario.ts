@@ -129,7 +129,6 @@ type ProbeWorkerInput = {
   scenarioId: string;
   modelId: string;
   scenario: {
-    preamble: string;
     prompt: string;
     followups: Array<{ label: string; prompt: string }>;
   };
@@ -301,9 +300,6 @@ async function buildWorkerInput(
   const content = scenarioContent as Record<string, unknown>;
   const definition = definitionContent as Record<string, unknown>;
 
-  // Get preamble from definition or scenario
-  const preamble = (content.preamble as string) || (definition.preamble as string) || '';
-
   // Get prompt from scenario
   const prompt = (content.prompt as string) || '';
 
@@ -321,7 +317,6 @@ async function buildWorkerInput(
     scenarioId,
     modelId: resolvedModelId,
     scenario: {
-      preamble,
       prompt,
       followups,
     },

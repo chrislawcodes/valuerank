@@ -19,6 +19,7 @@ import type { VisualizationData } from '../../api/operations/analysis';
 
 type DecisionDistributionChartProps = {
   visualizationData: VisualizationData;
+  dimensionLabels?: Record<string, string>;
 };
 
 type ChartDataPoint = {
@@ -43,9 +44,10 @@ const DECISION_COLORS = {
 /**
  * Custom tooltip component.
  */
-function CustomTooltip({ active, payload }: {
+function CustomTooltip({ active, payload, dimensionLabels }: {
   active?: boolean;
   payload?: Array<{ payload: ChartDataPoint }>;
+  dimensionLabels?: Record<string, string>;
 }) {
   if (!active || !payload?.[0]) return null;
 
@@ -61,7 +63,7 @@ function CustomTooltip({ active, payload }: {
               className="w-3 h-3 rounded"
               style={{ backgroundColor: DECISION_COLORS[d] }}
             />
-            <span>Decision {d}:</span>
+            <span>{dimensionLabels?.[d] || `Decision ${d}`}:</span>
             <span className="font-medium">{data[d]}</span>
           </div>
         ))}
@@ -69,8 +71,41 @@ function CustomTooltip({ active, payload }: {
     </div>
   );
 }
+export function CustomLegend({ dimensionLabels }: { dimensionLabels?: Record<string, string> }) {
+  const renderItem = (d: keyof typeof DECISION_COLORS) => (
+    <div key={d} className="flex items-center gap-2 text-sm">
+      <div
+        className="w-3 h-3 rounded"
+        style={{ backgroundColor: DECISION_COLORS[d] }}
+      />
+      <span className="text-gray-600">
+        {dimensionLabels?.[d] || `Decision ${d}`}
+      </span>
+    </div>
+  );
 
-export function DecisionDistributionChart({ visualizationData }: DecisionDistributionChartProps) {
+  return (
+    <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+      {/* Left Column: 1 (Strongly Support A) and 2 (Somewhat Support A) */}
+      <div className="flex flex-col gap-1 items-start">
+        {renderItem('1')}
+        {renderItem('2')}
+      </div>
+
+      {/* Center Column: 3 (Neutral) */}
+      <div className="flex flex-col gap-1 items-center justify-center">
+        {renderItem('3')}
+      </div>
+
+      {/* Right Column: 4 (Somewhat Support B) and 5 (Strongly Support B) */}
+      <div className="flex flex-col gap-1 items-end">
+        {renderItem('5')}
+        {renderItem('4')}
+      </div>
+    </div>
+  );
+}
+export function DecisionDistributionChart({ visualizationData, dimensionLabels }: DecisionDistributionChartProps) {
   const { decisionDistribution } = visualizationData;
 
   if (!decisionDistribution || Object.keys(decisionDistribution).length === 0) {
@@ -125,15 +160,15 @@ export function DecisionDistributionChart({ visualizationData }: DecisionDistrib
               width={110}
               tick={{ fontSize: 12 }}
             />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
+            <Tooltip content={<CustomTooltip dimensionLabels={dimensionLabels} />} />
+            <Legend content={<CustomLegend dimensionLabels={dimensionLabels} />} />
             {(['1', '2', '3', '4', '5'] as const).map((d) => (
               <Bar
                 key={d}
                 dataKey={d}
                 stackId="a"
                 fill={DECISION_COLORS[d]}
-                name={`Decision ${d}`}
+                name={dimensionLabels?.[d] || `Decision ${d}`}
               />
             ))}
           </BarChart>
@@ -141,7 +176,13 @@ export function DecisionDistributionChart({ visualizationData }: DecisionDistrib
       </div>
 
       <div className="text-xs text-gray-500 text-center">
-        1 = strongly agree with option A, 5 = strongly agree with option B
+        {dimensionLabels ? (
+          <>
+            1 = {dimensionLabels['1']}, 5 = {dimensionLabels['5']}
+          </>
+        ) : (
+          '1 = strongly agree with option A, 5 = strongly agree with option B'
+        )}
       </div>
     </div>
   );
