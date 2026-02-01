@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState, useCallback } from 'react';
-import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
+import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
