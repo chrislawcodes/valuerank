@@ -32,6 +32,7 @@ const llmProviders = [
     models: [
       { modelId: 'gpt-5-mini', displayName: 'GPT-5 Mini', costInput: 0.25, costOutput: 2.00 },
       { modelId: 'gpt-5.1', displayName: 'GPT-5.1', costInput: 1.25, costOutput: 10.00, isDefault: true },
+      { modelId: 'gpt-4', displayName: 'GPT-4', costInput: 2.50, costOutput: 10.00 },
     ],
   },
   {
@@ -42,6 +43,7 @@ const llmProviders = [
     models: [
       { modelId: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5', costInput: 1.00, costOutput: 5.00 },
       { modelId: 'claude-sonnet-4-5', displayName: 'Claude Sonnet 4.5', costInput: 3.00, costOutput: 15.00, isDefault: true },
+      { modelId: 'claude-3', displayName: 'Claude 3 Opus', costInput: 15.00, costOutput: 75.00 },
     ],
   },
   {
@@ -52,6 +54,7 @@ const llmProviders = [
     models: [
       { modelId: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', costInput: 1.25, costOutput: 10.00, isDefault: true },
       { modelId: 'gemini-2.5-flash-preview-09-2025', displayName: 'Gemini 2.5 Flash', costInput: 0.30, costOutput: 2.50 },
+      { modelId: 'gemini-pro', displayName: 'Gemini 1.0 Pro', costInput: 0.50, costOutput: 1.50 },
     ],
   },
   {

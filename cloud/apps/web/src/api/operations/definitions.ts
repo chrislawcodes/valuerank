@@ -14,7 +14,7 @@ export type Tag = {
  * Indicates which content fields are locally overridden vs inherited.
  */
 export type DefinitionOverrides = {
-  preamble: boolean;
+  preamble?: boolean;
   template: boolean;
   dimensions: boolean;
   matchingRules: boolean;
@@ -89,7 +89,7 @@ export type DefinitionContentStored = {
  */
 export type DefinitionContent = {
   schema_version: number;
-  preamble: string;
+  preamble?: string;
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
@@ -184,7 +184,7 @@ export const DEFINITION_QUERY = gql`
       resolvedContent
       localContent
       overrides {
-        preamble
+
         template
         dimensions
         matchingRules
@@ -289,7 +289,7 @@ export const FORK_DEFINITION_MUTATION = gql`
       resolvedContent
       localContent
       overrides {
-        preamble
+
         template
         dimensions
         matchingRules
@@ -309,7 +309,7 @@ export const UPDATE_DEFINITION_CONTENT_MUTATION = gql`
       resolvedContent
       localContent
       overrides {
-        preamble
+
         template
         dimensions
         matchingRules
@@ -412,7 +412,7 @@ export type UpdateDefinitionContentInput = {
   dimensions?: Dimension[];
   matchingRules?: string;
   /** List of fields to clear override for (inherit from parent) */
-  clearOverrides?: ('preamble' | 'template' | 'dimensions' | 'matching_rules')[];
+  clearOverrides?: ('template' | 'dimensions' | 'matching_rules')[];
 };
 
 export type UpdateDefinitionContentResult = {

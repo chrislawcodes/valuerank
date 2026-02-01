@@ -13,7 +13,7 @@ Input format (ProbeWorkerInput):
   "scenarioId": string,
   "modelId": string,
   "scenario": {
-    "preamble": string,
+    # "preamble": string,  # Deprecated/Ignored
     "prompt": string,
     "followups": [{ "label": string, "prompt": string }]
   },
@@ -188,13 +188,6 @@ def validate_input(data: dict[str, Any]) -> None:
         raise ValidationError(message="scenario.prompt cannot be empty")
 
 
-# Rating instruction to prepend to prompts for structured responses
-RATING_INSTRUCTION = (
-    "IMPORTANT: Begin your response with your rating on the first line in this exact format:\n"
-    "Rating: X\n\n"
-    "Where X is your numeric rating (1-5). Then provide your explanation.\n\n"
-)
-
 
 def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     """
@@ -227,15 +220,11 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
 
     transcript = Transcript(started_at=datetime.now(timezone.utc))
 
-    # Build initial conversation with preamble and prompt
+    # Build initial conversation with prompt
     messages: list[dict[str, str]] = []
 
-    preamble = scenario.get("preamble", "")
-    if preamble:
-        messages.append({"role": "system", "content": preamble})
-
-    # Prepend rating instruction to ensure structured response format
-    prompt = RATING_INSTRUCTION + scenario["prompt"]
+    # Use scenario prompt directly without rating instruction
+    prompt = scenario["prompt"]
     messages.append({"role": "user", "content": prompt})
 
     try:

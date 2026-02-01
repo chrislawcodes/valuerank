@@ -112,7 +112,7 @@ export function serializeScenariosToYaml(
   }
 
   const yamlData: CLIScenarioFile = {
-    preamble: content.preamble,
+    ...(content.preamble ? { preamble: content.preamble } : {}),
     scenarios: scenariosMap,
   };
 

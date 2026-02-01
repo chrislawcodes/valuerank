@@ -66,10 +66,11 @@ export function validateImportedContent(content: DefinitionContent): ImportError
   const errors: ImportError[] = [];
 
   // Check preamble
-  if (!content.preamble || typeof content.preamble !== 'string') {
+  // Check preamble (optional)
+  if (content.preamble !== undefined && typeof content.preamble !== 'string') {
     errors.push({
       field: 'content.preamble',
-      message: 'Preamble must be a non-empty string',
+      message: 'Preamble must be a string if provided',
     });
   }
 

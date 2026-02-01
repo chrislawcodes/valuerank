@@ -27,14 +27,14 @@ type DefinitionEditorProps = {
   parentName?: string;
   parentId?: string;
   overrides?: DefinitionOverrides;
-  onClearOverride?: (field: 'preamble' | 'template' | 'dimensions' | 'matching_rules') => void;
+  onClearOverride?: (field: 'template' | 'dimensions' | 'matching_rules') => void;
   onViewParent?: () => void;
 };
 
 function createDefaultContent(): DefinitionContent {
   return {
     schema_version: 1,
-    preamble: '',
+
     template: '',
     dimensions: [],
   };
@@ -89,15 +89,11 @@ export function DefinitionEditor({
 
   // Default overrides for non-forked definitions (everything is local)
   const effectiveOverrides: DefinitionOverrides = overrides ?? {
-    preamble: true,
+
     template: true,
     dimensions: true,
     matchingRules: true,
   };
-
-  const handlePreambleChange = useCallback((value: string) => {
-    setContent((prev) => ({ ...prev, preamble: value }));
-  }, []);
 
   const handleTemplateChange = useCallback((value: string) => {
     setContent((prev) => ({ ...prev, template: value }));
@@ -219,29 +215,6 @@ export function DefinitionEditor({
         error={errors.name}
         disabled={isSaving}
       />
-
-      {/* Preamble */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-sm font-medium text-gray-700">
-            Preamble (optional)
-          </label>
-          <InheritanceIndicator
-            isOverridden={effectiveOverrides.preamble}
-            isForked={isForked}
-            fieldName="Preamble"
-            onClearOverride={onClearOverride ? () => onClearOverride('preamble') : undefined}
-          />
-        </div>
-        <textarea
-          value={content.preamble}
-          onChange={(e) => handlePreambleChange(e.target.value)}
-          placeholder="Context or instructions that appear before each scenario..."
-          rows={3}
-          disabled={isSaving}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent disabled:bg-gray-100"
-        />
-      </div>
 
       {/* Template */}
       <div>

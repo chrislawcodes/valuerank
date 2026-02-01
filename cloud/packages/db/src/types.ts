@@ -36,7 +36,7 @@ export type Dimension = {
  */
 export type DefinitionContentV1 = {
   schema_version: 1;
-  preamble: string;
+  preamble?: string;
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
@@ -68,7 +68,7 @@ export type DefinitionContentStored = DefinitionContentV1 | DefinitionContentV2;
  */
 export type DefinitionContent = {
   schema_version: 1 | 2;
-  preamble: string;
+  preamble?: string;
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
@@ -79,14 +79,14 @@ export type DefinitionContent = {
  * Used by UI to show inheritance indicators.
  */
 export type DefinitionOverrides = {
-  preamble: boolean;
+  preamble?: boolean;
   template: boolean;
   dimensions: boolean;
   matching_rules: boolean;
 };
 
 export type DefinitionContentV0 = {
-  preamble: string;
+  preamble?: string;
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;

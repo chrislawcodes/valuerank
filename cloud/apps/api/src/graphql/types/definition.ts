@@ -26,9 +26,7 @@ const DefinitionOverridesRef = builder.objectRef<DefinitionOverrides>('Definitio
 builder.objectType(DefinitionOverridesRef, {
   description: 'Indicates which content fields are locally overridden vs inherited from parent',
   fields: (t) => ({
-    preamble: t.exposeBoolean('preamble', {
-      description: 'True if preamble is locally defined, false if inherited',
-    }),
+
     template: t.exposeBoolean('template', {
       description: 'True if template is locally defined, false if inherited',
     }),

@@ -11,7 +11,7 @@ Definitions are the core entity in Cloud ValueRank. A definition describes a mor
 A definition consists of:
 
 - **Name** - Human-readable identifier
-- **Preamble** - Context-setting text presented to the AI model before the scenario
+
 - **Template** - The scenario text with `[placeholder]` markers for dimension values
 - **Dimensions** - Variables that create scenario variations, each with scored levels
 - **Matching Rules** (optional) - Constraints on which dimension combinations are valid
@@ -27,7 +27,7 @@ Definitions store their content in a JSONB field with this schema:
 ```typescript
 type DefinitionContent = {
   schema_version: 2;              // Content version for migrations
-  preamble?: string;              // Context text before scenarios
+  // preamble?: string;           // (Deprecated) Context text before scenarios
   template: string;               // Scenario template with [placeholders]
   dimensions?: Dimension[];       // Variable dimensions
   matching_rules?: string;        // Optional generation constraints
@@ -51,7 +51,7 @@ type DimensionLevel = {
 ```json
 {
   "schema_version": 2,
-  "preamble": "You are helping a person make a difficult decision...",
+
   "template": "A [situation] has occurred involving [severity] consequences.",
   "dimensions": [
     {
@@ -111,7 +111,7 @@ mutation ForkWithOverrides {
   forkDefinition(input: {
     parentId: "parent-id"
     name: "Modified Fork"
-    content: { preamble: "New preamble text..." }
+    content: { template: "New template text..." }
   }) {
     id
   }
@@ -354,7 +354,7 @@ The web UI provides a full definition management interface:
 |-----------|---------|
 | `DefinitionList` | Paginated list with search and filters |
 | `DefinitionCard` | Summary card showing name, tags, run count |
-| `DefinitionEditor` | Full editor for preamble, template, dimensions |
+| `DefinitionEditor` | Full editor for template and dimensions |
 | `DimensionEditor` | Add/edit/remove dimensions |
 | `DimensionLevelEditor` | Edit levels within a dimension |
 | `TemplateEditor` | Template text with placeholder highlighting |
