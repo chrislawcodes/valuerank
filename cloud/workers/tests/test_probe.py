@@ -22,7 +22,7 @@ class TestValidateInput:
             "scenarioId": "scenario-456",
             "modelId": "gpt-4",
             "scenario": {
-                "preamble": "You are helpful.",
+
                 "prompt": "Hello, world!",
                 "followups": [],
             },
@@ -60,7 +60,7 @@ class TestValidateInput:
             "scenarioId": "scenario-456",
             "modelId": "gpt-4",
             "scenario": {
-                "preamble": "You are helpful.",
+
                 # Missing prompt
             },
             "config": {},
@@ -188,7 +188,7 @@ class TestRunProbe:
             "scenarioId": "scenario-456",
             "modelId": "gpt-4",
             "scenario": {
-                "preamble": "You are a helpful assistant.",
+
                 "prompt": "What is 2+2?",
                 "followups": [
                     {"label": "followup_1", "prompt": "Are you sure?"},

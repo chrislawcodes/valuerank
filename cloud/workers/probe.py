@@ -13,7 +13,7 @@ Input format (ProbeWorkerInput):
   "scenarioId": string,
   "modelId": string,
   "scenario": {
-    "preamble": string,
+    # "preamble": string,  # Deprecated/Ignored
     "prompt": string,
     "followups": [{ "label": string, "prompt": string }]
   },
