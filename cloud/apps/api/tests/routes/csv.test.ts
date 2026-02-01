@@ -73,6 +73,10 @@ describe('CSV Export Router', () => {
         // Setup API key mock
         vi.mocked(db.apiKey.findUnique).mockResolvedValue({
             id: 'key-123',
+            userId: 'u1',
+            keyHash: 'hashed-key',
+            expiresAt: null,
+            lastUsed: new Date(),
             user: { id: 'u1', email: 'test@example.com' }
         } as any);
 
@@ -93,6 +97,10 @@ describe('CSV Export Router', () => {
         // Setup API key mock
         vi.mocked(db.apiKey.findUnique).mockResolvedValue({
             id: 'key-123',
+            userId: 'u1',
+            keyHash: 'hashed-key',
+            expiresAt: null,
+            lastUsed: new Date(),
             user: { id: 'u1', email: 'test@example.com' }
         } as any);
 
@@ -105,9 +113,16 @@ describe('CSV Export Router', () => {
             .expect(200);
     });
 
-    it('should reject missing auth', async () => {
-        await request(app)
+    it('should allow anonymous access (public feed)', async () => {
+        // Setup data mocks for anonymous request too
+        vi.mocked(db.run.findUnique).mockResolvedValue(mockRun as any);
+        vi.mocked(db.transcript.findMany).mockResolvedValue(mockTranscripts as any);
+
+        const res = await request(app)
             .get('/api/csv/runs/run-123')
-            .expect(401); // Middleware allows through as null, but route checks req.user
+            .expect(200);
+
+        expect(res.text).toContain('Dim A');
+        expect(res.headers['content-type']).toContain('text/csv');
     });
 });

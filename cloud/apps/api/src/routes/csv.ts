@@ -12,13 +12,12 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
 import { db } from '@valuerank/db';
-import { createLogger, AuthenticationError, NotFoundError } from '@valuerank/shared';
+import { createLogger, NotFoundError } from '@valuerank/shared';
 
 import {
     getCSVHeader,
     formatCSVRow,
     transcriptToCSVRow,
-    generateExportFilename,
 } from '../services/export/csv.js';
 
 const log = createLogger('csv');
