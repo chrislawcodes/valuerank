@@ -71,7 +71,40 @@ function CustomTooltip({ active, payload, dimensionLabels }: {
     </div>
   );
 }
+export function CustomLegend({ dimensionLabels }: { dimensionLabels?: Record<string, string> }) {
+  const renderItem = (d: keyof typeof DECISION_COLORS) => (
+    <div key={d} className="flex items-center gap-2 text-sm">
+      <div
+        className="w-3 h-3 rounded"
+        style={{ backgroundColor: DECISION_COLORS[d] }}
+      />
+      <span className="text-gray-600">
+        {dimensionLabels?.[d] || `Decision ${d}`}
+      </span>
+    </div>
+  );
 
+  return (
+    <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+      {/* Left Column: 1 (Strongly Support A) and 2 (Somewhat Support A) */}
+      <div className="flex flex-col gap-1 items-start">
+        {renderItem('1')}
+        {renderItem('2')}
+      </div>
+
+      {/* Center Column: 3 (Neutral) */}
+      <div className="flex flex-col gap-1 items-center justify-center">
+        {renderItem('3')}
+      </div>
+
+      {/* Right Column: 4 (Somewhat Support B) and 5 (Strongly Support B) */}
+      <div className="flex flex-col gap-1 items-end">
+        {renderItem('5')}
+        {renderItem('4')}
+      </div>
+    </div>
+  );
+}
 export function DecisionDistributionChart({ visualizationData, dimensionLabels }: DecisionDistributionChartProps) {
   const { decisionDistribution } = visualizationData;
 
@@ -128,7 +161,7 @@ export function DecisionDistributionChart({ visualizationData, dimensionLabels }
               tick={{ fontSize: 12 }}
             />
             <Tooltip content={<CustomTooltip dimensionLabels={dimensionLabels} />} />
-            <Legend />
+            <Legend content={<CustomLegend dimensionLabels={dimensionLabels} />} />
             {(['1', '2', '3', '4', '5'] as const).map((d) => (
               <Bar
                 key={d}

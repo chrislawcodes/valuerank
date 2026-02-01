@@ -29,6 +29,7 @@ import type { PerModelStats, AnalysisWarning } from '../../api/operations/analys
 
 type DefinitionContentShape = {
   dimensions: Array<{
+    name: string;
     levels: Array<{
       score: number;
       label: string;
@@ -202,7 +203,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
     const decisionDim = content.dimensions.find(d =>
       // Check for name "decision" or similar
       ['decision', 'rubric', 'evaluation'].some(term =>
-        (d as any).name?.toLowerCase() === term
+        d.name?.toLowerCase() === term
       )
     );
 
@@ -217,8 +218,8 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
     // 2. Derive labels from Attribute names (e.g. "Privacy" vs "Security")
     // If we have exactly 2 dimensions, assume they are the conflicting values
     if (content.dimensions.length === 2) {
-      const dim1Name = (content.dimensions[0] as any).name;
-      const dim2Name = (content.dimensions[1] as any).name;
+      const dim1Name = content.dimensions[0]?.name ?? 'Option A';
+      const dim2Name = content.dimensions[1]?.name ?? 'Option B';
 
       return {
         '1': `Strongly Support ${dim1Name}`,
@@ -231,7 +232,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
 
     // 3. If 1 dimension, assume it's "Support X" vs "Oppose X"
     if (content.dimensions.length === 1) {
-      const dimName = (content.dimensions[0] as any).name;
+      const dimName = content.dimensions[0]?.name ?? 'Attribute';
       return {
         '1': `Strongly Support ${dimName}`,
         '2': `Somewhat Support ${dimName}`,
