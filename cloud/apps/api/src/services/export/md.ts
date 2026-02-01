@@ -86,10 +86,13 @@ export function serializeDefinitionToMd(mdDef: MDDefinition): string {
   lines.push('');
 
   // Preamble
-  lines.push('# Preamble');
-  lines.push('');
-  lines.push(mdDef.preamble);
-  lines.push('');
+  // Preamble (optional)
+  if (mdDef.preamble && mdDef.preamble.trim()) {
+    lines.push('# Preamble');
+    lines.push('');
+    lines.push(mdDef.preamble);
+    lines.push('');
+  }
 
   // Template
   lines.push('# Template');

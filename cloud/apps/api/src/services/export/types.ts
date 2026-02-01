@@ -34,7 +34,7 @@ export type MDDefinition = {
   name: string;
   base_id: string;
   category: string;
-  preamble: string;
+  preamble?: string;
   template: string;
   dimensions: MDDimension[];
   matchingRules: string;
@@ -66,7 +66,7 @@ export type MDDimensionValue = {
  * Matches the format expected by src/probe.py.
  */
 export type CLIScenarioFile = {
-  preamble: string;
+  preamble?: string;
   scenarios: Record<string, CLIScenario>;
 };
 

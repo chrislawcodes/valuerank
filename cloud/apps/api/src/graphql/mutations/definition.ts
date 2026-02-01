@@ -174,7 +174,7 @@ builder.mutationField('forkDefinition', (t) =>
 
         // Create v2 content with only provided fields as overrides
         finalContent = createPartialContent({
-          preamble: typeof contentObj.preamble === 'string' ? contentObj.preamble : undefined,
+
           template: typeof contentObj.template === 'string' ? contentObj.template : undefined,
           dimensions: Array.isArray(contentObj.dimensions) ? contentObj.dimensions as Dimension[] : undefined,
           matching_rules: typeof contentObj.matching_rules === 'string' ? contentObj.matching_rules : undefined,
@@ -248,10 +248,7 @@ const UpdateDefinitionInput = builder.inputType('UpdateDefinitionInput', {
 // Input type for updating specific content fields with inheritance support
 const UpdateDefinitionContentInput = builder.inputType('UpdateDefinitionContentInput', {
   fields: (t) => ({
-    preamble: t.string({
-      required: false,
-      description: 'Update preamble. Set to empty string to clear override and inherit from parent.',
-    }),
+
     template: t.string({
       required: false,
       description: 'Update template. Set to empty string to clear override and inherit from parent.',
@@ -267,7 +264,7 @@ const UpdateDefinitionContentInput = builder.inputType('UpdateDefinitionContentI
     }),
     clearOverrides: t.stringList({
       required: false,
-      description: 'List of fields to clear local override for (inherit from parent). Valid values: preamble, template, dimensions, matching_rules',
+      description: 'List of fields to clear local override for (inherit from parent). Valid values: template, dimensions, matching_rules',
     }),
   }),
 });
@@ -364,10 +361,10 @@ builder.mutationField('updateDefinitionContent', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const { id, input } = args;
-      const { preamble, template, dimensions, matchingRules, clearOverrides } = input;
+      const { template, dimensions, matchingRules, clearOverrides } = input;
 
       ctx.log.debug(
-        { definitionId: id, clearOverrides, hasPreamble: preamble !== undefined, hasTemplate: template !== undefined },
+        { definitionId: id, clearOverrides, hasTemplate: template !== undefined },
         'Updating definition content'
       );
 
@@ -391,14 +388,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
       // Fields to clear (set to undefined to inherit)
       const fieldsToClear = new Set(clearOverrides ?? []);
 
-      // Preamble
-      if (fieldsToClear.has('preamble')) {
-        // Don't include preamble - will inherit from parent
-      } else if (preamble !== undefined && preamble !== null) {
-        newContent.preamble = preamble;
-      } else if ('preamble' in existingContent) {
-        newContent.preamble = existingContent.preamble;
-      }
+
 
       // Template
       if (fieldsToClear.has('template')) {

@@ -27,14 +27,14 @@ type DefinitionEditorProps = {
   parentName?: string;
   parentId?: string;
   overrides?: DefinitionOverrides;
-  onClearOverride?: (field: 'preamble' | 'template' | 'dimensions' | 'matching_rules') => void;
+  onClearOverride?: (field: 'template' | 'dimensions' | 'matching_rules') => void;
   onViewParent?: () => void;
 };
 
 function createDefaultContent(): DefinitionContent {
   return {
     schema_version: 1,
-    preamble: '',
+
     template: '',
     dimensions: [],
   };
@@ -86,7 +86,7 @@ export function DefinitionEditor({
 
   // Default overrides for non-forked definitions (everything is local)
   const effectiveOverrides: DefinitionOverrides = overrides ?? {
-    preamble: true,
+
     template: true,
     dimensions: true,
     matchingRules: true,

@@ -298,7 +298,7 @@ async function buildWorkerInput(
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
-  const definition = definitionContent as Record<string, unknown>;
+
 
   // Get prompt from scenario
   const prompt = (content.prompt as string) || '';

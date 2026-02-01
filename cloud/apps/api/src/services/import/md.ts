@@ -196,13 +196,15 @@ function validateContent(
   }
 
   // Check required sections
-  const preamble = sections.preamble.join('\n').trim();
+
+  /* Preamble is now optional/deprecated
   if (!preamble) {
     errors.push({
       field: 'preamble',
       message: 'Preamble section is required',
     });
   }
+  */
 
   const template = sections.template.join('\n').trim();
   if (!template) {
@@ -280,7 +282,8 @@ export function isValidMdFormat(content: string): boolean {
 
   // Must have at least preamble and template sections
   const lowerContent = content.toLowerCase();
-  if (!lowerContent.includes('# preamble')) return false;
+  // Preamble is optional now
+  // if (!lowerContent.includes('# preamble')) return false;
   if (!lowerContent.includes('# template')) return false;
 
   return true;
