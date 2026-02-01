@@ -196,12 +196,53 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
 
   const dimensionLabels = useMemo(() => {
     const content = definitionContent as DefinitionContentShape | undefined;
-    if (!content?.dimensions?.[0]?.levels) return undefined;
-    const labels: Record<string, string> = {};
-    content.dimensions[0].levels.forEach((level) => {
-      labels[String(level.score)] = level.label;
-    });
-    return labels;
+    if (!content?.dimensions?.length) return undefined;
+
+    // 1. Look for an explicit "Decision" dimension (case-insensitive)
+    const decisionDim = content.dimensions.find(d =>
+      // Check for name "decision" or similar
+      ['decision', 'rubric', 'evaluation'].some(term =>
+        (d as any).name?.toLowerCase() === term
+      )
+    );
+
+    if (decisionDim?.levels?.length === 5) {
+      const labels: Record<string, string> = {};
+      decisionDim.levels.forEach((level) => {
+        labels[String(level.score)] = level.label;
+      });
+      return labels;
+    }
+
+    // 2. Derive labels from Attribute names (e.g. "Privacy" vs "Security")
+    // If we have exactly 2 dimensions, assume they are the conflicting values
+    if (content.dimensions.length === 2) {
+      const dim1Name = (content.dimensions[0] as any).name;
+      const dim2Name = (content.dimensions[1] as any).name;
+
+      return {
+        '1': `Strongly Support ${dim1Name}`,
+        '2': `Somewhat Support ${dim1Name}`,
+        '3': 'Neutral',
+        '4': `Somewhat Support ${dim2Name}`,
+        '5': `Strongly Support ${dim2Name}`,
+      };
+    }
+
+    // 3. If 1 dimension, assume it's "Support X" vs "Oppose X"
+    if (content.dimensions.length === 1) {
+      const dimName = (content.dimensions[0] as any).name;
+      return {
+        '1': `Strongly Support ${dimName}`,
+        '2': `Somewhat Support ${dimName}`,
+        '3': 'Neutral',
+        '4': `Somewhat Oppose ${dimName}`,
+        '5': `Strongly Oppose ${dimName}`,
+      };
+    }
+
+    // 4. Fallback: If we can't be smart, return undefined to use defaults
+    return undefined;
   }, [definitionContent]);
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
