@@ -19,6 +19,7 @@ import type { VisualizationData } from '../../api/operations/analysis';
 
 type DecisionDistributionChartProps = {
   visualizationData: VisualizationData;
+  dimensionLabels?: Record<string, string>;
 };
 
 type ChartDataPoint = {
@@ -43,9 +44,10 @@ const DECISION_COLORS = {
 /**
  * Custom tooltip component.
  */
-function CustomTooltip({ active, payload }: {
+function CustomTooltip({ active, payload, dimensionLabels }: {
   active?: boolean;
   payload?: Array<{ payload: ChartDataPoint }>;
+  dimensionLabels?: Record<string, string>;
 }) {
   if (!active || !payload?.[0]) return null;
 
@@ -61,7 +63,7 @@ function CustomTooltip({ active, payload }: {
               className="w-3 h-3 rounded"
               style={{ backgroundColor: DECISION_COLORS[d] }}
             />
-            <span>Decision {d}:</span>
+            <span>{dimensionLabels?.[d] || `Decision ${d}`}:</span>
             <span className="font-medium">{data[d]}</span>
           </div>
         ))}
@@ -70,7 +72,7 @@ function CustomTooltip({ active, payload }: {
   );
 }
 
-export function DecisionDistributionChart({ visualizationData }: DecisionDistributionChartProps) {
+export function DecisionDistributionChart({ visualizationData, dimensionLabels }: DecisionDistributionChartProps) {
   const { decisionDistribution } = visualizationData;
 
   if (!decisionDistribution || Object.keys(decisionDistribution).length === 0) {
@@ -125,7 +127,7 @@ export function DecisionDistributionChart({ visualizationData }: DecisionDistrib
               width={110}
               tick={{ fontSize: 12 }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip dimensionLabels={dimensionLabels} />} />
             <Legend />
             {(['1', '2', '3', '4', '5'] as const).map((d) => (
               <Bar
@@ -133,7 +135,7 @@ export function DecisionDistributionChart({ visualizationData }: DecisionDistrib
                 dataKey={d}
                 stackId="a"
                 fill={DECISION_COLORS[d]}
-                name={`Decision ${d}`}
+                name={dimensionLabels?.[d] || `Decision ${d}`}
               />
             ))}
           </BarChart>
@@ -141,7 +143,13 @@ export function DecisionDistributionChart({ visualizationData }: DecisionDistrib
       </div>
 
       <div className="text-xs text-gray-500 text-center">
-        1 = strongly agree with option A, 5 = strongly agree with option B
+        {dimensionLabels ? (
+          <>
+            1 = {dimensionLabels['1']}, 5 = {dimensionLabels['5']}
+          </>
+        ) : (
+          '1 = strongly agree with option A, 5 = strongly agree with option B'
+        )}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState, useCallback } from 'react';
-import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
+import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -27,9 +27,19 @@ import { useAnalysis } from '../../hooks/useAnalysis';
 import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
+type DefinitionContentShape = {
+  dimensions: Array<{
+    levels: Array<{
+      score: number;
+      label: string;
+    }>;
+  }>;
+};
+
 type AnalysisPanelProps = {
   runId: string;
   analysisStatus?: string | null;
+  definitionContent?: unknown;
 };
 
 /**
@@ -178,11 +188,21 @@ function AnalysisEmpty({
   );
 }
 
-export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
+export function AnalysisPanel({ runId, analysisStatus, definitionContent }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
     analysisStatus,
   });
+
+  const dimensionLabels = useMemo(() => {
+    const content = definitionContent as DefinitionContentShape | undefined;
+    if (!content?.dimensions?.[0]?.levels) return undefined;
+    const labels: Record<string, string> = {};
+    content.dimensions[0].levels.forEach((level) => {
+      labels[String(level.score)] = level.label;
+    });
+    return labels;
+  }, [definitionContent]);
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
   const [filters, setFilters] = useState<FilterState>({
@@ -434,6 +454,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             visualizationData={analysis.visualizationData}
             perModel={filteredPerModel}
             varianceAnalysis={analysis.varianceAnalysis}
+            dimensionLabels={dimensionLabels}
           />
         )}
         {activeTab === 'scenarios' && (
