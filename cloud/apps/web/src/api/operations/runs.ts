@@ -113,6 +113,7 @@ export type Run = {
     id: string;
     name: string;
     tags: RunDefinitionTag[];
+    content: unknown;
   };
 };
 
@@ -155,6 +156,7 @@ export const RUN_FRAGMENT = gql`
         id
         name
       }
+      content
     }
   }
 `;

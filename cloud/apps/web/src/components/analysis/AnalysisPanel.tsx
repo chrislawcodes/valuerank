@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState, useCallback } from 'react';
-import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, Info, FileSpreadsheet, Link2, Check } from 'lucide-react';
+import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -27,9 +27,20 @@ import { useAnalysis } from '../../hooks/useAnalysis';
 import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 
+type DefinitionContentShape = {
+  dimensions: Array<{
+    name: string;
+    levels: Array<{
+      score: number;
+      label: string;
+    }>;
+  }>;
+};
+
 type AnalysisPanelProps = {
   runId: string;
   analysisStatus?: string | null;
+  definitionContent?: unknown;
 };
 
 /**
@@ -178,11 +189,69 @@ function AnalysisEmpty({
   );
 }
 
-export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
+export function AnalysisPanel({ runId, analysisStatus, definitionContent }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
     analysisStatus,
   });
+
+  const dimensionLabels = useMemo(() => {
+    const content = definitionContent as DefinitionContentShape | undefined;
+    if (!content?.dimensions?.length) return undefined;
+
+    // 1. Look for an explicit "Decision" dimension (case-insensitive)
+    const decisionDim = content.dimensions.find(d =>
+      // Check for name "decision" or similar
+      ['decision', 'rubric', 'evaluation'].some(term =>
+        d.name?.toLowerCase() === term
+      )
+    );
+
+    if (decisionDim?.levels?.length === 5) {
+      const labels: Record<string, string> = {};
+      let validCount = 0;
+
+      decisionDim.levels.forEach((level) => {
+        if (level?.score != null && level?.label?.trim()) {
+          labels[String(level.score)] = level.label;
+          validCount++;
+        }
+      });
+
+      // Only use if we got all 5 valid labels
+      if (validCount === 5) return labels;
+    }
+
+    // 2. Derive labels from Attribute names (e.g. "Privacy" vs "Security")
+    // If we have exactly 2 dimensions, assume they are the conflicting values
+    if (content.dimensions.length === 2) {
+      const dim1Name = content.dimensions[0]?.name ?? 'Option A';
+      const dim2Name = content.dimensions[1]?.name ?? 'Option B';
+
+      return {
+        '1': `Strongly Support ${dim1Name}`,
+        '2': `Somewhat Support ${dim1Name}`,
+        '3': 'Neutral',
+        '4': `Somewhat Support ${dim2Name}`,
+        '5': `Strongly Support ${dim2Name}`,
+      };
+    }
+
+    // 3. If 1 dimension, assume it's "Support X" vs "Oppose X"
+    if (content.dimensions.length === 1) {
+      const dimName = content.dimensions[0]?.name ?? 'Attribute';
+      return {
+        '1': `Strongly Support ${dimName}`,
+        '2': `Somewhat Support ${dimName}`,
+        '3': 'Neutral',
+        '4': `Somewhat Oppose ${dimName}`,
+        '5': `Strongly Oppose ${dimName}`,
+      };
+    }
+
+    // 4. Fallback: If we can't be smart, return undefined to use defaults
+    return undefined;
+  }, [definitionContent]);
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
   const [filters, setFilters] = useState<FilterState>({
@@ -434,6 +503,7 @@ export function AnalysisPanel({ runId, analysisStatus }: AnalysisPanelProps) {
             visualizationData={analysis.visualizationData}
             perModel={filteredPerModel}
             varianceAnalysis={analysis.varianceAnalysis}
+            dimensionLabels={dimensionLabels}
           />
         )}
         {activeTab === 'scenarios' && (

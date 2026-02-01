@@ -15,9 +15,15 @@ type DecisionsTabProps = {
   visualizationData: VisualizationData | null | undefined;
   perModel: Record<string, PerModelStats>;
   varianceAnalysis?: VarianceAnalysis | null;
+  dimensionLabels?: Record<string, string>;
 };
 
-export function DecisionsTab({ visualizationData, perModel, varianceAnalysis }: DecisionsTabProps) {
+export function DecisionsTab({
+  visualizationData,
+  perModel,
+  varianceAnalysis,
+  dimensionLabels,
+}: DecisionsTabProps) {
   if (!visualizationData) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -30,7 +36,10 @@ export function DecisionsTab({ visualizationData, perModel, varianceAnalysis }: 
 
   return (
     <div className="space-y-8">
-      <DecisionDistributionChart visualizationData={visualizationData} />
+      <DecisionDistributionChart
+        visualizationData={visualizationData}
+        dimensionLabels={dimensionLabels}
+      />
       <div className="border-t border-gray-200 pt-6">
         <ModelConsistencyChart perModel={perModel} varianceAnalysis={varianceAnalysis} />
       </div>

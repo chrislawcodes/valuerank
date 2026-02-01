@@ -94,7 +94,11 @@ export function AnalysisDetail() {
   return (
     <div className="space-y-6">
       <Header runId={run.id} definitionName={run.definition?.name} />
-      <AnalysisPanel runId={run.id} analysisStatus={run.analysisStatus} />
+      <AnalysisPanel
+        runId={run.id}
+        analysisStatus={run.analysisStatus}
+        definitionContent={run.definition?.content}
+      />
     </div>
   );
 }
