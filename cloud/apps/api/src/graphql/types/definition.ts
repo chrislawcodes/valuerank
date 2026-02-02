@@ -466,16 +466,38 @@ builder.objectType(DefinitionRef, {
       type: [DefinitionRef],
       description: 'Full ancestry chain from this definition to root (oldest first)',
       resolve: async (definition) => {
-        return [] as any;
-      },
-    }),
+        if (!definition.parentId) return [];
 
-    // Computed: descendants - All descendants forked from this definition
-    descendants: t.field({
-      type: [DefinitionRef],
-      description: 'All descendants forked from this definition (newest first)',
-      resolve: async (definition) => {
-        return [] as any;
+        // Use recursive CTE to get all descendants (filtering out deleted)
+        const descendants = await db.$queryRaw<RawDefinitionRow[]>`
+          WITH RECURSIVE tree AS (
+            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id} AND d.deleted_at IS NULL
+            UNION ALL
+            SELECT d.*, t.depth + 1 FROM definitions d
+            JOIN tree t ON d.parent_id = t.id
+            WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
+          )
+          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+          FROM tree
+          WHERE id != ${definition.id}
+          ORDER BY created_at DESC
+        `;
+
+        return descendants.map((d) => ({
+          id: d.id,
+          parentId: d.parent_id,
+          name: d.name,
+          content: d.content,
+          expansionProgress: d.expansion_progress,
+          expansionDebug: d.expansion_debug,
+          createdAt: d.created_at,
+          updatedAt: d.updated_at,
+          lastAccessedAt: d.last_accessed_at,
+          createdByUserId: d.created_by_user_id,
+          deletedByUserId: d.deleted_by_user_id,
+          version: d.version,
+          preambleVersionId: d.preamble_version_id,
+        }));
       },
     }),
   }),

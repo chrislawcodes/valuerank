@@ -316,7 +316,7 @@ builder.mutationField('updateDefinition', (t) =>
       }
 
       // Build update data using UncheckedUpdateInput to allow raw ID access
-      const updateData: any = {};
+      const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
 
       if (name !== null && name !== undefined) {

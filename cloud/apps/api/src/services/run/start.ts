@@ -230,7 +230,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const definitionSnapshot = {
     ...content,
     // Inject resolved preamble text if available
-    preamble: (definition.preambleVersion?.content || content.preamble) as string | undefined,
+    preamble: (definition.preambleVersion?.content ?? content.preamble) as string | undefined,
     // Add version metadata for traceability
     _meta: {
       definitionVersion: definition.version,
