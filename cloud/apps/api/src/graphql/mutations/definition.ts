@@ -47,6 +47,10 @@ const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
       required: false,
       description: 'Optional parent definition ID for forking',
     }),
+    preambleVersionId: t.string({
+      required: false,
+      description: 'ID of the preamble version to use',
+    }),
   }),
 });
 
@@ -311,8 +315,8 @@ builder.mutationField('updateDefinition', (t) =>
         throw new Error(`Definition not found: ${id}`);
       }
 
-      // Build update data
-      const updateData: Prisma.DefinitionUpdateInput = {};
+      // Build update data using UncheckedUpdateInput to allow raw ID access
+      const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
 
       if (name !== null && name !== undefined) {

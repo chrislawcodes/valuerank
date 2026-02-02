@@ -21,6 +21,8 @@ type RawDefinitionRow = {
   last_accessed_at: Date | null;
   created_by_user_id: string | null;
   deleted_by_user_id: string | null;
+  version: number;
+  preamble_version_id: string | null;
 };
 
 // Query: definition(id: ID!) - Fetch single definition by ID
@@ -208,7 +210,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -227,6 +229,8 @@ builder.queryField('definitionAncestors', (t) =>
         lastAccessedAt: a.last_accessed_at,
         createdByUserId: a.created_by_user_id,
         deletedByUserId: a.deleted_by_user_id,
+        version: a.version,
+        preambleVersionId: a.preamble_version_id,
       }));
 
       ctx.log.debug({ count: mappedAncestors.length }, 'Ancestors fetched');
@@ -274,7 +278,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -293,6 +297,8 @@ builder.queryField('definitionDescendants', (t) =>
         lastAccessedAt: d.last_accessed_at,
         createdByUserId: d.created_by_user_id,
         deletedByUserId: d.deleted_by_user_id,
+        version: d.version,
+        preambleVersionId: d.preamble_version_id,
       }));
 
       ctx.log.debug({ count: mappedDescendants.length }, 'Descendants fetched');
