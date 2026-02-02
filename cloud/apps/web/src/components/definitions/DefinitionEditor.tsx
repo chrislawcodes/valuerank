@@ -417,9 +417,9 @@ export function DefinitionEditor({
 
 function createDefaultContent(): DefinitionContent {
   return {
+    schema_version: 1,
     template: '',
     dimensions: [],
-    matchingRules: [],
   };
 }
 
@@ -435,5 +435,6 @@ function createDefaultLevel(index: number): DimensionLevel {
     score: index + 1,
     description: '',
     options: [''],
+    label: '',
   };
 }
