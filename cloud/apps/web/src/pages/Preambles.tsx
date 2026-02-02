@@ -211,7 +211,7 @@ export function Preambles() {
                             </div>
                             <div className="flex items-center gap-1.5" title="Last Updated">
                                 <Clock className="w-3 h-3" />
-                                <span>{new Date(preamble.updatedAt).toLocaleDateString()}</span>
+                                <span>{new Date(preamble.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
                             </div>
                         </div>
                     </div>

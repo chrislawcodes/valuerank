@@ -13,19 +13,21 @@ function generateVersionLabel(): string {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
+        timeZoneName: 'short',
     };
 
     const formatter = new Intl.DateTimeFormat('en-US', options);
     const parts = formatter.formatToParts(new Date());
 
-    // Format: YYYY-MM-DD HH:mm PST
+    // Format: YYYY-MM-DD HH:mm PST/PDT
     const year = parts.find(p => p.type === 'year')?.value;
     const month = parts.find(p => p.type === 'month')?.value;
     const day = parts.find(p => p.type === 'day')?.value;
     const hour = parts.find(p => p.type === 'hour')?.value;
     const minute = parts.find(p => p.type === 'minute')?.value;
+    const tz = parts.find(p => p.type === 'timeZoneName')?.value;
 
-    return `${year}-${month}-${day} ${hour}:${minute} PST`;
+    return `${year}-${month}-${day} ${hour}:${minute} ${tz}`;
 }
 
 export type PreambleDto = {
@@ -133,6 +135,22 @@ export async function getPreambleVersion(versionId: string) {
 }
 
 export async function deletePreamble(id: string) {
+    // Safety check: is it in use?
+    const usageCount = await db.definition.count({
+        where: {
+            // Check if any definition uses ANY version of this preamble
+            preambleVersion: {
+                preambleId: id
+            },
+            // Only count active definitions
+            deletedAt: null
+        }
+    });
+
+    if (usageCount > 0) {
+        throw new Error(`Cannot delete preamble: used by ${usageCount} active definition(s). Please unassign it first.`);
+    }
+
     return await db.preamble.delete({
         where: { id },
     });
