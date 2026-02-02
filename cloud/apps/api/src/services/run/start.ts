@@ -178,6 +178,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         where: { deletedAt: null },
         select: { id: true },
       },
+      preambleVersion: true,
     },
   });
 
@@ -224,6 +225,23 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     'Cost estimate calculated'
   );
 
+  // Prepare definition snapshot with resolved preamble and version metadata
+  const content = definition.content as Record<string, unknown>;
+  const definitionSnapshot = {
+    ...content,
+    // Inject resolved preamble text if available
+    preamble: definition.preambleVersion?.content || content.preamble,
+    // Add version metadata for traceability
+    _meta: {
+      definitionVersion: definition.version,
+      preambleVersionId: definition.preambleVersion?.id,
+      preambleVersionLabel: definition.preambleVersion?.version,
+      preambleName: definition.preambleVersion ?
+        (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+        : undefined,
+    }
+  };
+
   // Create run config including cost estimate for historical reference
   const config = {
     models,
@@ -231,7 +249,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     sampleSeed,
     samplesPerScenario,
     priority,
-    definitionSnapshot: definition.content,
+    definitionSnapshot,
     estimatedCosts: costEstimate,
   };
 

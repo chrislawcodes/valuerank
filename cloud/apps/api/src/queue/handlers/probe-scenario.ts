@@ -129,6 +129,7 @@ type ProbeWorkerInput = {
   scenarioId: string;
   modelId: string;
   scenario: {
+    preamble?: string;
     prompt: string;
     followups: Array<{ label: string; prompt: string }>;
   };
@@ -207,21 +208,34 @@ export function isRetryableError(error: unknown): boolean {
   return true;
 }
 
-/**
- * Fetch scenario content from database.
- */
-async function fetchScenario(scenarioId: string) {
-  const scenario = await db.scenario.findUnique({
-    where: { id: scenarioId },
-    include: {
-      definition: {
-        select: {
-          id: true,
-          content: true,
-          deletedAt: true,
+// Define the query structure for scenario fetching to ensure type safety
+const scenarioQuery = {
+  include: {
+    definition: {
+      select: {
+        id: true,
+        content: true,
+        deletedAt: true,
+        preambleVersion: {
+          select: {
+            content: true,
+          },
         },
       },
     },
+  },
+} as const;
+
+// Derive the type from the query
+type ScenarioWithDefinition = Prisma.ScenarioGetPayload<typeof scenarioQuery>;
+
+/**
+ * Fetch scenario content from database.
+ */
+async function fetchScenario(scenarioId: string): Promise<ScenarioWithDefinition> {
+  const scenario = await db.scenario.findUnique({
+    where: { id: scenarioId },
+    ...scenarioQuery,
   });
 
   // Check scenario is not deleted and its definition is not deleted
@@ -294,10 +308,14 @@ async function buildWorkerInput(
   modelId: string,
   scenarioContent: unknown,
   definitionContent: unknown,
+  definitionPreamble: string | undefined, // New argument for fallback
   config: { temperature: number; maxTurns: number }
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
+
+  // Resolve preamble: Prefer scenario-specific, fallback to definition default
+  const preamble = (content.preamble as string) || definitionPreamble;
 
 
   // Get prompt from scenario
@@ -317,6 +335,7 @@ async function buildWorkerInput(
     scenarioId,
     modelId: resolvedModelId,
     scenario: {
+      preamble,
       prompt,
       followups,
     },
@@ -379,6 +398,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       modelId,
       scenario.content,
       scenario.definition.content,
+      scenario.definition.preambleVersion?.content || undefined,
       config
     );
 

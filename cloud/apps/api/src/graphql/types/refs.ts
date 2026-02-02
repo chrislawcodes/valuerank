@@ -35,4 +35,10 @@ export const LlmModelRef = builder.objectRef<LlmModel>('LlmModel');
 export const SystemSettingRef = builder.objectRef<SystemSetting>('SystemSetting');
 
 // Audit types
+// Audit types
 export const AuditLogRef = builder.objectRef<AuditLog>('AuditLog');
+
+// Preamble types
+import type { Preamble, PreambleVersion } from '@valuerank/db'; // Will import from package
+export const PreambleRef = builder.objectRef<Preamble>('Preamble');
+export const PreambleVersionRef = builder.objectRef<PreambleVersion>('PreambleVersion');

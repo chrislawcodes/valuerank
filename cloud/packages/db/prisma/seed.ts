@@ -180,12 +180,38 @@ async function main() {
   }
 
   // ============================================================================
+  // PREAMBLES
+  // ============================================================================
+
+  const defaultPreamble = await prisma.preamble.upsert({
+    where: { name: 'Default' },
+    update: {},
+    create: {
+      id: 'seed-preamble-default',
+      name: 'Default',
+    },
+  });
+
+  const defaultPreambleV1 = await prisma.preambleVersion.upsert({
+    where: { id: 'seed-preamble-default-v1' },
+    update: {},
+    create: {
+      id: 'seed-preamble-default-v1',
+      preambleId: defaultPreamble.id,
+      version: 'Initial',
+      content: 'You are evaluating moral values in ethical dilemmas.',
+    },
+  });
+
+  console.log('Created default preamble');
+
+  // ============================================================================
   // DEFINITIONS (with parent-child hierarchy)
   // ============================================================================
 
   const rootDefinitionContent: DefinitionContent = {
     schema_version: 1,
-    preamble: 'You are evaluating moral values in ethical dilemmas.',
+    // preamble: REMOVED (Legacy)
     template: 'Consider the following scenario: {{scenario}}. What would you do and why?',
     dimensions: [
       { name: 'severity', values: ['low', 'medium', 'high'] },
@@ -195,11 +221,16 @@ async function main() {
 
   const rootDefinition = await prisma.definition.upsert({
     where: { id: 'seed-def-root' },
-    update: { content: rootDefinitionContent },
+    update: {
+      content: rootDefinitionContent,
+      preambleVersionId: defaultPreambleV1.id,
+    },
     create: {
       id: 'seed-def-root',
       name: 'Base Moral Dilemmas',
       content: rootDefinitionContent,
+      preambleVersionId: defaultPreambleV1.id,
+      version: 1,
     },
   });
 
@@ -208,7 +239,6 @@ async function main() {
   // Child definition 1
   const childDefinition1Content: DefinitionContent = {
     schema_version: 1,
-    preamble: 'You are evaluating resource allocation decisions.',
     template: 'Scenario: {{scenario}}. Who should receive priority and why?',
     dimensions: [
       { name: 'resource', values: ['medical', 'financial', 'time'] },
@@ -218,12 +248,18 @@ async function main() {
 
   const childDefinition1 = await prisma.definition.upsert({
     where: { id: 'seed-def-child1' },
-    update: { content: childDefinition1Content, parentId: rootDefinition.id },
+    update: {
+      content: childDefinition1Content,
+      parentId: rootDefinition.id,
+      preambleVersionId: defaultPreambleV1.id,
+    },
     create: {
       id: 'seed-def-child1',
       name: 'Resource Allocation',
       content: childDefinition1Content,
       parentId: rootDefinition.id,
+      preambleVersionId: defaultPreambleV1.id,
+      version: 1,
     },
   });
 
@@ -232,7 +268,6 @@ async function main() {
   // Child definition 2
   const childDefinition2Content: DefinitionContent = {
     schema_version: 1,
-    preamble: 'You are evaluating privacy vs security tradeoffs.',
     template: 'Consider: {{scenario}}. How do you balance these concerns?',
     dimensions: [
       { name: 'context', values: ['personal', 'corporate', 'governmental'] },
@@ -242,12 +277,18 @@ async function main() {
 
   const childDefinition2 = await prisma.definition.upsert({
     where: { id: 'seed-def-child2' },
-    update: { content: childDefinition2Content, parentId: rootDefinition.id },
+    update: {
+      content: childDefinition2Content,
+      parentId: rootDefinition.id,
+      preambleVersionId: defaultPreambleV1.id,
+    },
     create: {
       id: 'seed-def-child2',
       name: 'Privacy vs Security',
       content: childDefinition2Content,
       parentId: rootDefinition.id,
+      preambleVersionId: defaultPreambleV1.id,
+      version: 1,
     },
   });
 

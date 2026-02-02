@@ -148,9 +148,13 @@ export function useScenarioPreview(
           levelIndices
         );
 
+        const fullText = content.preamble
+          ? `${content.preamble}\n\n${filledTemplate}`
+          : filledTemplate;
+
         return {
           id: index + 1,
-          filledTemplate,
+          filledTemplate: fullText,
           dimensionValues,
         };
       }

@@ -7,7 +7,7 @@ import {
   type Prisma,
   type DefinitionOverrides,
 } from '@valuerank/db';
-import { DefinitionRef, RunRef, ScenarioRef, TagRef } from './refs.js';
+import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef } from './refs.js';
 import { UserRef } from './user.js';
 import {
   getDefinitionExpansionStatus,
@@ -157,13 +157,31 @@ builder.objectType(DefinitionRef, {
       type: 'JSON',
       description: 'JSONB content with scenario configuration',
     }),
+    updatedAt: t.expose('updatedAt', {
+      type: 'DateTime',
+      description: 'When this definition was last updated',
+    }),
     createdAt: t.expose('createdAt', {
       type: 'DateTime',
       description: 'When this definition was created',
     }),
-    updatedAt: t.expose('updatedAt', {
-      type: 'DateTime',
-      description: 'When this definition was last updated',
+    version: t.exposeInt('version', {
+      description: 'Version counter (increments on every update)',
+    }),
+    preambleVersionId: t.exposeString('preambleVersionId', {
+      nullable: true,
+      description: 'ID of the specific preamble version used',
+    }),
+    preambleVersion: t.field({
+      type: PreambleVersionRef,
+      nullable: true,
+      description: 'The specific version of the preamble used',
+      resolve: async (definition) => {
+        if (!definition.preambleVersionId) return null;
+        return db.preambleVersion.findUnique({
+          where: { id: definition.preambleVersionId },
+        });
+      },
     }),
     lastAccessedAt: t.expose('lastAccessedAt', {
       type: 'DateTime',
