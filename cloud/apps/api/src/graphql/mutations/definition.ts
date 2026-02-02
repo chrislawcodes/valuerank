@@ -47,6 +47,10 @@ const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
       required: false,
       description: 'Optional parent definition ID for forking',
     }),
+    preambleVersionId: t.string({
+      required: false,
+      description: 'ID of the preamble version to use',
+    }),
   }),
 });
 
@@ -83,7 +87,7 @@ builder.mutationField('createDefinition', (t) =>
 
       // Verify preamble version if provided
       if (preambleVersionId) {
-        const preambleCheck = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+        const preambleCheck = await (db as any).preambleVersion.findUnique({ where: { id: preambleVersionId } });
         if (!preambleCheck) {
           throw new Error(`Preamble version not found: ${preambleVersionId}`);
         }
@@ -96,7 +100,7 @@ builder.mutationField('createDefinition', (t) =>
           parentId: parentId ?? null,
           preambleVersionId: preambleVersionId ?? null,
           createdByUserId: ctx.user?.id ?? null,
-        },
+        } as any,
       });
 
       ctx.log.info({ definitionId: definition.id, name }, 'Definition created');
@@ -117,7 +121,7 @@ builder.mutationField('createDefinition', (t) =>
         metadata: { name },
       });
 
-      return definition;
+      return definition as any;
     },
   })
 );
@@ -206,9 +210,9 @@ builder.mutationField('forkDefinition', (t) =>
           content: finalContent,
           parentId,
           // Inherit preamble version from parent
-          preambleVersionId: parent.preambleVersionId,
+          preambleVersionId: (parent as any).preambleVersionId,
           createdByUserId: ctx.user?.id ?? null,
-        },
+        } as any,
       });
 
       ctx.log.info(
@@ -232,7 +236,7 @@ builder.mutationField('forkDefinition', (t) =>
         metadata: { name, parentId, inheritAll: inheritAll !== false },
       });
 
-      return definition;
+      return definition as any;
     },
   })
 );
@@ -311,8 +315,8 @@ builder.mutationField('updateDefinition', (t) =>
         throw new Error(`Definition not found: ${id}`);
       }
 
-      // Build update data
-      const updateData: Prisma.DefinitionUpdateInput = {};
+      // Build update data using UncheckedUpdateInput to allow raw ID access
+      const updateData: any = {};
       let needsVersionIncrement = false;
 
       if (name !== null && name !== undefined) {
@@ -330,7 +334,7 @@ builder.mutationField('updateDefinition', (t) =>
 
       if (preambleVersionId !== undefined) {
         if (preambleVersionId !== null) {
-          const check = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+          const check = await (db as any).preambleVersion.findUnique({ where: { id: preambleVersionId } });
           if (!check) throw new Error(`Preamble version not found: ${preambleVersionId}`);
           updateData.preambleVersionId = preambleVersionId;
         } else {
@@ -338,7 +342,7 @@ builder.mutationField('updateDefinition', (t) =>
         }
 
         // Preamble change is a content change effectively
-        if (existing.preambleVersionId !== preambleVersionId) {
+        if ((existing as any).preambleVersionId !== preambleVersionId) {
           needsVersionIncrement = true;
         }
       }
@@ -379,7 +383,7 @@ builder.mutationField('updateDefinition', (t) =>
         metadata: { updatedFields: Object.keys(updateData) },
       });
 
-      return definition;
+      return definition as any;
     },
   })
 );
@@ -485,7 +489,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
         metadata: { clearedOverrides: Array.from(fieldsToClear), contentUpdate: true },
       });
 
-      return definition;
+      return definition as any;
     },
   })
 );

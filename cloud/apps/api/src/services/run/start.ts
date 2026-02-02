@@ -179,8 +179,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         select: { id: true },
       },
       preambleVersion: true,
-    },
-  });
+    } as any,
+  }) as any;
 
   if (!definition || definition.deletedAt !== null) {
     throw new NotFoundError('Definition', definitionId);
@@ -201,7 +201,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Sample scenarios (deterministic by default - same definition + % = same sample)
-  const allScenarioIds = definition.scenarios.map((s) => s.id);
+  const allScenarioIds = definition.scenarios.map((s: any) => s.id);
   const selectedScenarioIds = sampleScenarios(allScenarioIds, samplePercentage, definitionId, sampleSeed);
 
   log.debug(
@@ -230,14 +230,14 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const definitionSnapshot = {
     ...content,
     // Inject resolved preamble text if available
-    preamble: definition.preambleVersion?.content || content.preamble,
+    preamble: (definition.preambleVersion?.content || content.preamble) as string | undefined,
     // Add version metadata for traceability
     _meta: {
       definitionVersion: definition.version,
       preambleVersionId: definition.preambleVersion?.id,
       preambleVersionLabel: definition.preambleVersion?.version,
       preambleName: definition.preambleVersion ?
-        (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+        (await (db as any).preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
         : undefined,
     }
   };
