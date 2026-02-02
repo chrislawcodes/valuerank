@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Plus, Save, X } from 'lucide-react';
+import { useQuery } from 'urql';
+import { Plus, Save, X, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DimensionEditor } from './DimensionEditor';
@@ -15,10 +16,25 @@ import type {
   DimensionLevel,
 } from '../../api/operations/definitions';
 
+const PREAMBLES_LIST_QUERY = `
+  query GetPreamblesList {
+    preambles {
+      id
+      name
+      latestVersion {
+        id
+        version
+        content
+      }
+    }
+  }
+`;
+
 type DefinitionEditorProps = {
   initialName?: string;
   initialContent?: DefinitionContent;
-  onSave: (name: string, content: DefinitionContent) => Promise<void>;
+  initialPreambleVersionId?: string | null;
+  onSave: (name: string, content: DefinitionContent, preambleVersionId?: string | null) => Promise<void>;
   onCancel: () => void;
   isSaving?: boolean;
   mode: 'create' | 'edit';
@@ -63,6 +79,7 @@ function createDefaultLevel(index: number): DimensionLevel {
 export function DefinitionEditor({
   initialName = '',
   initialContent,
+  initialPreambleVersionId = null,
   onSave,
   onCancel,
   isSaving = false,
@@ -78,8 +95,12 @@ export function DefinitionEditor({
   const [content, setContent] = useState<DefinitionContent>(
     initialContent || createDefaultContent()
   );
+  const [preambleVersionId, setPreambleVersionId] = useState<string | null>(initialPreambleVersionId);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const templateEditorRef = useRef<TemplateEditorHandle>(null);
+
+  // Fetch preambles
+  const [{ data: preamblesData }] = useQuery({ query: PREAMBLES_LIST_QUERY });
 
   // Get dimension names for template editor autocomplete
   const dimensionNames = useMemo(
@@ -187,7 +208,7 @@ export function DefinitionEditor({
       return;
     }
 
-    await onSave(name.trim(), content);
+    await onSave(name.trim(), content, preambleVersionId);
   };
 
   // Extract placeholders from template for info display
@@ -215,6 +236,43 @@ export function DefinitionEditor({
         error={errors.name}
         disabled={isSaving}
       />
+
+      {/* Preamble Selection */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          System Preamble
+        </label>
+        <p className="text-sm text-gray-500 mb-2">
+          Instructions prefixed to every scenario.
+        </p>
+        <div className="relative">
+          <select
+            value={preambleVersionId || ''}
+            onChange={(e) => setPreambleVersionId(e.target.value || null)} // Handle empty string as null
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none appearance-none"
+            disabled={isSaving}
+          >
+            <option value="">Default (None)</option>
+            {preamblesData?.preambles.map((p: any) => (
+              <option key={p.id} value={p.latestVersion?.id || ''} disabled={!p.latestVersion}>
+                {p.name} {p.latestVersion ? `(v${p.latestVersion.version})` : '(No versions)'}
+              </option>
+            ))}
+          </select>
+          {/* Custom arrow if needed, but default select is fine for MVP */}
+        </div>
+        {preambleVersionId && (
+          <div className="mt-2 p-3 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600 font-mono">
+            <div className="flex items-center gap-1.5 mb-1 font-medium text-gray-500">
+              <Info className="w-3 h-3" />
+              Selected Preamble Preview
+            </div>
+            <div className="line-clamp-3">
+              {preamblesData?.preambles.find((p: any) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content || '(Loading content...)'}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Template */}
       <div>
@@ -343,7 +401,16 @@ export function DefinitionEditor({
       </div>
 
       {/* Scenario Preview */}
-      <ScenarioPreview content={content} maxSamples={10} />
+      <ScenarioPreview
+        content={useMemo(
+          () => ({
+            ...content,
+            preamble: preamblesData?.preambles.find((p: any) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content,
+          }),
+          [content, preamblesData, preambleVersionId]
+        )}
+        maxSamples={10}
+      />
 
       {/* Actions */}
       <div className="flex items-center gap-3 pt-4 border-t border-gray-200">

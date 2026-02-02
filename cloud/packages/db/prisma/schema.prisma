@@ -124,11 +124,42 @@ model Definition {
   createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
   deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
 
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
   // Cost visibility - per-definition token statistics (P3)
   tokenStatistics ModelTokenStatistics[]
 
   @@index([parentId])
+  @@index([preambleVersionId])
   @@map("definitions")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
 }
 
 model Tag {

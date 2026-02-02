@@ -129,6 +129,7 @@ type ProbeWorkerInput = {
   scenarioId: string;
   modelId: string;
   scenario: {
+    preamble?: string;
     prompt: string;
     followups: Array<{ label: string; prompt: string }>;
   };
@@ -219,13 +220,18 @@ async function fetchScenario(scenarioId: string) {
           id: true,
           content: true,
           deletedAt: true,
-        },
+          preambleVersion: {
+            select: {
+              content: true,
+            },
+          },
+        } as any,
       },
     },
   });
 
   // Check scenario is not deleted and its definition is not deleted
-  if (!scenario || scenario.deletedAt !== null || scenario.definition.deletedAt !== null) {
+  if (!scenario || scenario.deletedAt !== null || (scenario as any).definition.deletedAt !== null) {
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
 
@@ -294,10 +300,14 @@ async function buildWorkerInput(
   modelId: string,
   scenarioContent: unknown,
   definitionContent: unknown,
+  definitionPreamble: string | undefined, // New argument for fallback
   config: { temperature: number; maxTurns: number }
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
+
+  // Resolve preamble: Prefer scenario-specific, fallback to definition default
+  const preamble = (content.preamble as string) || definitionPreamble;
 
 
   // Get prompt from scenario
@@ -317,6 +327,7 @@ async function buildWorkerInput(
     scenarioId,
     modelId: resolvedModelId,
     scenario: {
+      preamble,
       prompt,
       followups,
     },
@@ -378,7 +389,8 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       scenarioId,
       modelId,
       scenario.content,
-      scenario.definition.content,
+      (scenario as any).definition.content,
+      (scenario as any).definition.preambleVersion?.content || undefined,
       config
     );
 
@@ -454,7 +466,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       modelId,
       sampleIndex,
       transcript: output.transcript,
-      definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
+      definitionSnapshot: (scenario as any).definition.content as Prisma.InputJsonValue,
       costSnapshot,
     });
 
