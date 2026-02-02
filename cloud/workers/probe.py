@@ -225,6 +225,12 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
 
     # Use scenario prompt directly without rating instruction
     prompt = scenario["prompt"]
+    
+    # Prepend preamble if available
+    preamble = scenario.get("preamble")
+    if preamble:
+        prompt = f"{preamble}\n\n{prompt}"
+        
     messages.append({"role": "user", "content": prompt})
 
     try:

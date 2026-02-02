@@ -10,6 +10,12 @@ export type Tag = {
   createdAt: string;
 };
 
+export type PreambleVersion = {
+  id: string;
+  version: string;
+  content: string;
+};
+
 /**
  * Indicates which content fields are locally overridden vs inherited.
  */
@@ -59,6 +65,9 @@ export type Definition = {
   lastAccessedAt: string | null;
   runCount: number;
   scenarioCount?: number;
+  version: number;
+  preambleVersionId: string | null;
+  preambleVersion?: PreambleVersion | null;
   tags: Tag[];
   parent?: Definition | null;
   children?: Definition[];
@@ -165,6 +174,13 @@ export const DEFINITION_QUERY = gql`
       lastAccessedAt
       runCount
       scenarioCount
+      version
+      preambleVersionId
+      preambleVersion {
+        id
+        version
+        content
+      }
       tags {
         id
         name
@@ -379,6 +395,7 @@ export type CreateDefinitionInput = {
   name: string;
   content: DefinitionContent;
   parentId?: string;
+  preambleVersionId?: string;
 };
 
 export type CreateDefinitionResult = {
@@ -388,6 +405,7 @@ export type CreateDefinitionResult = {
 export type UpdateDefinitionInput = {
   name?: string;
   content?: DefinitionContent;
+  preambleVersionId?: string | null;
 };
 
 export type UpdateDefinitionResult = {

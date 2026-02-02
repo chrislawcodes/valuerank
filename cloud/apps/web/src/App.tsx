@@ -16,6 +16,7 @@ import { AnalysisDetail } from './pages/AnalysisDetail';
 import { Compare } from './pages/Compare';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
+import { Preambles } from './pages/Preambles';
 import { client } from './api/client';
 
 // Protected layout wrapper
@@ -33,93 +34,101 @@ function App() {
       <Provider value={client}>
         <AuthProvider>
           <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
 
-          {/* Protected routes with layout */}
-          <Route
-            path="/"
-            element={
-              <ProtectedLayout>
-                <Dashboard />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/definitions"
-            element={
-              <ProtectedLayout>
-                <Definitions />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/definitions/:id"
-            element={
-              <ProtectedLayout>
-                <DefinitionDetail />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/runs"
-            element={
-              <ProtectedLayout>
-                <Runs />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/runs/:id"
-            element={
-              <ProtectedLayout>
-                <RunDetail />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/analysis"
-            element={
-              <ProtectedLayout>
-                <Analysis />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/analysis/:id"
-            element={
-              <ProtectedLayout>
-                <AnalysisDetail />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/compare"
-            element={
-              <ProtectedLayout fullWidth>
-                <Compare />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/experiments"
-            element={
-              <ProtectedLayout>
-                <Experiments />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedLayout>
-                <Settings />
-              </ProtectedLayout>
-            }
-          />
+            {/* Protected routes with layout */}
+            <Route
+              path="/"
+              element={
+                <ProtectedLayout>
+                  <Dashboard />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/definitions"
+              element={
+                <ProtectedLayout>
+                  <Definitions />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/definitions/:id"
+              element={
+                <ProtectedLayout>
+                  <DefinitionDetail />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/runs"
+              element={
+                <ProtectedLayout>
+                  <Runs />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/runs/:id"
+              element={
+                <ProtectedLayout>
+                  <RunDetail />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/analysis"
+              element={
+                <ProtectedLayout>
+                  <Analysis />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/analysis/:id"
+              element={
+                <ProtectedLayout>
+                  <AnalysisDetail />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/compare"
+              element={
+                <ProtectedLayout fullWidth>
+                  <Compare />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/experiments"
+              element={
+                <ProtectedLayout>
+                  <Experiments />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedLayout>
+                  <Settings />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/preambles"
+              element={
+                <ProtectedLayout>
+                  <Preambles />
+                </ProtectedLayout>
+              }
+            />
 
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Catch-all redirect */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
       </Provider>

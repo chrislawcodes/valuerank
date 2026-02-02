@@ -47,6 +47,10 @@ const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
       required: false,
       description: 'Optional parent definition ID for forking',
     }),
+    preambleVersionId: t.string({
+      required: false,
+      description: 'ID of the preamble version to use',
+    }),
   }),
 });
 
@@ -59,9 +63,9 @@ builder.mutationField('createDefinition', (t) =>
       input: t.arg({ type: CreateDefinitionInput, required: true }),
     },
     resolve: async (_root, args, ctx) => {
-      const { name, content, parentId } = args.input;
+      const { name, content, parentId, preambleVersionId } = args.input;
 
-      ctx.log.debug({ name, parentId }, 'Creating definition');
+      ctx.log.debug({ name, parentId, preambleVersionId }, 'Creating definition');
 
       // Validate content is an object
       if (typeof content !== 'object' || content === null || Array.isArray(content)) {
@@ -81,11 +85,20 @@ builder.mutationField('createDefinition', (t) =>
         }
       }
 
+      // Verify preamble version if provided
+      if (preambleVersionId) {
+        const preambleCheck = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+        if (!preambleCheck) {
+          throw new Error(`Preamble version not found: ${preambleVersionId}`);
+        }
+      }
+
       const definition = await db.definition.create({
         data: {
           name,
           content: processedContent,
           parentId: parentId ?? null,
+          preambleVersionId: preambleVersionId ?? null,
           createdByUserId: ctx.user?.id ?? null,
         },
       });
@@ -196,6 +209,8 @@ builder.mutationField('forkDefinition', (t) =>
           name,
           content: finalContent,
           parentId,
+          // Inherit preamble version from parent
+          preambleVersionId: parent.preambleVersionId,
           createdByUserId: ctx.user?.id ?? null,
         },
       });
@@ -242,6 +257,10 @@ const UpdateDefinitionInput = builder.inputType('UpdateDefinitionInput', {
       required: false,
       description: 'Updated content (optional, replaces entire content if provided)',
     }),
+    preambleVersionId: t.string({
+      required: false,
+      description: 'Update preamble version ID',
+    }),
   }),
 });
 
@@ -283,9 +302,9 @@ builder.mutationField('updateDefinition', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const { id, input } = args;
-      const { name, content } = input;
+      const { name, content, preambleVersionId } = input;
 
-      ctx.log.debug({ definitionId: id, hasName: !!name, hasContent: !!content }, 'Updating definition');
+      ctx.log.debug({ definitionId: id, hasName: !!name, hasContent: !!content, hasPreamble: preambleVersionId !== undefined }, 'Updating definition');
 
       // Check if definition exists
       const existing = await db.definition.findUnique({
@@ -296,8 +315,9 @@ builder.mutationField('updateDefinition', (t) =>
         throw new Error(`Definition not found: ${id}`);
       }
 
-      // Build update data
-      const updateData: Prisma.DefinitionUpdateInput = {};
+      // Build update data using UncheckedUpdateInput to allow raw ID access
+      const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
+      let needsVersionIncrement = false;
 
       if (name !== null && name !== undefined) {
         updateData.name = name;
@@ -309,12 +329,33 @@ builder.mutationField('updateDefinition', (t) =>
           throw new Error('Content must be a JSON object');
         }
         updateData.content = ensureSchemaVersion(content as Record<string, unknown>);
+        needsVersionIncrement = true;
+      }
+
+      if (preambleVersionId !== undefined) {
+        if (preambleVersionId !== null) {
+          const check = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+          if (!check) throw new Error(`Preamble version not found: ${preambleVersionId}`);
+          updateData.preambleVersionId = preambleVersionId;
+        } else {
+          updateData.preambleVersionId = null;
+        }
+
+        // Preamble change is a content change effectively
+        if (existing.preambleVersionId !== preambleVersionId) {
+          needsVersionIncrement = true;
+        }
       }
 
       // Check if there's anything to update
       if (Object.keys(updateData).length === 0) {
         ctx.log.debug({ definitionId: id }, 'No changes to apply');
         return existing;
+      }
+
+      if (needsVersionIncrement) {
+        // Increment version on content or preamble change
+        updateData.version = { increment: 1 };
       }
 
       const definition = await db.definition.update({

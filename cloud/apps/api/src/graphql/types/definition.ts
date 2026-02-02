@@ -7,7 +7,7 @@ import {
   type Prisma,
   type DefinitionOverrides,
 } from '@valuerank/db';
-import { DefinitionRef, RunRef, ScenarioRef, TagRef } from './refs.js';
+import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef } from './refs.js';
 import { UserRef } from './user.js';
 import {
   getDefinitionExpansionStatus,
@@ -141,6 +141,8 @@ type RawDefinitionRow = {
   last_accessed_at: Date | null;
   created_by_user_id: string | null;
   deleted_by_user_id: string | null;
+  version: number;
+  preamble_version_id: string | null;
 };
 
 builder.objectType(DefinitionRef, {
@@ -157,13 +159,31 @@ builder.objectType(DefinitionRef, {
       type: 'JSON',
       description: 'JSONB content with scenario configuration',
     }),
+    updatedAt: t.expose('updatedAt', {
+      type: 'DateTime',
+      description: 'When this definition was last updated',
+    }),
     createdAt: t.expose('createdAt', {
       type: 'DateTime',
       description: 'When this definition was created',
     }),
-    updatedAt: t.expose('updatedAt', {
-      type: 'DateTime',
-      description: 'When this definition was last updated',
+    version: t.exposeInt('version', {
+      description: 'Version counter (increments on every update)',
+    }),
+    preambleVersionId: t.exposeString('preambleVersionId', {
+      nullable: true,
+      description: 'ID of the specific preamble version used',
+    }),
+    preambleVersion: t.field({
+      type: PreambleVersionRef,
+      nullable: true,
+      description: 'The specific version of the preamble used',
+      resolve: async (definition) => {
+        if (!definition.preambleVersionId) return null;
+        return db.preambleVersion.findUnique({
+          where: { id: definition.preambleVersionId },
+        });
+      },
     }),
     lastAccessedAt: t.expose('lastAccessedAt', {
       type: 'DateTime',
@@ -457,7 +477,7 @@ builder.objectType(DefinitionRef, {
             JOIN ancestry a ON d.id = a.parent_id
             WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
           FROM ancestry
           WHERE id != ${definition.id}
           ORDER BY created_at ASC
@@ -475,6 +495,8 @@ builder.objectType(DefinitionRef, {
           lastAccessedAt: a.last_accessed_at,
           createdByUserId: a.created_by_user_id,
           deletedByUserId: a.deleted_by_user_id,
+          version: a.version,
+          preambleVersionId: a.preamble_version_id,
         }));
       },
     }),
@@ -493,7 +515,7 @@ builder.objectType(DefinitionRef, {
             JOIN tree t ON d.parent_id = t.id
             WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id
+          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
           FROM tree
           WHERE id != ${definition.id}
           ORDER BY created_at DESC
@@ -511,6 +533,8 @@ builder.objectType(DefinitionRef, {
           lastAccessedAt: d.last_accessed_at,
           createdByUserId: d.created_by_user_id,
           deletedByUserId: d.deleted_by_user_id,
+          version: d.version,
+          preambleVersionId: d.preamble_version_id,
         }));
       },
     }),

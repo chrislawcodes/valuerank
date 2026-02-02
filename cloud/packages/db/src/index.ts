@@ -26,6 +26,8 @@ export type {
   LlmModelStatus,
   SystemSetting,
   AuditLog,
+  Preamble,
+  PreambleVersion,
 } from '@prisma/client';
 
 // Audit types
