@@ -28,53 +28,18 @@ const PREAMBLES_LIST_QUERY = `
       }
     }
   }
-`;
-
-type DefinitionEditorProps = {
-  initialName?: string;
-  initialContent?: DefinitionContent;
-  initialPreambleVersionId?: string | null;
-  onSave: (name: string, content: DefinitionContent, preambleVersionId?: string | null) => Promise<void>;
-  onCancel: () => void;
-  isSaving?: boolean;
-  mode: 'create' | 'edit';
-  // Inheritance support (Phase 12)
-  isForked?: boolean;
-  parentName?: string;
-  parentId?: string;
-  overrides?: DefinitionOverrides;
-  onClearOverride?: (field: 'template' | 'dimensions' | 'matching_rules') => void;
-  onViewParent?: () => void;
+  id: string;
+  name: string;
+  latestVersion: {
+    id: string;
+    version: string;
+    content: string;
+  } | null;
 };
 
-function createDefaultContent(): DefinitionContent {
-  return {
-    schema_version: 1,
-
-    template: '',
-    dimensions: [],
-  };
-}
-
-function createDefaultDimension(): Dimension {
-  return {
-    name: '',
-    levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
-  };
-}
-
-import { DEFAULT_LEVEL_TEXTS } from './constants';
-
-function createDefaultLevel(index: number): DimensionLevel {
-  const text = DEFAULT_LEVEL_TEXTS[index] ?? '';
-  return {
-    score: index + 1,
-    label: text, // Populate label with text to satisfy backend requirement
-    description: undefined,
-    options: text ? [text] : undefined,
-  };
-}
-
+type PreambleListQueryData = {
+  preambles: PreambleSummary[];
+};
 
 export function DefinitionEditor({
   initialName = '',
@@ -100,7 +65,7 @@ export function DefinitionEditor({
   const templateEditorRef = useRef<TemplateEditorHandle>(null);
 
   // Fetch preambles
-  const [{ data: preamblesData }] = useQuery({ query: PREAMBLES_LIST_QUERY });
+  const [{ data: preamblesData }] = useQuery<PreambleListQueryData>({ query: PREAMBLES_LIST_QUERY });
 
   // Get dimension names for template editor autocomplete
   const dimensionNames = useMemo(
@@ -173,7 +138,7 @@ export function DefinitionEditor({
     for (const placeholder of placeholders) {
       const name = placeholder.slice(1, -1).toLowerCase();
       if (!dimensionNames.has(name)) {
-        newErrors.template = `Placeholder [${placeholder.slice(1, -1)}] has no matching dimension`;
+        newErrors.template = `Placeholder [${ placeholder.slice(1, -1)}] has no matching dimension`;
         break;
       }
     }
@@ -181,18 +146,18 @@ export function DefinitionEditor({
     // Validate dimensions
     (content.dimensions ?? []).forEach((dim, i) => {
       if (!dim.name.trim()) {
-        newErrors[`dimension-${i}`] = 'Dimension name is required';
+        newErrors[`dimension - ${ i } `] = 'Dimension name is required';
       }
       const levels = dim.levels ?? [];
       if (levels.length === 0) {
-        newErrors[`dimension-${i}`] = 'At least one level is required';
+        newErrors[`dimension - ${ i } `] = 'At least one level is required';
       }
 
       // Validate that each level has at least one option text
       levels.forEach((level, j) => {
         const optionText = level.options?.[0]?.trim();
         if (!optionText) {
-          newErrors[`dimension-${i}-level-${j}`] = 'Level text is required';
+          newErrors[`dimension - ${ i } -level - ${ j } `] = 'Level text is required';
         }
       });
     });
@@ -253,9 +218,9 @@ export function DefinitionEditor({
             disabled={isSaving}
           >
             <option value="">Default (None)</option>
-            {preamblesData?.preambles.map((p: any) => (
+            {preamblesData?.preambles.map((p) => (
               <option key={p.id} value={p.latestVersion?.id || ''} disabled={!p.latestVersion}>
-                {p.name} {p.latestVersion ? `(v${p.latestVersion.version})` : '(No versions)'}
+                {p.name} {p.latestVersion ? `(v${ p.latestVersion.version })` : '(No versions)'}
               </option>
             ))}
           </select>
@@ -268,7 +233,7 @@ export function DefinitionEditor({
               Selected Preamble Preview
             </div>
             <div className="line-clamp-3">
-              {preamblesData?.preambles.find((p: any) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content || '(Loading content...)'}
+              {preamblesData?.preambles.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content || '(Loading content...)'}
             </div>
           </div>
         )}
@@ -310,9 +275,9 @@ export function DefinitionEditor({
               <button
                 key={p}
                 type="button"
-                onClick={() => templateEditorRef.current?.insertAtCursor(`[${p}]`)}
+                onClick={() => templateEditorRef.current?.insertAtCursor(`[${ p }]`)}
                 className="inline-flex px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full hover:bg-teal-100 cursor-pointer transition-colors"
-                title={`Click to insert [${p}]`}
+                title={`Click to insert[${ p }]`}
               >
                 {p}
               </button>
@@ -405,7 +370,7 @@ export function DefinitionEditor({
         content={useMemo(
           () => ({
             ...content,
-            preamble: preamblesData?.preambles.find((p: any) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content,
+            preamble: preamblesData?.preambles.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content,
           }),
           [content, preamblesData, preambleVersionId]
         )}

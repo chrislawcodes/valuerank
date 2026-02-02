@@ -208,30 +208,38 @@ export function isRetryableError(error: unknown): boolean {
   return true;
 }
 
+// Define the query structure for scenario fetching to ensure type safety
+const scenarioQuery = {
+  include: {
+    definition: {
+      select: {
+        id: true,
+        content: true,
+        deletedAt: true,
+        preambleVersion: {
+          select: {
+            content: true,
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// Derive the type from the query
+type ScenarioWithDefinition = Prisma.ScenarioGetPayload<typeof scenarioQuery>;
+
 /**
  * Fetch scenario content from database.
  */
-async function fetchScenario(scenarioId: string) {
+async function fetchScenario(scenarioId: string): Promise<ScenarioWithDefinition> {
   const scenario = await db.scenario.findUnique({
     where: { id: scenarioId },
-    include: {
-      definition: {
-        select: {
-          id: true,
-          content: true,
-          deletedAt: true,
-          preambleVersion: {
-            select: {
-              content: true,
-            },
-          },
-        } as any,
-      },
-    },
+    ...scenarioQuery,
   });
 
   // Check scenario is not deleted and its definition is not deleted
-  if (!scenario || scenario.deletedAt !== null || (scenario as any).definition.deletedAt !== null) {
+  if (!scenario || scenario.deletedAt !== null || scenario.definition.deletedAt !== null) {
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
 
@@ -389,8 +397,8 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       scenarioId,
       modelId,
       scenario.content,
-      (scenario as any).definition.content,
-      (scenario as any).definition.preambleVersion?.content || undefined,
+      scenario.definition.content,
+      scenario.definition.preambleVersion?.content || undefined,
       config
     );
 
@@ -466,7 +474,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       modelId,
       sampleIndex,
       transcript: output.transcript,
-      definitionSnapshot: (scenario as any).definition.content as Prisma.InputJsonValue,
+      definitionSnapshot: scenario.definition.content as Prisma.InputJsonValue,
       costSnapshot,
     });
 
