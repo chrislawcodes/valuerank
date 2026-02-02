@@ -28,6 +28,9 @@ const PREAMBLES_LIST_QUERY = `
       }
     }
   }
+`;
+
+type PreambleSummary = {
   id: string;
   name: string;
   latestVersion: {
@@ -40,6 +43,22 @@ const PREAMBLES_LIST_QUERY = `
 type PreambleListQueryData = {
   preambles: PreambleSummary[];
 };
+
+export interface DefinitionEditorProps {
+  initialName?: string;
+  initialContent?: DefinitionContent;
+  initialPreambleVersionId?: string | null;
+  onSave: (name: string, content: DefinitionContent, preambleVersionId: string | null) => Promise<void>;
+  onCancel: () => void;
+  isSaving?: boolean;
+  mode: 'create' | 'edit';
+  isForked?: boolean;
+  parentName?: string;
+  parentId?: string;
+  overrides?: DefinitionOverrides;
+  onClearOverride?: (field: keyof DefinitionOverrides) => void;
+  onViewParent?: () => void;
+}
 
 export function DefinitionEditor({
   initialName = '',
@@ -75,7 +94,6 @@ export function DefinitionEditor({
 
   // Default overrides for non-forked definitions (everything is local)
   const effectiveOverrides: DefinitionOverrides = overrides ?? {
-
     template: true,
     dimensions: true,
     matchingRules: true,
@@ -138,7 +156,7 @@ export function DefinitionEditor({
     for (const placeholder of placeholders) {
       const name = placeholder.slice(1, -1).toLowerCase();
       if (!dimensionNames.has(name)) {
-        newErrors.template = `Placeholder [${ placeholder.slice(1, -1)}] has no matching dimension`;
+        newErrors.template = `Placeholder [${placeholder.slice(1, -1)}] has no matching dimension`;
         break;
       }
     }
@@ -146,18 +164,18 @@ export function DefinitionEditor({
     // Validate dimensions
     (content.dimensions ?? []).forEach((dim, i) => {
       if (!dim.name.trim()) {
-        newErrors[`dimension - ${ i } `] = 'Dimension name is required';
+        newErrors[`dimension-${i}`] = 'Dimension name is required';
       }
       const levels = dim.levels ?? [];
       if (levels.length === 0) {
-        newErrors[`dimension - ${ i } `] = 'At least one level is required';
+        newErrors[`dimension-${i}`] = 'At least one level is required';
       }
 
       // Validate that each level has at least one option text
       levels.forEach((level, j) => {
         const optionText = level.options?.[0]?.trim();
         if (!optionText) {
-          newErrors[`dimension - ${ i } -level - ${ j } `] = 'Level text is required';
+          newErrors[`dimension-${i}-level-${j}`] = 'Level text is required';
         }
       });
     });
@@ -220,7 +238,7 @@ export function DefinitionEditor({
             <option value="">Default (None)</option>
             {preamblesData?.preambles.map((p) => (
               <option key={p.id} value={p.latestVersion?.id || ''} disabled={!p.latestVersion}>
-                {p.name} {p.latestVersion ? `(v${ p.latestVersion.version })` : '(No versions)'}
+                {p.name} {p.latestVersion ? `(v${p.latestVersion.version})` : '(No versions)'}
               </option>
             ))}
           </select>
@@ -275,9 +293,9 @@ export function DefinitionEditor({
               <button
                 key={p}
                 type="button"
-                onClick={() => templateEditorRef.current?.insertAtCursor(`[${ p }]`)}
+                onClick={() => templateEditorRef.current?.insertAtCursor(`[${p}]`)}
                 className="inline-flex px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full hover:bg-teal-100 cursor-pointer transition-colors"
-                title={`Click to insert[${ p }]`}
+                title={`Click to insert [${p}]`}
               >
                 {p}
               </button>
@@ -395,4 +413,27 @@ export function DefinitionEditor({
       </div>
     </form>
   );
+}
+
+function createDefaultContent(): DefinitionContent {
+  return {
+    template: '',
+    dimensions: [],
+    matchingRules: [],
+  };
+}
+
+function createDefaultDimension(): Dimension {
+  return {
+    name: '',
+    levels: Array.from({ length: 5 }, (_, i) => createDefaultLevel(i)),
+  };
+}
+
+function createDefaultLevel(index: number): DimensionLevel {
+  return {
+    score: index + 1,
+    description: '',
+    options: [''],
+  };
 }

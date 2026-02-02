@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from 'urql';
-import { Plus, Edit2, Trash2, FileText, Calendar, Clock, RotateCcw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Edit2, Trash2, Clock, RotateCcw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 const PREAMBLES_QUERY = `
@@ -66,11 +65,15 @@ type Preamble = {
     } | null;
 };
 
+type PreambleQueryData = {
+    preambles: Preamble[];
+};
+
 export function Preambles() {
-    const [{ data, fetching, error }, reexecuteQuery] = useQuery({ query: PREAMBLES_QUERY });
-    const [createResult, createPreamble] = useMutation(CREATE_PREAMBLE_MUTATION);
-    const [updateResult, updatePreamble] = useMutation(UPDATE_PREAMBLE_MUTATION);
-    const [deleteResult, deletePreamble] = useMutation(DELETE_PREAMBLE_MUTATION);
+    const [{ data, fetching, error }, reexecuteQuery] = useQuery<PreambleQueryData>({ query: PREAMBLES_QUERY });
+    const [, createPreamble] = useMutation(CREATE_PREAMBLE_MUTATION);
+    const [, updatePreamble] = useMutation(UPDATE_PREAMBLE_MUTATION);
+    const [, deletePreamble] = useMutation(DELETE_PREAMBLE_MUTATION);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingPreamble, setEditingPreamble] = useState<Preamble | null>(null);
@@ -118,6 +121,7 @@ export function Preambles() {
             setIsModalOpen(false);
             reexecuteQuery({ requestPolicy: 'network-only' });
         } catch (err) {
+            // eslint-disable-next-line no-console
             console.error(err);
             alert('Failed to save preamble');
         } finally {
@@ -164,7 +168,7 @@ export function Preambles() {
                     </p>
                 </div>
 
-                {data?.preambles.map((preamble: any) => (
+                {data?.preambles.map((preamble) => (
                     <div key={preamble.id} className="bg-[#1A1A1A] border border-white/10 rounded-xl p-5 hover:border-teal-500/30 transition-colors group">
                         <div className="flex justify-between items-start mb-3">
                             <h3 className="font-medium text-white group-hover:text-teal-400 transition-colors">
