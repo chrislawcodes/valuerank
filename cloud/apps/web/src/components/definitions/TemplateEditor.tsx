@@ -59,7 +59,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       }
     }, [dimensions, value]);
 
-    const handleEditorMount: OnMount = (editor, monaco) => {
+    const handleEditorMount: OnMount = (editor, monaco: Monaco) => {
       editorRef.current = editor;
       monacoRef.current = monaco;
 

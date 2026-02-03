@@ -161,7 +161,7 @@ export function DefinitionList({
       setIsDragging(false);
       const file = e.dataTransfer.files[0];
       if (file) {
-        handleFile(file);
+        void handleFile(file);
       }
     },
     [handleFile]
@@ -216,8 +216,8 @@ export function DefinitionList({
               variant="ghost"
               size="icon"
               className={`p-1.5 rounded-none ${viewMode === 'flat'
-                  ? 'bg-teal-50 text-teal-600'
-                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                ? 'bg-teal-50 text-teal-600'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                 }`}
               title="List view"
               aria-label="List view"
@@ -230,8 +230,8 @@ export function DefinitionList({
               variant="ghost"
               size="icon"
               className={`p-1.5 rounded-none ${viewMode === 'folder'
-                  ? 'bg-teal-50 text-teal-600'
-                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                ? 'bg-teal-50 text-teal-600'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                 }`}
               title="Folder view (by tag)"
               aria-label="Folder view (by tag)"

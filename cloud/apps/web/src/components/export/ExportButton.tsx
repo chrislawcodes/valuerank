@@ -58,6 +58,7 @@ export function ExportButton({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Export failed';
       setError(message);
+      // eslint-disable-next-line no-console
       console.error('Export error:', err);
     } finally {
       setIsExporting(false);
@@ -102,11 +103,10 @@ export function ExportButton({
             type="button"
             onClick={() => handleExport('yaml')}
             disabled={!hasScenarios}
-            className={`w-full px-4 py-2 text-left text-sm flex items-center gap-3 ${
-              hasScenarios
+            className={`w-full px-4 py-2 text-left text-sm flex items-center gap-3 ${hasScenarios
                 ? 'text-gray-700 hover:bg-gray-50'
                 : 'text-gray-400 cursor-not-allowed'
-            }`}
+              }`}
           >
             <FileCode size={16} className={hasScenarios ? 'text-gray-400' : 'text-gray-300'} />
             <div>
