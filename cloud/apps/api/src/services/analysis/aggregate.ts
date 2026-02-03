@@ -138,6 +138,10 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
     // Use the first compatible run as a template for config
     const templateRun = compatibleRuns[0];
+    if (!templateRun) {
+        log.error('Unexpected state: compatibleRuns is empty but length check passed');
+        return;
+    }
     const templateConfig = templateRun.config as any;
 
     if (!aggregateRun) {
@@ -244,7 +248,7 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
 
         const totalModelSamples = validAnalyses.reduce((sum, a) => {
             const stats = a.perModel[modelId];
-            return sum + (stats ? stats.sampleSize : 0);
+            return sum + (stats ? (stats.sampleSize || 0) : 0);
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
@@ -317,12 +321,15 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
                         modelValueRates[valueId] = [];
                     }
 
-                    const target = aggregatedValues[valueId];
-                    target.count.prioritized += vStats.count.prioritized;
-                    target.count.deprioritized += vStats.count.deprioritized;
-                    target.count.neutral += vStats.count.neutral;
+                    if (target) {
+                        target.count.prioritized += vStats.count.prioritized;
+                        target.count.deprioritized += vStats.count.deprioritized;
+                        target.count.neutral += vStats.count.neutral;
+                    }
 
-                    modelValueRates[valueId].push(vStats.winRate);
+                    if (modelValueRates[valueId]) {
+                        modelValueRates[valueId].push(vStats.winRate);
+                    }
                 });
             }
         });
@@ -330,6 +337,8 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         valueAggregateStats[modelId] = { values: {} };
         Object.keys(aggregatedValues).forEach(valueId => {
             const target = aggregatedValues[valueId];
+            if (!target) return; // Should not happen given keys from object
+
             const totalWins = target.count.prioritized;
             const totalBattles = target.count.prioritized + target.count.deprioritized;
             target.winRate = totalBattles > 0 ? totalWins / totalBattles : 0;
@@ -347,12 +356,14 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
                     winRateSem: sem
                 };
 
-                target.confidenceInterval = {
-                    lower: Math.max(0, mean - (1.96 * sem)),
-                    upper: Math.min(1, mean + (1.96 * sem)),
-                    level: 0.95,
-                    method: 'aggregate-sem'
-                };
+                if (target) {
+                    target.confidenceInterval = {
+                        lower: Math.max(0, mean - (1.96 * sem)),
+                        upper: Math.min(1, mean + (1.96 * sem)),
+                        level: 0.95,
+                        method: 'aggregate-sem'
+                    };
+                }
             }
         });
 
@@ -378,10 +389,13 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         const code = parseInt(t.decisionCode);
         if (isNaN(code)) return;
 
-        if (!decisionsByScenario[t.modelId]) decisionsByScenario[t.modelId] = {};
-        if (!decisionsByScenario[t.modelId][t.scenarioId]) decisionsByScenario[t.modelId][t.scenarioId] = [];
-
-        decisionsByScenario[t.modelId][t.scenarioId].push(code);
+        if (decisionsByScenario[t.modelId] && decisionsByScenario[t.modelId]![t.scenarioId]) {
+            decisionsByScenario[t.modelId]![t.scenarioId]!.push(code);
+        } else if (decisionsByScenario[t.modelId]) {
+            decisionsByScenario[t.modelId]![t.scenarioId] = [code];
+        } else {
+            decisionsByScenario[t.modelId] = { [t.scenarioId]: [code] };
+        }
     });
 
     // 2. Aggregate per scenario and build distribution
