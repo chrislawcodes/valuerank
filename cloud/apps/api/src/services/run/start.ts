@@ -192,6 +192,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Fetch definition with scenarios (filtering out deleted)
+  // Casting 'include' options to satisfy TS on complex relation inclusion if strict mode complains, but removing 'as any' as primary goal
+  // Using explicit type compatible with Prisma include
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
     include: {
@@ -200,8 +202,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         select: { id: true },
       },
       preambleVersion: true,
-    } as any,
-  }) as any;
+    },
+  });
 
   if (!definition || definition.deletedAt !== null) {
     throw new NotFoundError('Definition', definitionId);
@@ -222,7 +224,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Sample scenarios (deterministic by default - same definition + % = same sample)
-  const allScenarioIds = definition.scenarios.map((s: any) => s.id);
+  const allScenarioIds = definition.scenarios.map((s) => s.id);
   const selectedScenarioIds = sampleScenarios(allScenarioIds, samplePercentage, definitionId, sampleSeed);
 
   log.debug(
@@ -258,7 +260,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       preambleVersionId: definition.preambleVersion?.id,
       preambleVersionLabel: definition.preambleVersion?.version,
       preambleName: definition.preambleVersion ?
-        (await (db as any).preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
+        (await db.preamble.findUnique({ where: { id: definition.preambleVersion.preambleId }, select: { name: true } }))?.name
         : undefined,
     }
   };

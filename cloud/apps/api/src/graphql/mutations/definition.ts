@@ -9,6 +9,7 @@ import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
 import { queueScenarioExpansion, cancelScenarioExpansion } from '../../services/scenario/index.js';
 import { createAuditLog } from '../../services/audit/index.js';
+import { z } from 'zod';
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -26,6 +27,9 @@ function ensureSchemaVersion(
 
   return content as Prisma.InputJsonValue;
 }
+
+// Zod schema for basic object validation of content
+const zContentObject = z.record(z.unknown());
 
 // Input type for creating a definition
 const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
@@ -68,12 +72,14 @@ builder.mutationField('createDefinition', (t) =>
       ctx.log.debug({ name, parentId, preambleVersionId }, 'Creating definition');
 
       // Validate content is an object
-      if (typeof content !== 'object' || content === null || Array.isArray(content)) {
+      const parseResult = zContentObject.safeParse(content);
+      if (!parseResult.success) {
         throw new Error('Content must be a JSON object');
       }
+      const rawContent = parseResult.data;
 
       // Ensure schema_version is present
-      const processedContent = ensureSchemaVersion(content as Record<string, unknown>);
+      const processedContent = ensureSchemaVersion(rawContent);
 
       // If parentId provided, verify it exists
       if (parentId !== null && parentId !== undefined && parentId !== '') {
@@ -87,7 +93,7 @@ builder.mutationField('createDefinition', (t) =>
 
       // Verify preamble version if provided
       if (preambleVersionId) {
-        const preambleCheck = await (db as any).preambleVersion.findUnique({ where: { id: preambleVersionId } });
+        const preambleCheck = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
         if (!preambleCheck) {
           throw new Error(`Preamble version not found: ${preambleVersionId}`);
         }
@@ -100,7 +106,7 @@ builder.mutationField('createDefinition', (t) =>
           parentId: parentId ?? null,
           preambleVersionId: preambleVersionId ?? null,
           createdByUserId: ctx.user?.id ?? null,
-        } as any,
+        },
       });
 
       ctx.log.info({ definitionId: definition.id, name }, 'Definition created');
@@ -121,7 +127,7 @@ builder.mutationField('createDefinition', (t) =>
         metadata: { name },
       });
 
-      return definition as any;
+      return definition;
     },
   })
 );
@@ -180,10 +186,11 @@ builder.mutationField('forkDefinition', (t) =>
 
       if (content !== null && content !== undefined) {
         // Explicit content provided - use as partial overrides
-        if (typeof content !== 'object' || Array.isArray(content)) {
+        const parseResult = zContentObject.safeParse(content);
+        if (!parseResult.success) {
           throw new Error('Content must be a JSON object');
         }
-        const contentObj = content as Record<string, unknown>;
+        const contentObj = parseResult.data;
 
         // Create v2 content with only provided fields as overrides
         finalContent = createPartialContent({
@@ -210,9 +217,9 @@ builder.mutationField('forkDefinition', (t) =>
           content: finalContent,
           parentId,
           // Inherit preamble version from parent
-          preambleVersionId: (parent as any).preambleVersionId,
+          preambleVersionId: parent.preambleVersionId,
           createdByUserId: ctx.user?.id ?? null,
-        } as any,
+        },
       });
 
       ctx.log.info(
@@ -236,7 +243,7 @@ builder.mutationField('forkDefinition', (t) =>
         metadata: { name, parentId, inheritAll: inheritAll !== false },
       });
 
-      return definition as any;
+      return definition;
     },
   })
 );
@@ -316,7 +323,8 @@ builder.mutationField('updateDefinition', (t) =>
       }
 
       // Build update data using UncheckedUpdateInput to allow raw ID access
-      const updateData: any = {};
+      // Using partial type to avoid 'any'
+      const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
 
       if (name !== null && name !== undefined) {
@@ -325,16 +333,17 @@ builder.mutationField('updateDefinition', (t) =>
 
       if (content !== null && content !== undefined) {
         // Validate content is an object
-        if (typeof content !== 'object' || Array.isArray(content)) {
+        const parseResult = zContentObject.safeParse(content);
+        if (!parseResult.success) {
           throw new Error('Content must be a JSON object');
         }
-        updateData.content = ensureSchemaVersion(content as Record<string, unknown>);
+        updateData.content = ensureSchemaVersion(parseResult.data);
         needsVersionIncrement = true;
       }
 
       if (preambleVersionId !== undefined) {
         if (preambleVersionId !== null) {
-          const check = await (db as any).preambleVersion.findUnique({ where: { id: preambleVersionId } });
+          const check = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
           if (!check) throw new Error(`Preamble version not found: ${preambleVersionId}`);
           updateData.preambleVersionId = preambleVersionId;
         } else {
@@ -342,7 +351,7 @@ builder.mutationField('updateDefinition', (t) =>
         }
 
         // Preamble change is a content change effectively
-        if ((existing as any).preambleVersionId !== preambleVersionId) {
+        if (existing.preambleVersionId !== preambleVersionId) {
           needsVersionIncrement = true;
         }
       }
@@ -383,7 +392,7 @@ builder.mutationField('updateDefinition', (t) =>
         metadata: { updatedFields: Object.keys(updateData) },
       });
 
-      return definition as any;
+      return definition;
     },
   })
 );
@@ -489,7 +498,7 @@ builder.mutationField('updateDefinitionContent', (t) =>
         metadata: { clearedOverrides: Array.from(fieldsToClear), contentUpdate: true },
       });
 
-      return definition as any;
+      return definition;
     },
   })
 );
