@@ -64,9 +64,8 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
       onClick={onClick}
       variant="interactive"
       disabled={isDisabled}
-      className={`w-full text-left ${
-        isDisabled ? 'opacity-75 cursor-not-allowed' : ''
-      }`}
+      className={`w-full text-left ${isDisabled ? 'opacity-75 cursor-not-allowed' : ''
+        }`}
     >
       <div className="flex items-start justify-between gap-4">
         {/* Left: Status and Info */}
@@ -84,7 +83,7 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              {run.definition?.name || 'Unnamed Definition'} · {formatDate(displayDate)}
+              {run.definition?.name || 'Unnamed Vignette'} <span className="text-gray-400">v{run.definitionVersion ?? run.definition?.version}</span> · {formatDate(displayDate)}
             </p>
             {/* Tags */}
             {run.definition?.tags && run.definition.tags.length > 0 && (

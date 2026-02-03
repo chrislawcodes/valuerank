@@ -462,12 +462,51 @@ builder.objectType(DefinitionRef, {
     }),
 
     // Computed: ancestors - Full ancestry chain from this definition to root
+    // Computed: ancestors - Full ancestry chain from this definition to root
     ancestors: t.field({
       type: [DefinitionRef],
       description: 'Full ancestry chain from this definition to root (oldest first)',
       resolve: async (definition) => {
         if (!definition.parentId) return [];
 
+        // Use recursive CTE to get all ancestors (filtering out deleted)
+        const ancestors = await db.$queryRaw<RawDefinitionRow[]>`
+          WITH RECURSIVE ancestry AS (
+            SELECT d.*, 1 as depth FROM definitions d WHERE d.id = ${definition.id} AND d.deleted_at IS NULL
+            UNION ALL
+            SELECT d.*, a.depth + 1 FROM definitions d
+            JOIN ancestry a ON d.id = a.parent_id
+            WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
+          )
+          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+          FROM ancestry
+          WHERE id != ${definition.id}
+          ORDER BY created_at ASC
+        `;
+
+        return ancestors.map((a) => ({
+          id: a.id,
+          parentId: a.parent_id,
+          name: a.name,
+          content: a.content,
+          expansionProgress: a.expansion_progress,
+          expansionDebug: a.expansion_debug,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at,
+          lastAccessedAt: a.last_accessed_at,
+          createdByUserId: a.created_by_user_id,
+          deletedByUserId: a.deleted_by_user_id,
+          version: a.version,
+          preambleVersionId: a.preamble_version_id,
+        })) as any;
+      },
+    }),
+
+    // Computed: descendants - All descendants forked from this definition
+    descendants: t.field({
+      type: [DefinitionRef],
+      description: 'All descendants forked from this definition (newest first)',
+      resolve: async (definition) => {
         // Use recursive CTE to get all descendants (filtering out deleted)
         const descendants = await db.$queryRaw<RawDefinitionRow[]>`
           WITH RECURSIVE tree AS (
@@ -497,7 +536,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: d.deleted_by_user_id,
           version: d.version,
           preambleVersionId: d.preamble_version_id,
-        }));
+        })) as any;
       },
     }),
   }),

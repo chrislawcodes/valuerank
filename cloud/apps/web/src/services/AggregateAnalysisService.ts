@@ -1,4 +1,4 @@
-import {
+import type {
     AnalysisResult,
     PerModelStats,
     VisualizationData,
@@ -112,21 +112,26 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
         // Calculate Decision Stats (Mean, SD, SEM of percentages)
         decisionStats[modelId] = { options: {} };
         [1, 2, 3, 4, 5].forEach(opt => {
-            const values = modelDecisions[opt];
+            const values = modelDecisions[opt] || [];
             if (values.length > 0) {
                 const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
                 const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length > 0 ? values.length : 1);
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(values.length);
 
+                // Safe access to decisionStats[modelId] which is initialized above
                 decisionStats[modelId].options[opt] = { mean, sd, sem, n: values.length };
             }
         });
 
         // --- B. Aggregate Value Scores (Win Rates) ---
-        // We use 'any' for the intermediate aggregator to allow partial construction
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const aggregatedValues: Record<string, any> = {};
+        // Helper type for mutable value stats construction
+        type ValueStatsBuilder = {
+            count: { prioritized: number; deprioritized: number; neutral: number };
+            winRate: number;
+            confidenceInterval: { lower: number; upper: number; level: number; method: string };
+        };
+        const aggregatedValues: Record<string, ValueStatsBuilder> = {};
         const modelValueRates: Record<string, number[]> = {};
 
         validAnalyses.forEach(analysis => {
@@ -143,11 +148,14 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
                     }
 
                     const target = aggregatedValues[valueId];
-                    target.count.prioritized += vStats.count.prioritized;
-                    target.count.deprioritized += vStats.count.deprioritized;
-                    target.count.neutral += vStats.count.neutral;
+                    if (target) {
+                        target.count.prioritized += vStats.count.prioritized;
+                        target.count.deprioritized += vStats.count.deprioritized;
+                        target.count.neutral += vStats.count.neutral;
+                    }
 
-                    modelValueRates[valueId].push(vStats.winRate);
+                    const rates = modelValueRates[valueId];
+                    if (rates) rates.push(vStats.winRate);
                 });
             }
         });
@@ -156,6 +164,8 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
         valueAggregateStats[modelId] = { values: {} };
         Object.keys(aggregatedValues).forEach(valueId => {
             const target = aggregatedValues[valueId];
+            if (!target) return;
+
             const totalWins = target.count.prioritized;
             const totalBattles = target.count.prioritized + target.count.deprioritized;
             target.winRate = totalBattles > 0 ? totalWins / totalBattles : 0; // Weighted average effectively
@@ -168,11 +178,13 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(rates.length);
 
-                valueAggregateStats[modelId].values[valueId] = {
-                    winRateMean: mean,
-                    winRateSd: sd,
-                    winRateSem: sem
-                };
+                if (valueAggregateStats[modelId]) {
+                    valueAggregateStats[modelId].values[valueId] = {
+                        winRateMean: mean,
+                        winRateSd: sd,
+                        winRateSem: sem
+                    };
+                }
 
                 // Update the public/standard stats with the Aggregate CI
                 // 95% CI = Mean +/- 1.96 * SEM
@@ -226,7 +238,10 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
             const d = a.visualizationData?.decisionDistribution?.[mId];
             if (d) {
                 Object.entries(d).forEach(([k, v]) => {
-                    mergedVizData.decisionDistribution[mId][k] = (mergedVizData.decisionDistribution[mId][k] || 0) + v;
+                    const currentDist = mergedVizData.decisionDistribution[mId];
+                    if (currentDist) {
+                        currentDist[k] = (currentDist[k] || 0) + v;
+                    }
                 });
             }
         });

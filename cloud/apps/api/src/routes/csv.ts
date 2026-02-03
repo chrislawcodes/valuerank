@@ -48,17 +48,31 @@ csvRouter.get(
             // Verify run exists
             const run = await db.run.findUnique({
                 where: { id: runId },
-                select: { id: true, status: true },
+                select: { id: true, status: true, config: true },
             });
 
             if (!run) {
                 throw new NotFoundError('Run', runId);
             }
 
+            // Handle Aggregate Runs
+            // If aggregate, fetch transcripts from source runs
+            let transcriptWhere: any = { runId };
+            const runConfig = run.config as any;
+            if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+                log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'CSV feed for aggregate run');
+                transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
+            }
+
             // Get transcripts
             const transcripts = await db.transcript.findMany({
-                where: { runId },
-                include: { scenario: true },
+                where: transcriptWhere,
+                include: {
+                    scenario: true,
+                    run: {
+                        select: { name: true },
+                    },
+                },
                 orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
             });
 

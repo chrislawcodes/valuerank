@@ -25,7 +25,7 @@ export type DefinitionShape = Omit<Definition, 'deletedAt'> & {
   preambleVersionId: string | null;
 };
 
-export const DefinitionRef = builder.objectRef<any>('Definition');
+export const DefinitionRef = builder.objectRef<DefinitionShape>('Definition');
 export const RunRef = builder.objectRef<Run>('Run');
 export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');

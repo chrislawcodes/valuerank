@@ -14,6 +14,9 @@ export type PreambleVersion = {
   id: string;
   version: string;
   content: string;
+  preamble?: {
+    name: string;
+  };
 };
 
 /**
@@ -180,6 +183,9 @@ export const DEFINITION_QUERY = gql`
         id
         version
         content
+        preamble {
+          name
+        }
       }
       tags {
         id

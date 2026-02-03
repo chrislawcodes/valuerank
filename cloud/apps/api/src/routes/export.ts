@@ -57,17 +57,31 @@ exportRouter.get(
       // Verify run exists
       const run = await db.run.findUnique({
         where: { id: runId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, config: true },
       });
 
       if (!run) {
         throw new NotFoundError('Run', runId);
       }
 
+      // Handle Aggregate Runs
+      // If aggregate, fetch transcripts from source runs
+      let transcriptWhere: any = { runId };
+      const runConfig = run.config as any;
+      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+        log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run');
+        transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
+      }
+
       // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
-        where: { runId },
-        include: { scenario: true },
+        where: transcriptWhere,
+        include: {
+          scenario: true,
+          run: {
+            select: { name: true },
+          },
+        },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
       });
 
@@ -143,7 +157,7 @@ exportRouter.get(
       // Verify run exists and check status
       const run = await db.run.findUnique({
         where: { id: runId },
-        select: { id: true, status: true, name: true, createdAt: true },
+        select: { id: true, status: true, name: true, createdAt: true, config: true },
       });
 
       if (!run) {
@@ -157,9 +171,18 @@ exportRouter.get(
         );
       }
 
+      // Handle Aggregate Runs
+      // If aggregate, fetch transcripts from source runs
+      let transcriptWhere: any = { runId };
+      const runConfig = run.config as any;
+      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+        log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run (XLSX)');
+        transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
+      }
+
       // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
-        where: { runId },
+        where: transcriptWhere,
         include: { scenario: true },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
       });
@@ -406,9 +429,18 @@ exportRouter.get(
         throw new NotFoundError('Run', runId);
       }
 
+      // Handle Aggregate Runs
+      // If aggregate, fetch transcripts from source runs
+      let transcriptWhere: any = { runId };
+      const runConfig = run.config as any;
+      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+        log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run (JSON)');
+        transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
+      }
+
       // Get transcripts for the run with scenario relation
       const transcripts = await db.transcript.findMany({
-        where: { runId },
+        where: transcriptWhere,
         include: {
           scenario: {
             select: {
@@ -442,10 +474,10 @@ exportRouter.get(
           modelVersion: t.modelVersion,
           scenario: t.scenario
             ? {
-                id: t.scenario.id,
-                name: t.scenario.name,
-                dimensions: (t.scenario.content as { dimensions?: Record<string, unknown> } | null)?.dimensions,
-              }
+              id: t.scenario.id,
+              name: t.scenario.name,
+              dimensions: (t.scenario.content as { dimensions?: Record<string, unknown> } | null)?.dimensions,
+            }
             : null,
           content: t.content,
           turnCount: t.turnCount,

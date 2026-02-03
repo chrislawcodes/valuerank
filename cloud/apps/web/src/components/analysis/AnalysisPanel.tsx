@@ -131,7 +131,7 @@ function AnalysisPending({
       {!isComputing && !isRunning && onRunAnalysis && (
         <Button variant="primary" size="sm" onClick={onRunAnalysis} className="mt-4">
           <BarChart2 className="w-4 h-4 mr-2" />
-          Run Analysis
+          Analyze Trial
         </Button>
       )}
     </div>
@@ -180,7 +180,7 @@ function AnalysisEmpty({
             ) : (
               <>
                 <RefreshCw className="w-4 h-4 mr-2" />
-                {isFailed ? 'Retry Analysis' : 'Run Analysis'}
+                {isFailed ? 'Retry Analysis' : 'Analyze Trial'}
               </>
             )}
           </Button>

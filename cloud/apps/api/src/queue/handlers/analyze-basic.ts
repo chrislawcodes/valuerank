@@ -217,10 +217,38 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           },
         });
 
+
         log.info(
           { jobId, runId, durationMs: output.analysis.durationMs },
           'Analyze:basic job completed'
         );
+
+        // --- Trigger Aggregate Update ---
+        try {
+          const run = await db.run.findUnique({
+            where: { id: runId },
+            include: { tags: { include: { tag: true } } }
+          });
+
+          if (run) {
+            const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
+            if (!isAggregate) {
+              const config = run.config as any;
+              const definitionId = run.definitionId;
+              const preambleVersionId =
+                config?.definitionSnapshot?._meta?.preambleVersionId ??
+                config?.definitionSnapshot?.preambleVersionId;
+
+              // Async trigger - don't block
+              import('../../services/analysis/aggregate.js')
+                .then(({ updateAggregateRun }) => updateAggregateRun(definitionId, preambleVersionId))
+                .catch(err => log.error({ err, runId }, 'Failed to trigger aggregate update'));
+            }
+          }
+        } catch (err) {
+          log.error({ err }, 'Error checking run for aggregation trigger');
+        }
+
       } catch (error) {
         log.error({ jobId, runId, err: error }, 'Analyze:basic job failed');
         throw error;
@@ -228,3 +256,4 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
     }
   };
 }
+
