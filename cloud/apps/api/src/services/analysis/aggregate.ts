@@ -29,190 +29,192 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 },
             },
             deletedAt: null,
-        },
+        } as Prisma.RunWhereInput, // Explicit cast to allow relation filtering
+    },
         include: {
-            analysisResults: {
-                where: { status: 'CURRENT' },
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-            },
-            definition: true,
-            _count: {
-                select: { transcripts: true }
-            }
+        analysisResults: {
+            where: { status: 'CURRENT' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
         },
-    });
-
-    // Filter by Preamble Version (from snapshot)
-    // We need to parse config to check preambleVersionId match
-    const compatibleRuns = runs.filter((run) => {
-        const snapshot = run.config as any;
-        const runPreambleId =
-            snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
-            snapshot?.definitionSnapshot?.preambleVersionId;
-
-        // Handle null case (legacy runs might be null)
-        if (preambleVersionId === null) return runPreambleId == null;
-        return runPreambleId === preambleVersionId;
-    });
-
-    if (compatibleRuns.length === 0) {
-        log.info('No compatible runs found for aggregation');
-        return;
-    }
-
-    const sourceRunIds = compatibleRuns.map(r => r.id);
-
-    // Get valid analysis results
-    const validAnalyses = compatibleRuns
-        .map((r) => r.analysisResults[0])
-        .filter((a): a is NonNullable<typeof a> => !!a);
-
-    if (validAnalyses.length === 0) {
-        log.info('No valid analysis results found for compatible runs');
-        return;
-    }
-
-    // 2. Perform Aggregation
-    // Convert DB JsonValue to AnalysisResult-like object structure for processing
-    const analysisObjects = validAnalyses.map((a) => {
-        return {
-            ...a,
-            output: a.output,
-            perModel: (a.output as any).perModel,
-            visualizationData: (a.output as any).visualizationData,
-            mostContestedScenarios: (a.output as any).mostContestedScenarios,
-        } as any;
-    });
-
-    // Valid transcripts for aggregation
-    const allTranscripts = await db.transcript.findMany({
-        where: {
-            runId: { in: sourceRunIds },
-            decisionCode: { not: null },
-            scenarioId: { not: null },
-            scenario: {
-                deletedAt: null
-            }
-        },
-        select: {
-            modelId: true,
-            scenarioId: true,
-            decisionCode: true
+        definition: true,
+        _count: {
+            select: { transcripts: true }
         }
+    },
     });
 
-    const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+// Filter by Preamble Version (from snapshot)
+// We need to parse config to check preambleVersionId match
+const compatibleRuns = runs.filter((run) => {
+    const snapshot = run.config as any;
+    const runPreambleId =
+        snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
+        snapshot?.definitionSnapshot?.preambleVersionId;
 
-    // 3. Find/Create Aggregate Run
-    // We identify it by having tag 'Aggregate' and matching definition/preamble
-    // Since we can't easily query by complex JSON config, we might need a deterministic naming convention or search.
-    // Or just search all runs with tag 'Aggregate' for this definition.
+    // Handle null case (legacy runs might be null)
+    if (preambleVersionId === null) return runPreambleId == null;
+    return runPreambleId === preambleVersionId;
+});
 
-    const aggregateRuns = await db.run.findMany({
-        where: {
-            definitionId,
-            tags: {
-                some: {
-                    tag: {
-                        name: 'Aggregate',
-                    },
+if (compatibleRuns.length === 0) {
+    log.info('No compatible runs found for aggregation');
+    return;
+}
+
+const sourceRunIds = compatibleRuns.map(r => r.id);
+
+// Get valid analysis results with safe access to includes
+const validAnalyses = compatibleRuns
+    .map((r: any) => r.analysisResults && r.analysisResults[0])
+    .filter((a): a is NonNullable<any> => !!a);
+
+if (validAnalyses.length === 0) {
+    log.info('No valid analysis results found for compatible runs');
+    return;
+}
+
+// 2. Perform Aggregation
+// Convert DB JsonValue to AnalysisResult-like object structure for processing
+const analysisObjects = validAnalyses.map((a) => {
+    return {
+        ...a,
+        output: a.output,
+        perModel: (a.output as any).perModel,
+        visualizationData: (a.output as any).visualizationData,
+        mostContestedScenarios: (a.output as any).mostContestedScenarios,
+    } as any;
+});
+
+// Valid transcripts for aggregation
+const allTranscripts = await db.transcript.findMany({
+    where: {
+        runId: { in: sourceRunIds },
+        decisionCode: { not: null },
+        scenarioId: { not: null },
+        scenario: {
+            deletedAt: null
+        }
+    },
+    select: {
+        modelId: true,
+        scenarioId: true,
+        decisionCode: true
+    }
+});
+
+const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+
+// 3. Find/Create Aggregate Run
+// We identify it by having tag 'Aggregate' and matching definition/preamble
+// Since we can't easily query by complex JSON config, we might need a deterministic naming convention or search.
+// Or just search all runs with tag 'Aggregate' for this definition.
+
+const aggregateRuns = await db.run.findMany({
+    where: {
+        definitionId,
+        tags: {
+            some: {
+                tag: {
+                    name: 'Aggregate',
                 },
             },
-            deletedAt: null,
         },
-    });
+        deletedAt: null,
+    },
+});
 
-    // Find the one matching our preamble
-    let aggregateRun = aggregateRuns.find((r) => {
-        const snapshot = r.config as any;
-        const runPreambleId =
-            snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
-            snapshot?.definitionSnapshot?.preambleVersionId;
-        if (preambleVersionId === null) return runPreambleId == null;
-        return runPreambleId === preambleVersionId;
-    });
+// Find the one matching our preamble
+let aggregateRun = aggregateRuns.find((r) => {
+    const snapshot = r.config as any;
+    const runPreambleId =
+        snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
+        snapshot?.definitionSnapshot?.preambleVersionId;
+    if (preambleVersionId === null) return runPreambleId == null;
+    return runPreambleId === preambleVersionId;
+});
 
 
-    const sampleSize = compatibleRuns.reduce((sum, r) => sum + (r._count.transcripts || 0), 0);
+const sampleSize = compatibleRuns.reduce((sum, r: any) => sum + (r._count?.transcripts || 0), 0);
 
-    // Use the first compatible run as a template for config
-    const templateRun = compatibleRuns[0];
-    if (!templateRun) {
-        log.error('Unexpected state: compatibleRuns is empty but length check passed');
-        return;
-    }
-    const templateConfig = templateRun.config as any;
+// Use the first compatible run as a template for config
+const templateRun = compatibleRuns[0];
+if (!templateRun) {
+    log.error('Unexpected state: compatibleRuns is empty but length check passed');
+    return;
+}
+const templateConfig = templateRun.config as any;
 
-    if (!aggregateRun) {
-        // Create new
-        log.info('Creating new Aggregate Run');
-        aggregateRun = await db.run.create({
-            data: {
-                definitionId,
-                createdByUserId: templateRun.createdByUserId, // Attribute to first author or system?
-                status: 'COMPLETED',
-                config: {
-                    ...templateConfig,
-                    isAggregate: true,
-                    sourceRunIds: sourceRunIds,
-                    transcriptCount: sampleSize,
-                },
-                tags: {
-                    create: {
-                        tag: {
-                            connectOrCreate: {
-                                where: { name: 'Aggregate' },
-                                create: { name: 'Aggregate' }
-                            }
+if (!aggregateRun) {
+    // Create new
+    log.info('Creating new Aggregate Run');
+    aggregateRun = await db.run.create({
+        data: {
+            definitionId,
+            createdByUserId: templateRun.createdByUserId, // Attribute to first author or system?
+            status: 'COMPLETED',
+            config: {
+                ...templateConfig,
+                isAggregate: true,
+                sourceRunIds: sourceRunIds,
+                transcriptCount: sampleSize,
+            },
+            tags: {
+                create: {
+                    tag: {
+                        connectOrCreate: {
+                            where: { name: 'Aggregate' },
+                            create: { name: 'Aggregate' }
                         }
                     }
                 }
-            },
+            }
+        } as any, // Cast to avoid strict type error on nested create
+    },
         });
     } else {
-        // Update existing
-        log.info({ runId: aggregateRun.id }, 'Updating existing Aggregate Run');
-        await db.run.update({
-            where: { id: aggregateRun.id },
-            data: {
-                config: {
-                    ...(aggregateRun.config as any),
-                    sourceRunIds: sourceRunIds,
-                    transcriptCount: sampleSize,
-                },
-                status: 'COMPLETED' // Ensure completed
-            }
-        });
-    }
-
-    // 4. Save Analysis Result
-    // Invalidate old current result
-    await db.analysisResult.updateMany({
-        where: { runId: aggregateRun.id, status: 'CURRENT' },
-        data: { status: 'SUPERSEDED' }
-    });
-
-    // Save new
-    await db.analysisResult.create({
+    // Update existing
+    log.info({ runId: aggregateRun.id }, 'Updating existing Aggregate Run');
+    await db.run.update({
+        where: { id: aggregateRun.id },
         data: {
-            runId: aggregateRun.id,
-            analysisType: 'AGGREGATE',
-            status: 'CURRENT',
-            codeVersion: '1.0.0',
-            inputHash: `aggregate-${Date.now()}`, // Simple hash for now
-            output: {
-                perModel: aggregatedResult.perModel,
-                modelAgreement: aggregatedResult.modelAgreement,
-                visualizationData: aggregatedResult.visualizationData,
-                mostContestedScenarios: aggregatedResult.mostContestedScenarios,
-                decisionStats: aggregatedResult.decisionStats,
-                valueAggregateStats: aggregatedResult.valueAggregateStats,
-                runCount: validAnalyses.length,
-                sourceRunIds,
-            } as any
+            config: {
+                ...(aggregateRun.config as any),
+                sourceRunIds: sourceRunIds,
+                transcriptCount: sampleSize,
+            },
+            status: 'COMPLETED' // Ensure completed
         }
     });
+}
+
+// 4. Save Analysis Result
+// Invalidate old current result
+await db.analysisResult.updateMany({
+    where: { runId: aggregateRun.id, status: 'CURRENT' },
+    data: { status: 'SUPERSEDED' }
+});
+
+// Save new
+await db.analysisResult.create({
+    data: {
+        runId: aggregateRun.id,
+        analysisType: 'AGGREGATE',
+        status: 'CURRENT',
+        codeVersion: '1.0.0',
+        inputHash: `aggregate-${Date.now()}`, // Simple hash for now
+        output: {
+            perModel: aggregatedResult.perModel,
+            modelAgreement: aggregatedResult.modelAgreement,
+            visualizationData: aggregatedResult.visualizationData,
+            mostContestedScenarios: aggregatedResult.mostContestedScenarios,
+            decisionStats: aggregatedResult.decisionStats,
+            valueAggregateStats: aggregatedResult.valueAggregateStats,
+            runCount: validAnalyses.length,
+            sourceRunIds,
+        } as any
+    }
+});
 }
 
 // --- Logic Ported from Frontend ---
