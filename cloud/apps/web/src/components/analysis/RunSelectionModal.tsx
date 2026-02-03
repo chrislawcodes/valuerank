@@ -21,6 +21,22 @@ const GET_COMPATIBLE_RUNS = gql(`
   }
 `);
 
+interface CompatibleRun {
+    id: string;
+    status: string;
+    createdAt: string;
+    transcriptCount: number;
+    models: {
+        id: string;
+        modelId: string;
+    }[];
+    definitionSnapshot: unknown;
+}
+
+interface GetCompatibleRunsQuery {
+    runs: CompatibleRun[];
+}
+
 interface RunSelectionModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -28,6 +44,13 @@ interface RunSelectionModalProps {
     definitionId: string;
     preambleVersionId?: string | null;
     currentRunId?: string; // To exclude or highlight the currently viewed run
+}
+
+interface SnapshotWithMeta {
+    _meta?: {
+        preambleVersionId?: string;
+    };
+    preambleVersionId?: string;
 }
 
 export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
@@ -40,7 +63,7 @@ export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
 }) => {
     const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set(currentRunId ? [currentRunId] : []));
 
-    const [{ data, fetching, error }] = useQuery({
+    const [{ data, fetching, error }] = useQuery<GetCompatibleRunsQuery>({
         query: GET_COMPATIBLE_RUNS,
         variables: { definitionId, preambleVersionId },
         pause: !isOpen,
@@ -51,14 +74,14 @@ export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
 
     // Filter runs client-side for strict preamble match if not handled by API
     // (API supports filtering by definitionId, but preamble check ensures strict compatibility)
-    const compatibleRuns = data?.runs.filter(run => {
+    const compatibleRuns = (data?.runs || []).filter(run => {
         // Must be completed
         if (run.status !== 'COMPLETED') return false;
 
         // Must match preamble (if specified)
         // Note: definitionSnapshot layout might vary, using safe access
-        // Note: definitionSnapshot layout might vary, using safe access
-        const runPreamble = (run.definitionSnapshot as any)?._meta?.preambleVersionId ?? (run.definitionSnapshot as any)?.preambleVersionId;
+        const snapshot = run.definitionSnapshot as SnapshotWithMeta;
+        const runPreamble = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId;
 
         // If we are looking for a specific preamble, enforce match
         if (preambleVersionId && runPreamble !== preambleVersionId) return false;
@@ -67,7 +90,7 @@ export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
         if (!preambleVersionId && runPreamble) return false;
 
         return true;
-    }) || [];
+    });
 
     const handleToggle = (runId: string) => {
         const newSet = new Set(selectedRunIds);

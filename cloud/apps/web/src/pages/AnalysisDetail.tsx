@@ -4,9 +4,8 @@
  * Displays detailed analysis for a single run with full AnalysisPanel.
  */
 
-import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Play, BarChart2, X } from 'lucide-react';
+import { ArrowLeft, Play } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';

@@ -92,7 +92,7 @@ export function OverlayChart({ distributions, chartData, runColors }: OverlayCha
           <YAxis tick={{ fill: '#6b7280' }} />
           <Tooltip content={(props) => <OverlayTooltip {...props} runNames={runNames} />} />
           <Legend
-            formatter={(value) => runNames.get(value) || value}
+            formatter={(value: string) => runNames.get(value) || value}
             wrapperStyle={{ paddingTop: 10 }}
           />
           {distributions.map((dist) => (

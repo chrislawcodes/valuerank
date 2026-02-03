@@ -6,7 +6,6 @@
 
 import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 'lucide-react';
 import type { Run, RunStatus } from '../../api/operations/runs';
-import { formatRunName } from '../../lib/format';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
 

@@ -1,9 +1,9 @@
-import type { Client} from 'urql';
+import type { Client } from 'urql';
 import { createClient, cacheExchange, fetchExchange, mapExchange } from 'urql';
 import { getStoredToken, clearStoredToken } from '../auth/context';
 
 // API base URL - empty string means same origin (dev), full URL for production
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
 
 // Custom exchange to handle 401 responses
 const authErrorExchange = mapExchange({

@@ -59,6 +59,7 @@ export function DimensionEditor({
       });
       return updated;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [levels.length]);
 
   const handleNameChange = (name: string) => {

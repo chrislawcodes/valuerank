@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Play } from 'lucide-react';
+import { ArrowLeft, Play } from 'lucide-react';
 import { formatRunName } from '../../lib/format';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';

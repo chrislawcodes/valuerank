@@ -99,11 +99,15 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
                 if (runTotal > 0) {
                     Object.entries(dist).forEach(([option, count]) => {
                         const opt = parseInt(option);
-                        if (!isNaN(opt)) modelDecisions[opt].push(count / runTotal);
+                        if (!isNaN(opt) && modelDecisions[opt]) {
+                            modelDecisions[opt].push(count / runTotal);
+                        }
                     });
                     // Handle 0 counts for missing options
                     [1, 2, 3, 4, 5].forEach(opt => {
-                        if (!dist[String(opt)]) modelDecisions[opt].push(0);
+                        if (!dist[String(opt)] && modelDecisions[opt]) {
+                            modelDecisions[opt].push(0);
+                        }
                     });
                 }
             }
@@ -113,7 +117,8 @@ export function aggregateAnalyses(analyses: AnalysisResult[]): AggregateAnalysis
         decisionStats[modelId] = { options: {} };
         [1, 2, 3, 4, 5].forEach(opt => {
             const values = modelDecisions[opt] || [];
-            if (values.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (values.length > 0 && decisionStats[modelId]) {
                 const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
                 const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length > 0 ? values.length : 1);
                 const sd = Math.sqrt(variance);
