@@ -30,6 +30,13 @@ interface RunSelectionModalProps {
     currentRunId?: string; // To exclude or highlight the currently viewed run
 }
 
+interface SnapshotWithMeta {
+    _meta?: {
+        preambleVersionId?: string;
+    };
+    preambleVersionId?: string;
+}
+
 export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
     isOpen,
     onClose,
@@ -57,8 +64,8 @@ export const RunSelectionModal: React.FC<RunSelectionModalProps> = ({
 
         // Must match preamble (if specified)
         // Note: definitionSnapshot layout might vary, using safe access
-        // Note: definitionSnapshot layout might vary, using safe access
-        const runPreamble = (run.definitionSnapshot as any)?._meta?.preambleVersionId ?? (run.definitionSnapshot as any)?.preambleVersionId;
+        const snapshot = run.definitionSnapshot as unknown as SnapshotWithMeta;
+        const runPreamble = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId;
 
         // If we are looking for a specific preamble, enforce match
         if (preambleVersionId && runPreamble !== preambleVersionId) return false;
