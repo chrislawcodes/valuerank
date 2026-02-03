@@ -1,8 +1,85 @@
+```typescript
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 
 const log = createLogger('analysis:aggregate');
+
+// --- Feature-Specific Interfaces ---
+
+interface RunSnapshot {
+    _meta?: { preambleVersionId?: string };
+    preambleVersionId?: string;
+}
+
+interface RunConfig {
+    definitionSnapshot?: RunSnapshot;
+    isAggregate?: boolean;
+    sourceRunIds?: string[];
+    transcriptCount?: number;
+    [key: string]: unknown; // Allow other properties for forward compatibility
+}
+
+interface AnalysisOutput {
+    perModel: Record<string, {
+        sampleSize?: number;
+        values?: Record<string, {
+            count: { prioritized: number; deprioritized: number; neutral: number };
+            winRate: number;
+            confidenceInterval: { lower: number; upper: number; level: number; method: string };
+        }>;
+        overall?: { mean: number; stdDev: number; min: number; max: number };
+    }>;
+    visualizationData: {
+        decisionDistribution?: Record<string, Record<string, number>>;
+        modelScenarioMatrix?: Record<string, Record<string, number>>;
+        [key: string]: unknown;
+    };
+    mostContestedScenarios?: Array<{
+        scenarioId: string;
+        variance: number;
+        [key: string]: unknown;
+    }>;
+    modelAgreement?: unknown; // Type can be refined if structure is known
+    [key: string]: unknown; // Allow other properties for forward compatibility
+}
+
+interface DecisionStatsOption {
+    mean: number;
+    sd: number;
+    sem: number;
+    n: number;
+}
+
+interface DecisionStats {
+    options: Record<number, DecisionStatsOption>;
+}
+
+interface ValueAggregateStatsValue {
+    winRateMean: number;
+    winRateSem: number;
+    winRateSd: number;
+}
+
+interface ValueAggregateStats {
+    values: Record<string, ValueAggregateStatsValue>;
+}
+
+interface AggregatedResult {
+    perModel: Record<string, unknown>; // Refined type based on aggregateAnalysesLogic output
+    modelAgreement: unknown;
+    visualizationData: {
+        decisionDistribution: Record<string, Record<string, number>>;
+        modelScenarioMatrix: Record<string, Record<string, number>>;
+    };
+    mostContestedScenarios: Array<{
+        scenarioId: string;
+        variance: number;
+        [key: string]: unknown;
+    }>;
+    decisionStats: Record<string, DecisionStats>;
+    valueAggregateStats: Record<string, ValueAggregateStats>;
+}
 
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
@@ -192,7 +269,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             analysisType: 'AGGREGATE',
             status: 'CURRENT',
             codeVersion: '1.0.0',
-            inputHash: `aggregate-${Date.now()}`,
+            inputHash: `aggregate - ${ Date.now() } `,
             output: {
                 perModel: aggregatedResult.perModel,
                 modelAgreement: aggregatedResult.modelAgreement,
