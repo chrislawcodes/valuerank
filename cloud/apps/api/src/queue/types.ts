@@ -5,7 +5,7 @@
  */
 
 // Job type union
-export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter';
+export type JobType = 'probe_scenario' | 'summarize_transcript' | 'analyze_basic' | 'analyze_deep' | 'expand_scenarios' | 'compute_token_stats' | 'probe_dead_letter' | 'aggregate_analysis';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -46,11 +46,16 @@ export type ComputeTokenStatsJobData = {
   runId: string;
 };
 
+export type AggregateAnalysisJobData = {
+  definitionId: string;
+  preambleVersionId: string | null;
+};
+
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
 export type ProbeDeadLetterJobData = ProbeScenarioJobData;
 
 // Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
-export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData;
+export type JobData = ProbeScenarioJobData | SummarizeTranscriptJobData | AnalyzeBasicJobData | AnalyzeDeepJobData | ExpandScenariosJobData | ComputeTokenStatsJobData | AggregateAnalysisJobData;
 
 // Job options interface
 export type JobOptions = {
@@ -101,6 +106,13 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryBackoff: true,
     expireInSeconds: 120, // 2 minutes - stats computation is quick
     singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'aggregate_analysis': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+    // singletonKey is set dynamically based on definitionId
   },
   'probe_dead_letter': {
     retryLimit: 0, // Don't retry dead letter jobs - just log and record

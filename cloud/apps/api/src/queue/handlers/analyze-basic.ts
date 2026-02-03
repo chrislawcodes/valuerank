@@ -239,10 +239,26 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 config?.definitionSnapshot?._meta?.preambleVersionId ??
                 config?.definitionSnapshot?.preambleVersionId;
 
-              // Async trigger - don't block
-              import('../../services/analysis/aggregate.js')
-                .then(({ updateAggregateRun }) => updateAggregateRun(definitionId, preambleVersionId))
-                .catch(err => log.error({ err, runId }, 'Failed to trigger aggregate update'));
+              // Async trigger via job queue (with debouncing via singletonKey)
+              // This prevents race conditions where multiple analyses trigger aggregation simultaneously
+              // causing duplicate aggregate runs.
+              const { getBoss } = await import('../../boss.js');
+              const { DEFAULT_JOB_OPTIONS } = await import('../../types.js');
+
+              const boss = getBoss();
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}`;
+
+              await boss.send(
+                'aggregate_analysis',
+                { definitionId, preambleVersionId },
+                {
+                  ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
+                  singletonKey,
+                  useSingletonQueue: true // Ensure only one job exists in queue (debounce)
+                }
+              );
+
+              log.info({ runId, definitionId, preambleVersionId }, 'Enqueued aggregate_analysis job');
             }
           }
         } catch (err) {

@@ -25,6 +25,7 @@ import { createAnalyzeDeepHandler } from './analyze-deep.js';
 import { createExpandScenariosHandler } from './expand-scenarios.js';
 import { createComputeTokenStatsHandler } from './compute-token-stats.js';
 import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
+import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import {
   createProviderQueues,
   getAllProviderQueues,
@@ -33,7 +34,7 @@ import {
 const log = createLogger('queue:handlers');
 
 // Re-export job data types for handlers
-export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData };
+export type { ProbeScenarioJobData, SummarizeTranscriptJobData, AnalyzeBasicJobData, AnalyzeDeepJobData, ExpandScenariosJobData, ComputeTokenStatsJobData, ProbeDeadLetterJobData, AggregateAnalysisJobData };
 
 // Dead letter queue name for probe jobs
 const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
@@ -113,6 +114,16 @@ const handlerRegistrations: HandlerRegistration[] = [
         PROBE_DEAD_LETTER_QUEUE,
         { batchSize },
         createProbeDeadLetterHandler()
+      );
+    },
+  },
+  {
+    name: 'aggregate_analysis',
+    register: async (boss, batchSize) => {
+      await boss.work<AggregateAnalysisJobData>(
+        'aggregate_analysis',
+        { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
+        createAggregateAnalysisHandler()
       );
     },
   },
