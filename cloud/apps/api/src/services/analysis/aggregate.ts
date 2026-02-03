@@ -80,15 +80,38 @@ interface AggregatedResult {
     valueAggregateStats: Record<string, ValueAggregateStats>;
 }
 
+
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
+ * Uses advisory locks to ensure serial execution for a given definition.
  */
 export async function updateAggregateRun(definitionId: string, preambleVersionId: string | null) {
-    log.info({ definitionId, preambleVersionId }, 'Updating aggregate run');
+    if (!definitionId) {
+        log.error('Cannot update aggregate run without definitionId');
+        return;
+    }
 
-    // 1. Find all COMPLETED runs for this definition+preamble (excluding existing aggregates)
-    const runs = await db.run.findMany({
-        where: {
+    log.info({ definitionId, preambleVersionId }, 'Updating aggregate run (with lock)');
+
+    // Wrap in transaction to hold the lock for the duration of the update
+    await db.$transaction(async (tx: Prisma.TransactionClient) => {
+        // 0. Acquire Advisory Lock
+        // We hash the definitionId to get a 64-bit bigint for the lock key.
+        // pg_advisory_xact_lock automatically releases at end of transaction.
+        // This effectively serializes concurrent UpdateAggregate jobs for the same definition.
+        try {
+            // Use raw query for locking. Note: BigInt is needed for 64-bit key if we used that, 
+            // but hashtext returns int which fits in 32-bit args for the 1-arg version? 
+            // Actually hashtext returns integer. pg_advisory_xact_lock takes (bigint) or (int, int).
+            // hashtext result is safe to cast to generic number/int in SQL.
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${definitionId}))`;
+        } catch (err) {
+            log.error({ err, definitionId }, 'Failed to acquire advisory lock');
+            throw err; // Abort transaction
+        }
+
+        // 1. Find all COMPLETED runs for this definition+preamble (excluding existing aggregates)
+        const runWhere: Prisma.RunWhereInput = {
             definitionId,
             status: 'COMPLETED',
             // Exclude the aggregate run itself (which we tag)
@@ -100,188 +123,207 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 },
             },
             deletedAt: null,
-        } as Prisma.RunWhereInput, // Explicit cast to allow relation filtering
-        include: {
-            analysisResults: {
-                where: { status: 'CURRENT' },
-                orderBy: { createdAt: 'desc' },
-                take: 1,
+        };
+
+        const runs = await tx.run.findMany({
+            where: runWhere,
+            include: {
+                analysisResults: {
+                    where: { status: 'CURRENT' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+                definition: true,
+                _count: {
+                    select: { transcripts: true }
+                }
             },
-            definition: true,
-            _count: {
-                select: { transcripts: true }
-            }
-        },
-    });
+        });
 
-    // Filter by Preamble Version (from snapshot)
-    // We need to parse config to check preambleVersionId match
-    const compatibleRuns = runs.filter((run) => {
-        const snapshot = run.config as any;
-        const runPreambleId =
-            snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
-            snapshot?.definitionSnapshot?.preambleVersionId;
+        // Filter by Preamble Version (from snapshot)
+        // We need to parse config to check preambleVersionId match
+        const compatibleRuns = runs.filter((run) => {
+            const config = run.config as unknown as RunConfig;
+            const snapshot = config?.definitionSnapshot;
 
-        // Handle null case (legacy runs might be null)
-        if (preambleVersionId === null) return runPreambleId == null;
-        return runPreambleId === preambleVersionId;
-    });
+            const runPreambleId =
+                snapshot?._meta?.preambleVersionId ??
+                snapshot?.preambleVersionId;
 
-    if (compatibleRuns.length === 0) {
-        log.info('No compatible runs found for aggregation');
-        return;
-    }
+            // Handle null case (legacy runs might be null)
+            if (preambleVersionId === null) return runPreambleId == null;
+            return runPreambleId === preambleVersionId;
+        });
 
-    const sourceRunIds = compatibleRuns.map(r => r.id);
-
-    // Get valid analysis results with safe access to includes
-    const validAnalyses = compatibleRuns
-        .map((r: any) => r.analysisResults && r.analysisResults[0])
-        .filter((a): a is NonNullable<any> => !!a);
-
-    if (validAnalyses.length === 0) {
-        log.info('No valid analysis results found for compatible runs');
-        return;
-    }
-
-    // 2. Perform Aggregation
-    // Convert DB JsonValue to AnalysisResult-like object structure for processing
-    const analysisObjects = validAnalyses.map((a) => {
-        return {
-            ...a,
-            output: a.output,
-            perModel: (a.output as any).perModel,
-            visualizationData: (a.output as any).visualizationData,
-            mostContestedScenarios: (a.output as any).mostContestedScenarios,
-        } as any;
-    });
-
-    // Valid transcripts for aggregation
-    const allTranscripts = await db.transcript.findMany({
-        where: {
-            runId: { in: sourceRunIds },
-            decisionCode: { not: null },
-            scenarioId: { not: null },
-            scenario: {
-                deletedAt: null
-            }
-        },
-        select: {
-            modelId: true,
-            scenarioId: true,
-            decisionCode: true
+        if (compatibleRuns.length === 0) {
+            log.info('No compatible runs found for aggregation');
+            return;
         }
-    });
 
-    const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+        const sourceRunIds = compatibleRuns.map(r => r.id);
 
-    // 3. Find/Create Aggregate Run
-    // We identify it by having tag 'Aggregate' and matching definition/preamble
-    const aggregateRuns = await db.run.findMany({
-        where: {
-            definitionId,
-            tags: {
-                some: {
-                    tag: {
-                        name: 'Aggregate',
+        // Get valid analysis results with safe access to includes
+        const validAnalyses = compatibleRuns
+            .map(r => r.analysisResults && r.analysisResults[0])
+            .filter((a): a is NonNullable<typeof r.analysisResults[0]> => !!a);
+
+        if (validAnalyses.length === 0) {
+            log.info('No valid analysis results found for compatible runs');
+            return;
+        }
+
+        // 2. Perform Aggregation
+        // Convert DB JsonValue to AnalysisOutput structure for processing
+        const analysisObjects = validAnalyses.map((a) => {
+            // Cast the output JSON to our typed interface
+            const output = a.output as unknown as AnalysisOutput;
+            return {
+                ...a,
+                output, // Keep original output for reference if needed
+                perModel: output.perModel,
+                visualizationData: output.visualizationData,
+                mostContestedScenarios: output.mostContestedScenarios,
+            };
+        });
+
+        // Valid transcripts for aggregation
+        const allTranscripts = await tx.transcript.findMany({
+            where: {
+                runId: { in: sourceRunIds },
+                decisionCode: { not: null },
+                scenarioId: { not: null },
+                scenario: {
+                    deletedAt: null
+                }
+            },
+            select: {
+                modelId: true,
+                scenarioId: true,
+                decisionCode: true
+            }
+        });
+
+        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+
+        // 3. Find/Create Aggregate Run
+        const aggregateRuns = await tx.run.findMany({
+            where: {
+                definitionId,
+                tags: {
+                    some: {
+                        tag: {
+                            name: 'Aggregate',
+                        },
                     },
                 },
+                deletedAt: null,
             },
-            deletedAt: null,
-        },
-    });
+        });
 
-    // Find the one matching our preamble
-    let aggregateRun = aggregateRuns.find((r) => {
-        const snapshot = r.config as any;
-        const runPreambleId =
-            snapshot?.definitionSnapshot?._meta?.preambleVersionId ??
-            snapshot?.definitionSnapshot?.preambleVersionId;
-        if (preambleVersionId === null) return runPreambleId == null;
-        return runPreambleId === preambleVersionId;
-    });
+        // Find the one matching our preamble
+        let aggregateRun = aggregateRuns.find((r) => {
+            const config = r.config as unknown as RunConfig;
+            const snapshot = config?.definitionSnapshot;
+
+            const runPreambleId =
+                snapshot?._meta?.preambleVersionId ??
+                snapshot?.preambleVersionId;
+
+            if (preambleVersionId === null) return runPreambleId == null;
+            return runPreambleId === preambleVersionId;
+        });
 
 
-    const sampleSize = compatibleRuns.reduce((sum, r: any) => sum + (r._count?.transcripts || 0), 0);
+        const sampleSize = compatibleRuns.reduce((sum, r) => sum + (r._count?.transcripts || 0), 0);
 
-    // Use the first compatible run as a template for config
-    const templateRun = compatibleRuns[0];
-    if (!templateRun) {
-        log.error('Unexpected state: compatibleRuns is empty but length check passed');
-        return;
-    }
-    const templateConfig = templateRun.config as any;
+        // Use the first compatible run as a template for config
+        const templateRun = compatibleRuns[0];
+        if (!templateRun) {
+            log.error('Unexpected state: compatibleRuns is empty but length check passed');
+            return;
+        }
+        const templateConfig = templateRun.config as unknown as RunConfig;
 
-    if (!aggregateRun) {
-        // Create new
-        log.info('Creating new Aggregate Run');
-        aggregateRun = await db.run.create({
-            data: {
-                definitionId,
-                createdByUserId: templateRun.createdByUserId,
-                status: 'COMPLETED',
-                config: {
-                    ...templateConfig,
-                    isAggregate: true,
-                    sourceRunIds: sourceRunIds,
-                    transcriptCount: sampleSize,
-                },
-                tags: {
-                    create: {
-                        tag: {
-                            connectOrCreate: {
-                                where: { name: 'Aggregate' },
-                                create: { name: 'Aggregate' }
+        const newConfig: RunConfig = {
+            ...templateConfig,
+            isAggregate: true,
+            sourceRunIds: sourceRunIds,
+            transcriptCount: sampleSize,
+        };
+
+        if (!aggregateRun) {
+            // Create new
+            log.info('Creating new Aggregate Run');
+            aggregateRun = await tx.run.create({
+                data: {
+                    definitionId,
+                    createdByUserId: templateRun.createdByUserId,
+                    status: 'COMPLETED',
+                    config: newConfig as unknown as Prisma.InputJsonValue,
+                    tags: {
+                        create: {
+                            tag: {
+                                connectOrCreate: {
+                                    where: { name: 'Aggregate' },
+                                    create: { name: 'Aggregate' }
+                                }
                             }
                         }
                     }
-                }
-            } as any,
-        });
-    } else {
-        // Update existing
-        log.info({ runId: aggregateRun.id }, 'Updating existing Aggregate Run');
-        await db.run.update({
-            where: { id: aggregateRun.id },
-            data: {
-                config: {
-                    ...(aggregateRun.config as any),
-                    sourceRunIds: sourceRunIds,
-                    transcriptCount: sampleSize,
                 },
-                status: 'COMPLETED'
+            });
+        } else {
+            // Update existing
+            log.info({ runId: aggregateRun.id }, 'Updating existing Aggregate Run');
+            // Merge with existing config
+            const existingConfig = aggregateRun.config as unknown as RunConfig;
+            const updatedConfig: RunConfig = {
+                ...existingConfig,
+                sourceRunIds: sourceRunIds,
+                transcriptCount: sampleSize,
+            };
+
+            await tx.run.update({
+                where: { id: aggregateRun.id },
+                data: {
+                    config: updatedConfig as unknown as Prisma.InputJsonValue,
+                    status: 'COMPLETED'
+                }
+            });
+        }
+
+        // 4. Save Analysis Result
+        // Invalidate old current result
+        await tx.analysisResult.updateMany({
+            where: { runId: aggregateRun.id, status: 'CURRENT' },
+            data: { status: 'SUPERSEDED' }
+        });
+
+        const newOutput: Record<string, unknown> = {
+            perModel: aggregatedResult.perModel,
+            modelAgreement: aggregatedResult.modelAgreement,
+            visualizationData: aggregatedResult.visualizationData,
+            mostContestedScenarios: aggregatedResult.mostContestedScenarios,
+            decisionStats: aggregatedResult.decisionStats,
+            valueAggregateStats: aggregatedResult.valueAggregateStats,
+            runCount: validAnalyses.length,
+            sourceRunIds,
+        };
+
+        // Save new
+        await tx.analysisResult.create({
+            data: {
+                runId: aggregateRun.id,
+                analysisType: 'AGGREGATE',
+                status: 'CURRENT',
+                codeVersion: '1.0.0',
+                inputHash: `aggregate-${Date.now()}`,
+                output: newOutput as unknown as Prisma.InputJsonValue
             }
         });
-    }
-
-    // 4. Save Analysis Result
-    // Invalidate old current result
-    await db.analysisResult.updateMany({
-        where: { runId: aggregateRun.id, status: 'CURRENT' },
-        data: { status: 'SUPERSEDED' }
-    });
-
-    // Save new
-    await db.analysisResult.create({
-        data: {
-            runId: aggregateRun.id,
-            analysisType: 'AGGREGATE',
-            status: 'CURRENT',
-            codeVersion: '1.0.0',
-            inputHash: `aggregate - ${Date.now()} `,
-            output: {
-                perModel: aggregatedResult.perModel,
-                modelAgreement: aggregatedResult.modelAgreement,
-                visualizationData: aggregatedResult.visualizationData,
-                mostContestedScenarios: aggregatedResult.mostContestedScenarios,
-                decisionStats: aggregatedResult.decisionStats,
-                valueAggregateStats: aggregatedResult.valueAggregateStats,
-                runCount: validAnalyses.length,
-                sourceRunIds,
-            } as any
-        }
     });
 }
+
 
 // --- Logic Ported from Frontend ---
 
