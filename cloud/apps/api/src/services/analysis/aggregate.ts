@@ -1,47 +1,74 @@
+```typescript
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
+import { z } from 'zod';
 
 const log = createLogger('analysis:aggregate');
 
-// --- Feature-Specific Interfaces ---
+// --- Feature-Specific Interfaces & Zod Schemas ---
 
-interface RunSnapshot {
-    _meta?: { preambleVersionId?: string };
-    preambleVersionId?: string;
-}
+const zRunSnapshot = z.object({
+    _meta: z.object({ preambleVersionId: z.string().optional() }).optional(),
+    preambleVersionId: z.string().optional(),
+});
 
-interface RunConfig {
-    definitionSnapshot?: RunSnapshot;
-    isAggregate?: boolean;
-    sourceRunIds?: string[];
-    transcriptCount?: number;
-    [key: string]: unknown; // Allow other properties for forward compatibility
-}
+const zRunConfig = z.object({
+    definitionSnapshot: zRunSnapshot.optional(),
+    isAggregate: z.boolean().optional(),
+    sourceRunIds: z.array(z.string()).optional(),
+    transcriptCount: z.number().optional(),
+}).passthrough(); // Allow unknown properies
 
-interface AnalysisOutput {
-    perModel: Record<string, {
-        sampleSize?: number;
-        values?: Record<string, {
-            count: { prioritized: number; deprioritized: number; neutral: number };
-            winRate: number;
-            confidenceInterval: { lower: number; upper: number; level: number; method: string };
-        }>;
-        overall?: { mean: number; stdDev: number; min: number; max: number };
-    }>;
-    visualizationData: {
-        decisionDistribution?: Record<string, Record<string, number>>;
-        modelScenarioMatrix?: Record<string, Record<string, number>>;
-        [key: string]: unknown;
-    };
-    mostContestedScenarios?: Array<{
-        scenarioId: string;
-        variance: number;
-        [key: string]: unknown;
-    }>;
-    modelAgreement?: unknown; // Type can be refined if structure is known
-    [key: string]: unknown; // Allow other properties for forward compatibility
-}
+type RunConfig = z.infer<typeof zRunConfig>;
+
+// Helper schemas for AnalysisOutput
+const zConfidenceInterval = z.object({
+    lower: z.number(),
+    upper: z.number(),
+    level: z.number(),
+    method: z.string(),
+});
+
+const zValueStats = z.object({
+    count: z.object({
+        prioritized: z.number(),
+        deprioritized: z.number(),
+        neutral: z.number(),
+    }),
+    winRate: z.number(),
+    confidenceInterval: zConfidenceInterval,
+});
+
+const zModelStats = z.object({
+    sampleSize: z.number().optional(),
+    values: z.record(zValueStats).optional(),
+    overall: z.object({
+        mean: z.number(),
+        stdDev: z.number(),
+        min: z.number(),
+        max: z.number(),
+    }).optional(),
+});
+
+const zVisualizationData = z.object({
+    decisionDistribution: z.record(z.record(z.number())).optional(),
+    modelScenarioMatrix: z.record(z.record(z.number())).optional(),
+}).passthrough();
+
+const zContestedScenario = z.object({
+    scenarioId: z.string(),
+    variance: z.number(),
+}).passthrough();
+
+const zAnalysisOutput = z.object({
+    perModel: z.record(zModelStats),
+    visualizationData: zVisualizationData,
+    mostContestedScenarios: z.array(zContestedScenario).optional(),
+    modelAgreement: z.unknown().optional(),
+}).passthrough();
+
+type AnalysisOutput = z.infer<typeof zAnalysisOutput>;
 
 interface DecisionStatsOption {
     mean: number;
@@ -100,11 +127,8 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // pg_advisory_xact_lock automatically releases at end of transaction.
         // This effectively serializes concurrent UpdateAggregate jobs for the same definition.
         try {
-            // Use raw query for locking. Note: BigInt is needed for 64-bit key if we used that, 
-            // but hashtext returns int which fits in 32-bit args for the 1-arg version? 
-            // Actually hashtext returns integer. pg_advisory_xact_lock takes (bigint) or (int, int).
-            // hashtext result is safe to cast to generic number/int in SQL.
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${definitionId}))`;
+            // Use raw query for locking.
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ definitionId }))`;
         } catch (err) {
             log.error({ err, definitionId }, 'Failed to acquire advisory lock');
             throw err; // Abort transaction
@@ -142,9 +166,12 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // Filter by Preamble Version (from snapshot)
         // We need to parse config to check preambleVersionId match
         const compatibleRuns = runs.filter((run) => {
-            const config = run.config as unknown as RunConfig;
-            const snapshot = config?.definitionSnapshot;
-
+            const parseResult = zRunConfig.safeParse(run.config);
+            if (!parseResult.success) return false;
+            
+            const config = parseResult.data;
+            const snapshot = config.definitionSnapshot;
+            
             const runPreambleId =
                 snapshot?._meta?.preambleVersionId ??
                 snapshot?.preambleVersionId;
@@ -164,7 +191,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
             .map(r => r.analysisResults && r.analysisResults[0])
-            .filter((a): a is NonNullable<typeof r.analysisResults[0]> => !!a);
+            .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => !!a);
 
         if (validAnalyses.length === 0) {
             log.info('No valid analysis results found for compatible runs');
@@ -174,9 +201,14 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // 2. Perform Aggregation
         // Convert DB JsonValue to AnalysisOutput structure for processing
         const analysisObjects = validAnalyses.map((a) => {
-            // Cast the output JSON to our typed interface.
-            // note: we use 'unknown' as intermediate because Prisma.JsonValue doesn't overlap perfectly with our strict interface
-            const output = a.output as unknown as AnalysisOutput;
+            // Validate output using Zod
+            const parseResult = zAnalysisOutput.safeParse(a.output);
+            if (!parseResult.success) {
+                log.warn({ analysisResultId: a.id, error: parseResult.error }, 'Invalid analysis output structure, skipping');
+                return null;
+            }
+            const output = parseResult.data;
+            
             return {
                 ...a,
                 output, // Keep original output for reference if needed
@@ -184,7 +216,12 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 visualizationData: output.visualizationData,
                 mostContestedScenarios: output.mostContestedScenarios,
             };
-        });
+        }).filter((a): a is NonNullable<typeof a> => !!a);
+
+        if (analysisObjects.length === 0) {
+            log.info('No valid analysis objects after validation');
+            return;
+        }
 
         // Valid transcripts for aggregation
         const allTranscripts = await tx.transcript.findMany({
@@ -222,13 +259,16 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
         // Find the one matching our preamble
         let aggregateRun = aggregateRuns.find((r) => {
-            const config = r.config as unknown as RunConfig;
-            const snapshot = config?.definitionSnapshot;
-
+            const parseResult = zRunConfig.safeParse(r.config);
+            if (!parseResult.success) return false;
+            
+            const config = parseResult.data;
+            const snapshot = config.definitionSnapshot;
+            
             const runPreambleId =
                 snapshot?._meta?.preambleVersionId ??
                 snapshot?.preambleVersionId;
-
+                
             if (preambleVersionId === null) return runPreambleId == null;
             return runPreambleId === preambleVersionId;
         });
@@ -242,7 +282,9 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             log.error('Unexpected state: compatibleRuns is empty but length check passed');
             return;
         }
-        const templateConfig = templateRun.config as unknown as RunConfig;
+        // Safe parse template config
+        const templateConfigResult = zRunConfig.safeParse(templateRun.config);
+        const templateConfig = templateConfigResult.success ? templateConfigResult.data : {};
 
         const newConfig: RunConfig = {
             ...templateConfig,
@@ -276,7 +318,9 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             // Update existing
             log.info({ runId: aggregateRun.id }, 'Updating existing Aggregate Run');
             // Merge with existing config
-            const existingConfig = aggregateRun.config as unknown as RunConfig;
+            const existingConfigResult = zRunConfig.safeParse(aggregateRun.config);
+            const existingConfig = existingConfigResult.success ? existingConfigResult.data : {};
+            
             const updatedConfig: RunConfig = {
                 ...existingConfig,
                 sourceRunIds: sourceRunIds,
@@ -317,7 +361,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 analysisType: 'AGGREGATE',
                 status: 'CURRENT',
                 codeVersion: '1.0.0',
-                inputHash: `aggregate-${Date.now()}`,
+                inputHash: `aggregate - ${ Date.now() } `,
                 output: newOutput as unknown as Prisma.InputJsonValue
             }
         });
@@ -327,29 +371,15 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
 // --- Logic Ported from Frontend ---
 
-interface DecisionStats {
-    options: Record<number, {
-        mean: number;
-        sd: number;
-        sem: number;
-        n: number;
-    }>;
-}
-
-interface ValueAggregateStats {
-    values: Record<string, {
-        winRateMean: number;
-        winRateSem: number;
-        winRateSd: number;
-    }>;
-}
-
 function aggregateAnalysesLogic(
-    analyses: Array<AnalysisOutput & { [key: string]: unknown }>,
+    analyses: AnalysisOutput[],
     transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[]
 ): AggregatedResult {
 
     // Basic structural setup
+    if (analyses.length === 0) {
+        throw new Error('Cannot aggregate empty analyses list');
+    }
     const template = analyses[0];
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
     const aggregatedPerModel: Record<string, unknown> = {};
@@ -362,7 +392,7 @@ function aggregateAnalysesLogic(
 
         const totalModelSamples = validAnalyses.reduce((sum, a) => {
             const stats = a.perModel[modelId];
-            return sum + (stats ? (stats.sampleSize || 0) : 0);
+            return sum + (stats?.sampleSize || 0);
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
@@ -371,11 +401,11 @@ function aggregateAnalysesLogic(
         validAnalyses.forEach(analysis => {
             const dist = analysis.visualizationData?.decisionDistribution?.[modelId];
             if (dist) {
-                const runTotal = Object.values(dist).reduce((sum, c) => sum + c, 0);
+                const runTotal = Object.values(dist).reduce((sum, c) => sum + (c as number), 0);
                 if (runTotal > 0) {
                     Object.entries(dist).forEach(([option, count]) => {
                         const opt = parseInt(option);
-                        if (!isNaN(opt)) modelDecisions[opt].push(count / runTotal);
+                        if (!isNaN(opt)) modelDecisions[opt].push((count as number) / runTotal);
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
                         if (!dist[String(opt)]) modelDecisions[opt].push(0);
@@ -521,15 +551,14 @@ function aggregateAnalysesLogic(
     });
 
     // Merge Contested Scenarios
-    const scenarioMap = new Map<string, { varianceSum: number, count: number, scenario: any }>();
+    const scenarioMap = new Map<string, { varianceSum: number, count: number, scenario: z.infer<typeof zContestedScenario> }>();
     analyses.forEach(a => {
         // Safe access now
         if (a.mostContestedScenarios) {
             a.mostContestedScenarios.forEach((s) => {
-                // 's' here is strictly typed from AnalysisOutput.mostContestedScenarios which uses unknown for extras
-                // so we still need some flexibility or strict type for variance.
-                // assuming variance exists.
-                const scen = s as { scenarioId: string; variance: number;[key: string]: unknown };
+                const scen = s; // Strictly typed due to Zod parsing (well, Zod returns unknown for extra props?)
+                // Zod passthrough keeps unknown props. TypeScript sees intersection of defined props + Record signature if filtered?
+                // Our type definition: zContestedScenario is { scenarioId: string, variance: number } & {[k:string]: unknown}
                 const existing = scenarioMap.get(scen.scenarioId) || { varianceSum: 0, count: 0, scenario: scen };
                 existing.varianceSum += scen.variance;
                 existing.count += 1;

@@ -17,6 +17,7 @@ import type {
   ExpandScenariosJobData,
   ComputeTokenStatsJobData,
   ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
