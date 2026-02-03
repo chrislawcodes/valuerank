@@ -160,6 +160,7 @@ export function DefinitionDetail() {
       navigate('/definitions');
     } catch (err) {
       setShowDeleteConfirm(false);
+      // eslint-disable-next-line no-console
       console.error('Failed to delete definition:', err);
     }
   };

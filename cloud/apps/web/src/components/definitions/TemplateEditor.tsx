@@ -59,15 +59,19 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       }
     }, [dimensions, value]);
 
-    const handleEditorMount: OnMount = (editor, monaco: Monaco) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleEditorMount: OnMount = (editor, monaco: any) => {
       editorRef.current = editor;
       monacoRef.current = monaco;
 
       // Register custom language if not already registered
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       if (!monaco.languages.getLanguages().some((lang: languages.ILanguageExtensionPoint) => lang.id === LANGUAGE_ID)) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         monaco.languages.register({ id: LANGUAGE_ID });
 
         // Syntax highlighting - colorize [dimension] patterns
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
           tokenizer: {
             root: [
@@ -77,6 +81,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
         });
 
         // Define custom theme with teal colors matching the app
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         monaco.editor.defineTheme('scenario-template-theme', {
           base: 'vs',
           inherit: true,
@@ -88,6 +93,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       }
 
       // Set up autocomplete provider
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       const completionProvider = monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
         triggerCharacters: ['['],
         provideCompletionItems: (model: editor.ITextModel, position: Position) => {
@@ -114,6 +120,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
 
           const suggestions = dimensionsRef.current.map((dim) => ({
             label: dim.toLowerCase(),
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             kind: monaco.languages.CompletionItemKind.Variable,
             insertText: dim.toLowerCase() + ']',
             range,
@@ -128,6 +135,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       disposablesRef.current.push(completionProvider);
 
       // Apply custom theme
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       monaco.editor.setTheme('scenario-template-theme');
 
       // Initial markers

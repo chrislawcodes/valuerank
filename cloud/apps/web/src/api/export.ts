@@ -10,7 +10,7 @@
  */
 function getApiBaseUrl(): string {
   // Use environment variable or default to same origin
-  return import.meta.env.VITE_API_URL || '';
+  return (import.meta.env.VITE_API_URL as string) || '';
 }
 
 /**
@@ -22,7 +22,7 @@ function getApiBaseUrl(): string {
  */
 export function getODataFeedUrl(runId: string): string {
   // Get base URL - use VITE_API_URL if set, otherwise use current origin
-  const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+  const baseUrl = (import.meta.env.VITE_API_URL as string) || window.location.origin;
   // Return the Transcripts entity set URL - this is what Excel needs
   return `${baseUrl}/api/odata/runs/${runId}/Transcripts`;
 }
@@ -35,7 +35,7 @@ export function getODataFeedUrl(runId: string): string {
  * @returns The CSV feed URL template (user needs to append api key)
  */
 export function getCSVFeedUrl(runId: string): string {
-  const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+  const baseUrl = (import.meta.env.VITE_API_URL as string) || window.location.origin;
   return `${baseUrl}/api/csv/runs/${runId}`;
 }
 

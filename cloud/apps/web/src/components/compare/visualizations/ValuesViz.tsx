@@ -282,7 +282,7 @@ export function ValuesViz({ runs, filters, onFilterChange }: ComparisonVisualiza
               />
               <Tooltip content={(props) => <ValueTooltip {...props} runNames={runNames} />} />
               <Legend
-                formatter={(value) => runNames.get(value) || value}
+                formatter={(value: string) => runNames.get(value) || value}
                 wrapperStyle={{ paddingTop: 20 }}
               />
               {runData.map((data) => (

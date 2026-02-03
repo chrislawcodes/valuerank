@@ -6,7 +6,7 @@ import type { AuthContextValue, LoginResponse } from './types';
 const TOKEN_KEY = 'valuerank_token';
 
 // API base URL - empty string means same origin (dev), full URL for production
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -19,19 +19,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore token from localStorage on mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    if (storedToken) {
-      setToken(storedToken);
-      // Validate token and fetch user info
-      validateToken(storedToken);
-    } else {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const validateToken = async (tokenToValidate: string, retryCount = 0) => {
+  const validateToken = useCallback(async (tokenToValidate: string, retryCount = 0) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
         headers: {
@@ -40,7 +28,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (response.ok) {
-        const userData: User = await response.json();
+        const userData = (await response.json()) as User;
         setUser(userData);
         setToken(tokenToValidate);
       } else if (response.status === 401 || response.status === 403) {
@@ -51,7 +39,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         // Server error (5xx), keep token and retry
         if (retryCount < 3) {
-          setTimeout(() => validateToken(tokenToValidate, retryCount + 1), 1000);
+          setTimeout(() => { void validateToken(tokenToValidate, retryCount + 1); }, 1000);
           return; // Don't set isLoading to false yet
         }
         // After 3 retries, keep the token but set user to null
@@ -64,7 +52,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Network error (server down) - retry a few times before giving up
       // Don't clear token on network errors - server might just be restarting
       if (retryCount < 3) {
-        setTimeout(() => validateToken(tokenToValidate, retryCount + 1), 1000);
+        setTimeout(() => { void validateToken(tokenToValidate, retryCount + 1); }, 1000);
         return; // Don't set isLoading to false yet
       }
       // After retries, keep the token - user can refresh when server is back
@@ -73,7 +61,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
     setIsLoading(false);
-  };
+  }, []);
+
+  // Restore token from localStorage on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (storedToken) {
+      setToken(storedToken);
+      // Validate token and fetch user info
+      void validateToken(storedToken);
+    } else {
+      setIsLoading(false);
+    }
+  }, [validateToken]);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error(error.message || 'Invalid credentials');
     }
 
-    const data: LoginResponse = await response.json();
+    const data = (await response.json()) as LoginResponse;
 
     // Store token
     localStorage.setItem(TOKEN_KEY, data.token);
