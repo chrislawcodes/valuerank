@@ -1,4 +1,3 @@
-```typescript
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
@@ -269,7 +268,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             analysisType: 'AGGREGATE',
             status: 'CURRENT',
             codeVersion: '1.0.0',
-            inputHash: `aggregate - ${ Date.now() } `,
+            inputHash: `aggregate - ${Date.now()} `,
             output: {
                 perModel: aggregatedResult.perModel,
                 modelAgreement: aggregatedResult.modelAgreement,
