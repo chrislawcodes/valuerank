@@ -1,7 +1,7 @@
 
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
-import type { Prisma } from '@valuerank/db';
+
 
 const log = createLogger('analysis:aggregate');
 
@@ -258,7 +258,7 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         // The stats (mean/sd) "per option" (Line 263) might typically reflect the raw variance.
         // I will leave the stats logic as is for now, assuming "Decision Distribution" refers to the visualization data.
 
-        const aggregatedDist: Record<string, number> = {};
+        // const aggregatedDist: Record<string, number> = {};
         const modelDecisions: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 
         validAnalyses.forEach(analysis => {
