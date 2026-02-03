@@ -111,22 +111,21 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         }
 
         // 1. Find all COMPLETED runs for this definition+preamble (excluding existing aggregates)
-        const runWhere: Prisma.RunWhereInput = {
-            definitionId,
-            status: 'COMPLETED',
-            // Exclude the aggregate run itself (which we tag)
-            tags: {
-                none: {
-                    tag: {
-                        name: 'Aggregate',
+        // We avoid explicit cast to Prisma.RunWhereInput to let TS inference work and catch errors
+        const runs = await tx.run.findMany({
+            where: {
+                definitionId,
+                status: 'COMPLETED',
+                // Exclude the aggregate run itself (which we tag)
+                tags: {
+                    none: {
+                        tag: {
+                            name: 'Aggregate',
+                        },
                     },
                 },
+                deletedAt: null,
             },
-            deletedAt: null,
-        };
-
-        const runs = await tx.run.findMany({
-            where: runWhere,
             include: {
                 analysisResults: {
                     where: { status: 'CURRENT' },
@@ -175,7 +174,8 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // 2. Perform Aggregation
         // Convert DB JsonValue to AnalysisOutput structure for processing
         const analysisObjects = validAnalyses.map((a) => {
-            // Cast the output JSON to our typed interface
+            // Cast the output JSON to our typed interface.
+            // note: we use 'unknown' as intermediate because Prisma.JsonValue doesn't overlap perfectly with our strict interface
             const output = a.output as unknown as AnalysisOutput;
             return {
                 ...a,
@@ -344,11 +344,15 @@ interface ValueAggregateStats {
     }>;
 }
 
-function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[]): any {
+function aggregateAnalysesLogic(
+    analyses: Array<AnalysisOutput & { [key: string]: unknown }>,
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[]
+): AggregatedResult {
+
     // Basic structural setup
     const template = analyses[0];
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
-    const aggregatedPerModel: Record<string, any> = {};
+    const aggregatedPerModel: Record<string, unknown> = {};
     const decisionStats: Record<string, DecisionStats> = {};
     const valueAggregateStats: Record<string, ValueAggregateStats> = {};
 
@@ -362,32 +366,16 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
-        // We defer the main distribution calc to the transcript-based section below
-        // But we still calculate detailed stats here from run-level summaries if needed.
-        // Actually, let's keep the detailed stats logic as is, it calculates descriptive stats of the *distributions*.
-        // Wait, if the distribution concept changes (Raw -> Scenario Mean), these stats (lines 235-265) might need updates?
-        // Lines 235-253 sum up raw counts to get `modelDecisions`.
-        // Then lines 255-265 calculate mean/sd of the *raw* decisions.
-        // The user specifically asked for "Decision Distribution by model" (the chart) to change.
-        // The stats (mean/sd) "per option" (Line 263) might typically reflect the raw variance.
-        // I will leave the stats logic as is for now, assuming "Decision Distribution" refers to the visualization data.
-
-        // const aggregatedDist: Record<string, number> = {};
         const modelDecisions: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 
         validAnalyses.forEach(analysis => {
             const dist = analysis.visualizationData?.decisionDistribution?.[modelId];
             if (dist) {
-                const runTotal = Object.values(dist).reduce((sum: number, c: any) => sum + (c as number), 0);
-                // Keep summing for stats purposes?
-                // Actually, if we change the distribution chart, maybe we should align statistics?
-                // But "mean option" across all transcripts is still valid.
-                // The "aggregated distribution" is a specialized view.
-
+                const runTotal = Object.values(dist).reduce((sum, c) => sum + c, 0);
                 if (runTotal > 0) {
                     Object.entries(dist).forEach(([option, count]) => {
                         const opt = parseInt(option);
-                        if (!isNaN(opt)) modelDecisions[opt].push((count as number) / runTotal);
+                        if (!isNaN(opt)) modelDecisions[opt].push(count / runTotal);
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
                         if (!dist[String(opt)]) modelDecisions[opt].push(0);
@@ -409,7 +397,6 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         });
 
         // B. Win Rates
-        // Helper type for stats
         type ValueStatsBuilder = {
             count: { prioritized: number; deprioritized: number; neutral: number };
             winRate: number;
@@ -421,7 +408,7 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         validAnalyses.forEach(analysis => {
             const pms = analysis.perModel[modelId];
             if (pms && pms.values) {
-                Object.entries(pms.values).forEach(([valueId, vStats]: [string, any]) => {
+                Object.entries(pms.values).forEach(([valueId, vStats]) => {
                     if (!aggregatedValues[valueId]) {
                         aggregatedValues[valueId] = {
                             count: { prioritized: 0, deprioritized: 0, neutral: 0 },
@@ -448,7 +435,7 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
         valueAggregateStats[modelId] = { values: {} };
         Object.keys(aggregatedValues).forEach(valueId => {
             const target = aggregatedValues[valueId];
-            if (!target) return; // Should not happen given keys from object
+            if (!target) return;
 
             const totalWins = target.count.prioritized;
             const totalBattles = target.count.prioritized + target.count.deprioritized;
@@ -536,12 +523,17 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
     // Merge Contested Scenarios
     const scenarioMap = new Map<string, { varianceSum: number, count: number, scenario: any }>();
     analyses.forEach(a => {
+        // Safe access now
         if (a.mostContestedScenarios) {
-            a.mostContestedScenarios.forEach((s: any) => {
-                const existing = scenarioMap.get(s.scenarioId) || { varianceSum: 0, count: 0, scenario: s };
-                existing.varianceSum += s.variance;
+            a.mostContestedScenarios.forEach((s) => {
+                // 's' here is strictly typed from AnalysisOutput.mostContestedScenarios which uses unknown for extras
+                // so we still need some flexibility or strict type for variance.
+                // assuming variance exists.
+                const scen = s as { scenarioId: string; variance: number;[key: string]: unknown };
+                const existing = scenarioMap.get(scen.scenarioId) || { varianceSum: 0, count: 0, scenario: scen };
+                existing.varianceSum += scen.variance;
                 existing.count += 1;
-                scenarioMap.set(s.scenarioId, existing);
+                scenarioMap.set(scen.scenarioId, existing);
             });
         }
     });
@@ -556,7 +548,7 @@ function aggregateAnalysesLogic(analyses: any[], transcripts: { modelId: string,
 
     return {
         perModel: aggregatedPerModel,
-        modelAgreement: template.modelAgreement, // We don't recompute agreement yet
+        modelAgreement: template.modelAgreement,
         visualizationData: mergedVizData,
         mostContestedScenarios: mergedContested,
         decisionStats,
