@@ -4,13 +4,14 @@
  * Displays the definition content: preamble, template, and dimensions.
  */
 
-import type { DefinitionContent } from '../../api/operations/definitions';
+import type { DefinitionContent, PreambleVersion } from '../../api/operations/definitions';
 
 type DefinitionContentViewProps = {
   content: DefinitionContent | null | undefined;
+  preambleVersion?: PreambleVersion | null;
 };
 
-export function DefinitionContentView({ content }: DefinitionContentViewProps) {
+export function DefinitionContentView({ content, preambleVersion }: DefinitionContentViewProps) {
   if (!content) {
     return (
       <div className="text-gray-400 text-sm italic">No content defined</div>
@@ -22,12 +23,20 @@ export function DefinitionContentView({ content }: DefinitionContentViewProps) {
   return (
     <div className="space-y-6">
       {/* Preamble */}
-      {preamble && (
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Preamble</h3>
-          <p className="text-gray-600 bg-gray-50 rounded-lg p-4">{preamble}</p>
+      {/* Preamble */}
+      <div>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">
+          Preamble
+          {preambleVersion?.preamble?.name && (
+            <span className="ml-2 font-normal text-gray-500">
+              {preambleVersion.preamble.name} <span className="text-gray-400">(v{preambleVersion.version})</span>
+            </span>
+          )}
+        </h3>
+        <div className="text-gray-600 bg-gray-50 rounded-lg p-4 whitespace-pre-wrap">
+          {preambleVersion?.content || preamble || <span className="text-gray-400 italic">No preamble defined</span>}
         </div>
-      )}
+      </div>
 
       {/* Template */}
       <div>

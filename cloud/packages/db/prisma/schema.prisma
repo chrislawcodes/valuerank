@@ -171,6 +171,7 @@ model Tag {
   createdByUserId String? @map("created_by_user_id")
 
   definitions DefinitionTag[]
+  runs        RunTag[]
 
   // Audit relations
   createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
@@ -192,6 +193,21 @@ model DefinitionTag {
   @@index([definitionId])
   @@index([tagId])
   @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
 }
 
 model Run {
@@ -219,6 +235,7 @@ model Run {
 
   definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
 
   transcripts     Transcript[]
   analysisResults AnalysisResult[]

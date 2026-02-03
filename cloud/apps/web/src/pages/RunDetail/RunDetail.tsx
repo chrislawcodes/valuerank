@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Play } from 'lucide-react';
 import { formatRunName } from '../../lib/format';
 import { Button } from '../../components/ui/Button';
@@ -23,6 +23,16 @@ import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+
+function formatDate(dateString: string | Date): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export function RunDetail() {
   const navigate = useNavigate();
@@ -249,20 +259,28 @@ export function RunDetail() {
               <Play className="w-5 h-5 text-teal-600" />
             </div>
             <div>
-              <RunNameEditor
-                name={run.name}
-                formattedName={formatRunName(run)}
-                onSave={handleSaveName}
-              />
-              {/* eslint-disable-next-line react/forbid-elements -- Link-style button with icon + text layout */}
-              <button
-                type="button"
-                onClick={() => navigate(`/definitions/${run.definitionId}`)}
-                className="text-sm text-teal-600 hover:text-teal-700 flex items-center gap-1"
-              >
-                <FileText className="w-3 h-3" />
-                {run.definition?.name || 'View definition'}
-              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to={`/definitions/${run.definitionId}`}
+                    className="text-xl font-medium text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-2"
+                  >
+                    {run.definition?.name || 'Unnamed Vignette'}
+                    {(run.definitionVersion || run.definition?.version) && (
+                      <span className="text-gray-500 font-normal text-base">v{run.definitionVersion ?? run.definition?.version}</span>
+                    )}
+                  </Link>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <RunNameEditor
+                    name={run.name}
+                    formattedName={formatRunName(run)}
+                    onSave={handleSaveName}
+                    variant="subtitle"
+                  />
+                  <span className="text-sm text-gray-500">· {run.definition?.name || 'Vignette'} · {formatDate(run.createdAt)}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

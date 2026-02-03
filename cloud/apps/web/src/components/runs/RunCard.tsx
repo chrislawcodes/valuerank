@@ -89,14 +89,23 @@ export function RunCard({ run, onClick }: RunCardProps) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-gray-900 truncate">
-                {formatRunName(run)}
+                {run.definition?.name || 'Unnamed Vignette'}
+                {(run.definitionVersion || run.definition?.version) && (
+                  <span className="ml-2 text-gray-500 font-normal">v{run.definitionVersion ?? run.definition?.version}</span>
+                )}
               </h3>
               <Badge variant={statusConfig.badgeVariant} size="count">
                 {getStatusLabel(run)}
               </Badge>
+              {run.tags?.some(t => t.name === 'Aggregate') && (
+                <Badge variant="info" size="count">
+                  Aggregate
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              {run.definition?.name || 'Unnamed Definition'} · {formatDate(run.createdAt)}
+              {run.name && <span className="font-medium text-gray-700 mr-1.5">{run.name} ·</span>}
+              {formatDate(run.createdAt)}
             </p>
           </div>
         </div>
@@ -112,7 +121,15 @@ export function RunCard({ run, onClick }: RunCardProps) {
           </div>
 
           {/* Progress */}
-          {progress && (
+          {/* Progress or Transcript Count */}
+          {run.tags?.some(t => t.name === 'Aggregate') ? (
+            <div className="text-right">
+              <div className="text-gray-500 text-xs">Transcripts</div>
+              <div className="font-medium text-gray-900">
+                {run.transcriptCount}
+              </div>
+            </div>
+          ) : progress && (
             <div className="text-right">
               <div className="text-gray-500 text-xs">Progress</div>
               <div className="font-medium text-gray-900">
@@ -132,20 +149,21 @@ export function RunCard({ run, onClick }: RunCardProps) {
       </div>
 
       {/* Progress bar */}
-      {progress && progress.total > 0 && (
-        <div className="mt-3">
-          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all ${
-                run.status === 'FAILED' ? 'bg-red-500' :
-                run.status === 'COMPLETED' ? 'bg-green-500' :
-                'bg-teal-500'
-              }`}
-              style={{ width: `${progress.percentComplete}%` }}
-            />
+      {
+        progress && progress.total > 0 && (
+          <div className="mt-3">
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${run.status === 'FAILED' ? 'bg-red-500' :
+                  run.status === 'COMPLETED' ? 'bg-green-500' :
+                    'bg-teal-500'
+                  }`}
+                style={{ width: `${progress.percentComplete}%` }}
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </Card>
+        )
+      }
+    </Card >
   );
 }

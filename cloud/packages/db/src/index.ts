@@ -28,6 +28,7 @@ export type {
   AuditLog,
   Preamble,
   PreambleVersion,
+  RunTag,
 } from '@prisma/client';
 
 // Audit types

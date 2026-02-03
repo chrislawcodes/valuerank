@@ -11,6 +11,18 @@ builder.objectType(PreambleVersionRef, {
         version: t.exposeString('version'),
         content: t.exposeString('content'),
         createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+        // Relation: Parent Preamble
+        preamble: t.field({
+            type: PreambleRef,
+            nullable: true,
+            description: 'The parent preamble definition',
+            resolve: async (parent) => {
+                return db.preamble.findUnique({
+                    where: { id: parent.preambleId },
+                });
+            },
+        }),
     }),
 });
 

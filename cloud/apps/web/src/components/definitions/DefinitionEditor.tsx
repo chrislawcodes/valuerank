@@ -15,6 +15,7 @@ import type {
   Dimension,
   DimensionLevel,
 } from '../../api/operations/definitions';
+import { DEFAULT_LEVEL_TEXTS } from './constants';
 
 const PREAMBLES_LIST_QUERY = `
   query GetPreamblesList {
@@ -431,10 +432,11 @@ function createDefaultDimension(): Dimension {
 }
 
 function createDefaultLevel(index: number): DimensionLevel {
+  const text = DEFAULT_LEVEL_TEXTS[index] || '';
   return {
     score: index + 1,
     description: '',
-    options: [''],
-    label: '',
+    options: [text],
+    label: text,
   };
 }

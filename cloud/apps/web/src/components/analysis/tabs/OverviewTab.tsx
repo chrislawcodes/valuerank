@@ -26,7 +26,7 @@ function ModelStatsRow({ modelId, stats }: { modelId: string; stats: PerModelSta
         <h4 className="font-medium text-gray-900 truncate" title={modelId}>
           {modelId}
         </h4>
-        <span className="text-sm text-gray-500">n={stats.sampleSize}</span>
+        <span className="text-sm text-gray-500">Transcripts: {stats.sampleSize}</span>
       </div>
 
       {/* Overall stats */}

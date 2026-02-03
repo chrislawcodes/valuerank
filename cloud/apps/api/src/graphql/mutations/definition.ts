@@ -9,6 +9,7 @@ import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
 import { queueScenarioExpansion, cancelScenarioExpansion } from '../../services/scenario/index.js';
 import { createAuditLog } from '../../services/audit/index.js';
+import { z } from 'zod';
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -26,6 +27,9 @@ function ensureSchemaVersion(
 
   return content as Prisma.InputJsonValue;
 }
+
+// Zod schema for basic object validation of content
+const zContentObject = z.record(z.unknown());
 
 // Input type for creating a definition
 const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
@@ -68,12 +72,14 @@ builder.mutationField('createDefinition', (t) =>
       ctx.log.debug({ name, parentId, preambleVersionId }, 'Creating definition');
 
       // Validate content is an object
-      if (typeof content !== 'object' || content === null || Array.isArray(content)) {
+      const parseResult = zContentObject.safeParse(content);
+      if (!parseResult.success) {
         throw new Error('Content must be a JSON object');
       }
+      const rawContent = parseResult.data;
 
       // Ensure schema_version is present
-      const processedContent = ensureSchemaVersion(content as Record<string, unknown>);
+      const processedContent = ensureSchemaVersion(rawContent);
 
       // If parentId provided, verify it exists
       if (parentId !== null && parentId !== undefined && parentId !== '') {
@@ -180,10 +186,11 @@ builder.mutationField('forkDefinition', (t) =>
 
       if (content !== null && content !== undefined) {
         // Explicit content provided - use as partial overrides
-        if (typeof content !== 'object' || Array.isArray(content)) {
+        const parseResult = zContentObject.safeParse(content);
+        if (!parseResult.success) {
           throw new Error('Content must be a JSON object');
         }
-        const contentObj = content as Record<string, unknown>;
+        const contentObj = parseResult.data;
 
         // Create v2 content with only provided fields as overrides
         finalContent = createPartialContent({
@@ -316,6 +323,7 @@ builder.mutationField('updateDefinition', (t) =>
       }
 
       // Build update data using UncheckedUpdateInput to allow raw ID access
+      // Using partial type to avoid 'any'
       const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
 
@@ -325,10 +333,11 @@ builder.mutationField('updateDefinition', (t) =>
 
       if (content !== null && content !== undefined) {
         // Validate content is an object
-        if (typeof content !== 'object' || Array.isArray(content)) {
+        const parseResult = zContentObject.safeParse(content);
+        if (!parseResult.success) {
           throw new Error('Content must be a JSON object');
         }
-        updateData.content = ensureSchemaVersion(content as Record<string, unknown>);
+        updateData.content = ensureSchemaVersion(parseResult.data);
         needsVersionIncrement = true;
       }
 

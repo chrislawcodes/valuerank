@@ -20,7 +20,10 @@ import type {
 
 // Omit deletedAt from Definition - soft delete is an internal implementation detail
 // that should never leak to the GraphQL API layer
-export type DefinitionShape = Omit<Definition, 'deletedAt'>;
+export type DefinitionShape = Omit<Definition, 'deletedAt'> & {
+  version: number;
+  preambleVersionId: string | null;
+};
 
 export const DefinitionRef = builder.objectRef<DefinitionShape>('Definition');
 export const RunRef = builder.objectRef<Run>('Run');

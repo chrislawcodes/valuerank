@@ -339,7 +339,10 @@ export function DefinitionDetail() {
         </div>
 
         {/* Content sections */}
-        <DefinitionContentView content={definition.resolvedContent ?? definition.content} />
+        <DefinitionContentView
+          content={definition.resolvedContent ?? definition.content}
+          preambleVersion={definition.preambleVersion}
+        />
 
         {/* Expanded Scenarios */}
         <div className="mt-6 pt-6 border-t border-gray-200">

@@ -14,6 +14,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  ErrorBar,
 } from 'recharts';
 import type { PerModelStats, ValueStats } from '../../api/operations/analysis';
 
@@ -30,6 +31,7 @@ type ChartDataPoint = {
   sampleSize: number;
   ciLower: number;
   ciUpper: number;
+  errorRange: number[];
 };
 
 // Color palette for different models
@@ -81,6 +83,22 @@ function getChartData(
         sampleSize: valueStats.count.prioritized + valueStats.count.deprioritized,
         ciLower: valueStats.confidenceInterval.lower,
         ciUpper: valueStats.confidenceInterval.upper,
+        // Recharts ErrorBar expects [minusError, plusError] relative to value
+        // But for "x" direction, it might need specific handling or just dataKey.
+        // Actually, ErrorBar with direction="x" expects an array of two values [min, max] if not relative?
+        // Let's use [winRate - lower, upper - winRate] for relative error if strictly symmetrical?
+        // But CI might be asymmetric (capped at 0/1).
+        // Best usage for standard horizontal error bar in Recharts vertical layout:
+        // Pass dataKey="errorRange" where errorRange is [lowerBound, upperBound] ?
+        // Recharts ErrorBar is a bit specific. Usually it wants { x: value, error: [neg, pos] }.
+        // Let's provide absolute bounds [ciLower, ciUpper] and let's check correct usage for layout="vertical".
+        // For layout="vertical", Bar dataKey is x-axis (number). ErrorBar direction="x".
+        // It should take [min, max] if we pass it as such? No, it usually takes error magnitude.
+        // Let's supply [winRate - ciLower, ciUpper - winRate] as error magnitude.
+        errorRange: [
+          valueStats.winRate - valueStats.confidenceInterval.lower,
+          valueStats.confidenceInterval.upper - valueStats.winRate
+        ]
       };
     })
     .filter((d): d is ChartDataPoint => d !== null)
@@ -201,6 +219,7 @@ export function ScoreDistributionChart({
                 radius={[0, 4, 4, 0]}
                 maxBarSize={40}
               >
+                <ErrorBar dataKey="errorRange" width={4} strokeWidth={2} stroke="#374151" direction="x" />
                 {chartData.map((entry, index) => (
                   <Cell
                     key={entry.modelId}

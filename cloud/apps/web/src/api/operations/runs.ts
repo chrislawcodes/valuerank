@@ -90,6 +90,7 @@ export type Run = {
   id: string;
   name: string | null;
   definitionId: string;
+  definitionVersion: number | null; // Added
   experimentId: string | null;
   status: RunStatus;
   config: RunConfig;
@@ -112,9 +113,14 @@ export type Run = {
   definition: {
     id: string;
     name: string;
+    version: number;
     tags: RunDefinitionTag[];
     content: unknown;
   };
+  tags: {
+    id: string;
+    name: string;
+  }[];
 };
 
 // ============================================================================
@@ -126,6 +132,7 @@ export const RUN_FRAGMENT = gql`
     id
     name
     definitionId
+    definitionVersion
     experimentId
     status
     config
@@ -149,15 +156,21 @@ export const RUN_FRAGMENT = gql`
     lastAccessedAt
     transcriptCount
     analysisStatus
+    tags {
+      id
+      name
+    }
     definition {
       id
       name
+      version
       tags: allTags {
         id
         name
       }
       content
     }
+    definitionSnapshot
   }
 `;
 

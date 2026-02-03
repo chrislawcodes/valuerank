@@ -4,8 +4,9 @@
  * Displays detailed analysis for a single run with full AnalysisPanel.
  */
 
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Play } from 'lucide-react';
+import { ArrowLeft, Play, BarChart2, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -67,38 +68,36 @@ export function AnalysisDetail() {
     );
   }
 
-  // No analysis available (analysisStatus is null when no analysis exists)
-  if (!run.analysisStatus) {
-    return (
-      <div className="space-y-6">
-        <Header runId={run.id} definitionName={run.definition?.name} />
+  // Determine if this is an Aggregate Run based on tags
+  const isAggregate = run.tags?.some(t => t.name === 'Aggregate') ?? false;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Header
+          runId={run.id}
+          definitionName={run.definition?.name}
+          isAggregate={isAggregate}
+        />
+      </div>
+
+      {!run.analysisStatus ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             No Analysis Available
           </h3>
           <p className="text-gray-500 mb-4">
-            This trial does not have analysis data. Analysis is computed for completed trials.
+            This trial does not have analysis data.
           </p>
-          <Link
-            to={`/runs/${run.id}`}
-            className="inline-flex items-center text-teal-600 hover:text-teal-700"
-          >
-            <Play className="w-4 h-4 mr-1" />
-            View Trial Details
-          </Link>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <Header runId={run.id} definitionName={run.definition?.name} />
-      <AnalysisPanel
-        runId={run.id}
-        analysisStatus={run.analysisStatus}
-        definitionContent={run.definition?.content}
-      />
+      ) : (
+        <AnalysisPanel
+          runId={run.id}
+          analysisStatus={run.analysisStatus}
+          definitionContent={run.definition?.content}
+          isAggregate={isAggregate}
+        />
+      )}
     </div>
   );
 }
@@ -109,33 +108,43 @@ export function AnalysisDetail() {
 function Header({
   runId,
   definitionName,
+  isAggregate,
 }: {
   runId: string;
   definitionName?: string | null;
+  isAggregate?: boolean;
 }) {
   const navigate = useNavigate();
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between flex-1 mr-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/analysis')}>
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back to Analysis
         </Button>
         <span className="text-gray-300">|</span>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-gray-500 flex items-center gap-2">
           {definitionName || 'Unnamed Definition'}
           <span className="mx-1">•</span>
-          <span className="font-mono">Trial {runId.slice(0, 8)}...</span>
+          {isAggregate ? (
+            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full font-medium flex items-center">
+              Aggregate View
+            </span>
+          ) : (
+            <span className="font-mono">Trial {runId.slice(0, 8)}...</span>
+          )}
         </div>
       </div>
-      <Link
-        to={`/runs/${runId}`}
-        className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700"
-      >
-        <Play className="w-4 h-4" />
-        View Trial
-      </Link>
+      {!isAggregate && (
+        <Link
+          to={`/runs/${runId}`}
+          className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700"
+        >
+          <Play className="w-4 h-4" />
+          View Trial
+        </Link>
+      )}
     </div>
   );
 }

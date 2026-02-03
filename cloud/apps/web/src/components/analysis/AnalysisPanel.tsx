@@ -41,6 +41,7 @@ type AnalysisPanelProps = {
   runId: string;
   analysisStatus?: string | null;
   definitionContent?: unknown;
+  isAggregate?: boolean;
 };
 
 /**
@@ -130,7 +131,7 @@ function AnalysisPending({
       {!isComputing && !isRunning && onRunAnalysis && (
         <Button variant="primary" size="sm" onClick={onRunAnalysis} className="mt-4">
           <BarChart2 className="w-4 h-4 mr-2" />
-          Run Analysis
+          Analyze Trial
         </Button>
       )}
     </div>
@@ -179,7 +180,7 @@ function AnalysisEmpty({
             ) : (
               <>
                 <RefreshCw className="w-4 h-4 mr-2" />
-                {isFailed ? 'Retry Analysis' : 'Run Analysis'}
+                {isFailed ? 'Retry Analysis' : 'Analyze Trial'}
               </>
             )}
           </Button>
@@ -189,7 +190,7 @@ function AnalysisEmpty({
   );
 }
 
-export function AnalysisPanel({ runId, analysisStatus, definitionContent }: AnalysisPanelProps) {
+export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggregate }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
     analysisStatus,
@@ -381,48 +382,52 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent }: Anal
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => void handleExportExcel()} disabled={isExporting}>
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-            )}
-            Export Excel
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleCopyODataLink()}
-            title="Copy OData URL for Excel's 'From OData Feed' feature"
-          >
-            {odataLinkCopied ? (
-              <Check className="w-4 h-4 mr-2 text-green-600" />
-            ) : (
-              <Link2 className="w-4 h-4 mr-2" />
-            )}
-            {odataLinkCopied ? 'Copied!' : 'OData Link'}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleCopyCSVLink()}
-            title="Copy CSV URL for Google Sheets IMPORTDATA"
-          >
-            {csvLinkCopied ? (
-              <Check className="w-4 h-4 mr-2 text-green-600" />
-            ) : (
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-            )}
-            {csvLinkCopied ? 'Copied!' : 'CSV Feed'}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
-            {recomputing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            Recompute
-          </Button>
+          {!isAggregate && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => void handleExportExcel()} disabled={isExporting}>
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                )}
+                Export Excel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleCopyODataLink()}
+                title="Copy OData URL for Excel's 'From OData Feed' feature"
+              >
+                {odataLinkCopied ? (
+                  <Check className="w-4 h-4 mr-2 text-green-600" />
+                ) : (
+                  <Link2 className="w-4 h-4 mr-2" />
+                )}
+                {odataLinkCopied ? 'Copied!' : 'OData Link'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleCopyCSVLink()}
+                title="Copy CSV URL for Google Sheets IMPORTDATA"
+              >
+                {csvLinkCopied ? (
+                  <Check className="w-4 h-4 mr-2 text-green-600" />
+                ) : (
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                )}
+                {csvLinkCopied ? 'Copied!' : 'CSV Feed'}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
+                {recomputing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Recompute
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

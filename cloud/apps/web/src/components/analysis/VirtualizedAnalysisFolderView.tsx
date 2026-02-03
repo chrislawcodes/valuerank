@@ -99,27 +99,63 @@ export function VirtualizedAnalysisFolderView({
   // Track which folders are expanded (default: first folder expanded)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
 
-  // Group runs by tag
+  // Split into Aggregate and Standard runs
+  const { aggregateRuns, standardRuns } = useMemo(() => {
+    const agg: Run[] = [];
+    const std: Run[] = [];
+    runs.forEach(r => {
+      // Check for Aggregate tag
+      if (r.tags?.some(t => t.name === 'Aggregate')) {
+        agg.push(r);
+      } else {
+        std.push(r);
+      }
+    });
+    return { aggregateRuns: agg, standardRuns: std };
+  }, [runs]);
+
+  // Group standard runs by tag
   const tagGroups = useMemo(() => {
-    const groups = groupRunsByTag(runs);
+    const groups = groupRunsByTag(standardRuns);
     return Array.from(groups.values()).sort((a, b) =>
       a.tag.name.localeCompare(b.tag.name)
     );
-  }, [runs]);
+  }, [standardRuns]);
 
-  // Runs with definitions that have no tags
+  // Runs with definitions that have no tags (from standard set)
   const untaggedRuns = useMemo(() => {
-    return runs.filter((r) => {
+    return standardRuns.filter((r) => {
       const tags = r.definition?.tags ?? [];
       return tags.length === 0;
     });
-  }, [runs]);
+  }, [standardRuns]);
 
   // Build flat list of items for virtualization
   const virtualItems = useMemo((): VirtualItem[] => {
     const items: VirtualItem[] = [];
 
-    // Add tag folders
+    // 1. Add Aggregate Runs Folder (First)
+    if (aggregateRuns.length > 0) {
+      items.push({
+        type: 'folder-header',
+        id: '__aggregate__',
+        tag: { id: '__aggregate__', name: 'Aggregated Trials' }, // Mock tag for display
+        runCount: aggregateRuns.length,
+      });
+
+      if (expandedFolders.has('__aggregate__')) {
+        for (const run of aggregateRuns) {
+          items.push({
+            type: 'run',
+            id: `aggregate-${run.id}`,
+            run,
+            folderId: '__aggregate__',
+          });
+        }
+      }
+    }
+
+    // 2. Add tag folders
     for (const { tag, runs: tagRuns } of tagGroups) {
       // Add folder header
       items.push({
@@ -142,7 +178,7 @@ export function VirtualizedAnalysisFolderView({
       }
     }
 
-    // Add untagged folder if there are untagged runs
+    // 3. Add untagged folder if there are untagged runs
     if (untaggedRuns.length > 0) {
       items.push({
         type: 'folder-header',
@@ -164,7 +200,7 @@ export function VirtualizedAnalysisFolderView({
     }
 
     return items;
-  }, [tagGroups, untaggedRuns, expandedFolders]);
+  }, [tagGroups, untaggedRuns, aggregateRuns, expandedFolders]);
 
   // Estimate size based on item type
   const getItemSize = useCallback((index: number) => {
@@ -201,8 +237,11 @@ export function VirtualizedAnalysisFolderView({
     if (untaggedRuns.length > 0) {
       allIds.push('__untagged__');
     }
+    if (aggregateRuns.length > 0) {
+      allIds.push('__aggregate__');
+    }
     setExpandedFolders(new Set(allIds));
-  }, [tagGroups, untaggedRuns.length]);
+  }, [tagGroups, untaggedRuns.length, aggregateRuns.length]);
 
   const collapseAll = useCallback(() => {
     setExpandedFolders(new Set());
@@ -291,17 +330,16 @@ export function VirtualizedAnalysisFolderView({
                     className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     <ChevronRight
-                      className={`w-4 h-4 text-gray-400 transition-transform ${
-                        isExpanded ? 'rotate-90' : ''
-                      }`}
+                      className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''
+                        }`}
                     />
                     {isExpanded ? (
-                      <FolderOpen className={`w-4 h-4 ${isUntagged ? 'text-gray-400' : 'text-amber-500'}`} />
+                      <FolderOpen className={`w-4 h-4 ${isUntagged ? 'text-gray-400' : item.id === '__aggregate__' ? 'text-indigo-500' : 'text-amber-500'}`} />
                     ) : (
-                      <Folder className={`w-4 h-4 ${isUntagged ? 'text-gray-400' : 'text-amber-500'}`} />
+                      <Folder className={`w-4 h-4 ${isUntagged ? 'text-gray-400' : item.id === '__aggregate__' ? 'text-indigo-500' : 'text-amber-500'}`} />
                     )}
                     {!isUntagged && (
-                      <TagIcon className="w-3.5 h-3.5 text-teal-600" />
+                      <TagIcon className={`w-3.5 h-3.5 ${item.id === '__aggregate__' ? 'text-indigo-600' : 'text-teal-600'}`} />
                     )}
                     <span className={`font-medium ${isUntagged ? 'text-gray-500' : 'text-gray-900'}`}>
                       {isUntagged ? 'Untagged' : item.tag?.name}
