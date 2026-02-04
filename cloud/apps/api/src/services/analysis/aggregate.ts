@@ -54,6 +54,7 @@ const zModelStats = z.object({
 const zVisualizationData = z.object({
     decisionDistribution: z.record(z.record(z.number())).optional(),
     modelScenarioMatrix: z.record(z.record(z.number())).optional(),
+    scenarioDimensions: z.record(z.record(z.union([z.number(), z.string()]))).optional(),
 }).passthrough();
 
 const zContestedScenario = z.object({
@@ -190,7 +191,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
-            .map(r => r.analysisResults && r.analysisResults[0])
+            .map(r => (r as any).analysisResults && (r as any).analysisResults[0])
             .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => !!a);
 
         if (validAnalyses.length === 0) {
@@ -240,7 +241,19 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             }
         });
 
-        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+        // Fetch all scenarios for dimensions extraction
+        const scenarios = await tx.scenario.findMany({
+            where: {
+                definitionId,
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                content: true
+            }
+        });
+
+        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts, scenarios);
 
         // 3. Find/Create Aggregate Run
         const aggregateRuns = await tx.run.findMany({
@@ -274,7 +287,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         });
 
 
-        const sampleSize = compatibleRuns.reduce((sum, r) => sum + (r._count?.transcripts || 0), 0);
+        const sampleSize = compatibleRuns.reduce((sum, r) => sum + ((r as any)._count?.transcripts || 0), 0);
 
         // Use the first compatible run as a template for config
         const templateRun = compatibleRuns[0];
@@ -373,7 +386,8 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
 function aggregateAnalysesLogic(
     analyses: AnalysisOutput[],
-    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[]
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
+    scenarios: { id: string, content: Prisma.JsonValue }[]
 ): AggregatedResult {
 
     // Basic structural setup
@@ -503,7 +517,8 @@ function aggregateAnalysesLogic(
     // Merge Visualization Data
     const mergedVizData: any = {
         decisionDistribution: {},
-        modelScenarioMatrix: {}
+        modelScenarioMatrix: {},
+        scenarioDimensions: {} // Initialize
     };
 
     // Calculate Decision Distribution using "Mean of Means" logic per scenario
@@ -548,6 +563,18 @@ function aggregateAnalysesLogic(
         }
 
         mergedVizData.decisionDistribution[mId] = dist;
+
+        // Populate modelScenarioMatrix (Model -> Scenario -> Mean Score)
+        const scenarioMeans: Record<string, number> = {};
+        if (scenarioDecisions) {
+            Object.entries(scenarioDecisions).forEach(([scenarioId, decisions]) => {
+                if (decisions.length === 0) return;
+                const sum = decisions.reduce((a, b) => a + b, 0);
+                const mean = sum / decisions.length;
+                scenarioMeans[scenarioId] = mean;
+            });
+        }
+        mergedVizData.modelScenarioMatrix[mId] = scenarioMeans;
     });
 
     // Merge Contested Scenarios
@@ -575,6 +602,17 @@ function aggregateAnalysesLogic(
         .sort((a, b) => b.variance - a.variance)
         .slice(0, 20);
 
+    // Populate scenarioDimensions
+    const dimensionsMap: Record<string, Record<string, number | string>> = {};
+    scenarios.forEach(s => {
+        if (!s.content || typeof s.content !== 'object') return;
+        const content = s.content as any;
+        if (content.dimensions) {
+            dimensionsMap[s.id] = content.dimensions;
+        }
+    });
+    mergedVizData.scenarioDimensions = dimensionsMap;
+
     return {
         perModel: aggregatedPerModel,
         modelAgreement: template.modelAgreement,
@@ -584,3 +622,4 @@ function aggregateAnalysesLogic(
         valueAggregateStats
     };
 }
+
