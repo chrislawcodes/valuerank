@@ -253,8 +253,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 { definitionId, preambleVersionId },
                 {
                   ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
-                  singletonKey,
-                  useSingletonQueue: true // Ensure only one job exists in queue (debounce)
+                  singletonKey
                 }
               );
 

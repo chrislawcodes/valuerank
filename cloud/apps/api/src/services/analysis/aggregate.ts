@@ -1,4 +1,4 @@
-```typescript
+
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
@@ -128,7 +128,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         // This effectively serializes concurrent UpdateAggregate jobs for the same definition.
         try {
             // Use raw query for locking.
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ definitionId }))`;
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${definitionId}))`;
         } catch (err) {
             log.error({ err, definitionId }, 'Failed to acquire advisory lock');
             throw err; // Abort transaction
@@ -168,10 +168,10 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         const compatibleRuns = runs.filter((run) => {
             const parseResult = zRunConfig.safeParse(run.config);
             if (!parseResult.success) return false;
-            
+
             const config = parseResult.data;
             const snapshot = config.definitionSnapshot;
-            
+
             const runPreambleId =
                 snapshot?._meta?.preambleVersionId ??
                 snapshot?.preambleVersionId;
@@ -208,7 +208,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 return null;
             }
             const output = parseResult.data;
-            
+
             return {
                 ...a,
                 output, // Keep original output for reference if needed
@@ -261,14 +261,14 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         let aggregateRun = aggregateRuns.find((r) => {
             const parseResult = zRunConfig.safeParse(r.config);
             if (!parseResult.success) return false;
-            
+
             const config = parseResult.data;
             const snapshot = config.definitionSnapshot;
-            
+
             const runPreambleId =
                 snapshot?._meta?.preambleVersionId ??
                 snapshot?.preambleVersionId;
-                
+
             if (preambleVersionId === null) return runPreambleId == null;
             return runPreambleId === preambleVersionId;
         });
@@ -320,7 +320,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             // Merge with existing config
             const existingConfigResult = zRunConfig.safeParse(aggregateRun.config);
             const existingConfig = existingConfigResult.success ? existingConfigResult.data : {};
-            
+
             const updatedConfig: RunConfig = {
                 ...existingConfig,
                 sourceRunIds: sourceRunIds,
@@ -361,7 +361,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 analysisType: 'AGGREGATE',
                 status: 'CURRENT',
                 codeVersion: '1.0.0',
-                inputHash: `aggregate - ${ Date.now() } `,
+                inputHash: `aggregate - ${Date.now()} `,
                 output: newOutput as unknown as Prisma.InputJsonValue
             }
         });
@@ -401,14 +401,18 @@ function aggregateAnalysesLogic(
         validAnalyses.forEach(analysis => {
             const dist = analysis.visualizationData?.decisionDistribution?.[modelId];
             if (dist) {
-                const runTotal = Object.values(dist).reduce((sum, c) => sum + (c as number), 0);
+                const runTotal = Object.values(dist).reduce((sum, c) => sum + (c), 0);
                 if (runTotal > 0) {
                     Object.entries(dist).forEach(([option, count]) => {
                         const opt = parseInt(option);
-                        if (!isNaN(opt)) modelDecisions[opt].push((count as number) / runTotal);
+                        if (!isNaN(opt)) {
+                            const decisionList = modelDecisions[opt];
+                            if (decisionList) decisionList.push((count) / runTotal);
+                        }
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
-                        if (!dist[String(opt)]) modelDecisions[opt].push(0);
+                        const decisionList = modelDecisions[opt];
+                        if (!dist[String(opt)] && decisionList) decisionList.push(0);
                     });
                 }
             }
@@ -422,7 +426,10 @@ function aggregateAnalysesLogic(
                 const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length > 0 ? values.length : 1);
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(values.length);
-                decisionStats[modelId].options[opt] = { mean, sd, sem, n: values.length };
+                const stats = decisionStats[modelId];
+                if (stats) {
+                    stats.options[opt] = { mean, sd, sem, n: values.length };
+                }
             }
         });
 
@@ -478,11 +485,14 @@ function aggregateAnalysesLogic(
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(rates.length);
 
-                valueAggregateStats[modelId].values[valueId] = {
-                    winRateMean: mean,
-                    winRateSd: sd,
-                    winRateSem: sem
-                };
+                const modelStats = valueAggregateStats[modelId];
+                if (modelStats) {
+                    modelStats.values[valueId] = {
+                        winRateMean: mean,
+                        winRateSd: sd,
+                        winRateSem: sem
+                    };
+                }
 
                 target.confidenceInterval = {
                     lower: Math.max(0, mean - (1.96 * sem)),
@@ -577,7 +587,7 @@ function aggregateAnalysesLogic(
 
     return {
         perModel: aggregatedPerModel,
-        modelAgreement: template.modelAgreement,
+        modelAgreement: template?.modelAgreement,
         visualizationData: mergedVizData,
         mostContestedScenarios: mergedContested,
         decisionStats,
