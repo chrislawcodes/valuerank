@@ -380,7 +380,7 @@ function aggregateAnalysesLogic(
     if (analyses.length === 0) {
         throw new Error('Cannot aggregate empty analyses list');
     }
-    const template = analyses[0];
+    const template = analyses[0]!;
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
     const aggregatedPerModel: Record<string, unknown> = {};
     const decisionStats: Record<string, DecisionStats> = {};
@@ -405,14 +405,10 @@ function aggregateAnalysesLogic(
                 if (runTotal > 0) {
                     Object.entries(dist).forEach(([option, count]) => {
                         const opt = parseInt(option);
-                        if (!isNaN(opt)) {
-                            const decisionList = modelDecisions[opt];
-                            if (decisionList) decisionList.push((count) / runTotal);
-                        }
+                        if (!isNaN(opt)) modelDecisions[opt]!.push((count) / runTotal);
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
-                        const decisionList = modelDecisions[opt];
-                        if (!dist[String(opt)] && decisionList) decisionList.push(0);
+                        if (!dist[String(opt)]) modelDecisions[opt]!.push(0);
                     });
                 }
             }
@@ -426,10 +422,7 @@ function aggregateAnalysesLogic(
                 const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length > 0 ? values.length : 1);
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(values.length);
-                const stats = decisionStats[modelId];
-                if (stats) {
-                    stats.options[opt] = { mean, sd, sem, n: values.length };
-                }
+                decisionStats[modelId]!.options[opt] = { mean, sd, sem, n: values.length };
             }
         });
 
@@ -485,14 +478,11 @@ function aggregateAnalysesLogic(
                 const sd = Math.sqrt(variance);
                 const sem = sd / Math.sqrt(rates.length);
 
-                const modelStats = valueAggregateStats[modelId];
-                if (modelStats) {
-                    modelStats.values[valueId] = {
-                        winRateMean: mean,
-                        winRateSd: sd,
-                        winRateSem: sem
-                    };
-                }
+                valueAggregateStats[modelId]!.values[valueId] = {
+                    winRateMean: mean,
+                    winRateSd: sd,
+                    winRateSem: sem
+                };
 
                 target.confidenceInterval = {
                     lower: Math.max(0, mean - (1.96 * sem)),
@@ -587,7 +577,7 @@ function aggregateAnalysesLogic(
 
     return {
         perModel: aggregatedPerModel,
-        modelAgreement: template?.modelAgreement,
+        modelAgreement: template.modelAgreement,
         visualizationData: mergedVizData,
         mostContestedScenarios: mergedContested,
         decisionStats,
