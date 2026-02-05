@@ -15,7 +15,7 @@ import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useRun } from '../hooks/useRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import type { Transcript } from '../api/operations/runs';
-import { normalizeScenarioId } from '../utils/scenarioUtils';
+import { normalizeModelId, normalizeScenarioId } from '../utils/scenarioUtils';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -28,6 +28,7 @@ export function AnalysisTranscripts() {
   const row = searchParams.get('row') ?? '';
   const col = searchParams.get('col') ?? '';
   const selectedModel = searchParams.get('model') ?? '';
+  const hasRequiredParams = Boolean(rowDim && colDim && row && col);
 
   const { run, loading, error } = useRun({
     id: id || '',
@@ -47,7 +48,7 @@ export function AnalysisTranscripts() {
   const filteredTranscripts = useMemo(() => {
     if (!run?.transcripts?.length) return [];
     if (!scenarioDimensions) return [];
-    if (!rowDim || !colDim || !row || !col) return [];
+    if (!hasRequiredParams) return [];
 
     const scenarioIds = new Set<string>();
     const normalizedScenarioIds = new Set<string>();
@@ -60,8 +61,7 @@ export function AnalysisTranscripts() {
       }
     }
 
-    const normalizeModel = (value: string) => value.toLowerCase().replace(/^.*:/, '');
-    const selectedModelNormalized = selectedModel ? normalizeModel(selectedModel) : '';
+    const selectedModelNormalized = selectedModel ? normalizeModelId(selectedModel) : '';
 
     return run.transcripts.filter((t) => {
       if (!t.scenarioId) return false;
@@ -75,12 +75,12 @@ export function AnalysisTranscripts() {
       }
       if (!selectedModel) return true;
       if (t.modelId === selectedModel) return true;
-      const transcriptModelNormalized = normalizeModel(t.modelId);
+      const transcriptModelNormalized = normalizeModelId(t.modelId);
       if (transcriptModelNormalized === selectedModelNormalized) return true;
       if (t.modelId.includes(selectedModel) || selectedModel.includes(t.modelId)) return true;
       return false;
     });
-  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel]);
+  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel, hasRequiredParams]);
 
   if (loading && !run) {
     return (
@@ -152,7 +152,11 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {scenarioDimensions && filteredTranscripts.length === 0 ? (
+      {scenarioDimensions && !hasRequiredParams ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
+        </div>
+      ) : scenarioDimensions && filteredTranscripts.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           No transcripts found for this condition.
         </div>
