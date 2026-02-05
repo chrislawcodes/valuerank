@@ -608,7 +608,6 @@ function aggregateAnalysesLogic(
         typeof value === 'number' || typeof value === 'string';
     const toDimensionRecord = (
         value: unknown,
-        *,
         scenarioId: string
     ): Record<string, number | string> | null => {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -631,7 +630,7 @@ function aggregateAnalysesLogic(
         if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
         const content = s.content as Record<string, unknown>;
         const dimensions = content['dimensions'];
-        const validated = toDimensionRecord(dimensions, { scenarioId: s.id });
+        const validated = toDimensionRecord(dimensions, s.id);
         if (validated) {
             dimensionsMap[s.id] = validated;
         }

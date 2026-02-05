@@ -57,7 +57,7 @@ async function main() {
 void main()
   .catch((err) => {
     if (err instanceof ValidationError) {
-      log.error(err.message);
+      log.error({ message: err.message }, 'Validation error');
       process.exit(1);
     }
     log.error({ err }, 'Failed to ensure user');
