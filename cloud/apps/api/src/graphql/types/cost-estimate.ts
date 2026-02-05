@@ -6,6 +6,7 @@
 
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
+import { createLogger, ValidationError, NotFoundError } from '@valuerank/shared';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { getTokenStatsForModels, getAllModelAverage } from '../../services/cost/statistics.js';
 import type {
@@ -234,7 +235,7 @@ builder.queryField('estimateCost', (t) =>
             where: { id: modelInput },
           });
           if (!model) {
-            throw new Error(`Model not found: ${modelInput}`);
+            throw new NotFoundError('Model', modelInput);
           }
           modelIds.push(model.modelId);
           continue;
@@ -244,7 +245,7 @@ builder.queryField('estimateCost', (t) =>
         if (modelInput.includes(':')) {
           const parts = modelInput.split(':');
           if (parts.length !== 2) {
-            throw new Error(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`);
+            throw new ValidationError(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`);
           }
           const [providerName, modelId] = parts;
 
@@ -252,7 +253,7 @@ builder.queryField('estimateCost', (t) =>
             where: { name: providerName },
           });
           if (!provider) {
-            throw new Error(`Provider not found: ${providerName}`);
+            throw new NotFoundError('Provider', providerName ?? 'unknown');
           }
 
           const model = await db.llmModel.findFirst({
@@ -262,7 +263,7 @@ builder.queryField('estimateCost', (t) =>
             },
           });
           if (!model) {
-            throw new Error(`Model not found: ${modelInput}`);
+            throw new NotFoundError('Model', modelInput);
           }
           modelIds.push(model.modelId);
           continue;
@@ -274,7 +275,7 @@ builder.queryField('estimateCost', (t) =>
           where: { modelId: modelInput },
         });
         if (!model) {
-          throw new Error(`Model not found: ${modelInput}`);
+          throw new NotFoundError('Model', modelInput);
         }
         modelIds.push(model.modelId);
       }

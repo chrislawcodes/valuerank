@@ -1,9 +1,9 @@
-import { createYoga, type Plugin } from 'graphql-yoga';
+import { createYoga, type Plugin, createGraphQLError } from 'graphql-yoga';
 import type { Request, Response } from 'express';
 import { graphql, type ExecutionResult, getOperationAST } from 'graphql';
 import { builder } from './builder.js';
 import { createContext, type Context } from './context.js';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, AppError } from '@valuerank/shared';
 
 // Import all types and operations to register them with the builder
 import './types/index.js';
@@ -127,5 +127,27 @@ export const yoga = createYoga<{
     warn: (...args) => log.warn(args, 'GraphQL warn'),
     error: (...args) => log.error(args, 'GraphQL error'),
   },
-  maskedErrors: process.env.NODE_ENV === 'production',
+  maskedErrors: process.env.NODE_ENV === 'production' ? {
+    maskError(error: any) {
+      if (error instanceof AppError || error?.originalError instanceof AppError) {
+        return createGraphQLError(error.message, {
+          extensions: {
+            code: (error instanceof AppError ? error.code : (error.originalError as AppError).code) || 'APP_ERROR',
+            http: {
+              status: (error instanceof AppError ? error.statusCode : (error.originalError as AppError).statusCode) || 400,
+            },
+          },
+        });
+      }
+      // Mask other errors with generic message
+      return createGraphQLError('Unexpected error occurred.', {
+        extensions: {
+          code: 'INTERNAL_SERVER_ERROR',
+          http: {
+            status: 500,
+          },
+        },
+      });
+    },
+  } : false,
 });
