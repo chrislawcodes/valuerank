@@ -327,14 +327,9 @@ builder.objectType(RunRef, {
         }
 
         if (sourceRunIds) {
-          // Aggregate runs reference multiple source run IDs, which the single-run
-          // dataloader cannot batch. Use a direct query to avoid incorrect caching.
-          return db.transcript.findMany({
-            where: {
-              runId: { in: sourceRunIds },
-              ...(args.modelId ? { modelId: args.modelId } : {}),
-            },
-            orderBy: { createdAt: 'desc' },
+          return ctx.loaders.transcriptsByAggregateRuns.load({
+            sourceRunIds,
+            modelId: args.modelId,
           });
         }
 

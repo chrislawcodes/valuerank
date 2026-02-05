@@ -15,7 +15,7 @@ import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useRun } from '../hooks/useRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import type { Transcript } from '../api/operations/runs';
-import { normalizeModelId, normalizeScenarioId } from '../utils/scenarioUtils';
+import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -46,41 +46,16 @@ export function AnalysisTranscripts() {
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
 
   const filteredTranscripts = useMemo(() => {
-    if (!run?.transcripts?.length) return [];
-    if (!scenarioDimensions) return [];
-    if (!hasRequiredParams) return [];
-
-    const scenarioIds = new Set<string>();
-    const normalizedScenarioIds = new Set<string>();
-    for (const [scenarioId, dims] of Object.entries(scenarioDimensions)) {
-      const rVal = String(dims[rowDim] ?? 'N/A');
-      const cVal = String(dims[colDim] ?? 'N/A');
-      if (rVal === row && cVal === col) {
-        scenarioIds.add(String(scenarioId));
-        normalizedScenarioIds.add(normalizeScenarioId(String(scenarioId)));
-      }
-    }
-
-    const selectedModelNormalized = selectedModel ? normalizeModelId(selectedModel) : '';
-
-    return run.transcripts.filter((t) => {
-      if (!t.scenarioId) return false;
-      const transcriptScenarioId = String(t.scenarioId);
-      const transcriptScenarioNormalized = normalizeScenarioId(transcriptScenarioId);
-      if (
-        !scenarioIds.has(transcriptScenarioId) &&
-        !normalizedScenarioIds.has(transcriptScenarioNormalized)
-      ) {
-        return false;
-      }
-      if (!selectedModel) return true;
-      if (t.modelId === selectedModel) return true;
-      const transcriptModelNormalized = normalizeModelId(t.modelId);
-      if (transcriptModelNormalized === selectedModelNormalized) return true;
-      if (t.modelId.includes(selectedModel) || selectedModel.includes(t.modelId)) return true;
-      return false;
+    return filterTranscriptsForPivotCell({
+      transcripts: run?.transcripts ?? [],
+      scenarioDimensions,
+      rowDim,
+      colDim,
+      row,
+      col,
+      selectedModel,
     });
-  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel, hasRequiredParams]);
+  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel]);
 
   if (loading && !run) {
     return (
