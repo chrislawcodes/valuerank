@@ -50,6 +50,7 @@ export function promptHidden(question: string): Promise<string> {
         case '\u0003': {
           stdout.write('\n');
           process.exit(130);
+          return;
         }
         case '\u007f': {
           input = input.slice(0, -1);

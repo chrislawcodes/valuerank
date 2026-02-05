@@ -390,9 +390,19 @@ function aggregateAnalysesLogic(
 
     // Basic structural setup
     if (analyses.length === 0) {
-        throw new Error('Cannot aggregate empty analyses list');
+        return {
+            perModel: {},
+            modelAgreement: null,
+            visualizationData: {
+                decisionDistribution: {},
+                modelScenarioMatrix: {},
+            },
+            mostContestedScenarios: [],
+            decisionStats: {},
+            valueAggregateStats: {},
+        };
     }
-    const template = analyses[0]!;
+    const template = analyses[0];
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
     const aggregatedPerModel: Record<string, ModelStats> = {};
     const decisionStats: Record<string, DecisionStats> = {};
@@ -603,12 +613,25 @@ function aggregateAnalysesLogic(
 
     // Populate scenarioDimensions
     const dimensionsMap: Record<string, Record<string, number | string>> = {};
+    const isDimensionValue = (value: unknown): value is number | string =>
+        typeof value === 'number' || typeof value === 'string';
+    const toDimensionRecord = (value: unknown): Record<string, number | string> | null => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        const entries = Object.entries(value);
+        const sanitized: Record<string, number | string> = {};
+        for (const [key, entry] of entries) {
+            if (!isDimensionValue(entry)) return null;
+            sanitized[key] = entry;
+        }
+        return sanitized;
+    };
     scenarios.forEach(s => {
         if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
         const content = s.content as Record<string, unknown>;
         const dimensions = content['dimensions'];
-        if (dimensions && typeof dimensions === 'object' && !Array.isArray(dimensions)) {
-            dimensionsMap[s.id] = dimensions as Record<string, number | string>;
+        const validated = toDimensionRecord(dimensions);
+        if (validated) {
+            dimensionsMap[s.id] = validated;
         }
     });
     mergedVizData.scenarioDimensions = dimensionsMap;

@@ -1,4 +1,14 @@
 
+/**
+ * debug-scenario-structure.ts
+ *
+ * Debugging utility to inspect scenario JSON structure.
+ * Useful when scenario content parsing or shape validation fails.
+ *
+ * Usage:
+ *   npx tsx src/cli/debug-scenario-structure.ts
+ */
+
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 

@@ -255,7 +255,7 @@ builder.queryField('estimateCost', (t) =>
         .filter((i) => i.kind === 'provider')
         .map((i) => ({ providerName: i.providerName, modelId: i.modelId }));
 
-      const [cuidModels, directModels, providers] = await Promise.all([
+      const [modelsByCuid, modelsByDirectId, providersByName] = await Promise.all([
         cuidIds.length
           ? db.llmModel.findMany({ where: { id: { in: cuidIds } } })
           : Promise.resolve([]),
@@ -269,7 +269,7 @@ builder.queryField('estimateCost', (t) =>
           : Promise.resolve([]),
       ]);
 
-      const providerMap = new Map(providers.map((p) => [p.name, p]));
+      const providerMap = new Map(providersByName.map((p) => [p.name, p]));
 
       const providerClauses = providerPairs
         .map((pair) => {
@@ -291,8 +291,8 @@ builder.queryField('estimateCost', (t) =>
             })
           : [];
 
-      const cuidMap = new Map(cuidModels.map((m) => [m.id, m]));
-      const directMap = new Map(directModels.map((m) => [m.modelId, m]));
+      const cuidMap = new Map(modelsByCuid.map((m) => [m.id, m]));
+      const directMap = new Map(modelsByDirectId.map((m) => [m.modelId, m]));
       const providerModelMap = new Map(
         providerModels.map((m) => [`${m.providerId}:${m.modelId}`, m])
       );

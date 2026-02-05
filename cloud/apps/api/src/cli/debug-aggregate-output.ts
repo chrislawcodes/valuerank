@@ -1,4 +1,14 @@
 
+/**
+ * debug-aggregate-output.ts
+ *
+ * Debugging utility to inspect aggregate analysis output structure.
+ * Used to troubleshoot scenarioDimensions missing from visualization data.
+ *
+ * Usage:
+ *   npx tsx src/cli/debug-aggregate-output.ts
+ */
+
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 

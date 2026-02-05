@@ -120,10 +120,6 @@ async function main(): Promise<void> {
     }
 
     log.error({ err }, 'Failed to create user');
-    log.error(
-      { message: err instanceof Error ? err.message : 'Unknown error' },
-      'Failed to create user'
-    );
     process.exit(1);
   } finally {
     await db.$disconnect();

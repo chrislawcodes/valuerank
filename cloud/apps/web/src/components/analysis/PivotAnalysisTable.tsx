@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { VisualizationData } from '../../api/operations/analysis';
 
 type PivotAnalysisTableProps = {
@@ -77,6 +77,26 @@ export function PivotAnalysisTable({ visualizationData, dimensionLabels }: Pivot
     const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
     // Default to first alphabetical model if available
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
+
+    useEffect(() => {
+        if (availableDimensions.length === 0) return;
+
+        if (!availableDimensions.includes(rowDim)) {
+            setRowDim(availableDimensions[0]);
+        }
+
+        if (!availableDimensions.includes(colDim)) {
+            setColDim(availableDimensions[1] || availableDimensions[0]);
+        }
+    }, [availableDimensions, rowDim, colDim]);
+
+    useEffect(() => {
+        if (models.length === 0) return;
+
+        if (!models.includes(selectedModel)) {
+            setSelectedModel(models[0]);
+        }
+    }, [models, selectedModel]);
 
     // 2. Aggregate Data based on selection
     const pivotData = useMemo(() => {
