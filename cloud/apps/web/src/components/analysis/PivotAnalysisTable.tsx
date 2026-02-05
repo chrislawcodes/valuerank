@@ -79,22 +79,34 @@ export function PivotAnalysisTable({ visualizationData, dimensionLabels }: Pivot
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
 
     useEffect(() => {
-        if (availableDimensions.length === 0) return;
+        const nextRow = availableDimensions[0] ?? '';
+        const nextCol = availableDimensions[1] ?? availableDimensions[0] ?? '';
+
+        if (availableDimensions.length === 0) {
+            if (rowDim !== '') setRowDim('');
+            if (colDim !== '') setColDim('');
+            return;
+        }
 
         if (!availableDimensions.includes(rowDim)) {
-            setRowDim(availableDimensions[0]);
+            setRowDim(nextRow);
         }
 
         if (!availableDimensions.includes(colDim)) {
-            setColDim(availableDimensions[1] || availableDimensions[0]);
+            setColDim(nextCol);
         }
     }, [availableDimensions, rowDim, colDim]);
 
     useEffect(() => {
-        if (models.length === 0) return;
+        const nextModel = models[0] ?? '';
+
+        if (models.length === 0) {
+            if (selectedModel !== '') setSelectedModel('');
+            return;
+        }
 
         if (!models.includes(selectedModel)) {
-            setSelectedModel(models[0]);
+            setSelectedModel(nextModel);
         }
     }, [models, selectedModel]);
 
