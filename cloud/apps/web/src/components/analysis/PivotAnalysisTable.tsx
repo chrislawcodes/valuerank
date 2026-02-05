@@ -1,8 +1,10 @@
 
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
 
 type PivotAnalysisTableProps = {
+    runId: string;
     visualizationData: VisualizationData;
     dimensionLabels?: Record<string, string>;
 };
@@ -58,7 +60,8 @@ function Legend({ dimensionLabels }: { dimensionLabels?: Record<string, string> 
     );
 }
 
-export function PivotAnalysisTable({ visualizationData, dimensionLabels }: PivotAnalysisTableProps) {
+export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }: PivotAnalysisTableProps) {
+    const navigate = useNavigate();
     const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
 
     // 1. Identify available dimensions
@@ -146,6 +149,17 @@ export function PivotAnalysisTable({ visualizationData, dimensionLabels }: Pivot
 
     }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel]);
 
+    const handleCellClick = (row: string, col: string) => {
+        const params = new URLSearchParams({
+            rowDim,
+            colDim,
+            row,
+            col,
+            model: selectedModel || '',
+        });
+        navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
+    };
+
     if (!scenarioDimensions || availableDimensions.length === 0) {
         return <div className="p-4 text-gray-500 italic">No dimension data available for pivot analysis.</div>;
     }
@@ -232,12 +246,14 @@ export function PivotAnalysisTable({ visualizationData, dimensionLabels }: Pivot
                                     {pivotData.cols.map(col => {
                                         const cell = pivotData.grid[row]?.[col];
                                         const mean = cell && cell.count > 0 ? cell.sum / cell.count : null;
+                                        const canOpen = Boolean(mean);
 
                                         return (
                                             <td
                                                 key={`${row}-${col}`}
-                                                className="p-4 border border-gray-100 text-center text-sm transition-colors"
+                                                className={`p-4 border border-gray-100 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''}`}
                                                 style={{ backgroundColor: mean ? getHeatmapColor(mean) : undefined }}
+                                                onClick={canOpen ? () => handleCellClick(row, col) : undefined}
                                             >
                                                 {mean ? (
                                                     <span className={`font-semibold ${getScoreTextColor(mean)}`}>
@@ -251,6 +267,9 @@ export function PivotAnalysisTable({ visualizationData, dimensionLabels }: Pivot
                             ))}
                         </tbody>
                     </table>
+                    <div className="mt-2 text-xs text-gray-500">
+                        Click a cell to view transcripts for that condition.
+                    </div>
                 </div>
             )}
         </div>

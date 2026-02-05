@@ -300,6 +300,14 @@ builder.objectType(RunRef, {
         }),
       },
       resolve: async (run, args, ctx) => {
+        const config = run.config as RunConfig & {
+          isAggregate?: boolean;
+          sourceRunIds?: string[];
+        };
+        const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
+          ? config.sourceRunIds
+          : null;
+
         // When pagination is requested, do a direct DB query instead of using dataloader
         if (args.limit !== undefined || args.offset !== undefined) {
           const limit = Math.min(args.limit ?? 1000, 1000);
@@ -307,12 +315,22 @@ builder.objectType(RunRef, {
 
           return db.transcript.findMany({
             where: {
-              runId: run.id,
+              runId: sourceRunIds ? { in: sourceRunIds } : run.id,
               ...(args.modelId ? { modelId: args.modelId } : {}),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,
+          });
+        }
+
+        if (sourceRunIds) {
+          return db.transcript.findMany({
+            where: {
+              runId: { in: sourceRunIds },
+              ...(args.modelId ? { modelId: args.modelId } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
           });
         }
 
