@@ -24,10 +24,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isDimensionValue(value: unknown): value is number | string {
+    return typeof value === 'number' || typeof value === 'string';
+}
+
+function isScenarioDimensions(value: unknown): value is Record<string, Record<string, number | string>> {
+    if (!isRecord(value)) return false;
+    for (const scenarioEntry of Object.values(value)) {
+        if (!isRecord(scenarioEntry)) return false;
+        for (const dimValue of Object.values(scenarioEntry)) {
+            if (!isDimensionValue(dimValue)) return false;
+        }
+    }
+    return true;
+}
+
 export function parseAggregateOutput(value: unknown): AggregateOutput | null {
     if (!isRecord(value)) return null;
     const visualizationData = isRecord(value.visualizationData) ? value.visualizationData : undefined;
-    const scenarioDimensions = visualizationData && isRecord(visualizationData.scenarioDimensions)
+    const scenarioDimensions = visualizationData && isScenarioDimensions(visualizationData.scenarioDimensions)
         ? visualizationData.scenarioDimensions
         : undefined;
     return {
