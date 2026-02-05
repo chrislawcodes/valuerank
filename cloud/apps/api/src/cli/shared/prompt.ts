@@ -35,25 +35,35 @@ export function promptHidden(question: string): Promise<string> {
     stdin.setRawMode(true);
 
     let input = '';
+    const cleanup = () => {
+      if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
+        stdin.setRawMode(false);
+      }
+      stdin.pause();
+      stdin.removeListener('data', onData);
+    };
+
     const onData = (char: string) => {
       switch (char) {
         case '\n':
         case '\r':
         case '\u0004': {
           stdout.write('\n');
-          stdin.setRawMode(false);
-          stdin.pause();
-          stdin.removeListener('data', onData);
+          cleanup();
           resolve(input);
           return;
         }
         case '\u0003': {
+          cleanup();
           stdout.write('\n');
           process.exit(130);
           return;
         }
         case '\u007f': {
-          input = input.slice(0, -1);
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            stdout.write('\b \b');
+          }
           return;
         }
         default: {

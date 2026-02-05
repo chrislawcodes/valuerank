@@ -120,6 +120,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
     log.info({ definitionId, preambleVersionId }, 'Updating aggregate run (with lock)');
 
     // Fetch scenarios outside the transaction to reduce lock duration.
+    // Note: this can read slightly stale scenario data if scenarios change during aggregation.
     const scenarios = await db.scenario.findMany({
         where: {
             definitionId,
@@ -390,19 +391,9 @@ function aggregateAnalysesLogic(
 
     // Basic structural setup
     if (analyses.length === 0) {
-        return {
-            perModel: {},
-            modelAgreement: null,
-            visualizationData: {
-                decisionDistribution: {},
-                modelScenarioMatrix: {},
-            },
-            mostContestedScenarios: [],
-            decisionStats: {},
-            valueAggregateStats: {},
-        };
+        throw new Error('Cannot aggregate empty analyses list');
     }
-    const template = analyses[0];
+    const template = analyses[0]!;
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
     const aggregatedPerModel: Record<string, ModelStats> = {};
     const decisionStats: Record<string, DecisionStats> = {};
@@ -615,21 +606,32 @@ function aggregateAnalysesLogic(
     const dimensionsMap: Record<string, Record<string, number | string>> = {};
     const isDimensionValue = (value: unknown): value is number | string =>
         typeof value === 'number' || typeof value === 'string';
-    const toDimensionRecord = (value: unknown): Record<string, number | string> | null => {
+    const toDimensionRecord = (
+        value: unknown,
+        *,
+        scenarioId: string
+    ): Record<string, number | string> | null => {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
         const entries = Object.entries(value);
         const sanitized: Record<string, number | string> = {};
+        let dropped = 0;
         for (const [key, entry] of entries) {
-            if (!isDimensionValue(entry)) return null;
+            if (!isDimensionValue(entry)) {
+                dropped += 1;
+                continue;
+            }
             sanitized[key] = entry;
         }
-        return sanitized;
+        if (dropped > 0) {
+            log.warn({ scenarioId, dropped }, 'Dropped invalid dimension values');
+        }
+        return Object.keys(sanitized).length > 0 ? sanitized : null;
     };
     scenarios.forEach(s => {
         if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
         const content = s.content as Record<string, unknown>;
         const dimensions = content['dimensions'];
-        const validated = toDimensionRecord(dimensions);
+        const validated = toDimensionRecord(dimensions, { scenarioId: s.id });
         if (validated) {
             dimensionsMap[s.id] = validated;
         }
