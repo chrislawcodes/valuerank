@@ -1,9 +1,3 @@
-/**
- * Analysis Tabs
- *
- * Barrel export for analysis tab components.
- */
-
 export { OverviewTab } from './OverviewTab';
 export { DecisionsTab } from './DecisionsTab';
 export { ScenariosTab } from './ScenariosTab';

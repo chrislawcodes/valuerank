@@ -88,6 +88,7 @@ export type MethodsUsed = {
 export type VisualizationData = {
   decisionDistribution: Record<string, Record<string, number>>;
   modelScenarioMatrix: Record<string, Record<string, number>>;
+  scenarioDimensions?: Record<string, Record<string, string | number>>;
 };
 
 // Variance analysis from multi-sample runs (samplesPerScenario > 1)

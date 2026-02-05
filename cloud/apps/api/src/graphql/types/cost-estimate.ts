@@ -6,6 +6,7 @@
 
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
+import { ValidationError, NotFoundError } from '@valuerank/shared';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { getTokenStatsForModels, getAllModelAverage } from '../../services/cost/statistics.js';
 import type {
@@ -217,64 +218,112 @@ builder.queryField('estimateCost', (t) =>
 
       // Resolve model identifiers from various formats
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
-      const modelIds: string[] = [];
-      for (let modelInput of models) {
-        // Alias legacy Gemini Flash ID
-        if (modelInput === 'gemini-2.5-flash-preview-05-20') {
-          modelInput = 'gemini-2.5-flash-preview-09-2025';
-        }
+      const normalizedInputs = models.map((modelInput) =>
+        modelInput === 'gemini-2.5-flash-preview-05-20'
+          ? 'gemini-2.5-flash-preview-09-2025'
+          : modelInput
+      );
 
-        // Check if it's a database UUID (cuid format: starts with 'c', ~25 chars, alphanumeric)
-        // CUIDs look like: "clxx1234567890abcdefgh" - they don't contain dashes
+      type ModelTokenInput =
+        | { raw: string; kind: 'cuid'; id: string }
+        | { raw: string; kind: 'provider'; providerName: string; modelId: string }
+        | { raw: string; kind: 'modelId'; modelId: string };
+
+      const parsedInputs: ModelTokenInput[] = normalizedInputs.map((modelInput) => {
         const isCuid = /^c[a-z0-9]{20,}$/i.test(modelInput);
-
         if (isCuid) {
-          // Look up the model to get its identifier string
-          const model = await db.llmModel.findUnique({
-            where: { id: modelInput },
-          });
-          if (!model) {
-            throw new Error(`Model not found: ${modelInput}`);
-          }
-          modelIds.push(model.modelId);
-          continue;
+          return { raw: modelInput, kind: 'cuid', id: modelInput };
         }
 
-        // Check for provider:modelId format
         if (modelInput.includes(':')) {
           const parts = modelInput.split(':');
-          if (parts.length !== 2) {
-            throw new Error(`Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`);
+          if (parts.length !== 2 || !parts[0] || !parts[1]) {
+            throw new ValidationError(
+              `Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`
+            );
           }
           const [providerName, modelId] = parts;
+          return { raw: modelInput, kind: 'provider', providerName, modelId };
+        }
 
-          const provider = await db.llmProvider.findFirst({
-            where: { name: providerName },
-          });
-          if (!provider) {
-            throw new Error(`Provider not found: ${providerName}`);
-          }
+        return { raw: modelInput, kind: 'modelId', modelId: modelInput };
+      });
 
-          const model = await db.llmModel.findFirst({
-            where: {
-              providerId: provider.id,
-              modelId: modelId,
-            },
-          });
+      const cuidIds = parsedInputs.filter((i) => i.kind === 'cuid').map((i) => i.id);
+      const directModelIds = parsedInputs.filter((i) => i.kind === 'modelId').map((i) => i.modelId);
+      const providerPairs = parsedInputs
+        .filter((i) => i.kind === 'provider')
+        .map((i) => ({ providerName: i.providerName, modelId: i.modelId }));
+
+      const [modelsByCuid, modelsByDirectId, providersByName] = await Promise.all([
+        cuidIds.length
+          ? db.llmModel.findMany({ where: { id: { in: cuidIds } } })
+          : Promise.resolve([]),
+        directModelIds.length
+          ? db.llmModel.findMany({ where: { modelId: { in: directModelIds } } })
+          : Promise.resolve([]),
+        providerPairs.length
+          ? db.llmProvider.findMany({
+              where: { name: { in: Array.from(new Set(providerPairs.map((p) => p.providerName))) } },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const providerMap = new Map(providersByName.map((p) => [p.name, p]));
+
+      const providerClauses = providerPairs
+        .map((pair) => {
+          const provider = providerMap.get(pair.providerName);
+          if (!provider) return null;
+          return {
+            providerId: provider.id,
+            modelId: pair.modelId,
+          };
+        })
+        .filter((pair): pair is { providerId: string; modelId: string } => Boolean(pair));
+
+      const providerModels =
+        providerClauses.length > 0
+          ? await db.llmModel.findMany({
+              where: {
+                OR: providerClauses,
+              },
+            })
+          : [];
+
+      const cuidMap = new Map(modelsByCuid.map((m) => [m.id, m]));
+      const directMap = new Map(modelsByDirectId.map((m) => [m.modelId, m]));
+      const providerModelMap = new Map(
+        providerModels.map((m) => [`${m.providerId}:${m.modelId}`, m])
+      );
+
+      const modelIds: string[] = [];
+      for (const input of parsedInputs) {
+        if (input.kind === 'cuid') {
+          const model = cuidMap.get(input.id);
           if (!model) {
-            throw new Error(`Model not found: ${modelInput}`);
+            throw new NotFoundError('Model', input.raw);
           }
           modelIds.push(model.modelId);
           continue;
         }
 
-        // Assume it's a direct model identifier (e.g., "claude-sonnet-4-20250514")
-        // Verify it exists in the database
-        const model = await db.llmModel.findFirst({
-          where: { modelId: modelInput },
-        });
+        if (input.kind === 'provider') {
+          const provider = providerMap.get(input.providerName);
+          if (!provider) {
+            throw new NotFoundError('Provider', input.providerName);
+          }
+          const model = providerModelMap.get(`${provider.id}:${input.modelId}`);
+          if (!model) {
+            throw new NotFoundError('Model', input.raw);
+          }
+          modelIds.push(model.modelId);
+          continue;
+        }
+
+        const model = directMap.get(input.modelId);
         if (!model) {
-          throw new Error(`Model not found: ${modelInput}`);
+          throw new NotFoundError('Model', input.raw);
         }
         modelIds.push(model.modelId);
       }

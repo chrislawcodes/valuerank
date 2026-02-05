@@ -5,7 +5,7 @@
  */
 
 import { db } from '@valuerank/db';
-import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
+import { createLogger, NotFoundError, ValidationError, MAX_SAMPLES_PER_SCENARIO } from '@valuerank/shared';
 import type {
   CostEstimate,
   ModelCostEstimate,
@@ -61,6 +61,11 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
 
   if (samplePercentage < 1 || samplePercentage > 100) {
     throw new ValidationError('samplePercentage must be between 1 and 100');
+  }
+  if (samplesPerScenario < 1 || samplesPerScenario > MAX_SAMPLES_PER_SCENARIO) {
+    throw new ValidationError(
+      `samplesPerScenario must be between 1 and ${MAX_SAMPLES_PER_SCENARIO}`
+    );
   }
 
   // Fetch definition with scenario count

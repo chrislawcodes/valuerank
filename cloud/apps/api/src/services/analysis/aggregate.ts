@@ -54,6 +54,7 @@ const zModelStats = z.object({
 const zVisualizationData = z.object({
     decisionDistribution: z.record(z.record(z.number())).optional(),
     modelScenarioMatrix: z.record(z.record(z.number())).optional(),
+    scenarioDimensions: z.record(z.record(z.union([z.number(), z.string()]))).optional(),
 }).passthrough();
 
 const zContestedScenario = z.object({
@@ -69,6 +70,8 @@ const zAnalysisOutput = z.object({
 }).passthrough();
 
 type AnalysisOutput = z.infer<typeof zAnalysisOutput>;
+type ModelStats = z.infer<typeof zModelStats>;
+type ContestedScenario = z.infer<typeof zContestedScenario>;
 
 interface DecisionStatsOption {
     mean: number;
@@ -92,17 +95,13 @@ interface ValueAggregateStats {
 }
 
 interface AggregatedResult {
-    perModel: Record<string, unknown>; // Refined type based on aggregateAnalysesLogic output
+    perModel: Record<string, ModelStats>;
     modelAgreement: unknown;
     visualizationData: {
         decisionDistribution: Record<string, Record<string, number>>;
         modelScenarioMatrix: Record<string, Record<string, number>>;
     };
-    mostContestedScenarios: Array<{
-        scenarioId: string;
-        variance: number;
-        [key: string]: unknown;
-    }>;
+    mostContestedScenarios: ContestedScenario[];
     decisionStats: Record<string, DecisionStats>;
     valueAggregateStats: Record<string, ValueAggregateStats>;
 }
@@ -119,6 +118,19 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
     }
 
     log.info({ definitionId, preambleVersionId }, 'Updating aggregate run (with lock)');
+
+    // Fetch scenarios outside the transaction to reduce lock duration.
+    // Note: this can read slightly stale scenario data if scenarios change during aggregation.
+    const scenarios = await db.scenario.findMany({
+        where: {
+            definitionId,
+            deletedAt: null,
+        },
+        select: {
+            id: true,
+            content: true,
+        },
+    });
 
     // Wrap in transaction to hold the lock for the duration of the update
     await db.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -211,10 +223,10 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
             return {
                 ...a,
-                output, // Keep original output for reference if needed
+                output,
                 perModel: output.perModel,
                 visualizationData: output.visualizationData,
-                mostContestedScenarios: output.mostContestedScenarios,
+                mostContestedScenarios: output.mostContestedScenarios ?? undefined,
             };
         }).filter((a): a is NonNullable<typeof a> => !!a);
 
@@ -240,7 +252,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             }
         });
 
-        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts);
+        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts, scenarios);
 
         // 3. Find/Create Aggregate Run
         const aggregateRuns = await tx.run.findMany({
@@ -373,7 +385,8 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
 function aggregateAnalysesLogic(
     analyses: AnalysisOutput[],
-    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[]
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
+    scenarios: { id: string, content: Prisma.JsonValue }[]
 ): AggregatedResult {
 
     // Basic structural setup
@@ -382,17 +395,18 @@ function aggregateAnalysesLogic(
     }
     const template = analyses[0]!;
     const modelIds = Array.from(new Set(analyses.flatMap(a => Object.keys(a.perModel))));
-    const aggregatedPerModel: Record<string, unknown> = {};
+    const aggregatedPerModel: Record<string, ModelStats> = {};
     const decisionStats: Record<string, DecisionStats> = {};
     const valueAggregateStats: Record<string, ValueAggregateStats> = {};
 
     modelIds.forEach(modelId => {
-        const validAnalyses = analyses.filter(a => a.perModel[modelId]);
+        const validAnalyses = analyses.filter(a => Boolean(a.perModel[modelId]));
         if (validAnalyses.length === 0) return;
 
         const totalModelSamples = validAnalyses.reduce((sum, a) => {
             const stats = a.perModel[modelId];
-            return sum + (stats?.sampleSize || 0);
+            if (!stats) return sum;
+            return sum + (stats.sampleSize || 0);
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
@@ -501,9 +515,10 @@ function aggregateAnalysesLogic(
     });
 
     // Merge Visualization Data
-    const mergedVizData: any = {
+    const mergedVizData: AggregatedResult['visualizationData'] & { scenarioDimensions: Record<string, Record<string, number | string>> } = {
         decisionDistribution: {},
-        modelScenarioMatrix: {}
+        modelScenarioMatrix: {},
+        scenarioDimensions: {} // Initialize
     };
 
     // Calculate Decision Distribution using "Mean of Means" logic per scenario
@@ -548,10 +563,22 @@ function aggregateAnalysesLogic(
         }
 
         mergedVizData.decisionDistribution[mId] = dist;
+
+        // Populate modelScenarioMatrix (Model -> Scenario -> Mean Score)
+        const scenarioMeans: Record<string, number> = {};
+        if (scenarioDecisions) {
+            Object.entries(scenarioDecisions).forEach(([scenarioId, decisions]) => {
+                if (decisions.length === 0) return;
+                const sum = decisions.reduce((a, b) => a + b, 0);
+                const mean = sum / decisions.length;
+                scenarioMeans[scenarioId] = mean;
+            });
+        }
+        mergedVizData.modelScenarioMatrix[mId] = scenarioMeans;
     });
 
     // Merge Contested Scenarios
-    const scenarioMap = new Map<string, { varianceSum: number, count: number, scenario: z.infer<typeof zContestedScenario> }>();
+    const scenarioMap = new Map<string, { varianceSum: number, count: number, scenario: ContestedScenario }>();
     analyses.forEach(a => {
         // Safe access now
         if (a.mostContestedScenarios) {
@@ -574,6 +601,41 @@ function aggregateAnalysesLogic(
         }))
         .sort((a, b) => b.variance - a.variance)
         .slice(0, 20);
+
+    // Populate scenarioDimensions
+    const dimensionsMap: Record<string, Record<string, number | string>> = {};
+    const isDimensionValue = (value: unknown): value is number | string =>
+        typeof value === 'number' || typeof value === 'string';
+    const toDimensionRecord = (
+        value: unknown,
+        scenarioId: string
+    ): Record<string, number | string> | null => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        const entries = Object.entries(value);
+        const sanitized: Record<string, number | string> = {};
+        let dropped = 0;
+        for (const [key, entry] of entries) {
+            if (!isDimensionValue(entry)) {
+                dropped += 1;
+                continue;
+            }
+            sanitized[key] = entry;
+        }
+        if (dropped > 0) {
+            log.warn({ scenarioId, dropped }, 'Dropped invalid dimension values');
+        }
+        return Object.keys(sanitized).length > 0 ? sanitized : null;
+    };
+    scenarios.forEach(s => {
+        if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
+        const content = s.content as Record<string, unknown>;
+        const dimensions = content['dimensions'];
+        const validated = toDimensionRecord(dimensions, s.id);
+        if (validated) {
+            dimensionsMap[s.id] = validated;
+        }
+    });
+    mergedVizData.scenarioDimensions = dimensionsMap;
 
     return {
         perModel: aggregatedPerModel,

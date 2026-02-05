@@ -20,4 +20,4 @@ export {
   type CanonicalLevel,
   type HigherOrderCategory,
 } from './canonical-dimensions.js';
-export { SYSTEM_ACTOR_ID } from './constants.js';
+export { SYSTEM_ACTOR_ID, MAX_SAMPLES_PER_SCENARIO } from './constants.js';
