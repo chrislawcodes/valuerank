@@ -191,7 +191,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
 
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
-            .map(r => (r as any).analysisResults && (r as any).analysisResults[0])
+            .map(r => r.analysisResults && r.analysisResults[0])
             .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => !!a);
 
         if (validAnalyses.length === 0) {
@@ -287,7 +287,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
         });
 
 
-        const sampleSize = compatibleRuns.reduce((sum, r) => sum + ((r as any)._count?.transcripts || 0), 0);
+        const sampleSize = compatibleRuns.reduce((sum, r) => sum + (r._count?.transcripts || 0), 0);
 
         // Use the first compatible run as a template for config
         const templateRun = compatibleRuns[0];
@@ -515,7 +515,7 @@ function aggregateAnalysesLogic(
     });
 
     // Merge Visualization Data
-    const mergedVizData: any = {
+    const mergedVizData: AggregatedResult['visualizationData'] & { scenarioDimensions: Record<string, Record<string, number | string>> } = {
         decisionDistribution: {},
         modelScenarioMatrix: {},
         scenarioDimensions: {} // Initialize
@@ -605,10 +605,10 @@ function aggregateAnalysesLogic(
     // Populate scenarioDimensions
     const dimensionsMap: Record<string, Record<string, number | string>> = {};
     scenarios.forEach(s => {
-        if (!s.content || typeof s.content !== 'object') return;
-        const content = s.content as any;
-        if (content.dimensions) {
-            dimensionsMap[s.id] = content.dimensions;
+        if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
+        const content = s.content as Record<string, unknown>;
+        if (content['dimensions'] && typeof content['dimensions'] === 'object') {
+            dimensionsMap[s.id] = content['dimensions'] as Record<string, number | string>;
         }
     });
     mergedVizData.scenarioDimensions = dimensionsMap;

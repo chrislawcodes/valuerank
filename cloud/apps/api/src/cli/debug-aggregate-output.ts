@@ -22,4 +22,10 @@ async function main() {
     console.log('Scenario Dimensions:', JSON.stringify(vizData?.scenarioDimensions, null, 2));
 }
 
-main().catch(console.error).finally(() => db.$disconnect());
+void main()
+    .catch((err) => {
+        console.error(err);
+    })
+    .finally(() => {
+        void db.$disconnect();
+    });

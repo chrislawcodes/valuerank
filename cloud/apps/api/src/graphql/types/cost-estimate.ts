@@ -6,7 +6,7 @@
 
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
-import { createLogger, ValidationError, NotFoundError } from '@valuerank/shared';
+import { ValidationError, NotFoundError } from '@valuerank/shared';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { getTokenStatsForModels, getAllModelAverage } from '../../services/cost/statistics.js';
 import type {

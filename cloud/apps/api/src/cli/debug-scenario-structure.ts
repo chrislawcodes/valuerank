@@ -15,4 +15,10 @@ async function main() {
     console.log(JSON.stringify(scenario.content, null, 2));
 }
 
-main().catch(console.error).finally(() => db.$disconnect());
+void main()
+    .catch((err) => {
+        console.error(err);
+    })
+    .finally(() => {
+        void db.$disconnect();
+    });
