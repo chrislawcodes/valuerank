@@ -1,5 +1,29 @@
 
 import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('cli:debug-aggregate-output');
+
+export type AggregateOutput = {
+    visualizationData?: {
+        scenarioDimensions?: Record<string, Record<string, number | string>>;
+    };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function parseAggregateOutput(value: unknown): AggregateOutput | null {
+    if (!isRecord(value)) return null;
+    const visualizationData = isRecord(value.visualizationData) ? value.visualizationData : undefined;
+    const scenarioDimensions = visualizationData && isRecord(visualizationData.scenarioDimensions)
+        ? visualizationData.scenarioDimensions
+        : undefined;
+    return {
+        visualizationData: scenarioDimensions ? { scenarioDimensions } : undefined,
+    };
+}
 
 async function main() {
     const analysis = await db.analysisResult.findFirst({
@@ -13,18 +37,18 @@ async function main() {
     });
 
     if (!analysis) {
-        console.log('No aggregate analysis found');
+        log.info('No aggregate analysis found');
         return;
     }
 
-    const output = analysis.output as any;
-    const vizData = output.visualizationData;
-    console.log('Scenario Dimensions:', JSON.stringify(vizData?.scenarioDimensions, null, 2));
+    const output = parseAggregateOutput(analysis.output);
+    const vizData = output?.visualizationData;
+    log.info({ scenarioDimensions: vizData?.scenarioDimensions }, 'Scenario Dimensions');
 }
 
 void main()
     .catch((err) => {
-        console.error(err);
+        log.error({ err }, 'Failed to debug aggregate output');
     })
     .finally(() => {
         void db.$disconnect();

@@ -7,6 +7,14 @@ import { validateEmail, validatePassword } from './create-user.js';
 
 const log = createLogger('cli:ensure-user');
 
+export function requireTty(isTty: boolean): void {
+  if (!isTty) {
+    throw new ValidationError(
+      'Refusing to read password from non-TTY input. Run this command in an interactive terminal.'
+    );
+  }
+}
+
 function promptLine(question: string): Promise<string> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -25,10 +33,7 @@ function promptHidden(question: string): Promise<string> {
     const stdin = process.stdin;
     const stdout = process.stdout;
 
-    if (!stdin.isTTY) {
-      promptLine(question).then(resolve);
-      return;
-    }
+    requireTty(Boolean(stdin.isTTY));
 
     stdout.write(question);
     stdin.setEncoding('utf8');

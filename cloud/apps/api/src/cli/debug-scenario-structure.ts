@@ -1,5 +1,8 @@
 
 import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('cli:debug-scenario-structure');
 
 async function main() {
     const scenario = await db.scenario.findFirst({
@@ -8,16 +11,16 @@ async function main() {
     });
 
     if (!scenario) {
-        console.log('No scenarios found');
+        log.info('No scenarios found');
         return;
     }
 
-    console.log(JSON.stringify(scenario.content, null, 2));
+    log.info({ content: scenario.content }, 'Scenario content');
 }
 
 void main()
     .catch((err) => {
-        console.error(err);
+        log.error({ err }, 'Failed to debug scenario structure');
     })
     .finally(() => {
         void db.$disconnect();

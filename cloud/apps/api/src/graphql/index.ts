@@ -128,13 +128,19 @@ export const yoga = createYoga<{
     error: (...args) => log.error(args, 'GraphQL error'),
   },
   maskedErrors: process.env.NODE_ENV === 'production' ? {
-    maskError(error: any) {
-      if (error instanceof AppError || error?.originalError instanceof AppError) {
-        return createGraphQLError(error.message, {
+    maskError(error: unknown) {
+      const appError = error instanceof AppError
+        ? error
+        : (error && typeof error === 'object' && 'originalError' in error && (error as { originalError?: unknown }).originalError instanceof AppError)
+          ? (error as { originalError: AppError }).originalError
+          : null;
+
+      if (appError) {
+        return createGraphQLError(appError.message, {
           extensions: {
-            code: (error instanceof AppError ? error.code : (error.originalError as AppError).code) || 'APP_ERROR',
+            code: appError.code || 'APP_ERROR',
             http: {
-              status: (error instanceof AppError ? error.statusCode : (error.originalError as AppError).statusCode) || 400,
+              status: appError.statusCode || 400,
             },
           },
         });
