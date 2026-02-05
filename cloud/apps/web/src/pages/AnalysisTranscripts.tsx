@@ -15,6 +15,7 @@ import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useRun } from '../hooks/useRun';
 import { useAnalysis } from '../hooks/useAnalysis';
 import type { Transcript } from '../api/operations/runs';
+import { normalizeScenarioId } from '../utils/scenarioUtils';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -47,9 +48,6 @@ export function AnalysisTranscripts() {
     if (!run?.transcripts?.length) return [];
     if (!scenarioDimensions) return [];
     if (!rowDim || !colDim || !row || !col) return [];
-
-    const normalizeScenarioId = (value: string) =>
-      value.toLowerCase().replace(/^.*[/:]/, '').replace(/^scenario-/, '');
 
     const scenarioIds = new Set<string>();
     const normalizedScenarioIds = new Set<string>();

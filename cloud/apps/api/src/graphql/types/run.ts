@@ -31,6 +31,11 @@ type RunConfig = {
   estimatedCosts?: CostEstimateShape;
 };
 
+type AggregateRunConfig = RunConfig & {
+  isAggregate?: boolean;
+  sourceRunIds?: string[];
+};
+
 builder.objectType(RunRef, {
   description: 'A run execution against a definition',
   fields: (t) => ({
@@ -300,10 +305,7 @@ builder.objectType(RunRef, {
         }),
       },
       resolve: async (run, args, ctx) => {
-        const config = run.config as RunConfig & {
-          isAggregate?: boolean;
-          sourceRunIds?: string[];
-        };
+        const config = run.config as AggregateRunConfig;
         const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
           ? config.sourceRunIds
           : null;

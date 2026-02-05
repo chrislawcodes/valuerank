@@ -8,6 +8,7 @@ import { useState, useMemo } from 'react';
 import { FileText, Clock, Hash, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Transcript } from '../../api/operations/runs';
 import type { VisualizationData } from '../../api/operations/analysis';
+import { normalizeScenarioId } from '../../utils/scenarioUtils';
 
 type TranscriptListProps = {
   transcripts: Transcript[];
@@ -61,9 +62,6 @@ export function TranscriptList({
 }: TranscriptListProps) {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
-
-  const normalizeScenarioId = (value: string) =>
-    value.toLowerCase().replace(/^.*[/:]/, '').replace(/^scenario-/, '');
 
   const dimensionKeys = useMemo(() => {
     if (!scenarioDimensions) return [];
