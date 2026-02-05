@@ -8,13 +8,13 @@
  * Used for invite-only user creation by administrators.
  */
 
-import * as readline from 'readline';
 import { fileURLToPath } from 'url';
 
 import { db } from '@valuerank/db';
 import { createLogger, ValidationError } from '@valuerank/shared';
 
 import { hashPassword } from '../auth/index.js';
+import { promptHidden, promptLine } from './shared/prompt.js';
 
 const log = createLogger('cli:create-user');
 
@@ -94,69 +94,6 @@ export async function createUser(
   log.info({ userId: user.id, email: user.email }, 'User created successfully');
 
   return user;
-}
-
-function promptLine(question: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
-}
-
-function promptHidden(question: string): Promise<string> {
-  return new Promise((resolve) => {
-    const stdin = process.stdin;
-    const stdout = process.stdout;
-
-    if (!stdin.isTTY) {
-      const rl = readline.createInterface({ input: stdin, output: stdout });
-      rl.question(question, (answer) => {
-        rl.close();
-        resolve(answer.trim());
-      });
-      return;
-    }
-
-    stdout.write(question);
-    stdin.setEncoding('utf8');
-    stdin.resume();
-    stdin.setRawMode(true);
-
-    let input = '';
-    const onData = (char: string) => {
-      switch (char) {
-        case '\n':
-        case '\r':
-        case '\u0004': {
-          stdout.write('\n');
-          stdin.setRawMode(false);
-          stdin.pause();
-          stdin.removeListener('data', onData);
-          resolve(input);
-          return;
-        }
-        case '\u0003': {
-          stdout.write('\n');
-          process.exit(130);
-        }
-        case '\u007f': {
-          input = input.slice(0, -1);
-          return;
-        }
-        default: {
-          input += char;
-        }
-      }
-    };
-
-    stdin.on('data', onData);
-  });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ValidationError } from '@valuerank/shared';
-import { requireTty } from './ensure-user.js';
+import { requireTty } from './shared/prompt.js';
 
 describe('ensure-user', () => {
   it('throws when not running in a TTY', () => {
