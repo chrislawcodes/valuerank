@@ -62,6 +62,9 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
   if (samplePercentage < 1 || samplePercentage > 100) {
     throw new ValidationError('samplePercentage must be between 1 and 100');
   }
+  if (samplesPerScenario < 1 || samplesPerScenario > 100) {
+    throw new ValidationError('samplesPerScenario must be between 1 and 100');
+  }
 
   // Fetch definition with scenario count
   const definition = await db.definition.findUnique({

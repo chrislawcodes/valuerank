@@ -96,17 +96,66 @@ export async function createUser(
   return user;
 }
 
-/**
- * Prompt for input with optional masking
- */
-function prompt(
-  rl: readline.Interface,
-  question: string
-): Promise<string> {
+function promptLine(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
+      rl.close();
       resolve(answer.trim());
     });
+  });
+}
+
+function promptHidden(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+
+    if (!stdin.isTTY) {
+      const rl = readline.createInterface({ input: stdin, output: stdout });
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer.trim());
+      });
+      return;
+    }
+
+    stdout.write(question);
+    stdin.setEncoding('utf8');
+    stdin.resume();
+    stdin.setRawMode(true);
+
+    let input = '';
+    const onData = (char: string) => {
+      switch (char) {
+        case '\n':
+        case '\r':
+        case '\u0004': {
+          stdout.write('\n');
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          resolve(input);
+          return;
+        }
+        case '\u0003': {
+          stdout.write('\n');
+          process.exit(130);
+        }
+        case '\u007f': {
+          input = input.slice(0, -1);
+          return;
+        }
+        default: {
+          input += char;
+        }
+      }
+    };
+
+    stdin.on('data', onData);
   });
 }
 
@@ -114,37 +163,32 @@ function prompt(
  * Main CLI entry point
  */
 async function main(): Promise<void> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  console.log('\n=== Create User ===\n');
+  log.info('Create user');
 
   try {
     // Collect inputs
-    const email = await prompt(rl, 'Email: ');
-    const password = await prompt(rl, 'Password: ');
-    const name = await prompt(rl, 'Name (optional, press Enter to skip): ');
+    const email = await promptLine('Email: ');
+    const password = await promptHidden('Password: ');
+    const name = await promptLine('Name (optional, press Enter to skip): ');
 
-    console.log('\nCreating user...');
+    log.info('Creating user');
 
     const user = await createUser(email, password, name || undefined);
 
-    console.log(`\n✓ User created successfully!`);
-    console.log(`  ID: ${user.id}`);
-    console.log(`  Email: ${user.email}\n`);
+    log.info({ userId: user.id, email: user.email }, 'User created successfully');
   } catch (err) {
     if (err instanceof ValidationError) {
-      console.error(`\n✗ Validation error: ${err.message}\n`);
+      log.error({ message: err.message }, 'Validation error');
       process.exit(1);
     }
 
     log.error({ err }, 'Failed to create user');
-    console.error(`\n✗ Failed to create user: ${err instanceof Error ? err.message : 'Unknown error'}\n`);
+    log.error(
+      { message: err instanceof Error ? err.message : 'Unknown error' },
+      'Failed to create user'
+    );
     process.exit(1);
   } finally {
-    rl.close();
     await db.$disconnect();
   }
 }
@@ -153,7 +197,7 @@ async function main(): Promise<void> {
 const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMainModule) {
   main().catch((err) => {
-    console.error('Fatal error:', err);
+    log.error({ err }, 'Fatal error');
     process.exit(1);
   });
 }

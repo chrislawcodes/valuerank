@@ -1,61 +1,127 @@
 #!/usr/bin/env tsx
 import * as readline from 'readline';
 import { db } from '@valuerank/db';
+import { createLogger, ValidationError } from '@valuerank/shared';
 import { hashPassword } from '../auth/index.js';
+import { validateEmail, validatePassword } from './create-user.js';
+
+const log = createLogger('cli:ensure-user');
+
+function promptLine(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+function promptHidden(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+
+    if (!stdin.isTTY) {
+      promptLine(question).then(resolve);
+      return;
+    }
+
+    stdout.write(question);
+    stdin.setEncoding('utf8');
+    stdin.resume();
+    stdin.setRawMode(true);
+
+    let input = '';
+
+    const onData = (char: string) => {
+      switch (char) {
+        case '\n':
+        case '\r':
+        case '\u0004': {
+          stdout.write('\n');
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          resolve(input);
+          return;
+        }
+        case '\u0003': {
+          stdout.write('\n');
+          process.exit(130);
+        }
+        case '\u007f': {
+          input = input.slice(0, -1);
+          return;
+        }
+        default: {
+          input += char;
+        }
+      }
+    };
+
+    stdin.on('data', onData);
+  });
+}
 
 async function main() {
-    const email = process.argv[2];
-    const name = process.argv[3];
+  const emailArg = process.argv[2];
+  const name = process.argv[3];
 
-    if (!email) {
-        console.error('Usage: npx tsx src/cli/ensure-user.ts <email> [name]');
-        process.exit(1);
+  if (!emailArg) {
+    log.error('Usage: npx tsx src/cli/ensure-user.ts <email> [name]');
+    process.exit(1);
+  }
+
+  const email = emailArg.toLowerCase();
+  validateEmail(email);
+
+  log.info({ email }, 'Ensuring user exists');
+
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) {
+    const confirm = await promptLine(
+      `User already exists (ID: ${existing.id}). Reset password${name ? ' and update name' : ''}? (y/N): `
+    );
+    if (!['y', 'yes'].includes(confirm.toLowerCase())) {
+      log.info('No changes applied.');
+      return;
     }
+  }
 
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
+  const password = await promptHidden('Enter password: ');
+  validatePassword(password);
 
-    const question = (query: string): Promise<string> =>
-        new Promise((resolve) => rl.question(query, resolve));
+  const passwordHash = await hashPassword(password);
 
-    console.log(`Ensuring user exists: ${email}`);
+  const user = await db.user.upsert({
+    where: { email },
+    update: {
+      passwordHash,
+      name: name || undefined,
+    },
+    create: {
+      email,
+      passwordHash,
+      name: name || null,
+    },
+  });
 
-    // Hidden password input is tricky in standard readline, but for this CLI
-    // we'll just use a standard question for simplicity or a simple prompt.
-    // To avoid password being visible in shell history, we use rl.question.
-    const password = await question('Enter password: ');
-    rl.close();
-
-    if (!password || password.length < 8) {
-        console.error('Password must be at least 8 characters long');
-        process.exit(1);
-    }
-
-    const passwordHash = await hashPassword(password);
-
-    const user = await db.user.upsert({
-        where: { email },
-        update: {
-            passwordHash,
-            name: name || undefined,
-        },
-        create: {
-            email,
-            passwordHash,
-            name: name || null,
-        },
-    });
-
-    console.log(`✓ User ${user.email} is ready (ID: ${user.id})`);
+  log.info({ email: user.email, userId: user.id }, 'User ready');
 }
 
 void main()
-    .catch((err) => {
-        console.error('Failed to ensure user:', err);
-        process.exit(1);
-    })
-    .finally(() => {
-        void db.$disconnect();
-    });
+  .catch((err) => {
+    if (err instanceof ValidationError) {
+      log.error(err.message);
+      process.exit(1);
+    }
+    log.error({ err }, 'Failed to ensure user');
+    process.exit(1);
+  })
+  .finally(() => {
+    void db.$disconnect();
+  });
