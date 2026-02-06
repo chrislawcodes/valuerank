@@ -20,6 +20,7 @@ import {
 } from '../../services/run/index.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
 import { createAuditLog } from '../../services/audit/index.js';
+import { normalizeLegacyModelIds } from '../../services/models/aliases.js';
 
 // StartRunPayload - return type for startRun mutation
 const StartRunPayload = builder.objectRef<{
@@ -99,9 +100,7 @@ builder.mutationField('startRun', (t) =>
       );
 
       // Alias legacy model IDs
-      const models = input.models.map(m =>
-        m === 'gemini-2.5-flash-preview-05-20' ? 'gemini-2.5-flash-preview-09-2025' : m
-      );
+      const models = normalizeLegacyModelIds(input.models);
 
       const result = await startRunService({
         definitionId: String(input.definitionId),

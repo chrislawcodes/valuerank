@@ -9,6 +9,7 @@ import { builder } from '../builder.js';
 import { ValidationError, NotFoundError } from '@valuerank/shared';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { getTokenStatsForModels, getAllModelAverage } from '../../services/cost/statistics.js';
+import { normalizeLegacyModelIds } from '../../services/models/aliases.js';
 import type {
   CostEstimate as CostEstimateShape,
   ModelCostEstimate as ModelCostEstimateShape,
@@ -218,11 +219,7 @@ builder.queryField('estimateCost', (t) =>
 
       // Resolve model identifiers from various formats
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
-      const normalizedInputs = models.map((modelInput) =>
-        modelInput === 'gemini-2.5-flash-preview-05-20'
-          ? 'gemini-2.5-flash-preview-09-2025'
-          : modelInput
-      );
+      const normalizedInputs = normalizeLegacyModelIds(models);
 
       type ModelTokenInput =
         | { raw: string; kind: 'cuid'; id: string }
