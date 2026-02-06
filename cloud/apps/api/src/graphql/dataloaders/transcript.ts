@@ -10,11 +10,6 @@ export type AggregateTranscriptsKey = {
   modelId?: string | null;
 };
 
-function aggregateTranscriptsCacheKey(key: AggregateTranscriptsKey): string {
-  const normalizedRunIds = Array.from(new Set(key.sourceRunIds)).sort();
-  return `${key.modelId ?? ''}|${normalizedRunIds.join(',')}`;
-}
-
 /**
  * Creates a DataLoader for batching Transcript lookups by ID.
  */
@@ -105,7 +100,6 @@ export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTr
     },
     {
       cache: true,
-      cacheKeyFn: aggregateTranscriptsCacheKey,
     }
   );
 }
