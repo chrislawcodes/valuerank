@@ -36,6 +36,55 @@ function groupTranscriptsByModel(transcripts: Transcript[]): GroupedTranscripts 
   return groups;
 }
 
+function normalizeDimensionName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function resolveSortDimensionKeys(
+  dimensionKeys: string[],
+  dimensionLabels?: Record<string, string>
+): { primary: string | null; secondary: string | null } {
+  if (dimensionKeys.length === 0) {
+    return { primary: null, secondary: null };
+  }
+
+  const findByName = (target: 'attributea' | 'attributeb'): string | null => {
+    for (const key of dimensionKeys) {
+      const keyNormalized = normalizeDimensionName(key);
+      const label = dimensionLabels?.[key];
+      const labelNormalized = label ? normalizeDimensionName(label) : '';
+      if (
+        keyNormalized.includes(target)
+        || labelNormalized.includes(target)
+      ) {
+        return key;
+      }
+    }
+    return null;
+  };
+
+  const primary = findByName('attributea') ?? dimensionKeys[0] ?? null;
+  const secondary = findByName('attributeb') ?? dimensionKeys.find((k) => k !== primary) ?? null;
+  return { primary, secondary };
+}
+
+function compareDimensionValues(a: string | number | undefined, b: string | number | undefined): number {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+
+  const aNum = typeof a === 'number' ? a : Number(a);
+  const bNum = typeof b === 'number' ? b : Number(b);
+  const aNumValid = Number.isFinite(aNum);
+  const bNumValid = Number.isFinite(bNum);
+
+  if (aNumValid && bNumValid) {
+    return aNum - bNum;
+  }
+
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export function TranscriptList({
   transcripts,
   onSelect,
@@ -75,10 +124,41 @@ export function TranscriptList({
     );
   };
 
-  const groupedTranscripts = useMemo(
-    () => groupTranscriptsByModel(transcripts),
-    [transcripts]
+  const sortKeys = useMemo(
+    () => resolveSortDimensionKeys(dimensionKeys, dimensionLabels),
+    [dimensionKeys, dimensionLabels]
   );
+
+  const sortTranscriptsByAttributes = (items: Transcript[]): Transcript[] => {
+    const { primary, secondary } = sortKeys;
+    if (!primary && !secondary) return items;
+
+    return [...items].sort((a, b) => {
+      const aDimensions = getScenarioDimensions(a.scenarioId);
+      const bDimensions = getScenarioDimensions(b.scenarioId);
+
+      if (primary) {
+        const primaryCmp = compareDimensionValues(aDimensions?.[primary], bDimensions?.[primary]);
+        if (primaryCmp !== 0) return primaryCmp;
+      }
+
+      if (secondary) {
+        const secondaryCmp = compareDimensionValues(aDimensions?.[secondary], bDimensions?.[secondary]);
+        if (secondaryCmp !== 0) return secondaryCmp;
+      }
+
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  };
+
+  const groupedTranscripts = useMemo(() => {
+    const grouped = groupTranscriptsByModel(transcripts);
+    const sortedGroups: GroupedTranscripts = {};
+    for (const [modelId, modelTranscripts] of Object.entries(grouped)) {
+      sortedGroups[modelId] = sortTranscriptsByAttributes(modelTranscripts);
+    }
+    return sortedGroups;
+  }, [transcripts, sortKeys, scenarioDimensions, normalizedScenarioDimensions]);
 
   const modelIds = Object.keys(groupedTranscripts).sort();
 
@@ -98,12 +178,13 @@ export function TranscriptList({
   const filteredTranscripts = useMemo(() => {
     if (!filter) return transcripts;
     const lowerFilter = filter.toLowerCase();
-    return transcripts.filter(
+    const filtered = transcripts.filter(
       (t) =>
         t.modelId.toLowerCase().includes(lowerFilter) ||
         (t.scenarioId?.toLowerCase().includes(lowerFilter) ?? false)
     );
-  }, [transcripts, filter]);
+    return sortTranscriptsByAttributes(filtered);
+  }, [transcripts, filter, sortKeys, scenarioDimensions, normalizedScenarioDimensions]);
 
   if (transcripts.length === 0) {
     return (
@@ -119,7 +200,7 @@ export function TranscriptList({
       dimensionKeys.length > 0
         ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
         : ''
-    } minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+    } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
     return (
       <div className="space-y-2">
@@ -146,9 +227,8 @@ export function TranscriptList({
               {dimensionKeys.map((key) => (
                 <span key={key}>{dimensionLabels?.[key] ?? key}</span>
               ))}
-              <span>Turns</span>
+              <span>Decision</span>
               <span>Tokens</span>
-              <span>Duration</span>
               <span>Created</span>
             </div>
           )}
@@ -174,7 +254,7 @@ export function TranscriptList({
     dimensionKeys.length > 0
       ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
       : ''
-  } minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+  } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
   return (
     <div className="space-y-3">
@@ -216,9 +296,8 @@ export function TranscriptList({
                     {dimensionKeys.map((key) => (
                       <span key={key}>{dimensionLabels?.[key] ?? key}</span>
                     ))}
-                    <span>Turns</span>
+                    <span>Decision</span>
                     <span>Tokens</span>
-                    <span>Duration</span>
                     <span>Created</span>
                   </div>
                 )}
