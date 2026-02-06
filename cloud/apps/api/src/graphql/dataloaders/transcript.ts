@@ -70,8 +70,8 @@ export function createTranscriptsByRunLoader(): DataLoader<string, Transcript[]>
  * Creates a DataLoader for aggregate run transcript lookups.
  * Keys are source run ID sets plus an optional model filter.
  */
-export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTranscriptsKey, Transcript[]> {
-  return new DataLoader<AggregateTranscriptsKey, Transcript[]>(
+export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTranscriptsKey, Transcript[], string> {
+  return new DataLoader<AggregateTranscriptsKey, Transcript[], string>(
     async (keys: readonly AggregateTranscriptsKey[]) => {
       const allRunIds = Array.from(new Set(keys.flatMap((key) => key.sourceRunIds)));
       log.debug({ keyCount: keys.length, runIdCount: allRunIds.length }, 'Batching transcripts by aggregate source runs');

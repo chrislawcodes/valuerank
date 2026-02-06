@@ -19,7 +19,7 @@ export interface DataLoaders {
   run: DataLoader<string, Run | null>;
   transcript: DataLoader<string, Transcript | null>;
   transcriptsByRun: DataLoader<string, Transcript[]>;
-  transcriptsByAggregateRuns: DataLoader<AggregateTranscriptsKey, Transcript[]>;
+  transcriptsByAggregateRuns: DataLoader<AggregateTranscriptsKey, Transcript[], string>;
   scenario: DataLoader<string, Scenario | null>;
   experiment: DataLoader<string, Experiment | null>;
   tag: DataLoader<string, Tag | null>;
