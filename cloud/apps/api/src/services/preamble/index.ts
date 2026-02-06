@@ -83,7 +83,7 @@ export async function createPreamble(name: string, content: string) {
         const version = await tx.preambleVersion.create({
             data: {
                 preambleId: preamble.id,
-                version: 'Initial',
+                version: generateVersionLabel(),
                 content,
             },
         });

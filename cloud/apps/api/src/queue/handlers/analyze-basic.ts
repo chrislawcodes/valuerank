@@ -217,10 +217,53 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           },
         });
 
+
         log.info(
           { jobId, runId, durationMs: output.analysis.durationMs },
           'Analyze:basic job completed'
         );
+
+        // --- Trigger Aggregate Update ---
+        try {
+          const run = await db.run.findUnique({
+            where: { id: runId },
+            include: { tags: { include: { tag: true } } }
+          });
+
+          if (run) {
+            const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
+            if (!isAggregate) {
+              const config = run.config as any;
+              const definitionId = run.definitionId;
+              const preambleVersionId =
+                config?.definitionSnapshot?._meta?.preambleVersionId ??
+                config?.definitionSnapshot?.preambleVersionId;
+
+              // Async trigger via job queue (with debouncing via singletonKey)
+              // This prevents race conditions where multiple analyses trigger aggregation simultaneously
+              // causing duplicate aggregate runs.
+              const { getBoss } = await import('../boss.js');
+              const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
+
+              const boss = getBoss();
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}`;
+
+              await boss.send(
+                'aggregate_analysis',
+                { definitionId, preambleVersionId },
+                {
+                  ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
+                  singletonKey
+                }
+              );
+
+              log.info({ runId, definitionId, preambleVersionId }, 'Enqueued aggregate_analysis job');
+            }
+          }
+        } catch (err) {
+          log.error({ err }, 'Error checking run for aggregation trigger');
+        }
+
       } catch (error) {
         log.error({ jobId, runId, err: error }, 'Analyze:basic job failed');
         throw error;
@@ -228,3 +271,4 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
     }
   };
 }
+

@@ -8,13 +8,13 @@
  * Used for invite-only user creation by administrators.
  */
 
-import * as readline from 'readline';
 import { fileURLToPath } from 'url';
 
 import { db } from '@valuerank/db';
 import { createLogger, ValidationError } from '@valuerank/shared';
 
 import { hashPassword } from '../auth/index.js';
+import { promptHidden, promptLine } from './shared/prompt.js';
 
 const log = createLogger('cli:create-user');
 
@@ -97,54 +97,31 @@ export async function createUser(
 }
 
 /**
- * Prompt for input with optional masking
- */
-function prompt(
-  rl: readline.Interface,
-  question: string
-): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      resolve(answer.trim());
-    });
-  });
-}
-
-/**
  * Main CLI entry point
  */
 async function main(): Promise<void> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  console.log('\n=== Create User ===\n');
+  log.info('Create user');
 
   try {
     // Collect inputs
-    const email = await prompt(rl, 'Email: ');
-    const password = await prompt(rl, 'Password: ');
-    const name = await prompt(rl, 'Name (optional, press Enter to skip): ');
+    const email = await promptLine('Email: ');
+    const password = await promptHidden('Password: ');
+    const name = await promptLine('Name (optional, press Enter to skip): ');
 
-    console.log('\nCreating user...');
+    log.info('Creating user');
 
     const user = await createUser(email, password, name || undefined);
 
-    console.log(`\n✓ User created successfully!`);
-    console.log(`  ID: ${user.id}`);
-    console.log(`  Email: ${user.email}\n`);
+    log.info({ userId: user.id, email: user.email }, 'User created successfully');
   } catch (err) {
     if (err instanceof ValidationError) {
-      console.error(`\n✗ Validation error: ${err.message}\n`);
+      log.error({ message: err.message }, 'Validation error');
       process.exit(1);
     }
 
     log.error({ err }, 'Failed to create user');
-    console.error(`\n✗ Failed to create user: ${err instanceof Error ? err.message : 'Unknown error'}\n`);
     process.exit(1);
   } finally {
-    rl.close();
     await db.$disconnect();
   }
 }
@@ -153,7 +130,7 @@ async function main(): Promise<void> {
 const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMainModule) {
   main().catch((err) => {
-    console.error('Fatal error:', err);
+    log.error({ err }, 'Fatal error');
     process.exit(1);
   });
 }

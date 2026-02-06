@@ -12,13 +12,23 @@ type RunNameEditorProps = {
   name: string | null;
   formattedName: string;
   onSave: (name: string | null) => Promise<void>;
+  variant?: 'title' | 'subtitle';
 };
 
-export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProps) {
+export function RunNameEditor({ name, formattedName, onSave, variant = 'title' }: RunNameEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Styles based on variant
+  const textClass = variant === 'title'
+    ? "text-xl font-medium text-gray-900"
+    : "text-sm font-medium text-gray-700";
+
+  const inputClass = variant === 'title'
+    ? "text-xl font-medium text-gray-900 border border-gray-300 rounded px-2 py-1"
+    : "text-sm font-medium text-gray-700 border border-gray-300 rounded px-2 py-0.5";
 
   // Focus input when editing starts
   useEffect(() => {
@@ -71,7 +81,7 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
           onChange={(e) => setEditedName(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Enter run name..."
-          className="text-xl font-medium text-gray-900 border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+          className={`${inputClass} focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent`}
           disabled={isSaving}
         />
         <Button
@@ -84,7 +94,7 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
           title="Save"
           aria-label="Save name"
         >
-          <Check className="w-5 h-5" />
+          <Check className="w-4 h-4" />
         </Button>
         <Button
           type="button"
@@ -96,7 +106,7 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
           title="Cancel"
           aria-label="Cancel editing"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </Button>
       </div>
     );
@@ -104,7 +114,7 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
 
   return (
     <div className="flex items-center gap-2 group">
-      <h1 className="text-xl font-medium text-gray-900">{formattedName}</h1>
+      <h1 className={textClass}>{formattedName}</h1>
       <Button
         type="button"
         onClick={handleStartEdit}
@@ -114,7 +124,7 @@ export function RunNameEditor({ name, formattedName, onSave }: RunNameEditorProp
         title="Edit name"
         aria-label="Edit run name"
       >
-        <Pencil className="w-4 h-4" />
+        <Pencil className="w-3.5 h-3.5" />
       </Button>
     </div>
   );

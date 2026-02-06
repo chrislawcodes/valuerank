@@ -1,0 +1,150 @@
+• Packages in scope: @valuerank/web
+• Running lint in 1 packages
+• Remote caching disabled
+@valuerank/shared:lint: cache hit, replaying logs 21dfbf5f7a29cb61
+@valuerank/shared:lint: 
+@valuerank/shared:lint: > @valuerank/shared@0.1.0 lint
+@valuerank/shared:lint: > eslint src --ext .ts
+@valuerank/shared:lint: 
+@valuerank/shared:build: cache hit, replaying logs c8be5a643869fea2
+@valuerank/shared:build: 
+@valuerank/shared:build: > @valuerank/shared@0.1.0 build
+@valuerank/shared:build: > tsc
+@valuerank/shared:build: 
+@valuerank/web:lint: cache hit, replaying logs a8c5d58d75785ef3
+@valuerank/web:lint: 
+@valuerank/web:lint: > @valuerank/web@0.1.0 lint
+@valuerank/web:lint: > eslint src --ext .ts,.tsx
+@valuerank/web:lint: 
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/api/client.ts
+@valuerank/web:lint:   6:7  warning  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/api/export.ts
+@valuerank/web:lint:   13:3  warning  Unsafe return of an `any` typed value  @typescript-eslint/no-unsafe-return
+@valuerank/web:lint:   25:9  warning  Unsafe assignment of an `any` value    @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   38:9  warning  Unsafe assignment of an `any` value    @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/api/import.ts
+@valuerank/web:lint:   12:3   warning  Unsafe return of an `any` typed value                                   @typescript-eslint/no-unsafe-return
+@valuerank/web:lint:   87:9   warning  Unsafe assignment of an `any` value                                     @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   92:7   warning  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   92:12  warning  Unsafe member access .message on an `any` value                         @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/auth/context.tsx
+@valuerank/web:lint:    9:7   warning  Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   28:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+@valuerank/web:lint:   32:6   warning  React Hook useEffect has a missing dependency: 'validateToken'. Either include it or remove the dependency array                                                    react-hooks/exhaustive-deps
+@valuerank/web:lint:   43:15  warning  Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   54:22  warning  Promise returned in function argument where a void return was expected                                                                                              @typescript-eslint/no-misused-promises
+@valuerank/web:lint:   67:20  warning  Promise returned in function argument where a void return was expected                                                                                              @typescript-eslint/no-misused-promises
+@valuerank/web:lint:   88:13  warning  Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   89:23  warning  Unsafe argument of type `any` assigned to a parameter of type `string | undefined`                                                                                  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   89:29  warning  Unsafe member access .message on an `any` value                                                                                                                     @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   92:11  warning  Unsafe assignment of an `any` value                                                                                                                                 @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/analysis/RunSelectionModal.tsx
+@valuerank/web:lint:    50:14   warning  Unsafe array destructuring of a tuple element with an `any` value                       @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    61:11   warning  Unsafe assignment of an `any` value                                                     @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    61:28   warning  Unsafe call of an `any` typed value                                                     @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    61:34   warning  Unsafe member access .runs on an `any` value                                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    63:17   warning  Unsafe member access .status on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    67:30   warning  Unsafe member access .definitionSnapshot on an `any` value                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   130:36   warning  Unsafe member access .length on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   140:26   warning  Unsafe call of an `any` typed value                                                     @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   140:41   warning  Unsafe member access .map on an `any` value                                             @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   142:38   warning  Unsafe assignment of an `any` value                                                     @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   142:42   warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   143:158  warning  Unsafe argument of type `any` assigned to a parameter of type `string`                  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   143:162  warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   147:61   warning  Unsafe argument of type `any` assigned to a parameter of type `string`                  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   147:65   warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   153:69   warning  Unsafe argument of type `any` assigned to a parameter of type `string`                  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   153:73   warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   158:54   warning  Unsafe argument of type `any` assigned to a parameter of type `string | number | Date`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   158:58   warning  Unsafe member access .createdAt on an `any` value                                       @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   159:42   warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   162:42   warning  Unsafe member access .transcriptCount on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   165:38   warning  Unsafe call of an `any` typed value                                                     @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   165:42   warning  Unsafe member access .models on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   166:52   warning  Unsafe assignment of an `any` value                                                     @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   166:54   warning  Unsafe member access .id on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   167:48   warning  Unsafe member access .modelId on an `any` value                                         @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/compare/charts/DistributionChart.tsx
+@valuerank/web:lint:   95:35  warning  Unsafe return of an `any` typed value                                   @typescript-eslint/no-unsafe-return
+@valuerank/web:lint:   95:48  warning  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/compare/visualizations/ValuesViz.tsx
+@valuerank/web:lint:   285:39  warning  Unsafe return of an `any` typed value                                   @typescript-eslint/no-unsafe-return
+@valuerank/web:lint:   285:52  warning  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/compare/visualizations/registry.tsx
+@valuerank/web:lint:   63:5  warning  Unexpected console statement  no-console
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/definitions/DefinitionList.tsx
+@valuerank/web:lint:   255:27  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/definitions/TemplateEditor.tsx
+@valuerank/web:lint:    24:30  warning  'any' overrides all other types in this union type                           @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:    64:7   warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    67:12  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    67:12  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    67:19  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    67:44  warning  Unsafe member access .some on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    68:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    68:16  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    71:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    71:16  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    80:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    80:16  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    91:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    91:34  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    91:41  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   117:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   117:26  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   128:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   131:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   131:14  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   168:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   168:30  warning  Unsafe member access .MarkerSeverity on an `any` value                       @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   178:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   178:14  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx
+@valuerank/web:lint:   46:22  warning  Unsafe member access .role on an `any` value     @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   47:32  warning  Unsafe member access .content on an `any` value  @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/settings/ApiKeysPanel.tsx
+@valuerank/web:lint:   248:5  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/settings/models/ModelForm.tsx
+@valuerank/web:lint:   62:11  warning  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/ui/JsonEditor.tsx
+@valuerank/web:lint:    95:28  warning  'any' overrides all other types in this union type                             @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:   101:5   warning  Unsafe assignment of an `any` value                                            @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   105:7   warning  Unsafe call of an `any` typed value                                            @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   105:14  warning  Unsafe member access .languages on an `any` value                              @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   125:15  warning  Unsafe assignment of an `any` value                                            @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   125:25  warning  Unsafe call of an `any` typed value                                            @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   125:32  warning  Unsafe member access .editor on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   126:15  warning  Unsafe assignment of an `any` value                                            @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   126:24  warning  Unsafe call of an `any` typed value                                            @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   126:32  warning  Unsafe member access .filter on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   127:60  warning  Unsafe member access .MarkerSeverity on an `any` value                         @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   130:22  warning  Unsafe member access .length on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   131:39  warning  Unsafe argument of type `any` assigned to a parameter of type `string | null`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   131:46  warning  Unsafe member access [0] on an `any` value                                     @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   139:13  warning  Unsafe assignment of an `any` value                                            @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   139:30  warning  Unsafe call of an `any` typed value                                            @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   139:37  warning  Unsafe member access .editor on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   144:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`    @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint: 
+@valuerank/web:lint: ✖ 96 problems (0 errors, 96 warnings)
+@valuerank/web:lint: 
+
+ Tasks:    3 successful, 3 total
+Cached:    3 cached, 3 total
+  Time:    69ms >>> FULL TURBO
+

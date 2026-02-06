@@ -59,7 +59,7 @@ export function ModelFormModal({
       let baseConfig: Record<string, unknown> = {};
       if (apiConfig.trim() !== '') {
         try {
-          baseConfig = JSON.parse(apiConfig);
+          baseConfig = JSON.parse(apiConfig) as Record<string, unknown>;
         } catch {
           setIsSaving(false);
           return;
@@ -99,10 +99,10 @@ export function ModelFormModal({
 
   const hasChanges = isEditing
     ? displayName !== (model?.displayName ?? '') ||
-      costInput !== (model?.costInputPerMillion?.toString() ?? '') ||
-      costOutput !== (model?.costOutputPerMillion?.toString() ?? '') ||
-      maxTokens !== (typeof existingMaxTokens === 'number' ? existingMaxTokens.toString() : '') ||
-      apiConfig !== getFilteredApiConfig()
+    costInput !== (model?.costInputPerMillion?.toString() ?? '') ||
+    costOutput !== (model?.costOutputPerMillion?.toString() ?? '') ||
+    maxTokens !== (typeof existingMaxTokens === 'number' ? existingMaxTokens.toString() : '') ||
+    apiConfig !== getFilteredApiConfig()
     : true;
 
   const isValid = isEditing

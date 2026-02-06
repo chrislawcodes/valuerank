@@ -180,7 +180,7 @@ builder.objectType(DefinitionRef, {
       description: 'The specific version of the preamble used',
       resolve: async (definition) => {
         if (!definition.preambleVersionId) return null;
-        return db.preambleVersion.findUnique({
+        return (db as any).preambleVersion.findUnique({
           where: { id: definition.preambleVersionId },
         });
       },
@@ -224,7 +224,7 @@ builder.objectType(DefinitionRef, {
       description: 'Parent definition in version tree',
       resolve: async (definition, _args, ctx) => {
         if (!definition.parentId) return null;
-        return ctx.loaders.definition.load(definition.parentId);
+        return ctx.loaders.definition.load(definition.parentId) as any;
       },
     }),
 
@@ -236,7 +236,7 @@ builder.objectType(DefinitionRef, {
         return db.definition.findMany({
           where: { parentId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
-        });
+        }) as any;
       },
     }),
 
@@ -462,6 +462,7 @@ builder.objectType(DefinitionRef, {
     }),
 
     // Computed: ancestors - Full ancestry chain from this definition to root
+    // Computed: ancestors - Full ancestry chain from this definition to root
     ancestors: t.field({
       type: [DefinitionRef],
       description: 'Full ancestry chain from this definition to root (oldest first)',
@@ -497,7 +498,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: a.deleted_by_user_id,
           version: a.version,
           preambleVersionId: a.preamble_version_id,
-        }));
+        })) as any;
       },
     }),
 
@@ -535,7 +536,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: d.deleted_by_user_id,
           version: d.version,
           preambleVersionId: d.preamble_version_id,
-        }));
+        })) as any;
       },
     }),
   }),

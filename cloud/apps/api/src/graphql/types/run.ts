@@ -1,6 +1,6 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
-import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef } from './refs.js';
+import { RunRef, DefinitionRef, TranscriptRef, ExperimentRef, LlmModelRef, TagRef } from './refs.js';
 import { UserRef } from './user.js';
 import { RunProgress, TaskResult } from './run-progress.js';
 import { ExecutionMetrics } from './execution-metrics.js';
@@ -31,6 +31,11 @@ type RunConfig = {
   estimatedCosts?: CostEstimateShape;
 };
 
+type AggregateRunConfig = RunConfig & {
+  isAggregate?: boolean;
+  sourceRunIds?: string[];
+};
+
 builder.objectType(RunRef, {
   description: 'A run execution against a definition',
   fields: (t) => ({
@@ -41,10 +46,58 @@ builder.objectType(RunRef, {
     }),
     definitionId: t.exposeString('definitionId'),
     experimentId: t.exposeString('experimentId', { nullable: true }),
+
+    // Snapshot version used for this run
+    definitionVersion: t.int({
+      nullable: true,
+      description: 'The version of the definition used in this run (from snapshot)',
+      resolve: (run) => {
+        const config = run.config as any;
+        return config?.definitionSnapshot?._meta?.definitionVersion ?? config?.definitionSnapshot?.version ?? null;
+      },
+    }),
+
+    // Tags
+    tags: t.field({
+      type: [TagRef],
+      description: 'Tags associated with this run',
+      resolve: async (run) => {
+        const runTags = await db.runTag.findMany({
+          where: { runId: run.id },
+          include: { tag: true },
+        });
+        return runTags.map((rt) => rt.tag);
+      },
+    }),
+
+    // Models used in this run
+    models: t.field({
+      type: [LlmModelRef],
+      description: 'List of LLM models used in this run',
+      resolve: async (run) => {
+        const config = run.config as RunConfig | null;
+        const modelIds = config?.models ?? [];
+        if (modelIds.length === 0) return [];
+
+        return db.llmModel.findMany({
+          where: { modelId: { in: modelIds } },
+        });
+      },
+    }),
+
     status: t.exposeString('status', {
       description: 'Current status of the run (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
     }),
     config: t.expose('config', { type: 'JSON' }),
+    definitionSnapshot: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: 'Snapshot of the definition version used for this run',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return config?.definitionSnapshot ?? null;
+      },
+    }),
     // Keep raw progress as JSON for backward compatibility
     progress: t.expose('progress', { type: 'JSON', nullable: true }),
     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
@@ -252,6 +305,11 @@ builder.objectType(RunRef, {
         }),
       },
       resolve: async (run, args, ctx) => {
+        const config = run.config as AggregateRunConfig;
+        const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
+          ? config.sourceRunIds
+          : null;
+
         // When pagination is requested, do a direct DB query instead of using dataloader
         if (args.limit !== undefined || args.offset !== undefined) {
           const limit = Math.min(args.limit ?? 1000, 1000);
@@ -259,12 +317,19 @@ builder.objectType(RunRef, {
 
           return db.transcript.findMany({
             where: {
-              runId: run.id,
+              runId: sourceRunIds ? { in: sourceRunIds } : run.id,
               ...(args.modelId ? { modelId: args.modelId } : {}),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,
+          });
+        }
+
+        if (sourceRunIds) {
+          return ctx.loaders.transcriptsByAggregateRuns.load({
+            sourceRunIds,
+            modelId: args.modelId,
           });
         }
 
@@ -281,6 +346,12 @@ builder.objectType(RunRef, {
     transcriptCount: t.field({
       type: 'Int',
       resolve: async (run, _args, ctx) => {
+        const config = run.config as RunConfig & { transcriptCount?: number };
+        // If pre-computed transcript count exists (e.g. for Aggregate runs), use it
+        if (typeof config?.transcriptCount === 'number') {
+          return config.transcriptCount;
+        }
+
         const transcripts = await ctx.loaders.transcriptsByRun.load(run.id);
         return transcripts.length;
       },

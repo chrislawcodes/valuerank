@@ -49,6 +49,14 @@ type ExpansionDebugInfo = {
   rawResponse: string | null;
   extractedYaml: string | null;
   parseError: string | null;
+  // Optional fields populated during processing/errors
+  partialTokens?: number;
+  modelId?: string;
+  timestamp?: string;
+  stderr?: string;
+  errorDetails?: string;
+  method?: string;
+  scenariosCreated?: number;
 };
 
 // Output from Python worker
@@ -77,9 +85,7 @@ type GenerateScenariosOutput = {
     details?: string;
   };
   // Debug info is now included for failed responses too
-  debug?: ExpansionDebugInfo & {
-    partialTokens?: number;
-  };
+  debug?: ExpansionDebugInfo;
 };
 
 export type ExpandScenariosResult = {

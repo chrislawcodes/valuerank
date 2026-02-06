@@ -39,17 +39,18 @@ function parseTranscriptContent(content: unknown): TranscriptContent {
   if (Array.isArray(data.turns)) {
     for (const turn of data.turns) {
       if (!turn || typeof turn !== 'object') continue;
+      const turnObj = turn as Record<string, unknown>;
 
       // Handle standard role/content format
-      if ('role' in turn && 'content' in turn) {
+      if ('role' in turnObj && 'content' in turnObj) {
         turns.push({
-          role: turn.role as 'user' | 'assistant',
-          content: String(turn.content),
+          role: turnObj.role as 'user' | 'assistant',
+          content: String(turnObj.content),
         });
       }
       // Handle worker schema format (probePrompt/targetResponse)
-      else if ('probePrompt' in turn || 'targetResponse' in turn) {
-        const t = turn as { probePrompt?: string; targetResponse?: string };
+      else if ('probePrompt' in turnObj || 'targetResponse' in turnObj) {
+        const t = turnObj as { probePrompt?: string; targetResponse?: string };
         if (t.probePrompt) {
           turns.push({
             role: 'user',
@@ -140,16 +141,14 @@ export function TranscriptViewer({ transcript, onClose }: TranscriptViewerProps)
               {content.turns.map((turn, index) => (
                 <div
                   key={index}
-                  className={`flex gap-3 ${
-                    turn.role === 'user' ? '' : ''
-                  }`}
+                  className={`flex gap-3 ${turn.role === 'user' ? '' : ''
+                    }`}
                 >
                   <div
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                      turn.role === 'user'
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${turn.role === 'user'
                         ? 'bg-gray-100 text-gray-600'
                         : 'bg-teal-100 text-teal-600'
-                    }`}
+                      }`}
                   >
                     {turn.role === 'user' ? (
                       <User className="w-4 h-4" />

@@ -96,3 +96,27 @@ builder.queryField('analysisHistoryCount', (t) =>
     },
   })
 );
+
+// Query: analyses(runIds: [ID!]!) - Fetch latest analysis results for multiple runs
+builder.queryField('analyses', (t) =>
+  t.field({
+    type: [AnalysisResultRef],
+    description: 'Fetch the latest analysis result for multiple runs. Useful for aggregation.',
+    args: {
+      runIds: t.arg.idList({ required: true, description: 'List of Run IDs' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const runIds = args.runIds.map(String);
+      ctx.log.debug({ runIds }, 'Fetching analyses for aggregation');
+
+      const analyses = await db.analysisResult.findMany({
+        where: {
+          runId: { in: runIds },
+          status: 'CURRENT',
+        },
+      });
+
+      return analyses;
+    },
+  })
+);

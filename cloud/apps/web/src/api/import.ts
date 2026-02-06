@@ -9,7 +9,7 @@
  */
 function getApiBaseUrl(): string {
   // Use environment variable or default to same origin
-  return import.meta.env.VITE_API_URL || '';
+  return (import.meta.env.VITE_API_URL as string) || '';
 }
 
 /**
@@ -84,13 +84,14 @@ export async function importDefinitionFromMd(
     }),
   });
 
-  const data = await response.json();
+  const data = (await response.json()) as ImportResult | ImportErrorResponse;
 
   if (!response.ok) {
     // Create error with additional data attached
+    const errorData = data as ImportErrorResponse;
     const error = new ImportApiError(
-      data.message || 'Import failed',
-      data as ImportErrorResponse
+      errorData.message || 'Import failed',
+      errorData
     );
     throw error;
   }

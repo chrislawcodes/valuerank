@@ -5,6 +5,16 @@ import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('dataloader:transcript');
 
+export type AggregateTranscriptsKey = {
+  sourceRunIds: string[];
+  modelId?: string | null;
+};
+
+function aggregateTranscriptsCacheKey(key: AggregateTranscriptsKey): string {
+  const normalizedRunIds = Array.from(new Set(key.sourceRunIds)).sort();
+  return `${key.modelId ?? ''}|${normalizedRunIds.join(',')}`;
+}
+
 /**
  * Creates a DataLoader for batching Transcript lookups by ID.
  */
@@ -53,5 +63,49 @@ export function createTranscriptsByRunLoader(): DataLoader<string, Transcript[]>
       return runIds.map((runId) => transcriptsByRun.get(runId) ?? []);
     },
     { cache: true }
+  );
+}
+
+/**
+ * Creates a DataLoader for aggregate run transcript lookups.
+ * Keys are source run ID sets plus an optional model filter.
+ */
+export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTranscriptsKey, Transcript[]> {
+  return new DataLoader<AggregateTranscriptsKey, Transcript[]>(
+    async (keys: readonly AggregateTranscriptsKey[]) => {
+      const allRunIds = Array.from(new Set(keys.flatMap((key) => key.sourceRunIds)));
+      log.debug({ keyCount: keys.length, runIdCount: allRunIds.length }, 'Batching transcripts by aggregate source runs');
+
+      if (allRunIds.length === 0) {
+        return keys.map(() => []);
+      }
+
+      const transcripts = await db.transcript.findMany({
+        where: { runId: { in: allRunIds } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const transcriptsByRun = new Map<string, Transcript[]>();
+      for (const runId of allRunIds) {
+        transcriptsByRun.set(runId, []);
+      }
+      for (const transcript of transcripts) {
+        const existing = transcriptsByRun.get(transcript.runId);
+        if (existing) existing.push(transcript);
+      }
+
+      return keys.map((key) => {
+        const runIds = Array.from(new Set(key.sourceRunIds));
+        const merged = runIds.flatMap((runId) => transcriptsByRun.get(runId) ?? []);
+        const filtered = key.modelId
+          ? merged.filter((transcript) => transcript.modelId === key.modelId)
+          : merged;
+        return filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      });
+    },
+    {
+      cache: true,
+      cacheKeyFn: aggregateTranscriptsCacheKey,
+    }
   );
 }

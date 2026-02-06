@@ -60,6 +60,7 @@ const visualizationRegistry = new Map<VisualizationType, VisualizationRegistrati
  */
 export function registerVisualization(registration: VisualizationRegistration): void {
   if (visualizationRegistry.has(registration.id)) {
+    // eslint-disable-next-line no-console
     console.warn(`Visualization '${registration.id}' is already registered. Overwriting.`);
   }
   visualizationRegistry.set(registration.id, registration);

@@ -91,7 +91,7 @@ export function TagSelector({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && canCreateNew) {
       e.preventDefault();
-      handleCreateTag();
+      void handleCreateTag();
     } else if (e.key === 'Escape') {
       setIsOpen(false);
       setSearch('');

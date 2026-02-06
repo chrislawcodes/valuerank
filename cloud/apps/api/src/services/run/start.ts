@@ -105,6 +105,27 @@ function sampleScenarios(
 }
 
 /**
+ * Converts a zero-based index to an alphabetical suffix.
+ * 0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, 27 -> AB
+ */
+function convertToAlpha(n: number): string {
+  if (n < 0) return '';
+
+  let result = '';
+  // Convert to 1-based index for cleaner math logic
+  let x = n + 1;
+
+  while (x > 0) {
+    // 1-based remainder
+    const remainder = (x - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    x = Math.floor((x - 1) / 26);
+  }
+
+  return result;
+}
+
+/**
  * Starts a new evaluation run.
  *
  * 1. Validates the definition exists and has scenarios
@@ -171,6 +192,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Fetch definition with scenarios (filtering out deleted)
+  // Casting 'include' options to satisfy TS on complex relation inclusion if strict mode complains, but removing 'as any' as primary goal
+  // Using explicit type compatible with Prisma include
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
     include: {
@@ -260,11 +283,40 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     failed: 0,
   };
 
+
+  // Generate sequential run name (e.g., "Feb 02-A")
+  const today = new Date();
+  const startOfDay = new Date(today);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(today);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  // Count existing runs for this definition today
+  // We use UncheckedCount input type implicitly here
+  const countToday = await db.run.count({
+    where: {
+      definitionId,
+      createdAt: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+      deletedAt: null,
+    },
+  });
+
+  // Generate suffix: A, B, C... Z, AA, AB...
+  const suffix = convertToAlpha(countToday);
+
+  const month = today.toLocaleDateString('en-US', { month: 'short' });
+  const day = today.toLocaleDateString('en-US', { day: '2-digit' });
+  const runName = `${month} ${day}-${suffix}`;
+
   // Create run in transaction
   const run = await db.$transaction(async (tx) => {
     // Create the run
     const newRun = await tx.run.create({
       data: {
+        name: runName,
         definitionId,
         experimentId: experimentId ?? null,
         status: 'PENDING',

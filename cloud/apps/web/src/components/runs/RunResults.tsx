@@ -17,6 +17,8 @@ type RunResultsProps = {
   isExporting?: boolean;
   onExportTranscripts?: () => void;
   isExportingTranscripts?: boolean;
+  scenarioDimensions?: Record<string, Record<string, string | number>>;
+  dimensionLabels?: Record<string, string>;
 };
 
 type ViewMode = 'list' | 'grouped';
@@ -94,6 +96,8 @@ export function RunResults({
   isExporting = false,
   onExportTranscripts,
   isExportingTranscripts = false,
+  scenarioDimensions,
+  dimensionLabels,
 }: RunResultsProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
@@ -270,6 +274,8 @@ export function RunResults({
         transcripts={transcripts}
         onSelect={handleTranscriptSelect}
         groupByModel={viewMode === 'grouped'}
+        scenarioDimensions={scenarioDimensions}
+        dimensionLabels={dimensionLabels}
       />
 
       {/* Transcript viewer modal */}
