@@ -19,6 +19,7 @@ import {
   deprecateModel,
   reactivateModel,
   setDefaultModel,
+  unsetDefaultModel,
   updateProvider,
   upsertSetting,
 } from '@valuerank/db';
@@ -70,7 +71,7 @@ builder.objectType(SetDefaultResultRef, {
     previousDefault: t.field({
       type: LlmModelRef,
       nullable: true,
-      description: 'The previous default model (now cleared)',
+      description: 'Always null when multiple defaults are allowed',
       resolve: (parent) => parent.previousDefault,
     }),
   }),
@@ -230,7 +231,7 @@ builder.mutationField('reactivateLlmModel', (t) =>
 builder.mutationField('setDefaultLlmModel', (t) =>
   t.field({
     type: SetDefaultResultRef,
-    description: 'Set a model as the default for its provider',
+    description: 'Set a model as a default for its provider',
     args: {
       id: t.arg.string({ required: true, description: 'Model ID to set as default' }),
     },
@@ -254,6 +255,35 @@ builder.mutationField('setDefaultLlmModel', (t) =>
       });
 
       return result;
+    },
+  })
+);
+
+// Mutation: unsetDefaultLlmModel
+builder.mutationField('unsetDefaultLlmModel', (t) =>
+  t.field({
+    type: LlmModelRef,
+    description: 'Remove a model from defaults for its provider',
+    args: {
+      id: t.arg.string({ required: true, description: 'Model ID to unset as default' }),
+    },
+    resolve: async (_root, args, ctx) => {
+      ctx.log.debug({ id: args.id }, 'Unsetting default LLM model');
+
+      const model = await unsetDefaultModel(args.id);
+
+      ctx.log.info({ modelId: model.id }, 'Default LLM model unset');
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'ACTION',
+        entityType: 'LlmModel',
+        entityId: model.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { action: 'unsetDefault' },
+      });
+
+      return model;
     },
   })
 );

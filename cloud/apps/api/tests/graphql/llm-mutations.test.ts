@@ -183,11 +183,11 @@ describe('LLM GraphQL Mutations', () => {
       createdModelIds.push(model.id); // Track for cleanup
       expect(model.isDefault).toBe(true);
 
-      // Verify old default was cleared
+      // Verify old default is still default (multiple defaults are allowed)
       const oldDefault = await db.llmModel.findUnique({
         where: { id: existingModel.id },
       });
-      expect(oldDefault?.isDefault).toBe(false);
+      expect(oldDefault?.isDefault).toBe(true);
     });
   });
 
@@ -261,7 +261,7 @@ describe('LLM GraphQL Mutations', () => {
       expect(response.body.data.deprecateLlmModel.newDefault).toBeNull();
     });
 
-    it('promotes new default when deprecating the default model', async () => {
+    it('does not promote a new default when deprecating the default model', async () => {
       const provider = await createTestProvider('deprecate-default', 'OpenAI');
       const defaultModel = await createTestModel(provider.id, 'deprecate-def-gpt-4o', 'GPT-4o', {
         costInputPerMillion: 2.5,
@@ -298,7 +298,10 @@ describe('LLM GraphQL Mutations', () => {
       expect(response.status).toBe(200);
       expect(response.body.data.deprecateLlmModel.model.status).toBe('DEPRECATED');
       expect(response.body.data.deprecateLlmModel.model.isDefault).toBe(false);
-      expect(response.body.data.deprecateLlmModel.newDefault.id).toBe(otherModel.id);
+      expect(response.body.data.deprecateLlmModel.newDefault).toBeNull();
+
+      const otherInDb = await db.llmModel.findUnique({ where: { id: otherModel.id } });
+      expect(otherInDb?.isDefault).toBe(false);
     });
   });
 
@@ -364,7 +367,7 @@ describe('LLM GraphQL Mutations', () => {
       expect(response.body.data.setDefaultLlmModel.previousDefault).toBeNull();
     });
 
-    it('clears previous default when setting new default', async () => {
+    it('keeps previous defaults when setting additional default', async () => {
       const provider = await createTestProvider('set-new-default', 'OpenAI');
       const oldDefault = await createTestModel(provider.id, 'old-def-gpt-4o', 'GPT-4o', {
         costInputPerMillion: 2.5,
@@ -399,11 +402,40 @@ describe('LLM GraphQL Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.setDefaultLlmModel.model.isDefault).toBe(true);
-      expect(response.body.data.setDefaultLlmModel.previousDefault.id).toBe(oldDefault.id);
+      expect(response.body.data.setDefaultLlmModel.previousDefault).toBeNull();
 
-      // Verify old default was cleared in DB
+      // Verify old default is still default in DB
       const updated = await db.llmModel.findUnique({ where: { id: oldDefault.id } });
-      expect(updated?.isDefault).toBe(false);
+      expect(updated?.isDefault).toBe(true);
+    });
+  });
+
+  describe('unsetDefaultLlmModel mutation', () => {
+    it('removes default flag from a model', async () => {
+      const provider = await createTestProvider('unset-default', 'OpenAI');
+      const model = await createTestModel(provider.id, 'unset-gpt-4o', 'GPT-4o', {
+        costInputPerMillion: 2.5,
+        costOutputPerMillion: 10.0,
+        isDefault: true,
+      });
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('X-API-Key', apiKey)
+        .send({
+          query: `
+            mutation UnsetDefault($id: String!) {
+              unsetDefaultLlmModel(id: $id) {
+                id
+                isDefault
+              }
+            }
+          `,
+          variables: { id: model.id },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.unsetDefaultLlmModel.isDefault).toBe(false);
     });
   });
 

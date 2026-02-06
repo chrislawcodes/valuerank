@@ -18,6 +18,7 @@ export function ProviderSection({
   onDeprecateModel,
   onReactivateModel,
   onSetDefault,
+  onUnsetDefault,
   onEditSettings,
 }: ProviderSectionProps) {
   const activeModels = provider.models.filter((m) => m.status === 'ACTIVE');
@@ -88,6 +89,7 @@ export function ProviderSection({
                 onDeprecate={() => onDeprecateModel(model.id)}
                 onReactivate={() => onReactivateModel(model.id)}
                 onSetDefault={() => onSetDefault(model.id)}
+                onUnsetDefault={() => onUnsetDefault(model.id)}
               />
             ))}
           </div>

@@ -14,6 +14,7 @@ export function ModelRow({
   onDeprecate,
   onReactivate,
   onSetDefault,
+  onUnsetDefault,
 }: ModelRowProps) {
   const isDeprecated = model.status === 'DEPRECATED';
 
@@ -61,10 +62,22 @@ export function ModelRow({
       </div>
 
       <div className="flex items-center gap-1">
-        {!isDeprecated && !model.isDefault && (
-          <Button variant="ghost" size="sm" onClick={onSetDefault} title="Set as default">
-            <Star className="w-4 h-4" />
-          </Button>
+        {!isDeprecated && (
+          model.isDefault ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onUnsetDefault}
+              title="Remove from defaults"
+              className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
+            >
+              <Star className="w-4 h-4 fill-current" />
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={onSetDefault} title="Set as default">
+              <Star className="w-4 h-4" />
+            </Button>
+          )
         )}
         <Button variant="ghost" size="sm" onClick={onEdit} title="Edit">
           <Edit2 className="w-4 h-4" />

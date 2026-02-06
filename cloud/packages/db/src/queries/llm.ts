@@ -187,7 +187,7 @@ export async function getModelByIdentifier(
 }
 
 /**
- * Get the default model for a provider.
+ * Get one default model for a provider.
  */
 export async function getDefaultModel(providerId: string): Promise<LlmModel | null> {
   log.debug({ providerId }, 'Fetching default model');
@@ -197,7 +197,7 @@ export async function getDefaultModel(providerId: string): Promise<LlmModel | nu
 }
 
 /**
- * Get all default models (one per provider).
+ * Get all default models.
  */
 export async function getAllDefaultModels(): Promise<LlmModelWithProvider[]> {
   log.debug('Fetching all default models');
@@ -224,27 +224,6 @@ export async function createModel(data: {
   // Verify provider exists
   await getProviderById(data.providerId);
 
-  // If setting as default, clear existing default in a transaction
-  if (data.setAsDefault) {
-    return db.$transaction(async (tx) => {
-      await tx.llmModel.updateMany({
-        where: { providerId: data.providerId, isDefault: true },
-        data: { isDefault: false },
-      });
-      return tx.llmModel.create({
-        data: {
-          providerId: data.providerId,
-          modelId: data.modelId,
-          displayName: data.displayName,
-          costInputPerMillion: data.costInputPerMillion,
-          costOutputPerMillion: data.costOutputPerMillion,
-          isDefault: true,
-          createdByUserId: data.createdByUserId ?? null,
-        },
-      });
-    });
-  }
-
   return db.llmModel.create({
     data: {
       providerId: data.providerId,
@@ -252,6 +231,7 @@ export async function createModel(data: {
       displayName: data.displayName,
       costInputPerMillion: data.costInputPerMillion,
       costOutputPerMillion: data.costOutputPerMillion,
+      isDefault: data.setAsDefault ?? false,
       createdByUserId: data.createdByUserId ?? null,
     },
   });
@@ -300,36 +280,9 @@ export async function deprecateModel(id: string): Promise<{
   log.info({ id }, 'Deprecating model');
 
   const model = await getModelById(id);
+  await db.llmModel.update({ where: { id }, data: { status: 'DEPRECATED', isDefault: false } });
 
-  // If this was the default, we need to promote another model
-  let newDefault: LlmModel | null = null;
-
-  if (model.isDefault) {
-    // Find another active model to make default
-    const nextModel = await db.llmModel.findFirst({
-      where: {
-        providerId: model.providerId,
-        id: { not: id },
-        status: 'ACTIVE',
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (nextModel) {
-      await db.$transaction([
-        db.llmModel.update({ where: { id }, data: { status: 'DEPRECATED', isDefault: false } }),
-        db.llmModel.update({ where: { id: nextModel.id }, data: { isDefault: true } }),
-      ]);
-      newDefault = await getModelById(nextModel.id);
-    } else {
-      // No other active models, just deprecate
-      await db.llmModel.update({ where: { id }, data: { status: 'DEPRECATED', isDefault: false } });
-    }
-  } else {
-    await db.llmModel.update({ where: { id }, data: { status: 'DEPRECATED' } });
-  }
-
-  return { model: await getModelById(id), newDefault };
+  return { model: await getModelById(id), newDefault: null };
 }
 
 /**
@@ -350,26 +303,22 @@ export async function setDefaultModel(id: string): Promise<{
 }> {
   log.info({ id }, 'Setting default model');
 
-  const model = await getModelById(id);
-
-  // Find current default
-  const previousDefault = await getDefaultModel(model.providerId);
-
-  // Update in transaction
-  await db.$transaction(async (tx) => {
-    // Clear existing default
-    await tx.llmModel.updateMany({
-      where: { providerId: model.providerId, isDefault: true },
-      data: { isDefault: false },
-    });
-    // Set new default
-    await tx.llmModel.update({ where: { id }, data: { isDefault: true } });
-  });
+  await getModelById(id); // Verify exists
+  await db.llmModel.update({ where: { id }, data: { isDefault: true } });
 
   return {
     model: await getModelById(id),
-    previousDefault: previousDefault?.id !== id ? previousDefault : null,
+    previousDefault: null,
   };
+}
+
+/**
+ * Unset a model as default for its provider.
+ */
+export async function unsetDefaultModel(id: string): Promise<LlmModel> {
+  log.info({ id }, 'Unsetting default model');
+  await getModelById(id); // Verify exists
+  return db.llmModel.update({ where: { id }, data: { isDefault: false } });
 }
 
 // ============================================================================

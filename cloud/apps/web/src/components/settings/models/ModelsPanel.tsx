@@ -21,6 +21,7 @@ import {
   DEPRECATE_LLM_MODEL_MUTATION,
   REACTIVATE_LLM_MODEL_MUTATION,
   SET_DEFAULT_LLM_MODEL_MUTATION,
+  UNSET_DEFAULT_LLM_MODEL_MUTATION,
   UPDATE_LLM_PROVIDER_MUTATION,
 } from '../../../api/operations/llm';
 
@@ -40,6 +41,7 @@ export function ModelsPanel() {
   const [, deprecateModel] = useMutation(DEPRECATE_LLM_MODEL_MUTATION);
   const [, reactivateModel] = useMutation(REACTIVATE_LLM_MODEL_MUTATION);
   const [, setDefaultModel] = useMutation(SET_DEFAULT_LLM_MODEL_MUTATION);
+  const [, unsetDefaultModel] = useMutation(UNSET_DEFAULT_LLM_MODEL_MUTATION);
   const [, updateProvider] = useMutation(UPDATE_LLM_PROVIDER_MUTATION);
 
   const toggleProvider = (providerId: string) => {
@@ -79,6 +81,11 @@ export function ModelsPanel() {
 
   const handleSetDefault = async (id: string) => {
     await setDefaultModel({ id });
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  };
+
+  const handleUnsetDefault = async (id: string) => {
+    await unsetDefaultModel({ id });
     reexecuteQuery({ requestPolicy: 'network-only' });
   };
 
@@ -132,6 +139,7 @@ export function ModelsPanel() {
             onDeprecateModel={handleDeprecateModel}
             onReactivateModel={handleReactivateModel}
             onSetDefault={handleSetDefault}
+            onUnsetDefault={handleUnsetDefault}
             onEditSettings={() => setEditingProvider(provider)}
           />
         ))}

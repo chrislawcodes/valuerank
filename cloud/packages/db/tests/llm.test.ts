@@ -23,6 +23,7 @@ import {
   deprecateModel,
   reactivateModel,
   setDefaultModel,
+  unsetDefaultModel,
   getAllSettings,
   getSettingByKey,
   upsertSetting,
@@ -303,9 +304,9 @@ skipIfNoDb('LLM Queries (Integration)', () => {
 
         expect(result.isDefault).toBe(true);
 
-        // Old default should be cleared
+        // Old default should remain default (multiple defaults are allowed)
         const oldDefault = await getModelById(existingDefault.id);
-        expect(oldDefault.isDefault).toBe(false);
+        expect(oldDefault.isDefault).toBe(true);
       });
     });
 
@@ -334,7 +335,7 @@ skipIfNoDb('LLM Queries (Integration)', () => {
         expect(deprecatedModel.status).toBe('DEPRECATED');
       });
 
-      it('promotes another model to default when deprecating default', async () => {
+      it('does not promote another model when deprecating default', async () => {
         const provider = await createTestProvider();
         const defaultModel = await createTestModel(provider.id, 'default', true);
         const otherModel = await createTestModel(provider.id, 'other', false);
@@ -343,7 +344,10 @@ skipIfNoDb('LLM Queries (Integration)', () => {
 
         expect(deprecated.status).toBe('DEPRECATED');
         expect(deprecated.isDefault).toBe(false);
-        expect(newDefault?.id).toBe(otherModel.id);
+        expect(newDefault).toBeNull();
+
+        const otherUpdated = await getModelById(otherModel.id);
+        expect(otherUpdated.isDefault).toBe(false);
       });
     });
 
@@ -373,7 +377,7 @@ skipIfNoDb('LLM Queries (Integration)', () => {
         expect(previousDefault).toBeNull();
       });
 
-      it('clears previous default', async () => {
+      it('keeps existing defaults', async () => {
         const provider = await createTestProvider();
         const oldDefault = await createTestModel(provider.id, 'old', true);
         const newModel = await createTestModel(provider.id, 'new', false);
@@ -381,9 +385,20 @@ skipIfNoDb('LLM Queries (Integration)', () => {
         const { model: newDefault, previousDefault } = await setDefaultModel(newModel.id);
 
         expect(newDefault.isDefault).toBe(true);
-        expect(previousDefault?.id).toBe(oldDefault.id);
+        expect(previousDefault).toBeNull();
 
         const updated = await getModelById(oldDefault.id);
+        expect(updated.isDefault).toBe(true);
+      });
+    });
+
+    describe('unsetDefaultModel', () => {
+      it('removes default flag from a model', async () => {
+        const provider = await createTestProvider();
+        const model = await createTestModel(provider.id, 'default', true);
+
+        const updated = await unsetDefaultModel(model.id);
+
         expect(updated.isDefault).toBe(false);
       });
     });
