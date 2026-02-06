@@ -31,6 +31,11 @@ type RunConfig = {
   estimatedCosts?: CostEstimateShape;
 };
 
+type AggregateRunConfig = RunConfig & {
+  isAggregate?: boolean;
+  sourceRunIds?: string[];
+};
+
 builder.objectType(RunRef, {
   description: 'A run execution against a definition',
   fields: (t) => ({
@@ -300,6 +305,11 @@ builder.objectType(RunRef, {
         }),
       },
       resolve: async (run, args, ctx) => {
+        const config = run.config as AggregateRunConfig;
+        const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
+          ? config.sourceRunIds
+          : null;
+
         // When pagination is requested, do a direct DB query instead of using dataloader
         if (args.limit !== undefined || args.offset !== undefined) {
           const limit = Math.min(args.limit ?? 1000, 1000);
@@ -307,12 +317,19 @@ builder.objectType(RunRef, {
 
           return db.transcript.findMany({
             where: {
-              runId: run.id,
+              runId: sourceRunIds ? { in: sourceRunIds } : run.id,
               ...(args.modelId ? { modelId: args.modelId } : {}),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
             skip: offset,
+          });
+        }
+
+        if (sourceRunIds) {
+          return ctx.loaders.transcriptsByAggregateRuns.load({
+            sourceRunIds,
+            modelId: args.modelId,
           });
         }
 

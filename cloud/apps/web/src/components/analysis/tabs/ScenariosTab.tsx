@@ -7,17 +7,16 @@
 import { ScenarioHeatmap } from '../ScenarioHeatmap';
 import { ContestedScenariosList } from '../ContestedScenariosList';
 import { ConditionAnalysisTable } from '../ConditionAnalysisTable';
+import { PivotAnalysisTable } from '../PivotAnalysisTable';
 import type { VisualizationData, ContestedScenario } from '../../../api/operations/analysis';
-
 type ScenariosTabProps = {
+  runId: string;
   visualizationData: VisualizationData | null | undefined;
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
 };
 
-import { PivotAnalysisTable } from '../PivotAnalysisTable';
-
-export function ScenariosTab({ visualizationData, contestedScenarios, dimensionLabels }: ScenariosTabProps) {
+export function ScenariosTab({ runId, visualizationData, contestedScenarios, dimensionLabels }: ScenariosTabProps) {
   return (
     <div className="space-y-8">
       {visualizationData ? (
@@ -30,6 +29,7 @@ export function ScenariosTab({ visualizationData, contestedScenarios, dimensionL
               </p>
             </div>
             <PivotAnalysisTable
+              runId={runId}
               visualizationData={visualizationData}
               dimensionLabels={dimensionLabels}
             />

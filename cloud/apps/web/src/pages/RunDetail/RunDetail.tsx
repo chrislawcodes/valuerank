@@ -16,6 +16,7 @@ import { RunResults } from '../../components/runs/RunResults';
 import { SummarizationControls } from '../../components/runs/SummarizationControls';
 import { RerunDialog } from '../../components/runs/RerunDialog';
 import { useRun } from '../../hooks/useRun';
+import { useAnalysis } from '../../hooks/useAnalysis';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import { exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
 import { RunHeader } from './RunHeader';
@@ -48,6 +49,12 @@ export function RunDetail() {
     id: id || '',
     pause: !id,
     enablePolling: true,
+  });
+  const { analysis } = useAnalysis({
+    runId: id || '',
+    pause: !id,
+    enablePolling: false,
+    analysisStatus: run?.analysisStatus ?? null,
   });
 
   const {
@@ -330,7 +337,7 @@ export function RunDetail() {
         {/* Results section */}
         {(isTerminal || run.transcriptCount > 0) && (
           <div className="border-t border-gray-200 pt-6 mt-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Delete Trial?</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Results</h3>
             {exportError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {exportError}
@@ -342,6 +349,7 @@ export function RunDetail() {
               isExporting={isExporting}
               onExportTranscripts={() => void handleExportTranscripts()}
               isExportingTranscripts={isExportingTranscripts}
+              scenarioDimensions={analysis?.visualizationData?.scenarioDimensions}
             />
           </div>
         )}

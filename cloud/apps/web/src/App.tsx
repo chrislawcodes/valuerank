@@ -13,6 +13,7 @@ import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
 import { Analysis } from './pages/Analysis';
 import { AnalysisDetail } from './pages/AnalysisDetail';
+import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
 import { Compare } from './pages/Compare';
 import { Experiments } from './pages/Experiments';
 import { Settings } from './pages/Settings';
@@ -91,6 +92,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <AnalysisDetail />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/analysis/:id/transcripts"
+              element={
+                <ProtectedLayout fullWidth>
+                  <AnalysisTranscripts />
                 </ProtectedLayout>
               }
             />

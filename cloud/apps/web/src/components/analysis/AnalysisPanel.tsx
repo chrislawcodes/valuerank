@@ -513,6 +513,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
         )}
         {activeTab === 'scenarios' && (
           <ScenariosTab
+            runId={runId}
             visualizationData={analysis.visualizationData}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}

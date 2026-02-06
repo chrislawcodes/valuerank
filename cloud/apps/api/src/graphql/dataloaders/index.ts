@@ -2,7 +2,12 @@ import type DataLoader from 'dataloader';
 import type { Definition, Run, Transcript, Scenario, Experiment, Tag, LlmProvider, LlmModel } from '@valuerank/db';
 import { createDefinitionLoader } from './definition.js';
 import { createRunLoader } from './run.js';
-import { createTranscriptLoader, createTranscriptsByRunLoader } from './transcript.js';
+import {
+  createTranscriptLoader,
+  createTranscriptsByRunLoader,
+  createTranscriptsByAggregateRunsLoader,
+  type AggregateTranscriptsKey,
+} from './transcript.js';
 import { createScenarioLoader } from './scenario.js';
 import { createExperimentLoader } from './experiment.js';
 import { createTagLoader, createTagsByDefinitionLoader } from './tag.js';
@@ -14,6 +19,7 @@ export interface DataLoaders {
   run: DataLoader<string, Run | null>;
   transcript: DataLoader<string, Transcript | null>;
   transcriptsByRun: DataLoader<string, Transcript[]>;
+  transcriptsByAggregateRuns: DataLoader<AggregateTranscriptsKey, Transcript[]>;
   scenario: DataLoader<string, Scenario | null>;
   experiment: DataLoader<string, Experiment | null>;
   tag: DataLoader<string, Tag | null>;
@@ -31,6 +37,7 @@ export function createDataLoaders(): DataLoaders {
     run: createRunLoader(),
     transcript: createTranscriptLoader(),
     transcriptsByRun: createTranscriptsByRunLoader(),
+    transcriptsByAggregateRuns: createTranscriptsByAggregateRunsLoader(),
     scenario: createScenarioLoader(),
     experiment: createExperimentLoader(),
     tag: createTagLoader(),
