@@ -5,49 +5,28 @@ ValueRank measures how AI models prioritize moral values in ethical dilemmas. It
 
 ## Repository Workflow
 
-This project uses a dual-repository setup:
+This project now uses `chrislawcodes/valuerank` as the canonical repository for development, PRs, and deployment.
 
 | Repository | Purpose |
 |------------|---------|
-| [codemonkeychris/valuerank](https://github.com/codemonkeychris/valuerank) | **Primary dev repo** - all PRs and active development happen here |
-| [chrislawcodes/valuerank](https://github.com/chrislawcodes/valuerank) | **Mirror/archive** - issue tracking only, synced from dev repo |
+| [chrislawcodes/valuerank](https://github.com/chrislawcodes/valuerank) | **Primary repo** - all PRs and active development happen here |
 
-**Railway deployment** pulls from `codemonkeychris/valuerank`.
+**Railway deployment** pulls from `chrislawcodes/valuerank` on the `main` branch.
 
 ### Pull Requests
 
-**IMPORTANT: Always create PRs against `codemonkeychris/valuerank`**, never against `chrislawcodes/valuerank`.
+Always create PRs against `chrislawcodes/valuerank`.
 
 ```bash
-# Create PR on the dev repo
-gh pr create --repo codemonkeychris/valuerank
+gh pr create --repo chrislawcodes/valuerank
 ```
 
 ### Git Remote Setup
 
 ```bash
-# Origin = dev repo (where you push and create PRs)
-git remote add origin git@github.com:codemonkeychris/valuerank.git
-
-# Upstream = mirror repo (for syncing after merges)
-git remote add upstream git@github.com:chrislawcodes/valuerank.git
+# Origin = canonical repo (where you push and create PRs)
+git remote add origin git@github.com:chrislawcodes/valuerank.git
 ```
-
-### Syncing Changes to Mirror
-
-After merging PRs to main in the dev repo, sync to the mirror:
-
-```bash
-# Fetch upstream state
-git fetch upstream
-
-# Push dev main to upstream main
-git push upstream main
-```
-
-### Creating Issues
-
-Create issues on `chrislawcodes/valuerank` for project tracking and visibility.
 
 ## Critical Documentation
 
@@ -212,4 +191,3 @@ To improve user-friendliness, the term "Definition" in the user interface has be
 -   **Definition:** Internal, code-level term.
 
 New contributors should be aware of this distinction when working on the codebase.
-
