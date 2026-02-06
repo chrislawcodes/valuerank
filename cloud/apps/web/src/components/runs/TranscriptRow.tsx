@@ -1,4 +1,4 @@
-import { FileText, Clock, Hash, Zap } from 'lucide-react';
+import { FileText, Zap } from 'lucide-react';
 import type { Transcript } from '../../api/operations/runs';
 
 type TranscriptRowProps = {
@@ -12,12 +12,6 @@ type TranscriptRowProps = {
   showModelColumn?: boolean;
 };
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.round(ms / 100) / 10;
-  return `${seconds}s`;
-}
-
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleTimeString('en-US', {
@@ -25,6 +19,33 @@ function formatDate(dateString: string): string {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractDecision(content: unknown): string {
+  if (!isRecord(content)) return '-';
+
+  const directCandidates = [content.decisionCode, content.decision, content.score];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'number' || typeof candidate === 'string') {
+      return String(candidate);
+    }
+  }
+
+  const summary = content.summary;
+  if (isRecord(summary)) {
+    const summaryCandidates = [summary.decisionCode, summary.decision, summary.score];
+    for (const candidate of summaryCandidates) {
+      if (typeof candidate === 'number' || typeof candidate === 'string') {
+        return String(candidate);
+      }
+    }
+  }
+
+  return '-';
 }
 
 export function TranscriptRow({
@@ -38,6 +59,7 @@ export function TranscriptRow({
   showModelColumn = true,
 }: TranscriptRowProps) {
   const showDimensions = !compact && dimensionKeys.length > 0 && gridTemplateColumns;
+  const decision = transcript.decisionCode ?? extractDecision(transcript.content);
 
   return (
     // eslint-disable-next-line react/forbid-elements -- Row button requires custom full-width layout styling
@@ -68,17 +90,10 @@ export function TranscriptRow({
               </div>
             );
           })}
-          <div className="flex items-center gap-1 text-gray-500">
-            <Hash className="w-3 h-3" />
-            {transcript.turnCount}
-          </div>
+          <div className="truncate">{decision}</div>
           <div className="flex items-center gap-1 text-gray-500">
             <Zap className="w-3 h-3" />
             {transcript.tokenCount.toLocaleString()}
-          </div>
-          <div className="flex items-center gap-1 text-gray-500">
-            <Clock className="w-3 h-3" />
-            {formatDuration(transcript.durationMs)}
           </div>
           <div className="text-xs text-gray-500">{formatDate(transcript.createdAt)}</div>
         </div>
@@ -101,17 +116,10 @@ export function TranscriptRow({
           </div>
 
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
-            <span className="flex items-center gap-1" title="Turns">
-              <Hash className="w-3 h-3" />
-              {transcript.turnCount}
-            </span>
+            <span title="Decision">{decision}</span>
             <span className="flex items-center gap-1" title="Tokens">
               <Zap className="w-3 h-3" />
               {transcript.tokenCount.toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1" title="Duration">
-              <Clock className="w-3 h-3" />
-              {formatDuration(transcript.durationMs)}
             </span>
             <span className="text-xs" title="Created at">
               {formatDate(transcript.createdAt)}
