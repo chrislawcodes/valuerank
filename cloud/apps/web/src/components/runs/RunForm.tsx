@@ -53,6 +53,7 @@ export function RunForm({
 }: RunFormProps) {
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
+    requestPolicy: 'cache-and-network',
   });
 
   const [formState, setFormState] = useState<RunFormState>({
@@ -63,7 +64,7 @@ export function RunForm({
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [hasPreselected, setHasPreselected] = useState(false);
+  const [hasUserChangedSelection, setHasUserChangedSelection] = useState(false);
 
   // Get all available model IDs for cost preview
   const allAvailableModelIds = models.filter((m) => m.isAvailable).map((m) => m.id);
@@ -100,20 +101,34 @@ export function RunForm({
     })()
     : null;
 
-  // Pre-select default models when models load
+  // Pre-select defaults and keep them synced until user manually changes selection.
+  // This allows fresh network data to update stale cached defaults.
   useEffect(() => {
-    if (!loadingModels && models.length > 0 && !hasPreselected) {
-      const defaultModels = models
-        .filter((m) => m.isDefault && m.isAvailable)
-        .map((m) => m.id);
-      if (defaultModels.length > 0) {
-        setFormState((prev) => ({ ...prev, selectedModels: defaultModels }));
-      }
-      setHasPreselected(true);
+    if (loadingModels || hasUserChangedSelection) {
+      return;
     }
-  }, [models, loadingModels, hasPreselected]);
+
+    const defaultModels = models
+      .filter((m) => m.isDefault && m.isAvailable)
+      .map((m) => m.id)
+      .sort();
+
+    setFormState((prev) => {
+      const current = [...prev.selectedModels].sort();
+      const isSameSelection =
+        current.length === defaultModels.length &&
+        current.every((id, index) => id === defaultModels[index]);
+
+      if (isSameSelection) {
+        return prev;
+      }
+
+      return { ...prev, selectedModels: defaultModels };
+    });
+  }, [models, loadingModels, hasUserChangedSelection]);
 
   const handleModelSelectionChange = useCallback((models: string[]) => {
+    setHasUserChangedSelection(true);
     setFormState((prev) => ({ ...prev, selectedModels: models }));
     setValidationError(null);
   }, []);
