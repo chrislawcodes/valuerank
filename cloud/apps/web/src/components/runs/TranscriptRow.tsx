@@ -59,7 +59,7 @@ export function TranscriptRow({
   showModelColumn = true,
 }: TranscriptRowProps) {
   const showDimensions = !compact && dimensionKeys.length > 0 && gridTemplateColumns;
-  const decision = extractDecision(transcript.content);
+  const decision = transcript.decisionCode ?? extractDecision(transcript.content);
 
   return (
     // eslint-disable-next-line react/forbid-elements -- Row button requires custom full-width layout styling
