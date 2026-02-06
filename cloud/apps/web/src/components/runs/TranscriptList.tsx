@@ -49,8 +49,8 @@ export function TranscriptList({
   const dimensionKeys = useMemo(() => {
     if (!scenarioDimensions) return [];
 
-    // Collect keys across all scenarios to avoid dropping columns when the
-    // first scenario has an empty/malformed dimensions object.
+    // Use the union of keys across all scenarios so sparse/empty first
+    // entries do not drop valid columns from the table.
     const keys = new Set<string>();
     for (const dimensions of Object.values(scenarioDimensions)) {
       if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
