@@ -64,7 +64,7 @@ const zContestedScenario = z.object({
 
 const zAnalysisOutput = z.object({
     perModel: z.record(zModelStats),
-    visualizationData: zVisualizationData,
+    visualizationData: zVisualizationData.optional(),
     mostContestedScenarios: z.array(zContestedScenario).optional(),
     modelAgreement: z.unknown().optional(),
 }).passthrough();
@@ -225,7 +225,7 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
                 ...a,
                 output,
                 perModel: output.perModel,
-                visualizationData: output.visualizationData,
+                visualizationData: output.visualizationData ?? {},
                 mostContestedScenarios: output.mostContestedScenarios ?? undefined,
             };
         }).filter((a): a is NonNullable<typeof a> => !!a);

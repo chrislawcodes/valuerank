@@ -10,11 +10,6 @@ export type AggregateTranscriptsKey = {
   modelId?: string | null;
 };
 
-function aggregateTranscriptsCacheKey(key: AggregateTranscriptsKey): string {
-  const normalizedRunIds = Array.from(new Set(key.sourceRunIds)).sort();
-  return `${key.modelId ?? ''}|${normalizedRunIds.join(',')}`;
-}
-
 /**
  * Creates a DataLoader for batching Transcript lookups by ID.
  */
@@ -70,8 +65,8 @@ export function createTranscriptsByRunLoader(): DataLoader<string, Transcript[]>
  * Creates a DataLoader for aggregate run transcript lookups.
  * Keys are source run ID sets plus an optional model filter.
  */
-export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTranscriptsKey, Transcript[]> {
-  return new DataLoader<AggregateTranscriptsKey, Transcript[]>(
+export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTranscriptsKey, Transcript[], string> {
+  return new DataLoader<AggregateTranscriptsKey, Transcript[], string>(
     async (keys: readonly AggregateTranscriptsKey[]) => {
       const allRunIds = Array.from(new Set(keys.flatMap((key) => key.sourceRunIds)));
       log.debug({ keyCount: keys.length, runIdCount: allRunIds.length }, 'Batching transcripts by aggregate source runs');
@@ -105,7 +100,6 @@ export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTr
     },
     {
       cache: true,
-      cacheKeyFn: aggregateTranscriptsCacheKey,
     }
   );
 }
