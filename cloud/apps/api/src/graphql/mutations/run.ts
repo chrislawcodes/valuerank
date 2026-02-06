@@ -20,7 +20,10 @@ import {
 } from '../../services/run/index.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
 import { createAuditLog } from '../../services/audit/index.js';
-import { normalizeLegacyModelIds } from '../../services/models/aliases.js';
+import {
+  getEquivalentModelIds,
+  resolveModelIdFromAvailable,
+} from '../../services/models/aliases.js';
 
 // StartRunPayload - return type for startRun mutation
 const StartRunPayload = builder.objectRef<{
@@ -99,8 +102,19 @@ builder.mutationField('startRun', (t) =>
         'Starting run via GraphQL'
       );
 
-      // Alias legacy model IDs
-      const models = normalizeLegacyModelIds(input.models);
+      // Resolve legacy model IDs against currently active models in the database.
+      const activeModelsForAliases = await db.llmModel.findMany({
+        where: {
+          status: 'ACTIVE',
+          modelId: {
+            in: Array.from(new Set(input.models.flatMap((id) => getEquivalentModelIds(id)))),
+          },
+        },
+        select: { modelId: true },
+      });
+      const activeModelIdSet = new Set(activeModelsForAliases.map((m) => m.modelId));
+
+      const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
 
       const result = await startRunService({
         definitionId: String(input.definitionId),

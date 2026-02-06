@@ -9,7 +9,10 @@ import { builder } from '../builder.js';
 import { ValidationError, NotFoundError } from '@valuerank/shared';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { getTokenStatsForModels, getAllModelAverage } from '../../services/cost/statistics.js';
-import { normalizeLegacyModelIds } from '../../services/models/aliases.js';
+import {
+  getEquivalentModelIds,
+  resolveModelIdFromAvailable,
+} from '../../services/models/aliases.js';
 import type {
   CostEstimate as CostEstimateShape,
   ModelCostEstimate as ModelCostEstimateShape,
@@ -219,14 +222,12 @@ builder.queryField('estimateCost', (t) =>
 
       // Resolve model identifiers from various formats
       // The cost service expects model identifier strings (e.g., "gpt-4"), not database UUIDs
-      const normalizedInputs = normalizeLegacyModelIds(models);
-
       type ModelTokenInput =
         | { raw: string; kind: 'cuid'; id: string }
         | { raw: string; kind: 'provider'; providerName: string; modelId: string }
         | { raw: string; kind: 'modelId'; modelId: string };
 
-      const parsedInputs: ModelTokenInput[] = normalizedInputs.map((modelInput) => {
+      const parsedInputs: ModelTokenInput[] = models.map((modelInput) => {
         const isCuid = /^c[a-z0-9]{20,}$/i.test(modelInput);
         if (isCuid) {
           return { raw: modelInput, kind: 'cuid', id: modelInput };
@@ -252,12 +253,16 @@ builder.queryField('estimateCost', (t) =>
         .filter((i) => i.kind === 'provider')
         .map((i) => ({ providerName: i.providerName, modelId: i.modelId }));
 
+      const expandedDirectModelIds = Array.from(
+        new Set(directModelIds.flatMap((id) => getEquivalentModelIds(id)))
+      );
+
       const [modelsByCuid, modelsByDirectId, providersByName] = await Promise.all([
         cuidIds.length
           ? db.llmModel.findMany({ where: { id: { in: cuidIds } } })
           : Promise.resolve([]),
-        directModelIds.length
-          ? db.llmModel.findMany({ where: { modelId: { in: directModelIds } } })
+        expandedDirectModelIds.length
+          ? db.llmModel.findMany({ where: { modelId: { in: expandedDirectModelIds } } })
           : Promise.resolve([]),
         providerPairs.length
           ? db.llmProvider.findMany({
@@ -269,13 +274,13 @@ builder.queryField('estimateCost', (t) =>
       const providerMap = new Map(providersByName.map((p) => [p.name, p]));
 
       const providerClauses = providerPairs
-        .map((pair) => {
+        .flatMap((pair) => {
           const provider = providerMap.get(pair.providerName);
-          if (!provider) return null;
-          return {
+          if (!provider) return [];
+          return getEquivalentModelIds(pair.modelId).map((candidateModelId) => ({
             providerId: provider.id,
-            modelId: pair.modelId,
-          };
+            modelId: candidateModelId,
+          }));
         })
         .filter((pair): pair is { providerId: string; modelId: string } => Boolean(pair));
 
@@ -293,6 +298,7 @@ builder.queryField('estimateCost', (t) =>
       const providerModelMap = new Map(
         providerModels.map((m) => [`${m.providerId}:${m.modelId}`, m])
       );
+      const availableDirectIds = new Set(directMap.keys());
 
       const modelIds: string[] = [];
       for (const input of parsedInputs) {
@@ -310,7 +316,16 @@ builder.queryField('estimateCost', (t) =>
           if (!provider) {
             throw new NotFoundError('Provider', input.providerName);
           }
-          const model = providerModelMap.get(`${provider.id}:${input.modelId}`);
+          const providerAvailableIds = new Set(
+            providerModels
+              .filter((m) => m.providerId === provider.id)
+              .map((m) => m.modelId)
+          );
+          const resolvedModelId = resolveModelIdFromAvailable(input.modelId, providerAvailableIds);
+          if (!resolvedModelId) {
+            throw new NotFoundError('Model', input.raw);
+          }
+          const model = providerModelMap.get(`${provider.id}:${resolvedModelId}`);
           if (!model) {
             throw new NotFoundError('Model', input.raw);
           }
@@ -318,7 +333,14 @@ builder.queryField('estimateCost', (t) =>
           continue;
         }
 
-        const model = directMap.get(input.modelId);
+        const resolvedDirectId = resolveModelIdFromAvailable(
+          input.modelId,
+          availableDirectIds
+        );
+        if (!resolvedDirectId) {
+          throw new NotFoundError('Model', input.raw);
+        }
+        const model = directMap.get(resolvedDirectId);
         if (!model) {
           throw new NotFoundError('Model', input.raw);
         }
