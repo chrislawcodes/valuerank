@@ -48,9 +48,19 @@ export function TranscriptList({
 
   const dimensionKeys = useMemo(() => {
     if (!scenarioDimensions) return [];
-    const firstScenario = Object.values(scenarioDimensions)[0];
-    if (!firstScenario) return [];
-    return Object.keys(firstScenario);
+
+    // Collect keys across all scenarios to avoid dropping columns when the
+    // first scenario has an empty/malformed dimensions object.
+    const keys = new Set<string>();
+    for (const dimensions of Object.values(scenarioDimensions)) {
+      if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+        continue;
+      }
+      for (const key of Object.keys(dimensions)) {
+        keys.add(key);
+      }
+    }
+    return Array.from(keys);
   }, [scenarioDimensions]);
 
   const normalizedScenarioDimensions = useMemo(() => {
