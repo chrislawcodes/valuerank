@@ -53,6 +53,9 @@ export function TranscriptList({
     // first scenario has an empty/malformed dimensions object.
     const keys = new Set<string>();
     for (const dimensions of Object.values(scenarioDimensions)) {
+      if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+        continue;
+      }
       for (const key of Object.keys(dimensions)) {
         keys.add(key);
       }
