@@ -22,6 +22,10 @@ builder.objectType(TranscriptRef, {
     turnCount: t.exposeInt('turnCount'),
     tokenCount: t.exposeInt('tokenCount'),
     durationMs: t.exposeInt('durationMs'),
+    decisionCode: t.exposeString('decisionCode', {
+      nullable: true,
+      description: 'Decision code assigned during summarization (typically 1-5)',
+    }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
     contentExpiresAt: t.expose('contentExpiresAt', { type: 'DateTime', nullable: true }),

@@ -119,7 +119,7 @@ export function TranscriptList({
       dimensionKeys.length > 0
         ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
         : ''
-    } minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+    } minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
     return (
       <div className="space-y-2">
@@ -146,10 +146,8 @@ export function TranscriptList({
               {dimensionKeys.map((key) => (
                 <span key={key}>{dimensionLabels?.[key] ?? key}</span>
               ))}
-              <span>Turns</span>
+              <span>Decision</span>
               <span>Tokens</span>
-              <span>Duration</span>
-              <span>Created</span>
             </div>
           )}
           {filteredTranscripts.map((transcript) => (
@@ -174,7 +172,7 @@ export function TranscriptList({
     dimensionKeys.length > 0
       ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
       : ''
-  } minmax(70px, 0.5fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+  } minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
   return (
     <div className="space-y-3">
@@ -216,10 +214,8 @@ export function TranscriptList({
                     {dimensionKeys.map((key) => (
                       <span key={key}>{dimensionLabels?.[key] ?? key}</span>
                     ))}
-                    <span>Turns</span>
+                    <span>Decision</span>
                     <span>Tokens</span>
-                    <span>Duration</span>
-                    <span>Created</span>
                   </div>
                 )}
                 {modelTranscripts.map((transcript) => (
