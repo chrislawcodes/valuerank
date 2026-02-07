@@ -1,4 +1,3 @@
-import type { Prisma} from '@valuerank/db';
 import { db, type CreateAuditLogInput } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
@@ -21,7 +20,7 @@ export async function createAuditLog(
         entityType: input.entityType,
         entityId: input.entityId,
         userId: input.userId,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        metadata: input.metadata,
       },
       select: { id: true },
     });

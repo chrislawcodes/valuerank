@@ -215,7 +215,7 @@ Example response:
         }
 
         // Step 2: Extract content
-        const content = definition.content as DefinitionContent | null;
+        const content = definition.content;
 
         if (!content) {
           return formatError(

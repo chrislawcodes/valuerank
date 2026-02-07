@@ -98,7 +98,7 @@ Limited to 2KB token budget.`,
         // Format definitions for response
         const formattedDefs: DefinitionListItem[] = definitions.map((def) => {
           const childCount = args.include_children
-            ? (def as typeof def & { _count: { children: number } })._count.children
+            ? ('_count' in def ? def._count.children : undefined)
             : undefined;
           return formatDefinitionListItem(def, childCount);
         });
