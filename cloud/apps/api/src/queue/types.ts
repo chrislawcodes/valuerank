@@ -49,7 +49,8 @@ export type ComputeTokenStatsJobData = {
 export type AggregateAnalysisJobData = {
   definitionId: string;
   preambleVersionId: string | null;
-  definitionVersion: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  definitionVersion?: number | null;
 };
 
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs

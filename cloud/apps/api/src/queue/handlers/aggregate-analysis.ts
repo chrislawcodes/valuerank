@@ -19,7 +19,9 @@ const log = createLogger('queue:aggregate-analysis');
 export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAnalysisJobData> {
     return async (jobs: PgBoss.Job<AggregateAnalysisJobData>[]) => {
         for (const job of jobs) {
-            const { definitionId, preambleVersionId, definitionVersion } = job.data;
+            const { definitionId, preambleVersionId } = job.data;
+            // Backward compatibility: jobs queued before this change may omit definitionVersion.
+            const definitionVersion = job.data.definitionVersion ?? null;
             const jobId = job.id;
 
             log.info(
