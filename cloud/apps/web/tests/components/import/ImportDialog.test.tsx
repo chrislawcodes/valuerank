@@ -36,7 +36,7 @@ describe('ImportDialog', () => {
   it('renders import dialog with header', () => {
     render(<ImportDialog onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
-    expect(screen.getByText('Import Definition')).toBeInTheDocument();
+    expect(screen.getByText('Import Vignette')).toBeInTheDocument();
     expect(screen.getByText(/Drag and drop a .md file/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /browse files/i })).toBeInTheDocument();
   });
@@ -223,7 +223,7 @@ describe('ImportDialog', () => {
     });
   });
 
-  it('calls onSuccess when clicking Go to Definition', async () => {
+  it('calls onSuccess when clicking Go to Vignette', async () => {
     const user = userEvent.setup();
     vi.mocked(importApi.importDefinitionFromMd).mockResolvedValue({
       id: 'def-123',
@@ -250,10 +250,10 @@ describe('ImportDialog', () => {
     await user.click(screen.getByRole('button', { name: /^import$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Go to Definition')).toBeInTheDocument();
+      expect(screen.getByText('Go to Vignette')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: /go to definition/i }));
+    await user.click(screen.getByRole('button', { name: /go to vignette/i }));
 
     expect(mockOnSuccess).toHaveBeenCalledWith('def-123', 'Test Definition');
   });

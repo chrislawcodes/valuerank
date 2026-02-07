@@ -44,7 +44,9 @@ vi.mock('../../../src/hooks/useCostEstimate', () => ({
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',
+    name: null,
     definitionId: 'def-1',
+    definitionVersion: null,
     experimentId: null,
     status: 'COMPLETED',
     config: {
@@ -58,6 +60,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
       failed: 0,
       percentComplete: 100,
     },
+    summarizeProgress: null,
     startedAt: '2024-01-15T10:00:00Z',
     completedAt: '2024-01-15T11:00:00Z',
     createdAt: '2024-01-15T09:55:00Z',
@@ -66,10 +69,17 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     transcripts: [],
     transcriptCount: 100,
     recentTasks: [],
+    analysisStatus: null,
+    executionMetrics: null,
+    analysis: null,
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      version: 1,
+      tags: [],
+      content: null,
     },
+    tags: [],
     ...overrides,
   };
 }
@@ -149,10 +159,10 @@ describe('RerunDialog', () => {
   });
 
   describe('Form behavior', () => {
-    it('shows Start Run button', () => {
+    it('shows Start Trial button', () => {
       render(<RerunDialog {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: /start run/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /start trial/i })).toBeInTheDocument();
     });
 
     it('shows model selector', () => {
@@ -165,8 +175,8 @@ describe('RerunDialog', () => {
       render(<RerunDialog {...defaultProps} />);
 
       expect(screen.getByText('Sample Size')).toBeInTheDocument();
-      expect(screen.getByText('1% (test run)')).toBeInTheDocument();
-      expect(screen.getByText('100% (full run)')).toBeInTheDocument();
+      expect(screen.getByText('1% (test trial)')).toBeInTheDocument();
+      expect(screen.getByText('100% (full trial)')).toBeInTheDocument();
     });
   });
 

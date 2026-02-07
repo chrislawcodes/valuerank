@@ -80,7 +80,7 @@ describe('AnalysisDetail', () => {
 
       renderWithRouter('run-123');
 
-      expect(screen.getByText('Run not found')).toBeInTheDocument();
+      expect(screen.getByText('Trial not found')).toBeInTheDocument();
     });
   });
 
@@ -99,7 +99,7 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-123');
 
       expect(screen.getByText('No Analysis Available')).toBeInTheDocument();
-      expect(screen.getByText('View Run Details')).toBeInTheDocument();
+      expect(screen.getByText(/This trial does not have analysis data/)).toBeInTheDocument();
     });
   });
 
@@ -184,7 +184,7 @@ describe('AnalysisDetail', () => {
 
       renderWithRouter('run-123');
 
-      expect(screen.getByText('View Run')).toBeInTheDocument();
+      expect(screen.getByText('View Trial')).toBeInTheDocument();
     });
 
     it('shows definition name in header', () => {
@@ -216,7 +216,7 @@ describe('AnalysisDetail', () => {
 
       renderWithRouter('run-12345678-abcd');
 
-      expect(screen.getByText(/Run run-1234/)).toBeInTheDocument();
+      expect(screen.getByText(/Trial run-1234/)).toBeInTheDocument();
     });
 
     it('shows unnamed definition when definition is missing', () => {

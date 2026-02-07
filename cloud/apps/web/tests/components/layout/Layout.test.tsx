@@ -34,8 +34,8 @@ describe('Layout Component', () => {
     renderLayout();
     // Navigation items appear in both NavTabs (desktop) and MobileNav (mobile)
     // so we check at least one of each exists
-    expect(screen.getAllByText('Definitions').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Runs').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Vignettes').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Trials').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Experiments').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0);
   });

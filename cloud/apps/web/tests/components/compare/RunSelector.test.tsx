@@ -70,7 +70,7 @@ describe('RunSelector', () => {
       );
 
       // Virtualized list shows count
-      expect(screen.getByText('2 runs')).toBeInTheDocument();
+      expect(screen.getByText('2 trials')).toBeInTheDocument();
     });
 
     it('shows selection count', () => {
@@ -96,7 +96,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('No runs with analysis found.')).toBeInTheDocument();
+      expect(screen.getByText('No trials with analysis found.')).toBeInTheDocument();
     });
 
     it('shows loading state', () => {
@@ -109,7 +109,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('Loading runs...')).toBeInTheDocument();
+      expect(screen.getByText('Loading trials...')).toBeInTheDocument();
     });
 
     it('shows error message', () => {
@@ -137,7 +137,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText(/1 of 50 runs/)).toBeInTheDocument();
+      expect(screen.getByText(/1 of 50 trials/)).toBeInTheDocument();
     });
 
     it('shows loading more indicator', () => {
@@ -153,7 +153,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('Loading more runs...')).toBeInTheDocument();
+      expect(screen.getByText('Loading more trials...')).toBeInTheDocument();
     });
 
     it('shows all runs loaded indicator', () => {
@@ -168,7 +168,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('All runs loaded')).toBeInTheDocument();
+      expect(screen.getByText('All trials loaded')).toBeInTheDocument();
     });
   });
 
@@ -187,7 +187,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText(/Maximum 10 runs/)).toBeInTheDocument();
+      expect(screen.getByText(/Maximum 10 trials/)).toBeInTheDocument();
     });
   });
 
@@ -196,7 +196,7 @@ describe('RunSelector', () => {
     function getRunCountText(container: HTMLElement): string {
       const spans = container.querySelectorAll('span.text-xs.text-gray-500');
       for (const span of spans) {
-        if (span.textContent?.includes('runs')) {
+        if (span.textContent?.includes('trials')) {
           // Normalize whitespace
           return span.textContent.replace(/\s+/g, ' ').trim();
         }
@@ -220,14 +220,14 @@ describe('RunSelector', () => {
       );
 
       // Initially shows 2 runs
-      expect(screen.getByText('2 runs')).toBeInTheDocument();
+      expect(screen.getByText('2 trials')).toBeInTheDocument();
 
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'Trolley');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'Trolley');
 
-      // After filtering, shows 1 of 2 runs (filtered count)
+      // After filtering, shows 1 of 2 trials (filtered count)
       await waitFor(() => {
         const countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 2 runs/);
+        expect(countText).toMatch(/1 of 2 trials/);
       });
     });
 
@@ -243,10 +243,10 @@ describe('RunSelector', () => {
         />
       );
 
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'nonexistent');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'nonexistent');
 
-      // Note: When filtering is active (search or tags), the empty state shows "No runs match your filters."
-      expect(screen.getByText('No runs match your filters.')).toBeInTheDocument();
+      // Note: When filtering is active (search or tags), the empty state shows "No trials match your filters."
+      expect(screen.getByText('No trials match your filters.')).toBeInTheDocument();
     });
 
     it('searches by run ID and updates count', async () => {
@@ -265,14 +265,14 @@ describe('RunSelector', () => {
       );
 
       // Initially shows 2 runs
-      expect(screen.getByText('2 runs')).toBeInTheDocument();
+      expect(screen.getByText('2 trials')).toBeInTheDocument();
 
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'abc');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'abc');
 
-      // After filtering, shows 1 of 2 runs
+      // After filtering, shows 1 of 2 trials
       await waitFor(() => {
         const countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 2 runs/);
+        expect(countText).toMatch(/1 of 2 trials/);
       });
     });
 
@@ -298,14 +298,14 @@ describe('RunSelector', () => {
       );
 
       // Initially shows 2 runs
-      expect(screen.getByText('2 runs')).toBeInTheDocument();
+      expect(screen.getByText('2 trials')).toBeInTheDocument();
 
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'ethics');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'ethics');
 
-      // After filtering, shows 1 of 2 runs
+      // After filtering, shows 1 of 2 trials
       await waitFor(() => {
         const countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 2 runs/);
+        expect(countText).toMatch(/1 of 2 trials/);
       });
     });
   });
@@ -365,7 +365,7 @@ describe('RunSelector', () => {
         />
       );
 
-      await user.click(screen.getByTitle('Refresh runs'));
+      await user.click(screen.getByTitle('Refresh trials'));
 
       expect(onRefresh).toHaveBeenCalled();
     });
@@ -379,7 +379,7 @@ describe('RunSelector', () => {
     function getRunCountText(container: HTMLElement): string {
       const spans = container.querySelectorAll('span.text-xs.text-gray-500');
       for (const span of spans) {
-        if (span.textContent?.includes('runs')) {
+        if (span.textContent?.includes('trials')) {
           // Normalize whitespace
           return span.textContent.replace(/\s+/g, ' ').trim();
         }
@@ -412,9 +412,9 @@ describe('RunSelector', () => {
         />
       );
 
-      // Should show 2 of 3 runs (filtered count)
+      // Should show 2 of 3 trials (filtered count)
       const countText = getRunCountText(container);
-      expect(countText).toMatch(/2 of 3 runs/);
+      expect(countText).toMatch(/2 of 3 trials/);
     });
 
     it('filters runs by multiple tags with AND logic', () => {
@@ -448,9 +448,9 @@ describe('RunSelector', () => {
         />
       );
 
-      // Only run-1 has BOTH tags, so should show 1 of 3 runs
+      // Only run-1 has BOTH tags, so should show 1 of 3 trials
       const countText = getRunCountText(container);
-      expect(countText).toMatch(/1 of 3 runs/);
+      expect(countText).toMatch(/1 of 3 trials/);
     });
 
     it('shows all runs when no tags selected', () => {
@@ -468,7 +468,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('2 runs')).toBeInTheDocument();
+      expect(screen.getByText('2 trials')).toBeInTheDocument();
     });
 
     it('shows empty state when no runs match tag filter', () => {
@@ -488,7 +488,7 @@ describe('RunSelector', () => {
         />
       );
 
-      expect(screen.getByText('No runs match your filters.')).toBeInTheDocument();
+      expect(screen.getByText('No trials match your filters.')).toBeInTheDocument();
     });
 
     it('combines tag filter with text search', async () => {
@@ -531,14 +531,14 @@ describe('RunSelector', () => {
 
       // Initially 2 runs match tag-1
       let countText = getRunCountText(container);
-      expect(countText).toMatch(/2 of 3 runs/);
+      expect(countText).toMatch(/2 of 3 trials/);
 
       // Search for "Trolley" - should filter to just run-1 (has tag-1 AND matches search)
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'Trolley');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'Trolley');
 
       await waitFor(() => {
         countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 3 runs/);
+        expect(countText).toMatch(/1 of 3 trials/);
       });
     });
   });
@@ -548,7 +548,7 @@ describe('RunSelector', () => {
     function getRunCountText(container: HTMLElement): string {
       const spans = container.querySelectorAll('span.text-xs.text-gray-500');
       for (const span of spans) {
-        if (span.textContent?.includes('runs')) {
+        if (span.textContent?.includes('trials')) {
           // Normalize whitespace
           return span.textContent.replace(/\s+/g, ' ').trim();
         }
@@ -596,15 +596,15 @@ describe('RunSelector', () => {
 
       // Initially 2 runs match tag-1
       let countText = getRunCountText(container);
-      expect(countText).toMatch(/2 of 3 runs/);
+      expect(countText).toMatch(/2 of 3 trials/);
 
       // Type search text
-      const searchInput = screen.getByPlaceholderText('Search runs...');
+      const searchInput = screen.getByPlaceholderText('Search trials...');
       await user.type(searchInput, 'Trolley');
 
       await waitFor(() => {
         countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 3 runs/);
+        expect(countText).toMatch(/1 of 3 trials/);
       });
 
       // Clear search text
@@ -613,7 +613,7 @@ describe('RunSelector', () => {
       // Should return to showing 2 runs (tag filter still active)
       await waitFor(() => {
         countText = getRunCountText(container);
-        expect(countText).toMatch(/2 of 3 runs/);
+        expect(countText).toMatch(/2 of 3 trials/);
       });
     });
 
@@ -659,15 +659,15 @@ describe('RunSelector', () => {
 
       // Initially 2 runs match tag-1
       let countText = getRunCountText(container);
-      expect(countText).toMatch(/2 of 3 runs/);
+      expect(countText).toMatch(/2 of 3 trials/);
 
       // Type search text
-      const searchInput = screen.getByPlaceholderText('Search runs...');
+      const searchInput = screen.getByPlaceholderText('Search trials...');
       await user.type(searchInput, 'Trolley');
 
       await waitFor(() => {
         countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 3 runs/);
+        expect(countText).toMatch(/1 of 3 trials/);
       });
 
       // Simulate clearing tags (rerender with empty tags)
@@ -684,7 +684,7 @@ describe('RunSelector', () => {
       // Should now show 2 runs (both Trolley runs, no tag filter)
       await waitFor(() => {
         countText = getRunCountText(container);
-        expect(countText).toMatch(/2 of 3 runs/);
+        expect(countText).toMatch(/2 of 3 trials/);
       });
 
       // Verify search text is still present
@@ -730,12 +730,12 @@ describe('RunSelector', () => {
       );
 
       // Search for "Trolley" with tag-1 filter
-      await user.type(screen.getByPlaceholderText('Search runs...'), 'Trolley');
+      await user.type(screen.getByPlaceholderText('Search trials...'), 'Trolley');
 
       // Only run-1 matches both conditions (has tag-1 AND name contains Trolley)
       await waitFor(() => {
         const countText = getRunCountText(container);
-        expect(countText).toMatch(/1 of 3 runs/);
+        expect(countText).toMatch(/1 of 3 trials/);
       });
     });
   });

@@ -122,7 +122,7 @@ describe('Runs Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderRuns(mockClient);
 
-    expect(screen.getByRole('heading', { name: 'Runs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Trials' })).toBeInTheDocument();
   });
 
   it('shows loading state', async () => {
@@ -141,7 +141,7 @@ describe('Runs Page', () => {
 
     // When no data yet and no error, empty state shows
     await waitFor(() => {
-      expect(screen.getByText('No runs yet')).toBeInTheDocument();
+      expect(screen.getByText('No trials yet')).toBeInTheDocument();
     });
   });
 
@@ -158,7 +158,7 @@ describe('Runs Page', () => {
     renderRuns(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to load runs/)).toBeInTheDocument();
+      expect(screen.getByText(/Failed to load trials/)).toBeInTheDocument();
     });
   });
 
@@ -175,10 +175,10 @@ describe('Runs Page', () => {
     renderRuns(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText('No runs yet')).toBeInTheDocument();
+      expect(screen.getByText('No trials yet')).toBeInTheDocument();
     });
-    expect(screen.getByText('Start your first evaluation run from a definition.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Go to Definitions' })).toBeInTheDocument();
+    expect(screen.getByText('Start your first evaluation trial from a vignette.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Go to Vignettes' })).toBeInTheDocument();
   });
 
   it('shows filtered empty state when filter applied', async () => {
@@ -202,9 +202,9 @@ describe('Runs Page', () => {
     await user.selectOptions(screen.getByLabelText('Status:'), 'RUNNING');
 
     await waitFor(() => {
-      expect(screen.getByText('No runs found')).toBeInTheDocument();
+      expect(screen.getByText('No trials found')).toBeInTheDocument();
     });
-    expect(screen.getByText('No runs match the selected filters.')).toBeInTheDocument();
+    expect(screen.getByText('No trials match the selected filters.')).toBeInTheDocument();
   });
 
   it('displays runs list with count', async () => {
@@ -257,7 +257,7 @@ describe('Runs Page', () => {
     // Default is folder view - should show header with run count and folder count
     await waitFor(() => {
       // VirtualizedFolderView shows "X runs · Y folders"
-      expect(screen.getByText(/1 runs/)).toBeInTheDocument();
+      expect(screen.getByText(/1 trials/)).toBeInTheDocument();
     });
     expect(screen.getByText(/1 folders/)).toBeInTheDocument();
     // Expand/collapse controls should be visible
@@ -358,10 +358,10 @@ describe('Runs Page', () => {
     renderRuns(mockClient);
 
     await waitFor(() => {
-      expect(screen.getByText('No runs yet')).toBeInTheDocument();
+      expect(screen.getByText('No trials yet')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Go to Definitions' }));
+    await user.click(screen.getByRole('button', { name: 'Go to Vignettes' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/definitions');
   });

@@ -98,15 +98,11 @@ describe('MD Parser', () => {
     });
 
     describe('invalid input', () => {
-      it('returns error for missing preamble', () => {
+      it('succeeds for missing preamble (preamble is optional)', () => {
         const result = parseMdToDefinition(INVALID_MD_NO_PREAMBLE);
 
-        expect(result.success).toBe(false);
-        if (result.success) return;
-
-        expect(result.errors).toContainEqual(
-          expect.objectContaining({ field: 'preamble' })
-        );
+        // Preamble is now optional/deprecated, so missing preamble should succeed
+        expect(result.success).toBe(true);
       });
 
       it('returns error for missing template', () => {

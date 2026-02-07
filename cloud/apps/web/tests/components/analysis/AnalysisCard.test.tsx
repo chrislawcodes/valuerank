@@ -124,9 +124,9 @@ describe('AnalysisCard', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<AnalysisCard run={run} />);
 
-    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Definition" in small text
+    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Vignette" in small text
     expect(screen.getByText(/Run:.*Unknown/)).toBeInTheDocument();
-    expect(screen.getByText(/Unnamed Definition.*·/)).toBeInTheDocument();
+    expect(screen.getByText(/Unnamed Vignette.*·/)).toBeInTheDocument();
   });
 
   it('shows tags when present', () => {

@@ -98,10 +98,10 @@ describe('DefinitionList', () => {
         loading: false,
         error: null,
       });
-      expect(screen.getByText('No definitions yet')).toBeInTheDocument();
+      expect(screen.getByText('No vignettes yet')).toBeInTheDocument();
       expect(
         screen.getByText(
-          'Create your first scenario definition to get started with AI moral values evaluation.'
+          'Create your first vignette to get started with AI moral values evaluation.'
         )
       ).toBeInTheDocument();
     });
@@ -115,7 +115,7 @@ describe('DefinitionList', () => {
         onCreateNew,
       });
       expect(
-        screen.getByRole('button', { name: /create definition/i })
+        screen.getByRole('button', { name: /create vignette/i })
       ).toBeInTheDocument();
     });
 
@@ -130,7 +130,7 @@ describe('DefinitionList', () => {
       });
 
       await user.click(
-        screen.getByRole('button', { name: /create definition/i })
+        screen.getByRole('button', { name: /create vignette/i })
       );
       expect(onCreateNew).toHaveBeenCalledTimes(1);
     });
@@ -147,7 +147,7 @@ describe('DefinitionList', () => {
         loading: false,
         error: null,
       });
-      expect(screen.getByText('2 definitions')).toBeInTheDocument();
+      expect(screen.getByText('2 vignettes')).toBeInTheDocument();
     });
 
     it('should render singular "definition" when count is 1', () => {
@@ -157,7 +157,7 @@ describe('DefinitionList', () => {
         loading: false,
         error: null,
       });
-      expect(screen.getByText('1 definition')).toBeInTheDocument();
+      expect(screen.getByText('1 vignette')).toBeInTheDocument();
     });
 
     it('should render each definition card in flat view', async () => {
@@ -179,7 +179,7 @@ describe('DefinitionList', () => {
       expect(screen.getByText('Third Definition')).toBeInTheDocument();
     });
 
-    it('should render "New Definition" button when onCreateNew provided', () => {
+    it('should render "New Vignette" button when onCreateNew provided', () => {
       const definitions = [createMockDefinition()];
       const onCreateNew = vi.fn();
       renderDefinitionList({
@@ -189,11 +189,11 @@ describe('DefinitionList', () => {
         onCreateNew,
       });
       expect(
-        screen.getByRole('button', { name: /new definition/i })
+        screen.getByRole('button', { name: /new vignette/i })
       ).toBeInTheDocument();
     });
 
-    it('should call onCreateNew when "New Definition" button clicked', async () => {
+    it('should call onCreateNew when "New Vignette" button clicked', async () => {
       const user = userEvent.setup();
       const definitions = [createMockDefinition()];
       const onCreateNew = vi.fn();
@@ -204,11 +204,11 @@ describe('DefinitionList', () => {
         onCreateNew,
       });
 
-      await user.click(screen.getByRole('button', { name: /new definition/i }));
+      await user.click(screen.getByRole('button', { name: /new vignette/i }));
       expect(onCreateNew).toHaveBeenCalledTimes(1);
     });
 
-    it('should not render "New Definition" button when onCreateNew not provided', () => {
+    it('should not render "New Vignette" button when onCreateNew not provided', () => {
       const definitions = [createMockDefinition()];
       renderDefinitionList({
         definitions,
@@ -216,7 +216,7 @@ describe('DefinitionList', () => {
         error: null,
       });
       expect(
-        screen.queryByRole('button', { name: /new definition/i })
+        screen.queryByRole('button', { name: /new vignette/i })
       ).not.toBeInTheDocument();
     });
   });

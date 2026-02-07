@@ -52,7 +52,7 @@ describe('DefinitionGroups', () => {
 
       render(<DefinitionGroups runs={runs} />);
 
-      expect(screen.getByText('1 definition across 3 runs')).toBeInTheDocument();
+      expect(screen.getByText('1 vignette across 3 runs')).toBeInTheDocument();
     });
 
     it('shows correct count for multiple definitions', () => {
@@ -73,7 +73,7 @@ describe('DefinitionGroups', () => {
 
       render(<DefinitionGroups runs={runs} />);
 
-      expect(screen.getByText('3 definitions across 3 runs')).toBeInTheDocument();
+      expect(screen.getByText('3 vignettes across 3 runs')).toBeInTheDocument();
     });
 
     it('shows message for single definition case', () => {
@@ -86,7 +86,7 @@ describe('DefinitionGroups', () => {
 
       render(<DefinitionGroups runs={runs} />);
 
-      expect(screen.getByText('All selected runs use the same definition')).toBeInTheDocument();
+      expect(screen.getByText('All selected runs use the same vignette')).toBeInTheDocument();
     });
 
     it('shows message for multiple definitions case', () => {

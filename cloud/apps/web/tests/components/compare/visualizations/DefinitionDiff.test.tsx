@@ -272,8 +272,8 @@ describe('DefinitionDiff', () => {
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.getByText('Definitions are identical')).toBeInTheDocument();
-      expect(screen.getByText('Both runs use the same definition content')).toBeInTheDocument();
+      expect(screen.getByText('Vignettes are identical')).toBeInTheDocument();
+      expect(screen.getByText('Both runs use the same vignette content')).toBeInTheDocument();
     });
 
     it('does not show identical message when templates differ', () => {
@@ -288,7 +288,7 @@ describe('DefinitionDiff', () => {
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.queryByText('Definitions are identical')).not.toBeInTheDocument();
+      expect(screen.queryByText('Vignettes are identical')).not.toBeInTheDocument();
     });
 
     it('does not show identical message when dimensions differ', () => {
@@ -307,7 +307,7 @@ describe('DefinitionDiff', () => {
 
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
-      expect(screen.queryByText('Definitions are identical')).not.toBeInTheDocument();
+      expect(screen.queryByText('Vignettes are identical')).not.toBeInTheDocument();
     });
   });
 
@@ -319,10 +319,10 @@ describe('DefinitionDiff', () => {
       render(<DefinitionDiff leftRun={leftRun} rightRun={rightRun} />);
 
       expect(screen.getByTestId('diff-original')).toHaveTextContent(
-        '(Definition content not available)'
+        '(Vignette content not available)'
       );
       expect(screen.getByTestId('diff-modified')).toHaveTextContent(
-        '(Definition content not available)'
+        '(Vignette content not available)'
       );
     });
 

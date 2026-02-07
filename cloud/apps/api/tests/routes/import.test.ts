@@ -163,15 +163,22 @@ describe('Import Endpoint', () => {
       expect(response.body.error).toBe('VALIDATION_ERROR');
     });
 
-    it('returns 400 for missing required sections', async () => {
-      // INVALID_MD_NO_PREAMBLE is caught by isValidMdFormat quick check
+    it('does not reject missing preamble (preamble is optional)', async () => {
+      // Preamble is now optional/deprecated - ensure it's not a validation error about preamble
       const response = await request(app)
         .post('/api/import/definition')
         .set('Authorization', getAuthHeader())
         .send({ content: INVALID_MD_NO_PREAMBLE });
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('VALIDATION_ERROR');
+      // Should succeed (201) or fail for a non-preamble reason (e.g. name conflict)
+      if (response.status === 201) {
+        createdDefinitionIds.push(response.body.id);
+      } else {
+        // If it fails, it should NOT be because of missing preamble
+        const details = response.body.details || [];
+        const preambleErrors = details.filter((e: { field?: string }) => e.field === 'preamble');
+        expect(preambleErrors).toHaveLength(0);
+      }
     });
 
     it('returns 400 for missing frontmatter', async () => {

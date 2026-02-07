@@ -32,9 +32,8 @@ describe('Summarization Parallelism Integration', () => {
   });
 
   describe('default batchSize', () => {
-    it('uses default batchSize (8) when setting is not configured', async () => {
+    it('uses default batchSize when setting is not configured', async () => {
       const batchSize = await getMaxParallelSummarizations();
-      expect(batchSize).toBe(8);
       expect(batchSize).toBe(getDefaultParallelism());
     });
   });

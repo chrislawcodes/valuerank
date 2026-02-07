@@ -15,6 +15,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     id: 'run-12345678-abcd',
     name: null, // Uses algorithmic name
     definitionId: 'def-1',
+    definitionVersion: null,
     experimentId: null,
     status: 'COMPLETED',
     config: {
@@ -27,6 +28,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
       failed: 0,
       percentComplete: 100,
     },
+    summarizeProgress: null,
     startedAt: '2024-01-15T10:00:00Z',
     completedAt: '2024-01-15T10:10:00Z',
     createdAt: '2024-01-15T09:55:00Z',
@@ -35,10 +37,17 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     transcripts: [],
     transcriptCount: 10,
     recentTasks: [],
+    analysisStatus: null,
+    executionMetrics: null,
+    analysis: null,
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      version: 1,
+      tags: [],
+      content: null,
     },
+    tags: [],
     ...overrides,
   };
 }
@@ -48,10 +57,8 @@ describe('RunCard', () => {
     const run = createMockRun();
     render(<RunCard run={run} />);
 
-    // Run name shows in h3 as "Run: Test Definition on Jan 15, 2024"
-    expect(screen.getByText(/Run:.*Test Definition/)).toBeInTheDocument();
-    // Definition name shows in small text
-    expect(screen.getByText(/Test Definition.*·/)).toBeInTheDocument();
+    // Definition name shows in h3
+    expect(screen.getByText('Test Definition')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
   });
 
@@ -99,9 +106,8 @@ describe('RunCard', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<RunCard run={run} />);
 
-    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Definition" in small text
-    expect(screen.getByText(/Run:.*Unknown/)).toBeInTheDocument();
-    expect(screen.getByText(/Unnamed Definition.*·/)).toBeInTheDocument();
+    // Shows "Unnamed Vignette" in h3
+    expect(screen.getByText('Unnamed Vignette')).toBeInTheDocument();
   });
 
   it('shows progress bar for completed runs', () => {

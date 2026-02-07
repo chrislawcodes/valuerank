@@ -33,7 +33,7 @@ describe('ExportButton', () => {
     const button = screen.getByRole('button', { name: /export/i });
     await user.click(button);
 
-    expect(screen.getByText('Definition (Markdown)')).toBeInTheDocument();
+    expect(screen.getByText('Vignette (Markdown)')).toBeInTheDocument();
     expect(screen.getByText('Scenarios (YAML)')).toBeInTheDocument();
   });
 
@@ -43,10 +43,10 @@ describe('ExportButton', () => {
 
     const button = screen.getByRole('button', { name: /export/i });
     await user.click(button);
-    expect(screen.getByText('Definition (Markdown)')).toBeInTheDocument();
+    expect(screen.getByText('Vignette (Markdown)')).toBeInTheDocument();
 
     await user.click(button);
-    expect(screen.queryByText('Definition (Markdown)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Vignette (Markdown)')).not.toBeInTheDocument();
   });
 
   it('exports definition as markdown when option clicked', async () => {
@@ -56,7 +56,7 @@ describe('ExportButton', () => {
     render(<ExportButton definitionId={mockDefinitionId} />);
 
     await user.click(screen.getByRole('button', { name: /export/i }));
-    await user.click(screen.getByText('Definition (Markdown)'));
+    await user.click(screen.getByText('Vignette (Markdown)'));
 
     await waitFor(() => {
       expect(exportApi.exportDefinitionAsMd).toHaveBeenCalledWith(mockDefinitionId);
@@ -96,7 +96,7 @@ describe('ExportButton', () => {
     render(<ExportButton definitionId={mockDefinitionId} />);
 
     await user.click(screen.getByRole('button', { name: /export/i }));
-    await user.click(screen.getByText('Definition (Markdown)'));
+    await user.click(screen.getByText('Vignette (Markdown)'));
 
     await waitFor(() => {
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -113,12 +113,12 @@ describe('ExportButton', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /export/i }));
-    expect(screen.getByText('Definition (Markdown)')).toBeInTheDocument();
+    expect(screen.getByText('Vignette (Markdown)')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /outside/i }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Definition (Markdown)')).not.toBeInTheDocument();
+      expect(screen.queryByText('Vignette (Markdown)')).not.toBeInTheDocument();
     });
   });
 
@@ -141,7 +141,7 @@ describe('ExportButton', () => {
     render(<ExportButton definitionId={mockDefinitionId} />);
 
     await user.click(screen.getByRole('button', { name: /export/i }));
-    await user.click(screen.getByText('Definition (Markdown)'));
+    await user.click(screen.getByText('Vignette (Markdown)'));
 
     // Button should be disabled while exporting
     const button = screen.getByRole('button', { name: /export/i });

@@ -14,24 +14,24 @@ function renderNavTabs(initialRoute = '/') {
 describe('NavTabs Component', () => {
   it('should render all navigation tabs', () => {
     renderNavTabs();
-    expect(screen.getByRole('link', { name: /definitions/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /runs/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /vignettes/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /trials/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /experiments/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
   });
 
   it('should link to correct paths', () => {
     renderNavTabs();
-    expect(screen.getByRole('link', { name: /definitions/i })).toHaveAttribute('href', '/definitions');
-    expect(screen.getByRole('link', { name: /runs/i })).toHaveAttribute('href', '/runs');
+    expect(screen.getByRole('link', { name: /vignettes/i })).toHaveAttribute('href', '/definitions');
+    expect(screen.getByRole('link', { name: /trials/i })).toHaveAttribute('href', '/runs');
     expect(screen.getByRole('link', { name: /experiments/i })).toHaveAttribute('href', '/experiments');
     expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
   });
 
   it('should highlight active tab', () => {
     renderNavTabs('/definitions');
-    const definitionsLink = screen.getByRole('link', { name: /definitions/i });
-    expect(definitionsLink.className).toContain('text-white');
-    expect(definitionsLink.className).toContain('border-teal-500');
+    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+    expect(vignettesLink.className).toContain('text-white');
+    expect(vignettesLink.className).toContain('border-teal-500');
   });
 });

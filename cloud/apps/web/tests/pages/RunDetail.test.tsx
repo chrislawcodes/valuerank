@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Provider, Client } from 'urql';
+import { fromValue } from 'wonka';
 import { RunDetail } from '../../src/pages/RunDetail';
 import type { Run } from '../../src/api/operations/runs';
 
@@ -20,14 +22,26 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
   useRunMutations: vi.fn(),
 }));
 
+vi.mock('../../src/hooks/useAnalysis', () => ({
+  useAnalysis: vi.fn().mockReturnValue({
+    analysis: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    recompute: vi.fn(),
+    recomputing: false,
+  }),
+}));
+
 import { useRun } from '../../src/hooks/useRun';
 import { useRunMutations } from '../../src/hooks/useRunMutations';
 
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-123456',
-    name: null, // Uses algorithmic name: "Run: Test Definition on Jan 15, 2024"
+    name: null, // Uses algorithmic name: "Trial: Test Definition on Jan 15, 2024"
     definitionId: 'def-1',
+    definitionVersion: null,
     experimentId: null,
     status: 'RUNNING',
     config: {
@@ -41,6 +55,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
       failed: 0,
       percentComplete: 50,
     },
+    summarizeProgress: null,
     startedAt: '2024-01-15T10:00:00Z',
     completedAt: null,
     createdAt: '2024-01-15T09:55:00Z',
@@ -55,22 +70,50 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      version: 1,
       tags: [],
+      content: null,
     },
+    tags: [],
     ...overrides,
   };
 }
 
+function createMockClient(): Client {
+  return {
+    executeQuery: vi.fn(() =>
+      fromValue({
+        data: {},
+        error: undefined,
+        stale: false,
+        hasNext: false,
+      })
+    ),
+    executeMutation: vi.fn(),
+    executeSubscription: vi.fn(),
+    url: 'http://localhost/graphql',
+    fetchOptions: undefined,
+    fetch: undefined,
+    suspense: false,
+    requestPolicy: 'cache-first',
+    preferGetMethod: false,
+    maskTypename: false,
+  } as unknown as Client;
+}
+
 function renderWithRouter(runId: string = 'run-123456') {
+  const client = createMockClient();
   return render(
-    <MemoryRouter initialEntries={[`/runs/${runId}`]}>
-      <Routes>
-        <Route path="/runs/:id" element={<RunDetail />} />
-        <Route path="/runs" element={<div>Runs List</div>} />
-        <Route path="/definitions/:id" element={<div>Definition Detail</div>} />
-        <Route path="/analysis/:id" element={<div>Analysis Detail</div>} />
-      </Routes>
-    </MemoryRouter>
+    <Provider value={client}>
+      <MemoryRouter initialEntries={[`/runs/${runId}`]}>
+        <Routes>
+          <Route path="/runs/:id" element={<RunDetail />} />
+          <Route path="/runs" element={<div>Runs List</div>} />
+          <Route path="/definitions/:id" element={<div>Definition Detail</div>} />
+          <Route path="/analysis/:id" element={<div>Analysis Detail</div>} />
+        </Routes>
+      </MemoryRouter>
+    </Provider>
   );
 }
 
@@ -91,6 +134,8 @@ describe('RunDetail', () => {
       cancelRun: mockCancelRun,
       deleteRun: mockDeleteRun,
       updateRun: mockUpdateRun,
+      cancelSummarization: vi.fn(),
+      restartSummarization: vi.fn(),
       loading: false,
       error: null,
     });
@@ -132,7 +177,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('Run not found')).toBeInTheDocument();
+    expect(screen.getByText('Trial not found')).toBeInTheDocument();
   });
 
   it('renders run details when data is available', () => {
@@ -245,7 +290,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('Configuration')).toBeInTheDocument();
+    expect(screen.getByText('Start Evaluation Trial')).toBeInTheDocument();
     // Models appear in both progress and config sections
     expect(screen.getAllByText('gpt-4').length).toBeGreaterThan(0);
     expect(screen.getAllByText('claude-3').length).toBeGreaterThan(0);
@@ -293,7 +338,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('Run is paused')).toBeInTheDocument();
+    expect(screen.getByText('Trial is paused')).toBeInTheDocument();
   });
 
   it('does not show polling indicator for completed runs', () => {
@@ -308,7 +353,7 @@ describe('RunDetail', () => {
     renderWithRouter();
 
     expect(screen.queryByText('Updating every 5 seconds...')).not.toBeInTheDocument();
-    expect(screen.queryByText('Run is paused')).not.toBeInTheDocument();
+    expect(screen.queryByText('Trial is paused')).not.toBeInTheDocument();
   });
 
   it('shows results section for completed runs with transcripts', () => {
@@ -356,7 +401,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByRole('button', { name: /back to runs/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /back to trials/i })).toBeInTheDocument();
   });
 
   describe('Analysis Banner', () => {

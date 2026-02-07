@@ -33,7 +33,7 @@ describe('startRun service', () => {
   const createdExperimentIds: string[] = [];
   const createdRunIds: string[] = [];
 
-  // Ensure test user exists before all tests
+  // Ensure test user and required models exist before all tests
   beforeAll(async () => {
     await db.user.upsert({
       where: { id: TEST_USER.id },
@@ -44,6 +44,20 @@ describe('startRun service', () => {
       },
       update: {},
     });
+
+    // Ensure test models exist as ACTIVE for model validation
+    const testProvider = await db.llmProvider.upsert({
+      where: { name: 'test-provider-start-run' },
+      create: { name: 'test-provider-start-run', displayName: 'Test Provider (Start Run)' },
+      update: {},
+    });
+    for (const modelId of ['gpt-4', 'claude-3', 'gemini-pro']) {
+      await db.llmModel.upsert({
+        where: { providerId_modelId: { providerId: testProvider.id, modelId } },
+        create: { modelId, displayName: modelId, providerId: testProvider.id, status: 'ACTIVE', costInputPerMillion: 1.0, costOutputPerMillion: 2.0 },
+        update: { status: 'ACTIVE' },
+      });
+    }
   });
 
   beforeEach(() => {

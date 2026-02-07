@@ -22,22 +22,22 @@ function renderDefinitionsPage() {
 }
 
 describe('Definitions Page', () => {
-  it('should render definitions heading', () => {
+  it('should render vignettes heading', () => {
     renderDefinitionsPage();
     expect(
-      screen.getByRole('heading', { name: /definitions/i, level: 1 })
+      screen.getByRole('heading', { name: /vignettes/i, level: 1 })
     ).toBeInTheDocument();
   });
 
-  it('should render empty state when no definitions', () => {
+  it('should render empty state when no vignettes', () => {
     renderDefinitionsPage();
-    expect(screen.getByText('No definitions yet')).toBeInTheDocument();
+    expect(screen.getByText('No vignettes yet')).toBeInTheDocument();
   });
 
   it('should render create button in empty state', () => {
     renderDefinitionsPage();
     expect(
-      screen.getByRole('button', { name: /create definition/i })
+      screen.getByRole('button', { name: /create vignette/i })
     ).toBeInTheDocument();
   });
 });

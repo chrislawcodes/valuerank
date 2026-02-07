@@ -67,7 +67,7 @@ describe('DefinitionViz', () => {
       );
 
       expect(screen.getByText('Select at least 2 runs')).toBeInTheDocument();
-      expect(screen.getByText('Definition comparison requires 2 or more runs')).toBeInTheDocument();
+      expect(screen.getByText('Vignette comparison requires 2 or more runs')).toBeInTheDocument();
     });
 
     it('shows message when only 1 run selected', () => {
@@ -148,7 +148,7 @@ describe('DefinitionViz', () => {
       );
 
       // Should show the groups summary
-      expect(screen.getByText(/definition.* across 3 runs/i)).toBeInTheDocument();
+      expect(screen.getByText(/vignette.* across 3 runs/i)).toBeInTheDocument();
     });
 
     it('renders DefinitionGroups component for 5 runs', () => {
@@ -169,7 +169,7 @@ describe('DefinitionViz', () => {
       );
 
       // Should show the groups summary for 5 runs
-      expect(screen.getByText(/definition.* across 5 runs/i)).toBeInTheDocument();
+      expect(screen.getByText(/vignette.* across 5 runs/i)).toBeInTheDocument();
     });
 
     it('groups runs by definition ID', () => {
@@ -200,7 +200,7 @@ describe('DefinitionViz', () => {
       );
 
       // Should show 2 definitions across 3 runs
-      expect(screen.getByText(/2 definitions across 3 runs/i)).toBeInTheDocument();
+      expect(screen.getByText(/2 vignettes across 3 runs/i)).toBeInTheDocument();
       expect(screen.getByText('Definition A')).toBeInTheDocument();
       expect(screen.getByText('Definition B')).toBeInTheDocument();
     });
@@ -277,8 +277,8 @@ describe('DefinitionViz', () => {
         />
       );
 
-      expect(screen.getByText('1 definition across 3 runs')).toBeInTheDocument();
-      expect(screen.getByText('All selected runs use the same definition')).toBeInTheDocument();
+      expect(screen.getByText('1 vignette across 3 runs')).toBeInTheDocument();
+      expect(screen.getByText('All selected runs use the same vignette')).toBeInTheDocument();
     });
   });
 });

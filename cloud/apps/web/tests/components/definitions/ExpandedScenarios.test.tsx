@@ -65,7 +65,7 @@ describe('ExpandedScenarios', () => {
 
     expect(screen.getByText('Database Narratives')).toBeInTheDocument();
     // Should not show scenarios list when collapsed
-    expect(screen.queryByText('Loading scenarios...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading narratives...')).not.toBeInTheDocument();
   });
 
   it('shows scenario count badge when scenarios exist', () => {
@@ -176,7 +176,7 @@ describe('ExpandedScenarios', () => {
     // Click to expand
     await user.click(screen.getByText('Database Narratives'));
 
-    expect(screen.getByText('Loading scenarios...')).toBeInTheDocument();
+    expect(screen.getByText('Loading narratives...')).toBeInTheDocument();
   });
 
   it('shows error message when error occurs', async () => {
@@ -342,6 +342,6 @@ describe('ExpandedScenarios', () => {
 
     await user.click(screen.getByText('Database Narratives'));
 
-    expect(screen.getByText('Showing 1 of 100 scenarios')).toBeInTheDocument();
+    expect(screen.getByText('Showing 1 of 100 narratives')).toBeInTheDocument();
   });
 });

@@ -191,17 +191,17 @@ describe('Compare Page', () => {
     it('renders page header', () => {
       render(<Compare />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Compare Runs')).toBeInTheDocument();
+      expect(screen.getByText('Compare Trials')).toBeInTheDocument();
       // Text may appear in multiple places, just verify it exists
-      const selectRunsText = screen.getAllByText(/Select runs to compare/);
-      expect(selectRunsText.length).toBeGreaterThan(0);
+      const selectTrialsText = screen.getAllByText(/Select trials to compare/);
+      expect(selectTrialsText.length).toBeGreaterThan(0);
     });
 
     it('renders empty selection state when no runs selected', () => {
       render(<Compare />, { wrapper: createWrapper() });
 
-      expect(screen.getByText('Cross-Run Comparison')).toBeInTheDocument();
-      expect(screen.getByText(/Select 2 or more runs/)).toBeInTheDocument();
+      expect(screen.getByText('Cross-Trial Comparison')).toBeInTheDocument();
+      expect(screen.getByText(/Select 2 or more trials/)).toBeInTheDocument();
     });
 
     it('renders run selector with available runs', () => {
@@ -210,7 +210,7 @@ describe('Compare Page', () => {
       // RunSelector uses virtualization, so items don't render in JSDOM
       // Instead check that the count display shows the correct number
       // With totalCount set, displays "X of Y runs"
-      expect(screen.getByText(/2 of 2 runs/)).toBeInTheDocument();
+      expect(screen.getByText(/2 of 2 trials/)).toBeInTheDocument();
     });
   });
 
@@ -234,7 +234,7 @@ describe('Compare Page', () => {
       render(<Compare />, { wrapper: createWrapper('/compare?runs=run-1') });
 
       expect(screen.getByText('Not Enough Data')).toBeInTheDocument();
-      expect(screen.getByText(/Only 1 run has analysis data/)).toBeInTheDocument();
+      expect(screen.getByText(/Only 1 trial has analysis data/)).toBeInTheDocument();
     });
 
     it('shows visualization when 2+ runs selected', () => {
@@ -356,7 +356,7 @@ describe('Compare Page', () => {
 
       render(<Compare />, { wrapper: createWrapper('/compare?runs=run-1,run-2') });
 
-      expect(screen.getByText(/Loading run data/i)).toBeInTheDocument();
+      expect(screen.getByText(/Loading trial data/i)).toBeInTheDocument();
     });
   });
 

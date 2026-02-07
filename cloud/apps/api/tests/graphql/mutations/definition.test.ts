@@ -388,13 +388,12 @@ describe('GraphQL Definition Mutations', () => {
       const fork = response.body.data.forkDefinition;
       createdDefinitionIds.push(fork.id);
 
-      // Local content only has preamble override (v2 sparse content)
-      expect(fork.content.preamble).toBe('New preamble');
+      // Preamble is no longer stored in content (deprecated), so fork content is minimal v2
       expect(fork.content.schema_version).toBe(2); // v2 sparse content
+      expect(fork.content.preamble).toBeUndefined(); // Preamble not passed through
       expect(fork.content.template).toBeUndefined(); // Not in local content
 
-      // resolvedContent shows local override + inherited values
-      expect(fork.resolvedContent.preamble).toBe('New preamble'); // Local override
+      // resolvedContent shows inherited values from parent
       expect(fork.resolvedContent.template).toBe('Original template'); // Inherited from parent
     });
 

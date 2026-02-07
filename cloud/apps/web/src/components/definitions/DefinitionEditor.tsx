@@ -237,7 +237,7 @@ export function DefinitionEditor({
             disabled={isSaving}
           >
             <option value="">Default (None)</option>
-            {preamblesData?.preambles.map((p) => (
+            {preamblesData?.preambles?.map((p) => (
               <option key={p.id} value={p.latestVersion?.id || ''} disabled={!p.latestVersion}>
                 {p.name} {p.latestVersion ? `(v${p.latestVersion.version})` : '(No versions)'}
               </option>
@@ -252,7 +252,7 @@ export function DefinitionEditor({
               Selected Preamble Preview
             </div>
             <div className="line-clamp-3">
-              {preamblesData?.preambles.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content || '(Loading content...)'}
+              {preamblesData?.preambles?.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content || '(Loading content...)'}
             </div>
           </div>
         )}
@@ -389,7 +389,7 @@ export function DefinitionEditor({
         content={useMemo(
           () => ({
             ...content,
-            preamble: preamblesData?.preambles.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content,
+            preamble: preamblesData?.preambles?.find((p) => p.latestVersion?.id === preambleVersionId)?.latestVersion?.content,
           }),
           [content, preamblesData, preambleVersionId]
         )}
