@@ -12,6 +12,9 @@ cd "$(git rev-parse --show-toplevel)/cloud"
 echo "📦 Running lint..."
 npx turbo lint --force
 
+echo "🗄️ Preparing test database schema..."
+npm run db:test:setup
+
 echo "🧪 Running tests..."
 npx turbo test --force
 
