@@ -51,11 +51,5 @@ jobs:
       - name: Push schema to test database
         run: npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate
 
-      - name: Build
-        run: npx turbo build
-
-      - name: Lint
-        run: npx turbo lint
-
-      - name: Test
-        run: npx turbo test
+      - name: Lint, Build & Test
+        run: npx turbo lint build test --force

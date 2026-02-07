@@ -1,5 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "**/tests/setup.ts"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build", "lint"],
