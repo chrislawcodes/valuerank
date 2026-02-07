@@ -71,6 +71,17 @@ jobs:
         working-directory: cloud
         run: npm run lint --workspace @valuerank/api
 
+      - name: Build shared
+        working-directory: cloud
+        run: npm run build --workspace @valuerank/shared
+
+      - name: Build db
+        working-directory: cloud
+        env:
+          DATABASE_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
+          DIRECT_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
+        run: npm run build --workspace @valuerank/db
+
       - name: Test api
         working-directory: cloud
         env:
