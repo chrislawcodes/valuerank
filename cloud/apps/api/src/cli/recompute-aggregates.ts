@@ -21,44 +21,79 @@ export function getPreambleVersionId(config: unknown): string | null {
     return fromSnapshot ?? null;
 }
 
+export function getDefinitionVersion(config: unknown): number | null {
+    if (!isRecord(config)) return null;
+    const snapshot = isRecord(config.definitionSnapshot) ? config.definitionSnapshot : undefined;
+    if (!snapshot) return null;
+    const meta = isRecord(snapshot._meta) ? snapshot._meta : undefined;
+    const raw = meta?.definitionVersion ?? snapshot.version;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw !== 'string' || raw.trim() === '') return null;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function main() {
     log.info('Starting manual aggregation update...');
 
-    // 1. Find all runs with the "Aggregate" tag
-    const aggregateRuns = await db.run.findMany({
+    // 1. Find all completed, non-aggregate runs and regroup by definition+preamble+version.
+    const sourceRuns = await db.run.findMany({
         where: {
+            status: 'COMPLETED',
+            deletedAt: null,
             tags: {
-                some: {
+                none: {
                     tag: {
-                        name: 'Aggregate'
+                        name: 'Aggregate',
                     }
                 }
             }
         },
         select: {
             id: true,
-            name: true,
             definitionId: true,
             config: true
         }
     });
 
-    log.info({ count: aggregateRuns.length }, `Found ${aggregateRuns.length} aggregate runs.`);
+    type Group = {
+        definitionId: string;
+        preambleVersionId: string | null;
+        definitionVersion: number | null;
+        runCount: number;
+    };
+    const grouped = new Map<string, Group>();
 
-    for (const run of aggregateRuns) {
-        log.info({ runId: run.id, name: run.name }, `Updating aggregate run`);
+    for (const run of sourceRuns) {
+        const preambleVersionId = getPreambleVersionId(run.config);
+        const definitionVersion = getDefinitionVersion(run.config);
+        const key = `${run.definitionId}::${preambleVersionId ?? 'null'}::${definitionVersion ?? 'null'}`;
+        const existing = grouped.get(key);
+        if (existing) {
+            existing.runCount += 1;
+            continue;
+        }
+        grouped.set(key, {
+            definitionId: run.definitionId,
+            preambleVersionId,
+            definitionVersion,
+            runCount: 1,
+        });
+    }
+
+    log.info(
+        { sourceRunCount: sourceRuns.length, aggregateGroupCount: grouped.size },
+        `Found ${grouped.size} aggregate groups from ${sourceRuns.length} source runs.`
+    );
+
+    for (const group of grouped.values()) {
+        log.info(group, 'Updating aggregate group');
         try {
-            // Extract preambleVersionId from config (simulating how analyze-basic or others do it)
-            // Config is JsonValue, need to cast or access safely
-            const preambleVersionId = getPreambleVersionId(run.config);
+            await updateAggregateRun(group.definitionId, group.preambleVersionId, group.definitionVersion);
 
-            log.info({ definitionId: run.definitionId, preambleVersionId }, 'Calling updateAggregateRun');
-
-            await updateAggregateRun(run.definitionId, preambleVersionId);
-
-            log.info({ runId: run.id }, `Successfully updated run`);
+            log.info(group, 'Successfully updated aggregate group');
         } catch (err) {
-            log.error({ err, runId: run.id }, 'Failed to update aggregate run');
+            log.error({ err, ...group }, 'Failed to update aggregate group');
         }
     }
 

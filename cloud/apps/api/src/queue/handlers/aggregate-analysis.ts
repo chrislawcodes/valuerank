@@ -19,16 +19,16 @@ const log = createLogger('queue:aggregate-analysis');
 export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAnalysisJobData> {
     return async (jobs: PgBoss.Job<AggregateAnalysisJobData>[]) => {
         for (const job of jobs) {
-            const { definitionId, preambleVersionId } = job.data;
+            const { definitionId, preambleVersionId, definitionVersion } = job.data;
             const jobId = job.id;
 
             log.info(
-                { jobId, definitionId, preambleVersionId },
+                { jobId, definitionId, preambleVersionId, definitionVersion },
                 'Processing aggregate_analysis job'
             );
 
             try {
-                await updateAggregateRun(definitionId, preambleVersionId);
+                await updateAggregateRun(definitionId, preambleVersionId, definitionVersion);
 
                 log.info(
                     { jobId, definitionId },
