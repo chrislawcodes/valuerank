@@ -238,6 +238,18 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const preambleVersionId =
                 config?.definitionSnapshot?._meta?.preambleVersionId ??
                 config?.definitionSnapshot?.preambleVersionId;
+              const definitionVersionRaw =
+                config?.definitionSnapshot?._meta?.definitionVersion ??
+                config?.definitionSnapshot?.version;
+              const parsedDefinitionVersion =
+                typeof definitionVersionRaw === 'number'
+                  ? definitionVersionRaw
+                  : typeof definitionVersionRaw === 'string' && definitionVersionRaw.trim() !== ''
+                    ? Number.parseInt(definitionVersionRaw, 10)
+                    : null;
+              const definitionVersion = Number.isFinite(parsedDefinitionVersion)
+                ? parsedDefinitionVersion
+                : null;
 
               // Async trigger via job queue (with debouncing via singletonKey)
               // This prevents race conditions where multiple analyses trigger aggregation simultaneously
@@ -246,18 +258,18 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
 
               const boss = getBoss();
-              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}`;
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}`;
 
               await boss.send(
                 'aggregate_analysis',
-                { definitionId, preambleVersionId },
+                { definitionId, preambleVersionId, definitionVersion },
                 {
                   ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
                   singletonKey
                 }
               );
 
-              log.info({ runId, definitionId, preambleVersionId }, 'Enqueued aggregate_analysis job');
+              log.info({ runId, definitionId, preambleVersionId, definitionVersion }, 'Enqueued aggregate_analysis job');
             }
           }
         } catch (err) {
@@ -271,4 +283,3 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
     }
   };
 }
-

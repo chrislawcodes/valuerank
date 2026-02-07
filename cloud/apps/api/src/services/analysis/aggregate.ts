@@ -9,8 +9,12 @@ const log = createLogger('analysis:aggregate');
 // --- Feature-Specific Interfaces & Zod Schemas ---
 
 const zRunSnapshot = z.object({
-    _meta: z.object({ preambleVersionId: z.string().optional() }).optional(),
+    _meta: z.object({
+        preambleVersionId: z.string().optional(),
+        definitionVersion: z.union([z.number(), z.string()]).optional(),
+    }).optional(),
     preambleVersionId: z.string().optional(),
+    version: z.union([z.number(), z.string()]).optional(),
 });
 
 const zRunConfig = z.object({
@@ -106,18 +110,41 @@ interface AggregatedResult {
     valueAggregateStats: Record<string, ValueAggregateStats>;
 }
 
+function parseDefinitionVersion(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string' || value.trim() === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getSnapshotMeta(config: RunConfig): { preambleVersionId: string | null; definitionVersion: number | null } {
+    const snapshot = config.definitionSnapshot;
+    const preambleVersionId =
+        snapshot?._meta?.preambleVersionId ??
+        snapshot?.preambleVersionId ??
+        null;
+    const definitionVersion =
+        parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
+        parseDefinitionVersion(snapshot?.version);
+    return { preambleVersionId, definitionVersion };
+}
+
 
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
  * Uses advisory locks to ensure serial execution for a given definition.
  */
-export async function updateAggregateRun(definitionId: string, preambleVersionId: string | null) {
+export async function updateAggregateRun(
+    definitionId: string,
+    preambleVersionId: string | null,
+    definitionVersion: number | null,
+) {
     if (!definitionId) {
         log.error('Cannot update aggregate run without definitionId');
         return;
     }
 
-    log.info({ definitionId, preambleVersionId }, 'Updating aggregate run (with lock)');
+    log.info({ definitionId, preambleVersionId, definitionVersion }, 'Updating aggregate run (with lock)');
 
     // Fetch scenarios outside the transaction to reduce lock duration.
     // Note: this can read slightly stale scenario data if scenarios change during aggregation.
@@ -182,15 +209,16 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             if (!parseResult.success) return false;
 
             const config = parseResult.data;
-            const snapshot = config.definitionSnapshot;
-
-            const runPreambleId =
-                snapshot?._meta?.preambleVersionId ??
-                snapshot?.preambleVersionId;
-
-            // Handle null case (legacy runs might be null)
-            if (preambleVersionId === null) return runPreambleId == null;
-            return runPreambleId === preambleVersionId;
+            const runMeta = getSnapshotMeta(config);
+            const preambleMatch =
+                preambleVersionId === null
+                    ? runMeta.preambleVersionId === null
+                    : runMeta.preambleVersionId === preambleVersionId;
+            const definitionVersionMatch =
+                definitionVersion === null
+                    ? runMeta.definitionVersion === null
+                    : runMeta.definitionVersion === definitionVersion;
+            return preambleMatch && definitionVersionMatch;
         });
 
         if (compatibleRuns.length === 0) {
@@ -275,14 +303,16 @@ export async function updateAggregateRun(definitionId: string, preambleVersionId
             if (!parseResult.success) return false;
 
             const config = parseResult.data;
-            const snapshot = config.definitionSnapshot;
-
-            const runPreambleId =
-                snapshot?._meta?.preambleVersionId ??
-                snapshot?.preambleVersionId;
-
-            if (preambleVersionId === null) return runPreambleId == null;
-            return runPreambleId === preambleVersionId;
+            const runMeta = getSnapshotMeta(config);
+            const preambleMatch =
+                preambleVersionId === null
+                    ? runMeta.preambleVersionId === null
+                    : runMeta.preambleVersionId === preambleVersionId;
+            const definitionVersionMatch =
+                definitionVersion === null
+                    ? runMeta.definitionVersion === null
+                    : runMeta.definitionVersion === definitionVersion;
+            return preambleMatch && definitionVersionMatch;
         });
 
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPreambleVersionId } from './recompute-aggregates.js';
+import { getDefinitionVersion, getPreambleVersionId } from './recompute-aggregates.js';
 
 describe('recompute-aggregates getPreambleVersionId', () => {
   it('returns null for non-object config', () => {
@@ -24,5 +24,31 @@ describe('recompute-aggregates getPreambleVersionId', () => {
       },
     };
     expect(getPreambleVersionId(config)).toBe('snapshot-2');
+  });
+});
+
+describe('recompute-aggregates getDefinitionVersion', () => {
+  it('returns null for non-object config', () => {
+    expect(getDefinitionVersion(null)).toBeNull();
+    expect(getDefinitionVersion('nope')).toBeNull();
+  });
+
+  it('reads definitionVersion from _meta first', () => {
+    const config = {
+      definitionSnapshot: {
+        _meta: { definitionVersion: 3 },
+        version: 2,
+      },
+    };
+    expect(getDefinitionVersion(config)).toBe(3);
+  });
+
+  it('falls back to snapshot version', () => {
+    const config = {
+      definitionSnapshot: {
+        version: '4',
+      },
+    };
+    expect(getDefinitionVersion(config)).toBe(4);
   });
 });
