@@ -83,25 +83,29 @@ Limited to 2KB token budget.`,
         const limit = args.limit ?? 50;
         const offset = args.offset ?? 0;
 
-        const definitions = await db.definition.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-          include: args.include_children
-            ? {
-                _count: { select: { children: true } },
-              }
-            : undefined,
-        });
-
-        // Format definitions for response
-        const formattedDefs: DefinitionListItem[] = definitions.map((def) => {
-          const childCount = args.include_children
-            ? ('_count' in def ? def._count.children : undefined)
-            : undefined;
-          return formatDefinitionListItem(def, childCount);
-        });
+        let formattedDefs: DefinitionListItem[];
+        if (args.include_children) {
+          const definitions = await db.definition.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            include: {
+              _count: { select: { children: true } },
+            },
+          });
+          formattedDefs = definitions.map((def) =>
+            formatDefinitionListItem(def, def._count.children)
+          );
+        } else {
+          const definitions = await db.definition.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          });
+          formattedDefs = definitions.map((def) => formatDefinitionListItem(def));
+        }
 
         // Build response with token budget enforcement
         const response = buildMcpResponse({
