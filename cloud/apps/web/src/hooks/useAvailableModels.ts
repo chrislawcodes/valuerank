@@ -8,6 +8,7 @@ import {
 type UseAvailableModelsOptions = {
   pause?: boolean;
   onlyAvailable?: boolean;
+  requestPolicy?: 'cache-first' | 'cache-and-network' | 'network-only' | 'cache-only';
 };
 
 type UseAvailableModelsResult = {
@@ -24,12 +25,12 @@ type UseAvailableModelsResult = {
  * @param options.onlyAvailable - Filter to only models with configured API keys
  */
 export function useAvailableModels(options: UseAvailableModelsOptions = {}): UseAvailableModelsResult {
-  const { pause = false, onlyAvailable = false } = options;
+  const { pause = false, onlyAvailable = false, requestPolicy = 'cache-first' } = options;
 
   const [result, reexecuteQuery] = useQuery<AvailableModelsQueryResult>({
     query: AVAILABLE_MODELS_QUERY,
     pause,
-    requestPolicy: 'cache-first',
+    requestPolicy,
   });
 
   let models = result.data?.availableModels ?? [];

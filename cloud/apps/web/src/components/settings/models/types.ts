@@ -15,6 +15,7 @@ export type ProviderSectionProps = {
   onDeprecateModel: (id: string) => void;
   onReactivateModel: (id: string) => void;
   onSetDefault: (id: string) => void;
+  onUnsetDefault: (id: string) => void;
   onEditSettings: () => void;
 };
 
@@ -24,6 +25,7 @@ export type ModelRowProps = {
   onDeprecate: () => void;
   onReactivate: () => void;
   onSetDefault: () => void;
+  onUnsetDefault: () => void;
 };
 
 export type ModelFormModalProps = {

@@ -188,6 +188,15 @@ export const SET_DEFAULT_LLM_MODEL_MUTATION = gql`
   ${LLM_MODEL_FRAGMENT}
 `;
 
+export const UNSET_DEFAULT_LLM_MODEL_MUTATION = gql`
+  mutation UnsetDefaultLlmModel($id: String!) {
+    unsetDefaultLlmModel(id: $id) {
+      ...LlmModelFields
+    }
+  }
+  ${LLM_MODEL_FRAGMENT}
+`;
+
 export const UPDATE_LLM_PROVIDER_MUTATION = gql`
   mutation UpdateLlmProvider($id: String!, $input: UpdateLlmProviderInput!) {
     updateLlmProvider(id: $id, input: $input) {
@@ -252,6 +261,10 @@ export type SetDefaultLlmModelMutationResult = {
     model: LlmModel;
     previousDefault: LlmModel | null;
   };
+};
+
+export type UnsetDefaultLlmModelMutationResult = {
+  unsetDefaultLlmModel: LlmModel;
 };
 
 export type UpdateLlmProviderMutationResult = {
