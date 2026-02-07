@@ -279,7 +279,7 @@ export async function deprecateModel(id: string): Promise<{
 }> {
   log.info({ id }, 'Deprecating model');
 
-  const model = await getModelById(id);
+  await getModelById(id); // Verify exists
   await db.llmModel.update({ where: { id }, data: { status: 'DEPRECATED', isDefault: false } });
 
   return { model: await getModelById(id), newDefault: null };
