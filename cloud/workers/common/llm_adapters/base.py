@@ -31,7 +31,7 @@ class BaseLLMAdapter(ABC):
         model: str,
         messages: list[dict[str, str]],
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
         timeout: Optional[int] = None,
@@ -41,7 +41,7 @@ class BaseLLMAdapter(ABC):
         Args:
             model: Model identifier
             messages: List of message dicts with 'role' and 'content'
-            temperature: Sampling temperature
+            temperature: Sampling temperature (None omits provider parameter)
             max_tokens: Maximum tokens to generate
             model_config: Optional provider-specific configuration (e.g., API parameter names)
             timeout: HTTP request timeout in seconds (defaults to adapter's timeout)

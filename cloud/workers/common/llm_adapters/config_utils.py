@@ -105,8 +105,8 @@ def get_config_value(
 
 def resolve_temperature(
     model_config: Optional[dict],
-    default_temperature: float,
-) -> float:
+    default_temperature: Optional[float],
+) -> Optional[float]:
     """
     Resolve the temperature value from model config.
 
@@ -115,7 +115,7 @@ def resolve_temperature(
         default_temperature: Default value if not specified in config
 
     Returns:
-        The resolved temperature value (0-2)
+        The resolved temperature value (0-2), or None to omit the parameter
     """
     temp = get_config_value(model_config, "temperature", float, 0, 2)
     return temp if temp is not None else default_temperature

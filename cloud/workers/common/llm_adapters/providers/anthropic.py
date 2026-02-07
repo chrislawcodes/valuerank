@@ -34,7 +34,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         model: str,
         messages: list[dict[str, str]],
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
         timeout: Optional[int] = None,
@@ -77,8 +77,10 @@ class AnthropicAdapter(BaseLLMAdapter):
             "model": model,
             "max_tokens": effective_max_tokens,
             "messages": anthropic_messages,
-            "temperature": resolved_temperature,
         }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
 
         if system_parts:
             payload["system"] = "\n\n".join(system_parts)
