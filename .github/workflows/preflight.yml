@@ -54,6 +54,9 @@ jobs:
 
       - name: Setup test database schema
         working-directory: cloud
+        env:
+          DATABASE_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
+          DIRECT_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
         run: npm run db:test:setup
 
       - name: Lint shared
@@ -72,6 +75,7 @@ jobs:
         working-directory: cloud
         env:
           DATABASE_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
+          DIRECT_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
           JWT_SECRET: test-secret-that-is-at-least-32-characters-long
           NODE_ENV: test
         run: npm run test --workspace @valuerank/api
