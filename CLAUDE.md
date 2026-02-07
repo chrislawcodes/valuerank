@@ -21,6 +21,9 @@ Always create PRs against `chrislawcodes/valuerank`.
 gh pr create --repo chrislawcodes/valuerank
 ```
 
+All coding agents (Codex, Antigravity, Claude Code, and similar tools) must follow the
+`Preflight Gate` in `cloud/CLAUDE.md` before any `git push` or PR creation.
+
 ### Git Remote Setup
 
 ```bash

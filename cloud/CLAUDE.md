@@ -17,7 +17,7 @@ This document defines the coding standards and architectural principles for the 
 
 ### Pre-push Hook
 
-A pre-push hook runs lint and build checks before allowing pushes. This catches CI failures locally.
+A pre-push hook runs lint, test, and build checks before allowing pushes. This catches CI failures locally.
 
 **Install the hook (one-time setup):**
 ```bash
@@ -26,12 +26,35 @@ A pre-push hook runs lint and build checks before allowing pushes. This catches 
 
 **What it does:**
 - Runs `npx turbo lint --force` to check for ESLint errors
+- Runs `npx turbo test --force` to validate tests
 - Runs `npx turbo build --force` to verify TypeScript compilation
 
 **Bypass (not recommended):**
 ```bash
 git push --no-verify
 ```
+
+### Preflight Gate (Required Before Push/PR)
+
+All code changes must pass local preflight before any `git push` or PR creation.
+
+**Required commands (run from `cloud/`):**
+1. `npm run lint --workspace @valuerank/shared`
+2. `npm run lint --workspace @valuerank/db`
+3. `npm run lint --workspace @valuerank/api`
+4. `npm run test --workspace @valuerank/api`
+5. `npm run build --workspace @valuerank/api`
+
+**If the change touches web:**
+1. `npm run lint --workspace @valuerank/web`
+2. `npm run test --workspace @valuerank/web`
+3. `npm run build --workspace @valuerank/web`
+
+**Hard rules:**
+- Do not push if any preflight command fails.
+- Do not use `git push --no-verify` except emergency hotfix with explicit human approval.
+- If unrelated local files break checks, validate in a clean worktree from `origin/main` before push.
+- Every PR must include a `Validation` section listing exact commands run and pass/fail results.
 
 ---
 
@@ -960,4 +983,3 @@ To improve user-friendliness, the term "Definition" in the user interface has be
 -   **Definition:** Internal, code-level term.
 
 New contributors should be aware of this distinction when working on the codebase.
-

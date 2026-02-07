@@ -15,5 +15,5 @@ chmod +x "$GIT_ROOT/.git/hooks/pre-push"
 
 echo "✅ Git hooks installed successfully!"
 echo ""
-echo "The pre-push hook will now run lint and build before each push."
+echo "The pre-push hook will now run lint, test, and build before each push."
 echo "To bypass (not recommended): git push --no-verify"
