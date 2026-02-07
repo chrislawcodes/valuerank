@@ -73,7 +73,7 @@ class GeminiAdapter(BaseLLMAdapter):
         # Only add maxOutputTokens if not unlimited (None)
         # For Gemini 2.5 thinking models, omitting this allows full thinking + output
         # (Default 1024 is too low for thinking models)
-        if resolved_max_tokens is not None and not model.startswith("gemini-2.5"):
+        if resolved_max_tokens is not None and "thinking" not in model:
             generation_config["maxOutputTokens"] = resolved_max_tokens
 
         # Add optional config values (Google supports topP and stopSequences)
