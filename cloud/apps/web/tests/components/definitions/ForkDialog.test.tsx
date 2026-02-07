@@ -14,7 +14,7 @@ describe('ForkDialog', () => {
       />
     );
 
-    expect(screen.getByText('Fork Definition')).toBeInTheDocument();
+    expect(screen.getByText('Fork Vignette')).toBeInTheDocument();
     expect(screen.getByText(/test definition/i)).toBeInTheDocument();
   });
 

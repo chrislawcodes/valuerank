@@ -65,9 +65,10 @@ const MOCK_TRANSCRIPT = {
 };
 
 // Mock job factory
+let jobCounter = 0;
 function createMockJob(data: Partial<ProbeScenarioJobData> = {}): Job<ProbeScenarioJobData> {
   return {
-    id: 'job-' + Date.now(),
+    id: 'job-' + Date.now() + '-' + (jobCounter++),
     name: 'probe_scenario',
     data: {
       runId: TEST_IDS.run,

@@ -157,7 +157,7 @@ describe('AnalysisPanel', () => {
     render(<AnalysisPanel runId="run-1" />);
 
     expect(screen.getByText('Analysis Not Available')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Run Analysis/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Analyze Trial/i })).toBeInTheDocument();
   });
 
   it('calls recompute when Run Analysis button is clicked', () => {
@@ -173,7 +173,7 @@ describe('AnalysisPanel', () => {
 
     render(<AnalysisPanel runId="run-1" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Run Analysis/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Analyze Trial/i }));
     expect(recompute).toHaveBeenCalled();
   });
 

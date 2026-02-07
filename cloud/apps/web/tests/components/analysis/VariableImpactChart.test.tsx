@@ -60,7 +60,7 @@ describe('VariableImpactChart', () => {
 
     expect(screen.getByText('Dimension Analysis Unavailable')).toBeInTheDocument();
     expect(
-      screen.getByText(/This analysis requires a definition with multiple dimensions/)
+      screen.getByText(/This analysis requires a vignette with multiple dimensions/)
     ).toBeInTheDocument();
   });
 

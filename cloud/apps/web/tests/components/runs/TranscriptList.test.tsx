@@ -91,8 +91,10 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
     expect(screen.getByText(/Scenario:/)).toBeInTheDocument();
 
-    // Collapse
-    await user.click(screen.getByText('gpt-4'));
+    // Collapse - use getAllByText since the model name also appears in the expanded transcript row
+    const gpt4Elements = screen.getAllByText('gpt-4');
+    // The first match is the model group header button
+    await user.click(gpt4Elements[0]);
     expect(screen.queryByText(/Scenario:/)).not.toBeInTheDocument();
   });
 
@@ -163,16 +165,15 @@ describe('TranscriptList', () => {
     expect(screen.queryByPlaceholderText('Filter by model or scenario...')).not.toBeInTheDocument();
   });
 
-  it('shows turn count in transcript row', async () => {
+  it('shows decision in transcript row', async () => {
     const user = userEvent.setup();
-    const transcripts = [createMockTranscript({ turnCount: 5 })];
+    const transcripts = [createMockTranscript()];
 
     render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByTitle('Turns')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByTitle('Decision')).toBeInTheDocument();
   });
 
   it('shows token count in transcript row', async () => {
@@ -187,16 +188,15 @@ describe('TranscriptList', () => {
     expect(screen.getByText('1,234')).toBeInTheDocument();
   });
 
-  it('shows duration in transcript row', async () => {
+  it('shows created time in transcript row', async () => {
     const user = userEvent.setup();
-    const transcripts = [createMockTranscript({ durationMs: 2500 })];
+    const transcripts = [createMockTranscript({ createdAt: '2024-01-15T10:00:00Z' })];
 
     render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByTitle('Duration')).toBeInTheDocument();
-    expect(screen.getByText('2.5s')).toBeInTheDocument();
+    expect(screen.getByTitle('Created at')).toBeInTheDocument();
   });
 
   it('handles transcript without scenario ID', async () => {

@@ -1,8 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Provider } from 'urql';
+import { fromValue } from 'wonka';
 import { DefinitionEditor } from '../../../src/components/definitions/DefinitionEditor';
 import type { DefinitionContent } from '../../../src/api/operations/definitions';
+
+const mockClient = {
+  executeQuery: vi.fn(() => fromValue({ data: { preambles: [] }, fetching: false })),
+  executeMutation: vi.fn(),
+  executeSubscription: vi.fn(),
+};
+
+function renderWithProvider(ui: React.ReactElement) {
+  return render(
+    <Provider value={mockClient as never}>
+      {ui}
+    </Provider>
+  );
+}
 
 function createMockContent(
   overrides: Partial<DefinitionContent> = {}
@@ -19,7 +35,7 @@ function createMockContent(
 describe('DefinitionEditor', () => {
   describe('form fields', () => {
     it('should render name input with placeholder', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -30,8 +46,8 @@ describe('DefinitionEditor', () => {
       expect(screen.getByPlaceholderText(/ethical dilemma/i)).toBeInTheDocument();
     });
 
-    it('should render preamble textarea', () => {
-      render(
+    it('should render preamble select', () => {
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -39,13 +55,12 @@ describe('DefinitionEditor', () => {
         />
       );
 
-      expect(
-        screen.getByPlaceholderText(/context or instructions/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText('System Preamble')).toBeInTheDocument();
+      expect(screen.getByText('Default (None)')).toBeInTheDocument();
     });
 
     it('should render template editor section', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -58,7 +73,7 @@ describe('DefinitionEditor', () => {
     });
 
     it('should render Add Custom Dimension button', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -79,7 +94,7 @@ describe('DefinitionEditor', () => {
         template: 'You face a [situation]',
       });
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="edit"
           initialName="Test Definition"
@@ -90,7 +105,6 @@ describe('DefinitionEditor', () => {
       );
 
       expect(screen.getByDisplayValue('Test Definition')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('This is the preamble')).toBeInTheDocument();
       // Monaco editor content can't be checked with getByDisplayValue
       // Just verify the template section is present
       expect(screen.getByText('Narrative')).toBeInTheDocument();
@@ -102,7 +116,7 @@ describe('DefinitionEditor', () => {
       const user = userEvent.setup();
       const onSave = vi.fn();
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={onSave}
@@ -121,7 +135,7 @@ describe('DefinitionEditor', () => {
       const user = userEvent.setup();
       const onSave = vi.fn();
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={onSave}
@@ -142,7 +156,7 @@ describe('DefinitionEditor', () => {
 
   describe('dimensions', () => {
     it('should show empty state when no dimensions', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -156,7 +170,7 @@ describe('DefinitionEditor', () => {
     it('should add dimension when Add Custom Dimension clicked', async () => {
       const user = userEvent.setup();
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -170,7 +184,7 @@ describe('DefinitionEditor', () => {
       expect(
         screen.getByPlaceholderText(/attribute name/i)
       ).toBeInTheDocument();
-      expect(screen.queryByText('No dimensions yet')).not.toBeInTheDocument();
+      expect(screen.queryByText('No attributes yet')).not.toBeInTheDocument();
     });
   });
 
@@ -184,7 +198,7 @@ describe('DefinitionEditor', () => {
         template: 'A simple test scenario',
       });
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           initialContent={initialContent}
@@ -204,13 +218,14 @@ describe('DefinitionEditor', () => {
           'Test Definition',
           expect.objectContaining({
             template: 'A simple test scenario',
-          })
+          }),
+          null
         );
       });
     });
 
     it('should show "Save Changes" button in edit mode', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="edit"
           initialName="Existing Definition"
@@ -230,7 +245,7 @@ describe('DefinitionEditor', () => {
       const user = userEvent.setup();
       const onCancel = vi.fn();
 
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -247,7 +262,7 @@ describe('DefinitionEditor', () => {
 
   describe('loading state', () => {
     it('should disable inputs when isSaving', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}
@@ -257,13 +272,12 @@ describe('DefinitionEditor', () => {
       );
 
       expect(screen.getByPlaceholderText(/ethical dilemma/i)).toBeDisabled();
-      expect(screen.getByPlaceholderText(/context or instructions/i)).toBeDisabled();
       // Monaco editor disabled state is handled differently - can't check with toBeDisabled()
-      // Just verify the form inputs are disabled
+      // Just verify the name input is disabled
     });
 
     it('should disable submit button when isSaving', () => {
-      render(
+      renderWithProvider(
         <DefinitionEditor
           mode="create"
           onSave={vi.fn()}

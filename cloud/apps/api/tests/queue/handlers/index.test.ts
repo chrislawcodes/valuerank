@@ -47,7 +47,8 @@ describe('Handler Registration', () => {
       expect(jobTypes).toContain('expand_scenarios');
       expect(jobTypes).toContain('compute_token_stats');
       expect(jobTypes).toContain('probe_dead_letter');
-      expect(jobTypes).toHaveLength(7);
+      expect(jobTypes).toContain('aggregate_analysis');
+      expect(jobTypes).toHaveLength(8);
     });
   });
 
@@ -100,7 +101,7 @@ describe('Handler Registration', () => {
 
       // Should still work
       const jobTypes = getJobTypes();
-      expect(jobTypes).toHaveLength(7);
+      expect(jobTypes).toHaveLength(8);
     });
   });
 

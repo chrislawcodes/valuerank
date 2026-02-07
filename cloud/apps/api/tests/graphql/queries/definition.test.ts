@@ -909,7 +909,6 @@ describe('GraphQL Definition Query', () => {
           definition(id: $id) {
             id
             overrides {
-              preamble
               template
               dimensions
             }
@@ -925,7 +924,7 @@ describe('GraphQL Definition Query', () => {
 
       expect(response.body.errors).toBeUndefined();
       const overrides = response.body.data.definition.overrides;
-      expect(overrides.preamble).toBe(true); // Overridden locally
+      // Preamble is no longer in the GraphQL DefinitionOverrides type
       expect(overrides.template).toBe(false); // Inherited
       expect(overrides.dimensions).toBe(false); // Inherited
     });

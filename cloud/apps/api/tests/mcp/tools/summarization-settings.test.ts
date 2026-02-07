@@ -39,9 +39,8 @@ describe('Summarization Settings MCP Workflow [T025]', () => {
       const setting = await getSettingByKey(SETTING_KEY);
       expect(setting).toBeNull();
 
-      // Service layer returns default
+      // Service layer returns default (calculated from system resources)
       const value = await getMaxParallelSummarizations();
-      expect(value).toBe(8);
       expect(value).toBe(getDefaultParallelism());
     });
 
@@ -80,7 +79,7 @@ describe('Summarization Settings MCP Workflow [T025]', () => {
     it('complete workflow: default -> set -> verify -> update -> verify', async () => {
       // Step 1: Verify default
       let value = await getMaxParallelSummarizations();
-      expect(value).toBe(8);
+      expect(value).toBe(getDefaultParallelism());
 
       // Step 2: Set initial value (simulates set_summarization_parallelism)
       await setMaxParallelSummarizations(12);
@@ -121,7 +120,7 @@ describe('Summarization Settings MCP Workflow [T025]', () => {
       // { success, setting: { key, max_parallel, previous_value }, handler_reloaded }
       // We verify the data layer matches
       expect(getSettingKey()).toBe(SETTING_KEY);
-      expect(previousValue).toBe(8); // Default
+      expect(previousValue).toBe(getDefaultParallelism()); // Default
     });
 
     it('list tool returns setting with timestamp', async () => {

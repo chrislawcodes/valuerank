@@ -70,7 +70,7 @@ describe('DefinitionFilters', () => {
     );
 
     expect(screen.getByText('Root only')).toBeInTheDocument();
-    expect(screen.getByText('Has runs')).toBeInTheDocument();
+    expect(screen.getByText('Has trials')).toBeInTheDocument();
     expect(screen.getByText('Tags')).toBeInTheDocument();
   });
 
@@ -117,7 +117,7 @@ describe('DefinitionFilters', () => {
       />
     );
 
-    await user.click(screen.getByText('Has runs'));
+    await user.click(screen.getByText('Has trials'));
 
     expect(mockOnFiltersChange).toHaveBeenCalledWith(
       expect.objectContaining({ hasRuns: true })
@@ -133,7 +133,7 @@ describe('DefinitionFilters', () => {
     );
 
     const rootOnlyButton = screen.getByText('Root only');
-    const hasRunsButton = screen.getByText('Has runs');
+    const hasRunsButton = screen.getByText('Has trials');
 
     expect(rootOnlyButton.className).toContain('bg-teal-50');
     expect(hasRunsButton.className).toContain('bg-teal-50');

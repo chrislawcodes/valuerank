@@ -4,7 +4,7 @@
  * Tests startRun, pauseRun, resumeRun, cancelRun mutations.
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
@@ -31,6 +31,22 @@ const app = createServer();
 describe('GraphQL Run Mutations', () => {
   const createdDefinitionIds: string[] = [];
   const createdRunIds: string[] = [];
+
+  // Ensure test models exist as ACTIVE for model validation
+  beforeAll(async () => {
+    const testProvider = await db.llmProvider.upsert({
+      where: { name: 'test-provider-run-mutation' },
+      create: { name: 'test-provider-run-mutation', displayName: 'Test Provider' },
+      update: {},
+    });
+    for (const modelId of ['gpt-4', 'claude-3']) {
+      await db.llmModel.upsert({
+        where: { providerId_modelId: { providerId: testProvider.id, modelId } },
+        create: { modelId, displayName: modelId, providerId: testProvider.id, status: 'ACTIVE', costInputPerMillion: 1.0, costOutputPerMillion: 2.0 },
+        update: { status: 'ACTIVE' },
+      });
+    }
+  });
 
   afterEach(async () => {
     // Clean up runs first

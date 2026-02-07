@@ -57,16 +57,29 @@ function createMockClient(options: {
   } = options;
 
   return {
-    executeQuery: vi.fn(() =>
-      pipe(
+    executeQuery: vi.fn((request: { query: string }) => {
+      // Return appropriate data based on the query being executed
+      const queryStr = typeof request.query === 'string' ? request.query : '';
+      if (queryStr.includes('GetPreamblesList') || queryStr.includes('preambles')) {
+        return pipe(
+          fromValue({
+            data: { preambles: [] },
+            fetching: false,
+            error: undefined,
+          }),
+          delay(0)
+        );
+      }
+      // Default: definition query (also handles scenarios/count queries gracefully)
+      return pipe(
         fromValue({
           data: definition ? { definition } : null,
           fetching: loading,
           error: error ? { message: error.message } : undefined,
         }),
         delay(0)
-      )
-    ),
+      );
+    }),
     executeMutation: vi.fn(() =>
       pipe(
         fromValue({ data: {} }),
@@ -112,7 +125,7 @@ describe('DefinitionDetail', () => {
       renderDefinitionDetail('def-1', client);
 
       await waitFor(() => {
-        expect(screen.getByText('Loading definition...')).toBeInTheDocument();
+        expect(screen.getByText('Loading vignette...')).toBeInTheDocument();
       });
     });
   });
@@ -123,17 +136,17 @@ describe('DefinitionDetail', () => {
       renderDefinitionDetail('new', client);
 
       await waitFor(() => {
-        expect(screen.getByText('Create New Definition')).toBeInTheDocument();
+        expect(screen.getByText('Create New Vignette')).toBeInTheDocument();
       });
     });
 
-    it('should show Definition Name input in create mode', async () => {
+    it('should show Vignette Name input in create mode', async () => {
       const client = createMockClient();
       renderDefinitionDetail('new', client);
 
       await waitFor(() => {
         // The Input component renders label text, not a proper label-input association
-        expect(screen.getByText('Definition Name')).toBeInTheDocument();
+        expect(screen.getByText('Vignette Name')).toBeInTheDocument();
       });
     });
   });
@@ -216,7 +229,7 @@ describe('DefinitionDetail', () => {
       await user.click(screen.getByRole('button', { name: /edit/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Edit Definition')).toBeInTheDocument();
+        expect(screen.getByText('Edit Vignette')).toBeInTheDocument();
       });
     });
   });
@@ -234,7 +247,7 @@ describe('DefinitionDetail', () => {
       await user.click(screen.getByRole('button', { name: /fork/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Fork Definition')).toBeInTheDocument();
+        expect(screen.getByText('Fork Vignette')).toBeInTheDocument();
       });
     });
   });
@@ -252,7 +265,7 @@ describe('DefinitionDetail', () => {
       await user.click(screen.getByRole('button', { name: /delete/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Delete Definition')).toBeInTheDocument();
+        expect(screen.getByText('Delete Vignette')).toBeInTheDocument();
       });
     });
   });

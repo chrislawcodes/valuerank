@@ -77,11 +77,11 @@ describe('RunForm', () => {
     );
 
     expect(screen.getByText('Sample Size')).toBeInTheDocument();
-    expect(screen.getByText('1% (test run)')).toBeInTheDocument();
+    expect(screen.getByText('1% (test trial)')).toBeInTheDocument();
     expect(screen.getByText('10%')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
     expect(screen.getByText('50%')).toBeInTheDocument();
-    expect(screen.getByText('100% (full run)')).toBeInTheDocument();
+    expect(screen.getByText('100% (full trial)')).toBeInTheDocument();
   });
 
   it('defaults to 1% sample for testing', () => {
@@ -93,7 +93,7 @@ describe('RunForm', () => {
     );
 
     // 1% button should be styled as selected
-    const testRunButton = screen.getByText('1% (test run)');
+    const testRunButton = screen.getByText('1% (test trial)');
     expect(testRunButton).toHaveClass('border-teal-500');
   });
 
@@ -106,8 +106,8 @@ describe('RunForm', () => {
       />
     );
 
-    // With 1% default, should show ~1 scenario
-    expect(screen.getByText('~1 scenario will be probed')).toBeInTheDocument();
+    // With 1% default, should show ~1 narrative
+    expect(screen.getByText('~1 narrative will be probed')).toBeInTheDocument();
   });
 
   it('updates estimated count when sample size changes', async () => {
@@ -124,7 +124,7 @@ describe('RunForm', () => {
     // Click 50% option
     await user.click(screen.getByText('50%'));
 
-    expect(screen.getByText('~50 scenarios will be probed')).toBeInTheDocument();
+    expect(screen.getByText('~50 narratives will be probed')).toBeInTheDocument();
   });
 
   it('disables submit button when no models are selected', () => {
@@ -136,7 +136,7 @@ describe('RunForm', () => {
     );
 
     // Submit button should be disabled
-    const submitButton = screen.getByRole('button', { name: /start run/i });
+    const submitButton = screen.getByRole('button', { name: /start trial/i });
     expect(submitButton).toBeDisabled();
 
     // onSubmit should not have been called
@@ -163,7 +163,7 @@ describe('RunForm', () => {
     await user.click(screen.getByText('25%'));
 
     // Submit
-    await user.click(screen.getByText('Start Run'));
+    await user.click(screen.getByText('Start Trial'));
 
     expect(mockOnSubmit).toHaveBeenCalledWith({
       definitionId: 'def-1',
@@ -218,7 +218,7 @@ describe('RunForm', () => {
     );
 
     // Submit button should show loading state
-    expect(screen.getByText('Starting Run...')).toBeInTheDocument();
+    expect(screen.getByText('Starting Trial...')).toBeInTheDocument();
 
     // Sample buttons should be disabled
     const sampleButton = screen.getByText('10%');
@@ -279,7 +279,7 @@ describe('RunForm', () => {
     await user.click(screen.getByText('Show advanced options'));
 
     expect(screen.getByText('Hide advanced options')).toBeInTheDocument();
-    expect(screen.getByText('Samples per Scenario')).toBeInTheDocument();
+    expect(screen.getByText('Samples per Narrative')).toBeInTheDocument();
   });
 
   it('enables submit button when models are selected', async () => {
@@ -296,7 +296,7 @@ describe('RunForm', () => {
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));
 
-    const submitButton = screen.getByRole('button', { name: /start run/i });
+    const submitButton = screen.getByRole('button', { name: /start trial/i });
     expect(submitButton).not.toBeDisabled();
   });
 
@@ -319,7 +319,7 @@ describe('RunForm', () => {
     await user.click(screen.getByText('Claude 3'));
 
     // Submit
-    await user.click(screen.getByText('Start Run'));
+    await user.click(screen.getByText('Start Trial'));
 
     expect(mockOnSubmit).toHaveBeenCalledWith({
       definitionId: 'def-1',

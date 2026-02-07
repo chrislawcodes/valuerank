@@ -107,7 +107,7 @@ describe('RunControls', () => {
 
       await waitFor(() => {
         expect(window.confirm).toHaveBeenCalledWith(
-          'Are you sure you want to cancel this run? This cannot be undone.'
+          'Are you sure you want to cancel this trial? This cannot be undone.'
         );
         expect(onCancel).toHaveBeenCalledWith('run-123');
       });
@@ -197,19 +197,19 @@ describe('RunControls', () => {
     it('has accessible labels for pause button', () => {
       render(<RunControls {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: /pause run/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /pause trial/i })).toBeInTheDocument();
     });
 
     it('has accessible labels for resume button', () => {
       render(<RunControls {...defaultProps} status="PAUSED" />);
 
-      expect(screen.getByRole('button', { name: /resume run/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /resume trial/i })).toBeInTheDocument();
     });
 
     it('has accessible labels for cancel button', () => {
       render(<RunControls {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: /cancel run/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /cancel trial/i })).toBeInTheDocument();
     });
   });
 
