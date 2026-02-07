@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { db, type DefinitionContent, type Dimension } from '@valuerank/db';
+import { db, type Dimension } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { calculateScenarioCombinations } from '../../services/mcp/validation.js';
 import { addToolRegistrar } from './registry.js';
