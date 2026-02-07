@@ -33,7 +33,7 @@ class GeminiAdapter(BaseLLMAdapter):
         model: str,
         messages: list[dict[str, str]],
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
         timeout: Optional[int] = None,
@@ -65,9 +65,10 @@ class GeminiAdapter(BaseLLMAdapter):
         resolved_temperature = resolve_temperature(model_config, temperature)
 
         # Build generation config
-        generation_config: dict[str, Any] = {
-            "temperature": resolved_temperature,
-        }
+        generation_config: dict[str, Any] = {}
+
+        if resolved_temperature is not None:
+            generation_config["temperature"] = resolved_temperature
 
         # Only add maxOutputTokens if not unlimited (None)
         # For Gemini 2.5 thinking models, omitting this allows full thinking + output

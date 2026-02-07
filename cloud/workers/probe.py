@@ -18,7 +18,7 @@ Input format (ProbeWorkerInput):
     "followups": [{ "label": string, "prompt": string }]
   },
   "config": {
-    "temperature": number,
+    "temperature": number,  # Optional
     "maxTokens": number,
     "maxTurns": number
   },
@@ -207,7 +207,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     model_cost = data.get("modelCost")  # Optional cost configuration
     model_config = data.get("modelConfig")  # Optional API configuration
 
-    temperature = config.get("temperature", 0.7)
+    temperature = config.get("temperature")
     max_tokens = config.get("maxTokens", 1024)
     max_turns = config.get("maxTurns", 10)
 
@@ -236,12 +236,17 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     try:
         # Turn 1: Initial prompt
         log.debug("Executing turn 1", modelId=model_id)
+        generate_kwargs: dict[str, Any] = {
+            "max_tokens": max_tokens,
+            "model_config": model_config,
+        }
+        if isinstance(temperature, (int, float)):
+            generate_kwargs["temperature"] = float(temperature)
+
         response = generate(
             model_id,
             messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model_config=model_config,
+            **generate_kwargs,
         )
 
         turn = Turn(
@@ -283,9 +288,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             response = generate(
                 model_id,
                 messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                model_config=model_config,
+                **generate_kwargs,
             )
 
             turn = Turn(

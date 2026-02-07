@@ -367,7 +367,6 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
             modelId,
             sampleIndex,
             config: {
-              temperature: 0.7, // Default, can be configured later
               maxTurns: 10,
             },
           },

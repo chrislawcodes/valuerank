@@ -239,7 +239,6 @@ async function requeueMissingProbes(
         modelId,
         sampleIndex,
         config: {
-          temperature: 0.7,
           maxTurns: 10,
         },
       },

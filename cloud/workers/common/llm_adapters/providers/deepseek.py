@@ -36,7 +36,7 @@ class DeepSeekAdapter(BaseLLMAdapter):
         model: str,
         messages: list[dict[str, str]],
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
         timeout: Optional[int] = None,
@@ -66,8 +66,10 @@ class DeepSeekAdapter(BaseLLMAdapter):
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": resolved_temperature,
         }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
 
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
@@ -143,7 +145,7 @@ class DeepSeekAdapter(BaseLLMAdapter):
         model: str,
         messages: list[dict[str, str]],
         *,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
         timeout: Optional[int] = None,
@@ -177,10 +179,12 @@ class DeepSeekAdapter(BaseLLMAdapter):
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": resolved_temperature,
             "stream": True,  # Enable streaming
             "stream_options": {"include_usage": True},  # Get token counts in stream
         }
+
+        if resolved_temperature is not None:
+            payload["temperature"] = resolved_temperature
 
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
