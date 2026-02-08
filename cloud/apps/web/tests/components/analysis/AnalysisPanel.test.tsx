@@ -431,4 +431,70 @@ describe('AnalysisPanel', () => {
     // Check for stability content (SEM)
     expect(screen.getByText(/Condition x AI Standard Error of Mean/i)).toBeInTheDocument();
   });
+
+  it('handles N<2 samples without crashing', async () => {
+    // Mock analysis where one model has only 1 sample (N=1)
+    // This causes calculateSEM to return null, which previously crashed the component
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': 'Value 1', 'Dim B': 'Value 1' },
+          'scenario-2': { 'Dim A': 'Value 1', 'Dim B': 'Value 1' }
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 0.8, 'scenario-2': 0.9 }, // Valid model
+          'claude-3': { 'scenario-1': 0.5, 'scenario-2': 0.6 } // Target model
+        },
+      }
+    });
+
+    // Force a scenario to have only 1 score (simulated by having only 1 scenario in the list for a condition)
+    // Actually, calculateSEM takes an array of scores.
+    // In StabilityTab logic (Lines 216-222), it collects scores for all scenarioIds matching the condition.
+    // If we have only 1 scenario matching 'Dim A: Value 1' && 'Dim B: Value 1', then scores array has length 1.
+    // calculateSEM([score]) returns null.
+
+    // The mock data above has 'scenario-1' and 'scenario-2' both mapping to 'Dim A: Value 1', 'Dim B: Value 1'.
+    // So for that condition, it will see 2 scenarios.
+    // I need to make it so there is ONLY 1 scenario for a specific condition.
+
+    if (analysis.visualizationData && analysis.visualizationData.scenarioDimensions) {
+      // scenario-1: A=1, B=1
+      analysis.visualizationData.scenarioDimensions['scenario-1'] = { 'Dim A': '1', 'Dim B': '1' };
+      // scenario-2: A=2, B=2
+      analysis.visualizationData.scenarioDimensions['scenario-2'] = { 'Dim A': '2', 'Dim B': '2' };
+    }
+
+    // Now for condition A=1, B=1, there is only scenario-1.
+    // Scores for 'claude-3' will be [0.5]. Length = 1.
+    // calculateSEM returns null.
+    // getModelSEM returns { sem: null, count: 1 }.
+    // Rendering: sem is null. getSEMTextColor(sem!) -> CRASH.
+
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    // Navigate to Stability tab
+    const stabilityTab = screen.getByRole('button', { name: /Stability/i });
+    await userEvent.click(stabilityTab);
+
+    // Should render without error and show N<2 or placeholder
+    expect(screen.getByText(/Condition x AI Standard Error of Mean/i)).toBeInTheDocument();
+    // We expect "N<2" to be displayed for the cell with insufficient data, 
+    // OR at least the component shouldn't crash.
+    // In the current broken state, this test might fail with the error observed in production.
+  });
 });

@@ -381,10 +381,10 @@ function ConditionStabilityMatrix({
                                                 <span className="text-gray-300">-</span>
                                             ) : (
                                                 <div className="flex flex-col items-center">
-                                                    {sem === -1 ? (
-                                                        <span className={getSEMTextColor(sem)}>N&lt;2</span>
+                                                    {sem === -1 || sem === null ? (
+                                                        <span className={getSEMTextColor(-1)}>N&lt;2</span>
                                                     ) : (
-                                                        <span className={getSEMTextColor(sem!)}>{sem!.toFixed(3)}</span>
+                                                        <span className={getSEMTextColor(sem)}>{sem.toFixed(3)}</span>
                                                     )}
                                                     <span className="text-[10px] text-gray-400 mt-0.5">n={count}</span>
                                                 </div>
