@@ -502,7 +502,9 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
 
       {/* Tab Content */}
       <div className="min-h-[400px]">
-        {activeTab === 'overview' && <OverviewTab perModel={filteredPerModel} />}
+        {activeTab === 'overview' && (
+          <OverviewTab runId={runId} perModel={filteredPerModel} visualizationData={analysis.visualizationData} />
+        )}
         {activeTab === 'decisions' && (
           <DecisionsTab
             visualizationData={analysis.visualizationData}
