@@ -17,7 +17,7 @@ import {
   OverviewTab,
   DecisionsTab,
   ScenariosTab,
-  ValuesTab,
+  StabilityTab,
   AgreementTab,
   MethodsTab,
   TABS,
@@ -521,12 +521,12 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
             dimensionLabels={dimensionLabels}
           />
         )}
-        {activeTab === 'values' && (
-          <ValuesTab
+        {activeTab === 'stability' && (
+          <StabilityTab
+            runId={runId}
             perModel={filteredPerModel}
-            dimensionAnalysis={analysis.dimensionAnalysis}
-            filters={filters}
-            onFilterChange={setFilters}
+            visualizationData={loading ? null : analysis.visualizationData}
+            varianceAnalysis={analysis.varianceAnalysis}
           />
         )}
         {activeTab === 'agreement' && (
