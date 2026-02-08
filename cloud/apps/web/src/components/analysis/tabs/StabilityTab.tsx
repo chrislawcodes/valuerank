@@ -163,36 +163,42 @@ function ConditionStabilityMatrix({
         if (varianceAnalysis) {
             const modelStats = varianceAnalysis.perModel[modelId];
             if (modelStats && modelStats.perScenario) {
-                const sems: number[] = [];
-                let hasAnyStats = false;
+                let sumWeightedVariances = 0;
+                let totalDf = 0;
                 let totalCount = 0;
 
                 scenarioIds.forEach(scenId => {
                     const stats = modelStats.perScenario[scenId];
                     if (stats) {
-                        hasAnyStats = true;
                         totalCount += stats.sampleCount;
                         if (stats.sampleCount > 1) {
-                            sems.push(stats.stdDev / Math.sqrt(stats.sampleCount));
+                            // Recover variance from stdDev: var = stdDev^2
+                            const variance = Math.pow(stats.stdDev, 2);
+                            // Weight by degrees of freedom (n-1)
+                            sumWeightedVariances += (stats.sampleCount - 1) * variance;
+                            totalDf += (stats.sampleCount - 1);
                         }
                     }
                 });
 
-                if (sems.length > 0) {
-                    // Return average SEM
+                if (totalDf > 0) {
+                    // Pooled Variance = Sum((n-1)*var) / Sum(n-1)
+                    const pooledVariance = sumWeightedVariances / totalDf;
+                    // Pooled SEM = sqrt(PooledVariance / TotalN)
+                    // Note: This assumes samples are drawn from same population distribution with same variance
+                    const pooledSEM = Math.sqrt(pooledVariance / totalCount);
+
                     return {
-                        sem: sems.reduce((a, b) => a + b, 0) / sems.length,
+                        sem: pooledSEM,
                         count: totalCount
                     };
                 }
 
-                // If we had stats but NONE had > 1 sample
-                if (hasAnyStats) {
-                    return { sem: -1, count: totalCount };
-                }
-
                 // If no stats found for any scenario in this condition
                 if (totalCount === 0) return null;
+
+                // If we have data but insufficient samples for variance (N < 2 for all scenarios)
+                return { sem: -1, count: totalCount };
             }
         }
 

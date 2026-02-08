@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import { formatPercent } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
@@ -110,6 +111,7 @@ function ConditionDecisionMatrix({
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
 }) {
+  const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
   const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
@@ -213,9 +215,7 @@ function ConditionDecisionMatrix({
       model: modelId,
     });
     const url = `/analysis/${runId}/transcripts?${params.toString()}`;
-    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
-      window.location.assign(url);
-    }
+    navigate(url);
   };
 
   if (!scenarioDimensions || !modelScenarioMatrix) {
@@ -342,9 +342,8 @@ function ConditionDecisionMatrix({
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
-                      className={`border border-gray-200 px-3 py-2 text-center text-sm transition-colors ${
-                        canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''
-                      }`}
+                      className={`border border-gray-200 px-3 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''
+                        }`}
                       style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
                       title={
                         canOpen
