@@ -277,8 +277,9 @@ export async function updateAggregateRun(
 
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
-            .map(r => r.analysisResults && r.analysisResults[0])
-            .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => !!a);
+            .map(r => r.analysisResults[0])
+            // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+            .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => a !== undefined && a !== null);
 
         if (validAnalyses.length === 0) {
             log.info('No valid analysis results found for compatible runs');
@@ -484,7 +485,7 @@ function aggregateAnalysesLogic(
         const totalModelSamples = validAnalyses.reduce((sum, a) => {
             const stats = a.perModel[modelId];
             if (!stats) return sum;
-            return sum + (stats.sampleSize || 0);
+            return sum + (stats.sampleSize ?? 0);
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
@@ -500,7 +501,7 @@ function aggregateAnalysesLogic(
                         if (!isNaN(opt)) modelDecisions[opt]!.push((count) / runTotal);
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
-                        if (!dist[String(opt)]) modelDecisions[opt]!.push(0);
+                        if (dist[String(opt)] === undefined) modelDecisions[opt]!.push(0);
                     });
                 }
             }
@@ -541,7 +542,7 @@ function aggregateAnalysesLogic(
                     }
 
                     const target = aggregatedValues[valueId];
-                    if (target) {
+                    if (target !== undefined) {
                         target.count.prioritized += vStats.count.prioritized;
                         target.count.deprioritized += vStats.count.deprioritized;
                         target.count.neutral += vStats.count.neutral;
@@ -604,7 +605,7 @@ function aggregateAnalysesLogic(
     const decisionsByScenario: Record<string, Record<string, number[]>> = {};
 
     transcripts.forEach(t => {
-        if (!t.decisionCode || !t.modelId || !t.scenarioId) return;
+        if (t.decisionCode == null || t.decisionCode === '' || t.modelId == null || t.modelId === '' || t.scenarioId == null || t.scenarioId === '') return;
         const code = parseInt(t.decisionCode);
         if (isNaN(code)) return;
 
@@ -636,7 +637,7 @@ function aggregateAnalysesLogic(
                 // Ensure bounds (though unlikely to exceed 1-5 unless input is weird)
                 const clamped = Math.max(1, Math.min(5, rounded));
 
-                dist[String(clamped)] = (dist[String(clamped)] || 0) + 1;
+                dist[String(clamped)] = (dist[String(clamped)] ?? 0) + 1;
             });
         }
 
@@ -688,7 +689,7 @@ function aggregateAnalysesLogic(
         value: unknown,
         scenarioId: string
     ): Record<string, number | string> | null => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
         const entries = Object.entries(value);
         const sanitized: Record<string, number | string> = {};
         let dropped = 0;
@@ -705,7 +706,7 @@ function aggregateAnalysesLogic(
         return Object.keys(sanitized).length > 0 ? sanitized : null;
     };
     scenarios.forEach(s => {
-        if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
+        if (s.content == null || typeof s.content !== 'object' || Array.isArray(s.content)) return;
         const content = s.content as Record<string, unknown>;
         const dimensions = content['dimensions'];
         const validated = toDimensionRecord(dimensions, s.id);
@@ -795,7 +796,7 @@ function computeVarianceAnalysis(
     const grouped = new Map<string, number[]>();
 
     transcripts.forEach(t => {
-        if (!t.scenarioId || !t.decisionCode || !t.modelId) return;
+        if (t.scenarioId == null || t.scenarioId === '' || t.decisionCode == null || t.decisionCode === '' || t.modelId == null || t.modelId === '') return;
         const score = parseFloat(t.decisionCode);
         if (isNaN(score)) return;
 
@@ -817,7 +818,7 @@ function computeVarianceAnalysis(
 
     grouped.forEach((scores, key) => {
         const [scenarioId, modelId] = key.split('||');
-        if (!modelId || !scenarioId) return;
+        if (modelId === undefined || modelId === '' || scenarioId === undefined || scenarioId === '') return;
 
         let modelMap = modelScenarioScores.get(modelId);
         if (!modelMap) {
