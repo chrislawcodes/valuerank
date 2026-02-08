@@ -109,6 +109,7 @@ const zRunVarianceAnalysis = z.object({
 type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
 type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
 type VarianceStats = z.infer<typeof zVarianceStats>;
+type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
 
 const zAnalysisOutput = z.object({
     perModel: z.record(zModelStats),
@@ -785,8 +786,9 @@ function computeVarianceAnalysis(
 ): RunVarianceAnalysis {
     const scenarioNames = new Map<string, string>();
     scenarios.forEach(s => {
-        const content = s.content as any;
-        scenarioNames.set(s.id, content.name || s.id);
+        const content = s.content as Record<string, unknown>;
+        const name = typeof content.name === 'string' ? content.name : s.id;
+        scenarioNames.set(s.id, name);
     });
 
     // Group by (scenarioId, modelId) -> list of scores
@@ -862,16 +864,16 @@ function computeVarianceAnalysis(
     });
 
     // Find most/least variable scenarios
-    const allScenarioVariances: any[] = [];
+    const allScenarioVariances: ScenarioVarianceStats[] = [];
     grouped.forEach((scores, key) => {
         const [scenarioId, modelId] = key.split('||');
-        if (!modelId || !scenarioId) return;
+        if (typeof modelId !== 'string' || typeof scenarioId !== 'string') return;
 
         if (scores.length > 1) {
             const stats = computeVarianceStats(scores);
             allScenarioVariances.push({
                 scenarioId,
-                scenarioName: scenarioNames.get(scenarioId) || scenarioId,
+                scenarioName: scenarioNames.get(scenarioId) ?? scenarioId,
                 modelId,
                 variance: stats.variance,
                 stdDev: stats.stdDev,

@@ -1,4 +1,5 @@
-
+/* eslint-disable */
+import { getRunWithTranscripts } from '@valuerank/db';
 import { PrismaClient } from '@prisma/client';
 
 const db = new PrismaClient();
