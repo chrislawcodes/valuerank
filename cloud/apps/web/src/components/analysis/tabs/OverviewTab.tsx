@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import { formatPercent } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
@@ -111,7 +110,6 @@ function ConditionDecisionMatrix({
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
 }) {
-  const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
   const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
@@ -214,7 +212,10 @@ function ConditionDecisionMatrix({
       col: row.attributeBLevel,
       model: modelId,
     });
-    navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
+    const url = `/analysis/${runId}/transcripts?${params.toString()}`;
+    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+      window.location.assign(url);
+    }
   };
 
   if (!scenarioDimensions || !modelScenarioMatrix) {
