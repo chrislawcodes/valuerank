@@ -163,42 +163,49 @@ function ConditionStabilityMatrix({
         if (varianceAnalysis) {
             const modelStats = varianceAnalysis.perModel[modelId];
             if (modelStats && modelStats.perScenario) {
-                let sumWeightedVariances = 0;
-                let totalDf = 0;
+                // First pass: Calculate global mean for this condition
+                let sumWeightedMeans = 0;
                 let totalCount = 0;
 
                 scenarioIds.forEach(scenId => {
                     const stats = modelStats.perScenario[scenId];
-                    if (stats) {
+                    if (stats && stats.sampleCount > 0) {
+                        sumWeightedMeans += stats.mean * stats.sampleCount;
                         totalCount += stats.sampleCount;
-                        if (stats.sampleCount > 1) {
-                            // Recover variance from stdDev: var = stdDev^2
-                            const variance = Math.pow(stats.stdDev, 2);
-                            // Weight by degrees of freedom (n-1)
-                            sumWeightedVariances += (stats.sampleCount - 1) * variance;
-                            totalDf += (stats.sampleCount - 1);
-                        }
                     }
                 });
 
-                if (totalDf > 0) {
-                    // Pooled Variance = Sum((n-1)*var) / Sum(n-1)
-                    const pooledVariance = sumWeightedVariances / totalDf;
-                    // Pooled SEM = sqrt(PooledVariance / TotalN)
-                    // Note: This assumes samples are drawn from same population distribution with same variance
-                    const pooledSEM = Math.sqrt(pooledVariance / totalCount);
-
-                    return {
-                        sem: pooledSEM,
-                        count: totalCount
-                    };
+                if (totalCount < 2) {
+                    // Not enough samples for variance
+                    return totalCount === 0 ? null : { sem: -1, count: totalCount };
                 }
 
-                // If no stats found for any scenario in this condition
-                if (totalCount === 0) return null;
+                const globalMean = sumWeightedMeans / totalCount;
+                let ssTotal = 0; // Sum of Squares Total
 
-                // If we have data but insufficient samples for variance (N < 2 for all scenarios)
-                return { sem: -1, count: totalCount };
+                // Second pass: Accumulate Within-Scenario and Between-Scenario SS
+                // SS_total = Σ((n_i - 1)s_i^2 + n_i(μ_i - μ_total)^2)
+                scenarioIds.forEach(scenId => {
+                    const stats = modelStats.perScenario[scenId];
+                    if (stats && stats.sampleCount > 0) {
+                        // Within-scenario SS = (n-1) * variance
+                        if (stats.sampleCount > 1) {
+                            const variance = Math.pow(stats.stdDev, 2);
+                            ssTotal += (stats.sampleCount - 1) * variance;
+                        }
+
+                        // Between-scenario SS = n * (mean - globalMean)^2
+                        ssTotal += stats.sampleCount * Math.pow(stats.mean - globalMean, 2);
+                    }
+                });
+
+                // Total Variance = SS_total / (N - 1)
+                const totalVariance = ssTotal / (totalCount - 1);
+
+                // SEM = sqrt(TotalVariance / N)
+                const sem = Math.sqrt(totalVariance / totalCount);
+
+                return { sem, count: totalCount };
             }
         }
 
