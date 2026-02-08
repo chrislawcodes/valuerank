@@ -17,7 +17,7 @@ import {
   OverviewTab,
   DecisionsTab,
   ScenariosTab,
-  ValuesTab,
+  StabilityTab,
   AgreementTab,
   MethodsTab,
   TABS,
@@ -257,7 +257,6 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
   const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
   const [filters, setFilters] = useState<FilterState>({
     selectedModels: [],
-    selectedValue: null,
   });
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -305,14 +304,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     [analysis]
   );
 
-  const availableValues = useMemo(() => {
-    if (!analysis) return [];
-    const valueSet = new Set<string>();
-    Object.values(analysis.perModel).forEach((modelStats) => {
-      Object.keys(modelStats.values).forEach((v) => valueSet.add(v));
-    });
-    return Array.from(valueSet).sort();
-  }, [analysis]);
+
 
   const filteredPerModel = useMemo(
     () => (analysis ? filterByModels(analysis.perModel, filters.selectedModels) : {}),
@@ -473,12 +465,14 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
 
       {/* Filters */}
       <div className="mb-6">
-        <AnalysisFilters
-          availableModels={availableModels}
-          availableValues={availableValues}
-          filters={filters}
-          onFilterChange={setFilters}
-        />
+        {/* Filters */}
+        <div className="mb-6">
+          <AnalysisFilters
+            availableModels={availableModels}
+            filters={filters}
+            onFilterChange={setFilters}
+          />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -521,12 +515,12 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
             dimensionLabels={dimensionLabels}
           />
         )}
-        {activeTab === 'values' && (
-          <ValuesTab
+        {activeTab === 'stability' && (
+          <StabilityTab
+            runId={runId}
             perModel={filteredPerModel}
-            dimensionAnalysis={analysis.dimensionAnalysis}
-            filters={filters}
-            onFilterChange={setFilters}
+            visualizationData={loading ? null : analysis.visualizationData}
+            varianceAnalysis={analysis.varianceAnalysis}
           />
         )}
         {activeTab === 'agreement' && (

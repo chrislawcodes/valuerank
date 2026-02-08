@@ -166,6 +166,20 @@ interface RunService {
 }
 ```
 
+### Strict Boolean Checks
+
+Use explicit checks for `null` and `undefined` instead of relying on truthiness, particularly for numbers and strings, to avoid linting errors.
+
+```typescript
+// Bad - fails strict-boolean-expressions if value is number/string
+if (!value) { ... }
+
+// Good
+if (value != null) { ... }
+if (value === 0) { ... }
+if (str === '') { ... }
+```
+
 ---
 
 ## Testing Requirements
@@ -214,6 +228,18 @@ apps/api/
 - **Mock**: Database, external APIs, LLM providers
 - **Integration tests**: API routes with test database
 - **Skip**: Simple getters, direct ORM pass-through
+
+### Frontend Component Testing
+
+- **Router Context**: Any component using `useNavigate`, `useLocation`, or `Link` **MUST** be wrapped in `<MemoryRouter>` during tests.
+  ```tsx
+  render(
+    <MemoryRouter>
+      <MyComponent />
+    </MemoryRouter>
+  );
+  ```
+- **Environment**: Ensure tests run in `jsdom` or `happy-dom`.
 
 ---
 

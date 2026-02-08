@@ -24,8 +24,16 @@ vi.mock('../../../src/queue/boss.js', () => ({
   }),
 }));
 
+// Mock parallelism service to avoid DB dependencies and enforce fast rate limits
+vi.mock('../../../src/services/parallelism/index.js', () => ({
+  loadProviderLimits: vi.fn(),
+  getProviderForModel: vi.fn(),
+}));
+
 // Import the mocked function
 import { spawnPython } from '../../../src/queue/spawn.js';
+import { loadProviderLimits, getProviderForModel } from '../../../src/services/parallelism/index.js';
+import { clearAll as clearRateLimiters } from '../../../src/services/rate-limiter/index.js';
 
 // Mock health check response
 const MOCK_HEALTH_CHECK = {
@@ -109,6 +117,23 @@ describe('probe-scenario integration', () => {
       });
     });
 
+    // Mock parallelism settings for fast tests (no rate limiting delay)
+    const mockLimits = new Map([
+      ['openai', { maxParallelRequests: 100, requestsPerMinute: 60000, queueName: 'probe_openai' }],
+      ['anthropic', { maxParallelRequests: 100, requestsPerMinute: 60000, queueName: 'probe_anthropic' }],
+      ['google', { maxParallelRequests: 100, requestsPerMinute: 60000, queueName: 'probe_google' }],
+    ]);
+
+    vi.mocked(loadProviderLimits).mockResolvedValue(mockLimits as any);
+
+    // Mock provider lookup
+    vi.mocked(getProviderForModel).mockImplementation(async (modelId) => {
+      if (modelId.startsWith('gpt')) return 'openai';
+      if (modelId.startsWith('claude')) return 'anthropic';
+      if (modelId.startsWith('gemini')) return 'google';
+      return null;
+    });
+
     // Create test data
     await db.definition.create({
       data: {
@@ -157,6 +182,9 @@ describe('probe-scenario integration', () => {
     await db.run.deleteMany({ where: { id: TEST_IDS.run } });
     await db.scenario.deleteMany({ where: { id: TEST_IDS.scenario } });
     await db.definition.deleteMany({ where: { id: TEST_IDS.definition } });
+
+    // Clear rate limiters to avoid state leaking between tests
+    clearRateLimiters();
   });
 
   describe('successful probe completion', () => {

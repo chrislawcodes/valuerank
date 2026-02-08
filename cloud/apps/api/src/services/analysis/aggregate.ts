@@ -55,21 +55,67 @@ const zModelStats = z.object({
     }).optional(),
 });
 
+
 const zVisualizationData = z.object({
     decisionDistribution: z.record(z.record(z.number())).optional(),
     modelScenarioMatrix: z.record(z.record(z.number())).optional(),
     scenarioDimensions: z.record(z.record(z.union([z.number(), z.string()]))).optional(),
 }).passthrough();
 
+const zVarianceStats = z.object({
+    sampleCount: z.number(),
+    mean: z.number(),
+    stdDev: z.number(),
+    variance: z.number(),
+    min: z.number(),
+    max: z.number(),
+    range: z.number(),
+});
+
+const zModelVarianceStats = z.object({
+    totalSamples: z.number(),
+    uniqueScenarios: z.number(),
+    samplesPerScenario: z.number(),
+    avgWithinScenarioVariance: z.number(),
+    maxWithinScenarioVariance: z.number(),
+    consistencyScore: z.number(),
+    perScenario: z.record(zVarianceStats),
+});
+
 const zContestedScenario = z.object({
     scenarioId: z.string(),
     variance: z.number(),
 }).passthrough();
 
+const zScenarioVarianceStats = z.object({
+    scenarioId: z.string(),
+    scenarioName: z.string(),
+    modelId: z.string().optional(),
+    mean: z.number(),
+    stdDev: z.number(),
+    variance: z.number(),
+    range: z.number(),
+    sampleCount: z.number(),
+}).passthrough();
+
+const zRunVarianceAnalysis = z.object({
+    isMultiSample: z.boolean(),
+    samplesPerScenario: z.number(),
+    perModel: z.record(zModelVarianceStats),
+    mostVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+    leastVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+}).passthrough();
+
+type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
+type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
+type VarianceStats = z.infer<typeof zVarianceStats>;
+type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
+
 const zAnalysisOutput = z.object({
     perModel: z.record(zModelStats),
     visualizationData: zVisualizationData.optional(),
     mostContestedScenarios: z.array(zContestedScenario).optional(),
+    varianceAnalysis: zRunVarianceAnalysis.optional(),
     modelAgreement: z.unknown().optional(),
 }).passthrough();
 
@@ -106,6 +152,7 @@ interface AggregatedResult {
         modelScenarioMatrix: Record<string, Record<string, number>>;
     };
     mostContestedScenarios: ContestedScenario[];
+    varianceAnalysis: RunVarianceAnalysis | null;
     decisionStats: Record<string, DecisionStats>;
     valueAggregateStats: Record<string, ValueAggregateStats>;
 }
@@ -230,8 +277,9 @@ export async function updateAggregateRun(
 
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
-            .map(r => r.analysisResults && r.analysisResults[0])
-            .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => !!a);
+            .map(r => r.analysisResults[0])
+            // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+            .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => a !== undefined && a !== null);
 
         if (validAnalyses.length === 0) {
             log.info('No valid analysis results found for compatible runs');
@@ -390,6 +438,7 @@ export async function updateAggregateRun(
             modelAgreement: aggregatedResult.modelAgreement,
             visualizationData: aggregatedResult.visualizationData,
             mostContestedScenarios: aggregatedResult.mostContestedScenarios,
+            varianceAnalysis: aggregatedResult.varianceAnalysis,
             decisionStats: aggregatedResult.decisionStats,
             valueAggregateStats: aggregatedResult.valueAggregateStats,
             runCount: validAnalyses.length,
@@ -436,7 +485,7 @@ function aggregateAnalysesLogic(
         const totalModelSamples = validAnalyses.reduce((sum, a) => {
             const stats = a.perModel[modelId];
             if (!stats) return sum;
-            return sum + (stats.sampleSize || 0);
+            return sum + (stats.sampleSize ?? 0);
         }, 0);
 
         // A. Decision Distributions (Calculated from stats/analyses)
@@ -452,7 +501,7 @@ function aggregateAnalysesLogic(
                         if (!isNaN(opt)) modelDecisions[opt]!.push((count) / runTotal);
                     });
                     [1, 2, 3, 4, 5].forEach(opt => {
-                        if (!dist[String(opt)]) modelDecisions[opt]!.push(0);
+                        if (dist[String(opt)] === undefined) modelDecisions[opt]!.push(0);
                     });
                 }
             }
@@ -493,7 +542,7 @@ function aggregateAnalysesLogic(
                     }
 
                     const target = aggregatedValues[valueId];
-                    if (target) {
+                    if (target !== undefined) {
                         target.count.prioritized += vStats.count.prioritized;
                         target.count.deprioritized += vStats.count.deprioritized;
                         target.count.neutral += vStats.count.neutral;
@@ -556,7 +605,7 @@ function aggregateAnalysesLogic(
     const decisionsByScenario: Record<string, Record<string, number[]>> = {};
 
     transcripts.forEach(t => {
-        if (!t.decisionCode || !t.modelId || !t.scenarioId) return;
+        if (t.decisionCode == null || t.decisionCode === '' || t.modelId == null || t.modelId === '' || t.scenarioId == null || t.scenarioId === '') return;
         const code = parseInt(t.decisionCode);
         if (isNaN(code)) return;
 
@@ -588,7 +637,7 @@ function aggregateAnalysesLogic(
                 // Ensure bounds (though unlikely to exceed 1-5 unless input is weird)
                 const clamped = Math.max(1, Math.min(5, rounded));
 
-                dist[String(clamped)] = (dist[String(clamped)] || 0) + 1;
+                dist[String(clamped)] = (dist[String(clamped)] ?? 0) + 1;
             });
         }
 
@@ -640,7 +689,7 @@ function aggregateAnalysesLogic(
         value: unknown,
         scenarioId: string
     ): Record<string, number | string> | null => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
         const entries = Object.entries(value);
         const sanitized: Record<string, number | string> = {};
         let dropped = 0;
@@ -657,7 +706,7 @@ function aggregateAnalysesLogic(
         return Object.keys(sanitized).length > 0 ? sanitized : null;
     };
     scenarios.forEach(s => {
-        if (!s.content || typeof s.content !== 'object' || Array.isArray(s.content)) return;
+        if (s.content == null || typeof s.content !== 'object' || Array.isArray(s.content)) return;
         const content = s.content as Record<string, unknown>;
         const dimensions = content['dimensions'];
         const validated = toDimensionRecord(dimensions, s.id);
@@ -667,12 +716,184 @@ function aggregateAnalysesLogic(
     });
     mergedVizData.scenarioDimensions = dimensionsMap;
 
+    // Compute Variance Analysis
+    const varianceAnalysis = computeVarianceAnalysis(transcripts, scenarios);
+
     return {
         perModel: aggregatedPerModel,
         modelAgreement: template.modelAgreement,
         visualizationData: mergedVizData,
         mostContestedScenarios: mergedContested,
+        varianceAnalysis,
         decisionStats,
         valueAggregateStats
+    };
+}
+
+// --- Variance Analysis Logic (Ported from Python) ---
+
+function computeVarianceStats(scores: number[]): VarianceStats {
+    if (scores.length === 0) {
+        return {
+            sampleCount: 0,
+            mean: 0,
+            stdDev: 0,
+            variance: 0,
+            min: 0,
+            max: 0,
+            range: 0,
+        };
+    }
+
+    const n = scores.length;
+    const sum = scores.reduce((a, b) => a + b, 0);
+    const mean = sum / n;
+
+    // Sample variance (ddof=1)
+    let variance = 0;
+    if (n > 1) {
+        const sumSqDiff = scores.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+        variance = sumSqDiff / (n - 1);
+    }
+
+    const stdDev = Math.sqrt(variance);
+    const min = Math.min(...scores);
+    const max = Math.max(...scores);
+
+    return {
+        sampleCount: n,
+        mean: parseFloat(mean.toFixed(6)),
+        stdDev: parseFloat(stdDev.toFixed(6)),
+        variance: parseFloat(variance.toFixed(6)),
+        min: parseFloat(min.toFixed(6)),
+        max: parseFloat(max.toFixed(6)),
+        range: parseFloat((max - min).toFixed(6)),
+    };
+}
+
+function computeConsistencyScore(variances: number[], maxPossibleVariance = 4.0): number {
+    if (variances.length === 0) return 1.0;
+    const sum = variances.reduce((a, b) => a + b, 0);
+    const avgVariance = sum / variances.length;
+
+    // Normalize: 0 variance = 1.0 consistency, max variance = 0.0 consistency
+    const score = 1.0 - (avgVariance / maxPossibleVariance);
+    return parseFloat(Math.max(0.0, Math.min(1.0, score)).toFixed(6));
+}
+
+function computeVarianceAnalysis(
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
+    scenarios: { id: string, content: Prisma.JsonValue }[]
+): RunVarianceAnalysis {
+    const scenarioNames = new Map<string, string>();
+    scenarios.forEach(s => {
+        const content = s.content as Record<string, unknown>;
+        const name = typeof content.name === 'string' ? content.name : s.id;
+        scenarioNames.set(s.id, name);
+    });
+
+    // Group by (scenarioId, modelId) -> list of scores
+    const grouped = new Map<string, number[]>();
+
+    transcripts.forEach(t => {
+        if (t.scenarioId == null || t.scenarioId === '' || t.decisionCode == null || t.decisionCode === '' || t.modelId == null || t.modelId === '') return;
+        const score = parseFloat(t.decisionCode);
+        if (isNaN(score)) return;
+
+        const key = `${t.scenarioId}||${t.modelId}`;
+        const current = grouped.get(key) || [];
+        current.push(score);
+        grouped.set(key, current);
+    });
+
+    let maxSamples = 1;
+    if (grouped.size > 0) {
+        maxSamples = Math.max(...Array.from(grouped.values()).map(s => s.length));
+    }
+    const isMultiSample = maxSamples > 1;
+
+    // Compute per-model variance stats
+    const perModel: Record<string, ModelVarianceStats> = {};
+    const modelScenarioScores = new Map<string, Map<string, number[]>>();
+
+    grouped.forEach((scores, key) => {
+        const [scenarioId, modelId] = key.split('||');
+        if (modelId === undefined || modelId === '' || scenarioId === undefined || scenarioId === '') return;
+
+        let modelMap = modelScenarioScores.get(modelId);
+        if (!modelMap) {
+            modelMap = new Map<string, number[]>();
+            modelScenarioScores.set(modelId, modelMap);
+        }
+        modelMap.set(scenarioId, scores);
+    });
+
+    modelScenarioScores.forEach((scenarioMap, modelId) => {
+        const perScenario: Record<string, VarianceStats> = {};
+        const variances: number[] = [];
+        let totalSamples = 0;
+
+        scenarioMap.forEach((scores, scenarioId) => {
+            const stats = computeVarianceStats(scores);
+            // PR Feedback: Key by scenarioId, NOT name. Frontend expects IDs.
+            // const name = scenarioNames.get(scenarioId) || scenarioId;
+            perScenario[scenarioId] = stats;
+
+            if (stats.sampleCount > 1) {
+                variances.push(stats.variance);
+            }
+            totalSamples += stats.sampleCount;
+        });
+
+        const avgVariance = variances.length > 0
+            ? variances.reduce((a, b) => a + b, 0) / variances.length
+            : 0;
+
+        const maxVariance = variances.length > 0
+            ? Math.max(...variances)
+            : 0;
+
+        perModel[modelId] = {
+            totalSamples,
+            uniqueScenarios: scenarioMap.size,
+            samplesPerScenario: maxSamples,
+            avgWithinScenarioVariance: parseFloat(avgVariance.toFixed(6)),
+            maxWithinScenarioVariance: parseFloat(maxVariance.toFixed(6)),
+            consistencyScore: computeConsistencyScore(variances),
+            perScenario
+        };
+    });
+
+    // Find most/least variable scenarios
+    const allScenarioVariances: ScenarioVarianceStats[] = [];
+    grouped.forEach((scores, key) => {
+        const [scenarioId, modelId] = key.split('||');
+        if (typeof modelId !== 'string' || typeof scenarioId !== 'string') return;
+
+        if (scores.length > 1) {
+            const stats = computeVarianceStats(scores);
+            allScenarioVariances.push({
+                scenarioId,
+                scenarioName: scenarioNames.get(scenarioId) ?? scenarioId,
+                modelId,
+                variance: stats.variance,
+                stdDev: stats.stdDev,
+                range: stats.range,
+                sampleCount: stats.sampleCount,
+                mean: stats.mean
+            });
+        }
+    });
+
+    allScenarioVariances.sort((a, b) => b.variance - a.variance);
+    const mostVariable = allScenarioVariances.slice(0, 5);
+    const leastVariable = allScenarioVariances.slice(-5).reverse();
+
+    return {
+        isMultiSample,
+        samplesPerScenario: maxSamples,
+        perModel,
+        mostVariableScenarios: mostVariable,
+        leastVariableScenarios: leastVariable
     };
 }

@@ -10,8 +10,7 @@ import type { FilterState } from '../../../src/components/analysis/AnalysisFilte
 describe('AnalysisFilters', () => {
   const defaultProps = {
     availableModels: ['gpt-4', 'claude-3', 'gemini'],
-    availableValues: ['Physical_Safety', 'Compassion', 'Fair_Process'],
-    filters: { selectedModels: [], selectedValue: null } as FilterState,
+    filters: { selectedModels: [] } as FilterState,
     onFilterChange: vi.fn(),
   };
 
@@ -23,14 +22,7 @@ describe('AnalysisFilters', () => {
     expect(screen.getByText('gemini')).toBeInTheDocument();
   });
 
-  it('renders value filter dropdown', () => {
-    render(<AnalysisFilters {...defaultProps} />);
 
-    expect(screen.getByLabelText('Value:')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'All values' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Physical Safety' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Compassion' })).toBeInTheDocument();
-  });
 
   it('calls onFilterChange when model is clicked', () => {
     const onFilterChange = vi.fn();
@@ -40,7 +32,6 @@ describe('AnalysisFilters', () => {
 
     expect(onFilterChange).toHaveBeenCalledWith({
       selectedModels: ['gpt-4'],
-      selectedValue: null,
     });
   });
 
@@ -49,7 +40,7 @@ describe('AnalysisFilters', () => {
     render(
       <AnalysisFilters
         {...defaultProps}
-        filters={{ selectedModels: ['gpt-4'], selectedValue: null }}
+        filters={{ selectedModels: ['gpt-4'] }}
         onFilterChange={onFilterChange}
       />
     );
@@ -58,49 +49,18 @@ describe('AnalysisFilters', () => {
 
     expect(onFilterChange).toHaveBeenCalledWith({
       selectedModels: [],
-      selectedValue: null,
     });
   });
 
-  it('calls onFilterChange when value is selected', () => {
-    const onFilterChange = vi.fn();
-    render(<AnalysisFilters {...defaultProps} onFilterChange={onFilterChange} />);
 
-    fireEvent.change(screen.getByLabelText('Value:'), {
-      target: { value: 'Physical_Safety' },
-    });
 
-    expect(onFilterChange).toHaveBeenCalledWith({
-      selectedModels: [],
-      selectedValue: 'Physical_Safety',
-    });
-  });
 
-  it('clears value filter when "All values" is selected', () => {
-    const onFilterChange = vi.fn();
-    render(
-      <AnalysisFilters
-        {...defaultProps}
-        filters={{ selectedModels: [], selectedValue: 'Physical_Safety' }}
-        onFilterChange={onFilterChange}
-      />
-    );
-
-    fireEvent.change(screen.getByLabelText('Value:'), {
-      target: { value: '' },
-    });
-
-    expect(onFilterChange).toHaveBeenCalledWith({
-      selectedModels: [],
-      selectedValue: null,
-    });
-  });
 
   it('shows clear filters button when filters are active', () => {
     render(
       <AnalysisFilters
         {...defaultProps}
-        filters={{ selectedModels: ['gpt-4'], selectedValue: null }}
+        filters={{ selectedModels: ['gpt-4'] }}
       />
     );
 
@@ -118,7 +78,7 @@ describe('AnalysisFilters', () => {
     render(
       <AnalysisFilters
         {...defaultProps}
-        filters={{ selectedModels: ['gpt-4', 'claude-3'], selectedValue: 'Physical_Safety' }}
+        filters={{ selectedModels: ['gpt-4', 'claude-3'] }}
         onFilterChange={onFilterChange}
       />
     );
@@ -127,7 +87,6 @@ describe('AnalysisFilters', () => {
 
     expect(onFilterChange).toHaveBeenCalledWith({
       selectedModels: [],
-      selectedValue: null,
     });
   });
 
@@ -135,13 +94,12 @@ describe('AnalysisFilters', () => {
     render(
       <AnalysisFilters
         {...defaultProps}
-        filters={{ selectedModels: ['gpt-4', 'claude-3'], selectedValue: 'Physical_Safety' }}
+        filters={{ selectedModels: ['gpt-4', 'claude-3'] }}
       />
     );
 
     expect(screen.getByText('2 models')).toBeInTheDocument();
-    // "Physical Safety" appears in both dropdown and summary, use getAllByText
-    expect(screen.getAllByText('Physical Safety').length).toBeGreaterThan(0);
+
   });
 
   it('truncates long model names', () => {
@@ -155,11 +113,7 @@ describe('AnalysisFilters', () => {
     expect(screen.getByText('very-long-mo...')).toBeInTheDocument();
   });
 
-  it('hides value filter when no values available', () => {
-    render(<AnalysisFilters {...defaultProps} availableValues={[]} />);
 
-    expect(screen.queryByLabelText('Value:')).not.toBeInTheDocument();
-  });
 });
 
 describe('filterByModels', () => {

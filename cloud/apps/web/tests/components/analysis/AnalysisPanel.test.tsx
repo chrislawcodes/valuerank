@@ -4,9 +4,10 @@
  * Tests for the analysis panel display component.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { AnalysisPanel } from '../../../src/components/analysis/AnalysisPanel';
 import type { AnalysisResult } from '../../../src/api/operations/analysis';
 
@@ -63,6 +64,9 @@ function createMockAnalysis(overrides: Partial<AnalysisResult> = {}): AnalysisRe
       outlierModels: [],
       overallAgreement: 0.85,
     },
+
+    visualizationData: null,
+    varianceAnalysis: null,
     dimensionAnalysis: null,
     mostContestedScenarios: [],
     methodsUsed: {
@@ -94,7 +98,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Loading analysis...')).toBeInTheDocument();
   });
@@ -109,7 +117,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText(/Failed to load analysis/)).toBeInTheDocument();
   });
@@ -124,7 +136,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" analysisStatus="pending" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisStatus="pending" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Analysis Pending')).toBeInTheDocument();
   });
@@ -139,7 +155,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" analysisStatus="computing" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisStatus="computing" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Computing Analysis...')).toBeInTheDocument();
   });
@@ -154,7 +174,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Analysis Not Available')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Analyze Trial/i })).toBeInTheDocument();
@@ -171,7 +195,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Analyze Trial/i }));
     expect(recompute).toHaveBeenCalled();
@@ -188,7 +216,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Analysis')).toBeInTheDocument();
     expect(screen.getByText(/Computed/)).toBeInTheDocument();
@@ -205,7 +237,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Models')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
@@ -222,7 +258,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Total Samples')).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
@@ -239,7 +279,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Per-Model Statistics')).toBeInTheDocument();
     // Model names appear in both Per-Model Statistics and Model Comparison Matrix
@@ -258,7 +302,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     // Multiple models show "Top Values by Win Rate" - use getAllByText
     expect(screen.getAllByText('Top Values by Win Rate').length).toBeGreaterThan(0);
@@ -284,7 +332,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Sample size is small')).toBeInTheDocument();
     expect(screen.getByText('Consider collecting more data')).toBeInTheDocument();
@@ -301,7 +353,11 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Recompute')).toBeInTheDocument();
   });
@@ -317,7 +373,11 @@ describe('AnalysisPanel', () => {
       recomputing: true,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     const button = screen.getByRole('button', { name: /Recompute/ });
     expect(button).toBeDisabled();
@@ -334,12 +394,41 @@ describe('AnalysisPanel', () => {
       recomputing: false,
     });
 
-    render(<AnalysisPanel runId="run-1" />);
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
 
     // Navigate to Methods tab
     const methodsTab = screen.getByRole('button', { name: /Methods/i });
     await userEvent.click(methodsTab);
 
     expect(screen.getByText('Statistical Methods Used')).toBeInTheDocument();
+  });
+
+  it('renders stability tab', async () => {
+    const analysis = createMockAnalysis();
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    // Navigate to Stability tab
+    const stabilityTab = screen.getByRole('button', { name: /Stability/i });
+    await userEvent.click(stabilityTab);
+
+    // Check for stability content (SEM)
+    expect(screen.getByText(/Condition x AI Standard Error of Mean/i)).toBeInTheDocument();
   });
 });
