@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { db, type DefinitionContent, type Dimension } from '@valuerank/db';
+import { db, resolveDefinitionContent, type Dimension } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { calculateScenarioCombinations } from '../../services/mcp/validation.js';
 import { addToolRegistrar } from './registry.js';
@@ -187,42 +187,11 @@ Example response:
       );
 
       try {
-        // Step 1: Fetch definition
-        const definition = await db.definition.findUnique({
-          where: { id: args.definition_id },
-        });
+        // Step 1: Fetch definition with resolved content
+        const definition = await resolveDefinitionContent(args.definition_id);
 
-        if (!definition) {
-          log.warn(
-            { requestId, definitionId: args.definition_id },
-            'Definition not found'
-          );
-          return formatError(
-            'NOT_FOUND',
-            `Definition not found: ${args.definition_id}`
-          );
-        }
-
-        if (definition.deletedAt !== null) {
-          log.warn(
-            { requestId, definitionId: args.definition_id },
-            'Definition is soft-deleted'
-          );
-          return formatError(
-            'NOT_FOUND',
-            `Definition not found: ${args.definition_id}`
-          );
-        }
-
-        // Step 2: Extract content
-        const content = definition.content as DefinitionContent | null;
-
-        if (!content) {
-          return formatError(
-            'VALIDATION_ERROR',
-            'Definition has no content'
-          );
-        }
+        // Step 2: Extract typed content
+        const content = definition.resolvedContent;
 
         const dimensions = content.dimensions ?? [];
         const template = content.template ?? '';

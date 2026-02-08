@@ -1,5 +1,5 @@
-import type { Prisma} from '@valuerank/db';
 import { db, type CreateAuditLogInput } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('audit');
@@ -15,13 +15,14 @@ export async function createAuditLog(
   input: CreateAuditLogInput
 ): Promise<{ id: string } | null> {
   try {
+    const metadata = input.metadata as unknown as Prisma.InputJsonValue | undefined;
     const auditLog = await db.auditLog.create({
       data: {
         action: input.action,
         entityType: input.entityType,
         entityId: input.entityId,
         userId: input.userId,
-        metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        metadata,
       },
       select: { id: true },
     });
