@@ -832,8 +832,9 @@ function computeVarianceAnalysis(
 
         scenarioMap.forEach((scores, scenarioId) => {
             const stats = computeVarianceStats(scores);
-            const name = scenarioNames.get(scenarioId) || scenarioId;
-            perScenario[name] = stats;
+            // PR Feedback: Key by scenarioId, NOT name. Frontend expects IDs.
+            // const name = scenarioNames.get(scenarioId) || scenarioId;
+            perScenario[scenarioId] = stats;
 
             if (stats.sampleCount > 1) {
                 variances.push(stats.variance);
