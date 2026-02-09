@@ -38,5 +38,9 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'Optional experiment to associate this run with',
     }),
+    finalTrial: t.boolean({
+      required: false,
+      description: 'If true, runs an adaptive sampling strategy to reach 10 samples per condition',
+    }),
   }),
 });

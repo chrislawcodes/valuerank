@@ -309,7 +309,7 @@ async function buildWorkerInput(
   scenarioContent: unknown,
   definitionContent: unknown,
   definitionPreamble: string | undefined, // New argument for fallback
-  config: { temperature?: number; maxTurns: number }
+  config: { temperature?: number; maxTurns: number; maxTokens?: number }
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
@@ -340,7 +340,7 @@ async function buildWorkerInput(
       followups,
     },
     config: {
-      maxTokens: 1024, // Default max tokens
+      maxTokens: config.maxTokens ?? 8192, // Default to 8192 to support reasoning models
       maxTurns: config.maxTurns,
       ...(typeof config.temperature === 'number' ? { temperature: config.temperature } : {}),
     },

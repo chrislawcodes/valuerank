@@ -208,7 +208,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     model_config = data.get("modelConfig")  # Optional API configuration
 
     temperature = config.get("temperature")
-    max_tokens = config.get("maxTokens", 1024)
+    max_tokens = config.get("maxTokens", 8192)
     max_turns = config.get("maxTurns", 10)
 
     log.info(

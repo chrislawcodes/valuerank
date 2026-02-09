@@ -382,6 +382,7 @@ export type StartRunInput = {
   sampleSeed?: number;
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
   experimentId?: string;
+  finalTrial?: boolean;
 };
 
 // ============================================================================

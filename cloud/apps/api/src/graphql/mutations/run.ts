@@ -67,6 +67,7 @@ type StartRunArgs = {
   samplesPerScenario?: number | null;
   priority?: string | null;
   experimentId?: string | number | null;
+  finalTrial?: boolean | null;
 };
 
 // startRun mutation
@@ -125,6 +126,7 @@ builder.mutationField('startRun', (t) =>
         priority: input.priority ?? 'NORMAL',
         experimentId: input.experimentId ? String(input.experimentId) : undefined,
         userId,
+        finalTrial: input.finalTrial ?? false,
       });
 
       ctx.log.info(
