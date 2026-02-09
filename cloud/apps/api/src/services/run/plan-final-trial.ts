@@ -191,13 +191,13 @@ export async function planFinalTrial(
 
   const conditionMap = new Map<string, string[]>();
   for (const scenario of definition.scenarios) {
-    if (!scenario.content || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) {
+    if (scenario.content === null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) {
       continue;
     }
     const content = scenario.content as Record<string, unknown>;
     const dims = (content.dimensions as Record<string, string | number> | undefined) ?? {};
     const key = getConditionKey(dims);
-    if (!key) continue;
+    if (key === '') continue;
     const existing = conditionMap.get(key) ?? [];
     existing.push(scenario.id);
     conditionMap.set(key, existing);
@@ -259,7 +259,7 @@ export async function planFinalTrial(
         let n = 0;
         let sem: number | null = null;
 
-        if (perScenarioVariance) {
+        if (perScenarioVariance !== undefined) {
           const stats = calculateSemFromVarianceStats(perScenarioVariance, scenarioIds);
           n = stats.n;
           sem = stats.sem;

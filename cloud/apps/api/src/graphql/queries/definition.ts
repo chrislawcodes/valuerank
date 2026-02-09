@@ -48,7 +48,7 @@ builder.queryField('definition', (t) =>
       });
 
       // Filter out soft-deleted definitions unless includeDeleted is true
-      if (!definition || (!includeDeleted && definition.deletedAt !== null)) {
+      if (definition === null || (includeDeleted === false && definition.deletedAt !== null)) {
         ctx.log.debug({ definitionId: id }, 'Definition not found');
         return null;
       }
@@ -104,11 +104,11 @@ builder.queryField('definitions', (t) =>
         deletedAt: null,
       };
 
-      if (args.rootOnly) {
+      if (args.rootOnly === true) {
         where.parentId = null;
       }
 
-      if (args.search) {
+      if (args.search !== undefined && args.search !== null && args.search !== '') {
         where.name = { contains: args.search, mode: 'insensitive' };
       }
 
@@ -197,7 +197,7 @@ builder.queryField('definitionAncestors', (t) =>
         where: { id },
       });
 
-      if (!definition || definition.deletedAt !== null) {
+      if (definition === null || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 
@@ -265,7 +265,7 @@ builder.queryField('definitionDescendants', (t) =>
         where: { id },
       });
 
-      if (!definition || definition.deletedAt !== null) {
+      if (definition === null || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 

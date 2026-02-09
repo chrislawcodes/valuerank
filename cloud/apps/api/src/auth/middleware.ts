@@ -62,7 +62,7 @@ export async function authMiddleware(
         // Use password as API key
         if (password.startsWith('vr_')) {
           const user = await validateApiKey(password);
-          if (user) {
+          if (user !== null) {
             req.user = user;
             req.authMethod = 'api_key';
             log.debug({ userId: user.id }, 'Basic auth (API key) successful');
@@ -78,12 +78,12 @@ export async function authMiddleware(
 
   const token = extractBearerToken(authHeader);
 
-  if (token) {
+  if (token !== null && token !== '') {
     // Check if Bearer token is actually an API key (for LeChat compatibility)
     if (token.startsWith('vr_')) {
       try {
         const user = await validateApiKey(token);
-        if (user) {
+        if (user !== null) {
           req.user = user;
           req.authMethod = 'api_key';
           log.debug({ userId: user.id }, 'API key (Bearer) authentication successful');
@@ -140,7 +140,7 @@ export async function authMiddleware(
   if (apiKey.length > 0) {
     try {
       const user = await validateApiKey(apiKey);
-      if (user) {
+      if (user !== null) {
         req.user = user;
         req.authMethod = 'api_key';
         log.debug({ userId: user.id }, 'API key authentication successful');
@@ -227,7 +227,7 @@ export function requireAuth(
   _res: Response,
   next: NextFunction
 ): void {
-  if (!req.user) {
+  if (req.user === null || req.user === undefined) {
     next(new AuthenticationError('Authentication required'));
     return;
   }
@@ -242,7 +242,7 @@ export function requireAuth(
 export function isIntrospectionQuery(req: Request): boolean {
   const body = req.body as { query?: string } | undefined;
 
-  if (!body?.query) {
+  if (body === undefined || body === null || body.query === undefined || body.query === null || body.query === '') {
     return false;
   }
 
@@ -274,7 +274,7 @@ export function graphqlAuthMiddleware(
   }
 
   // Require authentication for all other GraphQL operations
-  if (!req.user) {
+  if (req.user === null || req.user === undefined) {
     next(new AuthenticationError('Authentication required'));
     return;
   }

@@ -91,7 +91,7 @@ export async function getDefinitionExpansionStatus(
 
       // Extract error from output if failed
       let error: string | null = null;
-      if (status === 'failed' && currentJob.output) {
+      if (status === 'failed' && currentJob.output !== null && currentJob.output !== undefined) {
         const output = currentJob.output as { message?: string };
         error = output.message ?? 'Unknown error';
       }
@@ -102,8 +102,9 @@ export async function getDefinitionExpansionStatus(
       if (status === 'active' || status === 'pending') {
         // Check if progress is stale (no update in 20+ minutes)
         const STALE_THRESHOLD_MS = 20 * 60 * 1000;
-        const progressAge = progress?.updatedAt
-          ? Date.now() - new Date(progress.updatedAt).getTime()
+        const updatedAt = progress?.updatedAt;
+        const progressAge = (updatedAt !== undefined && updatedAt !== null && updatedAt !== '')
+          ? Date.now() - new Date(updatedAt).getTime()
           : Infinity;
 
         if (progressAge < STALE_THRESHOLD_MS) {

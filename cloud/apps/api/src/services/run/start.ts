@@ -216,7 +216,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
 
   // Validate experiment if provided
-  if (experimentId) {
+  if (experimentId !== undefined && experimentId !== null && experimentId !== '') {
     const experiment = await db.experiment.findUnique({
       where: { id: experimentId },
     });

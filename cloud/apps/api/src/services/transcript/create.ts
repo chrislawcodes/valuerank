@@ -126,7 +126,7 @@ export async function createTranscript(input: CreateTranscriptInput) {
  * Validate transcript data from Python worker.
  */
 export function validateTranscript(data: unknown): data is ProbeTranscript {
-  if (!data || typeof data !== 'object') {
+  if (data === null || data === undefined || typeof data !== 'object') {
     return false;
   }
 

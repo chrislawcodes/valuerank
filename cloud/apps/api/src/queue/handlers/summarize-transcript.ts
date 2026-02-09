@@ -56,11 +56,6 @@ async function queueComputeTokenStats(runId: string): Promise<void> {
   const { getBoss } = await import('../boss.js');
 
   const boss = getBoss();
-  if (!boss) {
-    log.warn({ runId }, 'Cannot queue compute_token_stats - boss not initialized');
-    return;
-  }
-
   const jobOptions = DEFAULT_JOB_OPTIONS['compute_token_stats'];
 
   await boss.send(

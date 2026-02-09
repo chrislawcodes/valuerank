@@ -84,11 +84,11 @@ Limited to 2KB token budget.`,
           deletedAt: null, // Exclude soft-deleted runs
         };
 
-        if (args.definition_id) {
+        if (args.definition_id !== undefined && args.definition_id !== null && args.definition_id !== '') {
           where.definitionId = args.definition_id;
         }
 
-        if (args.status) {
+        if (args.status !== undefined && args.status !== null) {
           where.status = statusToPrisma[args.status];
         }
 

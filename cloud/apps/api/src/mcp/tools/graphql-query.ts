@@ -126,7 +126,7 @@ Limited to 10KB token budget.`,
         log.info(
           {
             requestId,
-            hasErrors: !!result.errors?.length,
+            hasErrors: (result.errors?.length ?? 0) > 0,
             bytes: response.metadata.bytes,
             executionMs: response.metadata.executionMs,
           },

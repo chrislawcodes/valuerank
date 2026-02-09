@@ -39,7 +39,7 @@ csvRouter.get(
             // (Removed req.user check)
 
             const runId = req.params.id;
-            if (!runId) {
+            if (runId === undefined || runId === null || runId === '') {
                 throw new NotFoundError('Run', 'missing');
             }
 
@@ -51,15 +51,15 @@ csvRouter.get(
                 select: { id: true, status: true, config: true },
             });
 
-            if (!run) {
+            if (run === null) {
                 throw new NotFoundError('Run', runId);
             }
 
             // Handle Aggregate Runs
             // If aggregate, fetch transcripts from source runs
             let transcriptWhere: any = { runId };
-            const runConfig = run.config as any;
-            if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+            const runConfig = run.config as { isAggregate?: boolean; sourceRunIds?: string[] } | null;
+            if (runConfig !== null && runConfig?.isAggregate === true && Array.isArray(runConfig.sourceRunIds)) {
                 log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'CSV feed for aggregate run');
                 transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
             }
@@ -80,7 +80,7 @@ csvRouter.get(
             const variableSet = new Set<string>();
             for (const transcript of transcripts) {
                 const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
-                if (content?.dimensions) {
+                if (content !== null && content !== undefined && content.dimensions !== undefined && content.dimensions !== null) {
                     for (const [key, value] of Object.entries(content.dimensions)) {
                         if (typeof value === 'number') {
                             variableSet.add(key);

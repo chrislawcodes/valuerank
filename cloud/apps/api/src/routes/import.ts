@@ -93,14 +93,14 @@ importRouter.post(
       const parsed = parseResult.data;
 
       // Use override name if provided, otherwise use parsed name
-      const definitionName = body.name?.trim() || parsed.name;
+      const definitionName = (body.name !== undefined && body.name !== null && body.name.trim() !== '') ? body.name.trim() : parsed.name;
 
       // Validate against database constraints
       const validation = await validateImport(definitionName, parsed.content);
 
       if (!validation.valid) {
         // Check if we can use alternative name
-        if (body.forceAlternativeName && validation.suggestions?.alternativeName) {
+        if (body.forceAlternativeName === true && validation.suggestions?.alternativeName !== undefined && validation.suggestions?.alternativeName !== null && validation.suggestions?.alternativeName !== '') {
           // Retry with suggested name
           const altValidation = await validateImport(
             validation.suggestions.alternativeName,
@@ -182,7 +182,7 @@ async function createDefinition(
     });
 
     // Create tag if category was specified
-    if (parsed.category) {
+    if (typeof parsed.category === 'string' && parsed.category !== '') {
       const tag = await tx.tag.upsert({
         where: { name: parsed.category },
         update: {},

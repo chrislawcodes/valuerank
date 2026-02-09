@@ -59,7 +59,7 @@ builder.queryField('finalTrialPlan', (t) =>
         },
         resolve: async (_root, args, ctx) => {
             // Auth check? StartRun requires auth.
-            if (!ctx.user) throw new Error('Unauthorized');
+            if (ctx.user === undefined || ctx.user === null) throw new Error('Unauthorized');
             return planFinalTrial(args.definitionId, args.models);
         },
     })

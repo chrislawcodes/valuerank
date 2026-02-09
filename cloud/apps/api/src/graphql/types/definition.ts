@@ -179,7 +179,7 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'The specific version of the preamble used',
       resolve: async (definition) => {
-        if (!definition.preambleVersionId) return null;
+        if (definition.preambleVersionId === null || definition.preambleVersionId === undefined) return null;
         return (db as any).preambleVersion.findUnique({
           where: { id: definition.preambleVersionId },
         });
@@ -197,7 +197,7 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'User who created this definition',
       resolve: async (definition) => {
-        if (!definition.createdByUserId) return null;
+        if (definition.createdByUserId === null || definition.createdByUserId === undefined) return null;
         return db.user.findUnique({
           where: { id: definition.createdByUserId },
         });
@@ -210,7 +210,7 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'User who deleted this definition (only populated for soft-deleted records)',
       resolve: async (definition) => {
-        if (!definition.deletedByUserId) return null;
+        if (definition.deletedByUserId === null || definition.deletedByUserId === undefined) return null;
         return db.user.findUnique({
           where: { id: definition.deletedByUserId },
         });
@@ -223,8 +223,8 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'Parent definition in version tree',
       resolve: async (definition, _args, ctx) => {
-        if (!definition.parentId) return null;
-        return ctx.loaders.definition.load(definition.parentId) as any;
+        if (definition.parentId === null || definition.parentId === undefined) return null;
+        return ctx.loaders.definition.load(definition.parentId);
       },
     }),
 
@@ -233,10 +233,10 @@ builder.objectType(DefinitionRef, {
       type: [DefinitionRef],
       description: 'Child definitions forked from this one',
       resolve: async (definition) => {
-        return db.definition.findMany({
+        return await db.definition.findMany({
           where: { parentId: definition.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
-        }) as any;
+        });
       },
     }),
 
@@ -384,7 +384,7 @@ builder.objectType(DefinitionRef, {
       type: [TagRef],
       description: 'Tags inherited from all ancestor definitions (union of ancestor tags)',
       resolve: async (definition, _args, _ctx) => {
-        if (!definition.parentId) return [];
+        if (definition.parentId === null || definition.parentId === undefined) return [];
 
         // Get all ancestors using recursive CTE
         const ancestors = await db.$queryRaw<{ id: string }[]>`
@@ -427,7 +427,7 @@ builder.objectType(DefinitionRef, {
         const localTags = await ctx.loaders.tagsByDefinition.load(definition.id);
         const localTagIds = new Set(localTags.map((t) => t.id));
 
-        if (!definition.parentId) return localTags;
+        if (definition.parentId === null || definition.parentId === undefined) return localTags;
 
         // Get inherited tags
         const ancestors = await db.$queryRaw<{ id: string }[]>`
@@ -467,7 +467,7 @@ builder.objectType(DefinitionRef, {
       type: [DefinitionRef],
       description: 'Full ancestry chain from this definition to root (oldest first)',
       resolve: async (definition) => {
-        if (!definition.parentId) return [];
+        if (definition.parentId === null || definition.parentId === undefined) return [];
 
         // Use recursive CTE to get all ancestors (filtering out deleted)
         const ancestors = await db.$queryRaw<RawDefinitionRow[]>`
@@ -498,7 +498,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: a.deleted_by_user_id,
           version: a.version,
           preambleVersionId: a.preamble_version_id,
-        })) as any;
+        }));
       },
     }),
 
@@ -536,7 +536,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: d.deleted_by_user_id,
           version: d.version,
           preambleVersionId: d.preamble_version_id,
-        })) as any;
+        }));
       },
     }),
   }),

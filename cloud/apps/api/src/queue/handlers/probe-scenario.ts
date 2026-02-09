@@ -322,7 +322,7 @@ async function buildWorkerInput(
   const prompt = (content.prompt as string) || '';
 
   // Get followups from scenario
-  const followups = (content.followups as Array<{ label: string; prompt: string }>) || [];
+  const followups = (content.followups as Array<{ label: string; prompt: string }> | undefined) ?? [];
 
   // Resolve model ID to full API version (e.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022")
   const resolvedModelId = resolveModelVersion(modelId);
@@ -398,7 +398,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       modelId,
       scenario.content,
       scenario.definition.content,
-      scenario.definition.preambleVersion?.content || undefined,
+      scenario.definition.preambleVersion?.content ?? undefined,
       config
     );
 
@@ -504,7 +504,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       const { getBoss } = await import('../boss.js');
       const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
       const boss = getBoss();
-      if (boss) {
+      if (boss !== null) {
         await boss.send('summarize_transcript', {
           runId,
           transcriptId: transcriptRecord.id,
@@ -598,7 +598,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         // Get provider for this model to route to correct rate limiter
         const provider = await getProviderForModel(modelId);
 
-        if (!provider) {
+        if (provider === null) {
           // Unknown provider - process without rate limiting (fallback)
           log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
           return processProbeJob(job);

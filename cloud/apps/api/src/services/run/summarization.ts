@@ -250,9 +250,6 @@ export async function restartSummarization(
 
   // Queue summarize jobs
   const boss = getBoss();
-  if (!boss) {
-    throw new Error('PgBoss not initialized');
-  }
 
   const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
   const jobOptions = DEFAULT_JOB_OPTIONS['summarize_transcript'];

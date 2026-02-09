@@ -27,7 +27,7 @@ export function trackRunAccess(runId: string): void {
     .then(() => {
       log.debug({ runId }, 'Run access tracked');
     })
-    .catch((err) => {
+    .catch((err: unknown) => {
       // Don't fail on tracking errors - just log
       log.warn({ err, runId }, 'Failed to track run access');
     });
@@ -46,7 +46,7 @@ export function trackTranscriptAccess(transcriptId: string): void {
     .then(() => {
       log.debug({ transcriptId }, 'Transcript access tracked');
     })
-    .catch((err) => {
+    .catch((err: unknown) => {
       // Don't fail on tracking errors - just log
       log.warn({ err, transcriptId }, 'Failed to track transcript access');
     });
@@ -67,7 +67,7 @@ export function trackTranscriptsAccess(transcriptIds: string[]): void {
     .then((result) => {
       log.debug({ count: result.count }, 'Transcript accesses tracked');
     })
-    .catch((err) => {
+    .catch((err: unknown) => {
       // Don't fail on tracking errors - just log
       log.warn({ err, count: transcriptIds.length }, 'Failed to track transcript accesses');
     });
@@ -86,7 +86,7 @@ export function trackDefinitionAccess(definitionId: string): void {
     .then(() => {
       log.debug({ definitionId }, 'Definition access tracked');
     })
-    .catch((err) => {
+    .catch((err: unknown) => {
       // Don't fail on tracking errors - just log
       log.warn({ err, definitionId }, 'Failed to track definition access');
     });

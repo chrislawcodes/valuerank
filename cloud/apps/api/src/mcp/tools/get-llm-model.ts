@@ -139,9 +139,10 @@ function registerGetLlmModelTool(server: McpServer): void {
 
         // Lookup model
         let model;
-        if (hasId) {
+        if (hasId === true) {
           try {
-            model = await getModelWithProvider(args.id!);
+            const id = args.id as string;
+            model = await getModelWithProvider(id);
           } catch (err) {
             if (err instanceof NotFoundError) {
               return formatError('NOT_FOUND', `Model not found: ${args.id}`);
@@ -149,11 +150,13 @@ function registerGetLlmModelTool(server: McpServer): void {
             throw err;
           }
         } else {
-          model = await getModelByIdentifier(args.provider_name!, args.model_id!);
-          if (!model) {
+          const providerName = args.provider_name as string;
+          const modelId = args.model_id as string;
+          model = await getModelByIdentifier(providerName, modelId);
+          if (model === null) {
             return formatError(
               'NOT_FOUND',
-              `Model not found: ${args.provider_name}/${args.model_id}`
+              `Model not found: ${providerName}/${modelId}`
             );
           }
         }
