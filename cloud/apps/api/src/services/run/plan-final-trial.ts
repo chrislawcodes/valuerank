@@ -249,10 +249,10 @@ export async function planFinalTrial(
   const models: ModelPlan[] = modelIds.map((requestedModelId) => {
     // Resolve alias if needed (e.g. gemini-2.5-flash -> gemini-2.5-flash-preview-09-2025)
     // If no match found, fallback to requested ID (which will result in 0 samples found, correctly)
-    const modelId = resolveModelIdFromAvailable(requestedModelId, availableKeys) ?? requestedModelId;
+    const lookupModelId = resolveModelIdFromAvailable(requestedModelId, availableKeys) ?? requestedModelId;
 
-    const perScenarioVariance = analysis.varianceAnalysis?.perModel?.[modelId]?.perScenario;
-    const matrix = analysis.visualizationData?.modelScenarioMatrix?.[modelId] ?? {};
+    const perScenarioVariance = analysis.varianceAnalysis?.perModel?.[lookupModelId]?.perScenario;
+    const matrix = analysis.visualizationData?.modelScenarioMatrix?.[lookupModelId] ?? {};
 
     const conditions: ConditionPlan[] = Array.from(conditionMap.entries()).map(
       ([conditionKey, scenarioIds]) => {
@@ -285,7 +285,7 @@ export async function planFinalTrial(
     );
 
     return {
-      modelId,
+      modelId: requestedModelId,
       conditions,
       totalNeededSamples: conditions.reduce((sum, c) => sum + c.neededSamples, 0),
     };
