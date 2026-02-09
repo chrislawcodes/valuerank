@@ -227,7 +227,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   // Determine scenarios to run
   let selectedScenarioIds: string[] = [];
-  let jobPlan: { modelId: string; scenarioId: string; samples: number }[] = [];
+  const jobPlan: { modelId: string; scenarioId: string; samples: number }[] = [];
 
   if (finalTrial) {
     // Adaptive Sampling Strategy
