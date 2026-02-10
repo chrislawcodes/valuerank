@@ -52,9 +52,9 @@ describe('scenarioUtils', () => {
 
   it('filters transcripts with exact and normalized scenario/model matches', () => {
     const transcripts = [
-      makeTranscript({ id: 't-1', scenarioId: 'scenario-a', modelId: 'anthropic:claude-sonnet-4-5' }),
-      makeTranscript({ id: 't-2', scenarioId: 'a', modelId: 'claude-sonnet-4-5' }),
-      makeTranscript({ id: 't-3', scenarioId: 'scenario-b', modelId: 'claude-sonnet-4-5' }),
+      makeTranscript({ id: 't-1', scenarioId: 'scenario-a', modelId: 'anthropic:claude-sonnet-4-5', decisionCode: '3' }),
+      makeTranscript({ id: 't-2', scenarioId: 'a', modelId: 'claude-sonnet-4-5', decisionCode: 'other' }),
+      makeTranscript({ id: 't-3', scenarioId: 'scenario-b', modelId: 'claude-sonnet-4-5', decisionCode: '3' }),
     ];
 
     const filtered = filterTranscriptsForPivotCell({
@@ -71,6 +71,28 @@ describe('scenarioUtils', () => {
     });
 
     expect(filtered.map((t) => t.id)).toEqual(['t-1', 't-2']);
+  });
+
+  it('filters transcripts by decisionCode when provided', () => {
+    const transcripts = [
+      makeTranscript({ id: 't-1', scenarioId: 'scenario-a', modelId: 'claude-sonnet-4-5', decisionCode: 'other' }),
+      makeTranscript({ id: 't-2', scenarioId: 'scenario-a', modelId: 'claude-sonnet-4-5', decisionCode: '3' }),
+    ];
+
+    const filtered = filterTranscriptsForPivotCell({
+      transcripts,
+      scenarioDimensions: {
+        'scenario-a': { power: '1', conformity: '1' },
+      },
+      rowDim: 'power',
+      colDim: 'conformity',
+      row: '1',
+      col: '1',
+      selectedModel: 'claude-sonnet-4-5',
+      decisionCode: 'other',
+    });
+
+    expect(filtered.map((t) => t.id)).toEqual(['t-1']);
   });
 
   it('returns empty when required pivot parameters are missing', () => {

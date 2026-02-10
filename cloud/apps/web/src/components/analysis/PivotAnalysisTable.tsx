@@ -149,7 +149,7 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
 
     }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel]);
 
-    const handleCellClick = (row: string, col: string) => {
+    const handleCellClick = (row: string, col: string, options?: { decisionCode?: string }) => {
         const params = new URLSearchParams({
             rowDim,
             colDim,
@@ -157,6 +157,9 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
             col,
             model: selectedModel || '',
         });
+        if (options?.decisionCode) {
+            params.set('decisionCode', options.decisionCode);
+        }
         navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
     };
 
@@ -246,20 +249,21 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
                                     {pivotData.cols.map(col => {
                                         const cell = pivotData.grid[row]?.[col];
                                         const mean = cell && cell.count > 0 ? cell.sum / cell.count : null;
-                                        const canOpen = Boolean(mean);
+                                        const isOtherCell = mean === null;
+                                        const canOpen = true;
 
                                         return (
                                             <td
                                                 key={`${row}-${col}`}
                                                 className={`p-4 border border-gray-100 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''}`}
                                                 style={{ backgroundColor: mean ? getHeatmapColor(mean) : undefined }}
-                                                onClick={canOpen ? () => handleCellClick(row, col) : undefined}
+                                                onClick={() => handleCellClick(row, col, isOtherCell ? { decisionCode: 'other' } : undefined)}
                                             >
                                                 {mean ? (
                                                     <span className={`font-semibold ${getScoreTextColor(mean)}`}>
                                                         {mean.toFixed(2)}
                                                     </span>
-                                                ) : <span className="text-gray-300">-</span>}
+                                                ) : <span className="text-gray-500">-</span>}
                                             </td>
                                         );
                                     })}

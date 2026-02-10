@@ -65,6 +65,7 @@ export function RunDetail() {
     updateRun,
     cancelSummarization,
     restartSummarization,
+    updateTranscriptDecision,
   } = useRunMutations();
 
   const handleSaveName = useCallback(
@@ -162,6 +163,14 @@ export function RunDetail() {
       return { queuedCount: result.queuedCount };
     },
     [restartSummarization, refetch]
+  );
+
+  const handleUpdateTranscriptDecision = useCallback(
+    async (transcriptId: string, decisionCode: string) => {
+      await updateTranscriptDecision(transcriptId, decisionCode);
+      refetch();
+    },
+    [updateTranscriptDecision, refetch]
   );
 
   // Loading state
@@ -350,6 +359,7 @@ export function RunDetail() {
               onExportTranscripts={() => void handleExportTranscripts()}
               isExportingTranscripts={isExportingTranscripts}
               scenarioDimensions={analysis?.visualizationData?.scenarioDimensions}
+              onUpdateTranscriptDecision={handleUpdateTranscriptDecision}
             />
           </div>
         )}

@@ -9,7 +9,9 @@ import {
   UPDATE_RUN_MUTATION,
   CANCEL_SUMMARIZATION_MUTATION,
   RESTART_SUMMARIZATION_MUTATION,
+  UPDATE_TRANSCRIPT_DECISION_MUTATION,
   type Run,
+  type Transcript,
   type StartRunInput,
   type StartRunMutationVariables,
   type StartRunMutationResult,
@@ -28,6 +30,8 @@ import {
   type CancelSummarizationMutationResult,
   type RestartSummarizationMutationVariables,
   type RestartSummarizationMutationResult,
+  type UpdateTranscriptDecisionMutationVariables,
+  type UpdateTranscriptDecisionMutationResult,
 } from '../api/operations/runs';
 
 type StartRunResult = {
@@ -54,6 +58,7 @@ type UseRunMutationsResult = {
   updateRun: (runId: string, input: UpdateRunInput) => Promise<Run>;
   cancelSummarization: (runId: string) => Promise<CancelSummarizationResult>;
   restartSummarization: (runId: string, force?: boolean) => Promise<RestartSummarizationResult>;
+  updateTranscriptDecision: (transcriptId: string, decisionCode: string) => Promise<Transcript>;
   loading: boolean;
   error: Error | null;
 };
@@ -101,6 +106,10 @@ export function useRunMutations(): UseRunMutationsResult {
     RestartSummarizationMutationResult,
     RestartSummarizationMutationVariables
   >(RESTART_SUMMARIZATION_MUTATION);
+  const [updateTranscriptDecisionResult, executeUpdateTranscriptDecision] = useMutation<
+    UpdateTranscriptDecisionMutationResult,
+    UpdateTranscriptDecisionMutationVariables
+  >(UPDATE_TRANSCRIPT_DECISION_MUTATION);
 
   const startRun = useCallback(
     async (input: StartRunInput): Promise<StartRunResult> => {
@@ -214,6 +223,20 @@ export function useRunMutations(): UseRunMutationsResult {
     [executeRestartSummarization]
   );
 
+  const updateTranscriptDecision = useCallback(
+    async (transcriptId: string, decisionCode: string): Promise<Transcript> => {
+      const result = await executeUpdateTranscriptDecision({ transcriptId, decisionCode });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (!result.data?.updateTranscriptDecision) {
+        throw new Error('Failed to update transcript decision');
+      }
+      return result.data.updateTranscriptDecision;
+    },
+    [executeUpdateTranscriptDecision]
+  );
+
   // Combine loading and error states
   const loading =
     startRunResult.fetching ||
@@ -223,7 +246,8 @@ export function useRunMutations(): UseRunMutationsResult {
     deleteRunResult.fetching ||
     updateRunResult.fetching ||
     cancelSummarizationResult.fetching ||
-    restartSummarizationResult.fetching;
+    restartSummarizationResult.fetching ||
+    updateTranscriptDecisionResult.fetching;
 
   const error =
     startRunResult.error ||
@@ -233,7 +257,8 @@ export function useRunMutations(): UseRunMutationsResult {
     deleteRunResult.error ||
     updateRunResult.error ||
     cancelSummarizationResult.error ||
-    restartSummarizationResult.error;
+    restartSummarizationResult.error ||
+    updateTranscriptDecisionResult.error;
 
   return {
     startRun,
@@ -244,6 +269,7 @@ export function useRunMutations(): UseRunMutationsResult {
     updateRun,
     cancelSummarization,
     restartSummarization,
+    updateTranscriptDecision,
     loading,
     error: error ? new Error(error.message) : null,
   };

@@ -7,7 +7,7 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { AuthenticationError, NotFoundError } from '@valuerank/shared';
-import { RunRef } from '../types/refs.js';
+import { RunRef, TranscriptRef } from '../types/refs.js';
 import {
   startRun as startRunService,
   pauseRun as pauseRunService,
@@ -18,6 +18,7 @@ import {
   cancelSummarization as cancelSummarizationService,
   restartSummarization as restartSummarizationService,
 } from '../../services/run/index.js';
+import { triggerBasicAnalysis } from '../../services/analysis/trigger.js';
 import { StartRunInput } from '../types/inputs/start-run.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import {
@@ -527,6 +528,8 @@ const UpdateRunInput = builder.inputType('UpdateRunInput', {
   }),
 });
 
+const MANUAL_DECISION_CODES = new Set(['1', '2', '3', '4', '5']);
+
 // updateRun mutation - update run properties
 builder.mutationField('updateRun', (t) =>
   t.field({
@@ -595,6 +598,111 @@ builder.mutationField('updateRun', (t) =>
       });
 
       return updated;
+    },
+  })
+);
+
+// updateTranscriptDecision mutation - manually override transcript decision code
+builder.mutationField('updateTranscriptDecision', (t) =>
+  t.field({
+    type: TranscriptRef,
+    description: `
+      Manually update a transcript decision code.
+
+      Accepts only explicit decision codes "1" through "5".
+      If the run is already completed, this will supersede current analysis
+      and queue a recompute job.
+
+      Requires authentication.
+    `,
+    args: {
+      transcriptId: t.arg.id({
+        required: true,
+        description: 'The ID of the transcript to update',
+      }),
+      decisionCode: t.arg.string({
+        required: true,
+        description: 'Decision code override (must be one of: 1, 2, 3, 4, 5)',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const transcriptId = String(args.transcriptId);
+      const decisionCode = args.decisionCode.trim();
+
+      if (!MANUAL_DECISION_CODES.has(decisionCode)) {
+        throw new Error('decisionCode must be one of: 1, 2, 3, 4, 5');
+      }
+
+      const transcript = await db.transcript.findUnique({
+        where: { id: transcriptId },
+        select: {
+          id: true,
+          runId: true,
+          decisionCode: true,
+        },
+      });
+
+      if (!transcript) {
+        throw new NotFoundError('Transcript', transcriptId);
+      }
+
+      const updatedTranscript = await db.transcript.update({
+        where: { id: transcriptId },
+        data: { decisionCode },
+      });
+
+      let analysisQueued = false;
+      const run = await db.run.findUnique({
+        where: { id: transcript.runId },
+        select: { id: true, status: true },
+      });
+
+      if (run?.status === 'COMPLETED') {
+        await db.analysisResult.updateMany({
+          where: {
+            runId: run.id,
+            status: 'CURRENT',
+          },
+          data: {
+            status: 'SUPERSEDED',
+          },
+        });
+
+        analysisQueued = await triggerBasicAnalysis(run.id, { force: true });
+      }
+
+      ctx.log.info(
+        {
+          userId: ctx.user.id,
+          transcriptId,
+          runId: transcript.runId,
+          previousDecisionCode: transcript.decisionCode,
+          decisionCode,
+          analysisQueued,
+        },
+        'Transcript decision manually updated'
+      );
+
+      // Audit log (non-blocking)
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Run',
+        entityId: transcript.runId,
+        userId: ctx.user.id,
+        metadata: {
+          transcriptId,
+          previousDecisionCode: transcript.decisionCode,
+          decisionCode,
+          runId: transcript.runId,
+          analysisQueued,
+        },
+      });
+
+      return updatedTranscript;
     },
   })
 );

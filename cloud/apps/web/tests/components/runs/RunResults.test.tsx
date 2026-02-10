@@ -23,6 +23,7 @@ function createMockTranscript(overrides: Partial<Transcript> = {}): Transcript {
         { role: 'assistant', content: 'Hi there!' },
       ],
     },
+    decisionCode: '3',
     turnCount: 2,
     tokenCount: 100,
     durationMs: 1500,
@@ -195,7 +196,7 @@ describe('RunResults', () => {
     await user.click(screen.getByText('gpt-4'));
 
     // Click on a transcript row (contains scenario text)
-    const transcriptButton = screen.getByText(/Scenario:/);
+    const transcriptButton = screen.getByText('scenario');
     await user.click(transcriptButton);
 
     // Should show transcript viewer modal
@@ -213,7 +214,7 @@ describe('RunResults', () => {
 
     // Open viewer
     await user.click(screen.getByText('gpt-4'));
-    await user.click(screen.getByText(/Scenario:/));
+    await user.click(screen.getByText('scenario'));
 
     // Close viewer
     await user.click(screen.getByRole('button', { name: /close/i }));

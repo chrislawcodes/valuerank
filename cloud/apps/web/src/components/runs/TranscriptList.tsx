@@ -21,6 +21,8 @@ type TranscriptListProps = {
   groupByModel?: boolean;
   scenarioDimensions?: VisualizationData['scenarioDimensions'];
   dimensionLabels?: Record<string, string>;
+  onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
+  updatingTranscriptIds?: Set<string>;
 };
 
 type GroupedTranscripts = Record<string, Transcript[]>;
@@ -92,6 +94,8 @@ export function TranscriptList({
   groupByModel = true,
   scenarioDimensions,
   dimensionLabels,
+  onDecisionChange,
+  updatingTranscriptIds,
 }: TranscriptListProps) {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -197,10 +201,14 @@ export function TranscriptList({
 
   if (!groupByModel) {
     // Flat list view
-    const gridTemplateColumns = `minmax(140px, 1.2fr) minmax(160px, 1.4fr) ${dimensionKeys.length > 0
-        ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
-        : ''
-      } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+    const gridTemplateColumns = [
+      'minmax(140px, 1.2fr)',
+      'minmax(160px, 1.4fr)',
+      ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
+      'minmax(150px, 0.9fr)',
+      'minmax(90px, 0.7fr)',
+      'minmax(90px, 0.7fr)',
+    ].join(' ');
 
     return (
       <div className="space-y-2">
@@ -217,21 +225,19 @@ export function TranscriptList({
 
         {/* Transcript list */}
         <div className="space-y-1">
-          {dimensionKeys.length > 0 && (
-            <div
-              className="grid gap-3 px-3 py-2 text-xs uppercase tracking-wide text-gray-400"
-              style={{ gridTemplateColumns }}
-            >
-              <span>Scenario</span>
-              <span>Model</span>
-              {dimensionKeys.map((key) => (
-                <span key={key}>{dimensionLabels?.[key] ?? key}</span>
-              ))}
-              <span>Decision</span>
-              <span>Tokens</span>
-              <span>Created</span>
-            </div>
-          )}
+          <div
+            className="grid gap-3 px-3 py-2 text-xs uppercase tracking-wide text-gray-400"
+            style={{ gridTemplateColumns }}
+          >
+            <span>Scenario</span>
+            <span>Model</span>
+            {dimensionKeys.map((key) => (
+              <span key={key}>{dimensionLabels?.[key] ?? key}</span>
+            ))}
+            <span>Decision</span>
+            <span>Tokens</span>
+            <span>Created</span>
+          </div>
           {filteredTranscripts.map((transcript) => (
             <TranscriptRow
               key={transcript.id}
@@ -240,8 +246,10 @@ export function TranscriptList({
               dimensions={getScenarioDimensions(transcript.scenarioId)}
               dimensionKeys={dimensionKeys}
               dimensionLabels={dimensionLabels}
-              gridTemplateColumns={dimensionKeys.length > 0 ? gridTemplateColumns : undefined}
+              gridTemplateColumns={gridTemplateColumns}
               showModelColumn
+              onDecisionChange={onDecisionChange}
+              decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
             />
           ))}
         </div>
@@ -250,10 +258,13 @@ export function TranscriptList({
   }
 
   // Grouped by model view
-  const groupedGridTemplateColumns = `minmax(140px, 1.2fr) ${dimensionKeys.length > 0
-      ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
-      : ''
-    } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+  const groupedGridTemplateColumns = [
+    'minmax(140px, 1.2fr)',
+    ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
+    'minmax(150px, 0.9fr)',
+    'minmax(90px, 0.7fr)',
+    'minmax(90px, 0.7fr)',
+  ].join(' ');
 
   return (
     <div className="space-y-3">
@@ -286,20 +297,18 @@ export function TranscriptList({
             {/* Transcripts */}
             {isExpanded && (
               <div className="divide-y divide-gray-100">
-                {dimensionKeys.length > 0 && (
-                  <div
-                    className="grid gap-3 px-4 py-2 text-xs uppercase tracking-wide text-gray-400"
-                    style={{ gridTemplateColumns: groupedGridTemplateColumns }}
-                  >
-                    <span>Scenario</span>
-                    {dimensionKeys.map((key) => (
-                      <span key={key}>{dimensionLabels?.[key] ?? key}</span>
-                    ))}
-                    <span>Decision</span>
-                    <span>Tokens</span>
-                    <span>Created</span>
-                  </div>
-                )}
+                <div
+                  className="grid gap-3 px-4 py-2 text-xs uppercase tracking-wide text-gray-400"
+                  style={{ gridTemplateColumns: groupedGridTemplateColumns }}
+                >
+                  <span>Scenario</span>
+                  {dimensionKeys.map((key) => (
+                    <span key={key}>{dimensionLabels?.[key] ?? key}</span>
+                  ))}
+                  <span>Decision</span>
+                  <span>Tokens</span>
+                  <span>Created</span>
+                </div>
                 {modelTranscripts.map((transcript) => (
                   <TranscriptRow
                     key={transcript.id}
@@ -309,8 +318,10 @@ export function TranscriptList({
                     dimensions={getScenarioDimensions(transcript.scenarioId)}
                     dimensionKeys={dimensionKeys}
                     dimensionLabels={dimensionLabels}
-                    gridTemplateColumns={dimensionKeys.length > 0 ? groupedGridTemplateColumns : undefined}
+                    gridTemplateColumns={groupedGridTemplateColumns}
                     showModelColumn={false}
+                    onDecisionChange={onDecisionChange}
+                    decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
                   />
                 ))}
               </div>

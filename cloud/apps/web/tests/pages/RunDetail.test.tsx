@@ -136,6 +136,7 @@ describe('RunDetail', () => {
       updateRun: mockUpdateRun,
       cancelSummarization: vi.fn(),
       restartSummarization: vi.fn(),
+      updateTranscriptDecision: vi.fn(),
       loading: false,
       error: null,
     });
