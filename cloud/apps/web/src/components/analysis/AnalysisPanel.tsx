@@ -311,6 +311,15 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     [analysis, filters.selectedModels]
   );
 
+  const displayWarnings = useMemo<AnalysisWarning[]>(() => {
+    if (!analysis) return [];
+
+    // Hide "low sample size" warnings in the UI; users are expected to infer this from the tables.
+    const isLowSampleWarning = (code: string) => code.includes('SMALL_SAMPLE') || code.includes('MODERATE_SAMPLE');
+
+    return analysis.warnings.filter(w => !isLowSampleWarning(w.code));
+  }, [analysis]);
+
   // Loading state
   if (loading && !analysis) {
     return (
@@ -435,9 +444,9 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
       )}
 
       {/* Warnings */}
-      {analysis.warnings.length > 0 && (
+      {displayWarnings.length > 0 && (
         <div className="space-y-2 mb-6">
-          {analysis.warnings.map((warning, index) => (
+          {displayWarnings.map((warning, index) => (
             <WarningBanner key={`${warning.code}-${index}`} warning={warning} />
           ))}
         </div>
@@ -527,7 +536,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
           <AgreementTab modelAgreement={analysis.modelAgreement} perModel={filteredPerModel} />
         )}
         {activeTab === 'methods' && (
-          <MethodsTab methodsUsed={analysis.methodsUsed} warnings={analysis.warnings} />
+          <MethodsTab methodsUsed={analysis.methodsUsed} warnings={displayWarnings} />
         )}
       </div>
     </div>

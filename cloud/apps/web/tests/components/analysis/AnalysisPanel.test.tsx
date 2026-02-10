@@ -317,9 +317,9 @@ describe('AnalysisPanel', () => {
     const analysis = createMockAnalysis({
       warnings: [
         {
-          code: 'SMALL_SAMPLE',
-          message: 'Sample size is small',
-          recommendation: 'Consider collecting more data',
+          code: 'NO_DIMENSIONS',
+          message: 'No scenario dimensions found in transcripts',
+          recommendation: 'Variable impact analysis will be empty',
         },
       ],
     });
@@ -338,8 +338,34 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Sample size is small')).toBeInTheDocument();
-    expect(screen.getByText('Consider collecting more data')).toBeInTheDocument();
+    expect(screen.getByText('No scenario dimensions found in transcripts')).toBeInTheDocument();
+    expect(screen.getByText('Variable impact analysis will be empty')).toBeInTheDocument();
+  });
+
+  it('does not render low-sample warnings', () => {
+    const analysis = createMockAnalysis({
+      warnings: [
+        { code: 'SMALL_SAMPLE', message: 'Model a has only 9 samples', recommendation: 'Results may have wide confidence intervals' },
+        { code: 'MODERATE_SAMPLE', message: 'Model b has 20 samples', recommendation: 'Consider using bootstrap confidence intervals' },
+      ],
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText(/Model a has only 9 samples/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
   });
 
   it('renders recompute button', () => {
