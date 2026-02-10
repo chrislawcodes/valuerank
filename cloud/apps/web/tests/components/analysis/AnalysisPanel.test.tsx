@@ -342,6 +342,34 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('Consider collecting more data')).toBeInTheDocument();
   });
 
+  it('consolidates repeated per-model sample warnings into a single message', () => {
+    const analysis = createMockAnalysis({
+      warnings: [
+        { code: 'SMALL_SAMPLE', message: 'Model a has only 9 samples', recommendation: 'Results may have wide confidence intervals' },
+        { code: 'MODERATE_SAMPLE', message: 'Model b has 20 samples', recommendation: 'Consider using bootstrap confidence intervals' },
+      ],
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Some models have <25 samples; results may be unstable.')).toBeInTheDocument();
+    expect(screen.getByText('Collect more transcripts per model (aim for 25+) and recompute analysis.')).toBeInTheDocument();
+    expect(screen.queryByText(/Model a has only 9 samples/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
+  });
+
   it('renders recompute button', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({

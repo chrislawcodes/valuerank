@@ -311,6 +311,26 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     [analysis, filters.selectedModels]
   );
 
+  const displayWarnings = useMemo<AnalysisWarning[]>(() => {
+    if (!analysis) return [];
+
+    const sampleWarningCodes = new Set(['SMALL_SAMPLE', 'MODERATE_SAMPLE']);
+    const sampleWarnings = analysis.warnings.filter(w => sampleWarningCodes.has(w.code));
+
+    // Only consolidate when the same "low samples" warning is repeated per-model.
+    if (sampleWarnings.length <= 1) return analysis.warnings;
+
+    const nonSampleWarnings = analysis.warnings.filter(w => !sampleWarningCodes.has(w.code));
+
+    const consolidated: AnalysisWarning = {
+      code: 'SMALL_SAMPLE_CONSOLIDATED',
+      message: 'Some models have <25 samples; results may be unstable.',
+      recommendation: 'Collect more transcripts per model (aim for 25+) and recompute analysis.',
+    };
+
+    return [consolidated, ...nonSampleWarnings];
+  }, [analysis]);
+
   // Loading state
   if (loading && !analysis) {
     return (
@@ -435,9 +455,9 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
       )}
 
       {/* Warnings */}
-      {analysis.warnings.length > 0 && (
+      {displayWarnings.length > 0 && (
         <div className="space-y-2 mb-6">
-          {analysis.warnings.map((warning, index) => (
+          {displayWarnings.map((warning, index) => (
             <WarningBanner key={`${warning.code}-${index}`} warning={warning} />
           ))}
         </div>
@@ -527,7 +547,7 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
           <AgreementTab modelAgreement={analysis.modelAgreement} perModel={filteredPerModel} />
         )}
         {activeTab === 'methods' && (
-          <MethodsTab methodsUsed={analysis.methodsUsed} warnings={analysis.warnings} />
+          <MethodsTab methodsUsed={analysis.methodsUsed} warnings={displayWarnings} />
         )}
       </div>
     </div>
