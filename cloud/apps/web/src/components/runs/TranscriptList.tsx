@@ -13,6 +13,7 @@ import {
   getScenarioDimensionsForId,
 } from '../../utils/scenarioUtils';
 import { TranscriptRow } from './TranscriptRow';
+import { useCallback } from 'react';
 
 type TranscriptListProps = {
   transcripts: Transcript[];
@@ -116,20 +117,20 @@ export function TranscriptList({
     return buildNormalizedScenarioDimensionsMap(scenarioDimensions);
   }, [scenarioDimensions]);
 
-  const getScenarioDimensions = (scenarioId: string | null) => {
+  const getScenarioDimensions = useCallback((scenarioId: string | null) => {
     return getScenarioDimensionsForId(
       scenarioId,
       scenarioDimensions,
       normalizedScenarioDimensions
     );
-  };
+  }, [scenarioDimensions, normalizedScenarioDimensions]);
 
   const sortKeys = useMemo(
     () => resolveSortDimensionKeys(dimensionKeys, dimensionLabels),
     [dimensionKeys, dimensionLabels]
   );
 
-  const sortTranscriptsByAttributes = (items: Transcript[]): Transcript[] => {
+  const sortTranscriptsByAttributes = useCallback((items: Transcript[]): Transcript[] => {
     const { primary, secondary } = sortKeys;
     if (!primary && !secondary) return items;
 
@@ -149,7 +150,7 @@ export function TranscriptList({
 
       return a.createdAt.localeCompare(b.createdAt);
     });
-  };
+  }, [sortKeys, getScenarioDimensions]);
 
   const groupedTranscripts = useMemo(() => {
     const grouped = groupTranscriptsByModel(transcripts);
@@ -158,7 +159,7 @@ export function TranscriptList({
       sortedGroups[modelId] = sortTranscriptsByAttributes(modelTranscripts);
     }
     return sortedGroups;
-  }, [transcripts, sortKeys, scenarioDimensions, normalizedScenarioDimensions]);
+  }, [transcripts, sortTranscriptsByAttributes]);
 
   const modelIds = Object.keys(groupedTranscripts).sort();
 
@@ -184,7 +185,7 @@ export function TranscriptList({
         (t.scenarioId?.toLowerCase().includes(lowerFilter) ?? false)
     );
     return sortTranscriptsByAttributes(filtered);
-  }, [transcripts, filter, sortKeys, scenarioDimensions, normalizedScenarioDimensions]);
+  }, [transcripts, filter, sortTranscriptsByAttributes]);
 
   if (transcripts.length === 0) {
     return (
@@ -196,11 +197,10 @@ export function TranscriptList({
 
   if (!groupByModel) {
     // Flat list view
-    const gridTemplateColumns = `minmax(140px, 1.2fr) minmax(160px, 1.4fr) ${
-      dimensionKeys.length > 0
+    const gridTemplateColumns = `minmax(140px, 1.2fr) minmax(160px, 1.4fr) ${dimensionKeys.length > 0
         ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
         : ''
-    } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+      } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
     return (
       <div className="space-y-2">
@@ -250,11 +250,10 @@ export function TranscriptList({
   }
 
   // Grouped by model view
-  const groupedGridTemplateColumns = `minmax(140px, 1.2fr) ${
-    dimensionKeys.length > 0
+  const groupedGridTemplateColumns = `minmax(140px, 1.2fr) ${dimensionKeys.length > 0
       ? dimensionKeys.map(() => 'minmax(120px, 1fr)').join(' ')
       : ''
-  } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
+    } minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr)`.trim();
 
   return (
     <div className="space-y-3">

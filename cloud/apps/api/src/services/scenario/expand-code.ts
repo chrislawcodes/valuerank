@@ -135,7 +135,7 @@ function generateScenarioName(combination: Array<{ name: string; level: Dimensio
  * Normalize preamble - returns undefined if empty or whitespace-only.
  */
 function normalizePreamble(preamble: string | undefined): string | undefined {
-  if (!preamble || preamble.trim().length === 0) {
+  if (preamble === undefined || preamble === null || preamble === '' || preamble.trim().length === 0) {
     return undefined;
   }
   return preamble;

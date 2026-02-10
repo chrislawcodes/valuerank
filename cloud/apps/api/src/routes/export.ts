@@ -48,7 +48,7 @@ exportRouter.get(
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -66,9 +66,9 @@ exportRouter.get(
 
       // Handle Aggregate Runs
       // If aggregate, fetch transcripts from source runs
-      let transcriptWhere: any = { runId };
-      const runConfig = run.config as any;
-      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+      let transcriptWhere: { runId: string } | { runId: { in: string[] } } = { runId };
+      const runConfig = run.config as { isAggregate?: boolean; sourceRunIds?: string[] } | null;
+      if (runConfig !== null && runConfig.isAggregate === true && Array.isArray(runConfig.sourceRunIds)) {
         log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run');
         transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
       }
@@ -148,7 +148,7 @@ exportRouter.get(
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -173,9 +173,9 @@ exportRouter.get(
 
       // Handle Aggregate Runs
       // If aggregate, fetch transcripts from source runs
-      let transcriptWhere: any = { runId };
-      const runConfig = run.config as any;
-      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+      let transcriptWhere: { runId: string } | { runId: { in: string[] } } = { runId };
+      const runConfig = run.config as { isAggregate?: boolean; sourceRunIds?: string[] } | null;
+      if (runConfig !== null && runConfig.isAggregate === true && Array.isArray(runConfig.sourceRunIds)) {
         log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run (XLSX)');
         transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
       }
@@ -204,7 +204,7 @@ exportRouter.get(
       const exportData: RunExportData = {
         run: run as RunExportData['run'],
         transcripts,
-        analysisResult: analysisResult?.output
+        analysisResult: (analysisResult !== null && analysisResult.output !== null && analysisResult.output !== undefined)
           ? parseAnalysisOutput(analysisResult.output)
           : undefined,
       };
@@ -241,7 +241,7 @@ exportRouter.get(
  * Returns undefined if parsing fails.
  */
 function parseAnalysisOutput(output: unknown): RunExportData['analysisResult'] | undefined {
-  if (!output || typeof output !== 'object') {
+  if (output === null || output === undefined || typeof output !== 'object') {
     return undefined;
   }
 
@@ -260,8 +260,8 @@ function parseAnalysisOutput(output: unknown): RunExportData['analysisResult'] |
     const modelSet = new Set<string>();
     for (const key of Object.keys(rawModelAgreement.pairwise)) {
       const [model1, model2] = key.split(':');
-      if (model1) modelSet.add(model1);
-      if (model2) modelSet.add(model2);
+      if (typeof model1 === 'string' && model1 !== '') modelSet.add(model1);
+      if (typeof model2 === 'string' && model2 !== '') modelSet.add(model2);
     }
     const models = Array.from(modelSet).sort();
 
@@ -339,7 +339,7 @@ exportRouter.get(
       }
 
       const definitionId = req.params.id;
-      if (!definitionId) {
+      if (definitionId === undefined || definitionId === null || definitionId === '') {
         throw new NotFoundError('Definition', 'missing');
       }
 
@@ -400,7 +400,7 @@ exportRouter.get(
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -431,9 +431,9 @@ exportRouter.get(
 
       // Handle Aggregate Runs
       // If aggregate, fetch transcripts from source runs
-      let transcriptWhere: any = { runId };
-      const runConfig = run.config as any;
-      if (runConfig?.isAggregate && Array.isArray(runConfig.sourceRunIds)) {
+      let transcriptWhere: { runId: string } | { runId: { in: string[] } } = { runId };
+      const runConfig = run.config as { isAggregate?: boolean; sourceRunIds?: string[] } | null;
+      if (runConfig !== null && runConfig.isAggregate === true && Array.isArray(runConfig.sourceRunIds)) {
         log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'Exporting aggregate run (JSON)');
         transcriptWhere = { runId: { in: runConfig.sourceRunIds } };
       }
@@ -524,7 +524,7 @@ exportRouter.get(
       }
 
       const definitionId = req.params.id;
-      if (!definitionId) {
+      if (definitionId === undefined || definitionId === null || definitionId === '') {
         throw new NotFoundError('Definition', 'missing');
       }
 

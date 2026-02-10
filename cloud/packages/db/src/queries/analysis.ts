@@ -63,7 +63,7 @@ export type AnalysisResultWithOutput = AnalysisResult & {
  * Create a new experiment.
  */
 export async function createExperiment(data: CreateExperimentInput): Promise<Experiment> {
-  if (!data.name?.trim()) {
+  if (data.name === undefined || data.name === null || data.name.trim() === '') {
     throw new ValidationError('Experiment name is required', { field: 'name' });
   }
 
@@ -120,7 +120,7 @@ export async function listExperiments(filters?: ExperimentFilters): Promise<Expe
 
   const where: Prisma.ExperimentWhereInput = {};
 
-  if (filters?.name) {
+  if (filters?.name !== undefined) {
     where.name = { contains: filters.name, mode: 'insensitive' };
   }
 

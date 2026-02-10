@@ -81,14 +81,14 @@ export type DefinitionTreeNode = {
  * Create a new definition.
  */
 export async function createDefinition(data: CreateDefinitionInput): Promise<Definition> {
-  if (!data.name?.trim()) {
+  if (data.name === undefined || data.name === null || data.name.trim() === '') {
     throw new ValidationError('Definition name is required', { field: 'name' });
   }
-  if (!data.content) {
+  if (data.content === undefined || data.content === null) {
     throw new ValidationError('Definition content is required', { field: 'content' });
   }
 
-  log.info({ name: data.name, hasParent: !!data.parentId }, 'Creating definition');
+  log.info({ name: data.name, hasParent: data.parentId !== undefined && data.parentId !== null }, 'Creating definition');
 
   return db.definition.create({
     data: {
@@ -251,7 +251,7 @@ export async function listDefinitions(filters?: DefinitionFilters): Promise<Defi
     deletedAt: null, // Exclude soft-deleted
   };
 
-  if (filters?.name) {
+  if (filters?.name !== undefined) {
     where.name = { contains: filters.name, mode: 'insensitive' };
   }
   if (filters?.hasParent === true) {
@@ -406,7 +406,7 @@ export async function getDefinitionTree(rootId: string): Promise<DefinitionTreeN
 
   // Link children to parents
   for (const def of descendants) {
-    if (def.parentId && nodeMap.has(def.parentId)) {
+    if (def.parentId !== null && nodeMap.has(def.parentId)) {
       const parent = nodeMap.get(def.parentId)!;
       const child = nodeMap.get(def.id)!;
       parent.children.push(child);

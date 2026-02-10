@@ -23,7 +23,7 @@ builder.objectType(TagRef, {
       nullable: true,
       description: 'User who created this tag',
       resolve: async (tag) => {
-        if (!tag.createdByUserId) return null;
+        if (tag.createdByUserId === null || tag.createdByUserId === undefined || tag.createdByUserId === '') return null;
         return db.user.findUnique({
           where: { id: tag.createdByUserId },
         });

@@ -11,6 +11,8 @@ import { db } from '@valuerank/db';
 import { z } from 'zod';
 import type { AggregateAnalysisJobData } from '../types.js';
 import { updateAggregateRun } from '../../services/analysis/aggregate.js';
+import { planFinalTrial } from '../../services/run/plan-final-trial.js';
+import { startRun } from '../../services/run/start.js';
 
 const log = createLogger('queue:aggregate-analysis');
 
@@ -25,6 +27,8 @@ const zRunSnapshot = z.object({
 
 const zRunConfig = z.object({
     definitionSnapshot: zRunSnapshot.optional(),
+    models: z.array(z.string()).optional(),
+    isFinalTrial: z.boolean().optional(),
 }).passthrough();
 
 function parseDefinitionVersion(value: unknown): number | null {
@@ -115,6 +119,68 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                     for (const version of derivedVersions) {
                         await updateAggregateRun(definitionId, preambleVersionId, version);
                     }
+                }
+
+                // --- Adaptive Sampling Continuation ---
+                try {
+                    // Fetch recent runs to see if we are in a "Final Trial" context
+                    const runs = await db.run.findMany({
+                        where: {
+                            definitionId,
+                            status: 'COMPLETED',
+                            deletedAt: null,
+                            tags: {
+                                none: {
+                                    tag: { name: 'Aggregate' },
+                                },
+                            },
+                        },
+                        orderBy: { createdAt: 'desc' },
+                        take: 50, // Recent history is enough
+                    });
+
+                    // Filter for runs matching the current preamble+version and marked as Final Trial
+                    const finalTrialRuns = runs.filter((run) => {
+                        const parseResult = zRunConfig.safeParse(run.config);
+                        if (!parseResult.success) return false;
+                        const config = parseResult.data;
+                        const snapshot = config.definitionSnapshot;
+                        const runPreambleId = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId ?? null;
+                        const runVersion = parseDefinitionVersion(snapshot?._meta?.definitionVersion) ?? parseDefinitionVersion(snapshot?.version);
+
+                        const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
+                        const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
+
+                        return preambleMatch && versionMatch && config.isFinalTrial === true;
+                    });
+
+                    if (finalTrialRuns.length > 0) {
+                        const modelIds = [...new Set(finalTrialRuns.flatMap(r => {
+                            const parseResult = zRunConfig.safeParse(r.config);
+                            return parseResult.success ? (parseResult.data.models ?? []) : [];
+                        }))];
+                        const firstRun = finalTrialRuns[0]!;
+
+                        if (modelIds.length > 0) {
+                            log.info({ definitionId, modelIds }, 'Checking adaptive sampling stability');
+                            const plan = await planFinalTrial(definitionId, modelIds);
+
+                            if (plan.totalJobs > 0) {
+                                log.info({ definitionId, totalJobs: plan.totalJobs }, 'Stability criteria not met. Starting follow-up Final Trial run.');
+                                await startRun({
+                                    definitionId,
+                                    models: modelIds,
+                                    finalTrial: true,
+                                    userId: firstRun.createdByUserId ?? 'system',
+                                    experimentId: firstRun.experimentId ?? undefined,
+                                });
+                            } else {
+                                log.info({ definitionId }, 'Stability criteria met or cap reached. Final Trial complete.');
+                            }
+                        }
+                    }
+                } catch (samplingErr) {
+                    log.error({ samplingErr, definitionId }, 'Error in adaptive sampling continuation check');
                 }
 
                 log.info(

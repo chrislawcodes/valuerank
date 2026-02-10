@@ -39,7 +39,7 @@ export function mcpAuthMiddleware(
 ): void {
   // Try OAuth Bearer token first
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
+  if (authHeader !== undefined && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
 
     // Check if this is an API key in Bearer position (for LeChat compatibility)
@@ -83,7 +83,7 @@ export function mcpAuthMiddleware(
 
   // Try legacy API key authentication via X-API-Key header
   const apiKey = req.headers['x-api-key'];
-  if (apiKey && typeof apiKey === 'string' && apiKey.length > 0) {
+  if (apiKey !== undefined && typeof apiKey === 'string' && apiKey !== '') {
     // Check if user was authenticated by global authMiddleware
     if (req.user && req.authMethod === 'api_key') {
       log.debug({ userId: req.user.id, path: req.path }, 'MCP API key authenticated');

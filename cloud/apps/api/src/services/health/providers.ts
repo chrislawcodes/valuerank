@@ -214,7 +214,7 @@ async function checkProviderHealth(providerId: string, envKey: string): Promise<
   }
 
   const apiKey = getEnvOptional(envKey);
-  if (!apiKey) {
+  if (apiKey === undefined || apiKey === '') {
     return {
       id: providerId,
       name,

@@ -52,8 +52,19 @@ builder.objectType(RunRef, {
       nullable: true,
       description: 'The version of the definition used in this run (from snapshot)',
       resolve: (run) => {
-        const config = run.config as any;
-        return config?.definitionSnapshot?._meta?.definitionVersion ?? config?.definitionSnapshot?.version ?? null;
+        const config = run.config as {
+          definitionSnapshot?: {
+            _meta?: { definitionVersion?: number | string };
+            version?: number | string;
+          };
+        };
+        const versionRaw = config.definitionSnapshot?._meta?.definitionVersion ?? config.definitionSnapshot?.version;
+        if (typeof versionRaw === 'number') return versionRaw;
+        if (typeof versionRaw === 'string' && versionRaw.trim() !== '') {
+          const parsed = parseInt(versionRaw, 10);
+          return isNaN(parsed) ? null : parsed;
+        }
+        return null;
       },
     }),
 
@@ -112,7 +123,7 @@ builder.objectType(RunRef, {
       nullable: true,
       description: 'User who started this run',
       resolve: async (run) => {
-        if (!run.createdByUserId) return null;
+        if (run.createdByUserId === null || run.createdByUserId === undefined || run.createdByUserId === '') return null;
         return db.user.findUnique({
           where: { id: run.createdByUserId },
         });
@@ -125,7 +136,7 @@ builder.objectType(RunRef, {
       nullable: true,
       description: 'User who deleted this run (only populated for soft-deleted records)',
       resolve: async (run) => {
-        if (!run.deletedByUserId) return null;
+        if (run.deletedByUserId === null || run.deletedByUserId === undefined || run.deletedByUserId === '') return null;
         return db.user.findUnique({
           where: { id: run.deletedByUserId },
         });
@@ -139,7 +150,7 @@ builder.objectType(RunRef, {
       description: 'Structured progress information with percentComplete',
       resolve: async (run) => {
         const progress = run.progress as ProgressData | null;
-        if (!progress) return null;
+        if (progress === null) return null;
 
         // Query per-model counts from ProbeResult
         const byModelResults = await db.probeResult.groupBy({
@@ -183,7 +194,7 @@ builder.objectType(RunRef, {
       description: 'Progress information for transcript summarization (only populated in SUMMARIZING state)',
       resolve: async (run) => {
         const progress = run.summarizeProgress as ProgressData | null;
-        if (!progress) return null;
+        if (progress === null) return null;
 
         // Query per-model counts from Transcript
         // Use raw query for efficient COUNT with FILTER
@@ -282,7 +293,7 @@ builder.objectType(RunRef, {
       type: ExperimentRef,
       nullable: true,
       resolve: async (run, _args, ctx) => {
-        if (!run.experimentId) return null;
+        if (run.experimentId === null || run.experimentId === undefined || run.experimentId === '') return null;
         return ctx.loaders.experiment.load(run.experimentId);
       },
     }),
@@ -306,7 +317,7 @@ builder.objectType(RunRef, {
       },
       resolve: async (run, args, ctx) => {
         const config = run.config as AggregateRunConfig;
-        const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
+        const sourceRunIds = (config?.isAggregate === true && Array.isArray(config.sourceRunIds))
           ? config.sourceRunIds
           : null;
 
@@ -317,8 +328,8 @@ builder.objectType(RunRef, {
 
           return db.transcript.findMany({
             where: {
-              runId: sourceRunIds ? { in: sourceRunIds } : run.id,
-              ...(args.modelId ? { modelId: args.modelId } : {}),
+              runId: sourceRunIds !== null ? { in: sourceRunIds } : run.id,
+              ...(typeof args.modelId === 'string' && args.modelId !== '' ? { modelId: args.modelId } : {}),
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -326,7 +337,7 @@ builder.objectType(RunRef, {
           });
         }
 
-        if (sourceRunIds) {
+        if (sourceRunIds !== null) {
           return ctx.loaders.transcriptsByAggregateRuns.load({
             sourceRunIds,
             modelId: args.modelId,
@@ -335,7 +346,7 @@ builder.objectType(RunRef, {
 
         // No pagination - use dataloader for batching
         const transcripts = await ctx.loaders.transcriptsByRun.load(run.id);
-        if (args.modelId) {
+        if (typeof args.modelId === 'string' && args.modelId !== '') {
           return transcripts.filter((t) => t.modelId === args.modelId);
         }
         return transcripts;
@@ -411,7 +422,7 @@ builder.objectType(RunRef, {
           },
         });
 
-        if (analysis) {
+        if (analysis !== null && analysis !== undefined) {
           return 'completed';
         }
 
@@ -427,7 +438,7 @@ builder.objectType(RunRef, {
           `;
 
           const firstJob = jobs[0];
-          if (firstJob) {
+          if (firstJob !== undefined) {
             return firstJob.state === 'active' ? 'computing' : 'pending';
           }
 
@@ -484,7 +495,7 @@ builder.objectType(RunRef, {
         const progress = run.progress as ProgressData | null;
         let estimatedSecondsRemaining: number | null = null;
 
-        if (progress) {
+        if (progress !== null && progress !== undefined) {
           const remaining = progress.total - progress.completed - progress.failed;
           if (remaining > 0 && totalActive > 0) {
             // Rough estimate: assume average of 5 seconds per job
@@ -532,7 +543,7 @@ builder.objectType(RunRef, {
         if (args.status === 'SUCCESS' || args.status === 'FAILED') {
           where.status = args.status;
         }
-        if (args.modelId) {
+        if (typeof args.modelId === 'string' && args.modelId !== '') {
           where.modelId = args.modelId;
         }
 
@@ -568,7 +579,7 @@ builder.objectType(RunRef, {
             modelEntry.success++;
           } else {
             modelEntry.failed++;
-            if (result.errorCode) {
+            if (result.errorCode !== null && result.errorCode !== undefined && result.errorCode !== '') {
               modelEntry.errorCodes.add(result.errorCode);
             }
           }

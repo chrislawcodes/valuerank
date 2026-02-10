@@ -27,9 +27,9 @@ function isProviderAvailable(providerName: string): boolean {
   };
 
   const envVar = envVarMap[providerName.toLowerCase()];
-  if (!envVar) return false;
+  if (envVar === undefined || envVar === null) return false;
 
-  return !!process.env[envVar];
+  return process.env[envVar] !== undefined && process.env[envVar] !== '';
 }
 
 /**
@@ -141,17 +141,17 @@ function registerListLlmModelsTool(server: McpServer): void {
       try {
         // Build filters
         const filters: { providerId?: string; status?: 'ACTIVE' | 'DEPRECATED' } = {};
-        if (args.provider_id) {
+        if (args.provider_id !== undefined && args.provider_id !== null && args.provider_id !== '') {
           filters.providerId = args.provider_id;
         }
-        if (args.status && args.status !== 'all') {
+        if (args.status !== undefined && args.status !== null && args.status !== 'all') {
           filters.status = args.status.toUpperCase() as 'ACTIVE' | 'DEPRECATED';
         }
 
         let models = await getAllModelsWithProvider(filters);
 
         // Filter by provider name if specified
-        if (args.provider_name) {
+        if (args.provider_name !== undefined && args.provider_name !== null && args.provider_name !== '') {
           const providerNameLower = args.provider_name.toLowerCase();
           models = models.filter(
             (m) => m.provider.name.toLowerCase() === providerNameLower
@@ -165,7 +165,7 @@ function registerListLlmModelsTool(server: McpServer): void {
         }));
 
         // Filter to available only if requested
-        const filteredModels = args.available_only
+        const filteredModels = args.available_only === true
           ? modelsWithAvailability.filter((m) => m.isAvailable)
           : modelsWithAvailability;
 
@@ -218,8 +218,8 @@ function registerListLlmModelsTool(server: McpServer): void {
             has_more: offset + limit < totalCount,
           },
           filters: {
-            provider_id: args.provider_id || null,
-            provider_name: args.provider_name || null,
+            provider_id: (args.provider_id !== undefined && args.provider_id !== null && args.provider_id !== '') ? args.provider_id : null,
+            provider_name: (args.provider_name !== undefined && args.provider_name !== null && args.provider_name !== '') ? args.provider_name : null,
             status: args.status,
             available_only: args.available_only,
           },

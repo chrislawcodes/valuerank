@@ -86,7 +86,7 @@ export async function createTranscript(input: CreateTranscriptInput) {
     turns: transcript.turns,
   };
 
-  if (costSnapshot) {
+  if (costSnapshot !== undefined) {
     content.costSnapshot = costSnapshot;
   }
 
@@ -126,7 +126,7 @@ export async function createTranscript(input: CreateTranscriptInput) {
  * Validate transcript data from Python worker.
  */
 export function validateTranscript(data: unknown): data is ProbeTranscript {
-  if (!data || typeof data !== 'object') {
+  if (data === null || data === undefined || typeof data !== 'object') {
     return false;
   }
 
@@ -141,7 +141,7 @@ export function validateTranscript(data: unknown): data is ProbeTranscript {
 
   // Validate each turn
   for (const turn of obj.turns) {
-    if (!turn || typeof turn !== 'object') return false;
+    if (turn === null || turn === undefined || typeof turn !== 'object') return false;
     const t = turn as Record<string, unknown>;
     if (typeof t.turnNumber !== 'number') return false;
     if (typeof t.promptLabel !== 'string') return false;

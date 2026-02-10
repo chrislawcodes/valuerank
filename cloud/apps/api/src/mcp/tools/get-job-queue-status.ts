@@ -113,14 +113,14 @@ function registerGetJobQueueStatusTool(server: McpServer): void {
           by_job_type: Object.fromEntries(
             Object.entries(status.byJobType).map(([key, value]) => [
               key,
-              value ? {
+              value !== undefined && value !== null ? {
                 pending: value.pending,
                 running: value.running,
                 completed: value.completed,
                 failed: value.failed,
               } : undefined,
             ]).filter(([, v]) => v !== undefined)
-          ),
+          ) as Record<string, { pending: number; running: number; completed: number; failed: number }>,
           total_pending: status.totalPending,
           total_running: status.totalRunning,
           total_completed: status.totalCompleted,

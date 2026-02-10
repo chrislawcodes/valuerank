@@ -37,12 +37,12 @@ odataRouter.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check authentication
-      if (!req.user) {
+      if (req.user === null || req.user === undefined) {
         throw new AuthenticationError('Authentication required');
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -52,7 +52,7 @@ odataRouter.get(
         select: { id: true },
       });
 
-      if (!run) {
+      if (run === null) {
         throw new NotFoundError('Run', runId);
       }
 
@@ -80,7 +80,7 @@ odataRouter.get(
  * Returns unique dimension names found in the dimensions array.
  */
 function extractDimensionNames(content: unknown): string[] {
-  if (!content || typeof content !== 'object') {
+  if (content === null || content === undefined || typeof content !== 'object') {
     return [];
   }
 
@@ -124,12 +124,12 @@ odataRouter.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check authentication
-      if (!req.user) {
+      if (req.user === null || req.user === undefined) {
         throw new AuthenticationError('Authentication required');
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -144,13 +144,13 @@ odataRouter.get(
         },
       });
 
-      if (!run) {
+      if (run === null) {
         throw new NotFoundError('Run', runId);
       }
 
       // Extract dimension names from the definition content
       // Guard against missing definition relation (shouldn't happen but be defensive)
-      const dimensionNames = run.definition
+      const dimensionNames = run.definition !== null && run.definition !== undefined
         ? extractDimensionNames(run.definition.content)
         : [];
 
@@ -220,12 +220,12 @@ odataRouter.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check authentication
-      if (!req.user) {
+      if (req.user === null || req.user === undefined) {
         throw new AuthenticationError('Authentication required');
       }
 
       const runId = req.params.id;
-      if (!runId) {
+      if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
 
@@ -237,7 +237,7 @@ odataRouter.get(
         select: { id: true, status: true },
       });
 
-      if (!run) {
+      if (run === null) {
         throw new NotFoundError('Run', runId);
       }
 
@@ -249,8 +249,8 @@ odataRouter.get(
       }
 
       // Parse OData query options
-      const top = req.query.$top ? parseInt(req.query.$top as string, 10) : undefined;
-      const skip = req.query.$skip ? parseInt(req.query.$skip as string, 10) : undefined;
+      const top = (typeof req.query.$top === 'string' && req.query.$top !== '') ? parseInt(req.query.$top, 10) : undefined;
+      const skip = (typeof req.query.$skip === 'string' && req.query.$skip !== '') ? parseInt(req.query.$skip, 10) : undefined;
       const orderby = req.query.$orderby as string | undefined;
       const selectParam = req.query.$select as string | undefined;
 
@@ -258,7 +258,7 @@ odataRouter.get(
       type OrderByClause = { modelId?: 'asc' | 'desc'; scenarioId?: 'asc' | 'desc'; createdAt?: 'asc' | 'desc'; sampleIndex?: 'asc' | 'desc' };
       let orderBy: OrderByClause[] = [{ modelId: 'asc' }, { scenarioId: 'asc' }, { sampleIndex: 'asc' }];
 
-      if (orderby) {
+      if (typeof orderby === 'string' && orderby !== '') {
         const parts = orderby.split(' ');
         const field = parts[0];
         const direction = parts[1]?.toLowerCase() === 'desc' ? 'desc' : 'asc';
@@ -271,7 +271,7 @@ odataRouter.get(
           sampleIndex: 'sampleIndex',
         };
 
-        if (field && fieldMap[field]) {
+        if (field !== undefined && field !== null && field !== '' && fieldMap[field] !== undefined) {
           orderBy = [{ [fieldMap[field]]: direction } as OrderByClause];
         }
       }
@@ -293,7 +293,7 @@ odataRouter.get(
       log.info({ runId, transcriptCount: transcripts.length, total: totalCount }, 'OData Transcripts fetched');
 
       // Parse select fields if provided
-      const selectFields = selectParam ? selectParam.split(',').map((s) => s.trim()) : null;
+      const selectFields = (typeof selectParam === 'string' && selectParam !== '') ? selectParam.split(',').map((s) => s.trim()) : null;
 
       // Transform to OData format
       const baseUrl = `${req.protocol}://${req.get('host')}/api/odata/runs/${runId}`;
@@ -302,7 +302,7 @@ odataRouter.get(
       const value = transcripts.map((t) => {
         // Extract dimensions from scenario content
         const content = t.scenario?.content as { dimensions?: Record<string, number> } | null;
-        const dimensions = content?.dimensions ?? {};
+        const dimensions = (content !== null && content !== undefined && content.dimensions !== undefined && content.dimensions !== null) ? content.dimensions : {};
 
         // Base transcript data
         const baseData: Record<string, unknown> = {
@@ -317,7 +317,7 @@ odataRouter.get(
           turnCount: t.turnCount,
           tokenCount: t.tokenCount,
           durationMs: t.durationMs,
-          estimatedCost: t.estimatedCost ? Number(t.estimatedCost) : null,
+          estimatedCost: (t.estimatedCost !== null && t.estimatedCost !== undefined) ? Number(t.estimatedCost) : null,
           createdAt: t.createdAt.toISOString(),
         };
 
@@ -327,7 +327,7 @@ odataRouter.get(
         }
 
         // Apply $select if provided
-        if (selectFields) {
+        if (selectFields !== null) {
           const filtered: Record<string, unknown> = {};
           for (const field of selectFields) {
             if (field in baseData) {

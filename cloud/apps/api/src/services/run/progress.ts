@@ -210,10 +210,6 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
   const { DEFAULT_JOB_OPTIONS } = await import('../../queue/types.js');
 
   const boss = getBoss();
-  if (!boss) {
-    log.error({ runId }, 'Cannot queue summarize jobs - boss not initialized');
-    return;
-  }
 
   // Get all transcripts for this run
   const transcripts = await db.transcript.findMany({

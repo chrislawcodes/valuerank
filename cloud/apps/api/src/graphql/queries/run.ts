@@ -40,7 +40,7 @@ builder.queryField('run', (t) =>
       });
 
       // Filter out soft-deleted runs unless includeDeleted is true
-      if (!run || (!includeDeleted && run.deletedAt !== null)) {
+      if (run === null || (includeDeleted === false && run.deletedAt !== null)) {
         ctx.log.debug({ runId: id }, 'Run not found');
         return null;
       }
@@ -110,24 +110,24 @@ builder.queryField('runs', (t) =>
       const where: RunWhereInput & { deletedAt: null } = {
         deletedAt: null,
       };
-      if (args.definitionId) {
+      if (args.definitionId !== undefined && args.definitionId !== null && args.definitionId !== '') {
         where.definitionId = args.definitionId;
       }
-      if (args.experimentId) {
+      if (args.experimentId !== undefined && args.experimentId !== null && args.experimentId !== '') {
         where.experimentId = args.experimentId;
       }
-      if (args.status) {
+      if (args.status !== undefined && args.status !== null && args.status !== '') {
         where.status = args.status as RunStatus;
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || args.analysisStatus) {
+      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
         const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
           deletedAt: null,
         };
 
         // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus) {
+        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
           analysisWhere.status = args.analysisStatus as AnalysisStatus;
         }
 
@@ -257,24 +257,24 @@ builder.queryField('runCount', (t) =>
       const where: RunWhereInput & { deletedAt: null } = {
         deletedAt: null,
       };
-      if (args.definitionId) {
+      if (args.definitionId !== undefined && args.definitionId !== null && args.definitionId !== '') {
         where.definitionId = args.definitionId;
       }
-      if (args.experimentId) {
+      if (args.experimentId !== undefined && args.experimentId !== null && args.experimentId !== '') {
         where.experimentId = args.experimentId;
       }
-      if (args.status) {
+      if (args.status !== undefined && args.status !== null && args.status !== '') {
         where.status = args.status as RunStatus;
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || args.analysisStatus) {
+      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
         const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
           deletedAt: null,
         };
 
         // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus) {
+        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
           analysisWhere.status = args.analysisStatus as AnalysisStatus;
         }
 

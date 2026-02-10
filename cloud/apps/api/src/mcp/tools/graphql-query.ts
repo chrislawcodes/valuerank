@@ -34,9 +34,10 @@ const GraphQLQueryInputSchema = {
 function containsMutation(queryString: string): boolean {
   try {
     const doc = parse(queryString);
-    return doc.definitions.some(
-      (def) => def.kind === 'OperationDefinition' && def.operation === 'mutation'
-    );
+    return doc.definitions.some((def) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
+      return def.kind === 'OperationDefinition' && def.operation === 'mutation';
+    });
   } catch {
     // If we can't parse, let GraphQL handle the error
     return false;
@@ -126,7 +127,7 @@ Limited to 10KB token budget.`,
         log.info(
           {
             requestId,
-            hasErrors: !!result.errors?.length,
+            hasErrors: (result.errors?.length ?? 0) > 0,
             bytes: response.metadata.bytes,
             executionMs: response.metadata.executionMs,
           },

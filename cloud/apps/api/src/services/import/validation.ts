@@ -146,7 +146,7 @@ export async function validateImport(
   }
 
   // Check for name conflict
-  if (options.checkNameConflict && name) {
+  if (options.checkNameConflict === true && name !== '') {
     const conflict = await checkNameConflict(name);
     if (conflict.exists) {
       errors.push({

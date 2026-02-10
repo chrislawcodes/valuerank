@@ -48,7 +48,7 @@ builder.queryField('definition', (t) =>
       });
 
       // Filter out soft-deleted definitions unless includeDeleted is true
-      if (!definition || (!includeDeleted && definition.deletedAt !== null)) {
+      if (definition === null || (includeDeleted === false && definition.deletedAt !== null)) {
         ctx.log.debug({ definitionId: id }, 'Definition not found');
         return null;
       }
@@ -104,11 +104,11 @@ builder.queryField('definitions', (t) =>
         deletedAt: null,
       };
 
-      if (args.rootOnly) {
+      if (args.rootOnly === true) {
         where.parentId = null;
       }
 
-      if (args.search) {
+      if (args.search !== undefined && args.search !== null && args.search !== '') {
         where.name = { contains: args.search, mode: 'insensitive' };
       }
 
@@ -153,7 +153,7 @@ builder.queryField('definitions', (t) =>
         where.id = { in: matchingIds };
       }
 
-      if (args.hasRuns) {
+      if (args.hasRuns === true) {
         // Only definitions that have at least one run
         where.runs = { some: {} };
       }
@@ -197,7 +197,7 @@ builder.queryField('definitionAncestors', (t) =>
         where: { id },
       });
 
-      if (!definition || definition.deletedAt !== null) {
+      if (definition === null || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 
@@ -265,7 +265,7 @@ builder.queryField('definitionDescendants', (t) =>
         where: { id },
       });
 
-      if (!definition || definition.deletedAt !== null) {
+      if (definition === null || definition.deletedAt !== null) {
         throw new Error(`Definition not found: ${id}`);
       }
 
@@ -341,11 +341,11 @@ builder.queryField('definitionCount', (t) =>
         deletedAt: null,
       };
 
-      if (args.rootOnly) {
+      if (args.rootOnly === true) {
         where.parentId = null;
       }
 
-      if (args.search) {
+      if (args.search !== undefined && args.search !== null && args.search !== '') {
         where.name = { contains: args.search, mode: 'insensitive' };
       }
 
@@ -385,7 +385,7 @@ builder.queryField('definitionCount', (t) =>
         where.id = { in: matchingIds };
       }
 
-      if (args.hasRuns) {
+      if (args.hasRuns === true) {
         where.runs = { some: {} };
       }
 

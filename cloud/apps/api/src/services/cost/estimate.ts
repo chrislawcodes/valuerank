@@ -126,7 +126,7 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
 
   for (const modelId of modelIds) {
     const model = modelMap.get(modelId);
-    if (!model) {
+    if (model === undefined) {
       log.warn({ modelId }, 'Model not found, skipping');
       continue;
     }
@@ -143,7 +143,7 @@ export async function estimateCost(input: EstimateCostInput): Promise<CostEstima
       avgInputTokens = stats.avgInputTokens;
       avgOutputTokens = stats.avgOutputTokens;
       sampleCount = stats.sampleCount;
-    } else if (allModelAvg) {
+    } else if (allModelAvg !== null) {
       // Fallback to all-model average
       avgInputTokens = allModelAvg.input;
       avgOutputTokens = allModelAvg.output;
@@ -247,7 +247,7 @@ export async function computeActualCost(
   // If no pricing map provided, fetch it
   // Note: transcript.modelId is the model identifier string (e.g., "gpt-4"), not a database UUID
   let pricing = modelPricing;
-  if (!pricing) {
+  if (pricing === undefined) {
     const modelIds = [...new Set(transcripts.map((t) => t.modelId))];
     const models = await db.llmModel.findMany({
       where: { modelId: { in: modelIds } },
@@ -282,7 +282,7 @@ export async function computeActualCost(
     }
 
     const modelEntry = perModel[modelId];
-    if (!modelEntry) continue;
+    if (modelEntry === undefined) continue;
 
     modelEntry.probeCount += 1;
 

@@ -75,7 +75,7 @@ Limited to 2KB token budget.`,
         };
 
         // Filter by folder (uses name contains for simplicity)
-        if (args.folder) {
+        if (args.folder !== undefined && args.folder !== null && args.folder !== '') {
           where.name = { contains: args.folder };
         }
 

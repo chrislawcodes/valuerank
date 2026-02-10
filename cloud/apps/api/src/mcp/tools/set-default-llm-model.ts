@@ -153,7 +153,7 @@ Returns the new default model and the previous default (if changed).`,
             details: {
               modelId: model.modelId,
               providerName: modelWithProvider.provider.name,
-              previousDefaultModelId: previousDefault?.id || null,
+              previousDefaultModelId: previousDefault?.id !== undefined ? previousDefault.id : null,
             },
           })
         );
@@ -185,10 +185,10 @@ Returns the new default model and the previous default (if changed).`,
           },
           previous_default: previousDefault
             ? {
-                id: previousDefault.id,
-                model_id: previousDefault.modelId,
-                display_name: previousDefault.displayName,
-              }
+              id: previousDefault.id,
+              model_id: previousDefault.modelId,
+              display_name: previousDefault.displayName,
+            }
             : null,
         };
 

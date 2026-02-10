@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
+import Editor, { type Monaco } from '@monaco-editor/react';
 import type { editor, IDisposable, Uri } from 'monaco-editor';
 
 /**
@@ -92,15 +92,18 @@ export function JsonEditor({
   height = '120px',
 }: JsonEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   const monacoRef = useRef<Monaco | null>(null);
   const disposablesRef = useRef<IDisposable[]>([]);
   const schemaConfiguredRef = useRef(false);
 
-  const handleEditorMount: OnMount = (editor, monaco) => {
+  const handleEditorMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
     editorRef.current = editor;
     monacoRef.current = monaco;
 
     // Configure JSON schema validation only once
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
     if (!schemaConfiguredRef.current) {
       monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
         validate: true,
@@ -122,11 +125,11 @@ export function JsonEditor({
     const model = editor.getModel();
     if (model) {
       const checkMarkers = () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-        const markers = monaco.editor.getModelMarkers({ resource: model.uri }) as any[];
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+        const markers = monaco.editor.getModelMarkers({ resource: model.uri });
         const errors = markers.filter(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (m: any) => m.severity === monaco.MarkerSeverity.Error
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+          (m: editor.IMarker) => m.severity === monaco.MarkerSeverity.Error
         );
         if (onValidationChange) {
           if (errors.length > 0) {
@@ -139,6 +142,8 @@ export function JsonEditor({
       };
 
       // Check markers after a delay to allow Monaco to validate
+      // Check markers after a delay to allow Monaco to validate
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
       const markerListener = monaco.editor.onDidChangeMarkers((uris: readonly Uri[]) => {
         if (uris.some((uri: Uri) => uri.toString() === model.uri.toString())) {
           checkMarkers();

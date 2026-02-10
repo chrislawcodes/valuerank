@@ -52,8 +52,8 @@ function tryParseProgress(line: string): ProgressUpdate | null {
   }
 
   try {
-    const parsed = JSON.parse(line.trim());
-    if (parsed.type === 'progress') {
+    const parsed = JSON.parse(line.trim()) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && (parsed as Record<string, unknown>).type === 'progress') {
       return parsed as ProgressUpdate;
     }
   } catch {
@@ -134,15 +134,14 @@ export async function spawnPython<TInput, TOutput>(
 
         // Process complete lines
         const lines = stderrBuffer.split('\n');
-        // Keep the last incomplete line in the buffer
-        stderrBuffer = lines.pop() || '';
+        const lastLine = lines.pop();
+        stderrBuffer = typeof lastLine === 'string' ? lastLine : '';
 
         for (const line of lines) {
           const progress = tryParseProgress(line);
           if (progress) {
-            // Call the progress callback (fire and forget, don't block)
-            Promise.resolve(onProgress(progress)).catch((err) => {
-              log.warn({ err }, 'Progress callback failed');
+            Promise.resolve(onProgress(progress)).catch((err: unknown) => {
+              log.warn({ err: err instanceof Error ? err : new Error(String(err)) }, 'Progress callback failed');
             });
           }
         }
@@ -167,8 +166,8 @@ export async function spawnPython<TInput, TOutput>(
       if (onProgress && stderrBuffer) {
         const progress = tryParseProgress(stderrBuffer);
         if (progress) {
-          Promise.resolve(onProgress(progress)).catch((err) => {
-            log.warn({ err }, 'Progress callback failed');
+          Promise.resolve(onProgress(progress)).catch((err: unknown) => {
+            log.warn({ err: err instanceof Error ? err : new Error(String(err)) }, 'Progress callback failed');
           });
         }
       }
@@ -188,8 +187,8 @@ export async function spawnPython<TInput, TOutput>(
         const data = JSON.parse(stdout) as TOutput;
         log.debug({ script }, 'Python process completed successfully');
         finish({ success: true, data });
-      } catch (parseError) {
-        log.error({ script, stdout, parseError }, 'Failed to parse Python output');
+      } catch (parseError: unknown) {
+        log.error({ script, stdout, parseError: parseError instanceof Error ? parseError : new Error(String(parseError)) }, 'Failed to parse Python output');
         finish({
           success: false,
           error: `Failed to parse output: ${stdout.slice(0, 200)}`,
@@ -203,11 +202,12 @@ export async function spawnPython<TInput, TOutput>(
       const inputJson = JSON.stringify(input);
       pythonProcess.stdin.write(inputJson);
       pythonProcess.stdin.end();
-    } catch (writeError) {
-      log.error({ script, writeError }, 'Failed to write to Python stdin');
+    } catch (writeError: unknown) {
+      log.error({ script, writeError: writeError instanceof Error ? writeError : new Error(String(writeError)) }, 'Failed to write to Python stdin');
+      const errorMsg = writeError instanceof Error ? writeError.message : String(writeError);
       finish({
         success: false,
-        error: `Failed to write input: ${writeError}`,
+        error: `Failed to write input: ${errorMsg}`,
       });
     }
   });

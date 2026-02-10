@@ -73,7 +73,7 @@ function escapeXml(str: string): string {
  */
 function parseCellRef(ref: string): { col: number; row: number } {
   const match = ref.match(/^([A-Z]+)(\d+)$/);
-  if (!match || !match[1] || !match[2]) {
+  if (match === null || match[1] === undefined || match[2] === undefined) {
     throw new Error(`Invalid cell reference: ${ref}`);
   }
 
@@ -176,14 +176,14 @@ function generatePivotTableDefinition(
   // Find field indices and their field info
   const rowFieldInfos = config.rowFields.map((name) => {
     const field = fields.find((f) => f.name === name);
-    if (!field) throw new Error(`Row field not found: ${name}`);
+    if (field === undefined) throw new Error(`Row field not found: ${name}`);
     return field;
   });
   const rowFieldIndices = rowFieldInfos.map((f) => f.index);
 
   const colFieldInfos = config.columnFields.map((name) => {
     const field = fields.find((f) => f.name === name);
-    if (!field) throw new Error(`Column field not found: ${name}`);
+    if (field === undefined) throw new Error(`Column field not found: ${name}`);
     return field;
   });
   const colFieldIndices = colFieldInfos.map((f) => f.index);
@@ -235,7 +235,7 @@ function generatePivotTableDefinition(
   let rowItems = '';
   if (rowFieldInfos.length > 0) {
     const rowField = rowFieldInfos[0];
-    if (rowField) {
+    if (rowField !== undefined && rowField !== null) {
       const items = rowField.uniqueValues
         .map((_, i) => `<i><x v="${i}"/></i>`)
         .concat(['<i t="grand"><x/></i>'])
@@ -258,7 +258,7 @@ function generatePivotTableDefinition(
   let colItems = '<colItems count="1"><i/></colItems>';
   if (colFieldInfos.length > 0) {
     const colField = colFieldInfos[0];
-    if (colField) {
+    if (colField !== undefined && colField !== null) {
       const items = colField.uniqueValues
         .map((_, i) => `<i><x v="${i}"/></i>`)
         .concat(['<i t="grand"><x/></i>'])
@@ -340,7 +340,7 @@ export function addPivotTable(
 
   // Find the target worksheet's sheet ID
   const workbookXml = zip.getEntry('xl/workbook.xml')?.getData().toString('utf-8');
-  if (!workbookXml) throw new Error('workbook.xml not found');
+  if (workbookXml === undefined || workbookXml === null || workbookXml === '') throw new Error('workbook.xml not found');
 
   // Get sheet IDs from workbook
   const sheetMatches = workbookXml.matchAll(/<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"/g);
@@ -348,21 +348,21 @@ export function addPivotTable(
   for (const match of sheetMatches) {
     const sheetName = match[1];
     const sheetRid = match[2];
-    if (sheetName && sheetRid) {
+    if (sheetName !== undefined && sheetRid !== undefined) {
       sheets.set(sheetName, sheetRid);
     }
   }
 
   const targetSheetRid = sheets.get(config.targetSheet);
-  if (!targetSheetRid) throw new Error(`Target sheet not found: ${config.targetSheet}`);
+  if (targetSheetRid === undefined || targetSheetRid === null || targetSheetRid === '') throw new Error(`Target sheet not found: ${config.targetSheet}`);
 
   // Get the worksheet path from relationships
   const workbookRels = zip.getEntry('xl/_rels/workbook.xml.rels')?.getData().toString('utf-8');
-  if (!workbookRels) throw new Error('workbook.xml.rels not found');
+  if (workbookRels === undefined || workbookRels === null || workbookRels === '') throw new Error('workbook.xml.rels not found');
 
   const relMatch = workbookRels.match(new RegExp(`Id="${targetSheetRid}"[^>]*Target="([^"]*)"`));
-  const worksheetPath = relMatch ? `xl/${relMatch[1]}` : null;
-  if (!worksheetPath) throw new Error(`Worksheet path not found for ${targetSheetRid}`);
+  const worksheetPath = relMatch !== null ? `xl/${relMatch[1]}` : null;
+  if (worksheetPath === null) throw new Error(`Worksheet path not found for ${targetSheetRid}`);
 
   // Calculate target location for PivotTable
   const targetCellRef = parseCellRef(config.targetCell);
@@ -424,7 +424,7 @@ export function addPivotTable(
   const worksheetRelsPath = `${worksheetDir}/_rels/${worksheetFilename}.rels`;
   let worksheetRels = zip.getEntry(worksheetRelsPath)?.getData().toString('utf-8');
 
-  if (worksheetRels) {
+  if (worksheetRels !== undefined) {
     // Add pivotTable relationship to existing rels
     worksheetRels = worksheetRels.replace(
       '</Relationships>',
@@ -443,7 +443,7 @@ export function addPivotTable(
 
   // Update [Content_Types].xml
   const contentTypes = zip.getEntry('[Content_Types].xml')?.getData().toString('utf-8');
-  if (!contentTypes) throw new Error('[Content_Types].xml not found');
+  if (contentTypes === undefined || contentTypes === null || contentTypes === '') throw new Error('[Content_Types].xml not found');
 
   const updatedContentTypes = contentTypes.replace(
     '</Types>',

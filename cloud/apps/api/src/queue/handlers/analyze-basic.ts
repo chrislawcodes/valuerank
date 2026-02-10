@@ -143,9 +143,13 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         const transcriptData: TranscriptData[] = transcripts
           .filter((t) => t.scenario !== null && t.scenarioId !== null)
           .map((t) => {
+            const scenario = t.scenario;
+            if (scenario === null) {
+              throw new Error(`Scenario not found for transcript ${t.id}`);
+            }
             // Extract numeric dimensions from scenario content (matches CSV variable columns)
-            const scenarioContent = t.scenario!.content as Record<string, unknown> | null;
-            const rawDimensions = (scenarioContent?.dimensions as Record<string, unknown>) || {};
+            const scenarioContent = scenario.content as Record<string, unknown> | null;
+            const rawDimensions = (scenarioContent?.dimensions as Record<string, unknown>) ?? {};
             const dimensions: Record<string, number> = {};
             for (const [key, value] of Object.entries(rawDimensions)) {
               if (typeof value === 'number') {
@@ -233,14 +237,22 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           if (run) {
             const isAggregate = run.tags.some(rt => rt.tag.name === 'Aggregate');
             if (!isAggregate) {
-              const config = run.config as any;
+              const config = run.config as {
+                definitionSnapshot?: {
+                  _meta?: { preambleVersionId?: string; definitionVersion?: number | string };
+                  preambleVersionId?: string;
+                  version?: number | string;
+                }
+              };
               const definitionId = run.definitionId;
               const preambleVersionId =
-                config?.definitionSnapshot?._meta?.preambleVersionId ??
-                config?.definitionSnapshot?.preambleVersionId;
+                config.definitionSnapshot?._meta?.preambleVersionId ??
+                config.definitionSnapshot?.preambleVersionId ??
+                null;
               const definitionVersionRaw =
-                config?.definitionSnapshot?._meta?.definitionVersion ??
-                config?.definitionSnapshot?.version;
+                config.definitionSnapshot?._meta?.definitionVersion ??
+                config.definitionSnapshot?.version ??
+                null;
               const parsedDefinitionVersion =
                 typeof definitionVersionRaw === 'number'
                   ? definitionVersionRaw

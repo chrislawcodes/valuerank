@@ -95,13 +95,13 @@ async function getOrCreateLimiter(
   concurrencyOverride?: number
 ): Promise<Bottleneck> {
   // Determine the limiter key - use fixed suffix for overrides to allow reload
-  const limiterKey = concurrencyOverride
+  const limiterKey = (concurrencyOverride !== undefined && concurrencyOverride > 0)
     ? `${providerName}:summarize`
     : providerName;
 
   // Return existing limiter if available
   const existing = providerLimiters.get(limiterKey);
-  if (existing) {
+  if (existing !== undefined) {
     return existing;
   }
 
@@ -109,10 +109,10 @@ async function getOrCreateLimiter(
   const allLimits = await loadProviderLimits();
   const limits = allLimits.get(providerName);
 
-  if (!limits) {
+  if (limits === undefined) {
     log.warn({ provider: providerName }, 'No limits found for provider, using defaults');
     // Default conservative limits
-    const effectiveConcurrency = concurrencyOverride
+    const effectiveConcurrency = (concurrencyOverride !== undefined && concurrencyOverride > 0)
       ? Math.max(1, concurrencyOverride)
       : 1;
     const defaultLimiter = createLimiter(limiterKey, {
@@ -125,14 +125,14 @@ async function getOrCreateLimiter(
   }
 
   // Apply concurrency override if provided (use max of provider limit and override)
-  const effectiveLimits = concurrencyOverride
+  const effectiveLimits = (concurrencyOverride !== undefined && concurrencyOverride > 0)
     ? {
       ...limits,
       maxParallelRequests: Math.max(limits.maxParallelRequests, concurrencyOverride),
     }
     : limits;
 
-  if (concurrencyOverride) {
+  if (concurrencyOverride !== undefined && concurrencyOverride > 0) {
     log.info(
       {
         provider: providerName,
@@ -241,7 +241,7 @@ function createLimiter(providerName: string, limits: ProviderLimits): Bottleneck
   });
 
   limiter.on('error', (error) => {
-    log.error({ provider: providerName, error }, 'Bottleneck error');
+    log.error({ provider: providerName, error: error as unknown }, 'Bottleneck error');
   });
 
   return limiter;
@@ -278,7 +278,7 @@ export async function schedule<T>(
     const wrappedFn = async () => {
       // Increment active count for this model
       let providerModels = activeModelCounts.get(providerName);
-      if (!providerModels) {
+      if (providerModels === undefined) {
         providerModels = new Map<string, number>();
         activeModelCounts.set(providerName, providerModels);
       }
@@ -366,7 +366,7 @@ export async function getProviderMetrics(providerName: string): Promise<Provider
   const allLimits = await loadProviderLimits();
   const limits = allLimits.get(providerName);
 
-  if (!limits) {
+  if (limits === undefined) {
     return null;
   }
 
@@ -475,10 +475,10 @@ export async function reloadLimiters(): Promise<void> {
  * Get detailed stats for a rate limiter (for diagnostics).
  * Returns internal Bottleneck state plus our tracking counts.
  */
-export async function getLimiterStats(providerName: string): Promise<LimiterStats> {
+export function getLimiterStats(providerName: string): LimiterStats {
   const limiter = providerLimiters.get(providerName);
 
-  if (!limiter) {
+  if (limiter === undefined) {
     return {
       exists: false,
       provider: providerName,
@@ -492,7 +492,7 @@ export async function getLimiterStats(providerName: string): Promise<LimiterStat
   return {
     exists: true,
     provider: providerName,
-    config: config ? {
+    config: config !== undefined ? {
       maxConcurrent: config.maxConcurrent,
       minTime: config.minTime,
       reservoir: config.reservoir,

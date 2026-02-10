@@ -62,12 +62,12 @@ export function auditedMutation<TArgs, TResult>(
 
     // Extract entity ID
     let entityId: string;
-    if (config.extractEntityId) {
+    if (config.extractEntityId !== undefined) {
       entityId = config.extractEntityId(args, result);
     } else {
       // Default: assume result has an id property
       const resultWithId = result as EntityWithId;
-      if (resultWithId && typeof resultWithId.id === 'string') {
+      if (resultWithId !== null && resultWithId !== undefined && typeof resultWithId.id === 'string') {
         entityId = resultWithId.id;
       } else {
         ctx.log.warn(
@@ -88,7 +88,7 @@ export function auditedMutation<TArgs, TResult>(
       entityId,
       userId: ctx.user?.id ?? null,
       metadata: config.metadata?.(args, result),
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       ctx.log.error({ err }, 'Audit log creation failed');
     });
 

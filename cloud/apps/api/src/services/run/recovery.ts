@@ -175,12 +175,12 @@ async function findMissingProbes(
     },
   });
 
-  if (!run) {
+  if (run === null) {
     return [];
   }
 
   const config = run.config as { models: string[]; samplesPerScenario?: number };
-  const models = config.models || [];
+  const models = config.models ?? [];
   const samplesPerScenario = config.samplesPerScenario ?? 1;
   const scenarioIds = run.scenarioSelections.map((s) => s.scenarioId);
 
@@ -221,9 +221,7 @@ async function requeueMissingProbes(
   missingProbes: Array<{ scenarioId: string; modelId: string; sampleIndex: number }>
 ): Promise<number> {
   const boss = getBoss();
-  if (!boss) {
-    throw new Error('PgBoss not initialized');
-  }
+
 
   const jobOptions = DEFAULT_JOB_OPTIONS['probe_scenario'];
   let queuedCount = 0;
@@ -258,9 +256,7 @@ async function requeueMissingProbes(
  */
 async function queueSummarizeJobsForRecovery(runId: string): Promise<number> {
   const boss = getBoss();
-  if (!boss) {
-    throw new Error('PgBoss not initialized for summarization');
-  }
+
 
   // Get all transcripts for this run that haven't been summarized
   const transcripts = await db.transcript.findMany({

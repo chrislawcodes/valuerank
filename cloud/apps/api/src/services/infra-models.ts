@@ -41,7 +41,7 @@ export async function getInfraModel(purpose: InfraModelPurpose): Promise<InfraMo
   }
 
   const value = setting.value as { modelId?: string; providerId?: string };
-  if (!value.modelId || !value.providerId) {
+  if (value.modelId === undefined || value.modelId === null || value.modelId === '' || value.providerId === undefined || value.providerId === null || value.providerId === '') {
     log.warn({ purpose, value }, 'Invalid infrastructure model configuration');
     return null;
   }
@@ -89,7 +89,7 @@ export async function getInfraModel(purpose: InfraModelPurpose): Promise<InfraMo
 export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
   const configured = await getInfraModel('scenario_expansion');
 
-  if (configured) {
+  if (configured !== null) {
     return configured;
   }
 
@@ -112,7 +112,7 @@ export async function getScenarioExpansionModel(): Promise<InfraModelConfig> {
 export async function getSummarizerModel(): Promise<InfraModelConfig> {
   const configured = await getInfraModel('summarizer');
 
-  if (configured) {
+  if (configured !== null) {
     return configured;
   }
 
@@ -135,7 +135,7 @@ export async function getSummarizerModel(): Promise<InfraModelConfig> {
     },
   });
 
-  if (lowestCostModel) {
+  if (lowestCostModel !== null) {
     log.info(
       { modelId: lowestCostModel.modelId, provider: lowestCostModel.provider.name },
       'Using lowest cost model for summarization'

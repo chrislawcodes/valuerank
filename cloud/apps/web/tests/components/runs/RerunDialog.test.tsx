@@ -41,6 +41,16 @@ vi.mock('../../../src/hooks/useCostEstimate', () => ({
   }),
 }));
 
+// Mock the useFinalTrialPlan hook (used by RunForm)
+vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
+  useFinalTrialPlan: vi.fn().mockReturnValue({
+    plan: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',
@@ -176,7 +186,7 @@ describe('RerunDialog', () => {
 
       expect(screen.getByText('Sample Size')).toBeInTheDocument();
       expect(screen.getByText('1% (test trial)')).toBeInTheDocument();
-      expect(screen.getByText('100% (full trial)')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '100%' })).toBeInTheDocument();
     });
   });
 

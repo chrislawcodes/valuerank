@@ -30,7 +30,7 @@ builder.queryField('tags', (t) =>
 
       ctx.log.debug({ search: args.search, limit, offset }, 'Listing tags');
 
-      const where = args.search
+      const where = (args.search !== undefined && args.search !== null && args.search !== '')
         ? { name: { contains: args.search.toLowerCase(), mode: 'insensitive' as const } }
         : {};
 
@@ -91,7 +91,7 @@ builder.queryField('tagCount', (t) =>
     resolve: async (_root, args, ctx) => {
       ctx.log.debug({ search: args.search }, 'Counting tags');
 
-      const where = args.search
+      const where = (args.search !== undefined && args.search !== null && args.search !== '')
         ? { name: { contains: args.search.toLowerCase(), mode: 'insensitive' as const } }
         : {};
 

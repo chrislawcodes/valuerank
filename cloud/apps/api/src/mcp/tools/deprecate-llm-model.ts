@@ -137,7 +137,7 @@ Returns the deprecated model and the new default (if one was promoted).`,
               modelId: modelWithProvider.modelId,
               providerName: modelWithProvider.provider.name,
               wasDefault,
-              newDefaultModelId: newDefault?.id || null,
+              newDefaultModelId: newDefault?.id ?? null,
             },
           })
         );

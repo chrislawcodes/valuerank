@@ -218,7 +218,7 @@ export async function validateClientCredentials(
 ): Promise<StoredOAuthClient | null> {
   const client = await getOAuthClient(clientId);
 
-  if (!client || !client.clientSecretHash) {
+  if (!client || client.clientSecretHash === null || client.clientSecretHash === '') {
     return null;
   }
 
@@ -325,7 +325,7 @@ export async function revokeRefreshTokens(userId: string, clientId?: string): Pr
   const result = await db.oAuthRefreshToken.deleteMany({
     where: {
       userId,
-      ...(clientId && { clientId }),
+      ...(clientId !== undefined && clientId !== '' && { clientId }),
     },
   });
 

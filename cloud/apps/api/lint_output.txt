@@ -1,0 +1,46 @@
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/auth/middleware.ts
+   54:7   warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  @typescript-eslint/strict-boolean-expressions
+  205:18  warning  Unsafe assignment of an `any` value                                                          @typescript-eslint/no-unsafe-assignment
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/config/models.ts
+  127:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+  238:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+  238:23  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+  246:39  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/index.ts
+   45:78  error    `import()` type annotations are forbidden                                             @typescript-eslint/consistent-type-imports
+   53:19  error    This assertion is unnecessary since it does not change the type of the expression     @typescript-eslint/no-unnecessary-type-assertion
+   62:42  warning  Unexpected any. Specify a different type                                              @typescript-eslint/no-explicit-any
+   63:15  warning  Unsafe member access .kind on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+   64:11  warning  Unsafe call of an `any` typed value                                                   @typescript-eslint/no-unsafe-call
+   64:15  warning  Unsafe member access .selectionSet on an `any` value                                  @typescript-eslint/no-unsafe-member-access
+   64:51  warning  Unexpected any. Specify a different type                                              @typescript-eslint/no-explicit-any
+   65:13  warning  Unsafe return of an `any` typed value                                                 @typescript-eslint/no-unsafe-return
+   65:17  warning  Unsafe member access .kind on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+   65:37  warning  Unsafe call of an `any` typed value                                                   @typescript-eslint/no-unsafe-call
+   65:41  warning  Unsafe member access .name on an `any` value                                          @typescript-eslint/no-unsafe-member-access
+   81:42  error    This assertion is unnecessary since it does not change the type of the expression     @typescript-eslint/no-unnecessary-type-assertion
+  134:12  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/final-trial-plan.ts
+  33:34  warning  Unsafe return of an `any` typed value             @typescript-eslint/no-unsafe-return
+  49:34  warning  Unsafe return of an `any` typed value             @typescript-eslint/no-unsafe-return
+  62:43  warning  Async method 'resolve' has no 'await' expression  @typescript-eslint/require-await
+  66:13  warning  Unsafe return of an `any` typed value             @typescript-eslint/no-unsafe-return
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/cost-estimate.ts
+  396:39  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+
+/Users/chrislaw/valuerank/cloud/apps/api/src/mcp/oauth/metadata.ts
+  20:20  warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+  21:16  warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+  22:13  warning  Invalid type "string | string[]" of template literal expression                                    @typescript-eslint/restrict-template-expressions
+  22:27  warning  Invalid type "string | string[] | undefined" of template literal expression                        @typescript-eslint/restrict-template-expressions
+  83:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+  87:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+
+✖ 30 problems (3 errors, 27 warnings)
+  2 errors and 0 warnings potentially fixable with the `--fix` option.
+

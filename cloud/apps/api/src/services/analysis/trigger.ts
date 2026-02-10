@@ -56,7 +56,7 @@ export async function triggerBasicAnalysis(
 
   // Queue the analyze_basic job
   const boss = getBoss();
-  if (!boss) {
+  if (boss === null) {
     log.error({ runId }, 'Cannot queue analysis - boss not initialized');
     return false;
   }

@@ -10,7 +10,8 @@ import type {
   ApiKeysQueryResult,
   CreateApiKeyResult,
   RevokeApiKeyResult,
-  ApiKey} from '../../api/operations/api-keys';
+  ApiKey
+} from '../../api/operations/api-keys';
 import {
   API_KEYS_QUERY,
   CREATE_API_KEY_MUTATION,
@@ -243,9 +244,9 @@ function RevokeConfirmDialog({
 }) {
   const [isRevoking, setIsRevoking] = useState(false);
 
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     setIsRevoking(true);
-    await onConfirm();
+    onConfirm();
     setIsRevoking(false);
   };
 

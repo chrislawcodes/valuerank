@@ -11,7 +11,7 @@ async function main() {
   const emailArg = process.argv[2];
   const name = process.argv[3];
 
-  if (!emailArg) {
+  if (emailArg === undefined || emailArg === '') {
     log.error('Usage: npx tsx src/cli/ensure-user.ts <email> [name]');
     process.exit(1);
   }
@@ -24,7 +24,7 @@ async function main() {
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
     const confirm = await promptLine(
-      `User already exists (ID: ${existing.id}). Reset password${name ? ' and update name' : ''}? (y/N): `
+      `User already exists (ID: ${existing.id}). Reset password${(name ?? '') !== '' ? ' and update name' : ''}? (y/N): `
     );
     if (!['y', 'yes'].includes(confirm.toLowerCase())) {
       log.info('No changes applied.');
@@ -42,12 +42,12 @@ async function main() {
     where: { email },
     update: {
       passwordHash,
-      name: name || undefined,
+      name: name !== undefined && name !== '' ? name : undefined,
     },
     create: {
       email,
       passwordHash,
-      name: name || null,
+      name: name !== undefined && name !== '' ? name : null,
     },
   });
 
@@ -60,7 +60,7 @@ void main()
       log.error({ message: err.message }, 'Validation error');
       process.exit(1);
     }
-    log.error({ err }, 'Failed to ensure user');
+    log.error({ err: err as Error }, 'Failed to ensure user');
     process.exit(1);
   })
   .finally(() => {

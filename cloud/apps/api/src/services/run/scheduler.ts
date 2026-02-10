@@ -64,7 +64,7 @@ async function runRecoveryJob(): Promise<void> {
  * Clears the activity timeout if set.
  */
 function clearActivityTimeout(): void {
-  if (activityTimeout) {
+  if (activityTimeout !== null) {
     clearTimeout(activityTimeout);
     activityTimeout = null;
   }
@@ -89,7 +89,7 @@ function startActivityTimeout(): void {
  * Stops only the recovery interval (not the activity tracking).
  */
 function stopRecoveryInterval(): void {
-  if (recoveryInterval) {
+  if (recoveryInterval !== null) {
     clearInterval(recoveryInterval);
     recoveryInterval = null;
     log.info('Recovery interval stopped');
@@ -100,11 +100,11 @@ function stopRecoveryInterval(): void {
  * Starts the recovery interval if not already running.
  */
 function startRecoveryInterval(): void {
-  if (recoveryInterval) {
+  if (recoveryInterval !== null) {
     return; // Already running
   }
 
-  recoveryInterval = setInterval(runRecoveryJob, RECOVERY_INTERVAL_MS);
+  recoveryInterval = setInterval(() => { void runRecoveryJob(); }, RECOVERY_INTERVAL_MS);
   log.info({ intervalMs: RECOVERY_INTERVAL_MS }, 'Recovery interval started');
 }
 
@@ -128,7 +128,7 @@ export function signalRunActivity(): void {
  * only if there are active runs (detected during startup recovery).
  */
 export async function startRecoveryScheduler(): Promise<void> {
-  if (recoveryInterval) {
+  if (recoveryInterval !== null) {
     log.warn('Recovery scheduler already running');
     return;
   }

@@ -62,7 +62,7 @@ async function ensureHealthCheck(): Promise<void> {
   }
 
   // Health check in progress - wait for it
-  if (healthCheckPromise) {
+  if (healthCheckPromise !== null) {
     return healthCheckPromise;
   }
 
@@ -89,7 +89,7 @@ async function ensureHealthCheck(): Promise<void> {
 
     // Log health status
     const health = output.health;
-    if (health) {
+    if (health !== undefined) {
       log.info(
         {
           pythonVersion: health.pythonVersion,
@@ -309,7 +309,7 @@ async function buildWorkerInput(
   scenarioContent: unknown,
   definitionContent: unknown,
   definitionPreamble: string | undefined, // New argument for fallback
-  config: { temperature?: number; maxTurns: number }
+  config: { temperature?: number; maxTurns: number; maxTokens?: number }
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
@@ -322,7 +322,7 @@ async function buildWorkerInput(
   const prompt = (content.prompt as string) || '';
 
   // Get followups from scenario
-  const followups = (content.followups as Array<{ label: string; prompt: string }>) || [];
+  const followups = (content.followups as Array<{ label: string; prompt: string }> | undefined) ?? [];
 
   // Resolve model ID to full API version (e.g., "claude-3-5-haiku" -> "claude-3-5-haiku-20241022")
   const resolvedModelId = resolveModelVersion(modelId);
@@ -340,18 +340,18 @@ async function buildWorkerInput(
       followups,
     },
     config: {
-      maxTokens: 1024, // Default max tokens
+      maxTokens: config.maxTokens ?? 8192, // Default to 8192 to support reasoning models
       maxTurns: config.maxTurns,
       ...(typeof config.temperature === 'number' ? { temperature: config.temperature } : {}),
     },
   };
 
-  if (modelInfo) {
+  if (modelInfo !== null) {
     input.modelCost = {
       costInputPerMillion: modelInfo.costInputPerMillion,
       costOutputPerMillion: modelInfo.costOutputPerMillion,
     };
-    if (modelInfo.apiConfig) {
+    if (modelInfo.apiConfig !== undefined) {
       input.modelConfig = modelInfo.apiConfig;
     }
   }
@@ -398,7 +398,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       modelId,
       scenario.content,
       scenario.definition.content,
-      scenario.definition.preambleVersion?.content || undefined,
+      scenario.definition.preambleVersion?.content ?? undefined,
       config
     );
 
@@ -452,7 +452,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
 
     // Create transcript record with cost snapshot if model cost info available
     let costSnapshot: CostSnapshot | undefined;
-    if (workerInput.modelCost) {
+    if (workerInput.modelCost !== undefined) {
       const { costInputPerMillion, costOutputPerMillion } = workerInput.modelCost;
       const inputTokens = output.transcript.totalInputTokens;
       const outputTokens = output.transcript.totalOutputTokens;
@@ -504,7 +504,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       const { getBoss } = await import('../boss.js');
       const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
       const boss = getBoss();
-      if (boss) {
+      if (boss !== null) {
         await boss.send('summarize_transcript', {
           runId,
           transcriptId: transcriptRecord.id,
@@ -598,7 +598,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         // Get provider for this model to route to correct rate limiter
         const provider = await getProviderForModel(modelId);
 
-        if (!provider) {
+        if (provider === null) {
           // Unknown provider - process without rate limiting (fallback)
           log.warn({ jobId, modelId }, 'Unknown provider for model, processing without rate limit');
           return processProbeJob(job);
@@ -627,7 +627,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
       );
 
       // If all jobs failed, throw the first error
-      if (failures.length === jobs.length && failures[0]) {
+      if (failures.length === jobs.length && failures[0] !== undefined) {
         throw failures[0].reason;
       }
 

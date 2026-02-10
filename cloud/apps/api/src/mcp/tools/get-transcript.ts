@@ -82,7 +82,7 @@ type TranscriptOutput = {
  * Extracts turns from transcript content
  */
 function extractTurns(content: unknown): TranscriptTurn[] {
-  if (!content || typeof content !== 'object') return [];
+  if (content === undefined || content === null || typeof content !== 'object') return [];
 
   const obj = content as Record<string, unknown>;
   const turns = obj.turns;
@@ -90,7 +90,7 @@ function extractTurns(content: unknown): TranscriptTurn[] {
   if (!Array.isArray(turns)) return [];
 
   return turns.map((turn) => {
-    if (!turn || typeof turn !== 'object') {
+    if (turn === undefined || turn === null || typeof turn !== 'object') {
       return {
         turnNumber: 0,
         promptLabel: '',
@@ -127,12 +127,12 @@ type CostSnapshot = {
  * Extracts cost snapshot from transcript content
  */
 function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
-  if (!content || typeof content !== 'object') return undefined;
+  if (content === undefined || content === null || typeof content !== 'object') return undefined;
 
   const obj = content as Record<string, unknown>;
   const costSnapshot = obj.costSnapshot;
 
-  if (!costSnapshot || typeof costSnapshot !== 'object') return undefined;
+  if (costSnapshot === undefined || costSnapshot === null || typeof costSnapshot !== 'object') return undefined;
 
   const cs = costSnapshot as Record<string, unknown>;
   return {
@@ -182,8 +182,11 @@ Limited to 10KB token budget.`,
 
       try {
         // Validate input: either transcript_id OR (run_id + scenario_id + model)
-        const hasDirectId = !!args.transcript_id;
-        const hasCompositeKey = !!args.run_id && !!args.scenario_id && !!args.model;
+        const hasDirectId = args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '';
+        const hasCompositeKey =
+          args.run_id !== undefined && args.run_id !== null && args.run_id !== '' &&
+          args.scenario_id !== undefined && args.scenario_id !== null && args.scenario_id !== '' &&
+          args.model !== undefined && args.model !== null && args.model !== '';
 
         if (!hasDirectId && !hasCompositeKey) {
           return {
@@ -203,19 +206,19 @@ Limited to 10KB token budget.`,
         // Query transcript with all fields
         const transcript = hasDirectId
           ? await db.transcript.findFirst({
-              where: {
-                id: args.transcript_id,
-                deletedAt: null,
-              },
-            })
+            where: {
+              id: args.transcript_id,
+              deletedAt: null,
+            },
+          })
           : await db.transcript.findFirst({
-              where: {
-                runId: args.run_id,
-                scenarioId: args.scenario_id,
-                modelId: args.model,
-                deletedAt: null,
-              },
-            });
+            where: {
+              runId: args.run_id,
+              scenarioId: args.scenario_id,
+              modelId: args.model,
+              deletedAt: null,
+            },
+          });
 
         let data: TranscriptOutput;
 
@@ -225,7 +228,7 @@ Limited to 10KB token budget.`,
             scenarioId: args.scenario_id ?? '',
             model: args.model ?? '',
             status: 'not_found',
-            ...(args.transcript_id ? { transcriptId: args.transcript_id } : {}),
+            ...((args.transcript_id !== undefined && args.transcript_id !== null && args.transcript_id !== '') ? { transcriptId: args.transcript_id } : {}),
           };
         } else {
           const turns = extractTurns(transcript.content);
@@ -242,10 +245,10 @@ Limited to 10KB token budget.`,
               turnCount: transcript.turnCount,
               tokenCount: transcript.tokenCount,
               durationMs: transcript.durationMs,
-              estimatedCost: transcript.estimatedCost ? Number(transcript.estimatedCost) : null,
+              estimatedCost: transcript.estimatedCost !== null && transcript.estimatedCost !== undefined ? Number(transcript.estimatedCost) : null,
               createdAt: transcript.createdAt.toISOString(),
               turns,
-              ...(costSnapshot && { costSnapshot }),
+              ...(costSnapshot !== undefined && costSnapshot !== null && { costSnapshot }),
             },
           };
         }

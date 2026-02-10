@@ -29,7 +29,7 @@ import {
 import { validatePkce } from './pkce.js';
 import { generateAccessToken } from './tokens.js';
 import { getBaseUrl } from './metadata.js';
-import { DEFAULT_SCOPE, ACCESS_TOKEN_EXPIRY_SECONDS, CLIENT_SECRET_EXPIRY_SECONDS } from './constants.js';
+import { ACCESS_TOKEN_EXPIRY_SECONDS, CLIENT_SECRET_EXPIRY_SECONDS } from './constants.js';
 import type { ClientRegistrationResponse, TokenResponse, TokenErrorResponse } from './types.js';
 
 const log = createLogger('mcp:oauth:router');
@@ -41,9 +41,11 @@ export function createOAuthRouter(): Router {
    * POST /oauth/register - Dynamic Client Registration (RFC 7591)
    */
   router.post('/register', async (req: Request, res: Response) => {
-    log.debug({ body: req.body }, 'Client registration request');
+    log.debug({ body: (req.body as unknown) }, 'Client registration request');
 
-    const validation = validateClientRegistrationRequest(req.body || {});
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const body = req.body;
+    const validation = validateClientRegistrationRequest((body ?? {}) as Record<string, unknown>);
     if (!validation.valid || !validation.data) {
       res.status(400).json({
         error: validation.error,
@@ -104,14 +106,14 @@ export function createOAuthRouter(): Router {
       const redirectUri = req.query.redirect_uri as string;
       const state = req.query.state as string;
 
-      if (redirectUri && typeof redirectUri === 'string') {
+      if (redirectUri !== undefined && typeof redirectUri === 'string' && redirectUri !== '') {
         try {
           const errorUrl = new URL(redirectUri);
           errorUrl.searchParams.set('error', validation.error || 'invalid_request');
-          if (validation.errorDescription) {
+          if (validation.errorDescription !== undefined) {
             errorUrl.searchParams.set('error_description', validation.errorDescription);
           }
-          if (state) {
+          if (state !== undefined && state !== '') {
             errorUrl.searchParams.set('state', state);
           }
           res.redirect(errorUrl.toString());
@@ -152,7 +154,7 @@ export function createOAuthRouter(): Router {
 
     // Check for API key authentication
     const apiKey = req.headers['x-api-key'] as string;
-    if (!apiKey) {
+    if (apiKey === undefined || apiKey === '') {
       // No API key - return an HTML page for user to enter API key
       // For Claude.ai, this shouldn't happen as they send credentials
       const baseUrl = getBaseUrl(req);
@@ -175,15 +177,15 @@ export function createOAuthRouter(): Router {
 <body>
   <h1>Authorize ValueRank MCP</h1>
   <div class="info">
-    <p><strong>Client:</strong> ${client.clientName || authReq.client_id}</p>
-    <p><strong>Scope:</strong> ${authReq.scope || DEFAULT_SCOPE}</p>
+    <p><strong>Client:</strong> ${(client.clientName !== null && client.clientName !== '') ? client.clientName : authReq.client_id}</p>
+    <p><strong>Scope:</strong> {(authReq.scope !== undefined && authReq.scope !== '') ? authReq.scope : DEFAULT_SCOPE}</p>
   </div>
   <form method="POST" action="${baseUrl}/oauth/authorize">
     <input type="hidden" name="response_type" value="${authReq.response_type}">
     <input type="hidden" name="client_id" value="${authReq.client_id}">
     <input type="hidden" name="redirect_uri" value="${authReq.redirect_uri}">
-    <input type="hidden" name="scope" value="${authReq.scope || ''}">
-    <input type="hidden" name="state" value="${authReq.state || ''}">
+    <input type="hidden" name="scope" value="${(authReq.scope !== undefined) ? authReq.scope : ''}">
+    <input type="hidden" name="state" value="${(authReq.state !== undefined) ? authReq.state : ''}">
     <input type="hidden" name="code_challenge" value="${authReq.code_challenge}">
     <input type="hidden" name="code_challenge_method" value="${authReq.code_challenge_method}">
     <input type="hidden" name="resource" value="${authReq.resource}">
@@ -223,7 +225,7 @@ export function createOAuthRouter(): Router {
     // Redirect with code
     const redirectUrl = new URL(authReq.redirect_uri);
     redirectUrl.searchParams.set('code', code);
-    if (authReq.state) {
+    if (authReq.state !== undefined && authReq.state !== '') {
       redirectUrl.searchParams.set('state', authReq.state);
     }
 
@@ -235,19 +237,20 @@ export function createOAuthRouter(): Router {
    * POST /oauth/authorize - Authorization Endpoint (form submission)
    */
   router.post('/authorize', async (req: Request, res: Response) => {
-    const body = req.body || {};
-    log.info({ body: { ...body, api_key: body.api_key ? '[redacted]' : undefined }, contentType: req.headers['content-type'] }, 'Authorization POST request');
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+    log.info({ body: { ...body, api_key: (body.api_key !== undefined && body.api_key !== null && body.api_key !== '') ? '[redacted]' : undefined }, contentType: req.headers['content-type'] }, 'Authorization POST request');
 
     // Reconstruct auth request from form data
     const validation = validateAuthorizationRequest({
-      response_type: body.response_type,
-      client_id: body.client_id,
-      redirect_uri: body.redirect_uri,
-      scope: body.scope,
-      state: body.state,
-      code_challenge: body.code_challenge,
-      code_challenge_method: body.code_challenge_method,
-      resource: body.resource,
+      response_type: typeof body.response_type === 'string' ? body.response_type : undefined,
+      client_id: typeof body.client_id === 'string' ? body.client_id : undefined,
+      redirect_uri: typeof body.redirect_uri === 'string' ? body.redirect_uri : undefined,
+      scope: typeof body.scope === 'string' ? body.scope : undefined,
+      state: typeof body.state === 'string' ? body.state : undefined,
+      code_challenge: typeof body.code_challenge === 'string' ? body.code_challenge : undefined,
+      code_challenge_method: typeof body.code_challenge_method === 'string' ? body.code_challenge_method : undefined,
+      resource: typeof body.resource === 'string' ? body.resource : undefined,
     });
 
     if (!validation.valid || !validation.data) {
@@ -271,8 +274,8 @@ export function createOAuthRouter(): Router {
     }
 
     // Validate API key from form
-    const apiKey = body.api_key;
-    if (!apiKey) {
+    const apiKey = typeof body.api_key === 'string' ? body.api_key : undefined;
+    if (apiKey === undefined || apiKey === null || apiKey === '') {
       res.status(400).json({
         error: 'access_denied',
         error_description: 'API key required',
@@ -304,7 +307,7 @@ export function createOAuthRouter(): Router {
     // Redirect with code
     const redirectUrl = new URL(authReq.redirect_uri);
     redirectUrl.searchParams.set('code', code);
-    if (authReq.state) {
+    if (authReq.state !== undefined && authReq.state !== '') {
       redirectUrl.searchParams.set('state', authReq.state);
     }
 
@@ -317,7 +320,7 @@ export function createOAuthRouter(): Router {
    */
   router.post('/token', async (req: Request, res: Response) => {
     // Parse body - support both JSON and form-urlencoded
-    const body = req.body || {};
+    const body = (req.body ?? {}) as Record<string, unknown>;
     log.debug({ grantType: body.grant_type, clientId: body.client_id }, 'Token request');
 
     const validation = validateTokenRequest(body);
@@ -349,7 +352,7 @@ export function createOAuthRouter(): Router {
 
       // Check Basic auth header
       const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith('Basic ')) {
+      if (authHeader !== undefined && authHeader.startsWith('Basic ')) {
         const encoded = authHeader.slice(6);
         const decoded = Buffer.from(encoded, 'base64').toString();
         const [basicClientId, basicSecret] = decoded.split(':');
@@ -358,7 +361,7 @@ export function createOAuthRouter(): Router {
         }
       }
 
-      if (!clientSecret) {
+      if (clientSecret === undefined || clientSecret === null || clientSecret === '') {
         res.status(401).json({
           error: 'invalid_client',
           error_description: 'Client authentication required',

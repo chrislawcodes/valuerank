@@ -16,7 +16,7 @@ export function getPreambleVersionId(config: unknown): string | null {
     if (!snapshot) return null;
     const meta = isRecord(snapshot._meta) ? snapshot._meta : undefined;
     const fromMeta = typeof meta?.preambleVersionId === 'string' ? meta.preambleVersionId : null;
-    if (fromMeta) return fromMeta;
+    if (fromMeta !== null && fromMeta !== '') return fromMeta;
     const fromSnapshot = typeof snapshot.preambleVersionId === 'string' ? snapshot.preambleVersionId : null;
     return fromSnapshot ?? null;
 }
@@ -105,7 +105,7 @@ async function main() {
 import { fileURLToPath } from 'url';
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     main().catch((err) => {
-        log.error({ err }, 'Fatal error');
+        log.error({ err: err as Error }, 'Fatal error');
         process.exit(1);
     });
 }

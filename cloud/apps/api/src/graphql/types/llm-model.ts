@@ -47,7 +47,7 @@ LlmModelRef.implement({
       nullable: true,
       description: 'User who created this LLM model',
       resolve: async (model) => {
-        if (!model.createdByUserId) return null;
+        if (model.createdByUserId === null || model.createdByUserId === undefined || model.createdByUserId === '') return null;
         return db.user.findUnique({
           where: { id: model.createdByUserId },
         });
@@ -62,7 +62,7 @@ LlmModelRef.implement({
         const provider = await db.llmProvider.findUnique({
           where: { id: model.providerId },
         });
-        if (!provider) {
+        if (provider === null || provider === undefined) {
           throw new Error(`Provider not found for model ${model.id}`);
         }
         return provider;
@@ -77,7 +77,7 @@ LlmModelRef.implement({
         const provider = await db.llmProvider.findUnique({
           where: { id: model.providerId },
         });
-        if (!provider) return false;
+        if (provider === null || provider === undefined) return false;
 
         // Check if provider has API key configured
         const availableProviders = getAvailableProviders();

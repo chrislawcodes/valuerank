@@ -73,8 +73,8 @@ async function generateAnthropic(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: options?.model || 'claude-sonnet-4-20250514',
-        max_tokens: options?.maxTokens || 8192,
+        model: (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'claude-sonnet-4-20250514',
+        max_tokens: (options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192,
         temperature: options?.temperature ?? 0.7,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -88,7 +88,7 @@ async function generateAnthropic(
   }
 
   const data = (await response.json()) as { content: Array<{ text: string }> };
-  return data.content[0]?.text || '';
+  return data.content[0]?.text ?? '';
 }
 
 /**
@@ -100,7 +100,7 @@ async function generateOpenAI(
   options?: LLMOptions
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxTokens = Math.min(options?.maxTokens || 8192, 16384); // OpenAI GPT-4o max
+  const maxTokens = Math.min((options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192, 16384); // OpenAI GPT-4o max
 
   log.debug({ promptLength: prompt.length, timeoutMs, maxTokens }, 'Calling OpenAI API');
 
@@ -113,7 +113,7 @@ async function generateOpenAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || 'gpt-4o',
+        model: (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'gpt-4o',
         max_tokens: maxTokens,
         temperature: options?.temperature ?? 0.7,
         messages: [{ role: 'user', content: prompt }],
@@ -130,7 +130,7 @@ async function generateOpenAI(
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
-  return data.choices[0]?.message?.content || '';
+  return data.choices[0]?.message?.content ?? '';
 }
 
 /**
@@ -142,7 +142,7 @@ async function generateDeepSeek(
   options?: LLMOptions
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxTokens = Math.min(options?.maxTokens || 8192, 65536); // DeepSeek API limit is 64K
+  const maxTokens = Math.min((options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192, 65536); // DeepSeek API limit is 64K
 
   log.debug({ promptLength: prompt.length, timeoutMs, maxTokens }, 'Calling DeepSeek API');
 
@@ -155,7 +155,7 @@ async function generateDeepSeek(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || 'deepseek-chat',
+        model: (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'deepseek-chat',
         max_tokens: maxTokens,
         temperature: options?.temperature ?? 0.7,
         messages: [{ role: 'user', content: prompt }],
@@ -172,7 +172,7 @@ async function generateDeepSeek(
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
-  return data.choices[0]?.message?.content || '';
+  return data.choices[0]?.message?.content ?? '';
 }
 
 /**
@@ -184,7 +184,7 @@ async function generateGoogle(
   options?: LLMOptions
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const model = options?.model || 'gemini-1.5-flash';
+  const model = (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'gemini-1.5-flash';
 
   log.debug({ promptLength: prompt.length, timeoutMs, model }, 'Calling Google Gemini API');
 
@@ -201,7 +201,7 @@ async function generateGoogle(
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: options?.temperature ?? 0.7,
-          maxOutputTokens: options?.maxTokens || 8192,
+          maxOutputTokens: (options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192,
         },
       }),
     },
@@ -216,8 +216,8 @@ async function generateGoogle(
   const data = (await response.json()) as {
     candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
   };
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  return parts.map((p) => p.text).join('\n') || '';
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  return parts.map((p) => p.text).join('\n') ?? '';
 }
 
 /**
@@ -241,8 +241,8 @@ async function generateXAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || 'grok-2-1212',
-        max_tokens: options?.maxTokens || 8192,
+        model: (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'grok-2-1212',
+        max_tokens: (options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192,
         temperature: options?.temperature ?? 0.7,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -258,7 +258,7 @@ async function generateXAI(
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
-  return data.choices[0]?.message?.content || '';
+  return data.choices[0]?.message?.content ?? '';
 }
 
 /**
@@ -282,8 +282,8 @@ async function generateMistral(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || 'mistral-large-latest',
-        max_tokens: options?.maxTokens || 8192,
+        model: (options?.model !== undefined && options?.model !== null && options?.model !== '') ? options.model : 'mistral-large-latest',
+        max_tokens: (options?.maxTokens !== undefined && options?.maxTokens !== null && options?.maxTokens !== 0) ? options.maxTokens : 8192,
         temperature: options?.temperature ?? 0.7,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -299,7 +299,7 @@ async function generateMistral(
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
-  return data.choices[0]?.message?.content || '';
+  return data.choices[0]?.message?.content ?? '';
 }
 
 /**
@@ -357,14 +357,14 @@ const providers: LLMProvider[] = [
  */
 export async function callLLM(prompt: string, options?: LLMOptions): Promise<string> {
   // If a specific provider is requested, use it directly
-  if (options?.provider) {
+  if (options?.provider !== undefined && options?.provider !== null && options?.provider !== '') {
     const provider = providers.find((p) => p.id === options.provider);
-    if (!provider) {
+    if (provider === undefined || provider === null) {
       throw new Error(`Unknown provider: ${options.provider}`);
     }
 
     const apiKey = getEnvOptional(provider.envKey);
-    if (!apiKey) {
+    if (apiKey === null || apiKey === undefined || apiKey === '') {
       throw new Error(
         `Provider ${options.provider} not configured. Set ${provider.envKey} environment variable.`
       );
@@ -384,7 +384,7 @@ export async function callLLM(prompt: string, options?: LLMOptions): Promise<str
 
   for (const provider of providers) {
     const apiKey = getEnvOptional(provider.envKey);
-    if (apiKey) {
+    if (apiKey !== null && apiKey !== undefined && apiKey !== '') {
       try {
         log.info({ provider: provider.id }, 'Calling LLM');
         const result = await provider.generate(prompt, apiKey, options);
@@ -401,7 +401,7 @@ export async function callLLM(prompt: string, options?: LLMOptions): Promise<str
   }
 
   throw new Error(
-    lastError || 'No LLM API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, etc.'
+    (lastError !== null && lastError !== '') ? lastError : 'No LLM API key found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, etc.'
   );
 }
 
@@ -411,8 +411,8 @@ export async function callLLM(prompt: string, options?: LLMOptions): Promise<str
 export function extractYaml(result: string): string {
   // Try to find YAML in code block
   const yamlMatch = result.match(/```ya?ml\n([\s\S]*?)\n```/);
-  if (yamlMatch) {
-    return yamlMatch[1] || '';
+  if (yamlMatch !== null) {
+    return yamlMatch[1] ?? '';
   }
 
   // Try to find YAML starting with preamble:

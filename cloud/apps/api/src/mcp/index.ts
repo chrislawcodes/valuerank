@@ -65,7 +65,7 @@ export function createMcpRouter(): Router {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
       // For new sessions or stateless requests, create a new transport
-      if (req.method === 'POST' && !sessionId) {
+      if (req.method === 'POST' && (sessionId === undefined || sessionId === '')) {
         // Create new transport for this session
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
@@ -89,7 +89,7 @@ export function createMcpRouter(): Router {
       }
 
       // For existing sessions, reuse the transport
-      if (sessionId) {
+      if (sessionId !== undefined && sessionId !== '') {
         let transport = transports.get(sessionId);
 
         if (!transport) {
@@ -139,7 +139,7 @@ export function createMcpRouter(): Router {
   router.delete('/', async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    if (!sessionId) {
+    if (sessionId === undefined || sessionId === '') {
       res.status(400).json({
         error: 'BAD_REQUEST',
         message: 'Session ID required for DELETE',

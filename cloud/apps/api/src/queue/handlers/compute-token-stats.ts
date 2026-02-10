@@ -57,11 +57,11 @@ type StatsResult = { avgInputTokens: number; avgOutputTokens: number; sampleCoun
  */
 type ComputeWorkerOutput =
   | {
-      success: true;
-      stats: Record<string, StatsResult>;
-      definitionStats: Record<string, StatsResult>;
-      summary: { modelsUpdated: number; totalProbesProcessed: number; durationMs: number };
-    }
+    success: true;
+    stats: Record<string, StatsResult>;
+    definitionStats: Record<string, StatsResult>;
+    summary: { modelsUpdated: number; totalProbesProcessed: number; durationMs: number };
+  }
   | { success: false; error: { message: string; code: string; retryable: boolean } };
 
 /**
@@ -82,7 +82,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
           select: { id: true, status: true, definitionId: true },
         });
 
-        if (!run) {
+        if (run === null) {
           log.warn({ jobId, runId }, 'Run not found, skipping token stats computation');
           return;
         }
@@ -171,11 +171,16 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         }
 
         // Transform probe results for Python worker
-        const probeData: ProbeResultData[] = probeResults.map((p) => ({
-          modelId: p.modelId,
-          inputTokens: p.inputTokens!,
-          outputTokens: p.outputTokens!,
-        }));
+        const probeData: ProbeResultData[] = probeResults.map((p) => {
+          if (typeof p.inputTokens !== 'number' || typeof p.outputTokens !== 'number') {
+            throw new Error('Unexpected null tokens in successful probe result');
+          }
+          return {
+            modelId: p.modelId,
+            inputTokens: p.inputTokens,
+            outputTokens: p.outputTokens,
+          };
+        });
 
         log.debug(
           { jobId, runId, probeCount: probeData.length, modelCount: modelIds.length },
@@ -216,7 +221,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Update global stats
         for (const [modelIdentifier, newStats] of Object.entries(stats)) {
           const dbModelId = modelIdMap.get(modelIdentifier);
-          if (!dbModelId) {
+          if (dbModelId === undefined || dbModelId === null || dbModelId === '') {
             log.warn({ modelIdentifier }, 'Model ID not found in database, skipping stats update');
             continue;
           }
@@ -234,7 +239,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Update definition-specific stats
         for (const [modelIdentifier, newStats] of Object.entries(definitionStats)) {
           const dbModelId = modelIdMap.get(modelIdentifier);
-          if (!dbModelId) {
+          if (dbModelId === undefined || dbModelId === null || dbModelId === '') {
             log.warn({ modelIdentifier }, 'Model ID not found in database, skipping definition stats update');
             continue;
           }

@@ -1,0 +1,87 @@
+turbo 2.6.3
+
+• Packages in scope: @valuerank/web
+• Running lint in 1 packages
+• Remote caching disabled
+@valuerank/shared:lint: cache hit, replaying logs 5824d02d41db363f
+@valuerank/shared:lint: 
+@valuerank/shared:lint: > @valuerank/shared@0.1.0 lint
+@valuerank/shared:lint: > eslint src --ext .ts
+@valuerank/shared:lint: 
+@valuerank/shared:build: cache hit, replaying logs 26722bd445614543
+@valuerank/shared:build: 
+@valuerank/shared:build: > @valuerank/shared@0.1.0 build
+@valuerank/shared:build: > tsc
+@valuerank/shared:build: 
+@valuerank/web:lint: cache miss, executing 9b7aa142707166e1
+@valuerank/web:lint: 
+@valuerank/web:lint: > @valuerank/web@0.1.0 lint
+@valuerank/web:lint: > eslint src --ext .ts,.tsx
+@valuerank/web:lint: 
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/definitions/TemplateEditor.tsx
+@valuerank/web:lint:    24:30  warning  'any' overrides all other types in this union type                           @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:    64:7   warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    67:12  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    67:12  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    67:19  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    67:44  warning  Unsafe member access .some on an `any` value                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    68:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    68:16  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    71:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    71:16  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    80:9   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    80:16  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:    91:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    91:34  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:    91:41  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   117:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   117:26  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   128:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   131:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   131:14  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   168:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   168:30  warning  Unsafe member access .MarkerSeverity on an `any` value                       @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   178:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   178:14  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/settings/ApiKeysPanel.tsx
+@valuerank/web:lint:   247:34  error  Async arrow function 'handleConfirm' has no 'await' expression  @typescript-eslint/require-await
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/ui/JsonEditor.tsx
+@valuerank/web:lint:     2:36  error    'OnMount' is defined but never used. Allowed unused vars must match /^_/u    @typescript-eslint/no-unused-vars
+@valuerank/web:lint:    95:28  warning  'any' overrides all other types in this union type                           @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:   101:5   warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   105:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   105:14  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   125:15  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   125:25  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   125:32  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   126:15  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   126:24  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   126:32  warning  Unsafe member access .filter on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   127:56  warning  Unsafe member access .MarkerSeverity on an `any` value                       @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   130:22  warning  Unsafe member access .length on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   140:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   140:30  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   140:37  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   145:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint: 
+@valuerank/web:lint: ✖ 42 problems (2 errors, 40 warnings)
+@valuerank/web:lint: 
+@valuerank/web:lint: npm error Lifecycle script `lint` failed with error:
+@valuerank/web:lint: npm error code 1
+@valuerank/web:lint: npm error path /Users/chrislaw/valuerank/cloud/apps/web
+@valuerank/web:lint: npm error workspace @valuerank/web@0.1.0
+@valuerank/web:lint: npm error location /Users/chrislaw/valuerank/cloud/apps/web
+@valuerank/web:lint: npm error command failed
+@valuerank/web:lint: npm error command sh -c eslint src --ext .ts,.tsx
+@valuerank/web:lint: ERROR: command finished with error: command (/Users/chrislaw/valuerank/cloud/apps/web) /opt/homebrew/bin/npm run lint exited (1)
+@valuerank/web#lint: command (/Users/chrislaw/valuerank/cloud/apps/web) /opt/homebrew/bin/npm run lint exited (1)
+
+ Tasks:    2 successful, 3 total
+Cached:    2 cached, 3 total
+  Time:    5.3s 
+Failed:    @valuerank/web#lint
+
+ ERROR  run failed: command  exited (1)

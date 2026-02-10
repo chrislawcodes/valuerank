@@ -93,7 +93,7 @@ export function isValidResourceUri(uri: string): boolean {
  * Validate scope string
  */
 export function validateScope(scope: string | undefined): string {
-  if (!scope) {
+  if (scope === undefined || scope === null || scope === '') {
     return DEFAULT_SCOPE;
   }
 
@@ -121,7 +121,7 @@ export function validateAuthorizationRequest(
   }
 
   // Required: client_id
-  if (!params.client_id || typeof params.client_id !== 'string') {
+  if (params.client_id === undefined || params.client_id === null || params.client_id === '' || typeof params.client_id !== 'string') {
     return {
       valid: false,
       error: 'invalid_request',
@@ -130,7 +130,7 @@ export function validateAuthorizationRequest(
   }
 
   // Required: redirect_uri
-  if (!params.redirect_uri || typeof params.redirect_uri !== 'string') {
+  if (params.redirect_uri === undefined || params.redirect_uri === null || params.redirect_uri === '' || typeof params.redirect_uri !== 'string') {
     return {
       valid: false,
       error: 'invalid_request',
@@ -147,7 +147,7 @@ export function validateAuthorizationRequest(
   }
 
   // Required: code_challenge (PKCE)
-  if (!params.code_challenge || typeof params.code_challenge !== 'string') {
+  if (params.code_challenge === undefined || params.code_challenge === null || params.code_challenge === '' || typeof params.code_challenge !== 'string') {
     return {
       valid: false,
       error: 'invalid_request',
@@ -173,7 +173,7 @@ export function validateAuthorizationRequest(
   }
 
   // Required: resource (RFC 8707)
-  if (!params.resource || typeof params.resource !== 'string') {
+  if (params.resource === undefined || params.resource === null || params.resource === '' || typeof params.resource !== 'string') {
     return {
       valid: false,
       error: 'invalid_request',
@@ -221,7 +221,7 @@ export function validateTokenRequest(
   }
 
   // Required: client_id
-  if (!params.client_id || typeof params.client_id !== 'string') {
+  if (params.client_id === undefined || params.client_id === null || params.client_id === '' || typeof params.client_id !== 'string') {
     return {
       valid: false,
       error: 'invalid_request',
@@ -231,7 +231,7 @@ export function validateTokenRequest(
 
   if (grantType === 'authorization_code') {
     // Required: code
-    if (!params.code || typeof params.code !== 'string') {
+    if (params.code === undefined || params.code === null || params.code === '' || typeof params.code !== 'string') {
       return {
         valid: false,
         error: 'invalid_request',
@@ -240,7 +240,7 @@ export function validateTokenRequest(
     }
 
     // Required: redirect_uri
-    if (!params.redirect_uri || typeof params.redirect_uri !== 'string') {
+    if (params.redirect_uri === undefined || params.redirect_uri === null || params.redirect_uri === '' || typeof params.redirect_uri !== 'string') {
       return {
         valid: false,
         error: 'invalid_request',
@@ -249,7 +249,7 @@ export function validateTokenRequest(
     }
 
     // Required: code_verifier (PKCE)
-    if (!params.code_verifier || typeof params.code_verifier !== 'string') {
+    if (params.code_verifier === undefined || params.code_verifier === null || params.code_verifier === '' || typeof params.code_verifier !== 'string') {
       return {
         valid: false,
         error: 'invalid_request',
@@ -260,7 +260,7 @@ export function validateTokenRequest(
 
   if (grantType === 'refresh_token') {
     // Required: refresh_token
-    if (!params.refresh_token || typeof params.refresh_token !== 'string') {
+    if (params.refresh_token === undefined || params.refresh_token === null || params.refresh_token === '' || typeof params.refresh_token !== 'string') {
       return {
         valid: false,
         error: 'invalid_request',
@@ -317,8 +317,8 @@ export function validateClientRegistrationRequest(
       client_name: typeof body.client_name === 'string' ? body.client_name : undefined,
       token_endpoint_auth_method:
         body.token_endpoint_auth_method === 'none' ||
-        body.token_endpoint_auth_method === 'client_secret_post' ||
-        body.token_endpoint_auth_method === 'client_secret_basic'
+          body.token_endpoint_auth_method === 'client_secret_post' ||
+          body.token_endpoint_auth_method === 'client_secret_basic'
           ? body.token_endpoint_auth_method
           : undefined,
       grant_types: Array.isArray(body.grant_types) ? (body.grant_types as string[]).filter(

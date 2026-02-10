@@ -96,7 +96,7 @@ export function verifyToken(token: string): JWTPayload {
  * @returns Token string or null if not present/invalid format
  */
 export function extractBearerToken(authHeader: string | undefined): string | null {
-  if (!authHeader) {
+  if (authHeader === undefined || authHeader === null || authHeader === '') {
     return null;
   }
 

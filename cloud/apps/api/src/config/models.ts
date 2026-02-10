@@ -124,7 +124,7 @@ export function isProviderConfigured(envKey: string): boolean {
  */
 export function isProviderAvailable(providerName: string): boolean {
   const envKey = PROVIDER_ENV_KEYS[providerName.toLowerCase()];
-  if (!envKey) return false;
+  if (envKey === undefined || envKey === '') return false;
   return isProviderConfigured(envKey);
 }
 
@@ -235,7 +235,7 @@ export function parseModelId(fullModelId: string): { providerId: string; modelId
   // Handle format "provider:model" or just "model"
   if (fullModelId.includes(':')) {
     const [providerId, modelId] = fullModelId.split(':');
-    if (providerId && modelId) {
+    if (providerId !== undefined && providerId !== '' && modelId !== undefined && modelId !== '') {
       return { providerId, modelId };
     }
   }
@@ -243,7 +243,7 @@ export function parseModelId(fullModelId: string): { providerId: string; modelId
   // Try to find the model in any provider
   for (const provider of LLM_PROVIDERS) {
     for (const model of provider.models) {
-      if (model.id === fullModelId || model.versions?.includes(fullModelId)) {
+      if (model.id === fullModelId || (model.versions !== undefined && model.versions.includes(fullModelId))) {
         return { providerId: provider.id, modelId: model.id };
       }
     }

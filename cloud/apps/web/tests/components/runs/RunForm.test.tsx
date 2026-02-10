@@ -25,6 +25,16 @@ vi.mock('../../../src/hooks/useCostEstimate', () => ({
   }),
 }));
 
+// Mock the useFinalTrialPlan hook
+vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
+  useFinalTrialPlan: vi.fn().mockReturnValue({
+    plan: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 import { useAvailableModels } from '../../../src/hooks/useAvailableModels';
 
 function createMockModel(overrides: Partial<AvailableModel> = {}): AvailableModel {
@@ -81,7 +91,7 @@ describe('RunForm', () => {
     expect(screen.getByText('10%')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
     expect(screen.getByText('50%')).toBeInTheDocument();
-    expect(screen.getByText('100% (full trial)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '100%' })).toBeInTheDocument();
   });
 
   it('defaults to 1% sample for testing', () => {
@@ -170,6 +180,7 @@ describe('RunForm', () => {
       models: ['gpt-4'],
       samplePercentage: 25,
       samplesPerScenario: 1,
+      finalTrial: false,
     });
   });
 
@@ -326,6 +337,7 @@ describe('RunForm', () => {
       models: ['gpt-4', 'claude-3'],
       samplePercentage: 1,
       samplesPerScenario: 1,
+      finalTrial: false,
     });
   });
 });

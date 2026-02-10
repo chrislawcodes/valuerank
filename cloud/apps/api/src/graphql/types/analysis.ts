@@ -136,7 +136,7 @@ builder.objectType(AnalysisResultRef, {
       nullable: true,
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
-        if (!output?.computedAt) return null;
+        if (output?.computedAt === undefined || output.computedAt === null || output.computedAt === '') return null;
         return new Date(output.computedAt);
       },
     }),

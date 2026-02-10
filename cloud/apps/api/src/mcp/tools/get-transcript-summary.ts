@@ -67,7 +67,7 @@ function countWords(text: string): number {
  * Extracts turn count from transcript content
  */
 function extractTurnCount(content: unknown): number {
-  if (!content || typeof content !== 'object') return 0;
+  if (content === undefined || content === null || typeof content !== 'object') return 0;
 
   // Content might have turns array or messages array
   const obj = content as Record<string, unknown>;
@@ -84,7 +84,7 @@ function extractTurnCount(content: unknown): number {
  * Extracts word count from transcript content
  */
 function extractWordCount(content: unknown): number {
-  if (!content || typeof content !== 'object') return 0;
+  if (content === undefined || content === null || typeof content !== 'object') return 0;
 
   const obj = content as Record<string, unknown>;
   const turns = obj.turns ?? obj.messages ?? obj.conversation;
@@ -92,7 +92,7 @@ function extractWordCount(content: unknown): number {
   if (Array.isArray(turns)) {
     let total = 0;
     for (const turn of turns) {
-      if (turn && typeof turn === 'object') {
+      if (turn !== null && typeof turn === 'object') {
         const text = (turn as Record<string, unknown>).content ??
           (turn as Record<string, unknown>).text ??
           (turn as Record<string, unknown>).message;
@@ -119,12 +119,11 @@ function formatTranscriptSummary(
   runId: string,
   scenarioId: string,
   model: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transcript: {
-    content: any;
+    content: unknown;
     decisionCode: string | null;
     decisionText: string | null;
-    keyReasoning: any;
+    keyReasoning: unknown;
     createdAt: Date;
   } | null
 ): TranscriptSummaryOutput {
