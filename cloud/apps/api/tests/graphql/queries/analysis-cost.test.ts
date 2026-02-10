@@ -332,7 +332,12 @@ describe('AnalysisResult actualCost', () => {
         output: {
           visualizationData: {
             decisionDistribution: {},
-            modelScenarioMatrix: {},
+            // Simulate older output that keyed scenarios by *name*.
+            modelScenarioMatrix: {
+              'test-model': {
+                [scenario.name]: 3.2,
+              },
+            },
           },
         },
       },
@@ -363,6 +368,9 @@ describe('AnalysisResult actualCost', () => {
       power: '2',
       conformity: '1',
     });
+
+    // Matrix should be normalized to scenario IDs.
+    expect(response.body.data.analysis.visualizationData.modelScenarioMatrix['test-model'][scenario.id]).toBe(3.2);
 
     await db.analysisResult.deleteMany({ where: { runId: run.id } });
     await db.transcript.deleteMany({ where: { runId: run.id } });

@@ -48,6 +48,10 @@ function toDimensionRecord(value: unknown): Record<string, number | string> | nu
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 // Types for variance analysis from multi-sample runs
 type PerScenarioVarianceStats = {
   sampleCount: number;
@@ -215,11 +219,13 @@ builder.objectType(AnalysisResultRef, {
 
         const scenarios = await db.scenario.findMany({
           where: { definitionId: run.definitionId },
-          select: { id: true, content: true },
+          select: { id: true, name: true, content: true },
         });
 
         const scenarioDimensions: Record<string, Record<string, number | string>> = {};
+        const scenarioNameToId = new Map<string, string>();
         for (const scenario of scenarios) {
+          scenarioNameToId.set(scenario.name, scenario.id);
           const content = scenario.content;
           if (content == null || typeof content !== 'object' || Array.isArray(content)) continue;
           const dims = (content as Record<string, unknown>)['dimensions'];
@@ -229,9 +235,37 @@ builder.objectType(AnalysisResultRef, {
           }
         }
 
+        // Some older analysis results use scenario *names* as keys in modelScenarioMatrix.
+        // Remap those to scenario IDs so pivot tables can resolve scores.
+        const rawMatrix = viz.modelScenarioMatrix;
+        let normalizedMatrix: Record<string, Record<string, number>> | undefined;
+        if (rawMatrix !== undefined && isPlainObject(rawMatrix)) {
+          normalizedMatrix = {};
+          for (const [modelId, scenariosValue] of Object.entries(rawMatrix)) {
+            if (!isPlainObject(scenariosValue)) continue;
+            const outScenarios: Record<string, number> = {};
+            for (const [scenarioKey, score] of Object.entries(scenariosValue)) {
+              if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+
+              // Prefer already-ID keyed entries.
+              if (scenarioDimensions[scenarioKey]) {
+                outScenarios[scenarioKey] = score;
+                continue;
+              }
+
+              const mapped = scenarioNameToId.get(scenarioKey);
+              if (mapped) {
+                outScenarios[mapped] = score;
+              }
+            }
+            normalizedMatrix[modelId] = outScenarios;
+          }
+        }
+
         return {
           ...viz,
           scenarioDimensions,
+          ...(normalizedMatrix ? { modelScenarioMatrix: normalizedMatrix } : {}),
         };
       },
     }),
