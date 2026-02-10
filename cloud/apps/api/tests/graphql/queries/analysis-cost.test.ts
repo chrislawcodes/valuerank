@@ -303,6 +303,73 @@ describe('AnalysisResult actualCost', () => {
     }
   });
 
+  it('backfills visualizationData.scenarioDimensions for older analysis outputs', async () => {
+    // Create a scenario with dimensions
+    const scenario = await db.scenario.create({
+      data: {
+        definitionId: testDefinition.id,
+        name: 'Dimension Scenario',
+        content: { dimensions: { power: '2', conformity: '1' } },
+      },
+    });
+
+    const run = await db.run.create({
+      data: {
+        definitionId: testDefinition.id,
+        status: 'COMPLETED',
+        config: { models: ['test-model'] },
+        progress: { completed: 1, total: 1 },
+      },
+    });
+
+    const analysis = await db.analysisResult.create({
+      data: {
+        runId: run.id,
+        analysisType: 'basic',
+        status: 'CURRENT',
+        inputHash: 'test-hash-viz',
+        codeVersion: '1.0.0',
+        output: {
+          visualizationData: {
+            decisionDistribution: {},
+            modelScenarioMatrix: {},
+          },
+        },
+      },
+    });
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('X-API-Key', apiKey)
+      .send({
+        query: `
+          query GetAnalysisViz($runId: ID!) {
+            analysis(runId: $runId) {
+              id
+              visualizationData
+            }
+          }
+        `,
+        variables: { runId: run.id },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+
+    expect(response.body.data.analysis.id).toBe(analysis.id);
+    expect(response.body.data.analysis.visualizationData).toBeDefined();
+    expect(response.body.data.analysis.visualizationData.scenarioDimensions).toBeDefined();
+    expect(response.body.data.analysis.visualizationData.scenarioDimensions[scenario.id]).toEqual({
+      power: '2',
+      conformity: '1',
+    });
+
+    await db.analysisResult.deleteMany({ where: { runId: run.id } });
+    await db.transcript.deleteMany({ where: { runId: run.id } });
+    await db.run.deleteMany({ where: { id: run.id } });
+    await db.scenario.deleteMany({ where: { id: scenario.id } });
+  });
+
   it('handles transcripts without costSnapshot', async () => {
     // Create a run with transcripts that have no costSnapshot
     const noCostRun = await db.run.create({
