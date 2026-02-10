@@ -20,6 +20,7 @@ export type CSVRow = {
   modelName: string;
   sampleIndex: number;
   decisionCode: string;
+  probePrompt: string;
   targetResponse: string;
   variables: Record<string, number>;
 };
@@ -32,11 +33,12 @@ export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Batch', 'Sample Index'] a
 
 /**
  * CSV column headers after variable columns.
- * Order: Decision Code, Transcript ID, Target Response
+ * Order: Decision Code, Transcript ID, Probe Prompt, Target Response
  */
 export const POST_VARIABLE_HEADERS = [
   'Decision Code',
   'Transcript ID',
+  'Probe Prompt',
   'Target Response',
 ] as const;
 
@@ -78,9 +80,33 @@ type ScenarioContent = {
 // Transcript content structure with turns
 type TranscriptContent = {
   turns?: Array<{
+    promptLabel?: string;
+    probePrompt?: string;
     targetResponse?: string;
   }>;
 };
+
+/**
+ * Extract the probe prompts from transcript content.
+ * Combines prompts across turns; includes promptLabel when present.
+ */
+function getProbePrompt(transcript: TranscriptWithScenario): string {
+  const content = transcript.content as TranscriptContent | null;
+  if (!content?.turns || !Array.isArray(content.turns)) {
+    return '';
+  }
+
+  const prompts = content.turns
+    .map((turn) => {
+      const prompt = turn.probePrompt ?? '';
+      if (!prompt) return '';
+      const label = (turn.promptLabel ?? '').trim();
+      return label ? `[${label}] ${prompt}` : prompt;
+    })
+    .filter((p) => p.length > 0);
+
+  return prompts.join('\n\n---\n\n');
+}
 
 /**
  * Extract the target response from transcript content.
@@ -130,6 +156,7 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
     modelName: getModelName(transcript.modelId),
     sampleIndex: transcript.sampleIndex,
     decisionCode: transcript.decisionCode ?? 'pending',
+    probePrompt: getProbePrompt(transcript),
     targetResponse: getTargetResponse(transcript),
     variables: getScenarioDimensions(transcript),
   };
@@ -137,7 +164,7 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
 
 /**
  * Format a CSV row as a string with variable columns.
- * Column order: Model Name, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Target Response
+ * Column order: Model Name, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
@@ -159,6 +186,7 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
   const postVariableValues = [
     escapeCSV(row.decisionCode),
     escapeCSV(row.transcriptId),
+    escapeCSV(row.probePrompt),
     escapeCSV(row.targetResponse),
   ];
 
@@ -167,7 +195,7 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
 
 /**
  * Get CSV header line with variable columns.
- * Column order: Model Name, Sample Index, [Variables...], Decision Code, Decision Text, Transcript ID, Target Response
+ * Column order: Model Name, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
 export function getCSVHeader(variableNames: string[]): string {
