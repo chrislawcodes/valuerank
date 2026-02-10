@@ -314,48 +314,10 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
   const displayWarnings = useMemo<AnalysisWarning[]>(() => {
     if (!analysis) return [];
 
-    const isSampleWarning = (code: string) =>
-      code === 'SMALL_SAMPLE' ||
-      code === 'MODERATE_SAMPLE' ||
-      code.includes('SMALL_SAMPLE') ||
-      code.includes('MODERATE_SAMPLE');
+    // Hide "low sample size" warnings in the UI; users are expected to infer this from the tables.
+    const isLowSampleWarning = (code: string) => code.includes('SMALL_SAMPLE') || code.includes('MODERATE_SAMPLE');
 
-    const sampleWarnings = analysis.warnings.filter(w => isSampleWarning(w.code));
-
-    const lowSampleModels = Object.entries(analysis.perModel)
-      .map(([modelId, stats]) => ({ modelId, sampleSize: stats.sampleSize }))
-      .filter(m => m.sampleSize < 25)
-      .sort((a, b) => a.sampleSize - b.sampleSize);
-
-    const moderateSampleModels = Object.entries(analysis.perModel)
-      .map(([modelId, stats]) => ({ modelId, sampleSize: stats.sampleSize }))
-      .filter(m => m.sampleSize < 30)
-      .sort((a, b) => a.sampleSize - b.sampleSize);
-
-    // Collapse repeated per-model sample warnings into one banner.
-    // (The backend can emit one warning per model; we only want one in the UI.)
-    if (sampleWarnings.length <= 1) return analysis.warnings;
-
-    const nonSampleWarnings = analysis.warnings.filter(w => !isSampleWarning(w.code));
-
-    const threshold = lowSampleModels.length > 0 ? 25 : 30;
-    const modelsBelowThreshold = threshold === 25 ? lowSampleModels : moderateSampleModels;
-
-    const maxModelsToShow = 5;
-    const shown = modelsBelowThreshold
-      .slice(0, maxModelsToShow)
-      .map(m => `${m.modelId} (n=${m.sampleSize})`)
-      .join(', ');
-    const moreCount = Math.max(0, modelsBelowThreshold.length - maxModelsToShow);
-    const moreSuffix = moreCount > 0 ? ` (+${moreCount} more)` : '';
-
-    const consolidated: AnalysisWarning = {
-      code: 'SMALL_SAMPLE_CONSOLIDATED',
-      message: `Some models have <${threshold} samples; results may be unstable.`,
-      recommendation: `Models <${threshold}: ${shown}${moreSuffix}`,
-    };
-
-    return [consolidated, ...nonSampleWarnings];
+    return analysis.warnings.filter(w => !isLowSampleWarning(w.code));
   }, [analysis]);
 
   // Loading state
