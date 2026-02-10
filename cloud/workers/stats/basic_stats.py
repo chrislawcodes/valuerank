@@ -164,8 +164,7 @@ def compute_visualization_data(
 
     for t in transcripts:
         model_id = t.get("modelId", "unknown")
-        scenario = t.get("scenario", {})
-        scenario_name = scenario.get("name", t.get("scenarioId", "unknown"))
+        scenario_id = t.get("scenarioId", "unknown")
         summary = t.get("summary", {})
         score = summary.get("score")
 
@@ -184,17 +183,17 @@ def compute_visualization_data(
         # Build model-scenario matrix
         if model_id not in model_scenario_scores:
             model_scenario_scores[model_id] = {}
-        if scenario_name not in model_scenario_scores[model_id]:
-            model_scenario_scores[model_id][scenario_name] = []
-        model_scenario_scores[model_id][scenario_name].append(float(score))
+        if scenario_id not in model_scenario_scores[model_id]:
+            model_scenario_scores[model_id][scenario_id] = []
+        model_scenario_scores[model_id][scenario_id].append(float(score))
 
     # Compute averages for model-scenario matrix
     model_scenario_matrix: dict[str, dict[str, float]] = {}
     for model_id, scenarios in model_scenario_scores.items():
         model_scenario_matrix[model_id] = {}
-        for scenario_name, scores in scenarios.items():
+        for scenario_id, scores in scenarios.items():
             if scores:
-                model_scenario_matrix[model_id][scenario_name] = round(
+                model_scenario_matrix[model_id][scenario_id] = round(
                     float(np.mean(scores)), 2
                 )
 
