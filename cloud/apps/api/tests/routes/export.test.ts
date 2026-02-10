@@ -121,9 +121,9 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
-    // Headers: Model, Batch, Sample Index, Variables (alphabetical), Decision Code, Transcript ID, Target Response
+    // Headers: Model, Batch, Sample Index, Variables (alphabetical), Decision Code, Transcript ID, Probe Prompt, Target Response
     expect(headerLine).toBe(
-      'AI Model Name,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Target Response'
+      'AI Model Name,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Probe Prompt,Target Response'
     );
   });
 
@@ -476,6 +476,35 @@ describe('CSV Serialization Helper', () => {
 
     // Multiple responses are joined with separator
     expect(row.targetResponse).toBe('First response\n\n---\n\nSecond response');
+  });
+
+  it('extracts probe prompt from transcript turns', async () => {
+    const { transcriptToCSVRow, formatCSVRow } = await import('../../src/services/export/csv.js');
+
+    const mockTranscript = {
+      id: 'transcript-id',
+      modelId: 'gpt-4o',
+      scenarioId: 'test',
+      sampleIndex: 0,
+      content: {
+        turns: [
+          { promptLabel: 'scenario_prompt', probePrompt: 'What should I do?', targetResponse: 'Answer 1' },
+          { promptLabel: 'followup_1', probePrompt: 'Are you sure?', targetResponse: 'Answer 2' },
+        ],
+      },
+      scenario: { id: 'test', name: 'Test', content: {} },
+      decisionCode: '1',
+      decisionText: 'Test',
+    };
+
+    const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
+    expect(row.probePrompt).toBe('[scenario_prompt] What should I do?\n\n---\n\n[followup_1] Are you sure?');
+
+    const formatted = formatCSVRow(row, []);
+    // Post-variable columns include Probe Prompt before Target Response.
+    expect(formatted).toContain(',1,transcript-id,');
+    expect(formatted).toContain('[scenario_prompt] What should I do?');
+    expect(formatted).toContain('[followup_1] Are you sure?');
   });
 
   it('includes sample index in CSV row for multi-sample runs', async () => {
