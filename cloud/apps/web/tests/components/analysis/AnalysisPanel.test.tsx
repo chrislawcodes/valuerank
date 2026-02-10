@@ -344,6 +344,18 @@ describe('AnalysisPanel', () => {
 
   it('consolidates repeated per-model sample warnings into a single message', () => {
     const analysis = createMockAnalysis({
+      perModel: {
+        'gpt-4': {
+          sampleSize: 9,
+          values: {},
+          overall: { mean: 0.7, stdDev: 0.15, min: 0.4, max: 0.9 },
+        },
+        'claude-3': {
+          sampleSize: 20,
+          values: {},
+          overall: { mean: 0.65, stdDev: 0.12, min: 0.45, max: 0.85 },
+        },
+      },
       warnings: [
         { code: 'SMALL_SAMPLE', message: 'Model a has only 9 samples', recommendation: 'Results may have wide confidence intervals' },
         { code: 'MODERATE_SAMPLE', message: 'Model b has 20 samples', recommendation: 'Consider using bootstrap confidence intervals' },
@@ -365,7 +377,7 @@ describe('AnalysisPanel', () => {
     );
 
     expect(screen.getByText('Some models have <25 samples; results may be unstable.')).toBeInTheDocument();
-    expect(screen.getByText('Collect more transcripts per model (aim for 25+) and recompute analysis.')).toBeInTheDocument();
+    expect(screen.getByText('Models <25: gpt-4 (n=9), claude-3 (n=20)')).toBeInTheDocument();
     expect(screen.queryByText(/Model a has only 9 samples/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
   });

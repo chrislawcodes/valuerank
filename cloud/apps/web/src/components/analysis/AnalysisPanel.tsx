@@ -317,15 +317,29 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     const sampleWarningCodes = new Set(['SMALL_SAMPLE', 'MODERATE_SAMPLE']);
     const sampleWarnings = analysis.warnings.filter(w => sampleWarningCodes.has(w.code));
 
-    // Only consolidate when the same "low samples" warning is repeated per-model.
-    if (sampleWarnings.length <= 1) return analysis.warnings;
+    const lowSampleModels = Object.entries(analysis.perModel)
+      .map(([modelId, stats]) => ({ modelId, sampleSize: stats.sampleSize }))
+      .filter(m => m.sampleSize < 25)
+      .sort((a, b) => a.sampleSize - b.sampleSize);
+
+    // If there are no <25-sample models (per current definition), leave warnings untouched.
+    // If there are sample warnings, collapse them into a single banner to avoid repetition.
+    if (lowSampleModels.length === 0 || sampleWarnings.length === 0) return analysis.warnings;
 
     const nonSampleWarnings = analysis.warnings.filter(w => !sampleWarningCodes.has(w.code));
+
+    const maxModelsToShow = 5;
+    const shown = lowSampleModels
+      .slice(0, maxModelsToShow)
+      .map(m => `${m.modelId} (n=${m.sampleSize})`)
+      .join(', ');
+    const moreCount = Math.max(0, lowSampleModels.length - maxModelsToShow);
+    const moreSuffix = moreCount > 0 ? ` (+${moreCount} more)` : '';
 
     const consolidated: AnalysisWarning = {
       code: 'SMALL_SAMPLE_CONSOLIDATED',
       message: 'Some models have <25 samples; results may be unstable.',
-      recommendation: 'Collect more transcripts per model (aim for 25+) and recompute analysis.',
+      recommendation: `Models <25: ${shown}${moreSuffix}`,
     };
 
     return [consolidated, ...nonSampleWarnings];
