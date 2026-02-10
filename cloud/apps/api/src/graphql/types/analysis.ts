@@ -34,6 +34,20 @@ type VisualizationDataShape = {
   modelScenarioMatrix: Record<string, Record<string, number>>;
 };
 
+function isDimensionValue(value: unknown): value is number | string {
+  return typeof value === 'number' || typeof value === 'string';
+}
+
+function toDimensionRecord(value: unknown): Record<string, number | string> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const sanitized: Record<string, number | string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isDimensionValue(entry)) continue;
+    sanitized[key] = entry;
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
+
 // Types for variance analysis from multi-sample runs
 type PerScenarioVarianceStats = {
   sampleCount: number;
@@ -183,9 +197,42 @@ builder.objectType(AnalysisResultRef, {
       type: 'JSON',
       nullable: true,
       description: 'Data for frontend visualizations (decision distribution, model-scenario matrix)',
-      resolve: (analysis) => {
+      resolve: async (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
-        return output?.visualizationData ?? null;
+        const viz = (output?.visualizationData as Record<string, unknown> | null | undefined) ?? null;
+        if (!viz) return null;
+
+        // Backfill scenarioDimensions for older analysis results that predate this field.
+        if (viz.scenarioDimensions !== undefined) {
+          return viz;
+        }
+
+        const run = await db.run.findUnique({
+          where: { id: analysis.runId },
+          select: { definitionId: true },
+        });
+        if (!run) return viz;
+
+        const scenarios = await db.scenario.findMany({
+          where: { definitionId: run.definitionId },
+          select: { id: true, content: true },
+        });
+
+        const scenarioDimensions: Record<string, Record<string, number | string>> = {};
+        for (const scenario of scenarios) {
+          const content = scenario.content;
+          if (content == null || typeof content !== 'object' || Array.isArray(content)) continue;
+          const dims = (content as Record<string, unknown>)['dimensions'];
+          const validated = toDimensionRecord(dims);
+          if (validated) {
+            scenarioDimensions[scenario.id] = validated;
+          }
+        }
+
+        return {
+          ...viz,
+          scenarioDimensions,
+        };
       },
     }),
 
