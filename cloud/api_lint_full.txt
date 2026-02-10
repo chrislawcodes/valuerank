@@ -1,3 +1,5 @@
+turbo 2.6.3
+
 • Packages in scope: @valuerank/api
 • Running lint in 1 packages
 • Remote caching disabled
@@ -11,7 +13,7 @@
 @valuerank/shared:build: > @valuerank/shared@0.1.0 build
 @valuerank/shared:build: > tsc
 @valuerank/shared:build: 
-@valuerank/db:lint: cache hit, replaying logs 89a4c6ea7c414652
+@valuerank/db:lint: cache hit, replaying logs 9be794a06aa18276
 @valuerank/db:lint: 
 @valuerank/db:lint: 
 @valuerank/db:lint: > @valuerank/db@0.1.0 lint
@@ -30,8 +32,22 @@
 @valuerank/db:lint: Please only submit bug reports when using the officially supported version.
 @valuerank/db:lint: 
 @valuerank/db:lint: =============
+@valuerank/db:lint: [0m[0m
+@valuerank/db:lint: [0m[4m/Users/chrislaw/valuerank/cloud/packages/db/src/queries/analysis.ts[24m[0m
+@valuerank/db:lint: [0m  [2m123:7[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/db:lint: [0m[0m
+@valuerank/db:lint: [0m[4m/Users/chrislaw/valuerank/cloud/packages/db/src/queries/definitions.ts[24m[0m
+@valuerank/db:lint: [0m  [2m254:7[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/db:lint: [0m  [2m409:9[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/db:lint: [0m[0m
+@valuerank/db:lint: [0m[4m/Users/chrislaw/valuerank/cloud/packages/db/src/queries/runs.ts[24m[0m
+@valuerank/db:lint: [0m  [2m137:7[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/db:lint: [0m  [2m138:7[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/db:lint: [0m[0m
+@valuerank/db:lint: [0m[33m[1m✖ 5 problems (0 errors, 5 warnings)[22m[39m[0m
+@valuerank/db:lint: [0m[33m[1m[22m[39m[0m
 @valuerank/db:lint: ⠙[1G[0K
-@valuerank/db:build: cache hit, replaying logs 2401dd1f63de62bb
+@valuerank/db:build: cache hit, replaying logs 4ae82c0e115e9c7f
 @valuerank/db:build: 
 @valuerank/db:build: 
 @valuerank/db:build: > @valuerank/db@0.1.0 build
@@ -39,14 +55,14 @@
 @valuerank/db:build: 
 @valuerank/db:build: [2mPrisma schema loaded from prisma/schema.prisma[22m
 @valuerank/db:build: 
-@valuerank/db:build: ✔ Generated [1mPrisma Client[22m (v5.22.0)[2m to ./../../node_modules/@prisma/client[22m in 74ms
+@valuerank/db:build: ✔ Generated [1mPrisma Client[22m (v5.22.0)[2m to ./../../node_modules/@prisma/client[22m in 78ms
 @valuerank/db:build: 
 @valuerank/db:build: Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
 @valuerank/db:build: 
-@valuerank/db:build: Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+@valuerank/db:build: Tip: Want to react to database changes in your app as they happen? Discover how with Pulse: https://pris.ly/tip-1-pulse
 @valuerank/db:build: 
 @valuerank/db:build: ⠙[1G[0K
-@valuerank/api:lint: cache hit, replaying logs 6504a84a0eec45f2
+@valuerank/api:lint: cache hit, replaying logs 06d613d3e22d6ea8
 @valuerank/api:lint: 
 @valuerank/api:lint: 
 @valuerank/api:lint: > @valuerank/api@0.1.0 lint
@@ -69,6 +85,27 @@
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/auth/middleware.ts[24m[0m
 @valuerank/api:lint: [0m   [2m54:7[22m   [33mwarning[39m  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m205:18[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                                          [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/cli/create-user.ts[24m[0m
+@valuerank/api:lint: [0m   [2m86:13[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m133:17[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                                                [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/cli/debug-aggregate-output.ts[24m[0m
+@valuerank/api:lint: [0m  [2m76:21[22m  [33mwarning[39m  Unsafe assignment of an `any` value  [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/cli/debug-scenario-structure.ts[24m[0m
+@valuerank/api:lint: [0m  [2m33:21[22m  [33mwarning[39m  Unsafe assignment of an `any` value  [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/cli/ensure-user.ts[24m[0m
+@valuerank/api:lint: [0m  [2m14:8[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m27:66[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m45:13[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m50:13[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m63:17[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                                                [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/cli/recompute-aggregates.ts[24m[0m
+@valuerank/api:lint: [0m   [2m19:9[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m108:21[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                                                [2m@typescript-eslint/no-unsafe-assignment[22m[0m
 @valuerank/api:lint: [0m[0m
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/config/models.ts[24m[0m
 @valuerank/api:lint: [0m  [2m127:8[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
@@ -165,6 +202,9 @@
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/utils/audited-mutation.ts[24m[0m
 @valuerank/api:lint: [0m  [2m70:11[22m  [33mwarning[39m  Unexpected object value in conditional. The condition is always true  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m92:23[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                   [2m@typescript-eslint/no-unsafe-assignment[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/index.ts[24m[0m
+@valuerank/api:lint: [0m  [2m50:15[22m  [33mwarning[39m  Unsafe assignment of an `any` value  [2m@typescript-eslint/no-unsafe-assignment[22m[0m
 @valuerank/api:lint: [0m[0m
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/mcp/auth.ts[24m[0m
 @valuerank/api:lint: [0m  [2m42:7[22m  [33mwarning[39m  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
@@ -309,11 +349,35 @@
 @valuerank/api:lint: [0m  [2m35:7[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m54:18[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/cost/estimate.ts[24m[0m
+@valuerank/api:lint: [0m  [2m285:10[22m  [33mwarning[39m  Unexpected object value in conditional. The condition is always true  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/export/csv.ts[24m[0m
+@valuerank/api:lint: [0m  [2m128:16[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/export/md.ts[24m[0m
+@valuerank/api:lint: [0m  [2m90:7[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/export/xlsx/pivotTable.ts[24m[0m
+@valuerank/api:lint: [0m  [2m351:9[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m351:22[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m427:7[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m[0m
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/export/yaml.ts[24m[0m
-@valuerank/api:lint: [0m  [2m46:47[22m  [33mwarning[39m  Unexpected object value in conditional. The condition is always true  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m   [2m46:19[22m  [33mwarning[39m  Unexpected object value in conditional. The condition is always true                               [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m115:9[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m[0m
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/health/providers.ts[24m[0m
 @valuerank/api:lint: [0m  [2m217:8[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m[0m
+@valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/import/md.ts[24m[0m
+@valuerank/api:lint: [0m   [2m36:18[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m   [2m36:30[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m   [2m78:24[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m113:10[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m131:34[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m131:46[22m  [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m191:8[22m   [33mwarning[39m  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m[0m
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/import/validation.ts[24m[0m
 @valuerank/api:lint: [0m  [2m149:7[22m  [33mwarning[39m  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
@@ -332,6 +396,7 @@
 @valuerank/api:lint: [0m   [2m98:22[22m  [33mwarning[39m  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m115:34[22m  [33mwarning[39m  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m128:27[22m  [33mwarning[39m  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
+@valuerank/api:lint: [0m  [2m135:7[22m   [33mwarning[39m  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m  [2m244:41[22m  [33mwarning[39m  Unsafe assignment of an `any` value                                                                   [2m@typescript-eslint/no-unsafe-assignment[22m[0m
 @valuerank/api:lint: [0m  [2m478:8[22m   [33mwarning[39m  Async function 'getLimiterStats' has no 'await' expression                                            [2m@typescript-eslint/require-await[22m[0m
 @valuerank/api:lint: [0m[0m
@@ -341,11 +406,11 @@
 @valuerank/api:lint: [0m[4m/Users/chrislaw/valuerank/cloud/apps/api/src/services/transcript/create.ts[24m[0m
 @valuerank/api:lint: [0m  [2m144:10[22m  [33mwarning[39m  Unexpected any value in conditional. An explicit comparison or type cast is required  [2m@typescript-eslint/strict-boolean-expressions[22m[0m
 @valuerank/api:lint: [0m[0m
-@valuerank/api:lint: [0m[33m[1m✖ 171 problems (0 errors, 171 warnings)[22m[39m[0m
+@valuerank/api:lint: [0m[33m[1m✖ 198 problems (0 errors, 198 warnings)[22m[39m[0m
 @valuerank/api:lint: [0m[33m[1m[22m[39m[0m
 @valuerank/api:lint: ⠙[1G[0K
 
  Tasks:    5 successful, 5 total
 Cached:    5 cached, 5 total
-  Time:    69ms >>> FULL TURBO
+  Time:    93ms >>> FULL TURBO
 

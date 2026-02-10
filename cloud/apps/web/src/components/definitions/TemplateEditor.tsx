@@ -21,6 +21,7 @@ const LANGUAGE_ID = 'scenario-template';
 export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorProps>(
   function TemplateEditor({ value, dimensions, onChange, disabled = false, placeholder }, ref) {
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
     const monacoRef = useRef<Monaco | null>(null);
     const disposablesRef = useRef<IDisposable[]>([]);
     const dimensionsRef = useRef<string[]>(dimensions);
@@ -59,13 +60,13 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       }
     }, [dimensions, value]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleEditorMount: OnMount = (editor, monaco: any) => {
+    const handleEditorMount: OnMount = (editor, monaco) => {
+      /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */ // Changed to use OnMount type
       editorRef.current = editor;
       monacoRef.current = monaco;
 
       // Register custom language if not already registered
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       if (!monaco.languages.getLanguages().some((lang: languages.ILanguageExtensionPoint) => lang.id === LANGUAGE_ID)) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         monaco.languages.register({ id: LANGUAGE_ID });
@@ -148,6 +149,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       content: string,
       dims: string[]
     ) => {
+      /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
       const model = editor.getModel();
       if (!model) return;
 

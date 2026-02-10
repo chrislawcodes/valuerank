@@ -13,7 +13,7 @@ function validateDatabaseUrl(): void {
     typeof (globalThis as Record<string, unknown>).__vitest_worker__ !== 'undefined';
 
   if (isTestEnvironment) {
-    const dbUrl = process.env.DATABASE_URL || '';
+    const dbUrl = process.env.DATABASE_URL ?? '';
     // Check that database name contains '_test' (e.g., valuerank_test)
     if (!dbUrl.includes('_test')) {
       const errorMessage = `

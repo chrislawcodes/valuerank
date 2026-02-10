@@ -1,6 +1,6 @@
 import { createYoga, type Plugin, createGraphQLError } from 'graphql-yoga';
 import type { Request, Response } from 'express';
-import { graphql, type ExecutionResult, getOperationAST } from 'graphql';
+import { graphql, type ExecutionResult, getOperationAST, type DocumentNode, Kind } from 'graphql';
 import { builder } from './builder.js';
 import { createContext, type Context } from './context.js';
 import { createLogger, AppError } from '@valuerank/shared';
@@ -42,7 +42,7 @@ function useQueryLogging(): Plugin {
   return {
     onExecute({ args }) {
       const startTime = Date.now();
-      const { document, variableValues, contextValue } = args;
+      const { document, variableValues, contextValue } = args as { document: DocumentNode; variableValues?: Record<string, unknown>; contextValue: unknown };
 
       // Extract operation info
       const operation = getOperationAST(document);
@@ -50,7 +50,7 @@ function useQueryLogging(): Plugin {
       const operationType = operation?.operation ?? 'unknown';
 
       // Get user info from context (may be our Context type with user/authMethod)
-      const ctx = contextValue as unknown as Partial<Context>;
+      const ctx = (contextValue as Partial<Context> | undefined) ?? {};
       const userId = ctx.user?.id ?? 'anonymous';
       const authMethod = ctx.authMethod ?? 'none';
 
@@ -59,10 +59,10 @@ function useQueryLogging(): Plugin {
 
       // Skip introspection queries to reduce noise
       const isIntrospection = operationName === 'IntrospectionQuery' ||
-        (document.definitions.some((def: { kind: string; selectionSet?: { selections: Array<{ kind: string; name?: { value: string } }> } }) =>
-          def.kind === 'OperationDefinition' &&
-          def.selectionSet?.selections.some((sel) =>
-            sel.kind === 'Field' && sel.name?.value.startsWith('__')
+        (document.definitions.some((def) =>
+          def.kind === Kind.OPERATION_DEFINITION &&
+          (def as { selectionSet?: { selections: ReadonlyArray<{ kind: Kind; name?: { value: string } }> } }).selectionSet?.selections.some((sel) =>
+            sel.kind === Kind.FIELD && sel.name?.value.startsWith('__')
           )
         ));
 
@@ -78,7 +78,7 @@ function useQueryLogging(): Plugin {
           log.info({
             operationName,
             operationType,
-            variables: sanitizeVariables(variableValues as Record<string, unknown> | undefined),
+            variables: sanitizeVariables(variableValues),
             userId,
             authMethod,
             source,
@@ -129,13 +129,24 @@ export const yoga = createYoga<{
   },
   maskedErrors: process.env.NODE_ENV === 'production' ? {
     maskError(error: unknown) {
-      const appError = error instanceof AppError
-        ? error
-        : (error && typeof error === 'object' && 'originalError' in error && (error as { originalError?: unknown }).originalError instanceof AppError)
-          ? (error as { originalError: AppError }).originalError
-          : null;
+      // Unwrap AppError if present (directly or wrapped by Yoga)
+      let appError: AppError | null = null;
 
-      if (appError) {
+      if (error instanceof AppError) {
+        appError = error;
+      } else if (
+        error !== null &&
+        typeof error === 'object' &&
+        'originalError' in error
+      ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+        const original = (error as any).originalError;
+        if (original instanceof AppError) {
+          appError = original;
+        }
+      }
+
+      if (appError !== null) {
         return createGraphQLError(appError.message, {
           extensions: {
             code: appError.code || 'APP_ERROR',

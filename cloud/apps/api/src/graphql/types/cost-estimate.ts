@@ -235,12 +235,13 @@ builder.queryField('estimateCost', (t) =>
 
         if (modelInput.includes(':')) {
           const parts = modelInput.split(':');
-          if (parts.length !== 2 || !parts[0] || !parts[1]) {
+          if (parts.length !== 2 || parts[0] === '' || parts[1] === '') {
             throw new ValidationError(
               `Invalid model identifier format: ${modelInput}. Expected 'provider:modelId' or model identifier.`
             );
           }
-          const [providerName, modelId] = parts;
+          const providerName = parts[0] as string;
+          const modelId = parts[1] as string;
           return { raw: modelInput, kind: 'provider', providerName, modelId };
         }
 
@@ -266,8 +267,8 @@ builder.queryField('estimateCost', (t) =>
           : Promise.resolve([]),
         providerPairs.length
           ? db.llmProvider.findMany({
-              where: { name: { in: Array.from(new Set(providerPairs.map((p) => p.providerName))) } },
-            })
+            where: { name: { in: Array.from(new Set(providerPairs.map((p) => p.providerName))) } },
+          })
           : Promise.resolve([]),
       ]);
 
@@ -287,10 +288,10 @@ builder.queryField('estimateCost', (t) =>
       const providerModels =
         providerClauses.length > 0
           ? await db.llmModel.findMany({
-              where: {
-                OR: providerClauses,
-              },
-            })
+            where: {
+              OR: providerClauses,
+            },
+          })
           : [];
 
       const cuidMap = new Map(modelsByCuid.map((m) => [m.id, m]));
@@ -322,7 +323,7 @@ builder.queryField('estimateCost', (t) =>
               .map((m) => m.modelId)
           );
           const resolvedModelId = resolveModelIdFromAvailable(input.modelId, providerAvailableIds);
-          if (!resolvedModelId) {
+          if (resolvedModelId === undefined || resolvedModelId === null || resolvedModelId === '') {
             throw new NotFoundError('Model', input.raw);
           }
           const model = providerModelMap.get(`${provider.id}:${resolvedModelId}`);
@@ -337,7 +338,7 @@ builder.queryField('estimateCost', (t) =>
           input.modelId,
           availableDirectIds
         );
-        if (!resolvedDirectId) {
+        if (resolvedDirectId === undefined || resolvedDirectId === null || resolvedDirectId === '') {
           throw new NotFoundError('Model', input.raw);
         }
         const model = directMap.get(resolvedDirectId);
@@ -392,7 +393,7 @@ builder.queryField('modelTokenStats', (t) =>
           // Check for provider:modelId format
           if (modelInput.includes(':')) {
             const parts = modelInput.split(':');
-            if (parts.length === 2 && parts[1]) {
+            if (parts.length === 2 && parts[1] !== undefined && parts[1] !== '') {
               resolvedModelIds.push(parts[1]);
               continue;
             }
@@ -434,7 +435,7 @@ builder.queryField('allModelTokenAverage', (t) =>
     description: 'Get the average token statistics across all models. Used as fallback when model-specific stats are unavailable.',
     resolve: async () => {
       const avg = await getAllModelAverage();
-      if (!avg) return null;
+      if (avg === null || avg === undefined) return null;
 
       return {
         modelId: 'all-model-average',

@@ -17,7 +17,7 @@ let bossInstance: PgBoss | null = null;
  * Uses singleton pattern - returns existing instance if already created.
  */
 export function createBoss(): PgBoss {
-  if (bossInstance) {
+  if (bossInstance !== null) {
     return bossInstance;
   }
 
@@ -50,7 +50,7 @@ export function createBoss(): PgBoss {
  * Throws if not initialized.
  */
 export function getBoss(): PgBoss {
-  if (!bossInstance) {
+  if (bossInstance === null) {
     throw new Error('PgBoss not initialized. Call createBoss() first.');
   }
   return bossInstance;
@@ -73,7 +73,7 @@ export async function startBoss(): Promise<void> {
  * Completes in-flight jobs before stopping.
  */
 export async function stopBoss(): Promise<void> {
-  if (!bossInstance) {
+  if (bossInstance === null) {
     log.warn('PgBoss not running, nothing to stop');
     return;
   }

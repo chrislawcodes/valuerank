@@ -153,7 +153,7 @@ builder.queryField('definitions', (t) =>
         where.id = { in: matchingIds };
       }
 
-      if (args.hasRuns) {
+      if (args.hasRuns === true) {
         // Only definitions that have at least one run
         where.runs = { some: {} };
       }
@@ -341,11 +341,11 @@ builder.queryField('definitionCount', (t) =>
         deletedAt: null,
       };
 
-      if (args.rootOnly) {
+      if (args.rootOnly === true) {
         where.parentId = null;
       }
 
-      if (args.search) {
+      if (args.search !== undefined && args.search !== null && args.search !== '') {
         where.name = { contains: args.search, mode: 'insensitive' };
       }
 
@@ -385,7 +385,7 @@ builder.queryField('definitionCount', (t) =>
         where.id = { in: matchingIds };
       }
 
-      if (args.hasRuns) {
+      if (args.hasRuns === true) {
         where.runs = { some: {} };
       }
 

@@ -69,7 +69,7 @@ function migrateDefinitionV1toV2(data: DefinitionContentV1): DefinitionContentV2
  * @throws Error if schema_version is unknown/unsupported
  */
 export function parseStoredContent(raw: unknown): DefinitionContentStored {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Definition content must be an object');
   }
 
@@ -212,7 +212,7 @@ export function mergeContent(
  * Load and migrate run config to current version.
  */
 export function loadRunConfig(raw: unknown): RunConfig {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Run config must be an object');
   }
 
@@ -243,7 +243,7 @@ export function loadRunConfig(raw: unknown): RunConfig {
  * Load and migrate scenario content to current version.
  */
 export function loadScenarioContent(raw: unknown): ScenarioContent {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Scenario content must be an object');
   }
 
@@ -273,7 +273,7 @@ export function loadScenarioContent(raw: unknown): ScenarioContent {
  * Load and migrate transcript content to current version.
  */
 export function loadTranscriptContent(raw: unknown): TranscriptContent {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Transcript content must be an object');
   }
 
@@ -303,7 +303,7 @@ export function loadTranscriptContent(raw: unknown): TranscriptContent {
  * Load and migrate analysis output to current version.
  */
 export function loadAnalysisOutput(raw: unknown): AnalysisOutput {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Analysis output must be an object');
   }
 
@@ -332,7 +332,7 @@ export function loadAnalysisOutput(raw: unknown): AnalysisOutput {
  * Load and migrate rubric content to current version.
  */
 export function loadRubricContent(raw: unknown): RubricContent {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Rubric content must be an object');
   }
 
@@ -360,7 +360,7 @@ export function loadRubricContent(raw: unknown): RubricContent {
  * Load and migrate cohort criteria to current version.
  */
 export function loadCohortCriteria(raw: unknown): CohortCriteria {
-  if (!raw || typeof raw !== 'object') {
+  if (raw === null || raw === undefined || typeof raw !== 'object') {
     throw new Error('Cohort criteria must be an object');
   }
 

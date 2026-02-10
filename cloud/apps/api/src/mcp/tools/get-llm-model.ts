@@ -28,9 +28,9 @@ function isProviderAvailable(providerName: string): boolean {
   };
 
   const envVar = envVarMap[providerName.toLowerCase()];
-  if (!envVar) return false;
+  if (envVar === undefined) return false;
 
-  return !!process.env[envVar];
+  return process.env[envVar] !== undefined && process.env[envVar] !== '';
 }
 
 /**
@@ -119,14 +119,14 @@ function registerGetLlmModelTool(server: McpServer): void {
 
       try {
         // Validate input - must have either id OR (provider_name + model_id)
-        const hasId = !!args.id;
-        const hasIdentifier = !!args.provider_name && !!args.model_id;
+        const hasId = args.id !== undefined && args.id !== '';
+        const hasIdentifier = (args.provider_name !== undefined && args.provider_name !== '') && (args.model_id !== undefined && args.model_id !== '');
 
         if (!hasId && !hasIdentifier) {
           return formatError(
             'INVALID_INPUT',
             'Must provide either id OR both provider_name and model_id',
-            { provided: { id: hasId, provider_name: !!args.provider_name, model_id: !!args.model_id } }
+            { provided: { id: hasId, provider_name: args.provider_name !== undefined && args.provider_name !== '', model_id: args.model_id !== undefined && args.model_id !== '' } }
           );
         }
 

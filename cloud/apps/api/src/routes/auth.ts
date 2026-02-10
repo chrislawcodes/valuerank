@@ -39,7 +39,7 @@ authRouter.post(
       const { email, password } = req.body as LoginRequest;
 
       // Validate required fields
-      if (!email || !password) {
+      if (email === undefined || email === '' || password === undefined || password === '') {
         throw new ValidationError('Email and password are required');
       }
 
@@ -53,7 +53,7 @@ authRouter.post(
 
       // Generic error for both non-existent user and wrong password
       // Prevents email enumeration attacks
-      if (!user) {
+      if (user === null) {
         log.warn({ email: normalizedEmail }, 'Login failed: user not found');
         throw new AuthenticationError('Invalid credentials');
       }
@@ -103,7 +103,7 @@ authRouter.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check if user is authenticated (set by authMiddleware)
-      if (!req.user) {
+      if (req.user === undefined || req.user === null) {
         throw new AuthenticationError('Authentication required');
       }
 
@@ -112,7 +112,7 @@ authRouter.get(
         where: { id: req.user.id },
       });
 
-      if (!user) {
+      if (user === null) {
         throw new AuthenticationError('User not found');
       }
 

@@ -51,13 +51,13 @@ export type TranscriptWithContent = Transcript & {
  * Create a new transcript.
  */
 export async function createTranscript(data: CreateTranscriptInput): Promise<Transcript> {
-  if (!data.runId) {
+  if (data.runId === undefined || data.runId === null || data.runId === '') {
     throw new ValidationError('Run ID is required', { field: 'runId' });
   }
-  if (!data.modelId) {
+  if (data.modelId === undefined || data.modelId === null || data.modelId === '') {
     throw new ValidationError('Model ID is required', { field: 'modelId' });
   }
-  if (!data.content) {
+  if (data.content === undefined || data.content === null) {
     throw new ValidationError('Transcript content is required', { field: 'content' });
   }
 
@@ -181,9 +181,9 @@ export async function listTranscripts(filters?: TranscriptFilters): Promise<Tran
     deletedAt: null, // Exclude soft-deleted
   };
 
-  if (filters?.runId) where.runId = filters.runId;
-  if (filters?.scenarioId) where.scenarioId = filters.scenarioId;
-  if (filters?.modelId) where.modelId = filters.modelId;
+  if (filters?.runId !== undefined && filters?.runId !== null && filters?.runId !== '') where.runId = filters.runId;
+  if (filters?.scenarioId !== undefined && filters?.scenarioId !== null && filters?.scenarioId !== '') where.scenarioId = filters.scenarioId;
+  if (filters?.modelId !== undefined && filters?.modelId !== null && filters?.modelId !== '') where.modelId = filters.modelId;
 
   return db.transcript.findMany({
     where,

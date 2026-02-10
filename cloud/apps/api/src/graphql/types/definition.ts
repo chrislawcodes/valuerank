@@ -180,7 +180,7 @@ builder.objectType(DefinitionRef, {
       description: 'The specific version of the preamble used',
       resolve: async (definition) => {
         if (definition.preambleVersionId === null || definition.preambleVersionId === undefined) return null;
-        return (db as any).preambleVersion.findUnique({
+        return db.preambleVersion.findUnique({
           where: { id: definition.preambleVersionId },
         });
       },

@@ -33,16 +33,16 @@ type AuditLogFilter = {
 function buildWhereClause(filter?: AuditLogFilter | null): Prisma.AuditLogWhereInput {
   const where: Prisma.AuditLogWhereInput = {};
 
-  if (filter?.entityType) {
+  if (filter?.entityType !== undefined && filter.entityType !== null) {
     where.entityType = filter.entityType;
   }
-  if (filter?.entityId) {
+  if (filter?.entityId !== undefined && filter.entityId !== null) {
     where.entityId = filter.entityId;
   }
-  if (filter?.action) {
+  if (filter?.action !== undefined && filter.action !== null) {
     where.action = filter.action;
   }
-  if (filter?.userId) {
+  if (filter?.userId !== undefined && filter.userId !== null) {
     where.userId = filter.userId;
   }
 
@@ -107,7 +107,7 @@ builder.queryField('auditLogs', (t) =>
         where,
         orderBy: { id: 'desc' }, // Order by ID for consistent cursor pagination
         take: limit + 1, // Take one extra to check if there's a next page
-        ...(args.after && {
+        ...((args.after !== null && args.after !== undefined) && {
           cursor: { id: args.after },
           skip: 1, // Skip the cursor item itself
         }),

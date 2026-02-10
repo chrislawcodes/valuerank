@@ -92,7 +92,7 @@ export function createTranscriptsByAggregateRunsLoader(): DataLoader<AggregateTr
       return keys.map((key) => {
         const runIds = Array.from(new Set(key.sourceRunIds));
         const merged = runIds.flatMap((runId) => transcriptsByRun.get(runId) ?? []);
-        const filtered = key.modelId
+        const filtered = (key.modelId !== null && key.modelId !== undefined && key.modelId !== '')
           ? merged.filter((transcript) => transcript.modelId === key.modelId)
           : merged;
         return filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

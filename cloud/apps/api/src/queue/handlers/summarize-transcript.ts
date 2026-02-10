@@ -287,7 +287,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
     };
 
     // Get rate limiter stats before processing
-    const limiterStatsBefore = await getLimiterStats(providerName);
+    const limiterStatsBefore = getLimiterStats(providerName);
 
     // Extract unique run IDs for logging
     const runIds = [...new Set(jobs.map(j => j.data.runId))];
@@ -356,7 +356,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
     );
 
     // Get rate limiter stats after processing
-    const limiterStatsAfter = await getLimiterStats(providerName);
+    const limiterStatsAfter = getLimiterStats(providerName);
 
     // Check for failures - PgBoss needs us to throw to trigger retries
     const failures = results.filter(

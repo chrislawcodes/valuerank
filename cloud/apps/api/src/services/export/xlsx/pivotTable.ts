@@ -348,7 +348,7 @@ export function addPivotTable(
   for (const match of sheetMatches) {
     const sheetName = match[1];
     const sheetRid = match[2];
-    if (sheetName && sheetRid) {
+    if (sheetName !== undefined && sheetRid !== undefined) {
       sheets.set(sheetName, sheetRid);
     }
   }
@@ -424,7 +424,7 @@ export function addPivotTable(
   const worksheetRelsPath = `${worksheetDir}/_rels/${worksheetFilename}.rels`;
   let worksheetRels = zip.getEntry(worksheetRelsPath)?.getData().toString('utf-8');
 
-  if (worksheetRels) {
+  if (worksheetRels !== undefined) {
     // Add pivotTable relationship to existing rels
     worksheetRels = worksheetRels.replace(
       '</Relationships>',

@@ -121,7 +121,7 @@ function registerUpdateLlmModelTool(server: McpServer): void {
         {
           requestId,
           id: args.id,
-          hasDisplayName: !!args.display_name,
+          hasDisplayName: args.display_name !== undefined,
           hasCostInput: args.cost_input_per_million !== undefined,
           hasCostOutput: args.cost_output_per_million !== undefined,
           hasApiConfig: args.api_config !== undefined,

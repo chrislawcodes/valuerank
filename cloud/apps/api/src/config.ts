@@ -12,7 +12,7 @@ function getJwtSecret(): string {
 export const config = {
   PORT: parseInt(getEnv('PORT', '4000'), 10),
   NODE_ENV: getEnv('NODE_ENV', 'development'),
-  DATABASE_URL: getEnv('DATABASE_URL'),
+  DATABASE_URL: getEnv('DATABASE_URL') ?? '',
   JWT_SECRET: getJwtSecret(),
   JWT_EXPIRES_IN: '24h',
 } as const;
@@ -20,7 +20,7 @@ export const config = {
 // Queue configuration (PgBoss)
 export const queueConfig = {
   // Connection string (uses same database as app)
-  connectionString: getEnv('DATABASE_URL'),
+  connectionString: getEnv('DATABASE_URL') ?? '',
   // Maintenance interval in seconds
   maintenanceIntervalSeconds: parseInt(
     getEnv('PGBOSS_MAINTENANCE_INTERVAL', '30'),

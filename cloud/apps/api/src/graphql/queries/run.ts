@@ -121,13 +121,13 @@ builder.queryField('runs', (t) =>
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || args.analysisStatus) {
+      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
         const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
           deletedAt: null,
         };
 
         // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus) {
+        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
           analysisWhere.status = args.analysisStatus as AnalysisStatus;
         }
 
@@ -268,13 +268,13 @@ builder.queryField('runCount', (t) =>
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || args.analysisStatus) {
+      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
         const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
           deletedAt: null,
         };
 
         // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus) {
+        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
           analysisWhere.status = args.analysisStatus as AnalysisStatus;
         }
 

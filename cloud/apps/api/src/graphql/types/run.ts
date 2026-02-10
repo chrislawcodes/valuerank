@@ -317,7 +317,7 @@ builder.objectType(RunRef, {
       },
       resolve: async (run, args, ctx) => {
         const config = run.config as AggregateRunConfig;
-        const sourceRunIds = config?.isAggregate && Array.isArray(config.sourceRunIds)
+        const sourceRunIds = (config?.isAggregate === true && Array.isArray(config.sourceRunIds))
           ? config.sourceRunIds
           : null;
 
@@ -422,7 +422,7 @@ builder.objectType(RunRef, {
           },
         });
 
-        if (analysis) {
+        if (analysis !== null && analysis !== undefined) {
           return 'completed';
         }
 
@@ -438,7 +438,7 @@ builder.objectType(RunRef, {
           `;
 
           const firstJob = jobs[0];
-          if (firstJob) {
+          if (firstJob !== undefined) {
             return firstJob.state === 'active' ? 'computing' : 'pending';
           }
 
@@ -495,7 +495,7 @@ builder.objectType(RunRef, {
         const progress = run.progress as ProgressData | null;
         let estimatedSecondsRemaining: number | null = null;
 
-        if (progress) {
+        if (progress !== null && progress !== undefined) {
           const remaining = progress.total - progress.completed - progress.failed;
           if (remaining > 0 && totalActive > 0) {
             // Rough estimate: assume average of 5 seconds per job

@@ -125,7 +125,7 @@ function getScenarioDimensions(transcript: TranscriptWithScenario): Record<strin
  */
 export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
   return {
-    batchName: transcript.run?.name || '',
+    batchName: transcript.run?.name ?? '',
     transcriptId: transcript.id,
     modelName: getModelName(transcript.modelId),
     sampleIndex: transcript.sampleIndex,

@@ -29,7 +29,7 @@ function isProviderAvailable(providerName: string): boolean {
   const envVar = envVarMap[providerName.toLowerCase()];
   if (envVar === undefined || envVar === null) return false;
 
-  return !!process.env[envVar];
+  return process.env[envVar] !== undefined && process.env[envVar] !== '';
 }
 
 /**

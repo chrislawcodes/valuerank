@@ -51,7 +51,7 @@ export async function authMiddleware(
 
   // Check for Basic auth (for Excel OData connector)
   // Format: "Basic base64(username:password)" where password is the API key
-  if (authHeader?.startsWith('Basic ')) {
+  if (authHeader !== undefined && authHeader.startsWith('Basic ')) {
     const base64Credentials = authHeader.slice(6);
     try {
       const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
@@ -78,7 +78,7 @@ export async function authMiddleware(
 
   const token = extractBearerToken(authHeader);
 
-  if (token !== null && token !== '') {
+  if (token !== null && token !== undefined && token !== '') {
     // Check if Bearer token is actually an API key (for LeChat compatibility)
     if (token.startsWith('vr_')) {
       try {
@@ -201,7 +201,7 @@ async function validateApiKey(key: string): Promise<AuthUser | null> {
       where: { id: apiKeyRecord.id },
       data: { lastUsed: new Date() },
     })
-    .catch((err) => {
+    .catch((err: unknown) => {
       log.warn({ err, keyId: apiKeyRecord.id }, 'Failed to update last_used');
     });
 

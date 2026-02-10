@@ -45,7 +45,7 @@ type DimensionAnalysisOutput = {
 function safeJsonObject<T extends Record<string, unknown>>(
   value: unknown
 ): T | null {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {
     return value as T;
   }
   return null;
@@ -108,8 +108,8 @@ function formatDimensionAnalysis(
     runId,
     analysisStatus: status,
     rankedDimensions: truncateArray(rankedDimensions, 10),
-    varianceExplained: dimensionData?.varianceExplained || 0,
-    method: dimensionData?.method || 'unknown',
+    varianceExplained: dimensionData?.varianceExplained ?? 0,
+    method: dimensionData?.method !== undefined && dimensionData.method !== '' ? dimensionData.method : 'unknown',
   };
 }
 

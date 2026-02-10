@@ -35,7 +35,7 @@ export function createServer() {
 
   // Request ID and logging middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
-    const requestId = (req.headers['x-request-id'] as string) ?? crypto.randomUUID();
+    const requestId = (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID();
     req.requestId = requestId;
     req.log = createLogger('request').child({ requestId, method: req.method, path: req.path });
 

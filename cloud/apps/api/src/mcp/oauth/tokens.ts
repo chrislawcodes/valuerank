@@ -18,7 +18,7 @@ const log = createLogger('mcp:oauth:tokens');
  */
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
+  if (secret === undefined || secret === '') {
     throw new Error('JWT_SECRET environment variable is required');
   }
   return secret;

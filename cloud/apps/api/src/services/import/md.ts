@@ -33,7 +33,7 @@ function parseFrontmatter(lines: string[]): { frontmatter: Frontmatter; endIndex
   i = 1;
   while (i < lines.length && lines[i]?.trim() !== '---') {
     const match = lines[i]?.match(/^(\w+):\s*(.+)$/);
-    if (match && match[1] && match[2]) {
+    if (match && match[1] !== undefined && match[2] !== undefined) {
       const key = match[1] as keyof Frontmatter;
       frontmatter[key] = match[2].trim();
     }
@@ -75,7 +75,7 @@ function parseSections(lines: string[], startIndex: number): Sections {
     const line = lines[i] ?? '';
     const headerMatch = line.match(/^#\s+(.+)$/);
 
-    if (headerMatch && headerMatch[1]) {
+    if (headerMatch !== null && headerMatch[1] !== undefined) {
       currentSection = headerMatch[1].toLowerCase();
       continue;
     }
@@ -110,7 +110,7 @@ function parseDimensions(dimensionsContent: string[]): ParsedDimension[] {
   for (const dimSection of dimSections) {
     const dimLines = dimSection.split('\n');
     const dimName = dimLines[0]?.trim();
-    if (!dimName) continue;
+    if (dimName === undefined || dimName === '') continue;
 
     const levels: DimensionLevel[] = [];
 
@@ -128,7 +128,7 @@ function parseDimensions(dimensionsContent: string[]): ParsedDimension[] {
       // Parse table data rows
       if (inTable && line.includes('|')) {
         const cells = line.split('|').map(c => c.trim()).filter(c => c);
-        if (cells.length >= 3 && cells[0] && cells[1]) {
+        if (cells.length >= 3 && cells[0] !== undefined && cells[0] !== '' && cells[1] !== undefined && cells[1] !== '') {
           const score = parseInt(cells[0]) || 0;
           const label = cells[1];
           const options = cells[2]?.split(',').map(o => o.trim()).filter(o => o) || [];
@@ -188,7 +188,7 @@ function validateContent(
   const errors: ImportError[] = [];
 
   // Check required frontmatter
-  if (!frontmatter.name) {
+  if (frontmatter.name === undefined || frontmatter.name === '') {
     errors.push({
       field: 'frontmatter.name',
       message: 'Definition name is required in frontmatter',
@@ -216,7 +216,7 @@ function validateContent(
 
   // Dimensions are optional but if the section exists, it should have content
   const dimContent = sections.dimensions.join('\n').trim();
-  if (dimContent && dimensions.length === 0) {
+  if (dimContent !== '' && dimensions.length === 0) {
     errors.push({
       field: 'dimensions',
       message: 'Dimensions section exists but no valid dimensions found. Check table format.',

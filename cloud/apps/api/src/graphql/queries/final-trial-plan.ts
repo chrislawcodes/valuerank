@@ -22,14 +22,15 @@ const ConditionPlanRef = builder.objectRef<{
 
 const ModelPlanRef = builder.objectRef<{
     modelId: string;
-    conditions: any[]; // Using any[] to avoid circular ref issues or strict typing complexities here for now
+    conditions: unknown[]; // Using unknown[] to avoid circular ref issues or strict typing complexities here for now
     totalNeededSamples: number;
 }>('ModelPlan').implement({
     fields: (t) => ({
         modelId: t.exposeString('modelId'),
         conditions: t.field({
             type: [ConditionPlanRef],
-            resolve: (parent) => parent.conditions
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
+            resolve: (parent) => (parent as any).conditions
         }),
         totalNeededSamples: t.exposeInt('totalNeededSamples'),
     }),
@@ -37,14 +38,15 @@ const ModelPlanRef = builder.objectRef<{
 
 const FinalTrialPlanRef = builder.objectRef<{
     definitionId: string;
-    models: any[];
+    models: unknown[];
     totalJobs: number;
 }>('FinalTrialPlan').implement({
     fields: (t) => ({
         definitionId: t.exposeString('definitionId'),
         models: t.field({
             type: [ModelPlanRef],
-            resolve: (parent) => parent.models
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
+            resolve: (parent) => (parent as any).models
         }),
         totalJobs: t.exposeInt('totalJobs'),
     }),
@@ -57,10 +59,11 @@ builder.queryField('finalTrialPlan', (t) =>
             definitionId: t.arg.string({ required: true }),
             models: t.arg.stringList({ required: true }),
         },
-        resolve: async (_root, args, ctx) => {
+        resolve: (_root, args, ctx) => {
             // Auth check? StartRun requires auth.
             if (ctx.user === undefined || ctx.user === null) throw new Error('Unauthorized');
-            return planFinalTrial(args.definitionId, args.models);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
+            return planFinalTrial(args.definitionId, args.models) as any;
         },
     })
 );

@@ -34,9 +34,10 @@ const GraphQLQueryInputSchema = {
 function containsMutation(queryString: string): boolean {
   try {
     const doc = parse(queryString);
-    return doc.definitions.some(
-      (def) => def.kind === 'OperationDefinition' && def.operation === 'mutation'
-    );
+    return doc.definitions.some((def) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
+      return def.kind === 'OperationDefinition' && def.operation === 'mutation';
+    });
   } catch {
     // If we can't parse, let GraphQL handle the error
     return false;

@@ -114,7 +114,7 @@ builder.objectType(AuditLogRef, {
       nullable: true,
       description: 'User who performed the action (null for system actions)',
       resolve: async (log) => {
-        if (!log.userId) return null;
+        if (log.userId === null || log.userId === undefined || log.userId === '') return null;
         return db.user.findUnique({
           where: { id: log.userId },
         });

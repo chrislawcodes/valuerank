@@ -117,7 +117,7 @@ Supports pagination via limit and offset parameters.`,
 
       try {
         // If specific key requested, return single setting
-        if (args.key) {
+        if (args.key !== undefined && args.key !== null && args.key !== '') {
           const setting = await getSettingByKey(args.key);
 
           // Handle special case: return default for summarization parallelism
@@ -152,7 +152,7 @@ Supports pagination via limit and offset parameters.`,
         let settings = await getAllSettings();
 
         // Filter by prefix if specified
-        if (args.prefix) {
+        if (args.prefix !== undefined && args.prefix !== null && args.prefix !== '') {
           settings = settings.filter((s) => s.key.startsWith(args.prefix!));
         }
 
@@ -173,7 +173,7 @@ Supports pagination via limit and offset parameters.`,
           {
             requestId,
             settingCount: formattedSettings.length,
-            prefix: args.prefix || null,
+            prefix: (args.prefix !== undefined && args.prefix !== '') ? args.prefix : null,
           },
           'Settings listed'
         );
@@ -188,7 +188,7 @@ Supports pagination via limit and offset parameters.`,
             has_more: offset + limit < totalCount,
           },
           filter: {
-            prefix: args.prefix || null,
+            prefix: (args.prefix !== undefined && args.prefix !== '') ? args.prefix : null,
           },
         });
       } catch (err) {

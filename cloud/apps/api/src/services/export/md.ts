@@ -87,7 +87,7 @@ export function serializeDefinitionToMd(mdDef: MDDefinition): string {
 
   // Preamble
   // Preamble (optional)
-  if (mdDef.preamble && mdDef.preamble.trim()) {
+  if (mdDef.preamble !== undefined && mdDef.preamble.trim() !== '') {
     lines.push('# Preamble');
     lines.push('');
     lines.push(mdDef.preamble);

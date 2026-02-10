@@ -28,7 +28,7 @@ export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Validate email format
  */
 export function validateEmail(email: string): void {
-  if (!email || !EMAIL_REGEX.test(email)) {
+  if (email === undefined || email === '' || !EMAIL_REGEX.test(email)) {
     throw new ValidationError('Invalid email format');
   }
 }
@@ -83,7 +83,7 @@ export async function createUser(
     data: {
       email: normalizedEmail,
       passwordHash,
-      name: name || null,
+      name: (name !== undefined && name !== '') ? name : undefined,
     },
     select: {
       id: true,
@@ -119,7 +119,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    log.error({ err }, 'Failed to create user');
+    log.error({ err: err as Error }, 'Failed to create user');
     process.exit(1);
   } finally {
     await db.$disconnect();
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
 const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMainModule) {
   main().catch((err) => {
-    log.error({ err }, 'Fatal error');
+    log.error({ err: err as Error }, 'Fatal error');
     process.exit(1);
   });
 }

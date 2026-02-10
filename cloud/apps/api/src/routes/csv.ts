@@ -11,7 +11,7 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 
-import { db } from '@valuerank/db';
+import { db, type Prisma } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 
 import {
@@ -57,7 +57,7 @@ csvRouter.get(
 
             // Handle Aggregate Runs
             // If aggregate, fetch transcripts from source runs
-            let transcriptWhere: any = { runId };
+            let transcriptWhere: Prisma.TranscriptWhereInput = { runId };
             const runConfig = run.config as { isAggregate?: boolean; sourceRunIds?: string[] } | null;
             if (runConfig !== null && runConfig?.isAggregate === true && Array.isArray(runConfig.sourceRunIds)) {
                 log.info({ runId, sourceRunIds: runConfig.sourceRunIds }, 'CSV feed for aggregate run');

@@ -221,7 +221,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Update global stats
         for (const [modelIdentifier, newStats] of Object.entries(stats)) {
           const dbModelId = modelIdMap.get(modelIdentifier);
-          if (!dbModelId) {
+          if (dbModelId === undefined || dbModelId === null || dbModelId === '') {
             log.warn({ modelIdentifier }, 'Model ID not found in database, skipping stats update');
             continue;
           }
@@ -239,7 +239,7 @@ export function createComputeTokenStatsHandler(): PgBoss.WorkHandler<ComputeToke
         // Update definition-specific stats
         for (const [modelIdentifier, newStats] of Object.entries(definitionStats)) {
           const dbModelId = modelIdMap.get(modelIdentifier);
-          if (!dbModelId) {
+          if (dbModelId === undefined || dbModelId === null || dbModelId === '') {
             log.warn({ modelIdentifier }, 'Model ID not found in database, skipping definition stats update');
             continue;
           }

@@ -52,10 +52,10 @@ export type RunWithProgress = Run & {
  * Create a new run.
  */
 export async function createRun(data: CreateRunInput): Promise<Run> {
-  if (!data.definitionId) {
+  if (data.definitionId === undefined || data.definitionId === null || data.definitionId === '') {
     throw new ValidationError('Definition ID is required', { field: 'definitionId' });
   }
-  if (!data.config) {
+  if (data.config === undefined || data.config === null) {
     throw new ValidationError('Run config is required', { field: 'config' });
   }
 
@@ -117,7 +117,7 @@ export async function getRunWithTranscripts(id: string): Promise<RunWithTranscri
 export async function getRunWithProgress(id: string): Promise<RunWithProgress> {
   const run = await getRunById(id);
   const parsedConfig = loadRunConfig(run.config);
-  const parsedProgress = run.progress ? (run.progress as unknown as RunProgress) : null;
+  const parsedProgress = (run.progress !== null && run.progress !== undefined) ? (run.progress as unknown as RunProgress) : null;
 
   return {
     ...run,
@@ -134,8 +134,8 @@ export async function listRuns(filters?: RunFilters): Promise<Run[]> {
 
   const where: Prisma.RunWhereInput = {};
 
-  if (filters?.definitionId) where.definitionId = filters.definitionId;
-  if (filters?.experimentId) where.experimentId = filters.experimentId;
+  if (filters?.definitionId !== undefined) where.definitionId = filters.definitionId;
+  if (filters?.experimentId !== undefined) where.experimentId = filters.experimentId;
   if (filters?.status) where.status = filters.status;
 
   return db.run.findMany({

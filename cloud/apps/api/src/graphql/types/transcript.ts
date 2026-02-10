@@ -35,7 +35,7 @@ builder.objectType(TranscriptRef, {
       type: RunRef,
       resolve: async (transcript, _args, ctx) => {
         const run = await ctx.loaders.run.load(transcript.runId);
-        if (!run) {
+        if (run === null || run === undefined) {
           throw new Error(`Run not found for transcript ${transcript.id}`);
         }
         return run;
@@ -47,7 +47,7 @@ builder.objectType(TranscriptRef, {
       type: ScenarioRef,
       nullable: true,
       resolve: async (transcript, _args, ctx) => {
-        if (!transcript.scenarioId) return null;
+        if (transcript.scenarioId === null || transcript.scenarioId === undefined || transcript.scenarioId === '') return null;
         return ctx.loaders.scenario.load(transcript.scenarioId);
       },
     }),
@@ -58,9 +58,9 @@ builder.objectType(TranscriptRef, {
       description: 'Estimated cost in dollars based on token usage and model pricing',
       resolve: (transcript) => {
         const content = transcript.content as Record<string, unknown> | null;
-        if (!content) return null;
+        if (content === null || content === undefined) return null;
         const costSnapshot = content.costSnapshot as Record<string, unknown> | null;
-        if (!costSnapshot) return null;
+        if (costSnapshot === null || costSnapshot === undefined) return null;
         const cost = costSnapshot.estimatedCost;
         return typeof cost === 'number' ? cost : null;
       },

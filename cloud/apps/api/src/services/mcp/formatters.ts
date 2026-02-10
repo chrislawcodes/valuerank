@@ -102,7 +102,7 @@ function safeJsonArray<T>(value: JsonValue | undefined, defaultValue: T[] = []):
 function safeJsonObject<T extends Record<string, unknown>>(
   value: JsonValue | undefined
 ): T | null {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (value !== null && value !== undefined && typeof value === 'object' && !Array.isArray(value)) {
     return value as T;
   }
   return null;
@@ -188,7 +188,7 @@ export function formatTranscriptSummary(
 
   // Extract key reasoning from decisionText if available
   const keyReasoning: string[] = [];
-  if (transcript.decisionText) {
+  if (transcript.decisionText !== null && transcript.decisionText !== '') {
     // Split decision text into key points (simple heuristic)
     const points = transcript.decisionText
       .split(/[.\n]/)
@@ -282,7 +282,7 @@ export function formatRunSummary(
   const perModel: Record<string, { sampleSize: number; meanScore: number; stdDev: number }> = {};
   if (output.perModel) {
     for (const [modelId, stats] of Object.entries(output.perModel)) {
-      if (stats) {
+      if (stats !== undefined) {
         perModel[modelId] = {
           sampleSize: typeof stats.sampleSize === 'number' ? stats.sampleSize : 0,
           meanScore: typeof stats.meanScore === 'number' ? stats.meanScore : 0,
@@ -327,7 +327,7 @@ export function formatRunSummary(
     },
     mostContestedScenarios: contested.slice(0, 5),
     ...(insights && { insights }),
-    ...(llmSummary && { llmSummary }),
+    ...(llmSummary !== undefined && { llmSummary }),
     analysisStatus: analysis.status === 'CURRENT' ? 'completed' : 'pending',
   };
 }

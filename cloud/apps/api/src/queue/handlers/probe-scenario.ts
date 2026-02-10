@@ -62,7 +62,7 @@ async function ensureHealthCheck(): Promise<void> {
   }
 
   // Health check in progress - wait for it
-  if (healthCheckPromise) {
+  if (healthCheckPromise !== null) {
     return healthCheckPromise;
   }
 
@@ -89,7 +89,7 @@ async function ensureHealthCheck(): Promise<void> {
 
     // Log health status
     const health = output.health;
-    if (health) {
+    if (health !== undefined) {
       log.info(
         {
           pythonVersion: health.pythonVersion,
@@ -346,12 +346,12 @@ async function buildWorkerInput(
     },
   };
 
-  if (modelInfo) {
+  if (modelInfo !== null) {
     input.modelCost = {
       costInputPerMillion: modelInfo.costInputPerMillion,
       costOutputPerMillion: modelInfo.costOutputPerMillion,
     };
-    if (modelInfo.apiConfig) {
+    if (modelInfo.apiConfig !== undefined) {
       input.modelConfig = modelInfo.apiConfig;
     }
   }
@@ -452,7 +452,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
 
     // Create transcript record with cost snapshot if model cost info available
     let costSnapshot: CostSnapshot | undefined;
-    if (workerInput.modelCost) {
+    if (workerInput.modelCost !== undefined) {
       const { costInputPerMillion, costOutputPerMillion } = workerInput.modelCost;
       const inputTokens = output.transcript.totalInputTokens;
       const outputTokens = output.transcript.totalOutputTokens;
@@ -627,7 +627,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
       );
 
       // If all jobs failed, throw the first error
-      if (failures.length === jobs.length && failures[0]) {
+      if (failures.length === jobs.length && failures[0] !== undefined) {
         throw failures[0].reason;
       }
 

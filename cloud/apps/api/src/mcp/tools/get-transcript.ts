@@ -90,7 +90,7 @@ function extractTurns(content: unknown): TranscriptTurn[] {
   if (!Array.isArray(turns)) return [];
 
   return turns.map((turn) => {
-    if (!turn || typeof turn !== 'object') {
+    if (turn === undefined || turn === null || typeof turn !== 'object') {
       return {
         turnNumber: 0,
         promptLabel: '',
@@ -132,7 +132,7 @@ function extractCostSnapshot(content: unknown): CostSnapshot | undefined {
   const obj = content as Record<string, unknown>;
   const costSnapshot = obj.costSnapshot;
 
-  if (!costSnapshot || typeof costSnapshot !== 'object') return undefined;
+  if (costSnapshot === undefined || costSnapshot === null || typeof costSnapshot !== 'object') return undefined;
 
   const cs = costSnapshot as Record<string, unknown>;
   return {

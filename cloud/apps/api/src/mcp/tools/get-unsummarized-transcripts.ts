@@ -117,8 +117,8 @@ how many exist even if only 'limit' are returned.`,
           ...(includeFailed
             ? {}
             : {
-                OR: [{ decisionCode: null }, { decisionCode: { not: 'error' } }],
-              }),
+              OR: [{ decisionCode: null }, { decisionCode: { not: 'error' } }],
+            }),
         };
 
         // Get total count
@@ -176,7 +176,7 @@ how many exist even if only 'limit' are returned.`,
             model_id: t.modelId,
             scenario_id: t.scenarioId,
             created_at: t.createdAt.toISOString(),
-            ...(includeFailed && t.decisionCode ? { decision_code: t.decisionCode } : {}),
+            ...(includeFailed && t.decisionCode !== null && t.decisionCode !== '' ? { decision_code: t.decisionCode } : {}),
           })),
         });
       } catch (err) {

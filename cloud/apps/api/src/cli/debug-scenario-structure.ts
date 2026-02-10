@@ -30,7 +30,7 @@ async function main() {
 
 void main()
     .catch((err) => {
-        log.error({ err }, 'Failed to debug scenario structure');
+        log.error({ err: err as Error }, 'Failed to debug scenario structure');
     })
     .finally(() => {
         void db.$disconnect();

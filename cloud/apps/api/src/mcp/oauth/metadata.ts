@@ -17,9 +17,9 @@ const log = createLogger('mcp:oauth:metadata');
  * Get the base URL from request, handling proxies
  */
 export function getBaseUrl(req: Request): string {
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  return `${protocol}://${host}`;
+  const protocol = (typeof req.headers['x-forwarded-proto'] === 'string' ? req.headers['x-forwarded-proto'] : undefined) ?? req.protocol;
+  const host = (typeof req.headers['x-forwarded-host'] === 'string' ? req.headers['x-forwarded-host'] : undefined) ?? req.headers.host;
+  return `${protocol}://${host ?? ''}`;
 }
 
 /**
@@ -80,11 +80,11 @@ export function buildWwwAuthenticateHeader(req: Request, error?: string, errorDe
 
   let header = `Bearer resource="${resourceUri}"`;
 
-  if (error) {
+  if (error !== undefined && error !== '') {
     header += `, error="${error}"`;
   }
 
-  if (errorDescription) {
+  if (errorDescription !== undefined && errorDescription !== '') {
     header += `, error_description="${errorDescription}"`;
   }
 

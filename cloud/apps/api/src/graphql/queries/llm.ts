@@ -93,8 +93,8 @@ builder.queryField('llmModels', (t) =>
         status?: LlmModelStatus;
       } = {};
 
-      if (args.providerId) where.providerId = args.providerId;
-      if (args.status) where.status = args.status as LlmModelStatus;
+      if (args.providerId !== undefined && args.providerId !== null && args.providerId !== '') where.providerId = args.providerId;
+      if (args.status !== undefined && args.status !== null && args.status !== '') where.status = args.status as LlmModelStatus;
 
       const models = await db.llmModel.findMany({
         where,
@@ -232,7 +232,7 @@ builder.queryField('infraModel', (t) =>
       if (!setting) return null;
 
       const value = setting.value as { modelId?: string; providerId?: string };
-      if (!value.modelId || !value.providerId) return null;
+      if (value.modelId === undefined || value.modelId === '' || value.providerId === undefined || value.providerId === '') return null;
 
       const provider = await db.llmProvider.findUnique({
         where: { name: value.providerId },

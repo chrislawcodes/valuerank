@@ -85,8 +85,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Login failed' }));
-      throw new Error(error.message || 'Invalid credentials');
+      const error = (await response.json().catch(() => ({ message: 'Login failed' }))) as { message?: string };
+      throw new Error(error.message ?? 'Invalid credentials');
     }
 
     const data = (await response.json()) as LoginResponse;

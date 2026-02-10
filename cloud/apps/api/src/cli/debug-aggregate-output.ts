@@ -73,7 +73,7 @@ async function main() {
 
 void main()
     .catch((err) => {
-        log.error({ err }, 'Failed to debug aggregate output');
+        log.error({ err: err as Error }, 'Failed to debug aggregate output');
     })
     .finally(() => {
         void db.$disconnect();

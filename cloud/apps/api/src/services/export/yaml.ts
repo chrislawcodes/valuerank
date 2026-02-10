@@ -43,7 +43,7 @@ function scenarioToCLI(
 
   // Build subject from scenario name or dimension values
   let subject = scenario.name;
-  if (!subject && content.dimension_values) {
+  if ((subject === null || subject === '') && content.dimension_values !== null && content.dimension_values !== undefined) {
     const parts: string[] = [];
     for (const [dim, val] of Object.entries(content.dimension_values)) {
       parts.push(`${dim}=${val}`);
@@ -112,7 +112,7 @@ export function serializeScenariosToYaml(
   }
 
   const yamlData: CLIScenarioFile = {
-    ...(content.preamble ? { preamble: content.preamble } : {}),
+    ...(content.preamble !== undefined && content.preamble !== '' ? { preamble: content.preamble } : {}),
     scenarios: scenariosMap,
   };
 

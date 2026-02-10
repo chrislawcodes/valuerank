@@ -92,7 +92,7 @@ builder.mutationField('createDefinition', (t) =>
       }
 
       // Verify preamble version if provided
-      if (preambleVersionId) {
+      if (preambleVersionId !== null && preambleVersionId !== undefined && preambleVersionId !== '') {
         const preambleCheck = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
         if (!preambleCheck) {
           throw new Error(`Preamble version not found: ${preambleVersionId}`);
@@ -170,7 +170,7 @@ builder.mutationField('forkDefinition', (t) =>
     resolve: async (_root, args, ctx) => {
       const { parentId, name, content, inheritAll = true } = args.input;
 
-      ctx.log.debug({ parentId, name, inheritAll, hasContent: !!content }, 'Forking definition');
+      ctx.log.debug({ parentId, name, inheritAll, hasContent: content !== null && content !== undefined }, 'Forking definition');
 
       // Fetch parent - required for fork
       const parent = await db.definition.findUnique({
@@ -311,7 +311,7 @@ builder.mutationField('updateDefinition', (t) =>
       const { id, input } = args;
       const { name, content, preambleVersionId } = input;
 
-      ctx.log.debug({ definitionId: id, hasName: !!name, hasContent: !!content, hasPreamble: preambleVersionId !== undefined }, 'Updating definition');
+      ctx.log.debug({ definitionId: id, hasName: name !== null && name !== undefined, hasContent: content !== null && content !== undefined, hasPreamble: preambleVersionId !== undefined }, 'Updating definition');
 
       // Check if definition exists
       const existing = await db.definition.findUnique({

@@ -112,7 +112,7 @@ export async function getAllModels(filters?: {
   log.debug({ filters }, 'Fetching all models');
 
   const where: Prisma.LlmModelWhereInput = {};
-  if (filters?.providerId) where.providerId = filters.providerId;
+  if (filters?.providerId !== undefined && filters?.providerId !== null && filters?.providerId !== '') where.providerId = filters.providerId;
   if (filters?.status) where.status = filters.status;
 
   return db.llmModel.findMany({
@@ -131,7 +131,7 @@ export async function getAllModelsWithProvider(filters?: {
   log.debug({ filters }, 'Fetching all models with providers');
 
   const where: Prisma.LlmModelWhereInput = {};
-  if (filters?.providerId) where.providerId = filters.providerId;
+  if (filters?.providerId !== undefined && filters?.providerId !== null && filters?.providerId !== '') where.providerId = filters.providerId;
   if (filters?.status) where.status = filters.status;
 
   return db.llmModel.findMany({
@@ -364,7 +364,8 @@ export async function getInfraModel(purpose: string): Promise<LlmModelWithProvid
   if (!setting) return null;
 
   const value = setting.value as { modelId?: string; providerId?: string };
-  if (!value.modelId || !value.providerId) return null;
+  if (value.modelId === undefined || value.modelId === null || value.modelId === '' ||
+    value.providerId === undefined || value.providerId === null || value.providerId === '') return null;
 
   const provider = await getProviderByName(value.providerId);
   if (!provider) return null;

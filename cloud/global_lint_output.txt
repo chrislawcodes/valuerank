@@ -1,0 +1,453 @@
+turbo 2.6.3
+
+• Packages in scope: @valuerank/api, @valuerank/db, @valuerank/shared, @valuerank/web
+• Running lint in 4 packages
+• Remote caching disabled
+@valuerank/shared:lint: cache miss, executing 5824d02d41db363f
+@valuerank/shared:lint: 
+@valuerank/shared:lint: > @valuerank/shared@0.1.0 lint
+@valuerank/shared:lint: > eslint src --ext .ts
+@valuerank/shared:lint: 
+@valuerank/shared:build: cache miss, executing 26722bd445614543
+@valuerank/shared:build: 
+@valuerank/shared:build: > @valuerank/shared@0.1.0 build
+@valuerank/shared:build: > tsc
+@valuerank/shared:build: 
+@valuerank/web:lint: cache miss, executing d64d72df67baf8c8
+@valuerank/db:lint: cache miss, executing 5298913503f852c8
+@valuerank/db:lint: 
+@valuerank/db:lint: > @valuerank/db@0.1.0 lint
+@valuerank/db:lint: > eslint src --ext .ts
+@valuerank/db:lint: 
+@valuerank/web:lint: 
+@valuerank/web:lint: > @valuerank/web@0.1.0 lint
+@valuerank/web:lint: > eslint src --ext .ts,.tsx
+@valuerank/web:lint: 
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/client.ts
+@valuerank/db:lint:   16:19  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/queries/analysis.ts
+@valuerank/db:lint:   123:7  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/queries/definitions.ts
+@valuerank/db:lint:    87:8   warning  Unexpected object value in conditional. The condition is always true                               @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:    91:44  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   254:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   409:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/queries/llm.ts
+@valuerank/db:lint:   115:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   134:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   367:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   367:26  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/queries/runs.ts
+@valuerank/db:lint:    58:8   warning  Unexpected object value in conditional. The condition is always true                               @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   120:26  warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   137:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   138:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/queries/transcripts.ts
+@valuerank/db:lint:    60:8  warning  Unexpected object value in conditional. The condition is always true                               @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   184:7  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   185:7  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   186:7  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: /Users/chrislaw/valuerank/cloud/packages/db/src/schema-migration.ts
+@valuerank/db:lint:    72:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   215:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   246:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   276:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   306:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   335:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint:   363:8  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/db:lint: 
+@valuerank/db:lint: ✖ 25 problems (0 errors, 25 warnings)
+@valuerank/db:lint: 
+@valuerank/db:build: cache miss, executing 332cf9c158f159c4
+@valuerank/db:build: 
+@valuerank/db:build: > @valuerank/db@0.1.0 build
+@valuerank/db:build: > prisma generate && tsc
+@valuerank/db:build: 
+@valuerank/db:build: Prisma schema loaded from prisma/schema.prisma
+@valuerank/db:build: 
+@valuerank/db:build: ✔ Generated Prisma Client (v5.22.0) to ./../../node_modules/@prisma/client in 104ms
+@valuerank/db:build: 
+@valuerank/db:build: Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+@valuerank/db:build: 
+@valuerank/db:build: Tip: Easily identify and fix slow SQL queries in your app. Optimize helps you enhance your visibility: https://pris.ly/--optimize
+@valuerank/db:build: 
+@valuerank/api:lint: cache miss, executing 9960e12af601d50a
+@valuerank/api:lint: 
+@valuerank/api:lint: > @valuerank/api@0.1.0 lint
+@valuerank/api:lint: > eslint src --ext .ts
+@valuerank/api:lint: 
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/auth/context.tsx
+@valuerank/web:lint:   88:13  warning  Unsafe assignment of an `any` value                                                 @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   89:23  warning  Unsafe argument of type `any` assigned to a parameter of type `string | undefined`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   89:29  warning  Unsafe member access .message on an `any` value                                     @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/definitions/TemplateEditor.tsx
+@valuerank/web:lint:    24:30  warning  'any' overrides all other types in this union type                           @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:    65:7   warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:    97:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   124:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   135:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint:   176:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   176:30  warning  Unsafe member access .MarkerSeverity on an `any` value                       @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   186:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   186:14  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptList.tsx
+@valuerank/web:lint:   161:6  warning  React Hook useMemo has a missing dependency: 'sortTranscriptsByAttributes'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+@valuerank/web:lint:   187:6  warning  React Hook useMemo has a missing dependency: 'sortTranscriptsByAttributes'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/settings/ApiKeysPanel.tsx
+@valuerank/web:lint:   248:5  warning  Unexpected `await` of a non-Promise (non-"Thenable") value  @typescript-eslint/await-thenable
+@valuerank/web:lint: 
+@valuerank/web:lint: /Users/chrislaw/valuerank/cloud/apps/web/src/components/ui/JsonEditor.tsx
+@valuerank/web:lint:    95:28  warning  'any' overrides all other types in this union type                           @typescript-eslint/no-redundant-type-constituents
+@valuerank/web:lint:   101:5   warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   105:7   warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   105:14  warning  Unsafe member access .languages on an `any` value                            @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   142:13  warning  Unsafe assignment of an `any` value                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/web:lint:   142:30  warning  Unsafe call of an `any` typed value                                          @typescript-eslint/no-unsafe-call
+@valuerank/web:lint:   142:37  warning  Unsafe member access .editor on an `any` value                               @typescript-eslint/no-unsafe-member-access
+@valuerank/web:lint:   147:35  warning  Unsafe argument of type `any` assigned to a parameter of type `IDisposable`  @typescript-eslint/no-unsafe-argument
+@valuerank/web:lint: 
+@valuerank/web:lint: ✖ 23 problems (0 errors, 23 warnings)
+@valuerank/web:lint: 
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/auth/middleware.ts
+@valuerank/api:lint:    54:7   warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   205:18  warning  Unsafe assignment of an `any` value                                                          @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/cli/create-user.ts
+@valuerank/api:lint:    86:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   133:17  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/cli/debug-aggregate-output.ts
+@valuerank/api:lint:   76:21  warning  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/cli/debug-scenario-structure.ts
+@valuerank/api:lint:   33:21  warning  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/cli/ensure-user.ts
+@valuerank/api:lint:   14:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   27:66  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   45:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   50:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   63:17  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/cli/recompute-aggregates.ts
+@valuerank/api:lint:    19:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   108:21  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/config/models.ts
+@valuerank/api:lint:   127:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   238:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   238:23  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   246:39  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/dataloaders/transcript.ts
+@valuerank/api:lint:   95:26  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/index.ts
+@valuerank/api:lint:    45:15  warning  Unsafe array destructuring of a tuple element with an `any` value                     @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:    45:25  warning  Unsafe array destructuring of a tuple element with an `any` value                     @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:    48:41  warning  Unsafe argument of type `any` assigned to a parameter of type `DocumentNode`          @typescript-eslint/no-unsafe-argument
+@valuerank/api:lint:    61:13  warning  Unsafe assignment of an `any` value                                                   @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:    62:10  warning  Unsafe call of an `any` typed value                                                   @typescript-eslint/no-unsafe-call
+@valuerank/api:lint:    62:19  warning  Unsafe member access .definitions on an `any` value                                   @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:    69:11  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   134:12  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/mutations/definition.ts
+@valuerank/api:lint:    95:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   173:65  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   314:52  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   314:72  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/audit-log.ts
+@valuerank/api:lint:    36:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    39:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    42:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    45:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   110:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/definition.ts
+@valuerank/api:lint:   156:11  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   344:11  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   348:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   388:11  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/final-trial-plan.ts
+@valuerank/api:lint:   25:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+@valuerank/api:lint:   32:34  warning  Unsafe return of an `any[]` typed value   @typescript-eslint/no-unsafe-return
+@valuerank/api:lint:   40:13  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+@valuerank/api:lint:   47:34  warning  Unsafe return of an `any[]` typed value   @typescript-eslint/no-unsafe-return
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/llm.ts
+@valuerank/api:lint:    96:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    97:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   235:12  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   235:30  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/run.ts
+@valuerank/api:lint:   124:40  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   130:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   271:40  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   277:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/queries/tag.ts
+@valuerank/api:lint:   33:21  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   94:21  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/analysis.ts
+@valuerank/api:lint:   139:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/audit-log.ts
+@valuerank/api:lint:   117:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/cost-estimate.ts
+@valuerank/api:lint:   238:38  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   238:51  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   325:16  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   340:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   395:39  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/definition.ts
+@valuerank/api:lint:   181:35  warning  Async method 'resolve' has no 'await' expression         @typescript-eslint/require-await
+@valuerank/api:lint:   183:9   warning  Unsafe return of an `any` typed value                    @typescript-eslint/no-unsafe-return
+@valuerank/api:lint:   183:16  warning  Unsafe call of an `any` typed value                      @typescript-eslint/no-unsafe-call
+@valuerank/api:lint:   183:23  warning  Unexpected any. Specify a different type                 @typescript-eslint/no-explicit-any
+@valuerank/api:lint:   183:28  warning  Unsafe member access .preambleVersion on an `any` value  @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/llm-model.ts
+@valuerank/api:lint:   50:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/run.ts
+@valuerank/api:lint:   320:30  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/tag.ts
+@valuerank/api:lint:   26:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/transcript.ts
+@valuerank/api:lint:   50:14  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/graphql/utils/audited-mutation.ts
+@valuerank/api:lint:   70:11  warning  Unexpected object value in conditional. The condition is always true  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   92:23  warning  Unsafe assignment of an `any` value                                   @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/index.ts
+@valuerank/api:lint:   50:15  warning  Unsafe assignment of an `any` value  @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/auth.ts
+@valuerank/api:lint:   42:7  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   86:7  warning  Unexpected value in conditional. A boolean expression is required                            @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/index.ts
+@valuerank/api:lint:    68:37  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    92:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   142:10  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/oauth/metadata.ts
+@valuerank/api:lint:   20:20  warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   21:16  warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   22:13  warning  Invalid type "string | string[]" of template literal expression                                    @typescript-eslint/restrict-template-expressions
+@valuerank/api:lint:   22:27  warning  Invalid type "string | string[] | undefined" of template literal expression                        @typescript-eslint/restrict-template-expressions
+@valuerank/api:lint:   83:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   87:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/oauth/router.ts
+@valuerank/api:lint:    44:17  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:    46:58  warning  Unsafe argument of type `any` assigned to a parameter of type `Record<string, unknown>`            @typescript-eslint/no-unsafe-argument
+@valuerank/api:lint:    46:58  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   111:15  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   178:35  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   179:34  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   185:48  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   186:48  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   226:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   238:11  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   238:18  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   239:16  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   239:42  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   239:47  warning  Unsafe member access .api_key on an `any` value                                                    @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   243:27  warning  Unsafe member access .response_type on an `any` value                                              @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   244:23  warning  Unsafe member access .client_id on an `any` value                                                  @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   245:26  warning  Unsafe member access .redirect_uri on an `any` value                                               @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   246:19  warning  Unsafe member access .scope on an `any` value                                                      @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   247:19  warning  Unsafe member access .state on an `any` value                                                      @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   248:28  warning  Unsafe member access .code_challenge on an `any` value                                             @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   249:35  warning  Unsafe member access .code_challenge_method on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   250:22  warning  Unsafe member access .resource on an `any` value                                                   @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   274:11  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   274:25  warning  Unsafe member access .api_key on an `any` value                                                    @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   275:10  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   283:40  warning  Unsafe argument of type `any` assigned to a parameter of type `string`                             @typescript-eslint/no-unsafe-argument
+@valuerank/api:lint:   307:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   320:11  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   320:18  warning  Unexpected any value in conditional. An explicit comparison or type cast is required               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   321:17  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   321:33  warning  Unsafe member access .grant_type on an `any` value                                                 @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   321:45  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   321:60  warning  Unsafe member access .client_id on an `any` value                                                  @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   323:45  warning  Unsafe argument of type `any` assigned to a parameter of type `Record<string, unknown>`            @typescript-eslint/no-unsafe-argument
+@valuerank/api:lint:   352:11  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly        @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   361:12  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/oauth/storage.ts
+@valuerank/api:lint:   221:19  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   328:11  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/oauth/tokens.ts
+@valuerank/api:lint:   21:8  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/deprecate-llm-model.ts
+@valuerank/api:lint:   140:34  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-dimension-analysis.ts
+@valuerank/api:lint:    48:7   warning  Unexpected any value in conditional. An explicit comparison or type cast is required                  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   111:24  warning  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   112:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly     @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-job-queue-status.ts
+@valuerank/api:lint:   113:11  warning  Unsafe assignment of an `any` value                                   @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   116:15  warning  Unexpected object value in conditional. The condition is always true  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-llm-model.ts
+@valuerank/api:lint:    31:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    33:12  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   122:25  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   123:33  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   123:57  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   129:55  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   129:87  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-transcript-summary.ts
+@valuerank/api:lint:    70:8   warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    87:8   warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    95:11  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   124:14  warning  Unexpected any. Specify a different type                                              @typescript-eslint/no-explicit-any
+@valuerank/api:lint:   127:19  warning  Unexpected any. Specify a different type                                              @typescript-eslint/no-explicit-any
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-transcript.ts
+@valuerank/api:lint:    93:10  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   135:8   warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/get-unsummarized-transcripts.ts
+@valuerank/api:lint:   179:34  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/graphql-query.ts
+@valuerank/api:lint:   38:16  warning  The two values in this comparison do not have a shared enum type  @typescript-eslint/no-unsafe-enum-comparison
+@valuerank/api:lint:   38:54  warning  The two values in this comparison do not have a shared enum type  @typescript-eslint/no-unsafe-enum-comparison
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/list-definitions.ts
+@valuerank/api:lint:   78:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/list-llm-models.ts
+@valuerank/api:lint:   32:12  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/list-system-settings.ts
+@valuerank/api:lint:   120:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   155:13  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   176:21  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   191:21  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/set-default-llm-model.ts
+@valuerank/api:lint:   156:39  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/mcp/tools/update-llm-model.ts
+@valuerank/api:lint:   124:29  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/queue/handlers/compute-token-stats.ts
+@valuerank/api:lint:   224:16  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   242:16  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/queue/spawn.ts
+@valuerank/api:lint:    55:11  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:    56:16  warning  Unsafe member access .type on an `any` value                                                       @typescript-eslint/no-unsafe-member-access
+@valuerank/api:lint:   138:24  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   145:26  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   171:24  warning  Unsafe assignment of an `any` value                                                                @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   210:42  warning  Invalid type "unknown" of template literal expression                                              @typescript-eslint/restrict-template-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/routes/csv.ts
+@valuerank/api:lint:   60:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+@valuerank/api:lint:   69:17  warning  Unsafe assignment of an `any` value       @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/trigger.ts
+@valuerank/api:lint:   59:8  warning  Unexpected object value in conditional. The condition is always true  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/audit/query.ts
+@valuerank/api:lint:   31:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   35:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   54:18  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/cost/estimate.ts
+@valuerank/api:lint:   285:10  warning  Unexpected object value in conditional. The condition is always true  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/export/csv.ts
+@valuerank/api:lint:   128:16  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/export/md.ts
+@valuerank/api:lint:   90:7  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/export/xlsx/pivotTable.ts
+@valuerank/api:lint:   351:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   351:22  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   427:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/export/yaml.ts
+@valuerank/api:lint:    46:19  warning  Unexpected object value in conditional. The condition is always true                               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   115:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/health/providers.ts
+@valuerank/api:lint:   217:8  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/import/md.ts
+@valuerank/api:lint:    36:18  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    36:30  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:    78:24  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   113:10  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   131:34  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   131:46  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   191:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/import/validation.ts
+@valuerank/api:lint:   149:7  warning  Unexpected nullable boolean value in conditional. Please handle the nullish case explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/infra-models.ts
+@valuerank/api:lint:   44:8   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   44:26  warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/mcp/formatters.ts
+@valuerank/api:lint:   105:7   warning  Unexpected value in conditional. A boolean expression is required                                  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   191:7   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   285:11  warning  Unexpected object value in conditional. The condition is always true                               @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   330:9   warning  Unexpected nullable string value in conditional. Please handle the nullish/empty cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/rate-limiter/index.ts
+@valuerank/api:lint:    98:22  warning  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   115:34  warning  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   128:27  warning  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   135:7   warning  Unexpected nullable number value in conditional. Please handle the nullish/zero/NaN cases explicitly  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint:   244:41  warning  Unsafe assignment of an `any` value                                                                   @typescript-eslint/no-unsafe-assignment
+@valuerank/api:lint:   478:8   warning  Async function 'getLimiterStats' has no 'await' expression                                            @typescript-eslint/require-await
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/run/scheduler.ts
+@valuerank/api:lint:   107:34  warning  Promise returned in function argument where a void return was expected  @typescript-eslint/no-misused-promises
+@valuerank/api:lint: 
+@valuerank/api:lint: /Users/chrislaw/valuerank/cloud/apps/api/src/services/transcript/create.ts
+@valuerank/api:lint:   144:10  warning  Unexpected any value in conditional. An explicit comparison or type cast is required  @typescript-eslint/strict-boolean-expressions
+@valuerank/api:lint: 
+@valuerank/api:lint: ✖ 198 problems (0 errors, 198 warnings)
+@valuerank/api:lint: 
+
+ Tasks:    6 successful, 6 total
+Cached:    0 cached, 6 total
+  Time:    12.693s 
+

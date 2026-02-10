@@ -24,34 +24,34 @@ export async function queryAuditLogs(
 ): Promise<AuditLogQueryResult> {
   const where: Prisma.AuditLogWhereInput = {};
 
-  if (filters?.entityType) {
+  if (filters?.entityType !== undefined) {
     where.entityType = filters.entityType;
   }
 
-  if (filters?.entityId) {
+  if (filters?.entityId !== undefined) {
     where.entityId = filters.entityId;
   }
 
-  if (filters?.userId) {
+  if (filters?.userId !== undefined) {
     where.userId = filters.userId;
   }
 
-  if (filters?.action) {
+  if (filters?.action !== undefined) {
     where.action = filters.action;
   }
 
   if (filters?.from || filters?.to) {
     where.createdAt = {};
-    if (filters.from) {
+    if (filters.from !== undefined) {
       where.createdAt.gte = filters.from;
     }
-    if (filters.to) {
+    if (filters.to !== undefined) {
       where.createdAt.lte = filters.to;
     }
   }
 
   const take = pagination?.first ?? 50;
-  const cursor = pagination?.after ? { id: pagination.after } : undefined;
+  const cursor = (pagination?.after !== undefined && pagination.after !== null) ? { id: pagination.after } : undefined;
 
   const logs = await db.auditLog.findMany({
     where,
