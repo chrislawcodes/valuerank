@@ -314,32 +314,45 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
   const displayWarnings = useMemo<AnalysisWarning[]>(() => {
     if (!analysis) return [];
 
-    const sampleWarningCodes = new Set(['SMALL_SAMPLE', 'MODERATE_SAMPLE']);
-    const sampleWarnings = analysis.warnings.filter(w => sampleWarningCodes.has(w.code));
+    const isSampleWarning = (code: string) =>
+      code === 'SMALL_SAMPLE' ||
+      code === 'MODERATE_SAMPLE' ||
+      code.includes('SMALL_SAMPLE') ||
+      code.includes('MODERATE_SAMPLE');
+
+    const sampleWarnings = analysis.warnings.filter(w => isSampleWarning(w.code));
 
     const lowSampleModels = Object.entries(analysis.perModel)
       .map(([modelId, stats]) => ({ modelId, sampleSize: stats.sampleSize }))
       .filter(m => m.sampleSize < 25)
       .sort((a, b) => a.sampleSize - b.sampleSize);
 
-    // If there are no <25-sample models (per current definition), leave warnings untouched.
-    // If there are sample warnings, collapse them into a single banner to avoid repetition.
-    if (lowSampleModels.length === 0 || sampleWarnings.length === 0) return analysis.warnings;
+    const moderateSampleModels = Object.entries(analysis.perModel)
+      .map(([modelId, stats]) => ({ modelId, sampleSize: stats.sampleSize }))
+      .filter(m => m.sampleSize < 30)
+      .sort((a, b) => a.sampleSize - b.sampleSize);
 
-    const nonSampleWarnings = analysis.warnings.filter(w => !sampleWarningCodes.has(w.code));
+    // Collapse repeated per-model sample warnings into one banner.
+    // (The backend can emit one warning per model; we only want one in the UI.)
+    if (sampleWarnings.length <= 1) return analysis.warnings;
+
+    const nonSampleWarnings = analysis.warnings.filter(w => !isSampleWarning(w.code));
+
+    const threshold = lowSampleModels.length > 0 ? 25 : 30;
+    const modelsBelowThreshold = threshold === 25 ? lowSampleModels : moderateSampleModels;
 
     const maxModelsToShow = 5;
-    const shown = lowSampleModels
+    const shown = modelsBelowThreshold
       .slice(0, maxModelsToShow)
       .map(m => `${m.modelId} (n=${m.sampleSize})`)
       .join(', ');
-    const moreCount = Math.max(0, lowSampleModels.length - maxModelsToShow);
+    const moreCount = Math.max(0, modelsBelowThreshold.length - maxModelsToShow);
     const moreSuffix = moreCount > 0 ? ` (+${moreCount} more)` : '';
 
     const consolidated: AnalysisWarning = {
       code: 'SMALL_SAMPLE_CONSOLIDATED',
-      message: 'Some models have <25 samples; results may be unstable.',
-      recommendation: `Models <25: ${shown}${moreSuffix}`,
+      message: `Some models have <${threshold} samples; results may be unstable.`,
+      recommendation: `Models <${threshold}: ${shown}${moreSuffix}`,
     };
 
     return [consolidated, ...nonSampleWarnings];

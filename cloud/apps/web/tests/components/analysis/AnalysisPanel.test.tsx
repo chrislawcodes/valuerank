@@ -382,6 +382,46 @@ describe('AnalysisPanel', () => {
     expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
   });
 
+  it('consolidates repeated sample warnings even when no model is <25 (uses <30)', () => {
+    const analysis = createMockAnalysis({
+      perModel: {
+        'gpt-4': {
+          sampleSize: 26,
+          values: {},
+          overall: { mean: 0.7, stdDev: 0.15, min: 0.4, max: 0.9 },
+        },
+        'claude-3': {
+          sampleSize: 29,
+          values: {},
+          overall: { mean: 0.65, stdDev: 0.12, min: 0.45, max: 0.85 },
+        },
+      },
+      warnings: [
+        { code: 'MODERATE_SAMPLE', message: 'Model gpt-4 has 26 samples', recommendation: 'Consider using bootstrap confidence intervals' },
+        { code: 'MODERATE_SAMPLE', message: 'Model claude-3 has 29 samples', recommendation: 'Consider using bootstrap confidence intervals' },
+      ],
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Some models have <30 samples; results may be unstable.')).toBeInTheDocument();
+    expect(screen.getByText('Models <30: gpt-4 (n=26), claude-3 (n=29)')).toBeInTheDocument();
+    expect(screen.queryByText(/Model gpt-4 has 26 samples/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model claude-3 has 29 samples/)).not.toBeInTheDocument();
+  });
+
   it('renders recompute button', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
