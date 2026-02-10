@@ -3,10 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-
-defaults:
-  run:
-    working-directory: cloud
+  push:
+    branches: [main]
 
 jobs:
   test:
@@ -19,19 +17,20 @@ jobs:
         env:
           POSTGRES_USER: valuerank
           POSTGRES_PASSWORD: valuerank
-          POSTGRES_DB: valuerank
+          POSTGRES_DB: valuerank_test
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U valuerank -d valuerank"
-          --health-interval 5s
+          --health-cmd pg_isready
+          --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://valuerank:valuerank@localhost:5432/valuerank_test
-      DIRECT_URL: postgresql://valuerank:valuerank@localhost:5432/valuerank_test
+      DATABASE_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
+      DIRECT_URL: postgresql://valuerank:valuerank@localhost:5433/valuerank_test
       JWT_SECRET: test-secret-that-is-at-least-32-characters-long
+      NODE_ENV: test
 
     steps:
       - uses: actions/checkout@v4
@@ -42,14 +41,28 @@ jobs:
           cache: npm
           cache-dependency-path: cloud/package-lock.json
 
-      - name: Create test database
-        run: PGPASSWORD=valuerank psql -h localhost -U valuerank -d valuerank -c "CREATE DATABASE valuerank_test;"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: cloud/workers/requirements.txt
 
-      - name: Install dependencies
+      - name: Install Node dependencies
+        working-directory: cloud
         run: npm ci
 
-      - name: Push schema to test database
-        run: npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate
+      - name: Install Python dependencies
+        working-directory: cloud/workers
+        run: pip install -r requirements.txt
 
-      - name: Lint, Build & Test
-        run: npx turbo lint build test --force
+      - name: Setup test database schema
+        working-directory: cloud
+        run: npm run db:test:setup
+
+      - name: Lint, Build, Test (Node)
+        working-directory: cloud
+        run: npx turbo lint build test
+
+      - name: Test workers (Python)
+        working-directory: cloud/workers
+        run: pytest
