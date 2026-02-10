@@ -65,4 +65,7 @@ jobs:
 
       - name: Test workers (Python)
         working-directory: cloud/workers
+        env:
+          # Ensure local modules (common/, stats/, etc) are importable in CI.
+          PYTHONPATH: ${{ github.workspace }}/cloud/workers
         run: pytest
