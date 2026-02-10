@@ -18,6 +18,7 @@ function createMockTranscript(overrides: Partial<Transcript> = {}): Transcript {
     modelId: 'gpt-4',
     modelVersion: 'gpt-4-0125-preview',
     content: { turns: [] },
+    decisionCode: '3',
     turnCount: 2,
     tokenCount: 100,
     durationMs: 1500,
@@ -71,14 +72,14 @@ describe('TranscriptList', () => {
 
     render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
 
-    // Initially collapsed - scenario not visible
-    expect(screen.queryByText(/Scenario:/)).not.toBeInTheDocument();
+    // Initially collapsed - row content not visible
+    expect(screen.queryByText('test-sce')).not.toBeInTheDocument();
 
     // Click to expand
     await user.click(screen.getByText('gpt-4'));
 
     // Now scenario should be visible
-    expect(screen.getByText(/Scenario:/)).toBeInTheDocument();
+    expect(screen.getByText('test-sce')).toBeInTheDocument();
   });
 
   it('collapses model group when clicked again', async () => {
@@ -89,13 +90,13 @@ describe('TranscriptList', () => {
 
     // Expand
     await user.click(screen.getByText('gpt-4'));
-    expect(screen.getByText(/Scenario:/)).toBeInTheDocument();
+    expect(screen.getByText('test-sce')).toBeInTheDocument();
 
     // Collapse - use getAllByText since the model name also appears in the expanded transcript row
     const gpt4Elements = screen.getAllByText('gpt-4');
     // The first match is the model group header button
     await user.click(gpt4Elements[0]);
-    expect(screen.queryByText(/Scenario:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('test-sce')).not.toBeInTheDocument();
   });
 
   it('calls onSelect when transcript is clicked', async () => {
@@ -108,7 +109,7 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
 
     // Click transcript
-    await user.click(screen.getByText(/Scenario:/));
+    await user.click(screen.getByText('scenario'));
 
     expect(mockOnSelect).toHaveBeenCalledWith(transcript);
   });
@@ -173,7 +174,7 @@ describe('TranscriptList', () => {
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByTitle('Decision')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('shows token count in transcript row', async () => {
@@ -184,7 +185,6 @@ describe('TranscriptList', () => {
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByTitle('Tokens')).toBeInTheDocument();
     expect(screen.getByText('1,234')).toBeInTheDocument();
   });
 
@@ -196,7 +196,7 @@ describe('TranscriptList', () => {
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByTitle('Created at')).toBeInTheDocument();
+    expect(screen.getByText(/\d{2}:\d{2}:\d{2} [AP]M/)).toBeInTheDocument();
   });
 
   it('handles transcript without scenario ID', async () => {
@@ -221,6 +221,45 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
 
     // Should show truncated version
-    expect(screen.getByText(/Scenario: very-lon\.\.\./)).toBeInTheDocument();
+    expect(screen.getByText('very-lon')).toBeInTheDocument();
+  });
+
+  it('shows table headers in flat list even without dimensions', () => {
+    const transcripts = [
+      createMockTranscript({ id: 't1', modelId: 'gpt-4' }),
+    ];
+
+    render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+      />
+    );
+
+    expect(screen.getByText('Scenario')).toBeInTheDocument();
+    expect(screen.getByText('Model')).toBeInTheDocument();
+    expect(screen.getByText('Decision')).toBeInTheDocument();
+  });
+
+  it('renders decision override dropdown for transcripts with decisionCode "other"', async () => {
+    const user = userEvent.setup();
+    const onDecisionChange = vi.fn();
+    const transcript = createMockTranscript({ decisionCode: 'other' });
+
+    render(
+      <TranscriptList
+        transcripts={[transcript]}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        onDecisionChange={onDecisionChange}
+      />
+    );
+
+    const dropdown = screen.getByLabelText(`Set decision for transcript ${transcript.id}`);
+    expect(screen.getByText('other')).toBeInTheDocument();
+    await user.selectOptions(dropdown, '4');
+
+    expect(onDecisionChange).toHaveBeenCalledWith(transcript, '4');
   });
 });

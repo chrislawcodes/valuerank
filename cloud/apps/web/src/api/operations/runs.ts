@@ -370,6 +370,26 @@ export const RESTART_SUMMARIZATION_MUTATION = gql`
   ${RUN_FRAGMENT}
 `;
 
+export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
+  mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+    updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+      id
+      runId
+      scenarioId
+      modelId
+      modelVersion
+      content
+      decisionCode
+      turnCount
+      tokenCount
+      durationMs
+      estimatedCost
+      createdAt
+      lastAccessedAt
+    }
+  }
+`;
+
 // ============================================================================
 // INPUT TYPES
 // ============================================================================
@@ -498,4 +518,13 @@ export type RestartSummarizationMutationResult = {
     run: Run;
     queuedCount: number;
   };
+};
+
+export type UpdateTranscriptDecisionMutationVariables = {
+  transcriptId: string;
+  decisionCode: string;
+};
+
+export type UpdateTranscriptDecisionMutationResult = {
+  updateTranscriptDecision: Transcript;
 };

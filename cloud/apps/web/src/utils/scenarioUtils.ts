@@ -44,6 +44,7 @@ type FilterTranscriptsForPivotCellInput = {
   row: string;
   col: string;
   selectedModel?: string;
+  decisionCode?: string;
 };
 
 export function filterTranscriptsForPivotCell({
@@ -54,6 +55,7 @@ export function filterTranscriptsForPivotCell({
   row,
   col,
   selectedModel = '',
+  decisionCode,
 }: FilterTranscriptsForPivotCellInput): Transcript[] {
   if (!transcripts.length || !scenarioDimensions || !rowDim || !colDim || !row || !col) {
     return [];
@@ -73,6 +75,7 @@ export function filterTranscriptsForPivotCell({
   const selectedModelNormalized = selectedModel ? normalizeModelId(selectedModel) : '';
 
   return transcripts.filter((transcript) => {
+    if (decisionCode && transcript.decisionCode !== decisionCode) return false;
     if (!transcript.scenarioId) return false;
 
     const transcriptScenarioId = String(transcript.scenarioId);

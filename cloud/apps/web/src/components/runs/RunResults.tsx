@@ -4,7 +4,7 @@
  * Displays results of a completed run with transcript list and export options.
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Download, FileText, BarChart2, List, Grid, DollarSign, FileJson } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
@@ -19,6 +19,7 @@ type RunResultsProps = {
   isExportingTranscripts?: boolean;
   scenarioDimensions?: Record<string, Record<string, string | number>>;
   dimensionLabels?: Record<string, string>;
+  onUpdateTranscriptDecision?: (transcriptId: string, decisionCode: string) => Promise<void>;
 };
 
 type ViewMode = 'list' | 'grouped';
@@ -98,9 +99,11 @@ export function RunResults({
   isExportingTranscripts = false,
   scenarioDimensions,
   dimensionLabels,
+  onUpdateTranscriptDecision,
 }: RunResultsProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
+  const [updatingTranscriptIds, setUpdatingTranscriptIds] = useState<Set<string>>(new Set());
 
   const transcripts = run.transcripts ?? [];
   const stats = calculateStats(transcripts, run.analysis);
@@ -112,6 +115,25 @@ export function RunResults({
   const handleCloseViewer = () => {
     setSelectedTranscript(null);
   };
+
+  const handleDecisionChange = useCallback(async (transcript: Transcript, decisionCode: string) => {
+    if (!onUpdateTranscriptDecision) return;
+
+    setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
+    try {
+      await onUpdateTranscriptDecision(transcript.id, decisionCode);
+      setSelectedTranscript((current) => {
+        if (!current || current.id !== transcript.id) return current;
+        return { ...current, decisionCode };
+      });
+    } finally {
+      setUpdatingTranscriptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(transcript.id);
+        return next;
+      });
+    }
+  }, [onUpdateTranscriptDecision]);
 
   if (transcripts.length === 0) {
     return (
@@ -276,6 +298,8 @@ export function RunResults({
         groupByModel={viewMode === 'grouped'}
         scenarioDimensions={scenarioDimensions}
         dimensionLabels={dimensionLabels}
+        onDecisionChange={handleDecisionChange}
+        updatingTranscriptIds={updatingTranscriptIds}
       />
 
       {/* Transcript viewer modal */}
@@ -283,6 +307,8 @@ export function RunResults({
         <TranscriptViewer
           transcript={selectedTranscript}
           onClose={handleCloseViewer}
+          onDecisionChange={handleDecisionChange}
+          decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
         />
       )}
     </div>

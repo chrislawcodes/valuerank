@@ -51,6 +51,12 @@ describe('GraphQL Run Mutations', () => {
   afterEach(async () => {
     // Clean up runs first
     if (createdRunIds.length > 0) {
+      await db.transcript.deleteMany({
+        where: { runId: { in: createdRunIds } },
+      });
+      await db.analysisResult.deleteMany({
+        where: { runId: { in: createdRunIds } },
+      });
       await db.runScenarioSelection.deleteMany({
         where: { runId: { in: createdRunIds } },
       });
@@ -470,6 +476,106 @@ describe('GraphQL Run Mutations', () => {
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeDefined();
       expect(response.body.errors[0].message).toContain('no scenarios');
+    });
+  });
+
+  describe('updateTranscriptDecision', () => {
+    it('updates transcript decision code and returns transcript', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Test Definition for Transcript Decision Update',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const scenario = await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const run = await db.run.create({
+        data: {
+          definitionId: definition.id,
+          status: 'COMPLETED',
+          config: { models: ['gpt-4'] },
+          progress: { total: 1, completed: 1, failed: 0 },
+        },
+      });
+      createdRunIds.push(run.id);
+
+      const transcript = await db.transcript.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+          modelId: 'gpt-4',
+          content: { turns: [] },
+          decisionCode: 'other',
+          turnCount: 1,
+          tokenCount: 25,
+          durationMs: 100,
+          summarizedAt: new Date(),
+        },
+      });
+
+      const mutation = `
+        mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+          updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+            id
+            decisionCode
+            runId
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            transcriptId: transcript.id,
+            decisionCode: '4',
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.updateTranscriptDecision.decisionCode).toBe('4');
+      expect(response.body.data.updateTranscriptDecision.runId).toBe(run.id);
+
+      const updated = await db.transcript.findUnique({
+        where: { id: transcript.id },
+      });
+      expect(updated?.decisionCode).toBe('4');
+    });
+
+    it('returns validation error for unsupported decision code', async () => {
+      const mutation = `
+        mutation UpdateTranscriptDecision($transcriptId: ID!, $decisionCode: String!) {
+          updateTranscriptDecision(transcriptId: $transcriptId, decisionCode: $decisionCode) {
+            id
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            transcriptId: 'non-existent-transcript',
+            decisionCode: 'other',
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeDefined();
+      expect(response.body.errors[0].message).toContain('decisionCode must be one of');
     });
   });
 });

@@ -1,4 +1,5 @@
 import { FileText, Zap } from 'lucide-react';
+import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
 
 type TranscriptRowProps = {
@@ -10,6 +11,8 @@ type TranscriptRowProps = {
   dimensionLabels?: Record<string, string>;
   gridTemplateColumns?: string;
   showModelColumn?: boolean;
+  onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
+  decisionUpdating?: boolean;
 };
 
 function formatDate(dateString: string): string {
@@ -57,20 +60,40 @@ export function TranscriptRow({
   dimensionLabels,
   gridTemplateColumns,
   showModelColumn = true,
+  onDecisionChange,
+  decisionUpdating = false,
 }: TranscriptRowProps) {
-  const showDimensions = !compact && dimensionKeys.length > 0 && gridTemplateColumns;
+  const showGrid = !compact && Boolean(gridTemplateColumns);
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const isDecisionOverrideAllowed = transcript.decisionCode === 'other' && Boolean(onDecisionChange);
+
+  const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    event.stopPropagation();
+    const selected = event.target.value;
+    if (!selected || !onDecisionChange) return;
+    void onDecisionChange(transcript, selected);
+  };
+
+  const handleOpen = () => {
+    onSelect(transcript);
+  };
 
   return (
-    // eslint-disable-next-line react/forbid-elements -- Row button requires custom full-width layout styling
-    <button
-      type="button"
-      onClick={() => onSelect(transcript)}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleOpen();
+        }
+      }}
       className={`w-full text-left hover:bg-gray-50 transition-colors ${
         compact ? 'px-4 py-2' : 'p-3 border border-gray-200 rounded-lg'
       }`}
     >
-      {showDimensions ? (
+      {showGrid ? (
         <div className="grid items-center gap-3 text-sm text-gray-600" style={{ gridTemplateColumns }}>
           <div className="flex items-center gap-2 min-w-0">
             <FileText className="w-4 h-4 text-gray-400" />
@@ -90,7 +113,32 @@ export function TranscriptRow({
               </div>
             );
           })}
-          <div className="truncate">{decision}</div>
+          <div className="truncate">
+            {isDecisionOverrideAllowed ? (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-700">other</span>
+                <select
+                  aria-label={`Set decision for transcript ${transcript.id}`}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+                  defaultValue=""
+                  disabled={decisionUpdating}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={handleDecisionChange}
+                >
+                  <option value="">
+                    {decisionUpdating ? 'Saving...' : 'Change'}
+                  </option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+            ) : (
+              decision
+            )}
+          </div>
           <div className="flex items-center gap-1 text-gray-500">
             <Zap className="w-3 h-3" />
             {transcript.tokenCount.toLocaleString()}
@@ -127,6 +175,6 @@ export function TranscriptRow({
           </div>
         </div>
       )}
-    </button>
+    </div>
   );
 }

@@ -206,7 +206,7 @@ function ConditionDecisionMatrix({
     return count > 0 ? sum / count : null;
   };
 
-  const handleCellClick = (modelId: string, row: ConditionRow) => {
+  const handleCellClick = (modelId: string, row: ConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
       rowDim: attributeA,
       colDim: attributeB,
@@ -214,6 +214,9 @@ function ConditionDecisionMatrix({
       col: row.attributeBLevel,
       model: modelId,
     });
+    if (options?.decisionCode) {
+      params.set('decisionCode', options.decisionCode);
+    }
     const url = `/analysis/${runId}/transcripts?${params.toString()}`;
     navigate(url);
   };
@@ -338,7 +341,8 @@ function ConditionDecisionMatrix({
                 </td>
                 {visibleModels.map((modelId) => {
                   const mean = getMeanDecision(modelId, row.scenarioIds);
-                  const canOpen = mean !== null;
+                  const isOtherCell = mean === null;
+                  const canOpen = true;
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
@@ -347,13 +351,13 @@ function ConditionDecisionMatrix({
                       style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
                       title={
                         canOpen
-                          ? `View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}`
-                          : 'No score available'
+                          ? `View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`
+                          : ''
                       }
-                      onClick={canOpen ? () => handleCellClick(modelId, row) : undefined}
+                      onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                     >
                       {mean === null ? (
-                        <span className="text-gray-300">-</span>
+                        <span className="text-gray-500">-</span>
                       ) : (
                         <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
                       )}

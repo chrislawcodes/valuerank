@@ -5,12 +5,15 @@
  */
 
 import { X, User, Bot, Clock, Hash, Zap } from 'lucide-react';
+import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
 
 type TranscriptViewerProps = {
   transcript: Transcript;
   onClose: () => void;
+  onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
+  decisionUpdating?: boolean;
 };
 
 type Turn = {
@@ -83,8 +86,21 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-export function TranscriptViewer({ transcript, onClose }: TranscriptViewerProps) {
+export function TranscriptViewer({
+  transcript,
+  onClose,
+  onDecisionChange,
+  decisionUpdating = false,
+}: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
+  const decision = transcript.decisionCode ?? '-';
+  const canOverrideDecision = decision === 'other' && Boolean(onDecisionChange);
+
+  const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selected = event.target.value;
+    if (!selected || !onDecisionChange) return;
+    void onDecisionChange(transcript, selected);
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -118,6 +134,26 @@ export function TranscriptViewer({ transcript, onClose }: TranscriptViewerProps)
           <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
             {formatDuration(transcript.durationMs)}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-gray-500">Decision:</span>
+            <span className="font-medium text-gray-800">{decision}</span>
+            {canOverrideDecision && (
+              <select
+                aria-label={`Set decision for transcript ${transcript.id}`}
+                className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+                defaultValue=""
+                disabled={decisionUpdating}
+                onChange={handleDecisionChange}
+              >
+                <option value="">{decisionUpdating ? 'Saving...' : 'Change'}</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            )}
           </span>
         </div>
 

@@ -4,7 +4,7 @@
  * Shows filtered transcripts for a pivot cell in a full page view.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -14,6 +14,7 @@ import { TranscriptList } from '../components/runs/TranscriptList';
 import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useRun } from '../hooks/useRun';
 import { useAnalysis } from '../hooks/useAnalysis';
+import { useRunMutations } from '../hooks/useRunMutations';
 import type { Transcript } from '../api/operations/runs';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 
@@ -22,19 +23,23 @@ export function AnalysisTranscripts() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+  const [updatingTranscriptIds, setUpdatingTranscriptIds] = useState<Set<string>>(new Set());
 
   const rowDim = searchParams.get('rowDim') ?? '';
   const colDim = searchParams.get('colDim') ?? '';
   const row = searchParams.get('row') ?? '';
   const col = searchParams.get('col') ?? '';
   const selectedModel = searchParams.get('model') ?? '';
+  const decisionCode = searchParams.get('decisionCode') ?? '';
   const hasRequiredParams = Boolean(rowDim && colDim && row && col);
 
-  const { run, loading, error } = useRun({
+  const { run, loading, error, refetch } = useRun({
     id: id || '',
     pause: !id,
     enablePolling: false,
   });
+
+  const { updateTranscriptDecision } = useRunMutations();
 
   const { analysis } = useAnalysis({
     runId: id || '',
@@ -45,6 +50,24 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
 
+  const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
+    setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
+    try {
+      await updateTranscriptDecision(transcript.id, nextDecisionCode);
+      setSelectedTranscript((current) => {
+        if (!current || current.id !== transcript.id) return current;
+        return { ...current, decisionCode: nextDecisionCode };
+      });
+      refetch();
+    } finally {
+      setUpdatingTranscriptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(transcript.id);
+        return next;
+      });
+    }
+  }, [updateTranscriptDecision, refetch]);
+
   const filteredTranscripts = useMemo(() => {
     return filterTranscriptsForPivotCell({
       transcripts: run?.transcripts ?? [],
@@ -54,8 +77,9 @@ export function AnalysisTranscripts() {
       row,
       col,
       selectedModel,
+      decisionCode: decisionCode || undefined,
     });
-  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel]);
+  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel, decisionCode]);
 
   if (loading && !run) {
     return (
@@ -114,6 +138,12 @@ export function AnalysisTranscripts() {
               {colDim}: <span className="font-medium text-gray-900">{col || '-'}</span>
               <span className="mx-2">•</span>
               Model: <span className="font-medium text-gray-900">{selectedModel || 'All Models'}</span>
+              {decisionCode && (
+                <>
+                  <span className="mx-2">•</span>
+                  Decision: <span className="font-medium text-gray-900">{decisionCode}</span>
+                </>
+              )}
             </>
           ) : (
             'Transcript Filter'
@@ -141,6 +171,8 @@ export function AnalysisTranscripts() {
           onSelect={setSelectedTranscript}
           groupByModel={false}
           scenarioDimensions={scenarioDimensions}
+          onDecisionChange={handleDecisionChange}
+          updatingTranscriptIds={updatingTranscriptIds}
         />
       )}
 
@@ -148,6 +180,8 @@ export function AnalysisTranscripts() {
         <TranscriptViewer
           transcript={selectedTranscript}
           onClose={() => setSelectedTranscript(null)}
+          onDecisionChange={handleDecisionChange}
+          decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
         />
       )}
     </div>
