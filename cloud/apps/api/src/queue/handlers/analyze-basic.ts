@@ -41,6 +41,20 @@ type TranscriptData = {
   };
 };
 
+function isDimensionValue(value: unknown): value is number | string {
+  return typeof value === 'number' || typeof value === 'string';
+}
+
+function toDimensionRecord(value: unknown): Record<string, number | string> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const sanitized: Record<string, number | string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isDimensionValue(entry)) continue;
+    sanitized[key] = entry;
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
+
 /**
  * Python worker input structure.
  */
@@ -140,6 +154,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         });
 
         // Transform to worker input format (matches CSV export structure)
+        const scenarioDimensions: Record<string, Record<string, number | string>> = {};
         const transcriptData: TranscriptData[] = transcripts
           .filter((t) => t.scenario !== null && t.scenarioId !== null)
           .map((t) => {
@@ -155,6 +170,12 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               if (typeof value === 'number') {
                 dimensions[key] = value;
               }
+            }
+
+            // Preserve raw scenario dimensions (string/number) for UI pivot tables.
+            const validatedDimensions = toDimensionRecord(rawDimensions);
+            if (validatedDimensions) {
+              scenarioDimensions[scenario.id] = validatedDimensions;
             }
 
             // Convert decisionCode string to numeric score (matches CSV "Decision Code")
@@ -205,6 +226,12 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           }
           throw new Error(`${err.code}: ${err.message}`);
         }
+
+        // Ensure visualizationData includes scenarioDimensions (needed for pivot filtering in the UI).
+        (output.analysis as unknown as Record<string, unknown>).visualizationData = {
+          ...(((output.analysis as unknown as Record<string, unknown>).visualizationData as Record<string, unknown> | undefined) ?? {}),
+          scenarioDimensions,
+        };
 
         // Mark any existing analyses as superseded
         await invalidateCache(runId);
