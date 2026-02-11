@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
@@ -41,6 +41,7 @@ export function DefinitionFilters({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const { tags: allTags } = useTags();
   const schwartzValues = getCanonicalDimensionNames();
@@ -48,7 +49,11 @@ export function DefinitionFilters({
   const searchSuggestions = useMemo(() => {
     const tokenMatch = searchInput.match(/(?:^|\s)([^\s]*)$/);
     const token = tokenMatch?.[1]?.trim().toLowerCase() ?? '';
-    if (token.length === 0) return [];
+
+    // If user just completed a term (trailing space), suggest all Schwartz values for the next token.
+    if (token.length === 0) {
+      return [...schwartzValues].sort((a, b) => a.localeCompare(b)).slice(0, 8);
+    }
 
     return schwartzValues
       .filter((value) => value.toLowerCase().includes(token))
@@ -103,8 +108,11 @@ export function DefinitionFilters({
       if (/\s$/.test(current)) return `${current}${value} `;
       return `${current.replace(/[^\s]*$/, value)} `;
     });
-    setIsSearchFocused(false);
     setHighlightedSuggestionIndex(-1);
+    setIsSearchFocused(true);
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
   }, []);
 
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
@@ -178,6 +186,7 @@ export function DefinitionFilters({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchInput}
             onChange={(e) => {
