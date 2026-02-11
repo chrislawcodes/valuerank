@@ -41,7 +41,7 @@ export function UnforkDefinitionModal({
               <ul className="space-y-1">
                 <li>Current inherited content is copied into this vignette.</li>
                 <li>Future parent changes will no longer affect this vignette.</li>
-                <li>Scenario expansion will re-run to lock in standalone content.</li>
+                <li>Narrative expansion will re-run to lock in standalone content.</li>
               </ul>
             </div>
           </div>
