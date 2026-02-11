@@ -58,7 +58,7 @@ describe('DefinitionFilters', () => {
       />
     );
 
-    expect(screen.getByPlaceholderText('Search definitions...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search metadata (AND by default)')).toBeInTheDocument();
   });
 
   it('should render filter toggle buttons', () => {
@@ -84,7 +84,7 @@ describe('DefinitionFilters', () => {
       />
     );
 
-    const searchInput = screen.getByPlaceholderText('Search definitions...') as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText('Search metadata (AND by default)') as HTMLInputElement;
     await user.type(searchInput, 'test');
 
     expect(searchInput.value).toBe('test');
@@ -251,7 +251,7 @@ describe('DefinitionFilters', () => {
     );
 
     // Input should show the search value
-    const searchInput = screen.getByPlaceholderText('Search definitions...') as HTMLInputElement;
+    const searchInput = screen.getByPlaceholderText('Search metadata (AND by default)') as HTMLInputElement;
     expect(searchInput.value).toBe('test');
 
     // Clear button should be visible
