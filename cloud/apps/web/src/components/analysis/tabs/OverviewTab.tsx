@@ -4,7 +4,7 @@
  * Displays per-model statistics with overall stats and top values.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import { formatPercent } from './types';
@@ -211,22 +211,25 @@ function ConditionDecisionMatrix({
     });
   }, [scenarioDimensions, attributeA, attributeB]);
 
-  const getMeanDecision = (modelId: string, scenarioIds: string[]): number | null => {
-    const byScenario = modelScenarioMatrix?.[modelId];
-    if (!byScenario) return null;
+  const getMeanDecision = useCallback(
+    (modelId: string, scenarioIds: string[]): number | null => {
+      const byScenario = modelScenarioMatrix?.[modelId];
+      if (!byScenario) return null;
 
-    let sum = 0;
-    let count = 0;
-    scenarioIds.forEach((scenarioId) => {
-      const score = byScenario[scenarioId];
-      if (typeof score === 'number' && Number.isFinite(score)) {
-        sum += score;
-        count += 1;
-      }
-    });
+      let sum = 0;
+      let count = 0;
+      scenarioIds.forEach((scenarioId) => {
+        const score = byScenario[scenarioId];
+        if (typeof score === 'number' && Number.isFinite(score)) {
+          sum += score;
+          count += 1;
+        }
+      });
 
-    return count > 0 ? sum / count : null;
-  };
+      return count > 0 ? sum / count : null;
+    },
+    [modelScenarioMatrix]
+  );
 
   const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
 
@@ -257,7 +260,7 @@ function ConditionDecisionMatrix({
     });
 
     return result;
-  }, [visibleModels, conditionRows, modelScenarioMatrix]);
+  }, [visibleModels, conditionRows, modelScenarioMatrix, getMeanDecision]);
 
   const handleCellClick = (modelId: string, row: ConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
@@ -415,38 +418,44 @@ function ConditionDecisionMatrix({
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700 ${highlightA ? 'bg-blue-50' : ''}`}
                   >
-                    <button
+                    <Button
                       type="button"
-                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                       title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.aName}`}
                       onClick={() => handleCountsCellClick(modelId, 'a')}
                     >
                       {counts.a}
-                    </button>
+                    </Button>
                   </td>
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700 ${highlightNeutral ? 'bg-gray-100' : ''}`}
                   >
-                    <button
+                    <Button
                       type="button"
-                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                       title={`View neutral transcripts for ${modelId}`}
                       onClick={() => handleCountsCellClick(modelId, 'neutral')}
                     >
                       {counts.neutral}
-                    </button>
+                    </Button>
                   </td>
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700 ${highlightB ? 'bg-orange-50' : ''}`}
                   >
-                    <button
+                    <Button
                       type="button"
-                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                       title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.bName}`}
                       onClick={() => handleCountsCellClick(modelId, 'b')}
                     >
                       {counts.b}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               );
@@ -494,9 +503,11 @@ function ConditionDecisionMatrix({
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
                       style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
                     >
-                      <button
+                      <Button
                         type="button"
-                        className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
                         title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`}
                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                       >
@@ -505,7 +516,7 @@ function ConditionDecisionMatrix({
                         ) : (
                           <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
                         )}
-                      </button>
+                      </Button>
                     </td>
                   );
                 })}
