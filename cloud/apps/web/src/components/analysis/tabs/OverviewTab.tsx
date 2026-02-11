@@ -456,25 +456,24 @@ function ConditionDecisionMatrix({
                 {visibleModels.map((modelId) => {
                   const mean = getMeanDecision(modelId, row.scenarioIds);
                   const isOtherCell = mean === null;
-                  const canOpen = true;
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
-                      className={`border border-gray-200 px-3 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''
-                        }`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
                       style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
-                      title={
-                        canOpen
-                          ? `View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`
-                          : ''
-                      }
-                      onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                     >
-                      {mean === null ? (
-                        <span className="text-gray-500">-</span>
-                      ) : (
-                        <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
-                      )}
+                      <button
+                        type="button"
+                        className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
+                      >
+                        {mean === null ? (
+                          <span className="text-gray-500">-</span>
+                        ) : (
+                          <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                        )}
+                      </button>
                     </td>
                   );
                 })}
