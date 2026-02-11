@@ -3,6 +3,7 @@ import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
+import { getCanonicalDimensionNames } from '@valuerank/shared';
 
 export type DefinitionFilterState = {
   search: string;
@@ -40,6 +41,7 @@ export function DefinitionFilters({
   const [showTagDropdown, setShowTagDropdown] = useState(false);
 
   const { tags: allTags } = useTags();
+  const schwartzValues = getCanonicalDimensionNames();
 
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -112,9 +114,15 @@ export function DefinitionFilters({
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            list="schwartz-values"
             placeholder="Search metadata (AND by default)"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
+          <datalist id="schwartz-values">
+            {schwartzValues.map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
           {searchInput && (
             <Button
               type="button"
@@ -129,7 +137,7 @@ export function DefinitionFilters({
           )}
         </div>
         <p className="text-xs text-gray-500">
-          Search covers vignette metadata (name, attributes, template, tags). Use explicit <code>OR</code> for OR matching.
+          Search covers vignette metadata (name, attributes, template, tags). Schwartz values autocomplete as you type. Use explicit <code>OR</code> for OR matching.
         </p>
 
         {/* Filter row */}
