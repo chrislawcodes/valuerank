@@ -48,7 +48,6 @@ async function findDefinitionIdsByMetadataSearch(parsed: ParsedSearch): Promise<
         INNER JOIN tags t ON t.id = dt.tag_id
         WHERE dt.definition_id = d.id
           AND dt.deleted_at IS NULL
-          AND t.deleted_at IS NULL
           AND t.name ILIKE ${pattern}
       )
     )`;
