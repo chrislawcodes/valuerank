@@ -5,15 +5,18 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, GitBranch, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit, GitBranch, Play, Trash2, Unlink2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ExportButton } from '../../components/export/ExportButton';
 
 type DefinitionHeaderProps = {
   definitionId: string;
   scenarioCount: number;
+  isForked: boolean;
+  isUnforking: boolean;
   onEdit: () => void;
   onFork: () => void;
+  onUnfork: () => void;
   onDelete: () => void;
   onStartRun: () => void;
 };
@@ -21,8 +24,11 @@ type DefinitionHeaderProps = {
 export function DefinitionHeader({
   definitionId,
   scenarioCount,
+  isForked,
+  isUnforking,
   onEdit,
   onFork,
+  onUnfork,
   onDelete,
   onStartRun,
 }: DefinitionHeaderProps) {
@@ -49,6 +55,12 @@ export function DefinitionHeader({
           <GitBranch className="w-4 h-4 sm:mr-2" />
           <span className="hidden sm:inline">Fork</span>
         </Button>
+        {isForked && (
+          <Button variant="secondary" onClick={onUnfork} isLoading={isUnforking} title="Unfork">
+            <Unlink2 className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Unfork</span>
+          </Button>
+        )}
         <Button variant="secondary" onClick={onEdit} title="Edit">
           <Edit className="w-4 h-4 sm:mr-2" />
           <span className="hidden sm:inline">Edit</span>

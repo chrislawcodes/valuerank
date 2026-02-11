@@ -17,6 +17,14 @@ export default defineConfig({
     },
     // Run test files sequentially
     fileParallelism: false,
+    // CI hardening: keep one long-lived worker process for DB integration tests.
+    // This avoids intermittent tinypool worker exits seen in GitHub Actions.
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
     // DO NOT load .env file - it contains production DATABASE_URL
     // Test database URL is set in tests/setup.ts
     coverage: {

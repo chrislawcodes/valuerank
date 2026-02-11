@@ -36,6 +36,7 @@ import { DefinitionMetadata } from './DefinitionMetadata';
 import { DefinitionContentView } from './DefinitionContentView';
 import { DeleteDefinitionModal } from './DeleteDefinitionModal';
 import { RunFormModal } from './RunFormModal';
+import { UnforkDefinitionModal } from './UnforkDefinitionModal';
 
 export function DefinitionDetail() {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ export function DefinitionDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [showForkDialog, setShowForkDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showUnforkConfirm, setShowUnforkConfirm] = useState(false);
   const [showRunForm, setShowRunForm] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -81,10 +83,12 @@ export function DefinitionDetail() {
     createDefinition,
     updateDefinition,
     forkDefinition,
+    unforkDefinition,
     deleteDefinition,
     isCreating,
     isUpdating,
     isForking,
+    isUnforking,
     isDeleting,
   } = useDefinitionMutations();
 
@@ -162,6 +166,19 @@ export function DefinitionDetail() {
       setShowDeleteConfirm(false);
       // eslint-disable-next-line no-console
       console.error('Failed to delete definition:', err);
+    }
+  };
+
+  const handleUnfork = async () => {
+    if (!definition) return;
+    try {
+      await unforkDefinition(definition.id);
+      setShowUnforkConfirm(false);
+      refetch();
+    } catch (err) {
+      setShowUnforkConfirm(false);
+      // eslint-disable-next-line no-console
+      console.error('Failed to unfork definition:', err);
     }
   };
 
@@ -289,8 +306,11 @@ export function DefinitionDetail() {
       <DefinitionHeader
         definitionId={definition.id}
         scenarioCount={scenarioCount}
+        isForked={Boolean(definition.parentId)}
+        isUnforking={isUnforking}
         onEdit={() => setIsEditing(true)}
         onFork={() => setShowForkDialog(true)}
+        onUnfork={() => setShowUnforkConfirm(true)}
         onDelete={() => setShowDeleteConfirm(true)}
         onStartRun={() => setShowRunForm(true)}
       />
@@ -385,6 +405,15 @@ export function DefinitionDetail() {
         isDeleting={isDeleting}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
+      />
+
+      {/* Unfork Confirmation Dialog */}
+      <UnforkDefinitionModal
+        isOpen={showUnforkConfirm}
+        definitionName={definition.name}
+        isUnforking={isUnforking}
+        onClose={() => setShowUnforkConfirm(false)}
+        onConfirm={handleUnfork}
       />
 
       {/* Run Form Dialog */}
