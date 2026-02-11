@@ -340,6 +340,29 @@ export const UPDATE_DEFINITION_CONTENT_MUTATION = gql`
   }
 `;
 
+// Detach a forked definition from its parent
+export const UNFORK_DEFINITION_MUTATION = gql`
+  mutation UnforkDefinition($id: String!) {
+    unforkDefinition(id: $id) {
+      id
+      name
+      parentId
+      content
+      updatedAt
+      version
+      isForked
+      resolvedContent
+      localContent
+      overrides {
+
+        template
+        dimensions
+        matchingRules
+      }
+    }
+  }
+`;
+
 // Delete a definition (soft delete)
 export const DELETE_DEFINITION_MUTATION = gql`
   mutation DeleteDefinition($id: String!) {
@@ -441,6 +464,10 @@ export type UpdateDefinitionContentInput = {
 
 export type UpdateDefinitionContentResult = {
   updateDefinitionContent: Definition;
+};
+
+export type UnforkDefinitionResult = {
+  unforkDefinition: Definition;
 };
 
 export type DeleteDefinitionResult = {

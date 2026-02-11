@@ -4,6 +4,7 @@ import {
   softDeleteDefinition,
   createInheritingContent,
   createPartialContent,
+  resolveDefinitionContent,
 } from '@valuerank/db';
 import type { Prisma, Dimension } from '@valuerank/db';
 import { DefinitionRef } from '../types/refs.js';
@@ -497,6 +498,68 @@ builder.mutationField('updateDefinitionContent', (t) =>
         userId: ctx.user?.id ?? null,
         metadata: { clearedOverrides: Array.from(fieldsToClear), contentUpdate: true },
       });
+
+      return definition;
+    },
+  })
+);
+
+// Mutation: unforkDefinition - detach a forked definition from its parent.
+builder.mutationField('unforkDefinition', (t) =>
+  t.field({
+    type: DefinitionRef,
+    description: 'Detach a forked definition from its parent and snapshot inherited content locally.',
+    args: {
+      id: t.arg.string({
+        required: true,
+        description: 'Definition ID to detach from parent',
+      }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const { id } = args;
+
+      ctx.log.debug({ definitionId: id }, 'Unforking definition');
+
+      const existing = await db.definition.findUnique({
+        where: { id, deletedAt: null },
+      });
+
+      if (!existing) {
+        throw new Error(`Definition not found: ${id}`);
+      }
+
+      if (existing.parentId === null) {
+        throw new Error('Definition is already standalone');
+      }
+
+      const oldParentId = existing.parentId;
+      const resolved = await resolveDefinitionContent(id);
+
+      const definition = await db.definition.update({
+        where: { id },
+        data: {
+          parentId: null,
+          content: ensureSchemaVersion(resolved.resolvedContent as unknown as Record<string, unknown>),
+          version: { increment: 1 },
+        },
+      });
+
+      // Queue async scenario re-expansion after detaching inheritance.
+      const queueResult = await queueScenarioExpansion(definition.id, 'update');
+      ctx.log.info(
+        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+        'Scenario re-expansion queued after unfork'
+      );
+
+      void createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Definition',
+        entityId: definition.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { unforked: true, oldParentId },
+      });
+
+      ctx.log.info({ definitionId: id, oldParentId }, 'Definition unforked');
 
       return definition;
     },
