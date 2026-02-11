@@ -244,7 +244,7 @@ export function DefinitionFilters({
                   onMouseDown={() => handleSuggestionSelect(suggestion.value)}
                   className={`w-full justify-start rounded-none px-3 py-2 text-left text-sm ${
                     highlightedSuggestionIndex === index
-                      ? 'bg-teal-50 text-teal-800'
+                      ? 'bg-teal-100 text-teal-900'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
