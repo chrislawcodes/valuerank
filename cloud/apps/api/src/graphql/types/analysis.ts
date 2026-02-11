@@ -254,7 +254,7 @@ builder.objectType(AnalysisResultRef, {
               }
 
               const mapped = scenarioNameToId.get(scenarioKey);
-              if (mapped) {
+              if (mapped !== undefined) {
                 outScenarios[mapped] = score;
               }
             }
