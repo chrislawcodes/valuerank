@@ -112,7 +112,7 @@ export function DefinitionFilters({
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search definitions..."
+            placeholder="Search metadata (AND by default)"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
           {searchInput && (
@@ -128,6 +128,9 @@ export function DefinitionFilters({
             </Button>
           )}
         </div>
+        <p className="text-xs text-gray-500">
+          Search covers vignette metadata (name, attributes, template, tags). Use explicit <code>OR</code> for OR matching.
+        </p>
 
         {/* Filter row */}
         <div className="flex flex-wrap items-center gap-2">
