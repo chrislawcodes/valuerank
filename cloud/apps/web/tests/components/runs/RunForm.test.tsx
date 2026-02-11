@@ -35,7 +35,12 @@ vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
   }),
 }));
 
+vi.mock('../../../src/hooks/useRunConditionGrid', () => ({
+  useRunConditionGrid: vi.fn(),
+}));
+
 import { useAvailableModels } from '../../../src/hooks/useAvailableModels';
+import { useRunConditionGrid } from '../../../src/hooks/useRunConditionGrid';
 
 function createMockModel(overrides: Partial<AvailableModel> = {}): AvailableModel {
   return {
@@ -64,6 +69,24 @@ describe('RunForm', () => {
       error: null,
       refetch: vi.fn(),
     });
+    vi.mocked(useRunConditionGrid).mockReturnValue({
+      grid: {
+        attributeA: 'Attribute A',
+        attributeB: 'Attribute B',
+        rowLevels: ['1'],
+        colLevels: ['3'],
+        cells: [{
+          rowLevel: '1',
+          colLevel: '3',
+          trialCount: 7,
+          scenarioCount: 1,
+          scenarioIds: ['scenario-1'],
+        }],
+      },
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
   });
 
   it('renders form with model selector', () => {
@@ -78,7 +101,7 @@ describe('RunForm', () => {
     expect(screen.getByText('Select Models')).toBeInTheDocument();
   });
 
-  it('renders sample size options', () => {
+  it('renders trial size options', () => {
     render(
       <RunForm
         definitionId="def-1"
@@ -86,15 +109,16 @@ describe('RunForm', () => {
       />
     );
 
-    expect(screen.getByText('Sample Size')).toBeInTheDocument();
-    expect(screen.getByText('1% (test trial)')).toBeInTheDocument();
+    expect(screen.getByText('Trial Size')).toBeInTheDocument();
+    expect(screen.getByText('Trial specific condition')).toBeInTheDocument();
     expect(screen.getByText('10%')).toBeInTheDocument();
-    expect(screen.getByText('25%')).toBeInTheDocument();
-    expect(screen.getByText('50%')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '100%' })).toBeInTheDocument();
+    expect(screen.queryByText('1% (test trial)')).not.toBeInTheDocument();
+    expect(screen.queryByText('25%')).not.toBeInTheDocument();
+    expect(screen.queryByText('50%')).not.toBeInTheDocument();
   });
 
-  it('defaults to 1% sample for testing', () => {
+  it('defaults to 10% trial size', () => {
     render(
       <RunForm
         definitionId="def-1"
@@ -102,9 +126,8 @@ describe('RunForm', () => {
       />
     );
 
-    // 1% button should be styled as selected
-    const testRunButton = screen.getByText('1% (test trial)');
-    expect(testRunButton).toHaveClass('border-teal-500');
+    const defaultButton = screen.getByText('10%');
+    expect(defaultButton).toHaveClass('border-teal-500');
   });
 
   it('shows estimated scenario count', () => {
@@ -116,11 +139,11 @@ describe('RunForm', () => {
       />
     );
 
-    // With 1% default, should show ~1 narrative
-    expect(screen.getByText('~1 narrative will be probed')).toBeInTheDocument();
+    // With 10% default, should show ~10 narratives
+    expect(screen.getByText('~10 narratives will be probed')).toBeInTheDocument();
   });
 
-  it('updates estimated count when sample size changes', async () => {
+  it('updates estimated count when trial size changes', async () => {
     const user = userEvent.setup();
 
     render(
@@ -131,10 +154,10 @@ describe('RunForm', () => {
       />
     );
 
-    // Click 50% option
-    await user.click(screen.getByText('50%'));
+    // Click 100% option
+    await user.click(screen.getByText('100%'));
 
-    expect(screen.getByText('~50 narratives will be probed')).toBeInTheDocument();
+    expect(screen.getByText('~100 narratives will be probed')).toBeInTheDocument();
   });
 
   it('disables submit button when no models are selected', () => {
@@ -169,8 +192,8 @@ describe('RunForm', () => {
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));
 
-    // Click 25% sample
-    await user.click(screen.getByText('25%'));
+    // Click 10% trial size
+    await user.click(screen.getByText('10%'));
 
     // Submit
     await user.click(screen.getByText('Start Trial'));
@@ -178,7 +201,7 @@ describe('RunForm', () => {
     expect(mockOnSubmit).toHaveBeenCalledWith({
       definitionId: 'def-1',
       models: ['gpt-4'],
-      samplePercentage: 25,
+      samplePercentage: 10,
       samplesPerScenario: 1,
       finalTrial: false,
     });
@@ -273,9 +296,7 @@ describe('RunForm', () => {
     expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
   });
 
-  it('shows advanced options when toggled', async () => {
-    const user = userEvent.setup();
-
+  it('shows trials per narrative controls directly', () => {
     render(
       <RunForm
         definitionId="def-1"
@@ -283,14 +304,8 @@ describe('RunForm', () => {
       />
     );
 
-    // Initially hidden
-    expect(screen.getByText('Show advanced options')).toBeInTheDocument();
-
-    // Click to show
-    await user.click(screen.getByText('Show advanced options'));
-
-    expect(screen.getByText('Hide advanced options')).toBeInTheDocument();
-    expect(screen.getByText('Samples per Narrative')).toBeInTheDocument();
+    expect(screen.getByText('Trials per Narrative')).toBeInTheDocument();
+    expect(screen.queryByText(/advanced options/i)).not.toBeInTheDocument();
   });
 
   it('enables submit button when models are selected', async () => {
@@ -335,9 +350,26 @@ describe('RunForm', () => {
     expect(mockOnSubmit).toHaveBeenCalledWith({
       definitionId: 'def-1',
       models: ['gpt-4', 'claude-3'],
-      samplePercentage: 1,
+      samplePercentage: 10,
       samplesPerScenario: 1,
       finalTrial: false,
     });
+  });
+
+  it('requires condition selection for trial specific condition mode', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <RunForm
+        definitionId="def-1"
+        scenarioCount={100}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    await user.click(screen.getByText('Trial specific condition'));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('[no condition selected]')).toBeInTheDocument();
   });
 });

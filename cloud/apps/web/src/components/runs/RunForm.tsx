@@ -6,13 +6,14 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Play, AlertCircle, Settings } from 'lucide-react';
+import { Play, AlertCircle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ModelSelector } from './ModelSelector';
 import { CostBreakdown } from './CostBreakdown';
 import { useAvailableModels } from '../../hooks/useAvailableModels';
 import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useFinalTrialPlan } from '../../hooks/useFinalTrialPlan';
+import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
 
 type RunFormProps = {
@@ -27,14 +28,11 @@ type RunFormState = {
   selectedModels: string[];
   samplePercentage: number;
   samplesPerScenario: number;
-  showAdvanced: boolean;
 };
 
 const SAMPLE_OPTIONS = [
-  { value: 1, label: '1% (test trial)' },
+  { value: -2, label: 'Trial specific condition' },
   { value: 10, label: '10%' },
-  { value: 25, label: '25%' },
-  { value: 50, label: '50%' },
   { value: 100, label: '100%' },
   { value: -1, label: 'Final Trial' },
 ];
@@ -53,6 +51,7 @@ export function RunForm({
   onCancel,
   isSubmitting = false,
 }: RunFormProps) {
+  const SPECIFIC_CONDITION_TRIAL = -2;
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',
@@ -60,15 +59,31 @@ export function RunForm({
 
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
-    samplePercentage: 1, // Default to 1% (test trial)
+    samplePercentage: 10, // Default to 10% run
     samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
-    showAdvanced: false,
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasUserChangedSelection, setHasUserChangedSelection] = useState(false);
+  const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
+  const [selectedConditionRowLevel, setSelectedConditionRowLevel] = useState<string | null>(null);
+  const [selectedConditionColLevel, setSelectedConditionColLevel] = useState<string | null>(null);
+  const [selectedConditionScenarioIds, setSelectedConditionScenarioIds] = useState<string[]>([]);
+  const [conditionSelectionTouched, setConditionSelectionTouched] = useState(false);
+  const [modalRowLevel, setModalRowLevel] = useState<string | null>(null);
+  const [modalColLevel, setModalColLevel] = useState<string | null>(null);
 
   const isFinalTrial = formState.samplePercentage === -1;
+  const isSpecificConditionTrial = formState.samplePercentage === SPECIFIC_CONDITION_TRIAL;
+
+  const {
+    grid: conditionGrid,
+    loading: loadingConditionGrid,
+    error: conditionGridError,
+  } = useRunConditionGrid({
+    definitionId,
+    pause: !isSpecificConditionTrial && !isConditionModalOpen,
+  });
 
   // Fetch Final Trial Plan
   const {
@@ -91,7 +106,11 @@ export function RunForm({
   } = useCostEstimate({
     definitionId,
     models: allAvailableModelIds,
-    samplePercentage: isFinalTrial ? 100 : formState.samplePercentage,
+    samplePercentage: isFinalTrial
+      ? 100
+      : isSpecificConditionTrial && scenarioCount
+        ? Math.max(1, Math.round((selectedConditionScenarioIds.length / scenarioCount) * 100))
+        : formState.samplePercentage,
     samplesPerScenario: isFinalTrial ? 10 : formState.samplesPerScenario,
     pause: allAvailableModelIds.length === 0,
   });
@@ -149,14 +168,16 @@ export function RunForm({
 
   const handleSampleChange = useCallback((value: number) => {
     setFormState((prev) => ({ ...prev, samplePercentage: value }));
-  }, []);
+    setValidationError(null);
+    if (value === SPECIFIC_CONDITION_TRIAL) {
+      setModalRowLevel(selectedConditionRowLevel);
+      setModalColLevel(selectedConditionColLevel);
+      setIsConditionModalOpen(true);
+    }
+  }, [SPECIFIC_CONDITION_TRIAL, selectedConditionColLevel, selectedConditionRowLevel]);
 
   const handleSamplesPerScenarioChange = useCallback((value: number) => {
     setFormState((prev) => ({ ...prev, samplesPerScenario: value }));
-  }, []);
-
-  const toggleAdvanced = useCallback(() => {
-    setFormState((prev) => ({ ...prev, showAdvanced: !prev.showAdvanced }));
   }, []);
 
   const handleSubmit = useCallback(
@@ -169,13 +190,20 @@ export function RunForm({
         return;
       }
 
+      if (isSpecificConditionTrial && selectedConditionScenarioIds.length === 0) {
+        setValidationError('Please select a condition before starting this trial');
+        setConditionSelectionTouched(true);
+        return;
+      }
+
       // Build input
       const input: StartRunInput = {
         definitionId,
         models: formState.selectedModels,
-        samplePercentage: isFinalTrial ? undefined : formState.samplePercentage,
+        samplePercentage: isFinalTrial || isSpecificConditionTrial ? undefined : formState.samplePercentage,
         samplesPerScenario: isFinalTrial ? undefined : formState.samplesPerScenario,
-        finalTrial: isFinalTrial
+        scenarioIds: isSpecificConditionTrial ? selectedConditionScenarioIds : undefined,
+        finalTrial: isFinalTrial,
       };
 
       try {
@@ -184,12 +212,35 @@ export function RunForm({
         // Error handling is done by parent
       }
     },
-    [definitionId, formState, onSubmit, isFinalTrial]
+    [definitionId, formState, onSubmit, isFinalTrial, isSpecificConditionTrial, selectedConditionScenarioIds]
   );
+
+  const handleCloseConditionModal = useCallback(() => {
+    setIsConditionModalOpen(false);
+    if (selectedConditionScenarioIds.length === 0) {
+      setConditionSelectionTouched(true);
+    }
+  }, [selectedConditionScenarioIds.length]);
+
+  const handleImmediateConditionSelect = useCallback((rowLevel: string, colLevel: string, scenarioIds: string[]) => {
+    if (scenarioIds.length === 0) {
+      return;
+    }
+    setModalRowLevel(rowLevel);
+    setModalColLevel(colLevel);
+    setSelectedConditionRowLevel(rowLevel);
+    setSelectedConditionColLevel(colLevel);
+    setSelectedConditionScenarioIds(scenarioIds);
+    setConditionSelectionTouched(false);
+    setValidationError(null);
+    setIsConditionModalOpen(false);
+  }, []);
 
   // Calculate estimated scenario count
   const estimatedScenarios =
-    scenarioCount !== undefined
+    isSpecificConditionTrial
+      ? selectedConditionScenarioIds.length
+      : scenarioCount !== undefined
       ? Math.ceil((scenarioCount * formState.samplePercentage) / 100)
       : null;
 
@@ -198,6 +249,22 @@ export function RunForm({
     : (estimatedScenarios !== null
       ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
       : null);
+
+  const sortLevels = (levels: string[]): string[] => {
+    const deduped = Array.from(new Set(levels));
+    return deduped.sort((left, right) => {
+      const leftNum = Number(left);
+      const rightNum = Number(right);
+      const leftIsNum = Number.isFinite(leftNum);
+      const rightIsNum = Number.isFinite(rightNum);
+      if (leftIsNum && rightIsNum) {
+        return leftNum - rightNum;
+      }
+      if (leftIsNum) return -1;
+      if (rightIsNum) return 1;
+      return left.localeCompare(right);
+    });
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -231,7 +298,7 @@ export function RunForm({
       {/* Sample Percentage */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Sample Size
+          Trial Size
         </label>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_OPTIONS.map((option) => (
@@ -258,13 +325,44 @@ export function RunForm({
           </p>
         )}
 
+        {isSpecificConditionTrial && (
+          <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+            {selectedConditionScenarioIds.length > 0 && conditionGrid ? (
+              <p className="mt-2 text-sm text-teal-700">
+                {conditionGrid.attributeA}, level {selectedConditionRowLevel} / {conditionGrid.attributeB}, level {selectedConditionColLevel}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-700">Choose one condition to run.</p>
+            )}
+            {selectedConditionScenarioIds.length === 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                Click <span className="font-medium">Trial specific condition</span> again to open the selector.
+              </p>
+            )}
+            {selectedConditionScenarioIds.length === 0 && conditionSelectionTouched && (
+              <p className="mt-2 text-sm text-red-600">[no condition selected]</p>
+            )}
+            {selectedConditionScenarioIds.length === 0 && !conditionSelectionTouched && conditionGridError && (
+              <p className="mt-2 text-sm text-red-600">Failed to load condition grid: {conditionGridError.message}</p>
+            )}
+            {selectedConditionScenarioIds.length > 0 && conditionGridError && (
+              <p className="mt-2 text-sm text-red-600">Failed to load condition grid: {conditionGridError.message}</p>
+            )}
+            {selectedConditionScenarioIds.length > 0 && !conditionGridError && (
+              <p className="mt-1 text-xs text-gray-500">
+                Click <span className="font-medium">Trial specific condition</span> again to change selection.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Final Trial Info */}
         {isFinalTrial && (
           <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm text-blue-800">
-            <p className="font-medium mb-1">Adaptive Sampling Strategy</p>
+            <p className="font-medium mb-1">Adaptive Trial Strategy</p>
             <ul className="list-disc pl-4 space-y-1 text-xs text-blue-700">
-              <li>Target: 10 samples per condition per AI.</li>
-              <li>More Investigation: Adds 10 samples if stability is marginal (SEM 0.1-0.14).</li>
+              <li>Target: 10 trials per condition per AI.</li>
+              <li>More Investigation: Adds 10 trials if stability is marginal (SEM 0.1-0.14).</li>
               <li>Stops automatically if stable (SEM &lt; 0.1) or too chaotic.</li>
             </ul>
             {loadingFinalTrialPlan ? (
@@ -308,10 +406,10 @@ export function RunForm({
                       {initialCount > 0 && (
                         <div>
                           <p className="text-xs font-semibold text-blue-800 mb-1">
-                            Initial Sampling ({initialCount} jobs):
+                            Initial Trials ({initialCount} jobs):
                           </p>
                           <p className="text-xs text-blue-600 mb-1">
-                            Collecting baseline data (N &lt; 10) for {initials.length} conditions.
+                            Collecting baseline trial data (N &lt; 10) for {initials.length} conditions.
                           </p>
                           {/* Collapsible details for initial sampling */}
                           <details className="text-xs text-blue-500">
@@ -364,58 +462,38 @@ export function RunForm({
         )}
       </div>
 
-      {/* Advanced Options (collapsed by default) */}
-      {
-        !isFinalTrial && (
+      {/* Trials per Narrative */}
+      {!isFinalTrial && (
+        <div className="p-4 bg-gray-50 rounded-lg space-y-4">
           <div>
-            {/* eslint-disable-next-line react/forbid-elements -- Accordion toggle requires custom layout */}
-            <button
-              type="button"
-              onClick={toggleAdvanced}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
-            >
-              <Settings className="w-4 h-4" />
-              {formState.showAdvanced ? 'Hide' : 'Show'} advanced options
-            </button>
-
-            {formState.showAdvanced && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
-                {/* Samples per Scenario (Multi-Sample Runs) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Samples per Narrative
-                  </label>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Run multiple samples per narrative to measure model consistency and variance.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
-                      // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleSamplesPerScenarioChange(option.value)}
-                        className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplesPerScenario === option.value
-                          ? 'border-teal-500 bg-teal-50 text-teal-700'
-                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                          } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={isSubmitting}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  {formState.samplesPerScenario > 1 && totalJobs !== null && (
-                    <p className="mt-2 text-sm text-gray-500">
-                      {totalJobs} total probes ({estimatedScenarios} narratives × {formState.selectedModels.length} models × {formState.samplesPerScenario} samples)
-                    </p>
-                  )}
-                </div>
-              </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Trials per Narrative
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
+                // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSamplesPerScenarioChange(option.value)}
+                  className={`px-3 py-2 text-sm rounded-md border transition-colors ${formState.samplesPerScenario === option.value
+                    ? 'border-teal-500 bg-teal-50 text-teal-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={isSubmitting}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {formState.samplesPerScenario > 1 && totalJobs !== null && (
+              <p className="mt-2 text-sm text-gray-500">
+                {totalJobs} total probes ({estimatedScenarios} narratives × {formState.selectedModels.length} models × {formState.samplesPerScenario} trials)
+              </p>
             )}
           </div>
-        )
-      }
+        </div>
+      )}
 
       {/* Cost Estimate Summary */}
       {
@@ -444,7 +522,11 @@ export function RunForm({
         <Button
           type="submit"
           variant="primary"
-          disabled={isSubmitting || formState.selectedModels.length === 0}
+          disabled={
+            isSubmitting ||
+            formState.selectedModels.length === 0 ||
+            (isSpecificConditionTrial && selectedConditionScenarioIds.length === 0)
+          }
         >
           {isSubmitting ? (
             'Starting Trial...'
@@ -456,6 +538,101 @@ export function RunForm({
           )}
         </Button>
       </div>
+
+      {isConditionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <h3 className="text-base font-medium text-gray-900">Select Trial Condition</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                onClick={handleCloseConditionModal}
+                aria-label="Close condition selector"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-auto px-4 py-3">
+              {loadingConditionGrid ? (
+                <p className="text-sm text-gray-600">Loading condition grid...</p>
+              ) : conditionGridError ? (
+                <p className="text-sm text-red-600">Failed to load condition grid: {conditionGridError.message}</p>
+              ) : !conditionGrid ? (
+                <p className="text-sm text-gray-600">No condition grid is available for this vignette.</p>
+              ) : (
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="border border-gray-200 bg-gray-50 px-3 py-2" />
+                      <th
+                        colSpan={sortLevels(conditionGrid.rowLevels).length}
+                        className="border border-gray-200 bg-gray-100 px-3 py-2 text-center font-semibold text-gray-700"
+                      >
+                        {conditionGrid.attributeA}
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className="border border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">
+                        {conditionGrid.attributeB}
+                      </th>
+                      {sortLevels(conditionGrid.rowLevels).map((attributeALevel) => (
+                        <th
+                          key={attributeALevel}
+                          className="border border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700"
+                        >
+                          {attributeALevel}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortLevels(conditionGrid.colLevels).map((attributeBLevel) => (
+                      <tr key={attributeBLevel}>
+                        <th className="border border-gray-200 bg-gray-100 px-3 py-2 text-left font-semibold text-gray-700">
+                          {attributeBLevel}
+                        </th>
+                        {sortLevels(conditionGrid.rowLevels).map((attributeALevel) => {
+                          const cell = conditionGrid.cells.find(
+                            (item) => item.rowLevel === attributeALevel && item.colLevel === attributeBLevel
+                          );
+                          const isSelected = modalRowLevel === attributeALevel && modalColLevel === attributeBLevel;
+                          const scenarioIds = cell?.scenarioIds ?? [];
+                          return (
+                            <td key={`${attributeALevel}-${attributeBLevel}`} className="border border-gray-200 p-0">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className={`flex h-full w-full flex-col items-start gap-1 rounded-none border-2 px-3 py-2 text-left transition-colors ${isSelected
+                                  ? 'border-teal-600 bg-teal-200 text-teal-950 shadow-inner'
+                                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                                  } ${scenarioIds.length === 0 ? 'cursor-not-allowed opacity-60' : ''}`}
+                                onClick={() => handleImmediateConditionSelect(attributeALevel, attributeBLevel, scenarioIds)}
+                                disabled={scenarioIds.length === 0}
+                              >
+                                <span className="font-medium">n = {cell?.trialCount ?? 0}</span>
+                              </Button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
+              <Button type="button" variant="secondary" onClick={handleCloseConditionModal}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </form >
   );
 }

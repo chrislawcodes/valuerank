@@ -399,6 +399,7 @@ export type StartRunInput = {
   models: string[];
   samplePercentage?: number;
   samplesPerScenario?: number;
+  scenarioIds?: string[];
   sampleSeed?: number;
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
   experimentId?: string;
