@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type KeyboardEvent } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
@@ -39,6 +39,7 @@ export function DefinitionFilters({
 }: DefinitionFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
 
   const { tags: allTags } = useTags();
@@ -79,6 +80,7 @@ export function DefinitionFilters({
 
   const handleClearFilters = () => {
     setSearchInput('');
+    setHighlightedSuggestionIndex(-1);
     onFiltersChange({
       search: '',
       rootOnly: false,
@@ -102,7 +104,46 @@ export function DefinitionFilters({
       return `${current.replace(/[^\s]*$/, value)} `;
     });
     setIsSearchFocused(false);
+    setHighlightedSuggestionIndex(-1);
   }, []);
+
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchFocused || searchSuggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((prev) => {
+        if (prev < 0) return 0;
+        return Math.min(prev + 1, searchSuggestions.length - 1);
+      });
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((prev) => {
+        if (prev <= 0) return 0;
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < searchSuggestions.length) {
+        event.preventDefault();
+        const selected = searchSuggestions[highlightedSuggestionIndex];
+        if (selected !== undefined) {
+          handleSuggestionSelect(selected);
+        }
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setIsSearchFocused(false);
+      setHighlightedSuggestionIndex(-1);
+    }
+  }, [isSearchFocused, searchSuggestions, highlightedSuggestionIndex, handleSuggestionSelect]);
 
   const handleTagToggle = useCallback(
     (tagId: string) => {
@@ -139,25 +180,37 @@ export function DefinitionFilters({
           <input
             type="text"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setHighlightedSuggestionIndex(-1);
+            }}
+            onKeyDown={handleSearchKeyDown}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => {
               // Delay so suggestion click can register before closing.
-              setTimeout(() => setIsSearchFocused(false), 120);
+              setTimeout(() => {
+                setIsSearchFocused(false);
+                setHighlightedSuggestionIndex(-1);
+              }, 120);
             }}
             placeholder="Search metadata (AND by default)"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
           {isSearchFocused && searchSuggestions.length > 0 && (
             <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-              {searchSuggestions.map((suggestion) => (
+              {searchSuggestions.map((suggestion, index) => (
                 <Button
                   key={suggestion}
                   type="button"
                   variant="ghost"
                   size="sm"
+                  onMouseEnter={() => setHighlightedSuggestionIndex(index)}
                   onMouseDown={() => handleSuggestionSelect(suggestion)}
-                  className="w-full justify-start rounded-none px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                  className={`w-full justify-start rounded-none px-3 py-2 text-left text-sm ${
+                    highlightedSuggestionIndex === index
+                      ? 'bg-teal-50 text-teal-800'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
                 >
                   {suggestion}
                 </Button>
