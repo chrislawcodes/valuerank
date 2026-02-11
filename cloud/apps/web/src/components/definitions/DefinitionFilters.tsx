@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
+import { getCanonicalDimensionNames } from '@valuerank/shared/canonical-dimensions';
 
 export type DefinitionFilterState = {
   search: string;
@@ -37,9 +38,60 @@ export function DefinitionFilters({
   className = '',
 }: DefinitionFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const { tags: allTags } = useTags();
+  const schwartzValues = getCanonicalDimensionNames();
+  const tagNames = useMemo(
+    () => allTags.map((tag) => tag.name).filter((name) => name.trim().length > 0),
+    [allTags]
+  );
+
+  const suggestionItems = useMemo(() => {
+    const items: Array<{ value: string; kind: 'value' | 'tag' }> = [];
+    const seen = new Set<string>();
+
+    schwartzValues.forEach((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ value, kind: 'value' });
+    });
+
+    tagNames.forEach((tagName) => {
+      const key = tagName.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ value: tagName, kind: 'tag' });
+    });
+
+    return items;
+  }, [schwartzValues, tagNames]);
+
+  const searchSuggestions = useMemo(() => {
+    const tokenMatch = searchInput.match(/(?:^|\s)([^\s]*)$/);
+    const token = tokenMatch?.[1]?.trim().toLowerCase() ?? '';
+
+    // If user just completed a term (trailing space), suggest top mixed metadata items for next token.
+    if (token.length === 0) {
+      return [...suggestionItems]
+        .sort((a, b) => a.value.localeCompare(b.value))
+        .slice(0, 8);
+    }
+
+    return suggestionItems
+      .filter((item) => item.value.toLowerCase().includes(token))
+      .sort((a, b) => {
+        const aStarts = a.value.toLowerCase().startsWith(token);
+        const bStarts = b.value.toLowerCase().startsWith(token);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return a.value.localeCompare(b.value);
+      })
+      .slice(0, 8);
+  }, [searchInput, suggestionItems]);
 
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -60,6 +112,7 @@ export function DefinitionFilters({
 
   const handleClearFilters = () => {
     setSearchInput('');
+    setHighlightedSuggestionIndex(-1);
     onFiltersChange({
       search: '',
       rootOnly: false,
@@ -75,6 +128,57 @@ export function DefinitionFilters({
   const handleToggleHasRuns = () => {
     onFiltersChange({ ...filters, hasRuns: !filters.hasRuns });
   };
+
+  const handleSuggestionSelect = useCallback((value: string) => {
+    setSearchInput((current) => {
+      if (current.length === 0) return `${value} `;
+      if (/\s$/.test(current)) return `${current}${value} `;
+      return `${current.replace(/[^\s]*$/, value)} `;
+    });
+    setHighlightedSuggestionIndex(-1);
+    setIsSearchFocused(true);
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+  }, []);
+
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchFocused || searchSuggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((prev) => {
+        if (prev < 0) return 0;
+        return Math.min(prev + 1, searchSuggestions.length - 1);
+      });
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((prev) => {
+        if (prev <= 0) return 0;
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (highlightedSuggestionIndex >= 0 && highlightedSuggestionIndex < searchSuggestions.length) {
+        event.preventDefault();
+        const selected = searchSuggestions[highlightedSuggestionIndex];
+        if (selected !== undefined) {
+          handleSuggestionSelect(selected.value);
+        }
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setIsSearchFocused(false);
+      setHighlightedSuggestionIndex(-1);
+    }
+  }, [isSearchFocused, searchSuggestions, highlightedSuggestionIndex, handleSuggestionSelect]);
 
   const handleTagToggle = useCallback(
     (tagId: string) => {
@@ -109,12 +213,49 @@ export function DefinitionFilters({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search definitions..."
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setHighlightedSuggestionIndex(-1);
+            }}
+            onKeyDown={handleSearchKeyDown}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              // Delay so suggestion click can register before closing.
+              setTimeout(() => {
+                setIsSearchFocused(false);
+                setHighlightedSuggestionIndex(-1);
+              }, 120);
+            }}
+            placeholder="Search metadata (AND by default)"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
+          {isSearchFocused && searchSuggestions.length > 0 && (
+            <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {searchSuggestions.map((suggestion, index) => (
+                <Button
+                  key={`${suggestion.kind}:${suggestion.value}`}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onMouseEnter={() => setHighlightedSuggestionIndex(index)}
+                  onMouseDown={() => handleSuggestionSelect(suggestion.value)}
+                  className={`w-full justify-start rounded-none px-3 py-2 text-left text-sm ${
+                    highlightedSuggestionIndex === index
+                      ? 'bg-teal-100 text-teal-900'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <span className="truncate">{suggestion.value}</span>
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">
+                    {suggestion.kind}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          )}
           {searchInput && (
             <Button
               type="button"
@@ -128,6 +269,9 @@ export function DefinitionFilters({
             </Button>
           )}
         </div>
+        <p className="text-xs text-gray-500">
+          Search covers vignette metadata (name, attributes, template, tags). Schwartz values autocomplete as you type. Use explicit <code>OR</code> for OR matching.
+        </p>
 
         {/* Filter row */}
         <div className="flex flex-wrap items-center gap-2">
