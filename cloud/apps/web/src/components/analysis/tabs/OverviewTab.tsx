@@ -389,6 +389,10 @@ function ConditionDecisionMatrix({
           <tbody>
             {visibleModels.map((modelId) => {
               const counts = countsByModel[modelId] ?? { a: 0, neutral: 0, b: 0, total: 0 };
+              const maxCount = Math.max(counts.a, counts.neutral, counts.b);
+              const highlightA = maxCount > 0 && counts.a === maxCount;
+              const highlightNeutral = maxCount > 0 && counts.neutral === maxCount;
+              const highlightB = maxCount > 0 && counts.b === maxCount;
               return (
                 <tr key={modelId}>
                   <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
@@ -397,13 +401,19 @@ function ConditionDecisionMatrix({
                     </span>
                     <span className="ml-2 text-xs text-gray-400">({counts.total})</span>
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700">
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700 ${highlightA ? 'bg-blue-50' : ''}`}
+                  >
                     {counts.a}
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700">
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700 ${highlightNeutral ? 'bg-gray-100' : ''}`}
+                  >
                     {counts.neutral}
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700">
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700 ${highlightB ? 'bg-orange-50' : ''}`}
+                  >
                     {counts.b}
                   </td>
                 </tr>

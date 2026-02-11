@@ -30,6 +30,7 @@ describe('OverviewTab', () => {
               s1: { A: 'a1', B: 'b1' },
               s2: { A: 'a1', B: 'b2' },
               s3: { A: 'a2', B: 'b2' },
+              s4: { A: 'a2', B: 'b1' },
             },
             modelScenarioMatrix: {
               model1: {
@@ -39,6 +40,8 @@ describe('OverviewTab', () => {
                 s2: 2.6,
                 // rounds to 5 => Attribute B
                 s3: 4.6,
+                // rounds to 2 => Attribute A
+                s4: 1.6,
               },
             },
           }}
@@ -50,8 +53,13 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Harmony')).toBeInTheDocument();
     expect(screen.getByText('Neutral')).toBeInTheDocument();
 
-    // There should be exactly three count cells for the only model row: 1 / 1 / 1.
+    // Counts for model1: A=2, Neutral=1, B=1
+    expect(screen.getByText('2')).toBeInTheDocument();
     const ones = screen.getAllByText('1');
-    expect(ones.length).toBe(3);
+    expect(ones.length).toBe(2);
+
+    // Largest count cell (A=2) is highlighted with its side color.
+    const aCell = screen.getByText('2').closest('td');
+    expect(aCell).toHaveClass('bg-blue-50');
   });
 });
