@@ -38,23 +38,43 @@ function getScoreTextColor(value: number): string {
     return 'text-gray-600';
 }
 
-function Legend({ dimensionLabels }: { dimensionLabels?: Record<string, string> }) {
-    const label1 = dimensionLabels?.['1'] || "Low Score (1.0)";
-    const label5 = dimensionLabels?.['5'] || "High Score (5.0)";
+function extractAttributeName(label: string): string {
+    // Most common patterns for the decision scale labels.
+    const prefixes = [
+        'Strongly Support ',
+        'Somewhat Support ',
+        'Strongly Oppose ',
+        'Somewhat Oppose ',
+    ];
+    for (const prefix of prefixes) {
+        if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
+    }
+    return label.trim();
+}
+
+type LegendCounts = {
+    low: number;
+    neutral: number;
+    high: number;
+};
+
+function Legend({ dimensionLabels, counts }: { dimensionLabels?: Record<string, string>; counts: LegendCounts }) {
+    const lowName = extractAttributeName(dimensionLabels?.['1'] || 'Low');
+    const highName = extractAttributeName(dimensionLabels?.['5'] || 'High');
 
     return (
         <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
-                <span className="font-medium text-blue-800">{label1}</span>
+                <span className="font-medium text-blue-800">{lowName} {counts.low}</span>
             </div>
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
-                <span>Neutral (3.0)</span>
+                <span>Neutral {counts.neutral}</span>
             </div>
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
-                <span className="font-medium text-orange-800">{label5}</span>
+                <span className="font-medium text-orange-800">{highName} {counts.high}</span>
             </div>
         </div>
     );
@@ -149,6 +169,31 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
 
     }, [scenarioDimensions, modelScenarioMatrix, rowDim, colDim, selectedModel]);
 
+    const legendCounts = useMemo<LegendCounts>(() => {
+        if (!scenarioDimensions || !modelScenarioMatrix || !selectedModel) {
+            return { low: 0, neutral: 0, high: 0 };
+        }
+
+        const byScenario = modelScenarioMatrix[selectedModel] ?? {};
+
+        let low = 0;
+        let neutral = 0;
+        let high = 0;
+
+        // Count scenario-level decisions for this model (used as a proxy for trial counts in pivot).
+        for (const scenarioId of Object.keys(scenarioDimensions)) {
+            const score = byScenario[scenarioId];
+            if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+            if (score < 1 || score > 5) continue;
+
+            if (score <= 2.5) low += 1;
+            else if (score >= 3.5) high += 1;
+            else neutral += 1;
+        }
+
+        return { low, neutral, high };
+    }, [scenarioDimensions, modelScenarioMatrix, selectedModel]);
+
     const handleCellClick = (row: string, col: string, options?: { decisionCode?: string }) => {
         const params = new URLSearchParams({
             rowDim,
@@ -209,7 +254,7 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
                 </div>
 
                 <div className="ml-auto">
-                    <Legend dimensionLabels={dimensionLabels} />
+                    <Legend dimensionLabels={dimensionLabels} counts={legendCounts} />
                 </div>
             </div>
 
