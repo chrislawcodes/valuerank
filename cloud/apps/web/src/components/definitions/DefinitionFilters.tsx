@@ -45,26 +45,53 @@ export function DefinitionFilters({
 
   const { tags: allTags } = useTags();
   const schwartzValues = getCanonicalDimensionNames();
+  const tagNames = useMemo(
+    () => allTags.map((tag) => tag.name).filter((name) => name.trim().length > 0),
+    [allTags]
+  );
+
+  const suggestionItems = useMemo(() => {
+    const items: Array<{ value: string; kind: 'value' | 'tag' }> = [];
+    const seen = new Set<string>();
+
+    schwartzValues.forEach((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ value, kind: 'value' });
+    });
+
+    tagNames.forEach((tagName) => {
+      const key = tagName.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ value: tagName, kind: 'tag' });
+    });
+
+    return items;
+  }, [schwartzValues, tagNames]);
 
   const searchSuggestions = useMemo(() => {
     const tokenMatch = searchInput.match(/(?:^|\s)([^\s]*)$/);
     const token = tokenMatch?.[1]?.trim().toLowerCase() ?? '';
 
-    // If user just completed a term (trailing space), suggest all Schwartz values for the next token.
+    // If user just completed a term (trailing space), suggest top mixed metadata items for next token.
     if (token.length === 0) {
-      return [...schwartzValues].sort((a, b) => a.localeCompare(b)).slice(0, 8);
+      return [...suggestionItems]
+        .sort((a, b) => a.value.localeCompare(b.value))
+        .slice(0, 8);
     }
 
-    return schwartzValues
-      .filter((value) => value.toLowerCase().includes(token))
+    return suggestionItems
+      .filter((item) => item.value.toLowerCase().includes(token))
       .sort((a, b) => {
-        const aStarts = a.toLowerCase().startsWith(token);
-        const bStarts = b.toLowerCase().startsWith(token);
+        const aStarts = a.value.toLowerCase().startsWith(token);
+        const bStarts = b.value.toLowerCase().startsWith(token);
         if (aStarts !== bStarts) return aStarts ? -1 : 1;
-        return a.localeCompare(b);
+        return a.value.localeCompare(b.value);
       })
       .slice(0, 8);
-  }, [searchInput, schwartzValues]);
+  }, [searchInput, suggestionItems]);
 
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -141,7 +168,7 @@ export function DefinitionFilters({
         event.preventDefault();
         const selected = searchSuggestions[highlightedSuggestionIndex];
         if (selected !== undefined) {
-          handleSuggestionSelect(selected);
+          handleSuggestionSelect(selected.value);
         }
       }
       return;
@@ -209,19 +236,22 @@ export function DefinitionFilters({
             <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
               {searchSuggestions.map((suggestion, index) => (
                 <Button
-                  key={suggestion}
+                  key={`${suggestion.kind}:${suggestion.value}`}
                   type="button"
                   variant="ghost"
                   size="sm"
                   onMouseEnter={() => setHighlightedSuggestionIndex(index)}
-                  onMouseDown={() => handleSuggestionSelect(suggestion)}
+                  onMouseDown={() => handleSuggestionSelect(suggestion.value)}
                   className={`w-full justify-start rounded-none px-3 py-2 text-left text-sm ${
                     highlightedSuggestionIndex === index
                       ? 'bg-teal-50 text-teal-800'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  {suggestion}
+                  <span className="truncate">{suggestion.value}</span>
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">
+                    {suggestion.kind}
+                  </span>
                 </Button>
               ))}
             </div>
