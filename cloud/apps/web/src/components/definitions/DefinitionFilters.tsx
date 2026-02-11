@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
@@ -38,10 +38,27 @@ export function DefinitionFilters({
   className = '',
 }: DefinitionFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
 
   const { tags: allTags } = useTags();
   const schwartzValues = getCanonicalDimensionNames();
+
+  const searchSuggestions = useMemo(() => {
+    const tokenMatch = searchInput.match(/(?:^|\s)([^\s]*)$/);
+    const token = tokenMatch?.[1]?.trim().toLowerCase() ?? '';
+    if (token.length === 0) return [];
+
+    return schwartzValues
+      .filter((value) => value.toLowerCase().includes(token))
+      .sort((a, b) => {
+        const aStarts = a.toLowerCase().startsWith(token);
+        const bStarts = b.toLowerCase().startsWith(token);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 8);
+  }, [searchInput, schwartzValues]);
 
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -77,6 +94,15 @@ export function DefinitionFilters({
   const handleToggleHasRuns = () => {
     onFiltersChange({ ...filters, hasRuns: !filters.hasRuns });
   };
+
+  const handleSuggestionSelect = useCallback((value: string) => {
+    setSearchInput((current) => {
+      if (current.length === 0) return `${value} `;
+      if (/\s$/.test(current)) return `${current}${value} `;
+      return `${current.replace(/[^\s]*$/, value)} `;
+    });
+    setIsSearchFocused(false);
+  }, []);
 
   const handleTagToggle = useCallback(
     (tagId: string) => {
@@ -114,15 +140,30 @@ export function DefinitionFilters({
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            list="schwartz-values"
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              // Delay so suggestion click can register before closing.
+              setTimeout(() => setIsSearchFocused(false), 120);
+            }}
             placeholder="Search metadata (AND by default)"
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
           />
-          <datalist id="schwartz-values">
-            {schwartzValues.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
+          {isSearchFocused && searchSuggestions.length > 0 && (
+            <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {searchSuggestions.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onMouseDown={() => handleSuggestionSelect(suggestion)}
+                  className="w-full justify-start rounded-none px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          )}
           {searchInput && (
             <Button
               type="button"
