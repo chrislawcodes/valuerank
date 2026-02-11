@@ -274,6 +274,17 @@ function ConditionDecisionMatrix({
     navigate(url);
   };
 
+  const handleCountsCellClick = (modelId: string, decisionBucket: 'a' | 'neutral' | 'b') => {
+    const params = new URLSearchParams({
+      rowDim: attributeA,
+      colDim: attributeB,
+      model: modelId,
+      decisionBucket,
+    });
+    const url = `/analysis/${runId}/transcripts?${params.toString()}`;
+    navigate(url);
+  };
+
   if (!scenarioDimensions || !modelScenarioMatrix) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
@@ -404,17 +415,38 @@ function ConditionDecisionMatrix({
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700 ${highlightA ? 'bg-blue-50' : ''}`}
                   >
-                    {counts.a}
+                    <button
+                      type="button"
+                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.aName}`}
+                      onClick={() => handleCountsCellClick(modelId, 'a')}
+                    >
+                      {counts.a}
+                    </button>
                   </td>
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700 ${highlightNeutral ? 'bg-gray-100' : ''}`}
                   >
-                    {counts.neutral}
+                    <button
+                      type="button"
+                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      title={`View neutral transcripts for ${modelId}`}
+                      onClick={() => handleCountsCellClick(modelId, 'neutral')}
+                    >
+                      {counts.neutral}
+                    </button>
                   </td>
                   <td
                     className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700 ${highlightB ? 'bg-orange-50' : ''}`}
                   >
-                    {counts.b}
+                    <button
+                      type="button"
+                      className="w-full h-full rounded-sm hover:ring-1 hover:ring-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.bName}`}
+                      onClick={() => handleCountsCellClick(modelId, 'b')}
+                    >
+                      {counts.b}
+                    </button>
                   </td>
                 </tr>
               );
