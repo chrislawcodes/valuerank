@@ -31,7 +31,14 @@ export function AnalysisTranscripts() {
   const col = searchParams.get('col') ?? '';
   const selectedModel = searchParams.get('model') ?? '';
   const decisionCode = searchParams.get('decisionCode') ?? '';
-  const hasRequiredParams = Boolean(rowDim && colDim && row && col);
+  const decisionBucket = searchParams.get('decisionBucket') ?? '';
+  const hasCellFilterParams = Boolean(rowDim && colDim && row && col);
+  const hasBucketFilterParams = Boolean(
+    rowDim
+    && colDim
+    && selectedModel
+    && (decisionBucket === 'a' || decisionBucket === 'neutral' || decisionBucket === 'b')
+  );
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -49,6 +56,7 @@ export function AnalysisTranscripts() {
   });
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
+  const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
@@ -69,6 +77,58 @@ export function AnalysisTranscripts() {
   }, [updateTranscriptDecision, refetch]);
 
   const filteredTranscripts = useMemo(() => {
+    if (hasBucketFilterParams) {
+      const transcripts = run?.transcripts ?? [];
+      if (!scenarioDimensions || !modelScenarioMatrix) return [];
+      const modelScores = modelScenarioMatrix[selectedModel];
+      if (!modelScores) return [];
+
+      // Group scenarios by selected row/col dimensions.
+      const grouped = new Map<string, string[]>();
+      Object.entries(scenarioDimensions).forEach(([scenarioId, dims]) => {
+        const r = String(dims[rowDim] ?? 'N/A');
+        const c = String(dims[colDim] ?? 'N/A');
+        const key = `${r}||${c}`;
+        const current = grouped.get(key);
+        if (current) {
+          current.push(scenarioId);
+        } else {
+          grouped.set(key, [scenarioId]);
+        }
+      });
+
+      // Keep scenarios from conditions whose mean rounds into the selected bucket.
+      const matchingScenarioIds = new Set<string>();
+      grouped.forEach((scenarioIds) => {
+        let sum = 0;
+        let count = 0;
+        scenarioIds.forEach((scenarioId) => {
+          const score = modelScores[scenarioId];
+          if (typeof score === 'number' && Number.isFinite(score)) {
+            sum += score;
+            count += 1;
+          }
+        });
+        if (count === 0) return;
+
+        const rounded = Math.round(sum / count);
+        const matchesBucket = (
+          (decisionBucket === 'a' && rounded <= 2)
+          || (decisionBucket === 'neutral' && rounded === 3)
+          || (decisionBucket === 'b' && rounded >= 4)
+        );
+        if (!matchesBucket) return;
+
+        scenarioIds.forEach((scenarioId) => matchingScenarioIds.add(scenarioId));
+      });
+
+      return transcripts.filter((transcript) => (
+        transcript.modelId === selectedModel
+        && transcript.scenarioId !== null
+        && matchingScenarioIds.has(transcript.scenarioId)
+      ));
+    }
+
     return filterTranscriptsForPivotCell({
       transcripts: run?.transcripts ?? [],
       scenarioDimensions,
@@ -79,7 +139,19 @@ export function AnalysisTranscripts() {
       selectedModel,
       decisionCode: decisionCode || undefined,
     });
-  }, [run?.transcripts, scenarioDimensions, rowDim, colDim, row, col, selectedModel, decisionCode]);
+  }, [
+    run?.transcripts,
+    scenarioDimensions,
+    modelScenarioMatrix,
+    rowDim,
+    colDim,
+    row,
+    col,
+    selectedModel,
+    decisionCode,
+    decisionBucket,
+    hasBucketFilterParams,
+  ]);
 
   if (loading && !run) {
     return (
@@ -131,13 +203,27 @@ export function AnalysisTranscripts() {
           Back
         </Button>
         <div className="text-sm text-gray-500">
-          {rowDim && colDim ? (
+          {(rowDim && colDim) ? (
             <>
-              {rowDim}: <span className="font-medium text-gray-900">{row || '-'}</span>
-              <span className="mx-2">•</span>
-              {colDim}: <span className="font-medium text-gray-900">{col || '-'}</span>
+              {hasCellFilterParams ? (
+                <>
+                  {rowDim}: <span className="font-medium text-gray-900">{row || '-'}</span>
+                  <span className="mx-2">•</span>
+                  {colDim}: <span className="font-medium text-gray-900">{col || '-'}</span>
+                </>
+              ) : (
+                <>
+                  {rowDim} × {colDim}
+                </>
+              )}
               <span className="mx-2">•</span>
               Model: <span className="font-medium text-gray-900">{selectedModel || 'All Models'}</span>
+              {decisionBucket && (
+                <>
+                  <span className="mx-2">•</span>
+                  Bucket: <span className="font-medium text-gray-900">{decisionBucket}</span>
+                </>
+              )}
               {decisionCode && (
                 <>
                   <span className="mx-2">•</span>
@@ -157,7 +243,7 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {scenarioDimensions && !hasRequiredParams ? (
+      {scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>

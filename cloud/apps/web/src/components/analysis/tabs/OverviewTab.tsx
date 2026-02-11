@@ -4,7 +4,7 @@
  * Displays per-model statistics with overall stats and top values.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import { formatPercent } from './types';
@@ -15,6 +15,7 @@ type OverviewTabProps = {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
+  dimensionLabels?: Record<string, string>;
 };
 
 /**
@@ -102,14 +103,35 @@ function getScoreTextColor(value: number): string {
   return 'text-gray-700';
 }
 
+function extractAttributeName(label: string): string {
+  const prefixes = [
+    'Strongly Support ',
+    'Somewhat Support ',
+    'Strongly Oppose ',
+    'Somewhat Oppose ',
+  ];
+  for (const prefix of prefixes) {
+    if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
+  }
+  return label.trim();
+}
+
+function getDecisionSideNames(dimensionLabels?: Record<string, string>): { aName: string; bName: string } {
+  const aName = dimensionLabels?.['1'] ? extractAttributeName(dimensionLabels['1']) : 'Attribute A';
+  const bName = dimensionLabels?.['5'] ? extractAttributeName(dimensionLabels['5']) : 'Attribute B';
+  return { aName, bName };
+}
+
 function ConditionDecisionMatrix({
   runId,
   perModel,
   visualizationData,
+  dimensionLabels,
 }: {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
+  dimensionLabels?: Record<string, string>;
 }) {
   const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
@@ -189,22 +211,56 @@ function ConditionDecisionMatrix({
     });
   }, [scenarioDimensions, attributeA, attributeB]);
 
-  const getMeanDecision = (modelId: string, scenarioIds: string[]): number | null => {
-    const byScenario = modelScenarioMatrix?.[modelId];
-    if (!byScenario) return null;
+  const getMeanDecision = useCallback(
+    (modelId: string, scenarioIds: string[]): number | null => {
+      const byScenario = modelScenarioMatrix?.[modelId];
+      if (!byScenario) return null;
 
-    let sum = 0;
-    let count = 0;
-    scenarioIds.forEach((scenarioId) => {
-      const score = byScenario[scenarioId];
-      if (typeof score === 'number' && Number.isFinite(score)) {
-        sum += score;
-        count += 1;
-      }
+      let sum = 0;
+      let count = 0;
+      scenarioIds.forEach((scenarioId) => {
+        const score = byScenario[scenarioId];
+        if (typeof score === 'number' && Number.isFinite(score)) {
+          sum += score;
+          count += 1;
+        }
+      });
+
+      return count > 0 ? sum / count : null;
+    },
+    [modelScenarioMatrix]
+  );
+
+  const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
+
+  const countsByModel = useMemo(() => {
+    const result: Record<string, { a: number; neutral: number; b: number; total: number }> = {};
+    if (!modelScenarioMatrix) return result;
+    if (conditionRows.length === 0) return result;
+
+    visibleModels.forEach((modelId) => {
+      let a = 0;
+      let neutral = 0;
+      let b = 0;
+      let total = 0;
+
+      conditionRows.forEach((row) => {
+        const mean = getMeanDecision(modelId, row.scenarioIds);
+        if (mean === null) return;
+        const rounded = Math.round(mean);
+        if (rounded < 1 || rounded > 5) return;
+
+        total += 1;
+        if (rounded <= 2) a += 1;
+        else if (rounded === 3) neutral += 1;
+        else b += 1;
+      });
+
+      result[modelId] = { a, neutral, b, total };
     });
 
-    return count > 0 ? sum / count : null;
-  };
+    return result;
+  }, [visibleModels, conditionRows, modelScenarioMatrix, getMeanDecision]);
 
   const handleCellClick = (modelId: string, row: ConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
@@ -217,6 +273,17 @@ function ConditionDecisionMatrix({
     if (options?.decisionCode) {
       params.set('decisionCode', options.decisionCode);
     }
+    const url = `/analysis/${runId}/transcripts?${params.toString()}`;
+    navigate(url);
+  };
+
+  const handleCountsCellClick = (modelId: string, decisionBucket: 'a' | 'neutral' | 'b') => {
+    const params = new URLSearchParams({
+      rowDim: attributeA,
+      colDim: attributeB,
+      model: modelId,
+      decisionBucket,
+    });
     const url = `/analysis/${runId}/transcripts?${params.toString()}`;
     navigate(url);
   };
@@ -320,6 +387,94 @@ function ConditionDecisionMatrix({
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
+                AI
+              </th>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
+                {sideNames.aName}
+              </th>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
+                Neutral
+              </th>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
+                {sideNames.bName}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleModels.map((modelId) => {
+              const counts = countsByModel[modelId] ?? { a: 0, neutral: 0, b: 0, total: 0 };
+              const maxCount = Math.max(counts.a, counts.neutral, counts.b);
+              const highlightA = maxCount > 0 && counts.a === maxCount;
+              const highlightNeutral = maxCount > 0 && counts.neutral === maxCount;
+              const highlightB = maxCount > 0 && counts.b === maxCount;
+              return (
+                <tr key={modelId}>
+                  <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                    <span className="truncate" title={modelId}>
+                      {modelId}
+                    </span>
+                    <span className="ml-2 text-xs text-gray-400">({counts.total})</span>
+                  </td>
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700 ${highlightA ? 'bg-blue-50' : ''}`}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.aName}`}
+                      onClick={() => handleCountsCellClick(modelId, 'a')}
+                    >
+                      {counts.a}
+                    </Button>
+                  </td>
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700 ${highlightNeutral ? 'bg-gray-100' : ''}`}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                      title={`View neutral transcripts for ${modelId}`}
+                      onClick={() => handleCountsCellClick(modelId, 'neutral')}
+                    >
+                      {counts.neutral}
+                    </Button>
+                  </td>
+                  <td
+                    className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700 ${highlightB ? 'bg-orange-50' : ''}`}
+                  >
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.bName}`}
+                      onClick={() => handleCountsCellClick(modelId, 'b')}
+                    >
+                      {counts.b}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {visibleModels.length === 0 && (
+          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+        )}
+        <div className="mt-2 text-xs text-gray-500">
+          Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
                 Condition
               </th>
               {visibleModels.map((modelId) => (
@@ -342,25 +497,26 @@ function ConditionDecisionMatrix({
                 {visibleModels.map((modelId) => {
                   const mean = getMeanDecision(modelId, row.scenarioIds);
                   const isOtherCell = mean === null;
-                  const canOpen = true;
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
-                      className={`border border-gray-200 px-3 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''
-                        }`}
+                      className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
                       style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
-                      title={
-                        canOpen
-                          ? `View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`
-                          : ''
-                      }
-                      onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                     >
-                      {mean === null ? (
-                        <span className="text-gray-500">-</span>
-                      ) : (
-                        <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
-                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
+                        title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`}
+                        onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
+                      >
+                        {mean === null ? (
+                          <span className="text-gray-500">-</span>
+                        ) : (
+                          <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                        )}
+                      </Button>
                     </td>
                   );
                 })}
@@ -376,7 +532,7 @@ function ConditionDecisionMatrix({
   );
 }
 
-export function OverviewTab({ runId, perModel, visualizationData }: OverviewTabProps) {
+export function OverviewTab({ runId, perModel, visualizationData, dimensionLabels }: OverviewTabProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -385,7 +541,12 @@ export function OverviewTab({ runId, perModel, visualizationData }: OverviewTabP
           Rows are condition combinations (attribute A level + attribute B level). Columns are target AIs.
           Each cell shows the mean decision score.
         </p>
-        <ConditionDecisionMatrix runId={runId} perModel={perModel} visualizationData={visualizationData} />
+        <ConditionDecisionMatrix
+          runId={runId}
+          perModel={perModel}
+          visualizationData={visualizationData}
+          dimensionLabels={dimensionLabels}
+        />
       </div>
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-700">Per-Model Statistics</h3>
