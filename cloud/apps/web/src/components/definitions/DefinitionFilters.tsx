@@ -3,7 +3,7 @@ import { Search, X, Filter, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import { useTags } from '../../hooks/useTags';
-import { getCanonicalDimensionNames } from '@valuerank/shared';
+import { getCanonicalDimensionNames } from '@valuerank/shared/canonical-dimensions';
 
 export type DefinitionFilterState = {
   search: string;
