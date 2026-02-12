@@ -41,6 +41,29 @@ vi.mock('../../../src/hooks/useCostEstimate', () => ({
   }),
 }));
 
+vi.mock('../../../src/hooks/useRunConditionGrid', () => ({
+  useRunConditionGrid: () => ({
+    grid: {
+      attributeA: 'Attribute A',
+      attributeB: 'Attribute B',
+      rowLevels: ['1'],
+      colLevels: ['1'],
+      cells: [
+        {
+          rowLevel: '1',
+          colLevel: '1',
+          trialCount: 0,
+          scenarioCount: 1,
+          scenarioIds: ['scenario-1'],
+        },
+      ],
+    },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 // Mock the useFinalTrialPlan hook (used by RunForm)
 vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
   useFinalTrialPlan: vi.fn().mockReturnValue({
@@ -181,11 +204,11 @@ describe('RerunDialog', () => {
       expect(screen.getByText('Target Models')).toBeInTheDocument();
     });
 
-    it('shows sample size options', () => {
+    it('shows trial size options', () => {
       render(<RerunDialog {...defaultProps} />);
 
-      expect(screen.getByText('Sample Size')).toBeInTheDocument();
-      expect(screen.getByText('1% (test trial)')).toBeInTheDocument();
+      expect(screen.getByText('Trial Size')).toBeInTheDocument();
+      expect(screen.getByText('Trial specific condition')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '100%' })).toBeInTheDocument();
     });
   });

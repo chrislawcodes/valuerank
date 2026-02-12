@@ -26,6 +26,7 @@ export type StartRunInput = {
   experimentId?: string;
   userId: string;
   finalTrial?: boolean;
+  scenarioIds?: string[];
 };
 
 export type StartRunResult = {
@@ -149,6 +150,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     experimentId,
     userId,
     finalTrial = false,
+    scenarioIds,
   } = input;
 
   log.info(
@@ -169,6 +171,10 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   // Validate samplesPerScenario (only if not final trial)
   if (!finalTrial && (samplesPerScenario < 1 || samplesPerScenario > 100)) {
     throw new ValidationError('samplesPerScenario must be between 1 and 100');
+  }
+
+  if (finalTrial && Array.isArray(scenarioIds) && scenarioIds.length > 0) {
+    throw new ValidationError('scenarioIds cannot be used with finalTrial');
   }
 
   // Validate priority
@@ -250,6 +256,32 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     selectedScenarioIds = Array.from(new Set(jobPlan.map(j => j.scenarioId)));
 
     log.info({ runPlanSize: jobPlan.length, scenariosInvolved: selectedScenarioIds.length }, 'Final Trial plan generated');
+  } else if (Array.isArray(scenarioIds) && scenarioIds.length > 0) {
+    const allScenarioIds = definition.scenarios.map((s) => s.id);
+    const allScenarioIdSet = new Set(allScenarioIds);
+    selectedScenarioIds = Array.from(new Set(scenarioIds));
+
+    const invalidScenarioIds = selectedScenarioIds.filter((scenarioId) => !allScenarioIdSet.has(scenarioId));
+    if (invalidScenarioIds.length > 0) {
+      throw new ValidationError(
+        `Invalid scenarioIds for definition ${definitionId}: ${invalidScenarioIds.join(', ')}`
+      );
+    }
+
+    for (const modelId of models) {
+      for (const scenarioId of selectedScenarioIds) {
+        jobPlan.push({
+          modelId,
+          scenarioId,
+          samples: samplesPerScenario,
+        });
+      }
+    }
+
+    log.debug(
+      { definitionId, selectedScenarios: selectedScenarioIds.length },
+      'Using explicit scenario selection'
+    );
   } else {
     // Standard Percentage Sampling
     const allScenarioIds = definition.scenarios.map((s) => s.id);
@@ -287,7 +319,11 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   const costEstimate = await estimateCost({
     definitionId,
     modelIds: models,
-    samplePercentage: finalTrial ? 100 : samplePercentage, // Assume 100% of scenarios for base calculation? Inaccurate.
+    samplePercentage: finalTrial
+      ? 100
+      : (Array.isArray(scenarioIds) && scenarioIds.length > 0)
+        ? Math.max(1, Math.round((selectedScenarioIds.length / definition.scenarios.length) * 100))
+        : samplePercentage,
     samplesPerScenario: finalTrial ? 10 : samplesPerScenario, // Upper bound?
   });
 
@@ -312,6 +348,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     samplePercentage: finalTrial ? null : samplePercentage,
     sampleSeed: finalTrial ? null : sampleSeed,
     samplesPerScenario: finalTrial ? null : samplesPerScenario,
+    scenarioIds: finalTrial ? null : (selectedScenarioIds.length > 0 ? selectedScenarioIds : null),
+    runMode: finalTrial ? 'FINAL' : (Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE'),
     isFinalTrial: finalTrial,
     priority,
     definitionSnapshot,

@@ -19,6 +19,22 @@ export type Scenario = {
   createdAt: string;
 };
 
+export type RunConditionGridCell = {
+  rowLevel: string;
+  colLevel: string;
+  trialCount: number;
+  scenarioCount: number;
+  scenarioIds: string[];
+};
+
+export type RunConditionGrid = {
+  attributeA: string;
+  attributeB: string;
+  rowLevels: string[];
+  colLevels: string[];
+  cells: RunConditionGridCell[];
+};
+
 // ============================================================================
 // QUERIES
 // ============================================================================
@@ -53,6 +69,24 @@ export const SCENARIO_QUERY = gql`
   }
 `;
 
+export const RUN_CONDITION_GRID_QUERY = gql`
+  query RunConditionGrid($definitionId: ID!) {
+    runConditionGrid(definitionId: $definitionId) {
+      attributeA
+      attributeB
+      rowLevels
+      colLevels
+      cells {
+        rowLevel
+        colLevel
+        trialCount
+        scenarioCount
+        scenarioIds
+      }
+    }
+  }
+`;
+
 // ============================================================================
 // RESULT TYPES
 // ============================================================================
@@ -81,4 +115,12 @@ export type ScenarioQueryResult = {
 
 export type ScenarioQueryVariables = {
   id: string;
+};
+
+export type RunConditionGridQueryResult = {
+  runConditionGrid: RunConditionGrid | null;
+};
+
+export type RunConditionGridQueryVariables = {
+  definitionId: string;
 };
