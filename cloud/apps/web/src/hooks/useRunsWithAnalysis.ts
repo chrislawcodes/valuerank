@@ -5,6 +5,7 @@ import {
   type RunsQueryVariables,
   type RunsQueryResult,
 } from '../api/operations/runs';
+import { isNonSurveyRun } from '../lib/runClassification';
 
 type UseRunsWithAnalysisOptions = {
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
@@ -50,7 +51,7 @@ export function useRunsWithAnalysis(options: UseRunsWithAnalysisOptions = {}): U
   });
 
   return {
-    runs: result.data?.runs ?? [],
+    runs: (result.data?.runs ?? []).filter(isNonSurveyRun),
     loading: result.fetching,
     error: result.error ? new Error(result.error.message) : null,
     refetch: () => reexecuteQuery({ requestPolicy: 'network-only' }),

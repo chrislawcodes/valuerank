@@ -13,6 +13,7 @@ import {
   type RunsQueryResult,
 } from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
+import { isNonSurveyRun } from '../lib/runClassification';
 
 type UseInfiniteRunsWithAnalysisOptions = {
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
@@ -73,8 +74,14 @@ export function useInfiniteRunsWithAnalysis(
     pause,
   });
 
+  const nonSurveyRuns = useMemo(
+    () => result.items.filter(isNonSurveyRun),
+    [result.items]
+  );
+
   return {
     ...result,
-    runs: result.items,
+    items: nonSurveyRuns,
+    runs: nonSurveyRuns,
   };
 }

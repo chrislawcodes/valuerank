@@ -13,6 +13,7 @@ import {
   type ComparisonRunsListQueryResult,
 } from '../api/operations/comparison';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
+import { isNonSurveyRun } from '../lib/runClassification';
 
 type UseInfiniteComparisonRunsOptions = {
   definitionId?: string;
@@ -75,8 +76,14 @@ export function useInfiniteComparisonRuns(
     pause,
   });
 
+  const nonSurveyRuns = useMemo(
+    () => result.items.filter(isNonSurveyRun),
+    [result.items]
+  );
+
   return {
     ...result,
-    runs: result.items,
+    items: nonSurveyRuns,
+    runs: nonSurveyRuns,
   };
 }

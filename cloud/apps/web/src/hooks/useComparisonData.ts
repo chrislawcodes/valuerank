@@ -22,6 +22,7 @@ import type {
   ValueWinRate,
 } from '../components/compare/types';
 import { cohensD } from '../lib/statistics/cohens-d';
+import { isNonSurveyRun } from '../lib/runClassification';
 
 type UseComparisonDataOptions = {
   /** IDs of runs to fetch with full analysis */
@@ -97,7 +98,7 @@ export function useComparisonData(options: UseComparisonDataOptions): UseCompari
 
   // Transform selected runs to RunWithAnalysis type with computed aggregates
   const selectedRuns = useMemo<RunWithAnalysis[]>(() => {
-    const runs = selectedResult.data?.runsWithAnalysis ?? [];
+    const runs = (selectedResult.data?.runsWithAnalysis ?? []).filter(isNonSurveyRun);
 
     // Maintain order of selectedRunIds
     return selectedRunIds
