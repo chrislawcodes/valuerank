@@ -88,7 +88,7 @@ type TranscriptContent = {
 
 /**
  * Extract the probe prompts from transcript content.
- * Combines prompts across turns; includes promptLabel when present.
+ * Combines prompts across turns.
  */
 function getProbePrompt(transcript: TranscriptWithScenario): string {
   const content = transcript.content as TranscriptContent | null;
@@ -97,12 +97,7 @@ function getProbePrompt(transcript: TranscriptWithScenario): string {
   }
 
   const prompts = content.turns
-    .map((turn) => {
-      const prompt = turn.probePrompt ?? '';
-      if (!prompt) return '';
-      const label = (turn.promptLabel ?? '').trim();
-      return label ? `[${label}] ${prompt}` : prompt;
-    })
+    .map((turn) => turn.probePrompt ?? '')
     .filter((p) => p.length > 0);
 
   return prompts.join('\n\n---\n\n');

@@ -498,13 +498,13 @@ describe('CSV Serialization Helper', () => {
     };
 
     const row = transcriptToCSVRow(mockTranscript as Parameters<typeof transcriptToCSVRow>[0]);
-    expect(row.probePrompt).toBe('[scenario_prompt] What should I do?\n\n---\n\n[followup_1] Are you sure?');
+    expect(row.probePrompt).toBe('What should I do?\n\n---\n\nAre you sure?');
 
     const formatted = formatCSVRow(row, []);
     // Post-variable columns include Probe Prompt before Target Response.
     expect(formatted).toContain(',1,transcript-id,');
-    expect(formatted).toContain('[scenario_prompt] What should I do?');
-    expect(formatted).toContain('[followup_1] Are you sure?');
+    expect(formatted).toContain('What should I do?');
+    expect(formatted).toContain('Are you sure?');
   });
 
   it('includes sample index in CSV row for multi-sample runs', async () => {
