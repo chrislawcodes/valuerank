@@ -56,7 +56,7 @@ export function DefinitionDetail() {
   });
 
   // Fetch scenario count for run form
-  const { totalCount: scenarioCount } = useExpandedScenarios({
+  const { totalCount: scenarioCount, refetch: refetchScenarioCount } = useExpandedScenarios({
     definitionId: id || '',
     pause: isNewDefinition || !id,
     limit: 1,
@@ -73,11 +73,12 @@ export function DefinitionDetail() {
     if (isExpanding && !isNewDefinition && !isEditing) {
       const interval = setInterval(() => {
         refetch();
+        refetchScenarioCount();
       }, 3000);
       return () => clearInterval(interval);
     }
     return undefined;
-  }, [isExpanding, isNewDefinition, isEditing, refetch]);
+  }, [isExpanding, isNewDefinition, isEditing, refetch, refetchScenarioCount]);
 
   const {
     createDefinition,
