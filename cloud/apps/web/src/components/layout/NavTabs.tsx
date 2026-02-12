@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { FileText, Play, BarChart2, GitCompare, FlaskConical, Settings, ScrollText } from 'lucide-react';
+import { FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, ScrollText } from 'lucide-react';
 
 const tabs = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
@@ -7,7 +7,8 @@ const tabs = [
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Experiments', path: '/experiments', icon: FlaskConical },
+  { name: 'Survey', path: '/survey', icon: ClipboardList },
+  { name: 'Survey Results', path: '/survey-results', icon: BarChart2 },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Menu, X, FileText, Play, BarChart2, GitCompare, FlaskConical, Settings } from 'lucide-react';
+import { Menu, X, FileText, Play, BarChart2, GitCompare, ClipboardList, Settings } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -9,7 +9,8 @@ const navItems = [
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Experiments', path: '/experiments', icon: FlaskConical },
+  { name: 'Survey', path: '/survey', icon: ClipboardList },
+  { name: 'Survey Results', path: '/survey-results', icon: BarChart2 },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 

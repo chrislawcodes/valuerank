@@ -45,6 +45,7 @@ export type UseInfiniteQueryResult<TItem> = {
   totalCount: number | null;
   loadMore: () => void;
   refetch: () => void;
+  softRefetch: () => void;
 };
 
 /**
@@ -154,6 +155,11 @@ export function useInfiniteQuery<
     reexecuteQuery({ requestPolicy: 'network-only' });
   }, [reexecuteQuery]);
 
+  // Refetch without clearing currently rendered items (useful for polling/live updates)
+  const softRefetch = useCallback(() => {
+    reexecuteQuery({ requestPolicy: 'network-only' });
+  }, [reexecuteQuery]);
+
   return {
     items: allItems,
     loading: result.fetching && allItems.length === 0,
@@ -163,5 +169,6 @@ export function useInfiniteQuery<
     totalCount,
     loadMore,
     refetch,
+    softRefetch,
   };
 }

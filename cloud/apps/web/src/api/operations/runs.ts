@@ -243,6 +243,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
 export const RUNS_QUERY = gql`
   query Runs(
     $definitionId: String
+    $experimentId: String
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
@@ -251,6 +252,7 @@ export const RUNS_QUERY = gql`
   ) {
     runs(
       definitionId: $definitionId
+      experimentId: $experimentId
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
@@ -266,12 +268,14 @@ export const RUNS_QUERY = gql`
 export const RUN_COUNT_QUERY = gql`
   query RunCount(
     $definitionId: String
+    $experimentId: String
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
   ) {
     runCount(
       definitionId: $definitionId
+      experimentId: $experimentId
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
@@ -412,6 +416,7 @@ export type StartRunInput = {
 
 export type RunsQueryVariables = {
   definitionId?: string;
+  experimentId?: string;
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
@@ -425,6 +430,7 @@ export type RunsQueryResult = {
 
 export type RunCountQueryVariables = {
   definitionId?: string;
+  experimentId?: string;
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';

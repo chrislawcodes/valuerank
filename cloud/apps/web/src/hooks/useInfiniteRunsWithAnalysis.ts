@@ -17,6 +17,7 @@ import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuer
 type UseInfiniteRunsWithAnalysisOptions = {
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   definitionId?: string;
+  experimentId?: string;
   pageSize?: number;
   pause?: boolean;
 };
@@ -33,7 +34,7 @@ type UseInfiniteRunsWithAnalysisResult = UseInfiniteQueryResult<Run> & {
 export function useInfiniteRunsWithAnalysis(
   options: UseInfiniteRunsWithAnalysisOptions = {}
 ): UseInfiniteRunsWithAnalysisResult {
-  const { analysisStatus, definitionId, pageSize, pause = false } = options;
+  const { analysisStatus, definitionId, experimentId, pageSize, pause = false } = options;
 
   // Build filters object
   const filters = useMemo(
@@ -41,8 +42,9 @@ export function useInfiniteRunsWithAnalysis(
       hasAnalysis: true,
       analysisStatus: analysisStatus || undefined,
       definitionId: definitionId || undefined,
+      experimentId: experimentId || undefined,
     }),
-    [analysisStatus, definitionId]
+    [analysisStatus, definitionId, experimentId]
   );
 
   // Count query filters
@@ -51,8 +53,9 @@ export function useInfiniteRunsWithAnalysis(
       hasAnalysis: true as const,
       analysisStatus: analysisStatus || undefined,
       definitionId: definitionId || undefined,
+      experimentId: experimentId || undefined,
     }),
-    [analysisStatus, definitionId]
+    [analysisStatus, definitionId, experimentId]
   );
 
   // Extract runs from query result

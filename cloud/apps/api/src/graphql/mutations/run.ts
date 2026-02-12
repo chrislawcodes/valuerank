@@ -530,7 +530,9 @@ const UpdateRunInput = builder.inputType('UpdateRunInput', {
   }),
 });
 
-const MANUAL_DECISION_CODES = new Set(['1', '2', '3', '4', '5']);
+function isValidManualDecisionCode(value: string): boolean {
+  return /^[1-9]\d*$/.test(value);
+}
 
 // updateRun mutation - update run properties
 builder.mutationField('updateRun', (t) =>
@@ -611,7 +613,7 @@ builder.mutationField('updateTranscriptDecision', (t) =>
     description: `
       Manually update a transcript decision code.
 
-      Accepts only explicit decision codes "1" through "5".
+      Accepts only positive integer decision codes.
       If the run is already completed, this will supersede current analysis
       and queue a recompute job.
 
@@ -624,7 +626,7 @@ builder.mutationField('updateTranscriptDecision', (t) =>
       }),
       decisionCode: t.arg.string({
         required: true,
-        description: 'Decision code override (must be one of: 1, 2, 3, 4, 5)',
+        description: 'Decision code override (must be a positive integer)',
       }),
     },
     resolve: async (_root, args, ctx) => {
@@ -635,8 +637,8 @@ builder.mutationField('updateTranscriptDecision', (t) =>
       const transcriptId = String(args.transcriptId);
       const decisionCode = args.decisionCode.trim();
 
-      if (!MANUAL_DECISION_CODES.has(decisionCode)) {
-        throw new Error('decisionCode must be one of: 1, 2, 3, 4, 5');
+      if (!isValidManualDecisionCode(decisionCode)) {
+        throw new Error('decisionCode must be a positive integer');
       }
 
       const transcript = await db.transcript.findUnique({
