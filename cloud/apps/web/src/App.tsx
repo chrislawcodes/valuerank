@@ -15,7 +15,8 @@ import { Analysis } from './pages/Analysis';
 import { AnalysisDetail } from './pages/AnalysisDetail';
 import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
 import { Compare } from './pages/Compare';
-import { Experiments } from './pages/Experiments';
+import { Survey } from './pages/Survey';
+import { SurveyResults } from './pages/SurveyResults';
 import { Settings } from './pages/Settings';
 import { Preambles } from './pages/Preambles';
 import { client } from './api/client';
@@ -112,13 +113,22 @@ function App() {
               }
             />
             <Route
-              path="/experiments"
+              path="/survey"
               element={
                 <ProtectedLayout>
-                  <Experiments />
+                  <Survey />
                 </ProtectedLayout>
               }
             />
+            <Route
+              path="/survey-results"
+              element={
+                <ProtectedLayout>
+                  <SurveyResults />
+                </ProtectedLayout>
+              }
+            />
+            <Route path="/experiments" element={<Navigate to="/survey" replace />} />
             <Route
               path="/settings"
               element={

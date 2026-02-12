@@ -8,6 +8,7 @@
 import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Run } from '../../api/operations/runs';
 import { formatRunName } from '../../lib/format';
+import { getRunStatusLabel, getRunStatusVariant } from '../../lib/statusBadge';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
 
@@ -78,6 +79,11 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
               <h3 className="font-medium text-gray-900 truncate">
                 {formatRunName(run)}
               </h3>
+              <Badge variant={getRunStatusVariant(run.status)} size="count">
+                {run.status === 'SUMMARIZING' && run.summarizeProgress
+                  ? `Summarizing (${run.summarizeProgress.completed}/${run.summarizeProgress.total})`
+                  : getRunStatusLabel(run.status)}
+              </Badge>
               <Badge variant={statusConfig.badgeVariant} size="count">
                 {statusConfig.label}
               </Badge>

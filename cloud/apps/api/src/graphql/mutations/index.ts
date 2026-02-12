@@ -11,3 +11,4 @@ import './analysis.js';
 import './export.js';
 import './llm.js';
 import './preamble.js';
+import './survey.js';

@@ -14,3 +14,4 @@ import './llm.js';
 import './audit-log.js';
 import './preamble.js';
 import './final-trial-plan.js';
+import './survey.js';

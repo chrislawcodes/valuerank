@@ -16,6 +16,7 @@ import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuer
 
 type UseInfiniteRunsOptions = {
   definitionId?: string;
+  experimentId?: string;
   status?: string;
   pageSize?: number;
   pause?: boolean;
@@ -31,24 +32,26 @@ type UseInfiniteRunsResult = UseInfiniteQueryResult<Run> & {
  * Loads pages incrementally and concatenates results.
  */
 export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfiniteRunsResult {
-  const { definitionId, status, pageSize, pause = false } = options;
+  const { definitionId, experimentId, status, pageSize, pause = false } = options;
 
   // Build filters object
   const filters = useMemo(
     () => ({
       definitionId: definitionId || undefined,
+      experimentId: experimentId || undefined,
       status: status || undefined,
     }),
-    [definitionId, status]
+    [definitionId, experimentId, status]
   );
 
   // Count query filters
   const countFilters = useMemo(
     () => ({
       definitionId: definitionId || undefined,
+      experimentId: experimentId || undefined,
       status: status || undefined,
     }),
-    [definitionId, status]
+    [definitionId, experimentId, status]
   );
 
   // Extract runs from query result
