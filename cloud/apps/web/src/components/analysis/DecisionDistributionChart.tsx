@@ -5,6 +5,7 @@
  * Stacked horizontal bar chart with decision codes color-coded.
  */
 
+import { useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -16,6 +17,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { VisualizationData } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type DecisionDistributionChartProps = {
   visualizationData: VisualizationData;
@@ -106,6 +108,7 @@ export function CustomLegend({ dimensionLabels }: { dimensionLabels?: Record<str
   );
 }
 export function DecisionDistributionChart({ visualizationData, dimensionLabels }: DecisionDistributionChartProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const { decisionDistribution } = visualizationData;
 
   if (!decisionDistribution || Object.keys(decisionDistribution).length === 0) {
@@ -137,14 +140,16 @@ export function DecisionDistributionChart({ visualizationData, dimensionLabels }
   const chartHeight = Math.max(300, chartData.length * 50);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-medium text-gray-700">Decision Distribution by Model</h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Shows how each model distributes its decisions across the 1-5 scale
-        </p>
+    <div ref={chartRef} className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Decision Distribution by Model</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Shows how each model distributes its decisions across the 1-5 scale
+          </p>
+        </div>
+        <CopyVisualButton targetRef={chartRef} label="decision distribution chart" />
       </div>
-
       <div style={{ height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart

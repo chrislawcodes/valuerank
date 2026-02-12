@@ -5,8 +5,9 @@
  * Green = low decisions (1-2), Yellow = neutral (3), Red = high (4-5).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { VisualizationData } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type ScenarioHeatmapProps = {
   visualizationData: VisualizationData;
@@ -26,6 +27,7 @@ function getColor(value: number): string {
 }
 
 export function ScenarioHeatmap({ visualizationData }: ScenarioHeatmapProps) {
+  const heatmapRef = useRef<HTMLDivElement>(null);
   const { modelScenarioMatrix } = visualizationData;
 
   // Extract models and scenarios
@@ -72,13 +74,16 @@ export function ScenarioHeatmap({ visualizationData }: ScenarioHeatmapProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-medium text-gray-700">Model Behavior by Scenario</h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Heatmap showing average decision per model (rows) across scenarios (columns).
-          Green = lower (1-2), Yellow = neutral (3), Red = higher (4-5).
-        </p>
+    <div ref={heatmapRef} className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Model Behavior by Scenario</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Heatmap showing average decision per model (rows) across scenarios (columns).
+            Green = lower (1-2), Yellow = neutral (3), Red = higher (4-5).
+          </p>
+        </div>
+        <CopyVisualButton targetRef={heatmapRef} label="scenario heatmap" />
       </div>
 
       <div className="overflow-auto max-h-[400px]">

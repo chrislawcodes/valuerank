@@ -4,12 +4,13 @@
  * Displays per-model statistics with overall stats and top values.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import { formatPercent } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
+import { CopyVisualButton } from '../../ui/CopyVisualButton';
 
 type OverviewTabProps = {
   runId: string;
@@ -133,6 +134,8 @@ function ConditionDecisionMatrix({
   visualizationData: VisualizationData | null | undefined;
   dimensionLabels?: Record<string, string>;
 }) {
+  const countsTableRef = useRef<HTMLDivElement>(null);
+  const meanTableRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
@@ -382,8 +385,13 @@ function ConditionDecisionMatrix({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
+      <div ref={countsTableRef} className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-xs font-semibold uppercase text-gray-500">Condition Bucket Counts</h4>
+          <CopyVisualButton targetRef={countsTableRef} label="condition bucket counts table" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
@@ -461,17 +469,23 @@ function ConditionDecisionMatrix({
               );
             })}
           </tbody>
-        </table>
-        {visibleModels.length === 0 && (
-          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
-        )}
-        <div className="mt-2 text-xs text-gray-500">
+          </table>
+          {visibleModels.length === 0 && (
+            <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+          )}
+        </div>
+        <div className="text-xs text-gray-500">
           Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
+      <div ref={meanTableRef} className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Mean Decision</h4>
+          <CopyVisualButton targetRef={meanTableRef} label="condition by AI mean decision table" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
@@ -523,10 +537,11 @@ function ConditionDecisionMatrix({
               </tr>
             ))}
           </tbody>
-        </table>
-        {visibleModels.length === 0 && (
-          <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
-        )}
+          </table>
+          {visibleModels.length === 0 && (
+            <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
+          )}
+        </div>
       </div>
     </div>
   );
