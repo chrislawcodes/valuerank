@@ -19,6 +19,7 @@ import { useRun } from '../../hooks/useRun';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import { exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
+import type { Run, TaskResult } from '../../api/operations/runs';
 import { RunHeader } from './RunHeader';
 import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
@@ -33,6 +34,56 @@ function formatDate(dateString: string | Date): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function inferProviderFromModelId(modelId: string): string | null {
+  const normalized = modelId.toLowerCase();
+
+  if (normalized.includes('gpt') || normalized.includes('openai')) return 'OpenAI';
+  if (normalized.includes('claude') || normalized.includes('anthropic')) return 'Anthropic';
+  if (normalized.includes('gemini') || normalized.includes('google')) return 'Google';
+  if (normalized.includes('deepseek')) return 'DeepSeek';
+  if (normalized.includes('mistral')) return 'Mistral';
+  if (normalized.includes('grok') || normalized.includes('xai')) return 'xAI';
+
+  return null;
+}
+
+function isBudgetFailure(errorMessage: string): boolean {
+  const normalized = errorMessage.toLowerCase();
+  const budgetPatterns = [
+    'insufficient',
+    'insufficient_quota',
+    'quota',
+    'credit',
+    'balance',
+    'billing',
+    'payment',
+    'out of money',
+    'out of funds',
+    'exceeded your current quota',
+  ];
+  return budgetPatterns.some((pattern) => normalized.includes(pattern));
+}
+
+function getSystemFailureBanner(run: Run): string | null {
+  if (run.status !== 'FAILED') return null;
+
+  const failedTaskWithError = run.recentTasks.find(
+    (task: TaskResult) => task.status === 'FAILED' && task.error
+  );
+  if (!failedTaskWithError) {
+    return 'API failure. Check budget.';
+  }
+
+  const providerName = inferProviderFromModelId(failedTaskWithError.modelId);
+  const prefix = providerName ?? 'API';
+
+  if (isBudgetFailure(failedTaskWithError.error ?? '')) {
+    return `${prefix} failure. Check budget.`;
+  }
+
+  return 'API failure. Check budget.';
 }
 
 export function RunDetail() {
@@ -221,6 +272,7 @@ export function RunDetail() {
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING';
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
+  const systemFailureBanner = getSystemFailureBanner(run);
 
   return (
     <div className="space-y-6">
@@ -235,6 +287,12 @@ export function RunDetail() {
         onRerun={() => setIsRerunDialogOpen(true)}
         onDelete={() => setIsDeleteConfirmOpen(true)}
       />
+
+      {systemFailureBanner && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-700">{systemFailureBanner}</p>
+        </div>
+      )}
 
       {/* Summarization controls */}
       {(run.status === 'SUMMARIZING' || isTerminal) && run.transcriptCount > 0 && (
