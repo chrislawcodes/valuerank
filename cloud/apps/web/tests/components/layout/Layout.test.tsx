@@ -36,7 +36,8 @@ describe('Layout Component', () => {
     // so we check at least one of each exists
     expect(screen.getAllByText('Vignettes').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Trials').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Experiments').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Survey').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Survey Results').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0);
   });
 
