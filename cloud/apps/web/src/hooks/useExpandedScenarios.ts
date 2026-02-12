@@ -45,7 +45,7 @@ export function useExpandedScenarios(options: UseExpandedScenariosOptions): UseE
     requestPolicy: 'cache-and-network',
   });
 
-  const [countResult] = useQuery<ScenarioCountQueryResult, ScenarioCountQueryVariables>({
+  const [countResult, reexecuteCount] = useQuery<ScenarioCountQueryResult, ScenarioCountQueryVariables>({
     query: SCENARIO_COUNT_QUERY,
     variables: { definitionId },
     pause: pause || !definitionId,
@@ -61,6 +61,9 @@ export function useExpandedScenarios(options: UseExpandedScenariosOptions): UseE
       : countResult.error
         ? new Error(countResult.error.message)
         : null,
-    refetch: () => reexecuteScenarios({ requestPolicy: 'network-only' }),
+    refetch: () => {
+      reexecuteScenarios({ requestPolicy: 'network-only' });
+      reexecuteCount({ requestPolicy: 'network-only' });
+    },
   };
 }
