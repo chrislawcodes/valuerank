@@ -575,7 +575,7 @@ describe('GraphQL Run Mutations', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeDefined();
-      expect(response.body.errors[0].message).toContain('decisionCode must be one of');
+      expect(response.body.errors[0].message).toContain('decisionCode must be a positive integer');
     });
   });
 });
