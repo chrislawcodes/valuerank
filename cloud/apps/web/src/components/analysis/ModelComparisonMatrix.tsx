@@ -5,9 +5,10 @@
  * Shows Spearman's rho correlation and highlights outlier models.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import type { ModelAgreement, PerModelStats, PairwiseAgreement } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type ModelComparisonMatrixProps = {
   modelAgreement: ModelAgreement;
@@ -75,6 +76,7 @@ function CellTooltip({ agreement }: { agreement: PairwiseAgreement }) {
 }
 
 export function ModelComparisonMatrix({ modelAgreement, perModel }: ModelComparisonMatrixProps) {
+  const matrixRef = useRef<HTMLDivElement>(null);
   const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
 
   // Build matrix data
@@ -114,13 +116,14 @@ export function ModelComparisonMatrix({ modelAgreement, perModel }: ModelCompari
   }
 
   return (
-    <div className="space-y-4">
+    <div ref={matrixRef} className="space-y-4">
       {/* Overall agreement */}
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between gap-3 text-sm">
         <div className="text-gray-600">
           <span className="font-medium">Overall Agreement:</span>{' '}
           {(modelAgreement.overallAgreement * 100).toFixed(1)}%
         </div>
+        <CopyVisualButton targetRef={matrixRef} label="model agreement matrix" />
         {modelAgreement.outlierModels.length > 0 && (
           <div className="flex items-center gap-2 text-amber-600">
             <AlertTriangle className="w-4 h-4" />

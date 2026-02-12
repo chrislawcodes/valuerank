@@ -5,11 +5,12 @@
  * Replaces the old Values tab.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import type { VisualizationData, VarianceAnalysis } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
+import { CopyVisualButton } from '../../ui/CopyVisualButton';
 
 type StabilityTabProps = {
     runId: string;
@@ -78,6 +79,7 @@ function ConditionStabilityMatrix({
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
 }) {
+    const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const scenarioDimensions = visualizationData?.scenarioDimensions;
     const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
@@ -257,7 +259,7 @@ function ConditionStabilityMatrix({
     }
 
     return (
-        <div className="space-y-4 rounded-lg border border-gray-200 p-4">
+        <div ref={tableRef} className="space-y-4 rounded-lg border border-gray-200 p-4">
             <div className="flex flex-wrap items-end gap-4">
                 <div>
                     <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Attribute A</label>
@@ -332,6 +334,11 @@ function ConditionStabilityMatrix({
                         </div>
                     </details>
                 </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+                <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Stability (SEM)</h4>
+                <CopyVisualButton targetRef={tableRef} label="condition by AI stability table" />
             </div>
 
             <div className="overflow-x-auto">

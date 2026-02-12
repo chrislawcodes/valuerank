@@ -5,6 +5,7 @@
  * Shows a horizontal bar chart with scenarios sorted by variance (stdDev).
  */
 
+import { useRef } from 'react';
 import {
   Bar,
   XAxis,
@@ -17,6 +18,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import type { VarianceAnalysis, ScenarioVarianceStats } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type ScenarioVarianceChartProps = {
   varianceAnalysis: VarianceAnalysis;
@@ -69,6 +71,7 @@ function CustomTooltip({ active, payload }: {
 }
 
 export function ScenarioVarianceChart({ varianceAnalysis, maxScenarios = 15 }: ScenarioVarianceChartProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
   if (!varianceAnalysis.isMultiSample) {
     return null;
   }
@@ -126,13 +129,16 @@ export function ScenarioVarianceChart({ varianceAnalysis, maxScenarios = 15 }: S
   const chartHeight = Math.max(300, chartData.length * 35);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-medium text-gray-700">Scenario Response Variance</h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Standard deviation of responses across {varianceAnalysis.samplesPerScenario} samples per scenario.
-          Higher bars indicate more variable (less consistent) responses.
-        </p>
+    <div ref={chartRef} className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Scenario Response Variance</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Standard deviation of responses across {varianceAnalysis.samplesPerScenario} samples per scenario.
+            Higher bars indicate more variable (less consistent) responses.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={chartRef} label="scenario variance chart" />
       </div>
 
       <div style={{ height: chartHeight }}>

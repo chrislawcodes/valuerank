@@ -8,9 +8,10 @@
  * - Visual variance indicator
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import type { VisualizationData, ContestedScenario } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type ConditionAnalysisTableProps = {
     visualizationData: VisualizationData;
@@ -54,6 +55,7 @@ function getScoreTextColor(value: number): string {
 }
 
 export function ConditionAnalysisTable({ visualizationData, contestedScenarios }: ConditionAnalysisTableProps) {
+    const tableRef = useRef<HTMLDivElement>(null);
     const [sortField, setSortField] = useState<SortField>('variance');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -130,13 +132,16 @@ export function ConditionAnalysisTable({ visualizationData, contestedScenarios }
     }
 
     return (
-        <div className="space-y-4">
-            <div>
-                <h3 className="text-sm font-medium text-gray-700">Condition Analysis</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                    Detailed breakdown of how each model scored on specific conditions.
-                    Sort by &quot;Disagreement&quot; to see where models diverge most.
-                </p>
+        <div ref={tableRef} className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h3 className="text-sm font-medium text-gray-700">Condition Analysis</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                        Detailed breakdown of how each model scored on specific conditions.
+                        Sort by &quot;Disagreement&quot; to see where models diverge most.
+                    </p>
+                </div>
+                <CopyVisualButton targetRef={tableRef} label="condition analysis table" />
             </div>
 
             <div className="border border-gray-200 rounded-lg overflow-hidden">

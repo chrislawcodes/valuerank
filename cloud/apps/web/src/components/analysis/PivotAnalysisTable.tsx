@@ -1,7 +1,8 @@
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -81,6 +82,7 @@ function Legend({ dimensionLabels, counts }: { dimensionLabels?: Record<string, 
 }
 
 export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }: PivotAnalysisTableProps) {
+    const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
 
@@ -217,7 +219,7 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
     }
 
     return (
-        <div className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
+        <div ref={tableRef} className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
             <div className="flex flex-wrap gap-6 items-end border-b border-gray-100 pb-4">
                 {/* Selectors */}
                 <div>
@@ -253,7 +255,8 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
                     </select>
                 </div>
 
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
                     <Legend dimensionLabels={dimensionLabels} counts={legendCounts} />
                 </div>
             </div>
