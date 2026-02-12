@@ -561,24 +561,28 @@ function SurveyMatrix({
                               </option>
                             ))}
                           </select>
-                          <button
+                          <Button
                             type="button"
-                            className="w-fit text-left text-xs text-teal-700 hover:text-teal-800 hover:underline"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto w-fit justify-start p-0 text-left text-xs text-teal-700 hover:text-teal-800 hover:underline"
                             onClick={() => setSelectedTranscript(targetTranscript)}
                           >
                             View transcript
-                          </button>
+                          </Button>
                         </div>
                       ) : transcriptCount > 0 ? (
-                        <button
+                        <Button
                           type="button"
-                          className="text-left text-teal-700 hover:text-teal-800 hover:underline"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto p-0 text-left text-teal-700 hover:text-teal-800 hover:underline"
                           onClick={() => setSelectedTranscript(transcripts[0] ?? null)}
                           title="View transcript"
                         >
                           {value}
                           {transcriptCount > 1 ? ` (n=${transcriptCount})` : ''}
-                        </button>
+                        </Button>
                       ) : (
                         value
                       )}

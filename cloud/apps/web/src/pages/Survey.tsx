@@ -128,7 +128,7 @@ export function Survey() {
   const [runError, setRunError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const surveys = data?.surveys ?? [];
+  const surveys = useMemo(() => data?.surveys ?? [], [data?.surveys]);
   const surveyGroups = useMemo(() => {
     const grouped = new Map<string, Survey[]>();
     for (const survey of surveys) {
