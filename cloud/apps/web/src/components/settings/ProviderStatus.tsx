@@ -11,6 +11,15 @@ const PROVIDER_COLORS: Record<string, string> = {
   mistral: 'bg-orange-100 text-orange-700',
 };
 
+const PROVIDER_USAGE_DASHBOARD_URLS: Record<string, string> = {
+  openai: 'https://platform.openai.com/usage',
+  anthropic: 'https://console.anthropic.com/settings/cost',
+  google: 'https://console.cloud.google.com/billing',
+  xai: 'https://console.x.ai/',
+  deepseek: 'https://platform.deepseek.com/top_up',
+  mistral: 'https://console.mistral.ai/billing/',
+};
+
 type ProviderStatusProps = {
   providers: ProviderHealthStatus[];
   loading?: boolean;
@@ -52,15 +61,17 @@ function ProviderItem({
   loading?: boolean;
 }) {
   const colorClass = PROVIDER_COLORS[provider.id] ?? 'bg-gray-100 text-gray-700';
+  const usageDashboardUrl = PROVIDER_USAGE_DASHBOARD_URLS[provider.id];
+  const hasBudget = typeof provider.remainingBudgetUsd === 'number' && Number.isFinite(provider.remainingBudgetUsd);
 
   return (
-    <div className="flex items-center justify-between py-3 px-4 border-b border-gray-100 last:border-b-0">
+    <div className="grid grid-cols-[minmax(220px,1fr)_160px_220px] items-center gap-4 py-3 px-4 border-b border-gray-100 last:border-b-0">
       <div className="flex items-center gap-3">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${colorClass}`}>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${colorClass} flex-shrink-0`}>
           {provider.name.slice(0, 2).toUpperCase()}
         </div>
-        <div>
-          <p className="font-medium text-gray-900">{provider.name}</p>
+        <div className="min-w-0">
+          <p className="font-medium text-gray-900 truncate">{provider.name}</p>
           <p className="text-xs text-gray-500">
             {provider.configured ? (
               provider.connected ? 'Connected' : provider.error ?? 'Connection failed'
@@ -70,7 +81,29 @@ function ProviderItem({
           </p>
         </div>
       </div>
-      <StatusIcon configured={provider.configured} connected={provider.connected} loading={loading} />
+
+      <div className="flex items-center">
+        <StatusIcon configured={provider.configured} connected={provider.connected} loading={loading} />
+      </div>
+
+      <div className="text-sm text-gray-700">
+        {hasBudget ? (
+          <span className="font-medium">
+            ${provider.remainingBudgetUsd!.toFixed(2)}
+          </span>
+        ) : usageDashboardUrl ? (
+          <a
+            href={usageDashboardUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-teal-700 hover:text-teal-800 underline"
+          >
+            Usage dashboard
+          </a>
+        ) : (
+          <span className="text-gray-500">Unavailable</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -88,6 +121,11 @@ export function ProviderStatus({ providers, loading }: ProviderStatusProps) {
         </span>
       </div>
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[minmax(220px,1fr)_160px_220px] gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium uppercase tracking-wide text-gray-600">
+          <span>Provider</span>
+          <span>Status</span>
+          <span>Remaining Budget</span>
+        </div>
         {providers.map((provider) => (
           <ProviderItem key={provider.id} provider={provider} loading={loading} />
         ))}

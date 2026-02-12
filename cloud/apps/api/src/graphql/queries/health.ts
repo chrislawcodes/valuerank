@@ -46,6 +46,7 @@ builder.queryField('providerHealth', (t) =>
         providers: result.providers.map((p) => ({
           ...p,
           error: p.error ?? null,
+          remainingBudgetUsd: p.remainingBudgetUsd ?? null,
         })),
       };
     },
@@ -138,11 +139,12 @@ builder.queryField('systemHealth', (t) =>
       return {
         providers: {
           ...providers,
-          providers: providers.providers.map((p) => ({
-            ...p,
-            error: p.error ?? null,
-          })),
-        },
+        providers: providers.providers.map((p) => ({
+          ...p,
+          error: p.error ?? null,
+          remainingBudgetUsd: p.remainingBudgetUsd ?? null,
+        })),
+      },
         queue: {
           ...queue,
           error: queue.error ?? null,

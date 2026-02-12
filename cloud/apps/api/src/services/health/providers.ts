@@ -16,6 +16,7 @@ export type ProviderHealthStatus = {
   configured: boolean;
   connected: boolean;
   error?: string;
+  remainingBudgetUsd?: number | null;
   lastChecked: Date | null;
 };
 
@@ -50,6 +51,233 @@ async function checkOpenAI(apiKey: string): Promise<{ connected: boolean; error?
   } catch (error) {
     return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+function getMonthDateRange(): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
+  return { start, end: now };
+}
+
+function findFirstNumberDeep(input: unknown): number | null {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input === 'string') {
+    const parsed = Number(input);
+    if (Number.isFinite(parsed)) return parsed;
+    return null;
+  }
+  if (input === null || input === undefined) return null;
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const found = findFirstNumberDeep(item);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (typeof input === 'object') {
+    const record = input as Record<string, unknown>;
+    for (const value of Object.values(record)) {
+      const found = findFirstNumberDeep(value);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
+function sumNumbersDeep(input: unknown): number {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input === 'string') {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (input === null || input === undefined) return 0;
+  if (Array.isArray(input)) {
+    return input.reduce<number>((sum, item) => sum + sumNumbersDeep(item), 0);
+  }
+  if (typeof input === 'object') {
+    const record = input as Record<string, unknown>;
+    return Object.values(record).reduce<number>((sum, value) => sum + sumNumbersDeep(value), 0);
+  }
+  return 0;
+}
+
+function getMonthlyBudgetCapUsd(providerId: string): number | null {
+  const exactKey = `BUDGET_CAP_${providerId.toUpperCase()}_USD`;
+  const specific = getEnvOptional(exactKey);
+  if (specific !== undefined && specific !== '') {
+    const parsed = Number(specific);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+
+  const legacyKey = `${providerId.toUpperCase()}_MONTHLY_BUDGET_USD`;
+  const legacy = getEnvOptional(legacyKey);
+  if (legacy !== undefined && legacy !== '') {
+    const parsed = Number(legacy);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+
+  return null;
+}
+
+async function getOpenAIMonthlyCostUsd(apiKey: string): Promise<number | null> {
+  const { start, end } = getMonthDateRange();
+  const startTime = Math.floor(start.getTime() / 1000);
+  const endTime = Math.floor(end.getTime() / 1000);
+
+  const url = `https://api.openai.com/v1/organization/costs?start_time=${startTime}&end_time=${endTime}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const data = payload.data;
+  if (!Array.isArray(data)) {
+    return null;
+  }
+
+  let sum = 0;
+  for (const item of data) {
+    const record = item as Record<string, unknown>;
+    if (record.amount !== undefined) {
+      const amount = record.amount as Record<string, unknown>;
+      const value = findFirstNumberDeep(amount.value);
+      if (value !== null) {
+        sum += value;
+        continue;
+      }
+    }
+
+    const fallback = findFirstNumberDeep(record.cost ?? record.total_cost ?? record.usd ?? record.value);
+    if (fallback !== null) {
+      sum += fallback;
+    }
+  }
+
+  return sum > 0 ? sum : 0;
+}
+
+async function getAnthropicMonthlyCostUsd(apiKey: string): Promise<number | null> {
+  const { start, end } = getMonthDateRange();
+  const startIso = start.toISOString();
+  const endIso = end.toISOString();
+  const url = `https://api.anthropic.com/v1/organizations/usage_report/messages?starting_at=${encodeURIComponent(startIso)}&ending_at=${encodeURIComponent(endIso)}&granularity=day`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+
+  const direct =
+    findFirstNumberDeep(payload.total_cost_usd)
+    ?? findFirstNumberDeep(payload.total_cost)
+    ?? findFirstNumberDeep(payload.cost_usd);
+  if (direct !== null) {
+    return direct;
+  }
+
+  if (Array.isArray(payload.data)) {
+    let sum = 0;
+    for (const row of payload.data) {
+      const record = row as Record<string, unknown>;
+      const entryValue =
+        findFirstNumberDeep(record.cost_usd)
+        ?? findFirstNumberDeep(record.total_cost_usd)
+        ?? findFirstNumberDeep(record.cost)
+        ?? findFirstNumberDeep(record.total_cost);
+      if (entryValue !== null) {
+        sum += entryValue;
+      }
+    }
+    return sum > 0 ? sum : 0;
+  }
+
+  const deep = sumNumbersDeep(payload);
+  return deep > 0 ? deep : null;
+}
+
+async function getDeepSeekRemainingBudgetUsd(apiKey: string): Promise<number | null> {
+  const response = await fetch('https://api.deepseek.com/user/balance', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+
+  const direct =
+    findFirstNumberDeep(payload.total_balance)
+    ?? findFirstNumberDeep(payload.totalBalance)
+    ?? findFirstNumberDeep(payload.balance);
+  if (direct !== null) return direct;
+
+  const data = payload.data as Record<string, unknown> | undefined;
+  if (data !== undefined) {
+    const nested =
+      findFirstNumberDeep(data.total_balance)
+      ?? findFirstNumberDeep(data.totalBalance)
+      ?? findFirstNumberDeep(data.balance)
+      ?? (Array.isArray(data.balance_infos)
+        ? data.balance_infos
+            .map((item) => findFirstNumberDeep(item))
+            .find((value): value is number => value !== null) ?? null
+        : null);
+    if (nested !== null) return nested;
+  }
+
+  if (Array.isArray(payload.balance_infos)) {
+    const infoValue = payload.balance_infos
+      .map((item) => findFirstNumberDeep(item))
+      .find((value): value is number => value !== null) ?? null;
+    if (infoValue !== null) return infoValue;
+  }
+
+  return null;
+}
+
+async function getProviderRemainingBudgetUsd(providerId: string, apiKey: string): Promise<number | null> {
+  if (providerId === 'deepseek') {
+    return getDeepSeekRemainingBudgetUsd(apiKey);
+  }
+
+  const cap = getMonthlyBudgetCapUsd(providerId);
+  if (cap === null) {
+    return null;
+  }
+
+  if (providerId === 'openai') {
+    const spend = await getOpenAIMonthlyCostUsd(apiKey);
+    if (spend === null) return null;
+    return Math.max(0, cap - spend);
+  }
+
+  if (providerId === 'anthropic') {
+    const spend = await getAnthropicMonthlyCostUsd(apiKey);
+    if (spend === null) return null;
+    return Math.max(0, cap - spend);
+  }
+
+  return null;
 }
 
 /**
@@ -209,6 +437,7 @@ async function checkProviderHealth(providerId: string, envKey: string): Promise<
       name,
       configured: false,
       connected: false,
+      remainingBudgetUsd: null,
       lastChecked: new Date(),
     };
   }
@@ -220,6 +449,7 @@ async function checkProviderHealth(providerId: string, envKey: string): Promise<
       name,
       configured: false,
       connected: false,
+      remainingBudgetUsd: null,
       lastChecked: new Date(),
     };
   }
@@ -233,17 +463,29 @@ async function checkProviderHealth(providerId: string, envKey: string): Promise<
       configured: true,
       connected: false,
       error: 'Health check not implemented for this provider',
+      remainingBudgetUsd: null,
       lastChecked: new Date(),
     };
   }
 
   const result = await checker(apiKey);
+  let remainingBudgetUsd: number | null = null;
+  if (result.connected) {
+    try {
+      remainingBudgetUsd = await getProviderRemainingBudgetUsd(providerId, apiKey);
+    } catch (err) {
+      log.debug({ providerId, err }, 'Failed to fetch provider remaining budget');
+      remainingBudgetUsd = null;
+    }
+  }
+
   return {
     id: providerId,
     name,
     configured: true,
     connected: result.connected,
     error: result.error,
+    remainingBudgetUsd,
     lastChecked: new Date(),
   };
 }
