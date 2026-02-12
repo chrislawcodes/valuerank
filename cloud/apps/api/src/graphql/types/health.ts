@@ -14,6 +14,7 @@ export const ProviderHealthStatusType = builder.objectRef<{
   configured: boolean;
   connected: boolean;
   error: string | null;
+  remainingBudgetUsd: number | null;
   lastChecked: Date | null;
 }>('ProviderHealthStatus').implement({
   description: 'Health status for an LLM provider',
@@ -34,6 +35,11 @@ export const ProviderHealthStatusType = builder.objectRef<{
       nullable: true,
       description: 'Error message if health check failed',
     }),
+    remainingBudgetUsd: t.exposeFloat('remainingBudgetUsd', {
+      nullable: true,
+      description:
+        'Remaining budget in USD when available. For providers with spend-only APIs, this requires a configured monthly cap.',
+    }),
     lastChecked: t.field({
       type: 'DateTime',
       nullable: true,
@@ -51,6 +57,7 @@ export const ProviderHealthType = builder.objectRef<{
     configured: boolean;
     connected: boolean;
     error: string | null;
+    remainingBudgetUsd: number | null;
     lastChecked: Date | null;
   }>;
   checkedAt: Date;
@@ -191,6 +198,7 @@ export const SystemHealthType = builder.objectRef<{
       configured: boolean;
       connected: boolean;
       error: string | null;
+      remainingBudgetUsd: number | null;
       lastChecked: Date | null;
     }>;
     checkedAt: Date;

@@ -10,6 +10,7 @@ export type ProviderHealthStatus = {
   configured: boolean;
   connected: boolean;
   error: string | null;
+  remainingBudgetUsd: number | null;
   lastChecked: string | null;
 };
 
@@ -69,6 +70,7 @@ export const PROVIDER_HEALTH_QUERY = gql`
         configured
         connected
         error
+        remainingBudgetUsd
         lastChecked
       }
       checkedAt
@@ -124,6 +126,7 @@ export const SYSTEM_HEALTH_QUERY = gql`
           configured
           connected
           error
+          remainingBudgetUsd
           lastChecked
         }
         checkedAt
