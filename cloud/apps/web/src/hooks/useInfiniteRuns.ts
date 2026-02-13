@@ -13,7 +13,6 @@ import {
   type RunsQueryResult,
 } from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
-import { isNonSurveyRun, isSurveyRun } from '../lib/runClassification';
 
 type UseInfiniteRunsOptions = {
   definitionId?: string;
@@ -42,6 +41,11 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     pageSize,
     pause = false,
   } = options;
+  const runTypeFilter: 'ALL' | 'SURVEY' | 'NON_SURVEY' = runType === 'all'
+    ? 'ALL'
+    : runType === 'survey'
+      ? 'SURVEY'
+      : 'NON_SURVEY';
 
   // Build filters object
   const filters = useMemo(
@@ -49,8 +53,9 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status]
+    [definitionId, experimentId, status, runTypeFilter]
   );
 
   // Count query filters
@@ -59,8 +64,9 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status]
+    [definitionId, experimentId, status, runTypeFilter]
   );
 
   // Extract runs from query result
@@ -78,19 +84,8 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     pause,
   });
 
-  const filteredRuns = useMemo(() => {
-    if (runType === 'survey') {
-      return result.items.filter(isSurveyRun);
-    }
-    if (runType === 'all') {
-      return result.items;
-    }
-    return result.items.filter(isNonSurveyRun);
-  }, [result.items, runType]);
-
   return {
     ...result,
-    items: filteredRuns,
-    runs: filteredRuns,
+    runs: result.items,
   };
 }

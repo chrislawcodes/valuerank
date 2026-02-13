@@ -249,6 +249,7 @@ export const RUNS_QUERY = gql`
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
+    $runType: String
     $limit: Int
     $offset: Int
   ) {
@@ -258,6 +259,7 @@ export const RUNS_QUERY = gql`
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
+      runType: $runType
       limit: $limit
       offset: $offset
     ) {
@@ -274,6 +276,7 @@ export const RUN_COUNT_QUERY = gql`
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
+    $runType: String
   ) {
     runCount(
       definitionId: $definitionId
@@ -281,6 +284,7 @@ export const RUN_COUNT_QUERY = gql`
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
+      runType: $runType
     )
   }
 `;
@@ -423,6 +427,7 @@ export type RunsQueryVariables = {
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
+  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
   limit?: number;
   offset?: number;
 };
@@ -437,6 +442,7 @@ export type RunCountQueryVariables = {
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
+  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
 };
 
 export type RunCountQueryResult = {

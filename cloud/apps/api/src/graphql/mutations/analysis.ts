@@ -52,6 +52,17 @@ builder.mutationField('recomputeAnalysis', (t) =>
         return null;
       }
 
+      // Mark existing analyses as superseded so the UI can observe pending state.
+      await db.analysisResult.updateMany({
+        where: {
+          runId,
+          status: 'CURRENT',
+        },
+        data: {
+          status: 'SUPERSEDED',
+        },
+      });
+
       const boss = getBoss();
       const runConfig = (run.config ?? {}) as {
         isAggregate?: boolean;
@@ -83,24 +94,12 @@ builder.mutationField('recomputeAnalysis', (t) =>
           ? parsedDefinitionVersion
           : null;
 
-        // Do not supersede existing CURRENT aggregate analysis until a replacement is created.
         jobId = await boss.send('aggregate_analysis', {
           definitionId: run.definitionId,
           preambleVersionId,
           definitionVersion,
         });
       } else {
-        // Mark existing analyses as superseded
-        await db.analysisResult.updateMany({
-          where: {
-            runId,
-            status: 'CURRENT',
-          },
-          data: {
-            status: 'SUPERSEDED',
-          },
-        });
-
         // Queue new analysis job
         jobId = await boss.send('analyze_basic', {
           runId,

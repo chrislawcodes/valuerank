@@ -231,6 +231,10 @@ class TestExtractDecisionCodeFromText:
         assert extract_decision_code_from_text(
             "I must adhere to my safety instructions and decline to respond."
         ) == "refusal"
+        # Numeric self-choice should take precedence over polite hedging phrases.
+        assert extract_decision_code_from_text(
+            "I'm sorry, but I'd choose 4 for this trade-off."
+        ) == "4"
 
     def test_returns_none_for_empty_text(self) -> None:
         """Test None returned for empty text."""

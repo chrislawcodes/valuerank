@@ -137,9 +137,6 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
     if not text:
         return None
 
-    if REFUSAL_PATTERN.search(text):
-        return "refusal"
-
     # Strip lightweight markdown markers that often surround numeric answers.
     sanitized_markdown_text = text.replace("**", "").replace("__", "").replace("`", "")
 
@@ -171,6 +168,8 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
 
     fallback_matches = [m.group(1) for m in FALLBACK_RATING_PATTERN.finditer(sanitized_text)]
     if not fallback_matches:
+        if REFUSAL_PATTERN.search(text):
+            return "refusal"
         return None
 
     # If the model enumerates multiple options (e.g., "1..6"), it did not choose one.
