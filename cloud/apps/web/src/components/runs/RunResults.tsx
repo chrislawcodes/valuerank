@@ -124,7 +124,7 @@ export function RunResults({
       await onUpdateTranscriptDecision(transcript.id, decisionCode);
       setSelectedTranscript((current) => {
         if (!current || current.id !== transcript.id) return current;
-        return { ...current, decisionCode };
+        return { ...current, decisionCode, decisionCodeSource: 'manual' };
       });
     } finally {
       setUpdatingTranscriptIds((prev) => {

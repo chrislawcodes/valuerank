@@ -36,6 +36,72 @@ type AggregateRunConfig = RunConfig & {
   sourceRunIds?: string[];
 };
 
+type RunSnapshotMeta = {
+  preambleVersionId: string | null;
+  definitionVersion: number | null;
+};
+
+type QueueJobRow = {
+  state: string;
+  data: unknown;
+};
+
+function parseDefinitionVersion(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
+  const snapshot = (config?.definitionSnapshot ?? null) as
+    | { _meta?: { preambleVersionId?: string; definitionVersion?: number | string }; preambleVersionId?: string; version?: number | string }
+    | null;
+
+  const preambleVersionId =
+    snapshot?._meta?.preambleVersionId ??
+    snapshot?.preambleVersionId ??
+    null;
+  const definitionVersion =
+    parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
+    parseDefinitionVersion(snapshot?.version);
+
+  return { preambleVersionId, definitionVersion };
+}
+
+function getJobDataRecord(data: unknown): Record<string, unknown> | null {
+  return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
+}
+
+function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
+  const data = getJobDataRecord(jobData);
+  if (data === null) {
+    return false;
+  }
+  if (data.definitionId !== runDefinitionId) {
+    return false;
+  }
+
+  const jobPreambleVersionId =
+    typeof data.preambleVersionId === 'string' && data.preambleVersionId !== ''
+      ? data.preambleVersionId
+      : null;
+  if (jobPreambleVersionId !== runMeta.preambleVersionId) {
+    return false;
+  }
+
+  const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
+  if (runMeta.definitionVersion !== null && jobDefinitionVersion !== runMeta.definitionVersion) {
+    return false;
+  }
+
+  return true;
+}
+
 builder.objectType(RunRef, {
   description: 'A run execution against a definition',
   fields: (t) => ({
@@ -426,34 +492,73 @@ builder.objectType(RunRef, {
           return 'completed';
         }
 
+        const runConfig = run.config as AggregateRunConfig | null;
+        const isAggregateRun = runConfig?.isAggregate === true;
+
         // Check if analysis job is pending or active
         try {
-          // Use raw query to check PgBoss job state
-          const jobs = await db.$queryRaw<Array<{ state: string }>>`
-            SELECT state FROM pgboss.job
-            WHERE name = 'analyze_basic'
-              AND data->>'runId' = ${run.id}
-              AND state IN ('created', 'active', 'retry')
-            LIMIT 1
-          `;
+          if (isAggregateRun) {
+            const runMeta = getSnapshotMeta(runConfig);
 
-          const firstJob = jobs[0];
-          if (firstJob !== undefined) {
-            return firstJob.state === 'active' ? 'computing' : 'pending';
-          }
+            const activeJobs = await db.$queryRaw<QueueJobRow[]>`
+              SELECT state, data FROM pgboss.job
+              WHERE name = 'aggregate_analysis'
+                AND data->>'definitionId' = ${run.definitionId}
+                AND state IN ('created', 'active', 'retry')
+              ORDER BY created_on DESC
+              LIMIT 25
+            `;
 
-          // Check for failed jobs in the job table (PgBoss v10+ keeps all jobs in one table)
-          const failedJobs = await db.$queryRaw<Array<{ state: string }>>`
-            SELECT state FROM pgboss.job
-            WHERE name = 'analyze_basic'
-              AND data->>'runId' = ${run.id}
-              AND state = 'failed'
-            ORDER BY completed_on DESC
-            LIMIT 1
-          `;
+            const firstActiveMatch = activeJobs.find((job) =>
+              matchesAggregateJob(job.data, run.definitionId, runMeta)
+            );
+            if (firstActiveMatch !== undefined) {
+              return firstActiveMatch.state === 'active' ? 'computing' : 'pending';
+            }
 
-          if (failedJobs.length > 0) {
-            return 'failed';
+            const failedJobs = await db.$queryRaw<QueueJobRow[]>`
+              SELECT state, data FROM pgboss.job
+              WHERE name = 'aggregate_analysis'
+                AND data->>'definitionId' = ${run.definitionId}
+                AND state = 'failed'
+              ORDER BY completed_on DESC
+              LIMIT 25
+            `;
+
+            const firstFailedMatch = failedJobs.find((job) =>
+              matchesAggregateJob(job.data, run.definitionId, runMeta)
+            );
+            if (firstFailedMatch !== undefined) {
+              return 'failed';
+            }
+          } else {
+            // Use raw query to check PgBoss job state
+            const jobs = await db.$queryRaw<Array<{ state: string }>>`
+              SELECT state FROM pgboss.job
+              WHERE name = 'analyze_basic'
+                AND data->>'runId' = ${run.id}
+                AND state IN ('created', 'active', 'retry')
+              LIMIT 1
+            `;
+
+            const firstJob = jobs[0];
+            if (firstJob !== undefined) {
+              return firstJob.state === 'active' ? 'computing' : 'pending';
+            }
+
+            // Check for failed jobs in the job table (PgBoss v10+ keeps all jobs in one table)
+            const failedJobs = await db.$queryRaw<Array<{ state: string }>>`
+              SELECT state FROM pgboss.job
+              WHERE name = 'analyze_basic'
+                AND data->>'runId' = ${run.id}
+                AND state = 'failed'
+              ORDER BY completed_on DESC
+              LIMIT 1
+            `;
+
+            if (failedJobs.length > 0) {
+              return 'failed';
+            }
           }
         } catch {
           // PgBoss tables may not exist

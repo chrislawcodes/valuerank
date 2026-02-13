@@ -15,6 +15,14 @@ type RunWhereInput = {
   experimentId?: string | null;
   status?: RunStatus;
   id?: { in: string[] };
+  definition?: {
+    is?: {
+      name?: {
+        startsWith?: string;
+        not?: { startsWith: string };
+      };
+    };
+  };
 };
 
 // Query: run(id: ID!) - Fetch single run by ID
@@ -79,6 +87,10 @@ builder.queryField('runs', (t) =>
         required: false,
         description: 'Filter by analysis status (CURRENT or SUPERSEDED)',
       }),
+      runType: t.arg.string({
+        required: false,
+        description: 'Filter by run type (ALL, SURVEY, NON_SURVEY)',
+      }),
       limit: t.arg.int({
         required: false,
         description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
@@ -100,6 +112,7 @@ builder.queryField('runs', (t) =>
           status: args.status,
           hasAnalysis: args.hasAnalysis,
           analysisStatus: args.analysisStatus,
+          runType: args.runType,
           limit,
           offset,
         },
@@ -118,6 +131,25 @@ builder.queryField('runs', (t) =>
       }
       if (args.status !== undefined && args.status !== null && args.status !== '') {
         where.status = args.status as RunStatus;
+      }
+      if (args.runType === 'SURVEY') {
+        where.definition = {
+          is: {
+            name: {
+              startsWith: '[Survey]',
+            },
+          },
+        };
+      } else if (args.runType === 'NON_SURVEY') {
+        where.definition = {
+          is: {
+            name: {
+              not: {
+                startsWith: '[Survey]',
+              },
+            },
+          },
+        };
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis
@@ -240,6 +272,10 @@ builder.queryField('runCount', (t) =>
         required: false,
         description: 'Filter by analysis status (CURRENT or SUPERSEDED)',
       }),
+      runType: t.arg.string({
+        required: false,
+        description: 'Filter by run type (ALL, SURVEY, NON_SURVEY)',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       ctx.log.debug(
@@ -249,6 +285,7 @@ builder.queryField('runCount', (t) =>
           status: args.status,
           hasAnalysis: args.hasAnalysis,
           analysisStatus: args.analysisStatus,
+          runType: args.runType,
         },
         'Counting runs'
       );
@@ -265,6 +302,25 @@ builder.queryField('runCount', (t) =>
       }
       if (args.status !== undefined && args.status !== null && args.status !== '') {
         where.status = args.status as RunStatus;
+      }
+      if (args.runType === 'SURVEY') {
+        where.definition = {
+          is: {
+            name: {
+              startsWith: '[Survey]',
+            },
+          },
+        };
+      } else if (args.runType === 'NON_SURVEY') {
+        where.definition = {
+          is: {
+            name: {
+              not: {
+                startsWith: '[Survey]',
+              },
+            },
+          },
+        };
       }
 
       // Handle analysis filtering - requires subquery to find run IDs with analysis

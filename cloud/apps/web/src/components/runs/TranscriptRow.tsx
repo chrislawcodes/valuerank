@@ -65,6 +65,7 @@ export function TranscriptRow({
 }: TranscriptRowProps) {
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
   const isDecisionOverrideAllowed = transcript.decisionCode === 'other' && Boolean(onDecisionChange);
 
   const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -136,7 +137,7 @@ export function TranscriptRow({
                 </select>
               </div>
             ) : (
-              decision
+              decisionDisplay
             )}
           </div>
           <div className="flex items-center gap-1 text-gray-500">
@@ -164,7 +165,9 @@ export function TranscriptRow({
           </div>
 
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
-            <span title="Decision">{decision}</span>
+            <span title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}>
+              {decisionDisplay}
+            </span>
             <span className="flex items-center gap-1" title="Tokens">
               <Zap className="w-3 h-3" />
               {transcript.tokenCount.toLocaleString()}

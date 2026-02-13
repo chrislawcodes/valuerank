@@ -45,7 +45,7 @@ type SummarizeWorkerInput = {
  * Python worker output structure.
  */
 type SummarizeWorkerOutput =
-  | { success: true; summary: { decisionCode: string; decisionText: string } }
+  | { success: true; summary: { decisionCode: string; decisionSource: string; decisionText: string | null } }
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
 
 /**
@@ -193,6 +193,7 @@ async function processSummarizeJob(
           where: { id: transcriptId },
           data: {
             decisionCode: 'error',
+            decisionCodeSource: 'error',
             decisionText: `Summary failed: ${err.message}`,
             summarizedAt: new Date(),
           },
@@ -211,6 +212,7 @@ async function processSummarizeJob(
       where: { id: transcriptId },
       data: {
         decisionCode: output.summary.decisionCode,
+        decisionCodeSource: output.summary.decisionSource,
         decisionText: output.summary.decisionText,
         summarizedAt: new Date(),
       },
@@ -243,6 +245,7 @@ async function processSummarizeJob(
           where: { id: transcriptId },
           data: {
             decisionCode: 'error',
+            decisionCodeSource: 'error',
             decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
             summarizedAt: new Date(),
           },

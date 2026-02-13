@@ -94,6 +94,7 @@ export function TranscriptViewer({
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
   const decision = transcript.decisionCode ?? '-';
+  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
   const canOverrideDecision = decision === 'other' && Boolean(onDecisionChange);
 
   const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -137,7 +138,9 @@ export function TranscriptViewer({
           </span>
           <span className="flex items-center gap-2">
             <span className="text-gray-500">Decision:</span>
-            <span className="font-medium text-gray-800">{decision}</span>
+            <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
+              {decisionDisplay}
+            </span>
             {canOverrideDecision && (
               <select
                 aria-label={`Set decision for transcript ${transcript.id}`}

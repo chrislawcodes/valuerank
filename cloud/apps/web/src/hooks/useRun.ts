@@ -30,6 +30,13 @@ function isActiveRun(status: string | undefined): boolean {
 }
 
 /**
+ * Check if analysis is still pending/computing.
+ */
+function isAnalysisPending(status: string | null | undefined): boolean {
+  return status === 'pending' || status === 'computing';
+}
+
+/**
  * Hook to fetch a single run with optional polling for active runs.
  *
  * @param options.id - Run ID to fetch
@@ -46,7 +53,7 @@ export function useRun({ id, pause = false, enablePolling = true }: UseRunOption
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const run = result.data?.run ?? null;
-  const isActive = isActiveRun(run?.status);
+  const shouldPoll = isActiveRun(run?.status) || isAnalysisPending(run?.analysisStatus);
 
   // Set up polling for active runs
   useEffect(() => {
@@ -57,7 +64,7 @@ export function useRun({ id, pause = false, enablePolling = true }: UseRunOption
     }
 
     // Start polling if enabled and run is active
-    if (enablePolling && isActive && !pause) {
+    if (enablePolling && shouldPoll && !pause) {
       pollIntervalRef.current = setInterval(() => {
         reexecuteQuery({ requestPolicy: 'network-only' });
       }, 5000); // Poll every 5 seconds
@@ -70,7 +77,7 @@ export function useRun({ id, pause = false, enablePolling = true }: UseRunOption
         pollIntervalRef.current = null;
       }
     };
-  }, [enablePolling, isActive, pause, reexecuteQuery]);
+  }, [enablePolling, shouldPoll, pause, reexecuteQuery]);
 
   return {
     run,

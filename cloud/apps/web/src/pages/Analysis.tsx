@@ -6,9 +6,9 @@
  * tags or flat list view.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, RefreshCw } from 'lucide-react';
+import { BarChart2, RefreshCw, Clock3 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -40,9 +40,28 @@ export function Analysis() {
     totalCount,
     loadMore,
     refetch,
+    softRefetch,
   } = useInfiniteRunsWithAnalysis({
     analysisStatus: filters.analysisStatus || undefined,
   });
+
+  const inProgressAnalysisRuns = useMemo(
+    () => runs
+      .filter((run) => run.analysisStatus === 'pending' || run.analysisStatus === 'computing'),
+    [runs]
+  );
+
+  useEffect(() => {
+    if (inProgressAnalysisRuns.length === 0) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      softRefetch();
+    }, 7000);
+
+    return () => window.clearInterval(interval);
+  }, [softRefetch, inProgressAnalysisRuns.length]);
 
   // Filter runs by selected tags (client-side filtering)
   const filteredRuns = useMemo(() => {
@@ -85,6 +104,35 @@ export function Analysis() {
       <div className="mb-6">
         <AnalysisListFilters filters={filters} onFiltersChange={handleFiltersChange} />
       </div>
+
+      {inProgressAnalysisRuns.length > 0 && (
+        <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-blue-600" />
+            <p className="text-sm font-medium text-blue-900">
+              {inProgressAnalysisRuns.length} analysis {inProgressAnalysisRuns.length === 1 ? 'is' : 'are'} in progress
+            </p>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {inProgressAnalysisRuns.slice(0, 5).map((run) => (
+              <Button
+                key={run.id}
+                variant="ghost"
+                size="sm"
+                className="h-7 border border-blue-200 bg-white px-2 text-blue-700 hover:bg-blue-100"
+                onClick={() => navigate(`/analysis/${run.id}`)}
+              >
+                {run.name || run.definition?.name || run.id}
+              </Button>
+            ))}
+            {inProgressAnalysisRuns.length > 5 && (
+              <span className="text-xs text-blue-700 self-center">
+                +{inProgressAnalysisRuns.length - 5} more
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Content - fills remaining height */}
       <div className="flex-1 min-h-0">

@@ -288,6 +288,7 @@ model Transcript {
   contentExpiresAt   DateTime? @map("content_expires_at")
   // Summary fields (populated after run completes)
   decisionCode       String?   @map("decision_code")     // 1-5 rating or "other"
+  decisionCodeSource String?   @map("decision_code_source") // deterministic | llm | manual | error
   decisionText       String?   @map("decision_text")     // LLM-generated summary
   summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
   // Soft delete

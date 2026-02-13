@@ -26,6 +26,10 @@ builder.objectType(TranscriptRef, {
       nullable: true,
       description: 'Decision code assigned during summarization (typically 1-5)',
     }),
+    decisionCodeSource: t.exposeString('decisionCodeSource', {
+      nullable: true,
+      description: 'How decisionCode was assigned: deterministic, llm, manual, or error',
+    }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
     contentExpiresAt: t.expose('contentExpiresAt', { type: 'DateTime', nullable: true }),

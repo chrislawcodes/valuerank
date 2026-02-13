@@ -52,7 +52,7 @@ builder.mutationField('recomputeAnalysis', (t) =>
         return null;
       }
 
-      // Mark existing analyses as superseded
+      // Mark existing analyses as superseded so the UI can observe pending state.
       await db.analysisResult.updateMany({
         where: {
           runId,
@@ -63,12 +63,49 @@ builder.mutationField('recomputeAnalysis', (t) =>
         },
       });
 
-      // Queue new analysis job
       const boss = getBoss();
-      const jobId = await boss.send('analyze_basic', {
-        runId,
-        force: true, // Force recomputation even if cache hit
-      });
+      const runConfig = (run.config ?? {}) as {
+        isAggregate?: boolean;
+        definitionSnapshot?: {
+          _meta?: { preambleVersionId?: string; definitionVersion?: number | string };
+          preambleVersionId?: string;
+          version?: number | string;
+        };
+      };
+
+      let jobId: string | null;
+      if (runConfig.isAggregate === true) {
+        // Aggregate runs should be recomputed via aggregate_analysis, not analyze_basic.
+        const preambleVersionId =
+          runConfig.definitionSnapshot?._meta?.preambleVersionId ??
+          runConfig.definitionSnapshot?.preambleVersionId ??
+          null;
+        const definitionVersionRaw =
+          runConfig.definitionSnapshot?._meta?.definitionVersion ??
+          runConfig.definitionSnapshot?.version ??
+          null;
+        const parsedDefinitionVersion =
+          typeof definitionVersionRaw === 'number'
+            ? definitionVersionRaw
+            : typeof definitionVersionRaw === 'string' && definitionVersionRaw.trim() !== ''
+              ? Number.parseInt(definitionVersionRaw, 10)
+              : null;
+        const definitionVersion = Number.isFinite(parsedDefinitionVersion)
+          ? parsedDefinitionVersion
+          : null;
+
+        jobId = await boss.send('aggregate_analysis', {
+          definitionId: run.definitionId,
+          preambleVersionId,
+          definitionVersion,
+        });
+      } else {
+        // Queue new analysis job
+        jobId = await boss.send('analyze_basic', {
+          runId,
+          force: true, // Force recomputation even if cache hit
+        });
+      }
 
       ctx.log.info({ runId, jobId }, 'Analysis job queued');
 

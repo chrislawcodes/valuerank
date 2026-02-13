@@ -59,6 +59,9 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const displayDate = run.completedAt || run.createdAt;
 
   const isDisabled = analysisStatus === 'computing' || analysisStatus === 'pending';
+  const runStatusLabel = run.status === 'SUMMARIZING' && run.summarizeProgress
+    ? `Run Summarizing (${run.summarizeProgress.completed}/${run.summarizeProgress.total})`
+    : `Run ${getRunStatusLabel(run.status)}`;
 
   return (
     <Card
@@ -80,9 +83,7 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
                 {formatRunName(run)}
               </h3>
               <Badge variant={getRunStatusVariant(run.status)} size="count">
-                {run.status === 'SUMMARIZING' && run.summarizeProgress
-                  ? `Summarizing (${run.summarizeProgress.completed}/${run.summarizeProgress.total})`
-                  : getRunStatusLabel(run.status)}
+                {runStatusLabel}
               </Badge>
               <Badge variant={statusConfig.badgeVariant} size="count">
                 {statusConfig.label}

@@ -54,6 +54,7 @@ export type Transcript = {
   modelVersion: string | null;
   content: unknown;
   decisionCode: string | null;
+  decisionCodeSource?: string | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
@@ -186,6 +187,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       modelVersion
       content
       decisionCode
+      decisionCodeSource
       turnCount
       tokenCount
       durationMs
@@ -247,6 +249,7 @@ export const RUNS_QUERY = gql`
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
+    $runType: String
     $limit: Int
     $offset: Int
   ) {
@@ -256,6 +259,7 @@ export const RUNS_QUERY = gql`
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
+      runType: $runType
       limit: $limit
       offset: $offset
     ) {
@@ -272,6 +276,7 @@ export const RUN_COUNT_QUERY = gql`
     $status: String
     $hasAnalysis: Boolean
     $analysisStatus: String
+    $runType: String
   ) {
     runCount(
       definitionId: $definitionId
@@ -279,6 +284,7 @@ export const RUN_COUNT_QUERY = gql`
       status: $status
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
+      runType: $runType
     )
   }
 `;
@@ -384,6 +390,7 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
       modelVersion
       content
       decisionCode
+      decisionCodeSource
       turnCount
       tokenCount
       durationMs
@@ -420,6 +427,7 @@ export type RunsQueryVariables = {
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
+  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
   limit?: number;
   offset?: number;
 };
@@ -434,6 +442,7 @@ export type RunCountQueryVariables = {
   status?: string;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
+  runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
 };
 
 export type RunCountQueryResult = {

@@ -18,6 +18,7 @@ type UseInfiniteRunsOptions = {
   definitionId?: string;
   experimentId?: string;
   status?: string;
+  runType?: 'nonSurvey' | 'survey' | 'all';
   pageSize?: number;
   pause?: boolean;
 };
@@ -32,7 +33,19 @@ type UseInfiniteRunsResult = UseInfiniteQueryResult<Run> & {
  * Loads pages incrementally and concatenates results.
  */
 export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfiniteRunsResult {
-  const { definitionId, experimentId, status, pageSize, pause = false } = options;
+  const {
+    definitionId,
+    experimentId,
+    status,
+    runType = 'nonSurvey',
+    pageSize,
+    pause = false,
+  } = options;
+  const runTypeFilter: 'ALL' | 'SURVEY' | 'NON_SURVEY' = runType === 'all'
+    ? 'ALL'
+    : runType === 'survey'
+      ? 'SURVEY'
+      : 'NON_SURVEY';
 
   // Build filters object
   const filters = useMemo(
@@ -40,8 +53,9 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status]
+    [definitionId, experimentId, status, runTypeFilter]
   );
 
   // Count query filters
@@ -50,8 +64,9 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status]
+    [definitionId, experimentId, status, runTypeFilter]
   );
 
   // Extract runs from query result
