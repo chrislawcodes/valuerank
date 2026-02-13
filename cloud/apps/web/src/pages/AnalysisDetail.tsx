@@ -19,7 +19,7 @@ export function AnalysisDetail() {
   const { run, loading, error } = useRun({
     id: id || '',
     pause: !id,
-    enablePolling: false,
+    enablePolling: true,
   });
 
   // Loading state
@@ -95,6 +95,7 @@ export function AnalysisDetail() {
           analysisStatus={run.analysisStatus}
           definitionContent={run.definition?.content}
           isAggregate={isAggregate}
+          pendingSince={run.completedAt}
         />
       )}
     </div>

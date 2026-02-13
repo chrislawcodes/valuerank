@@ -656,7 +656,10 @@ builder.mutationField('updateTranscriptDecision', (t) =>
 
       const updatedTranscript = await db.transcript.update({
         where: { id: transcriptId },
-        data: { decisionCode },
+        data: {
+          decisionCode,
+          decisionCodeSource: 'manual',
+        },
       });
 
       let analysisQueued = false;

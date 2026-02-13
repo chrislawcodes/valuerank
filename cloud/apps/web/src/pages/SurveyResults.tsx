@@ -154,6 +154,7 @@ export function SurveyResults() {
     softRefetch,
   } = useInfiniteRuns({
     experimentId: selectedSurveyId || undefined,
+    runType: 'survey',
     pause: !selectedSurveyId,
   });
 
@@ -498,7 +499,7 @@ function SurveyMatrix({
         <div>
           <h2 className="text-lg font-medium text-gray-900">Question x AI Matrix</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Showing latest run {runName ? `"${runName}"` : ''}.
+            Showing latest run {runName ? `"${runName}"` : ''}. `*` indicates an LLM-classified decision code.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
@@ -529,6 +530,7 @@ function SurveyMatrix({
                   const transcriptCount = transcripts.length;
                   const isOther = value.trim().toLowerCase() === 'other';
                   const targetTranscript = transcripts[0] ?? null;
+                  const valueDisplay = targetTranscript?.decisionCodeSource === 'llm' ? `${value}*` : value;
                   return (
                     <td key={`${row.scenarioId}-${modelId}`} className="border border-gray-200 px-3 py-2 text-gray-700">
                       {transcriptCount > 0 && isOther && targetTranscript ? (
@@ -578,9 +580,9 @@ function SurveyMatrix({
                           size="sm"
                           className="h-auto p-0 text-left text-teal-700 hover:text-teal-800 hover:underline"
                           onClick={() => setSelectedTranscript(transcripts[0] ?? null)}
-                          title="View transcript"
+                          title={targetTranscript?.decisionCodeSource === 'llm' ? 'View transcript (LLM-classified decision)' : 'View transcript'}
                         >
-                          {value}
+                          {valueDisplay}
                           {transcriptCount > 1 ? ` (n=${transcriptCount})` : ''}
                         </Button>
                       ) : (

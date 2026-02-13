@@ -54,6 +54,7 @@ export type Transcript = {
   modelVersion: string | null;
   content: unknown;
   decisionCode: string | null;
+  decisionCodeSource?: string | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
@@ -186,6 +187,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       modelVersion
       content
       decisionCode
+      decisionCodeSource
       turnCount
       tokenCount
       durationMs
@@ -384,6 +386,7 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
       modelVersion
       content
       decisionCode
+      decisionCodeSource
       turnCount
       tokenCount
       durationMs

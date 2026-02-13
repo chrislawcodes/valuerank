@@ -13,11 +13,13 @@ import {
   type RunsQueryResult,
 } from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
+import { isNonSurveyRun, isSurveyRun } from '../lib/runClassification';
 
 type UseInfiniteRunsOptions = {
   definitionId?: string;
   experimentId?: string;
   status?: string;
+  runType?: 'nonSurvey' | 'survey' | 'all';
   pageSize?: number;
   pause?: boolean;
 };
@@ -32,7 +34,14 @@ type UseInfiniteRunsResult = UseInfiniteQueryResult<Run> & {
  * Loads pages incrementally and concatenates results.
  */
 export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfiniteRunsResult {
-  const { definitionId, experimentId, status, pageSize, pause = false } = options;
+  const {
+    definitionId,
+    experimentId,
+    status,
+    runType = 'nonSurvey',
+    pageSize,
+    pause = false,
+  } = options;
 
   // Build filters object
   const filters = useMemo(
@@ -69,8 +78,19 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     pause,
   });
 
+  const filteredRuns = useMemo(() => {
+    if (runType === 'survey') {
+      return result.items.filter(isSurveyRun);
+    }
+    if (runType === 'all') {
+      return result.items;
+    }
+    return result.items.filter(isNonSurveyRun);
+  }, [result.items, runType]);
+
   return {
     ...result,
-    runs: result.items,
+    items: filteredRuns,
+    runs: filteredRuns,
   };
 }

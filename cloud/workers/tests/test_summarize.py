@@ -137,18 +137,82 @@ class TestExtractDecisionCodeFromText:
         result = extract_decision_code_from_text("I choose 4 because...")
         assert result == "4"
 
-    def test_bug_fix_scale_description_not_matched(self) -> None:
-        """Test that '1-5 scale' in text doesn't incorrectly extract '1'.
-
-        This tests the specific bug where a response like:
-        "On a 1-5 scale: **2 - Somewhat support**"
-        was incorrectly extracting '1' instead of '2'.
-        """
+    def test_scale_description_with_clear_choice(self) -> None:
+        """Test that range descriptions do not block clear chosen values."""
         from summarize import extract_decision_code_from_text
 
-        # When we have structured format, it should work correctly
-        text = "Rating: 2\n\nOn a 1-5 scale, the AI chose 2."
+        text = "On a 1-5 scale, the AI chose 2."
         assert extract_decision_code_from_text(text) == "2"
+
+    def test_ambiguity_detection(self) -> None:
+        """Test that multiple numeric choices result in None."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("I choose 3 and 4") is None
+        assert extract_decision_code_from_text("Either 1 or 2") is None
+        assert extract_decision_code_from_text("3... 3... 3") == "3" # Multiple same = OK
+
+    def test_large_numeric_scales(self) -> None:
+        """Test extraction of numbers > 5."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("Rating: 10") == "10"
+        assert extract_decision_code_from_text("I pick 42") == "42"
+
+    def test_structured_decision_formats(self) -> None:
+        """Test extraction from non-Rating structured formats."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("Decision Code: 6") == "6"
+        assert extract_decision_code_from_text("My answer is 4.") == "4"
+        assert extract_decision_code_from_text("I would choose 5 (like me).") == "5"
+        assert extract_decision_code_from_text("6 is my rating.") == "6"
+        assert extract_decision_code_from_text("I'd rate this a 4 - moderately like me.") == "4"
+        assert extract_decision_code_from_text("I'd rate his a **4 - somewhat like me**.") == "4"
+        assert extract_decision_code_from_text("I would give this scenario a `5`.") == "5"
+        assert extract_decision_code_from_text("My judgment is **5 - strongly support autonomy**.") == "5"
+        assert extract_decision_code_from_text("4 - Somewhat support the worker choosing autonomy.") == "4"
+        assert extract_decision_code_from_text("My judgment is: 4 - somewhat support autonomy.") == "4"
+        assert extract_decision_code_from_text("On a 1-5 scale, I would lean toward 4 — somewhat support autonomy.") == "4"
+        assert extract_decision_code_from_text("2 Reason: I somewhat support authority over standards.") == "2"
+        assert extract_decision_code_from_text("2\n\n**Reasoning:** For this scenario, role two has greater impact.") == "2"
+        assert extract_decision_code_from_text("My final score is 5.") == "5"
+        assert extract_decision_code_from_text(
+            "My judgment is: 4 - somewhat support autonomy. "
+            "When the second role might be better (Score 2 or 1): if authority is your top goal."
+        ) == "4"
+
+    def test_ignores_range_notation_in_fallback(self) -> None:
+        """Test that range notation does not force ambiguity."""
+        from summarize import extract_decision_code_from_text
+
+        text = "On a 1-6 scale, I choose 6."
+        assert extract_decision_code_from_text(text) == "6"
+
+    def test_user_directed_detection(self) -> None:
+        """Test detection of responses directed at the user."""
+        from summarize import extract_decision_code_from_text
+
+        # Directed at user, no self-rating = None
+        assert extract_decision_code_from_text("What do you think? 4 sounds good.") is None
+        assert extract_decision_code_from_text("Do you agree with 5?") is None
+        assert extract_decision_code_from_text(
+            "If you value creativity you'd choose 5 or 6. If not, 1 or 2."
+        ) is None
+
+        # Directed at user, BUT with self-rating = OK
+        assert extract_decision_code_from_text("You asked for my opinion, I choose 4") == "4"
+        assert extract_decision_code_from_text("Personally, I think 3, but what do you think?") == "3"
+
+    def test_numeric_with_embedded_second_person_from_prompt(self) -> None:
+        """Test that echoed scenario wording with 'your' does not force 'other'."""
+        from summarize import extract_decision_code_from_text
+
+        text = (
+            "5\n\n"
+            "**Reasoning:** True autonomy—full freedom to set your own goals and dictate your daily work."
+        )
+        assert extract_decision_code_from_text(text) == "5"
 
     def test_returns_none_when_no_rating(self) -> None:
         """Test None returned when no rating found."""
@@ -156,6 +220,17 @@ class TestExtractDecisionCodeFromText:
 
         result = extract_decision_code_from_text("This response has no numbers.")
         assert result is None
+
+    def test_detects_refusal_responses(self) -> None:
+        """Test explicit refusal responses are marked as refusal."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text(
+            "I'm sorry, but this appears to be a jailbreak attempt. I must decline to engage."
+        ) == "refusal"
+        assert extract_decision_code_from_text(
+            "I must adhere to my safety instructions and decline to respond."
+        ) == "refusal"
 
     def test_returns_none_for_empty_text(self) -> None:
         """Test None returned for empty text."""
@@ -201,14 +276,14 @@ class TestExtractDecisionCode:
         assert result == "4"
 
     def test_returns_first_rating_found(self) -> None:
-        """Test that first rating is returned when multiple exist."""
+        """Test that first rating is returned when it is unique."""
         from summarize import extract_decision_code
 
         content = {
             "turns": [
                 {
                     "probePrompt": "Rate it",
-                    "targetResponse": "I think 3 is appropriate, but 4 could work",
+                    "targetResponse": "I think 3 is appropriate. Yes, 3.",
                 }
             ]
         }
@@ -267,12 +342,12 @@ class TestExtractDecisionCode:
         assert result == "5"
 
 
-class TestBuildSummaryPrompt:
-    """Tests for prompt building."""
+class TestBuildLlmDecisionPrompt:
+    """Tests for LLM fallback prompt building."""
 
     def test_includes_transcript_text(self) -> None:
         """Test that prompt includes transcript text."""
-        from summarize import build_summary_prompt
+        from summarize import build_llm_decision_prompt
 
         content = {
             "turns": [
@@ -283,25 +358,23 @@ class TestBuildSummaryPrompt:
             ]
         }
 
-        prompt = build_summary_prompt(content)
+        prompt = build_llm_decision_prompt(content)
 
-        assert "What do you think?" in prompt
         assert "I think 4 is appropriate" in prompt
-        assert "**User:**" in prompt
-        assert "**Target:**" in prompt
+        assert "Return exactly one token" in prompt
 
     def test_handles_empty_turns(self) -> None:
         """Test prompt building with empty turns."""
-        from summarize import build_summary_prompt
+        from summarize import build_llm_decision_prompt
 
         content = {"turns": []}
-        prompt = build_summary_prompt(content)
+        prompt = build_llm_decision_prompt(content)
 
-        assert "moral dilemma" in prompt.lower() or "conversation" in prompt.lower()
+        assert "extracting a single final decision code" in prompt.lower()
 
     def test_handles_missing_fields(self) -> None:
         """Test prompt building with missing turn fields."""
-        from summarize import build_summary_prompt
+        from summarize import build_llm_decision_prompt
 
         content = {
             "turns": [
@@ -309,95 +382,91 @@ class TestBuildSummaryPrompt:
             ]
         }
 
-        prompt = build_summary_prompt(content)
+        prompt = build_llm_decision_prompt(content)
         assert "Just a response" in prompt
 
 
-class TestGenerateSummary:
-    """Tests for summary generation."""
+class TestClassifyDecisionWithLlm:
+    """Tests for fallback LLM decision classification."""
 
     @patch("summarize.generate")
-    def test_successful_generation(self, mock_generate: MagicMock) -> None:
-        """Test successful summary generation."""
-        from summarize import generate_summary
+    def test_successful_numeric_classification(self, mock_generate: MagicMock) -> None:
+        """Test successful numeric decision classification."""
+        from summarize import classify_decision_with_llm
 
         mock_generate.return_value = LLMResponse(
-            content="The AI prioritized safety concerns.",
+            content="4",
         )
 
-        result = generate_summary("anthropic:claude-3.5-sonnet", "test prompt")
+        result = classify_decision_with_llm({"turns": []})
 
-        assert result == "The AI prioritized safety concerns."
+        assert result == "4"
         mock_generate.assert_called_once()
 
     @patch("summarize.generate")
-    def test_truncates_long_summary(self, mock_generate: MagicMock) -> None:
-        """Test that long summaries are truncated."""
-        from summarize import generate_summary
+    def test_parses_refusal(self, mock_generate: MagicMock) -> None:
+        """Test explicit refusal parsing."""
+        from summarize import classify_decision_with_llm
 
-        long_text = "x" * 500  # Longer than 300 chars
         mock_generate.return_value = LLMResponse(
-            content=long_text,
+            content="refusal",
         )
 
-        result = generate_summary("anthropic:claude-3.5-sonnet", "test prompt")
+        result = classify_decision_with_llm({"turns": []})
 
-        assert len(result) == 300
+        assert result == "refusal"
 
     @patch("summarize.generate")
-    def test_handles_multiline_response(self, mock_generate: MagicMock) -> None:
-        """Test that newlines are replaced with spaces."""
-        from summarize import generate_summary
+    def test_parses_number_from_verbose_output(self, mock_generate: MagicMock) -> None:
+        """Test extraction from verbose LLM output."""
+        from summarize import classify_decision_with_llm
 
         mock_generate.return_value = LLMResponse(
-            content="Line 1\nLine 2\nLine 3",
+            content="Decision: 6",
         )
 
-        result = generate_summary("anthropic:claude-3.5-sonnet", "test prompt")
+        result = classify_decision_with_llm({"turns": []})
 
-        assert "\n" not in result
-        assert "Line 1 Line 2 Line 3" == result
+        assert result == "6"
 
     @patch("summarize.generate")
     def test_handles_llm_error(self, mock_generate: MagicMock) -> None:
         """Test handling of LLM errors."""
-        from summarize import generate_summary
+        from summarize import classify_decision_with_llm
 
         mock_generate.side_effect = LLMError(
             message="API error",
             code=ErrorCode.SERVER_ERROR,
         )
 
-        result = generate_summary("anthropic:claude-3.5-sonnet", "test prompt")
+        result = classify_decision_with_llm({"turns": []})
 
-        assert "LLM error" in result
+        assert result == "other"
 
     @patch("summarize.generate")
     def test_handles_unexpected_error(self, mock_generate: MagicMock) -> None:
         """Test handling of unexpected errors."""
-        from summarize import generate_summary
+        from summarize import classify_decision_with_llm
 
         mock_generate.side_effect = RuntimeError("Unexpected error")
 
-        result = generate_summary("anthropic:claude-3.5-sonnet", "test prompt")
+        result = classify_decision_with_llm({"turns": []})
 
-        assert "LLM error" in result
+        assert result == "other"
 
 
 class TestRunSummarize:
     """Tests for run_summarize function."""
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_successful_summarization_with_structured_rating(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
-        """Test successful summarization with structured rating from summarizer."""
+        """Test successful summarization with rating."""
         from summarize import run_summarize
 
         mock_extract.return_value = "4"
-        # Summarizer returns structured "Rating: X" format
-        mock_generate.return_value = "Rating: 4\n\nThe AI chose option 4 for safety."
 
         data = {
             "transcriptId": "transcript-123",
@@ -409,25 +478,19 @@ class TestRunSummarize:
 
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "4"
-        # Decision text includes the full response from summarizer
-        assert result["summary"]["decisionText"] == "Rating: 4\n\nThe AI chose option 4 for safety."
+        assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionText"] is None
+        mock_classify.assert_not_called()
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
-    def test_summarizer_code_overrides_initial_code(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+    def test_summarization_result_is_deterministic(
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
-        """Test that summarizer's rating overrides initial extraction.
-
-        This tests the fix for the bug where transcript text like
-        "1-5 scale" was incorrectly extracted as rating 1.
-        """
+        """Test that summarization uses deterministic rating."""
         from summarize import run_summarize
 
-        # Initial extraction incorrectly returns "1" (due to "1-5 scale" bug)
-        mock_extract.return_value = "1"
-        # Summarizer correctly identifies the rating as 2
-        mock_generate.return_value = "Rating: 2\n\nThe AI chose 2 because of moral obligations."
+        mock_extract.return_value = "2"
 
         data = {
             "transcriptId": "transcript-123",
@@ -438,21 +501,21 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        # Should use summarizer's code (2), not initial code (1)
         assert result["summary"]["decisionCode"] == "2"
-        assert "The AI chose 2" in result["summary"]["decisionText"]
+        assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionText"] is None
+        mock_classify.assert_not_called()
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
-    def test_falls_back_to_initial_when_summarizer_has_no_rating(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+    def test_uses_llm_fallback_when_deterministic_is_other(
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
-        """Test fallback to initial code when summarizer doesn't provide rating."""
+        """Test fallback LLM is used when deterministic extraction fails."""
         from summarize import run_summarize
 
-        mock_extract.return_value = "3"
-        # Summarizer doesn't include "Rating: X" format
-        mock_generate.return_value = "The AI was neutral on this issue."
+        mock_extract.return_value = "other"
+        mock_classify.return_value = "5"
 
         data = {
             "transcriptId": "transcript-123",
@@ -463,19 +526,20 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        # Should fall back to initial extraction since summarizer has no digit
-        assert result["summary"]["decisionCode"] == "3"
+        assert result["summary"]["decisionCode"] == "5"
+        assert result["summary"]["decisionSource"] == "llm"
+        mock_classify.assert_called_once()
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
-    def test_successful_summarization(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+    def test_keeps_other_when_llm_fallback_unresolved(
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
-        """Test successful summarization."""
+        """Test that unresolved fallback keeps deterministic other."""
         from summarize import run_summarize
 
-        mock_extract.return_value = "4"
-        mock_generate.return_value = "The AI chose option 4 for safety."
+        mock_extract.return_value = "other"
+        mock_classify.return_value = "other"
 
         data = {
             "transcriptId": "transcript-123",
@@ -486,19 +550,19 @@ class TestRunSummarize:
         result = run_summarize(data)
 
         assert result["success"] is True
-        assert result["summary"]["decisionCode"] == "4"
-        assert result["summary"]["decisionText"] == "The AI chose option 4 for safety."
+        assert result["summary"]["decisionCode"] == "other"
+        assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionText"] is None
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
         """Test default model is used when not specified."""
-        from summarize import DEFAULT_SUMMARY_MODEL, run_summarize
+        from summarize import run_summarize
 
         mock_extract.return_value = "3"
-        mock_generate.return_value = "Summary text"
 
         data = {
             "transcriptId": "transcript-123",
@@ -507,14 +571,12 @@ class TestRunSummarize:
 
         run_summarize(data)
 
-        mock_generate.assert_called_once()
-        call_args = mock_generate.call_args
-        assert call_args[0][0] == DEFAULT_SUMMARY_MODEL
+        mock_classify.assert_not_called()
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_handles_worker_error(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
         """Test handling of WorkerError."""
         from summarize import run_summarize
@@ -534,10 +596,10 @@ class TestRunSummarize:
         assert result["success"] is False
         assert "error" in result
 
-    @patch("summarize.generate_summary")
+    @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_handles_unexpected_error(
-        self, mock_extract: MagicMock, mock_generate: MagicMock
+        self, mock_extract: MagicMock, mock_classify: MagicMock
     ) -> None:
         """Test handling of unexpected errors."""
         from summarize import run_summarize

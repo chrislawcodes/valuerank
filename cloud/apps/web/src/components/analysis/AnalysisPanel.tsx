@@ -5,7 +5,7 @@
  * Shows per-model statistics, win rates, and warnings.
  */
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, FileSpreadsheet, Link2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
@@ -42,6 +42,7 @@ type AnalysisPanelProps = {
   analysisStatus?: string | null;
   definitionContent?: unknown;
   isAggregate?: boolean;
+  pendingSince?: string | null;
 };
 
 /**
@@ -106,12 +107,40 @@ function AnalysisPending({
   status,
   onRunAnalysis,
   isRunning,
+  pendingSince,
 }: {
   status: string | null | undefined;
   onRunAnalysis?: () => void;
   isRunning?: boolean;
+  pendingSince?: string | null;
 }) {
   const isComputing = status === 'computing';
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!pendingSince) {
+      setElapsedMs(0);
+      return;
+    }
+
+    const baseTime = new Date(pendingSince).getTime();
+    if (!Number.isFinite(baseTime)) {
+      setElapsedMs(0);
+      return;
+    }
+
+    const tick = () => {
+      setElapsedMs(Math.max(0, Date.now() - baseTime));
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [pendingSince]);
+
+  const elapsedText = elapsedMs > 0
+    ? `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`
+    : null;
 
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -128,6 +157,11 @@ function AnalysisPending({
           ? 'Statistical analysis is being computed. This usually takes a few seconds.'
           : 'Analysis has not been computed yet for this run.'}
       </p>
+      {elapsedText && (
+        <p className="text-xs text-gray-500 mt-2">
+          Elapsed: {elapsedText} (auto-refresh every 5s)
+        </p>
+      )}
       {!isComputing && !isRunning && onRunAnalysis && (
         <Button variant="primary" size="sm" onClick={onRunAnalysis} className="mt-4">
           <BarChart2 className="w-4 h-4 mr-2" />
@@ -190,7 +224,13 @@ function AnalysisEmpty({
   );
 }
 
-export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggregate }: AnalysisPanelProps) {
+export function AnalysisPanel({
+  runId,
+  analysisStatus,
+  definitionContent,
+  isAggregate,
+  pendingSince,
+}: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
     analysisStatus,
@@ -320,6 +360,20 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     return analysis.warnings.filter(w => !isLowSampleWarning(w.code));
   }, [analysis]);
 
+  // Pending/computing state
+  if (!analysis && (analysisStatus === 'pending' || analysisStatus === 'computing')) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <AnalysisPending
+          status={analysisStatus}
+          onRunAnalysis={() => void recompute()}
+          isRunning={recomputing}
+          pendingSince={pendingSince}
+        />
+      </div>
+    );
+  }
+
   // Loading state
   if (loading && !analysis) {
     return (
@@ -334,19 +388,6 @@ export function AnalysisPanel({ runId, analysisStatus, definitionContent, isAggr
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
-      </div>
-    );
-  }
-
-  // Pending/computing state
-  if (!analysis && (analysisStatus === 'pending' || analysisStatus === 'computing')) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <AnalysisPending
-          status={analysisStatus}
-          onRunAnalysis={() => void recompute()}
-          isRunning={recomputing}
-        />
       </div>
     );
   }
