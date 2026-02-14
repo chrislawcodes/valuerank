@@ -329,6 +329,7 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
           const result = await rateLimitSchedule(
             providerName,
             jobId,
+            runId,
             `${providerName}:${infraModel.modelId}`,
             transcriptId,
             () => processSummarizeJob(job, infraModel),

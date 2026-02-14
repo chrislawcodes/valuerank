@@ -122,7 +122,12 @@ function estimateModelTranscriptTimeMs(
   // Fallback for early RUNNING state: use in-memory recent completions if available.
   const recentDurations = (run.executionMetrics?.providers ?? [])
     .flatMap((provider) => provider.recentCompletions)
-    .filter((completion) => completion.modelId === modelId && completion.durationMs > 0)
+    .filter(
+      (completion) =>
+        completion.success &&
+        completion.modelId === modelId &&
+        completion.durationMs > 0
+    )
     .map((completion) => completion.durationMs);
 
   if (recentDurations.length === 0) {

@@ -205,6 +205,48 @@ describe('RunProgress', () => {
     expect(screen.getByText('~5.2s')).toBeInTheDocument();
   });
 
+  it('uses only successful recent completions for fallback transcript-time estimate', () => {
+    const run = createMockRun({
+      config: { models: ['gpt-4'] },
+      transcripts: [],
+      executionMetrics: {
+        providers: [
+          {
+            provider: 'openai',
+            activeJobs: 0,
+            queuedJobs: 0,
+            maxParallel: 5,
+            requestsPerMinute: 60,
+            activeModelIds: [],
+            recentCompletions: [
+              {
+                modelId: 'gpt-4',
+                scenarioId: 's-1',
+                success: false,
+                completedAt: '2024-01-15T10:00:00Z',
+                durationMs: 1500,
+              },
+              {
+                modelId: 'gpt-4',
+                scenarioId: 's-2',
+                success: true,
+                completedAt: '2024-01-15T10:00:01Z',
+                durationMs: 8000,
+              },
+            ],
+          },
+        ],
+        totalActive: 0,
+        totalQueued: 0,
+        estimatedSecondsRemaining: null,
+      },
+    });
+
+    render(<RunProgress run={run} showPerModel={true} />);
+
+    expect(screen.getByText('~8.0s')).toBeInTheDocument();
+  });
+
   it('handles zero progress correctly', () => {
     const run = createMockRun({
       status: 'PENDING',

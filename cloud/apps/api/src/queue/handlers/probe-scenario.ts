@@ -608,6 +608,7 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         return rateLimitSchedule(
           provider,
           jobId,
+          job.data.runId,
           modelId,
           scenarioId,
           () => processProbeJob(job)
