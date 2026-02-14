@@ -16,7 +16,7 @@ import { createLogger } from '@valuerank/shared';
 import type { ProbeScenarioJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
-import { incrementCompleted, incrementFailed, isRunPaused, isRunTerminal } from '../../services/run/index.js';
+import { updateProgress, isRunPaused, isRunTerminal } from '../../services/run/index.js';
 import { createTranscript, validateTranscript } from '../../services/transcript/index.js';
 import type { ProbeTranscript, CostSnapshot } from '../../services/transcript/index.js';
 import { recordProbeSuccess, recordProbeFailure } from '../../services/probe-result/index.js';
@@ -151,6 +151,84 @@ type ProbeWorkerInput = {
 type ProbeWorkerOutput =
   | { success: true; transcript: ProbeTranscript }
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+
+type ProbeStatus = 'SUCCESS' | 'FAILED' | null;
+
+function getProgressDelta(
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): { incrementCompleted: number; incrementFailed: number } {
+  if (previousStatus === nextStatus) {
+    return { incrementCompleted: 0, incrementFailed: 0 };
+  }
+
+  if (previousStatus === null) {
+    return nextStatus === 'SUCCESS'
+      ? { incrementCompleted: 1, incrementFailed: 0 }
+      : { incrementCompleted: 0, incrementFailed: 1 };
+  }
+
+  // Transition between terminal states (rare but possible if recovered/overridden)
+  return nextStatus === 'SUCCESS'
+    ? { incrementCompleted: 1, incrementFailed: -1 }
+    : { incrementCompleted: -1, incrementFailed: 1 };
+}
+
+function extractStoredTranscriptTokenUsage(
+  content: unknown,
+  fallbackTokenCount: number
+): { inputTokens: number; outputTokens: number } {
+  const value = content as Record<string, unknown>;
+  const snapshot = value.costSnapshot as Record<string, unknown> | undefined;
+  const snapshotInput = snapshot?.inputTokens;
+  const snapshotOutput = snapshot?.outputTokens;
+
+  if (typeof snapshotInput === 'number' && typeof snapshotOutput === 'number') {
+    return { inputTokens: snapshotInput, outputTokens: snapshotOutput };
+  }
+
+  const turns = Array.isArray(value.turns) ? value.turns : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let foundAny = false;
+
+  for (const turn of turns) {
+    if (turn === null || typeof turn !== 'object') {
+      continue;
+    }
+
+    const turnObj = turn as Record<string, unknown>;
+    if (typeof turnObj.inputTokens === 'number') {
+      inputTokens += turnObj.inputTokens;
+      foundAny = true;
+    }
+    if (typeof turnObj.outputTokens === 'number') {
+      outputTokens += turnObj.outputTokens;
+      foundAny = true;
+    }
+  }
+
+  if (foundAny) {
+    return { inputTokens, outputTokens };
+  }
+
+  // Last-resort fallback when detailed counts are unavailable in legacy transcript payloads
+  return { inputTokens: 0, outputTokens: fallbackTokenCount };
+}
+
+async function applyProgressDelta(
+  runId: string,
+  previousStatus: ProbeStatus,
+  nextStatus: 'SUCCESS' | 'FAILED'
+): Promise<{ progress: { total: number; completed: number; failed: number } | null; status: string | null }> {
+  const delta = getProgressDelta(previousStatus, nextStatus);
+  if (delta.incrementCompleted === 0 && delta.incrementFailed === 0) {
+    return { progress: null, status: null };
+  }
+
+  const updated = await updateProgress(runId, delta);
+  return { progress: updated.progress, status: updated.status };
+}
 
 /**
  * Checks if an error is retryable.
@@ -366,6 +444,14 @@ async function buildWorkerInput(
 async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<void> {
   const { runId, scenarioId, modelId, sampleIndex = 0, config } = job.data;
   const jobId = job.id;
+  const probeResultKey = {
+    runId_scenarioId_modelId_sampleIndex: {
+      runId,
+      scenarioId,
+      modelId,
+      sampleIndex,
+    },
+  };
 
   log.info(
     { jobId, runId, scenarioId, modelId, sampleIndex, config },
@@ -383,6 +469,87 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
     if (await isRunPaused(runId)) {
       log.info({ jobId, runId }, 'Deferring job - run is paused');
       throw new Error('RUN_PAUSED: Job deferred because run is paused');
+    }
+
+    // Idempotency: if this probe combination already succeeded, skip it.
+    const existingProbeResult = await db.probeResult.findUnique({
+      where: probeResultKey,
+      select: {
+        status: true,
+        transcriptId: true,
+      },
+    });
+    const previousProbeStatus = existingProbeResult?.status ?? null;
+    const currentRetryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+
+    if (
+      existingProbeResult !== null &&
+      existingProbeResult.status === 'SUCCESS' &&
+      typeof existingProbeResult.transcriptId === 'string' &&
+      existingProbeResult.transcriptId !== ''
+    ) {
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingProbeResult.transcriptId },
+        'Skipping probe job - result already succeeded'
+      );
+      return;
+    }
+
+    // If this specific key is already terminal-failed and this is only a PgBoss retry,
+    // skip repeating a call that has already been recorded as failed.
+    if (
+      existingProbeResult !== null &&
+      existingProbeResult.status === 'FAILED' &&
+      currentRetryCount > 0
+    ) {
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, currentRetryCount },
+        'Skipping probe job - already terminal failed'
+      );
+      return;
+    }
+
+    // Recovery path: transcript exists but probe_result success row is missing
+    const existingTranscript = await db.transcript.findFirst({
+      where: {
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        durationMs: true,
+        tokenCount: true,
+        content: true,
+      },
+    });
+
+    if (existingTranscript !== null) {
+      const tokenUsage = extractStoredTranscriptTokenUsage(
+        existingTranscript.content,
+        existingTranscript.tokenCount
+      );
+
+      await recordProbeSuccess({
+        runId,
+        scenarioId,
+        modelId,
+        sampleIndex,
+        transcriptId: existingTranscript.id,
+        durationMs: existingTranscript.durationMs,
+        inputTokens: tokenUsage.inputTokens,
+        outputTokens: tokenUsage.outputTokens,
+      });
+
+      const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
+      log.info(
+        { jobId, runId, scenarioId, modelId, sampleIndex, transcriptId: existingTranscript.id, progress, status },
+        'Recovered probe result from existing transcript'
+      );
+      return;
     }
 
     // Run health check on first job (lazy initialization)
@@ -435,7 +602,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           errorMessage: err.message,
           retryCount: 0,
         });
-        const { progress, status } = await incrementFailed(runId);
+        const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'FAILED');
         log.error({ jobId, runId, progress, status, error: err }, 'Probe job permanently failed');
         return; // Complete job without retrying
       }
@@ -495,8 +662,8 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       outputTokens: output.transcript.totalOutputTokens,
     });
 
-    // Update progress - increment completed count
-    const { progress, status } = await incrementCompleted(runId);
+    // Update progress based on status transition for this probe key
+    const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'SUCCESS');
 
     // If run is already in SUMMARIZING state (late-arriving probe job),
     // queue a summarize job for this transcript immediately
@@ -543,6 +710,10 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
         // Record the failure with error details
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
+        const existingProbeResult = await db.probeResult.findUnique({
+          where: probeResultKey,
+          select: { status: true },
+        });
         await recordProbeFailure({
           runId,
           scenarioId,
@@ -552,7 +723,11 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           errorMessage,
           retryCount,
         });
-        const { progress, status } = await incrementFailed(runId);
+        const { progress, status } = await applyProgressDelta(
+          runId,
+          existingProbeResult?.status ?? null,
+          'FAILED'
+        );
         log.error(
           { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
           'Probe job permanently failed'
@@ -563,6 +738,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           'Failed to update progress after job failure'
         );
       }
+      return;
     } else {
       log.info(
         { jobId, runId, retryCount, retriesRemaining: RETRY_LIMIT - retryCount },
@@ -627,13 +803,11 @@ export function createProbeScenarioHandler(): PgBoss.WorkHandler<ProbeScenarioJo
         'Some jobs in batch failed'
       );
 
-      // If all jobs failed, throw the first error
-      if (failures.length === jobs.length && failures[0] !== undefined) {
+      // Throw when any retryable failures occurred so PgBoss requeues them.
+      // Succeeded jobs are idempotent (checked by probe_result/transcript), so retries are safe.
+      if (failures[0] !== undefined) {
         throw failures[0].reason;
       }
-
-      // If some succeeded and some failed, log but don't throw
-      // The successful ones are done, failed ones were handled in processProbeJob
     }
 
     log.info(

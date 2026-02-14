@@ -93,10 +93,10 @@ export async function updateProgress(
         jsonb_set(
           progress,
           '{completed}',
-          to_jsonb((progress->>'completed')::int + ${incrementCompleted})
+          to_jsonb(GREATEST(0, (progress->>'completed')::int + ${incrementCompleted}))
         ),
         '{failed}',
-        to_jsonb((progress->>'failed')::int + ${incrementFailed})
+        to_jsonb(GREATEST(0, (progress->>'failed')::int + ${incrementFailed}))
       ),
       updated_at = NOW()
     WHERE id = ${runId}
