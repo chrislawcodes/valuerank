@@ -24,6 +24,7 @@ vi.mock('../../../src/services/parallelism/index.js', () => ({
 import { loadProviderLimits } from '../../../src/services/parallelism/index.js';
 
 const mockedLoadProviderLimits = vi.mocked(loadProviderLimits);
+const RUN_ID = 'test-run-id';
 
 describe('Rate Limiter Service', () => {
   beforeEach(() => {
@@ -64,6 +65,7 @@ describe('Rate Limiter Service', () => {
       const result = await schedule(
         'test-provider',
         'job-1',
+        RUN_ID,
         'model-1',
         'scenario-1',
         mockFn
@@ -76,7 +78,7 @@ describe('Rate Limiter Service', () => {
     it('records successful completion in metrics', async () => {
       const mockFn = vi.fn().mockResolvedValue('done');
 
-      await schedule('test-provider', 'job-1', 'model-1', 'scenario-1', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 'scenario-1', mockFn);
 
       const metrics = await getProviderMetrics('test-provider');
       expect(metrics).toBeDefined();
@@ -91,7 +93,7 @@ describe('Rate Limiter Service', () => {
       const mockFn = vi.fn().mockRejectedValue(error);
 
       await expect(
-        schedule('test-provider', 'job-1', 'model-1', 'scenario-1', mockFn)
+        schedule('test-provider', 'job-1', RUN_ID, 'model-1', 'scenario-1', mockFn)
       ).rejects.toThrow('API failure');
 
       const metrics = await getProviderMetrics('test-provider');
@@ -105,7 +107,7 @@ describe('Rate Limiter Service', () => {
         return 'done';
       });
 
-      await schedule('test-provider', 'job-1', 'model-1', 'scenario-1', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 'scenario-1', mockFn);
 
       const metrics = await getProviderMetrics('test-provider');
       expect(metrics!.recentCompletions[0].durationMs).toBeGreaterThanOrEqual(50);
@@ -118,6 +120,7 @@ describe('Rate Limiter Service', () => {
       const result = await schedule(
         'unknown-provider',
         'job-1',
+        RUN_ID,
         'model-1',
         'scenario-1',
         mockFn
@@ -130,8 +133,8 @@ describe('Rate Limiter Service', () => {
     it('reuses existing limiter for same provider', async () => {
       const mockFn = vi.fn().mockResolvedValue('ok');
 
-      await schedule('test-provider', 'job-1', 'model-1', 'scenario-1', mockFn);
-      await schedule('test-provider', 'job-2', 'model-1', 'scenario-2', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 'scenario-1', mockFn);
+      await schedule('test-provider', 'job-2', RUN_ID, 'model-1', 'scenario-2', mockFn);
 
       // loadProviderLimits should only be called once for creating the limiter
       expect(mockedLoadProviderLimits).toHaveBeenCalledTimes(1);
@@ -163,6 +166,7 @@ describe('Rate Limiter Service', () => {
           schedule(
             'fast-provider',
             `job-${i}`,
+            RUN_ID,
             'model-1',
             `scenario-${i}`,
             mockFn
@@ -240,8 +244,8 @@ describe('Rate Limiter Service', () => {
         new Promise<string>((resolve) => setTimeout(() => resolve('done'), 100));
 
       const promises = [
-        schedule('test-provider', 'job-1', 'model-1', 's-1', slowFn),
-        schedule('anthropic', 'job-2', 'model-2', 's-2', slowFn),
+        schedule('test-provider', 'job-1', RUN_ID, 'model-1', 's-1', slowFn),
+        schedule('anthropic', 'job-2', RUN_ID, 'model-2', 's-2', slowFn),
       ];
 
       // Give time for jobs to start
@@ -262,7 +266,7 @@ describe('Rate Limiter Service', () => {
       const mockFn = vi.fn().mockResolvedValue('ok');
 
       // Create some state
-      await schedule('test-provider', 'job-1', 'model-1', 's-1', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 's-1', mockFn);
 
       let metrics = await getProviderMetrics('test-provider');
       expect(metrics!.recentCompletions).toHaveLength(1);
@@ -312,14 +316,14 @@ describe('Rate Limiter Service', () => {
       const mockFn = vi.fn().mockResolvedValue('ok');
 
       // Create a limiter
-      await schedule('test-provider', 'job-1', 'model-1', 's-1', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 's-1', mockFn);
 
       // Reload should disconnect the old limiter
       await reloadLimiters();
 
       // New requests should create new limiters
       mockedLoadProviderLimits.mockClear();
-      await schedule('test-provider', 'job-2', 'model-1', 's-2', mockFn);
+      await schedule('test-provider', 'job-2', RUN_ID, 'model-1', 's-2', mockFn);
 
       // Note: loadProviderLimits is called once during reloadLimiters
       // and not again when scheduling because the limiter was pre-created
@@ -354,9 +358,9 @@ describe('Rate Limiter Service', () => {
 
       // Schedule jobs
       const promises = [
-        schedule('limited-provider', 'job-1', 'm', 's-1', () => trackingFn('1')),
-        schedule('limited-provider', 'job-2', 'm', 's-2', () => trackingFn('2')),
-        schedule('limited-provider', 'job-3', 'm', 's-3', () => trackingFn('3')),
+        schedule('limited-provider', 'job-1', RUN_ID, 'm', 's-1', () => trackingFn('1')),
+        schedule('limited-provider', 'job-2', RUN_ID, 'm', 's-2', () => trackingFn('2')),
+        schedule('limited-provider', 'job-3', RUN_ID, 'm', 's-3', () => trackingFn('3')),
       ];
 
       await Promise.all(promises);
@@ -371,7 +375,7 @@ describe('Rate Limiter Service', () => {
       const mockFn = vi.fn().mockResolvedValue('ok');
       const beforeTime = new Date();
 
-      await schedule('test-provider', 'job-1', 'model-1', 's-1', mockFn);
+      await schedule('test-provider', 'job-1', RUN_ID, 'model-1', 's-1', mockFn);
 
       const afterTime = new Date();
       const metrics = await getProviderMetrics('test-provider');
