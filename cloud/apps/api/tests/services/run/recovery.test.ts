@@ -331,6 +331,31 @@ describe('run recovery service', () => {
       expect(mockBoss.send).toHaveBeenCalled();
     });
 
+    it('resumes COMPLETED runs before requeueing missing probes', async () => {
+      const definition = await createTestDefinition();
+      const scenario = await createTestScenario(definition.id);
+      const run = await createTestRun(
+        definition.id,
+        'COMPLETED',
+        { total: 1, completed: 1, failed: 0 }
+      );
+
+      await db.runScenarioSelection.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+        },
+      });
+
+      const result = await recoverOrphanedRun(run.id);
+      expect(result.action).toBe('requeued_probes');
+      expect(result.requeuedCount).toBe(1);
+
+      const updatedRun = await db.run.findUnique({ where: { id: run.id } });
+      expect(updatedRun?.status).toBe('RUNNING');
+      expect(updatedRun?.completedAt).toBeNull();
+    });
+
     it('requeues missing samples in multi-sample runs', async () => {
       const definition = await createTestDefinition();
       const scenario = await createTestScenario(definition.id);
