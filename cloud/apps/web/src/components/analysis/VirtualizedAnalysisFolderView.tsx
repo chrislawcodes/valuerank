@@ -28,6 +28,27 @@ type TagFolder = {
   runs: Run[];
 };
 
+function sortRunsForDisplay(runs: Run[]): Run[] {
+  return [...runs].sort((left, right) => {
+    const leftName = left.definition?.name ?? '';
+    const rightName = right.definition?.name ?? '';
+    const byName = leftName.localeCompare(rightName);
+    if (byName !== 0) {
+      return byName;
+    }
+
+    const leftVersion = left.definitionVersion ?? left.definition?.version ?? 0;
+    const rightVersion = right.definitionVersion ?? right.definition?.version ?? 0;
+    if (leftVersion !== rightVersion) {
+      return rightVersion - leftVersion;
+    }
+
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+    return rightTime - leftTime;
+  });
+}
+
 // Virtual list item types
 type FolderHeaderItem = {
   type: 'folder-header';
@@ -111,7 +132,10 @@ export function VirtualizedAnalysisFolderView({
         std.push(r);
       }
     });
-    return { aggregateRuns: agg, standardRuns: std };
+    return {
+      aggregateRuns: sortRunsForDisplay(agg),
+      standardRuns: std,
+    };
   }, [runs]);
 
   // Group standard runs by tag
@@ -167,7 +191,7 @@ export function VirtualizedAnalysisFolderView({
 
       // Add runs if folder is expanded
       if (expandedFolders.has(tag.id)) {
-        for (const run of tagRuns) {
+        for (const run of sortRunsForDisplay(tagRuns)) {
           items.push({
             type: 'run',
             id: `${tag.id}-${run.id}`,
@@ -188,7 +212,7 @@ export function VirtualizedAnalysisFolderView({
       });
 
       if (expandedFolders.has('__untagged__')) {
-        for (const run of untaggedRuns) {
+        for (const run of sortRunsForDisplay(untaggedRuns)) {
           items.push({
             type: 'run',
             id: `untagged-${run.id}`,
