@@ -107,6 +107,11 @@ export type Run = {
   transcripts: Transcript[];
   transcriptCount: number;
   recentTasks: TaskResult[];
+  failedProbes?: Array<{
+    modelId: string;
+    errorCode: string | null;
+    errorMessage: string | null;
+  }>;
   analysisStatus: 'pending' | 'computing' | 'completed' | 'failed' | null;
   executionMetrics: ExecutionMetrics | null;
   analysis: {
@@ -179,6 +184,11 @@ export const RUN_FRAGMENT = gql`
 export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
   fragment RunWithTranscriptsFields on Run {
     ...RunFields
+    failedProbes {
+      modelId
+      errorCode
+      errorMessage
+    }
     transcripts {
       id
       runId

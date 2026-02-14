@@ -28,6 +28,7 @@ export type ProviderMetrics = {
 };
 
 export type CompletionEvent = {
+  runId: string;
   modelId: string;
   scenarioId: string;
   success: boolean;
@@ -265,6 +266,7 @@ export type ScheduleOptions = {
 export async function schedule<T>(
   providerName: string,
   jobId: string,
+  runId: string,
   modelId: string,
   scenarioId: string,
   fn: () => Promise<T>,
@@ -301,6 +303,7 @@ export async function schedule<T>(
 
     // Record successful completion
     recordCompletion(providerName, {
+      runId,
       modelId,
       scenarioId,
       success: true,
@@ -312,6 +315,7 @@ export async function schedule<T>(
   } catch (error) {
     // Record failed completion
     recordCompletion(providerName, {
+      runId,
       modelId,
       scenarioId,
       success: false,

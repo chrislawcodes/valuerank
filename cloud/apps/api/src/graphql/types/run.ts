@@ -593,7 +593,11 @@ builder.objectType(RunRef, {
           return null;
         }
 
-        const providers = await getAllMetrics();
+        const providers = (await getAllMetrics()).map((provider) => ({
+          ...provider,
+          // Restrict recent completion samples to this run only.
+          recentCompletions: provider.recentCompletions.filter((completion) => completion.runId === run.id),
+        }));
         const { totalActive, totalQueued } = getTotals();
 
         // Calculate estimated time remaining based on progress and throughput

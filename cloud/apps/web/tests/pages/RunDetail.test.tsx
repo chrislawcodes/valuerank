@@ -64,6 +64,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     transcripts: [],
     transcriptCount: 0,
     recentTasks: [],
+    failedProbes: [],
     analysisStatus: null,
     executionMetrics: null,
     analysis: null,
@@ -413,7 +414,30 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('OpenAI failure. Check budget.')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI budget exhausted. Check provider credits.')).toBeInTheDocument();
+  });
+
+  it('shows budget banner even when run is not failed', () => {
+    const run = createMockRun({
+      status: 'RUNNING',
+      failedProbes: [
+        {
+          modelId: 'grok-4-1-fast-reasoning',
+          errorCode: 'NON_RETRYABLE',
+          errorMessage: 'insufficient_quota: out of funds for this API key',
+        },
+      ],
+    });
+    vi.mocked(useRun).mockReturnValue({
+      run,
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderWithRouter();
+
+    expect(screen.getByText('xAI budget exhausted. Check provider credits.')).toBeInTheDocument();
   });
 
   it('shows API budget-check banner for unknown API failures', () => {

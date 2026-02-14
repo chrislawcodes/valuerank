@@ -172,9 +172,79 @@ describe('RunProgress', () => {
     });
     render(<RunProgress run={run} showPerModel={true} />);
 
-    expect(screen.getByText('Per-Model Progress')).toBeInTheDocument();
+    expect(screen.getAllByText('Per-Model Progress').length).toBeGreaterThan(0);
+    expect(screen.getByText('Est. Transcript Time')).toBeInTheDocument();
     expect(screen.getByText('gpt-4')).toBeInTheDocument();
     expect(screen.getByText('claude-3')).toBeInTheDocument();
+  });
+
+  it('shows estimated transcript time per model when duration data exists', () => {
+    const run = createMockRun({
+      config: { models: ['gpt-4'] },
+      transcripts: [
+        {
+          id: 't-1',
+          runId: 'run-1',
+          scenarioId: 's-1',
+          modelId: 'gpt-4',
+          modelVersion: null,
+          content: {},
+          decisionCode: null,
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 5200,
+          estimatedCost: null,
+          createdAt: '2024-01-15T10:00:00Z',
+          lastAccessedAt: null,
+        },
+      ],
+    });
+
+    render(<RunProgress run={run} showPerModel={true} />);
+
+    expect(screen.getByText('~5.2s')).toBeInTheDocument();
+  });
+
+  it('uses only successful recent completions for fallback transcript-time estimate', () => {
+    const run = createMockRun({
+      config: { models: ['gpt-4'] },
+      transcripts: [],
+      executionMetrics: {
+        providers: [
+          {
+            provider: 'openai',
+            activeJobs: 0,
+            queuedJobs: 0,
+            maxParallel: 5,
+            requestsPerMinute: 60,
+            activeModelIds: [],
+            recentCompletions: [
+              {
+                modelId: 'gpt-4',
+                scenarioId: 's-1',
+                success: false,
+                completedAt: '2024-01-15T10:00:00Z',
+                durationMs: 1500,
+              },
+              {
+                modelId: 'gpt-4',
+                scenarioId: 's-2',
+                success: true,
+                completedAt: '2024-01-15T10:00:01Z',
+                durationMs: 8000,
+              },
+            ],
+          },
+        ],
+        totalActive: 0,
+        totalQueued: 0,
+        estimatedSecondsRemaining: null,
+      },
+    });
+
+    render(<RunProgress run={run} showPerModel={true} />);
+
+    expect(screen.getByText('~8.0s')).toBeInTheDocument();
   });
 
   it('handles zero progress correctly', () => {

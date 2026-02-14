@@ -88,6 +88,56 @@ function calculateProgress(progress: RunProgressType | null): number {
 }
 
 /**
+ * Format duration in milliseconds for compact per-model estimate display.
+ */
+function formatEstimatedTranscriptTime(durationMs: number | null): string {
+  if (durationMs === null || durationMs <= 0) {
+    return '-';
+  }
+
+  const seconds = durationMs / 1000;
+  if (seconds < 10) {
+    return `~${seconds.toFixed(1)}s`;
+  }
+  if (seconds < 60) {
+    return `~${Math.round(seconds)}s`;
+  }
+
+  const minutes = seconds / 60;
+  return `~${minutes.toFixed(1)}m`;
+}
+
+/**
+ * Estimate per-transcript time for a model using run-local transcript durations.
+ */
+function estimateModelTranscriptTimeMs(
+  modelId: string,
+  modelDurations: number[],
+  run: Run
+): number | null {
+  if (modelDurations.length > 0) {
+    return Math.round(modelDurations.reduce((sum, ms) => sum + ms, 0) / modelDurations.length);
+  }
+
+  // Fallback for early RUNNING state: use in-memory recent completions if available.
+  const recentDurations = (run.executionMetrics?.providers ?? [])
+    .flatMap((provider) => provider.recentCompletions)
+    .filter(
+      (completion) =>
+        completion.success &&
+        completion.modelId === modelId &&
+        completion.durationMs > 0
+    )
+    .map((completion) => completion.durationMs);
+
+  if (recentDurations.length === 0) {
+    return null;
+  }
+
+  return Math.round(recentDurations.reduce((sum, ms) => sum + ms, 0) / recentDurations.length);
+}
+
+/**
  * Check if run is in an active state that should show expanded metrics.
  */
 function isActiveRun(status: string): boolean {
@@ -191,12 +241,22 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
       {(showPerModel || isExpanded) && models.length > 0 && (
         <div className="border-t border-gray-200 pt-4 mt-4">
           <h4 className="text-sm font-medium text-gray-700 mb-3">Per-Model Progress</h4>
+          <div className="mb-2 px-1 flex items-center gap-3 text-xs text-gray-500 font-medium">
+            <span className="w-40">Model</span>
+            <span className="w-24 text-right">Est. Transcript Time</span>
+            <span className="flex-1">Per-Model Progress</span>
+            <span className="w-16 text-right">Done</span>
+          </div>
           <div className="space-y-2">
             {models.map((modelId) => {
               // Get transcripts for this model
               const modelTranscripts = run.transcripts?.filter(
                 (t) => t.modelId === modelId
               ) ?? [];
+              const modelDurations = modelTranscripts
+                .map((t) => t.durationMs)
+                .filter((durationMs) => durationMs > 0);
+              const estimatedTranscriptTimeMs = estimateModelTranscriptTimeMs(modelId, modelDurations, run);
               const modelCompleted = modelTranscripts.length;
               // Estimate total per model (total / models.length)
               const modelTotal = Math.ceil(total / models.length);
@@ -206,6 +266,12 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
                 <div key={modelId} className="flex items-center gap-3">
                   <span className="text-sm text-gray-700 w-40 truncate" title={modelId}>
                     {modelId}
+                  </span>
+                  <span
+                    className="text-xs text-gray-500 w-24 text-right tabular-nums"
+                    title="Estimated per-transcript response time"
+                  >
+                    {formatEstimatedTranscriptTime(estimatedTranscriptTimeMs)}
                   </span>
                   <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
