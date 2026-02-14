@@ -78,26 +78,14 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
 
   for (const run of stuckRuns) {
     const progress = run.progress as { total: number; completed: number; failed: number };
-    const done = progress.completed + progress.failed;
-
-    // Check if run is actually incomplete
-    if (done >= progress.total) {
-      // Progress shows complete, but status not updated - different issue
-      // This might be a stuck summarization, handle separately
-      if (run.status === 'RUNNING') {
-        log.warn(
-          { runId: run.id, progress },
-          'Run progress complete but status still RUNNING - triggering summarization'
-        );
-        // This is an edge case - we'll handle it in recovery
-      }
-      continue;
-    }
 
     // Count pending/active jobs for this run in PgBoss
     const jobCounts = await countJobsForRun(run.id);
 
     if (jobCounts.pending === 0 && jobCounts.active === 0) {
+      // Coverage check is based on expected scenario/model/sample keys, not progress counters.
+      // This catches runs where progress counters are inaccurate due retries/duplicates.
+      const missingProbes = await findMissingProbes(run.id);
       const stuckMinutes = Math.floor(
         (Date.now() - run.updatedAt.getTime()) / (60 * 1000)
       );
@@ -108,7 +96,7 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
         progress,
         pendingJobs: jobCounts.pending,
         activeJobs: jobCounts.active,
-        missingProbes: progress.total - done,
+        missingProbes: missingProbes.length,
         stuckMinutes,
       });
 
@@ -117,7 +105,7 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
           runId: run.id,
           status: run.status,
           progress,
-          missingProbes: progress.total - done,
+          missingProbes: missingProbes.length,
           stuckMinutes,
         },
         'Detected orphaned run'
