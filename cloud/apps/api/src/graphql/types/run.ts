@@ -95,7 +95,7 @@ function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta:
   }
 
   const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
-  if (runMeta.definitionVersion !== null && jobDefinitionVersion !== runMeta.definitionVersion) {
+  if (jobDefinitionVersion !== runMeta.definitionVersion) {
     return false;
   }
 

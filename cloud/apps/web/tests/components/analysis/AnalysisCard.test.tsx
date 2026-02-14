@@ -52,10 +52,10 @@ describe('AnalysisCard', () => {
     const run = createMockRun();
     render(<AnalysisCard run={run} />);
 
-    // Run name shows in h3 as "Run: Test Definition on Jan 15, 2024"
-    expect(screen.getByText(/Run:.*Test Definition/)).toBeInTheDocument();
-    // Definition name shows in small text
-    expect(screen.getByText(/Test Definition.*·/)).toBeInTheDocument();
+    // Vignette title is the primary heading.
+    expect(screen.getByRole('heading', { level: 3, name: /Test Definition/i })).toBeInTheDocument();
+    // Date metadata still renders.
+    expect(screen.getByText(/Jan 15/i)).toBeInTheDocument();
   });
 
   it('shows model count', () => {
@@ -124,9 +124,9 @@ describe('AnalysisCard', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<AnalysisCard run={run} />);
 
-    // Shows "Run: Unknown on <date>" in h3 and "Unnamed Vignette" in small text
-    expect(screen.getByText(/Run:.*Unknown/)).toBeInTheDocument();
-    expect(screen.getByText(/Unnamed Vignette.*·/)).toBeInTheDocument();
+    // Falls back to generic vignette title in heading.
+    expect(screen.getByRole('heading', { level: 3, name: /Unnamed Vignette/i })).toBeInTheDocument();
+    expect(screen.getByText(/Jan 15/i)).toBeInTheDocument();
   });
 
   it('shows tags when present', () => {

@@ -360,6 +360,15 @@ export function AnalysisPanel({
     return analysis.warnings.filter(w => !isLowSampleWarning(w.code));
   }, [analysis]);
 
+  // Error state
+  if (error) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
+      </div>
+    );
+  }
+
   // Pending/computing state
   if (!analysis && (analysisStatus === 'pending' || analysisStatus === 'computing')) {
     return (
@@ -379,15 +388,6 @@ export function AnalysisPanel({
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <Loading text="Loading analysis..." />
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <ErrorMessage message={`Failed to load analysis: ${error.message}`} />
       </div>
     );
   }

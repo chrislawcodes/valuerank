@@ -7,7 +7,6 @@
 
 import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Run } from '../../api/operations/runs';
-import { formatRunName } from '../../lib/format';
 import { getRunStatusLabel, getRunStatusVariant } from '../../lib/statusBadge';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
@@ -54,6 +53,9 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const analysisStatus = run.analysisStatus || 'pending';
   const statusConfig = ANALYSIS_STATUS_CONFIG[analysisStatus] ?? DEFAULT_STATUS_CONFIG;
   const StatusIcon = statusConfig.icon;
+  const definitionName = run.definition?.name || 'Unnamed Vignette';
+  const definitionVersion = run.definitionVersion ?? run.definition?.version;
+  const hasCustomRunName = run.name !== null && run.name !== undefined && run.name.trim() !== '';
 
   // Use completed date if available, otherwise created date
   const displayDate = run.completedAt || run.createdAt;
@@ -80,7 +82,10 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-gray-900 truncate">
-                {formatRunName(run)}
+                {definitionName}
+                {definitionVersion !== null && definitionVersion !== undefined && (
+                  <span className="text-gray-400"> v{definitionVersion}</span>
+                )}
               </h3>
               <Badge variant={getRunStatusVariant(run.status)} size="count">
                 {runStatusLabel}
@@ -90,7 +95,8 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              {run.definition?.name || 'Unnamed Vignette'} <span className="text-gray-400">v{run.definitionVersion ?? run.definition?.version}</span> · {formatDate(displayDate)}
+              {hasCustomRunName ? `${run.name} · ` : ''}
+              {formatDate(displayDate)}
             </p>
             {/* Tags */}
             {run.definition?.tags && run.definition.tags.length > 0 && (
