@@ -348,9 +348,6 @@ export async function recoverOrphanedRun(
     return { action: 'no_missing_probes' };
   }
 
-  // Re-queue missing probes
-  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
-
   // Ensure run is set to RUNNING so re-queued probe jobs are not skipped as terminal.
   // (COMPLETED/FAILED runs can be manually recovered if missing probes are detected.)
   const shouldResume = run !== null && run.status !== 'RUNNING';
@@ -363,6 +360,10 @@ export async function recoverOrphanedRun(
       updatedAt: new Date(),
     },
   });
+
+  // Re-queue missing probes after status update.
+  // This avoids workers skipping jobs when a run was previously terminal.
+  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
 
   // Log details about missing probes (include full details if small number)
   const logDetails = missingProbes.length <= 10

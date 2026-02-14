@@ -347,6 +347,16 @@ describe('run recovery service', () => {
         },
       });
 
+      // Validate that recovery flips status before queueing probe work.
+      mockBoss.send.mockImplementationOnce(async () => {
+        const queuedRun = await db.run.findUnique({
+          where: { id: run.id },
+          select: { status: true },
+        });
+        expect(queuedRun?.status).toBe('RUNNING');
+        return 'mock-job-id';
+      });
+
       const result = await recoverOrphanedRun(run.id);
       expect(result.action).toBe('requeued_probes');
       expect(result.requeuedCount).toBe(1);
