@@ -54,16 +54,59 @@ function isBudgetFailure(errorMessage: string): boolean {
   const budgetPatterns = [
     'insufficient',
     'insufficient_quota',
+    'insufficient credits',
     'quota',
     'credit',
+    'credits',
     'balance',
+    'low balance',
     'billing',
+    'hard limit',
+    'rate limit budget',
     'payment',
+    'payment required',
     'out of money',
     'out of funds',
     'exceeded your current quota',
   ];
   return budgetPatterns.some((pattern) => normalized.includes(pattern));
+}
+
+function getBudgetFailureBanner(run: Run): string | null {
+  const providers = new Set<string>();
+
+  const failedProbeBudgetHits = (run.failedProbes ?? []).filter((probe) =>
+    probe.errorMessage !== null && isBudgetFailure(probe.errorMessage)
+  );
+  for (const probe of failedProbeBudgetHits) {
+    const provider = inferProviderFromModelId(probe.modelId);
+    if (provider) providers.add(provider);
+  }
+
+  const recentTaskBudgetHits = run.recentTasks.filter((task) =>
+    task.status === 'FAILED' &&
+    task.error !== null &&
+    isBudgetFailure(task.error)
+  );
+  for (const task of recentTaskBudgetHits) {
+    const provider = inferProviderFromModelId(task.modelId);
+    if (provider) providers.add(provider);
+  }
+
+  const hitCount = failedProbeBudgetHits.length + recentTaskBudgetHits.length;
+  if (hitCount === 0) {
+    return null;
+  }
+
+  const providerList = Array.from(providers);
+  if (providerList.length === 1 && providerList[0] !== undefined) {
+    return `${providerList[0]} budget exhausted. Check provider credits.`;
+  }
+  if (providerList.length > 1) {
+    return `${providerList.join(', ')} budgets exhausted. Check provider credits.`;
+  }
+
+  return 'Target AI provider budget exhausted. Check provider credits.';
 }
 
 function getSystemFailureBanner(run: Run): string | null {
@@ -272,7 +315,8 @@ export function RunDetail() {
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING';
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
-  const systemFailureBanner = getSystemFailureBanner(run);
+  const budgetFailureBanner = getBudgetFailureBanner(run);
+  const systemFailureBanner = budgetFailureBanner === null ? getSystemFailureBanner(run) : null;
 
   return (
     <div className="space-y-6">
@@ -287,6 +331,12 @@ export function RunDetail() {
         onRerun={() => setIsRerunDialogOpen(true)}
         onDelete={() => setIsDeleteConfirmOpen(true)}
       />
+
+      {budgetFailureBanner && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800">{budgetFailureBanner}</p>
+        </div>
+      )}
 
       {systemFailureBanner && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3">
