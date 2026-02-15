@@ -1,4 +1,5 @@
 type DefinitionContentShape = {
+  template?: string;
   dimensions?: Array<{
     name?: string;
     levels?: Array<{
@@ -19,6 +20,58 @@ export function extractAttributeName(label: string): string {
     if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
   }
   return label.trim();
+}
+
+function normalizeDimensionToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getTwoAttributeOptionOrder(content: DefinitionContentShape): {
+  optionAName: string;
+  optionBName: string;
+} {
+  const fallback = {
+    optionAName: content.dimensions?.[0]?.name ?? 'Option A',
+    optionBName: content.dimensions?.[1]?.name ?? 'Option B',
+  };
+
+  if (typeof content.template !== 'string' || content.template.trim() === '') {
+    return fallback;
+  }
+
+  const namesByToken = new Map<string, string>();
+  (content.dimensions ?? []).forEach((dimension) => {
+    if (!dimension.name) return;
+    namesByToken.set(normalizeDimensionToken(dimension.name), dimension.name);
+  });
+
+  const orderedNames: string[] = [];
+  const seen = new Set<string>();
+  const placeholderPattern = /\[([^\]]+)\]/g;
+  let match = placeholderPattern.exec(content.template);
+  while (match) {
+    const rawToken = match[1]?.trim();
+    if (rawToken) {
+      const resolvedName = namesByToken.get(normalizeDimensionToken(rawToken));
+      if (resolvedName && !seen.has(resolvedName)) {
+        orderedNames.push(resolvedName);
+        seen.add(resolvedName);
+        if (orderedNames.length === 2) {
+          break;
+        }
+      }
+    }
+    match = placeholderPattern.exec(content.template);
+  }
+
+  if (orderedNames.length < 2) {
+    return fallback;
+  }
+
+  return {
+    optionAName: orderedNames[0] ?? fallback.optionAName,
+    optionBName: orderedNames[1] ?? fallback.optionBName,
+  };
 }
 
 /**
@@ -51,8 +104,7 @@ export function deriveDecisionDimensionLabels(
   }
 
   if (content.dimensions.length === 2) {
-    const optionAName = content.dimensions[0]?.name ?? 'Option A';
-    const optionBName = content.dimensions[1]?.name ?? 'Option B';
+    const { optionAName, optionBName } = getTwoAttributeOptionOrder(content);
     return {
       '1': `Strongly Support ${optionBName}`,
       '2': `Somewhat Support ${optionBName}`,
