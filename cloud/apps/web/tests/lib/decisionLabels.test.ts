@@ -42,6 +42,27 @@ describe('decisionLabels', () => {
     });
   });
 
+  it('uses template placeholder order when it differs from dimension array order', () => {
+    const labels = deriveDecisionDimensionLabels({
+      template: [
+        'Creating an original project will add [self_direction_action] ability to decide.',
+        'The standard project will add [achievement] positive influence on their grades.',
+      ].join('\n'),
+      dimensions: [
+        { name: 'Achievement', levels: [] },
+        { name: 'Self_Direction_Action', levels: [] },
+      ],
+    });
+
+    expect(labels).toEqual({
+      '1': 'Strongly Support Achievement',
+      '2': 'Somewhat Support Achievement',
+      '3': 'Neutral',
+      '4': 'Somewhat Support Self_Direction_Action',
+      '5': 'Strongly Support Self_Direction_Action',
+    });
+  });
+
   it('computes side names from score-1 and score-5 labels', () => {
     const names = getDecisionSideNames({
       '1': 'Strongly Support Achievement',
