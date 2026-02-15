@@ -11,6 +11,7 @@ import { formatPercent } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
+import { getDecisionSideNames } from '../../../utils/decisionLabels';
 
 type OverviewTabProps = {
   runId: string;
@@ -102,25 +103,6 @@ function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-700';
-}
-
-function extractAttributeName(label: string): string {
-  const prefixes = [
-    'Strongly Support ',
-    'Somewhat Support ',
-    'Strongly Oppose ',
-    'Somewhat Oppose ',
-  ];
-  for (const prefix of prefixes) {
-    if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
-  }
-  return label.trim();
-}
-
-function getDecisionSideNames(dimensionLabels?: Record<string, string>): { aName: string; bName: string } {
-  const aName = dimensionLabels?.['1'] ? extractAttributeName(dimensionLabels['1']) : 'Attribute A';
-  const bName = dimensionLabels?.['5'] ? extractAttributeName(dimensionLabels['5']) : 'Attribute B';
-  return { aName, bName };
 }
 
 function ConditionDecisionMatrix({
