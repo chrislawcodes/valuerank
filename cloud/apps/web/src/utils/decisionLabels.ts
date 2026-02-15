@@ -9,6 +9,54 @@ type DefinitionContentShape = {
   }>;
 };
 
+const TEMPLATE_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'between',
+  'by',
+  'choose',
+  'choosing',
+  'do',
+  'for',
+  'from',
+  'give',
+  'he',
+  'her',
+  'his',
+  'i',
+  'if',
+  'in',
+  'is',
+  'it',
+  'its',
+  'me',
+  'my',
+  'of',
+  'on',
+  'or',
+  'our',
+  'project',
+  'scale',
+  'student',
+  'support',
+  'somewhat',
+  'strongly',
+  'the',
+  'their',
+  'them',
+  'they',
+  'to',
+  'unsure',
+  'we',
+  'with',
+  'you',
+  'your',
+]);
+
 export function extractAttributeName(label: string): string {
   const prefixes = [
     'Strongly Support ',
@@ -24,6 +72,15 @@ export function extractAttributeName(label: string): string {
 
 function normalizeDimensionToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function tokenizeText(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !TEMPLATE_STOP_WORDS.has(token));
 }
 
 function getTwoAttributeOptionOrder(content: DefinitionContentShape): {
@@ -74,6 +131,83 @@ function getTwoAttributeOptionOrder(content: DefinitionContentShape): {
   };
 }
 
+function inferTemplateScoreDirection(
+  content: DefinitionContentShape,
+  optionAName: string,
+  optionBName: string
+): Record<'1' | '2' | '4' | '5', string> | null {
+  if (typeof content.template !== 'string' || content.template.trim() === '') {
+    return null;
+  }
+
+  const namesByToken = new Map<string, string>();
+  (content.dimensions ?? []).forEach((dimension) => {
+    if (!dimension.name) return;
+    namesByToken.set(normalizeDimensionToken(dimension.name), dimension.name);
+  });
+
+  const optionKeywords = new Map<string, Set<string>>();
+  const placeholderLinePattern = /\[([^\]]+)\]/g;
+  const lines = content.template.split('\n');
+  lines.forEach((line) => {
+    let placeholderMatch = placeholderLinePattern.exec(line);
+    while (placeholderMatch) {
+      const token = placeholderMatch[1]?.trim();
+      if (token) {
+        const optionName = namesByToken.get(normalizeDimensionToken(token));
+        if (optionName && (optionName === optionAName || optionName === optionBName)) {
+          const existing = optionKeywords.get(optionName) ?? new Set<string>();
+          tokenizeText(line.replace(/\[[^\]]+\]/g, ' ')).forEach((word) => existing.add(word));
+          if (existing.size > 0) {
+            optionKeywords.set(optionName, existing);
+          }
+        }
+      }
+      placeholderMatch = placeholderLinePattern.exec(line);
+    }
+    placeholderLinePattern.lastIndex = 0;
+  });
+
+  const keywordsA = optionKeywords.get(optionAName);
+  const keywordsB = optionKeywords.get(optionBName);
+  if (!keywordsA || !keywordsB || keywordsA.size === 0 || keywordsB.size === 0) {
+    return null;
+  }
+
+  const scoreToOption = new Map<'1' | '2' | '4' | '5', string>();
+  const scoreLinePattern = /^\s*([1-5])\s*[—–\-:]\s*(.+?)\s*$/;
+  lines.forEach((line) => {
+    const match = line.match(scoreLinePattern);
+    if (!match) return;
+    const score = match[1];
+    if (score !== '1' && score !== '2' && score !== '4' && score !== '5') return;
+    const description = match[2] ?? '';
+    const tokens = tokenizeText(description);
+    if (tokens.length === 0) return;
+
+    let overlapA = 0;
+    let overlapB = 0;
+    tokens.forEach((token) => {
+      if (keywordsA.has(token)) overlapA += 1;
+      if (keywordsB.has(token)) overlapB += 1;
+    });
+    if (overlapA === overlapB || (overlapA === 0 && overlapB === 0)) return;
+
+    scoreToOption.set(score, overlapA > overlapB ? optionAName : optionBName);
+  });
+
+  if (!scoreToOption.has('1') || !scoreToOption.has('5')) {
+    return null;
+  }
+
+  return {
+    '1': scoreToOption.get('1') ?? optionBName,
+    '2': scoreToOption.get('2') ?? scoreToOption.get('1') ?? optionBName,
+    '4': scoreToOption.get('4') ?? scoreToOption.get('5') ?? optionAName,
+    '5': scoreToOption.get('5') ?? optionAName,
+  };
+}
+
 /**
  * Build decision-code labels (1..5) from definition content.
  *
@@ -105,6 +239,16 @@ export function deriveDecisionDimensionLabels(
 
   if (content.dimensions.length === 2) {
     const { optionAName, optionBName } = getTwoAttributeOptionOrder(content);
+    const inferredDirection = inferTemplateScoreDirection(content, optionAName, optionBName);
+    if (inferredDirection) {
+      return {
+        '1': `Strongly Support ${inferredDirection['1']}`,
+        '2': `Somewhat Support ${inferredDirection['2']}`,
+        '3': 'Neutral',
+        '4': `Somewhat Support ${inferredDirection['4']}`,
+        '5': `Strongly Support ${inferredDirection['5']}`,
+      };
+    }
     return {
       '1': `Strongly Support ${optionBName}`,
       '2': `Somewhat Support ${optionBName}`,
