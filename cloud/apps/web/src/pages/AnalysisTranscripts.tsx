@@ -17,29 +17,10 @@ import { useAnalysis } from '../hooks/useAnalysis';
 import { useRunMutations } from '../hooks/useRunMutations';
 import type { Transcript } from '../api/operations/runs';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
-
-type DefinitionContentShape = {
-  dimensions?: Array<{
-    name?: string;
-    levels?: Array<{
-      score?: number;
-      label?: string;
-    }>;
-  }>;
-};
-
-function extractAttributeName(label: string): string {
-  const prefixes = [
-    'Strongly Support ',
-    'Somewhat Support ',
-    'Strongly Oppose ',
-    'Somewhat Oppose ',
-  ];
-  for (const prefix of prefixes) {
-    if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
-  }
-  return label.trim();
-}
+import {
+  deriveDecisionDimensionLabels,
+  getDecisionSideNames,
+} from '../utils/decisionLabels';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -80,35 +61,15 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const dimensionLabels = useMemo(
+    () => deriveDecisionDimensionLabels(run?.definition?.content),
+    [run?.definition?.content]
+  );
 
-  const decisionSideNames = useMemo(() => {
-    const content = run?.definition?.content as DefinitionContentShape | undefined;
-    const dimensions = content?.dimensions ?? [];
-
-    const decisionDimension = dimensions.find((dimension) => (
-      ['decision', 'rubric', 'evaluation'].some((term) => dimension.name?.toLowerCase() === term)
-    ));
-
-    if (decisionDimension?.levels?.length === 5) {
-      const score1 = decisionDimension.levels.find((level) => level.score === 1)?.label?.trim();
-      const score5 = decisionDimension.levels.find((level) => level.score === 5)?.label?.trim();
-      if (score1 && score5) {
-        return {
-          aName: extractAttributeName(score1),
-          bName: extractAttributeName(score5),
-        };
-      }
-    }
-
-    if (dimensions.length >= 2) {
-      return {
-        aName: dimensions[0]?.name?.trim() || 'Attribute A',
-        bName: dimensions[1]?.name?.trim() || 'Attribute B',
-      };
-    }
-
-    return { aName: 'Attribute A', bName: 'Attribute B' };
-  }, [run?.definition?.content]);
+  const decisionSideNames = useMemo(
+    () => getDecisionSideNames(dimensionLabels),
+    [dimensionLabels]
+  );
 
   const decisionBucketLabel = useMemo(() => {
     if (decisionBucket === 'a') return decisionSideNames.aName;
