@@ -78,26 +78,14 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
 
   for (const run of stuckRuns) {
     const progress = run.progress as { total: number; completed: number; failed: number };
-    const done = progress.completed + progress.failed;
-
-    // Check if run is actually incomplete
-    if (done >= progress.total) {
-      // Progress shows complete, but status not updated - different issue
-      // This might be a stuck summarization, handle separately
-      if (run.status === 'RUNNING') {
-        log.warn(
-          { runId: run.id, progress },
-          'Run progress complete but status still RUNNING - triggering summarization'
-        );
-        // This is an edge case - we'll handle it in recovery
-      }
-      continue;
-    }
 
     // Count pending/active jobs for this run in PgBoss
     const jobCounts = await countJobsForRun(run.id);
 
     if (jobCounts.pending === 0 && jobCounts.active === 0) {
+      // Coverage check is based on expected scenario/model/sample keys, not progress counters.
+      // This catches runs where progress counters are inaccurate due retries/duplicates.
+      const missingProbes = await findMissingProbes(run.id);
       const stuckMinutes = Math.floor(
         (Date.now() - run.updatedAt.getTime()) / (60 * 1000)
       );
@@ -108,7 +96,7 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
         progress,
         pendingJobs: jobCounts.pending,
         activeJobs: jobCounts.active,
-        missingProbes: progress.total - done,
+        missingProbes: missingProbes.length,
         stuckMinutes,
       });
 
@@ -117,7 +105,7 @@ export async function detectOrphanedRuns(): Promise<OrphanedRunInfo[]> {
           runId: run.id,
           status: run.status,
           progress,
-          missingProbes: progress.total - done,
+          missingProbes: missingProbes.length,
           stuckMinutes,
         },
         'Detected orphaned run'
@@ -287,17 +275,27 @@ async function queueSummarizeJobsForRecovery(runId: string): Promise<number> {
 export async function recoverOrphanedRun(
   runId: string
 ): Promise<{ action: string; requeuedCount?: number }> {
+  const run = await db.run.findUnique({
+    where: { id: runId },
+    select: { status: true, startedAt: true },
+  });
+
+  if (run?.status === 'CANCELLED') {
+    log.info({ runId }, 'Skipping recovery for cancelled run');
+    return { action: 'run_cancelled' };
+  }
+
   const missingProbes = await findMissingProbes(runId);
 
   if (missingProbes.length === 0) {
     // No missing probes - check if we need to trigger summarization
-    const run = await db.run.findUnique({
+    const currentRun = await db.run.findUnique({
       where: { id: runId },
       select: { status: true, progress: true },
     });
 
-    if (run?.status === 'RUNNING') {
-      const progress = run.progress as { total: number; completed: number; failed: number };
+    if (currentRun?.status === 'RUNNING') {
+      const progress = currentRun.progress as { total: number; completed: number; failed: number };
       if (progress.completed + progress.failed >= progress.total) {
         // Progress complete, trigger summarization
         log.info({ runId }, 'Triggering summarization for completed run');
@@ -313,7 +311,7 @@ export async function recoverOrphanedRun(
     }
 
     // Check if run is in SUMMARIZING but has no pending summarize jobs
-    if (run?.status === 'SUMMARIZING') {
+    if (currentRun?.status === 'SUMMARIZING') {
       const pendingSummarizeJobs = await db.$queryRaw<Array<{ count: bigint }>>`
         SELECT COUNT(*) as count
         FROM pgboss.job
@@ -350,14 +348,22 @@ export async function recoverOrphanedRun(
     return { action: 'no_missing_probes' };
   }
 
-  // Re-queue missing probes
-  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
-
-  // Update run status back to RUNNING if it was stuck
+  // Ensure run is set to RUNNING so re-queued probe jobs are not skipped as terminal.
+  // (COMPLETED/FAILED runs can be manually recovered if missing probes are detected.)
+  const shouldResume = run !== null && run.status !== 'RUNNING';
   await db.run.update({
     where: { id: runId },
-    data: { updatedAt: new Date() },
+    data: {
+      status: shouldResume ? 'RUNNING' : undefined,
+      completedAt: shouldResume ? null : undefined,
+      startedAt: shouldResume && run.startedAt === null ? new Date() : undefined,
+      updatedAt: new Date(),
+    },
   });
+
+  // Re-queue missing probes after status update.
+  // This avoids workers skipping jobs when a run was previously terminal.
+  const requeuedCount = await requeueMissingProbes(runId, missingProbes);
 
   // Log details about missing probes (include full details if small number)
   const logDetails = missingProbes.length <= 10

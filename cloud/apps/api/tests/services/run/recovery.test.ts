@@ -214,10 +214,10 @@ describe('run recovery service', () => {
       expect(found).toBeUndefined();
     });
 
-    it('skips runs where progress is already complete', async () => {
+    it('detects stuck RUNNING runs even when progress appears complete', async () => {
       const definition = await createTestDefinition();
       // Run with progress complete but stuck in RUNNING (edge case)
-      await createTestRun(
+      const run = await createTestRun(
         definition.id,
         'RUNNING',
         { total: 10, completed: 10, failed: 0 },
@@ -225,8 +225,33 @@ describe('run recovery service', () => {
       );
 
       const orphaned = await detectOrphanedRuns();
-      // Should not be detected as orphaned (progress complete)
-      expect(orphaned.length).toBe(0);
+      const found = orphaned.find((o) => o.runId === run.id);
+      expect(found).toBeDefined();
+      expect(found?.missingProbes).toBe(0);
+    });
+
+    it('detects missing probes even when progress counters say complete', async () => {
+      const definition = await createTestDefinition();
+      const scenario = await createTestScenario(definition.id);
+      const run = await createTestRun(
+        definition.id,
+        'RUNNING',
+        { total: 1, completed: 1, failed: 0 },
+        10 * 60 * 1000
+      );
+
+      await db.runScenarioSelection.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+        },
+      });
+
+      // Intentionally no transcript for the expected scenario/model pair.
+      const orphaned = await detectOrphanedRuns();
+      const found = orphaned.find((o) => o.runId === run.id);
+      expect(found).toBeDefined();
+      expect(found?.missingProbes).toBe(1);
     });
   });
 
@@ -304,6 +329,41 @@ describe('run recovery service', () => {
       expect(result.action).toBe('requeued_probes');
       expect(result.requeuedCount).toBe(1);
       expect(mockBoss.send).toHaveBeenCalled();
+    });
+
+    it('resumes COMPLETED runs before requeueing missing probes', async () => {
+      const definition = await createTestDefinition();
+      const scenario = await createTestScenario(definition.id);
+      const run = await createTestRun(
+        definition.id,
+        'COMPLETED',
+        { total: 1, completed: 1, failed: 0 }
+      );
+
+      await db.runScenarioSelection.create({
+        data: {
+          runId: run.id,
+          scenarioId: scenario.id,
+        },
+      });
+
+      // Validate that recovery flips status before queueing probe work.
+      mockBoss.send.mockImplementationOnce(async () => {
+        const queuedRun = await db.run.findUnique({
+          where: { id: run.id },
+          select: { status: true },
+        });
+        expect(queuedRun?.status).toBe('RUNNING');
+        return 'mock-job-id';
+      });
+
+      const result = await recoverOrphanedRun(run.id);
+      expect(result.action).toBe('requeued_probes');
+      expect(result.requeuedCount).toBe(1);
+
+      const updatedRun = await db.run.findUnique({ where: { id: run.id } });
+      expect(updatedRun?.status).toBe('RUNNING');
+      expect(updatedRun?.completedAt).toBeNull();
     });
 
     it('requeues missing samples in multi-sample runs', async () => {

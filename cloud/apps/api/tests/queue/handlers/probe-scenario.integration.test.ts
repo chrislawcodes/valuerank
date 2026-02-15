@@ -297,6 +297,99 @@ describe('probe-scenario integration', () => {
     });
   });
 
+  describe('batch retry idempotency', () => {
+    it('retries partial batch failures without duplicating successful transcripts', async () => {
+      const scenario2Id = 'test-scenario-retry-' + Date.now();
+      await db.scenario.create({
+        data: {
+          id: scenario2Id,
+          definitionId: TEST_IDS.definition,
+          name: 'Retry Scenario',
+          content: { prompt: 'Retry scenario prompt', followups: [] },
+        },
+      });
+
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: {
+          progress: { total: 2, completed: 0, failed: 0 },
+        },
+      });
+
+      let scenario2Attempts = 0;
+      const probeCallsByScenario: Record<string, number> = {};
+
+      vi.mocked(spawnPython).mockImplementation((script: string, input: unknown) => {
+        if (script.includes('health_check.py')) {
+          return Promise.resolve({ success: true, data: MOCK_HEALTH_CHECK, stderr: '' });
+        }
+
+        const workerInput = input as { scenarioId?: string };
+        const scenarioId = workerInput.scenarioId ?? 'unknown';
+        probeCallsByScenario[scenarioId] = (probeCallsByScenario[scenarioId] ?? 0) + 1;
+
+        if (scenarioId === scenario2Id) {
+          scenario2Attempts++;
+          if (scenario2Attempts === 1) {
+            return Promise.resolve({
+              success: true,
+              data: {
+                success: false,
+                error: { message: 'Rate limit exceeded', code: 'RATE_LIMIT', retryable: true },
+              },
+              stderr: '',
+            });
+          }
+        }
+
+        return Promise.resolve({
+          success: true,
+          data: { success: true, transcript: MOCK_TRANSCRIPT },
+          stderr: '',
+        });
+      });
+
+      const handler = createProbeScenarioHandler();
+      const jobs = [
+        createMockJob({ scenarioId: TEST_IDS.scenario }),
+        createMockJob({ scenarioId: scenario2Id }),
+      ];
+
+      // First attempt: one succeeds, one retryable failure
+      await expect(handler(jobs)).rejects.toThrow('RATE_LIMIT');
+
+      let transcripts = await db.transcript.findMany({
+        where: { runId: TEST_IDS.run },
+      });
+      expect(transcripts.length).toBe(1);
+
+      let run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
+      let progress = run?.progress as { completed: number; failed: number; total: number };
+      expect(progress.completed).toBe(1);
+      expect(progress.failed).toBe(0);
+
+      // Retry with the same batch: succeeded probe should be skipped, failed one should complete
+      await handler(jobs);
+
+      transcripts = await db.transcript.findMany({
+        where: { runId: TEST_IDS.run },
+      });
+      expect(transcripts.length).toBe(2);
+
+      run = await db.run.findUnique({ where: { id: TEST_IDS.run } });
+      progress = run?.progress as { completed: number; failed: number; total: number };
+      expect(progress.completed).toBe(2);
+      expect(progress.failed).toBe(0);
+
+      expect(probeCallsByScenario[TEST_IDS.scenario]).toBe(1);
+      expect(probeCallsByScenario[scenario2Id]).toBe(2);
+
+      await db.scenario.deleteMany({
+        where: { id: scenario2Id },
+      });
+    });
+  });
+
   describe('error handling', () => {
     it('handles rate limit errors as retryable', async () => {
       vi.mocked(spawnPython).mockImplementation((script: string) => {
