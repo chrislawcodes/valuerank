@@ -149,4 +149,30 @@ describe('decisionLabels', () => {
       colDim: 'Societal_Security',
     });
   });
+
+  it('returns requested axes unchanged when scenario attributes are unavailable', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      [],
+      'Benevolence_Dependability',
+      'Self_Direction_Action'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Self_Direction_Action',
+    });
+  });
+
+  it('falls back to first and second attributes when both requested axes are invalid', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      ['Benevolence_Dependability', 'Societal_Security', 'Achievement'],
+      'Invalid_Row',
+      'Invalid_Col'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Societal_Security',
+    });
+  });
 });

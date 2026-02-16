@@ -4,7 +4,7 @@
  * Shows filtered transcripts for a pivot cell in a full page view.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -27,7 +27,7 @@ import {
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [updatingTranscriptIds, setUpdatingTranscriptIds] = useState<Set<string>>(new Set());
 
@@ -95,6 +95,32 @@ export function AnalysisTranscripts() {
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
   }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
+
+  useEffect(() => {
+    if (!scenarioDimensions) return;
+
+    const rowChanged = rowDim !== activeRowDim;
+    const colChanged = colDim !== activeColDim;
+    if (!rowChanged && !colChanged) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('rowDim', activeRowDim);
+    nextParams.set('colDim', activeColDim);
+
+    // Existing row/col cell coordinates may not be valid once axes change.
+    if (rowChanged) nextParams.delete('row');
+    if (colChanged) nextParams.delete('col');
+
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    scenarioDimensions,
+    searchParams,
+    setSearchParams,
+    rowDim,
+    colDim,
+    activeRowDim,
+    activeColDim,
+  ]);
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));

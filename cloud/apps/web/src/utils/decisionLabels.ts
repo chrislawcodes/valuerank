@@ -333,6 +333,8 @@ export function resolveScenarioAxisDimensions(
   requestedRowDim: string,
   requestedColDim: string
 ): { rowDim: string; colDim: string } {
+  // URL params can be stale (bookmarks/shared links) after scenario attributes change.
+  // Always resolve to currently available attributes, and avoid duplicate row/col axes.
   if (availableAttributes.length === 0) {
     return { rowDim: requestedRowDim, colDim: requestedColDim };
   }
