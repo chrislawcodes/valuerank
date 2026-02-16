@@ -14,6 +14,8 @@ export type TabDefinition = {
   label: string;
 };
 
+// Intentionally keep Analysis focused on actionable decision views.
+// Agreement and Methods tabs were removed by product decision to reduce noise.
 export const TABS: TabDefinition[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'decisions', label: 'Decisions' },
