@@ -10,13 +10,18 @@ import type { PerModelStats } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
-import { getDecisionSideNames, mapDecisionSidesToScenarioAttributes } from '../../../utils/decisionLabels';
+import {
+  getDecisionSideNames,
+  mapDecisionSidesToScenarioAttributes,
+  resolveScenarioAttributes,
+} from '../../../utils/decisionLabels';
 
 type OverviewTabProps = {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   dimensionLabels?: Record<string, string>;
+  expectedAttributes?: string[];
 };
 
 type ConditionRow = {
@@ -55,11 +60,13 @@ function ConditionDecisionMatrix({
   perModel,
   visualizationData,
   dimensionLabels,
+  expectedAttributes = [],
 }: {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   dimensionLabels?: Record<string, string>;
+  expectedAttributes?: string[];
 }) {
   const countsTableRef = useRef<HTMLDivElement>(null);
   const meanTableRef = useRef<HTMLDivElement>(null);
@@ -69,11 +76,8 @@ function ConditionDecisionMatrix({
   const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
 
   const availableAttributes = useMemo(() => {
-    if (!scenarioDimensions) return [];
-    const firstScenario = Object.values(scenarioDimensions)[0];
-    if (!firstScenario) return [];
-    return Object.keys(firstScenario).sort();
-  }, [scenarioDimensions]);
+    return resolveScenarioAttributes(scenarioDimensions, expectedAttributes);
+  }, [scenarioDimensions, expectedAttributes]);
 
   const attributeA = availableAttributes[0] ?? '';
   const attributeB = availableAttributes[1] ?? availableAttributes[0] ?? '';
@@ -526,13 +530,20 @@ function ConditionDecisionMatrix({
   );
 }
 
-export function OverviewTab({ runId, perModel, visualizationData, dimensionLabels }: OverviewTabProps) {
+export function OverviewTab({
+  runId,
+  perModel,
+  visualizationData,
+  dimensionLabels,
+  expectedAttributes = [],
+}: OverviewTabProps) {
   return (
     <ConditionDecisionMatrix
       runId={runId}
       perModel={perModel}
       visualizationData={visualizationData}
       dimensionLabels={dimensionLabels}
+      expectedAttributes={expectedAttributes}
     />
   );
 }

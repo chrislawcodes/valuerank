@@ -22,7 +22,10 @@ import {
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
-import { deriveDecisionDimensionLabels } from '../../utils/decisionLabels';
+import {
+  deriveDecisionDimensionLabels,
+  deriveScenarioAttributesFromDefinition,
+} from '../../utils/decisionLabels';
 
 type AnalysisPanelProps = {
   runId: string;
@@ -225,6 +228,10 @@ export function AnalysisPanel({
 
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
+    [definitionContent]
+  );
+  const expectedScenarioAttributes = useMemo(
+    () => deriveScenarioAttributesFromDefinition(definitionContent),
     [definitionContent]
   );
 
@@ -464,6 +471,7 @@ export function AnalysisPanel({
             perModel={perModel}
             visualizationData={analysis.visualizationData}
             dimensionLabels={dimensionLabels}
+            expectedAttributes={expectedScenarioAttributes}
           />
         )}
         {activeTab === 'decisions' && (
@@ -480,6 +488,7 @@ export function AnalysisPanel({
             visualizationData={analysis.visualizationData}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}
+            expectedAttributes={expectedScenarioAttributes}
           />
         )}
         {activeTab === 'stability' && (

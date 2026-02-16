@@ -9,6 +9,8 @@ type DefinitionContentShape = {
   }>;
 };
 
+type ScenarioDimensions = Record<string, Record<string, string | number>>;
+
 const TEMPLATE_STOP_WORDS = new Set([
   'a',
   'an',
@@ -350,4 +352,84 @@ export function resolveScenarioAxisDimensions(
   }
 
   return { rowDim, colDim };
+}
+
+export function getDominantScenarioAttributes(
+  scenarioDimensions?: ScenarioDimensions
+): string[] {
+  // Fallback source when vignette definition attributes are unavailable.
+  // We treat each scenario key-set as a signature and select the most frequent one.
+  // Ties are resolved lexicographically so the choice is deterministic.
+  if (!scenarioDimensions) return [];
+
+  const signatureCounts = new Map<string, number>();
+  const keysBySignature = new Map<string, string[]>();
+
+  Object.values(scenarioDimensions).forEach((dimensions) => {
+    const keys = Object.keys(dimensions).sort();
+    if (keys.length === 0) return;
+    const signature = keys.join('||');
+    keysBySignature.set(signature, keys);
+    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
+  });
+
+  if (signatureCounts.size === 0) return [];
+
+  const sorted = [...signatureCounts.entries()].sort((a, b) => {
+    if (a[1] !== b[1]) return b[1] - a[1];
+    return a[0].localeCompare(b[0]);
+  });
+  const dominantSignature = sorted[0]?.[0];
+  if (!dominantSignature) return [];
+
+  return keysBySignature.get(dominantSignature) ?? [];
+}
+
+export function deriveScenarioAttributesFromDefinition(
+  definitionContent: unknown
+): string[] {
+  // Vignette definition is canonical for display labels.
+  // Decision-like dimensions are excluded because they are not scenario axes.
+  const content = definitionContent as DefinitionContentShape | undefined;
+  if (!content?.dimensions?.length) return [];
+
+  const excluded = new Set(['decision', 'rubric', 'evaluation']);
+  const names = content.dimensions
+    .map((dimension) => dimension.name?.trim() ?? '')
+    .filter((name) => name !== '' && !excluded.has(name.toLowerCase()));
+
+  return [...new Set(names)];
+}
+
+export function resolveScenarioAttributes(
+  scenarioDimensions: ScenarioDimensions | undefined,
+  preferredAttributes: string[]
+): string[] {
+  // Resolution order:
+  // 1) Prefer vignette-derived attributes that are present in scenario data.
+  // 2) If only one preferred attribute is present, pair it with dominant fallback.
+  // 3) Otherwise use dominant scenario attribute signature.
+  const dominant = getDominantScenarioAttributes(scenarioDimensions);
+  if (!scenarioDimensions || preferredAttributes.length === 0) {
+    return dominant;
+  }
+
+  const allObservedKeys = new Set<string>();
+  Object.values(scenarioDimensions).forEach((dimensions) => {
+    Object.keys(dimensions).forEach((key) => allObservedKeys.add(key));
+  });
+
+  const preferredPresent = preferredAttributes.filter((name) => allObservedKeys.has(name));
+  if (preferredPresent.length >= 2) {
+    return preferredPresent.slice(0, 2);
+  }
+
+  if (preferredPresent.length === 1) {
+    const preferred = preferredPresent[0];
+    if (!preferred) return dominant;
+    const fallback = dominant.find((name) => name !== preferred);
+    return fallback ? [preferred, fallback] : [preferred];
+  }
+
+  return dominant;
 }
