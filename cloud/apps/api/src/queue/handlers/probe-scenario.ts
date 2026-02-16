@@ -322,6 +322,18 @@ async function fetchScenario(scenarioId: string): Promise<ScenarioWithDefinition
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
 
+  if (scenario.deletedAt !== null || scenario.definition.deletedAt !== null) {
+    log.warn(
+      {
+        scenarioId,
+        scenarioDeletedAt: scenario.deletedAt?.toISOString() ?? null,
+        definitionId: scenario.definition.id,
+        definitionDeletedAt: scenario.definition.deletedAt?.toISOString() ?? null,
+      },
+      'Processing probe against soft-deleted scenario/definition for run recovery'
+    );
+  }
+
   return scenario;
 }
 
