@@ -1,10 +1,11 @@
 # API service with Node.js + Python for worker subprocesses
 FROM node:20-slim
 
-# Install Python 3
+# Install Python 3 and PostgreSQL client (pg_dump for admin export)
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 

@@ -8,6 +8,7 @@ import { exportRouter } from './routes/export.js';
 import { csvRouter } from './routes/csv.js';
 import { importRouter } from './routes/import.js';
 import { odataRouter } from './routes/odata.js';
+import { adminRouter } from './routes/admin.js';
 import { authMiddleware, graphqlAuthMiddleware } from './auth/index.js';
 import { yoga } from './graphql/index.js';
 import { createMcpRouter } from './mcp/index.js';
@@ -60,6 +61,7 @@ export function createServer() {
   app.use('/api/csv', csvRouter);
   app.use('/api/import', importRouter);
   app.use('/api/odata', odataRouter);
+  app.use('/admin', adminRouter);
 
   // OAuth 2.1 endpoints for MCP authentication (RFC 8414, 7591, 9728)
   // - Authorization Server Metadata at /.well-known/oauth-authorization-server

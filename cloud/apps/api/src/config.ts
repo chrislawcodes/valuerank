@@ -1,4 +1,4 @@
-import { getEnv } from '@valuerank/shared';
+import { getEnv, getEnvOptional } from '@valuerank/shared';
 
 // Validate JWT_SECRET meets minimum requirements
 function getJwtSecret(): string {
@@ -13,6 +13,8 @@ export const config = {
   PORT: parseInt(getEnv('PORT', '4000'), 10),
   NODE_ENV: getEnv('NODE_ENV', 'development'),
   DATABASE_URL: getEnv('DATABASE_URL') ?? '',
+  DIRECT_URL: getEnvOptional('DIRECT_URL'),
+  ADMIN_EXPORT_TOKEN: getEnvOptional('ADMIN_EXPORT_TOKEN'),
   JWT_SECRET: getJwtSecret(),
   JWT_EXPIRES_IN: '24h',
 } as const;
