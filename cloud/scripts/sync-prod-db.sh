@@ -23,22 +23,26 @@ LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-valuerank-postgres}"
 LOCAL_DB_USER="${LOCAL_DB_USER:-valuerank}"
 LOCAL_DB_NAME="${LOCAL_DB_NAME:-valuerank}"
 DUMP_FILE="${DUMP_FILE:-production_dump.sql}"
+TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "${TEMP_DIR}" "${DUMP_FILE}"' EXIT
+
+HEADER_FILE="${TEMP_DIR}/curl-headers.txt"
+printf 'header = "Authorization: Bearer %s"\n' "${ADMIN_EXPORT_TOKEN}" > "${HEADER_FILE}"
+chmod 600 "${HEADER_FILE}"
 
 echo "Downloading production database dump from ${API_URL}..."
 HTTP_STATUS=$(curl -sS -o "${DUMP_FILE}" -w "%{http_code}" \
-  -H "Authorization: Bearer ${ADMIN_EXPORT_TOKEN}" \
+  -K "${HEADER_FILE}" \
   "${API_URL}")
 
 if [ "${HTTP_STATUS}" != "200" ]; then
   echo "Download failed with HTTP ${HTTP_STATUS}"
   [ -f "${DUMP_FILE}" ] && head -n 20 "${DUMP_FILE}" || true
-  rm -f "${DUMP_FILE}"
   exit 1
 fi
 
 if [ ! -s "${DUMP_FILE}" ]; then
   echo "Downloaded dump is empty"
-  rm -f "${DUMP_FILE}"
   exit 1
 fi
 
@@ -59,5 +63,4 @@ echo "Restore complete:"
 echo "  Runs: ${RUNS}"
 echo "  Transcripts: ${TRANSCRIPTS}"
 
-rm -f "${DUMP_FILE}"
 echo "Done."
