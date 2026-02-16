@@ -327,3 +327,27 @@ export function mapDecisionSidesToScenarioAttributes(
 
   return { lowAttribute: attributeA, highAttribute: attributeB };
 }
+
+export function resolveScenarioAxisDimensions(
+  availableAttributes: string[],
+  requestedRowDim: string,
+  requestedColDim: string
+): { rowDim: string; colDim: string } {
+  // URL params can be stale (bookmarks/shared links) after scenario attributes change.
+  // Always resolve to currently available attributes, and avoid duplicate row/col axes.
+  if (availableAttributes.length === 0) {
+    return { rowDim: requestedRowDim, colDim: requestedColDim };
+  }
+
+  const fallbackRowDim = availableAttributes[0] ?? requestedRowDim;
+  const fallbackColDim = availableAttributes.find((attribute) => attribute !== fallbackRowDim) ?? fallbackRowDim;
+
+  const rowDim = availableAttributes.includes(requestedRowDim) ? requestedRowDim : fallbackRowDim;
+  let colDim = availableAttributes.includes(requestedColDim) ? requestedColDim : fallbackColDim;
+
+  if (colDim === rowDim) {
+    colDim = availableAttributes.find((attribute) => attribute !== rowDim) ?? colDim;
+  }
+
+  return { rowDim, colDim };
+}

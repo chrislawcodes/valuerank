@@ -4,7 +4,7 @@
  * Shows filtered transcripts for a pivot cell in a full page view.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -21,12 +21,13 @@ import {
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
   mapDecisionSidesToScenarioAttributes,
+  resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [updatingTranscriptIds, setUpdatingTranscriptIds] = useState<Set<string>>(new Set());
 
@@ -37,13 +38,6 @@ export function AnalysisTranscripts() {
   const selectedModel = searchParams.get('model') ?? '';
   const decisionCode = searchParams.get('decisionCode') ?? '';
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
-  const hasCellFilterParams = Boolean(rowDim && colDim && row && col);
-  const hasBucketFilterParams = Boolean(
-    rowDim
-    && colDim
-    && selectedModel
-    && (decisionBucket === 'a' || decisionBucket === 'neutral' || decisionBucket === 'b')
-  );
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -62,6 +56,25 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const availableAttributes = useMemo(() => {
+    if (!scenarioDimensions) return [];
+    const firstScenario = Object.values(scenarioDimensions)[0];
+    if (!firstScenario) return [];
+    return Object.keys(firstScenario).sort();
+  }, [scenarioDimensions]);
+  const resolvedAxes = useMemo(
+    () => resolveScenarioAxisDimensions(availableAttributes, rowDim, colDim),
+    [availableAttributes, colDim, rowDim]
+  );
+  const activeRowDim = resolvedAxes.rowDim;
+  const activeColDim = resolvedAxes.colDim;
+  const hasCellFilterParams = Boolean(activeRowDim && activeColDim && row && col);
+  const hasBucketFilterParams = Boolean(
+    activeRowDim
+    && activeColDim
+    && selectedModel
+    && (decisionBucket === 'a' || decisionBucket === 'neutral' || decisionBucket === 'b')
+  );
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(run?.definition?.content),
     [run?.definition?.content]
@@ -72,8 +85,8 @@ export function AnalysisTranscripts() {
     [dimensionLabels]
   );
   const bucketAttributes = useMemo(
-    () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
-    [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]
+    () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [activeRowDim, activeColDim].filter((d) => d !== '')),
+    [activeColDim, activeRowDim, decisionSideNames.aName, decisionSideNames.bName]
   );
 
   const decisionBucketLabel = useMemo(() => {
@@ -82,6 +95,32 @@ export function AnalysisTranscripts() {
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
   }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
+
+  useEffect(() => {
+    if (!scenarioDimensions) return;
+
+    const rowChanged = rowDim !== activeRowDim;
+    const colChanged = colDim !== activeColDim;
+    if (!rowChanged && !colChanged) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('rowDim', activeRowDim);
+    nextParams.set('colDim', activeColDim);
+
+    // Existing row/col cell coordinates may not be valid once axes change.
+    if (rowChanged) nextParams.delete('row');
+    if (colChanged) nextParams.delete('col');
+
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    scenarioDimensions,
+    searchParams,
+    setSearchParams,
+    rowDim,
+    colDim,
+    activeRowDim,
+    activeColDim,
+  ]);
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));
@@ -111,8 +150,8 @@ export function AnalysisTranscripts() {
       // Group scenarios by selected row/col dimensions.
       const grouped = new Map<string, string[]>();
       Object.entries(scenarioDimensions).forEach(([scenarioId, dims]) => {
-        const r = String(dims[rowDim] ?? 'N/A');
-        const c = String(dims[colDim] ?? 'N/A');
+        const r = String(dims[activeRowDim] ?? 'N/A');
+        const c = String(dims[activeColDim] ?? 'N/A');
         const key = `${r}||${c}`;
         const current = grouped.get(key);
         if (current) {
@@ -157,8 +196,8 @@ export function AnalysisTranscripts() {
     return filterTranscriptsForPivotCell({
       transcripts: run?.transcripts ?? [],
       scenarioDimensions,
-      rowDim,
-      colDim,
+      rowDim: activeRowDim,
+      colDim: activeColDim,
       row,
       col,
       selectedModel,
@@ -168,8 +207,8 @@ export function AnalysisTranscripts() {
     run?.transcripts,
     scenarioDimensions,
     modelScenarioMatrix,
-    rowDim,
-    colDim,
+    activeRowDim,
+    activeColDim,
     row,
     col,
     selectedModel,
@@ -228,19 +267,19 @@ export function AnalysisTranscripts() {
           Back
         </Button>
         <div className="text-sm text-gray-500">
-          {(rowDim && colDim) ? (
-            <>
-              {hasCellFilterParams ? (
+              {(activeRowDim && activeColDim) ? (
                 <>
-                  {rowDim}: <span className="font-medium text-gray-900">{row || '-'}</span>
-                  <span className="mx-2">•</span>
-                  {colDim}: <span className="font-medium text-gray-900">{col || '-'}</span>
-                </>
-              ) : (
-                <>
-                  {rowDim} × {colDim}
-                </>
-              )}
+                  {hasCellFilterParams ? (
+                    <>
+                      {activeRowDim}: <span className="font-medium text-gray-900">{row || '-'}</span>
+                      <span className="mx-2">•</span>
+                      {activeColDim}: <span className="font-medium text-gray-900">{col || '-'}</span>
+                    </>
+                  ) : (
+                    <>
+                      {activeRowDim} × {activeColDim}
+                    </>
+                  )}
               <span className="mx-2">•</span>
               Model: <span className="font-medium text-gray-900">{selectedModel || 'All Models'}</span>
               {decisionBucketLabel && (

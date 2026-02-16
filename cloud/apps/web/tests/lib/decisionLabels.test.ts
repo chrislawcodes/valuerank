@@ -3,6 +3,7 @@ import {
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
   mapDecisionSidesToScenarioAttributes,
+  resolveScenarioAxisDimensions,
 } from '../../src/utils/decisionLabels';
 
 describe('decisionLabels', () => {
@@ -120,6 +121,58 @@ describe('decisionLabels', () => {
     expect(mapped).toEqual({
       lowAttribute: 'Power_Dominance',
       highAttribute: 'Universalism_Concern',
+    });
+  });
+
+  it('resolves invalid query axis dimensions to available scenario attributes', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      ['Benevolence_Dependability', 'Societal_Security'],
+      'Benevolence_Dependability',
+      'Self_Direction_Action'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Societal_Security',
+    });
+  });
+
+  it('avoids duplicate row/column axis dimensions after resolution', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      ['Benevolence_Dependability', 'Societal_Security'],
+      'Benevolence_Dependability',
+      'Benevolence_Dependability'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Societal_Security',
+    });
+  });
+
+  it('returns requested axes unchanged when scenario attributes are unavailable', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      [],
+      'Benevolence_Dependability',
+      'Self_Direction_Action'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Self_Direction_Action',
+    });
+  });
+
+  it('falls back to first and second attributes when both requested axes are invalid', () => {
+    const resolved = resolveScenarioAxisDimensions(
+      ['Benevolence_Dependability', 'Societal_Security', 'Achievement'],
+      'Invalid_Row',
+      'Invalid_Col'
+    );
+
+    expect(resolved).toEqual({
+      rowDim: 'Benevolence_Dependability',
+      colDim: 'Societal_Security',
     });
   });
 });
