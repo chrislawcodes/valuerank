@@ -46,6 +46,19 @@ if [ ! -s "${DUMP_FILE}" ]; then
   exit 1
 fi
 
+TABLE_COUNT=$(docker exec "${LOCAL_DB_CONTAINER}" psql -U "${LOCAL_DB_USER}" -d "${LOCAL_DB_NAME}" -At -c \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema');" \
+  2>/dev/null || echo "")
+
+if [ -n "${TABLE_COUNT}" ] && [ "${TABLE_COUNT}" -gt 0 ] 2>/dev/null; then
+  BACKUP_FILE="backup-${LOCAL_DB_NAME}-$(date +%Y%m%d-%H%M%S).sql"
+  echo "Creating backup of current local DB: ${BACKUP_FILE}"
+  docker exec "${LOCAL_DB_CONTAINER}" pg_dump -U "${LOCAL_DB_USER}" -d "${LOCAL_DB_NAME}" > "${BACKUP_FILE}"
+  echo "Backup saved to ${BACKUP_FILE}"
+else
+  echo "No existing local data found; skipping backup"
+fi
+
 echo "Resetting local database ${LOCAL_DB_NAME} in ${LOCAL_DB_CONTAINER}..."
 docker exec "${LOCAL_DB_CONTAINER}" psql -U "${LOCAL_DB_USER}" -d postgres \
   -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${LOCAL_DB_NAME}' AND pid <> pg_backend_pid();" \
