@@ -58,7 +58,6 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
-  const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
   const preferredAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(run?.definition?.content),
     [run?.definition?.content]
