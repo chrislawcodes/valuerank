@@ -407,6 +407,18 @@ export function resolveScenarioAttributes(
   preferredAttributes: string[],
   modelScenarioMatrix?: ModelScenarioMatrix
 ): string[] {
+  /**
+   * Attribute resolution algorithm:
+   * 1) If vignette provides at least two attributes, use those exactly (source of truth).
+   * 2) Otherwise, select one scenario signature from scenarioDimensions.
+   *    - When modelScenarioMatrix exists, only scenario IDs with at least one finite numeric score
+   *      (from any model) are considered "scored" and eligible.
+   *    - Rank signatures by:
+   *      a) overlap count with preferredAttributes (desc)
+   *      b) signature frequency/count (desc)
+   *      c) signature string (asc) for deterministic tie-breaking.
+   * 3) Build final pair from the chosen signature.
+   */
   // Resolution order:
   // 1) Vignette attributes are canonical source-of-truth for axis selection.
   // 2) If vignette attributes are unavailable, use scored scenario signatures.
@@ -421,6 +433,7 @@ export function resolveScenarioAttributes(
   if (modelScenarioMatrix) {
     Object.values(modelScenarioMatrix).forEach((byScenario) => {
       Object.entries(byScenario).forEach(([scenarioId, score]) => {
+        // "Scored" means at least one model produced a finite numeric score for this scenario.
         if (typeof score === 'number' && Number.isFinite(score)) {
           eligibleScenarioIds.add(scenarioId);
         }

@@ -274,4 +274,34 @@ describe('decisionLabels', () => {
 
     expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
   });
+
+  it('uses vignette attributes directly when model matrix is missing (backward compatible)', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+      },
+      ['Self_Direction_Action', 'Achievement']
+    );
+
+    expect(attributes).toEqual(['Self_Direction_Action', 'Achievement']);
+  });
+
+  it('treats only finite numeric values as scored scenarios', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Self_Direction_Action: '2' },
+      },
+      [],
+      {
+        modelA: {
+          s1: Number.NaN,
+          s2: 0,
+        },
+      }
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Self_Direction_Action']);
+  });
 });
