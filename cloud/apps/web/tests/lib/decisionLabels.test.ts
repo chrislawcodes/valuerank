@@ -63,6 +63,33 @@ describe('decisionLabels', () => {
     });
   });
 
+  it('infers flipped score direction from rubric lines in template', () => {
+    const labels = deriveDecisionDimensionLabels({
+      template: [
+        'Creating an original project will add [self_direction_action] ability to decide on the project goals and procedure.',
+        'The standard project will add [achievement] positive influence on their grades.',
+        'Give me your judgement on a scale of 1 to 5. Do you:',
+        '5 - Strongly support the student choosing a standard project',
+        '4 - Somewhat support the student choosing a standard project',
+        '3 - Neutral or Unsure',
+        '2 - Somewhat support the student creating an original project',
+        '1 - Strongly support the student creating an original project',
+      ].join('\n'),
+      dimensions: [
+        { name: 'Self_Direction_Action', levels: [] },
+        { name: 'Achievement', levels: [] },
+      ],
+    });
+
+    expect(labels).toEqual({
+      '1': 'Strongly Support Self_Direction_Action',
+      '2': 'Somewhat Support Self_Direction_Action',
+      '3': 'Neutral',
+      '4': 'Somewhat Support Achievement',
+      '5': 'Strongly Support Achievement',
+    });
+  });
+
   it('computes side names from score-1 and score-5 labels', () => {
     const names = getDecisionSideNames({
       '1': 'Strongly Support Achievement',
