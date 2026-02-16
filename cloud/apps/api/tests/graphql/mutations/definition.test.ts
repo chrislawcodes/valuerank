@@ -524,4 +524,87 @@ describe('GraphQL Definition Mutations', () => {
       expect(response.body.errors[0].message).toContain('Name is required');
     });
   });
+
+  describe('updateDefinition', () => {
+    it('does not increment version when only name changes', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Original Name',
+          content: { schema_version: 1, preamble: 'Preamble', template: 'Template' },
+          version: 1,
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const mutation = `
+        mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
+          updateDefinition(id: $id, input: $input) {
+            id
+            name
+            version
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            id: definition.id,
+            input: {
+              name: 'Renamed Definition',
+              content: { schema_version: 1, preamble: 'Preamble', template: 'Template' },
+            },
+          },
+        })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.updateDefinition.name).toBe('Renamed Definition');
+      expect(response.body.data.updateDefinition.version).toBe(1);
+    });
+
+    it('increments version when content changes', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Content Update Definition',
+          content: { schema_version: 1, preamble: 'Preamble', template: 'Template' },
+          version: 1,
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      const mutation = `
+        mutation UpdateDefinition($id: String!, $input: UpdateDefinitionInput!) {
+          updateDefinition(id: $id, input: $input) {
+            id
+            name
+            version
+            content
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            id: definition.id,
+            input: {
+              name: 'Content Update Definition',
+              content: { schema_version: 1, preamble: 'Preamble', template: 'Updated Template' },
+            },
+          },
+        })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.updateDefinition.version).toBe(2);
+      expect(response.body.data.updateDefinition.content.template).toBe('Updated Template');
+    });
+  });
 });

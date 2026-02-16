@@ -32,6 +32,34 @@ function ensureSchemaVersion(
 // Zod schema for basic object validation of content
 const zContentObject = z.record(z.unknown());
 
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeJsonValue);
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const sortedEntries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => [key, normalizeJsonValue(child)] as const);
+    return Object.fromEntries(sortedEntries);
+  }
+
+  return value;
+}
+
+function jsonValuesEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(normalizeJsonValue(a)) === JSON.stringify(normalizeJsonValue(b));
+}
+
+function stripRootSchemaVersion(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const { schema_version: _schemaVersion, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
 // Input type for creating a definition
 const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
   fields: (t) => ({
@@ -327,6 +355,7 @@ builder.mutationField('updateDefinition', (t) =>
       // Using partial type to avoid 'any'
       const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
+      let hasContentChange = false;
 
       if (name !== null && name !== undefined) {
         updateData.name = name;
@@ -338,8 +367,18 @@ builder.mutationField('updateDefinition', (t) =>
         if (!parseResult.success) {
           throw new Error('Content must be a JSON object');
         }
-        updateData.content = ensureSchemaVersion(parseResult.data);
-        needsVersionIncrement = true;
+        const processedContent = ensureSchemaVersion(parseResult.data);
+        const contentChanged = !jsonValuesEqual(existing.content, processedContent)
+          && !jsonValuesEqual(
+            stripRootSchemaVersion(existing.content),
+            stripRootSchemaVersion(processedContent)
+          );
+
+        if (contentChanged) {
+          updateData.content = processedContent;
+          needsVersionIncrement = true;
+          hasContentChange = true;
+        }
       }
 
       if (preambleVersionId !== undefined) {
@@ -375,8 +414,8 @@ builder.mutationField('updateDefinition', (t) =>
 
       ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
 
-      // Queue async scenario re-expansion if content was updated
-      if (content !== null && content !== undefined) {
+      // Queue async scenario re-expansion only when content actually changed
+      if (hasContentChange) {
         const queueResult = await queueScenarioExpansion(definition.id, 'update');
         ctx.log.info(
           { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
