@@ -448,6 +448,9 @@ function ConditionDecisionMatrix({
         <div className="text-xs text-gray-500">
           Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
         </div>
+        <div className="text-xs text-gray-500">
+          Sensitivity: positive means decisions move toward that attribute&apos;s side; negative means away.
+        </div>
       </div>
 
       <div ref={meanTableRef} className="space-y-2">
