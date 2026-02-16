@@ -59,7 +59,7 @@ adminRouter.get('/db-export', (req, res) => {
   req.log.info({ pgDumpCommand }, 'Starting database export');
 
   res.setHeader('Content-Type', 'application/sql');
-  res.setHeader('Content-Disposition', 'attachment; filename=\"production_dump.sql\"');
+  res.setHeader('Content-Disposition', 'attachment; filename="production_dump.sql"');
 
   const pgDump = spawn(pgDumpCommand, dumpArgs);
   pgDump.stdout.pipe(res);
