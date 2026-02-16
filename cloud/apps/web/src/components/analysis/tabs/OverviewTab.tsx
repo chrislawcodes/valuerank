@@ -54,6 +54,63 @@ function normalizeName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function tokenizeName(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
+function nameSimilarity(a: string, b: string): number {
+  const normalizedA = normalizeName(a);
+  const normalizedB = normalizeName(b);
+  if (normalizedA === normalizedB) return 100;
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) return 60;
+
+  const tokensA = new Set(tokenizeName(a));
+  const tokensB = new Set(tokenizeName(b));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+
+  let overlap = 0;
+  tokensA.forEach((token) => {
+    if (tokensB.has(token)) overlap += 1;
+  });
+  return overlap * 10;
+}
+
+function mapDecisionSidesToScenarioAttributes(
+  lowSideName: string,
+  highSideName: string,
+  availableAttributes: string[]
+): { lowAttribute: string; highAttribute: string } {
+  if (availableAttributes.length < 2) {
+    return {
+      lowAttribute: lowSideName,
+      highAttribute: highSideName,
+    };
+  }
+
+  const attributeA = availableAttributes[0] ?? lowSideName;
+  const attributeB = availableAttributes[1] ?? highSideName;
+  const assignmentA =
+    nameSimilarity(lowSideName, attributeA) + nameSimilarity(highSideName, attributeB);
+  const assignmentB =
+    nameSimilarity(lowSideName, attributeB) + nameSimilarity(highSideName, attributeA);
+
+  if (assignmentB > assignmentA) {
+    return {
+      lowAttribute: attributeB,
+      highAttribute: attributeA,
+    };
+  }
+
+  return {
+    lowAttribute: attributeA,
+    highAttribute: attributeB,
+  };
+}
+
 function ConditionDecisionMatrix({
   runId,
   perModel,
@@ -160,10 +217,14 @@ function ConditionDecisionMatrix({
   );
 
   const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
-  const lowSideAttribute = sideNames.aName;
-  const highSideAttribute = sideNames.bName;
+  const sideAttributeMap = useMemo(
+    () => mapDecisionSidesToScenarioAttributes(sideNames.aName, sideNames.bName, availableAttributes),
+    [availableAttributes, sideNames.aName, sideNames.bName]
+  );
+  const lowSideAttribute = sideAttributeMap.lowAttribute;
+  const highSideAttribute = sideAttributeMap.highAttribute;
 
-  const getSensitivity = useCallback((modelId: string, attribute: string): number | null => {
+  const getSensitivity = useCallback((modelId: string, attribute: string, side: 'low' | 'high'): number | null => {
     if (!scenarioDimensions || !modelScenarioMatrix) return null;
     const byScenario = modelScenarioMatrix[modelId];
     if (!byScenario) return null;
@@ -191,20 +252,8 @@ function ConditionDecisionMatrix({
     });
     if (denominator === 0) return null;
     const rawSlope = numerator / denominator;
-
-    // Align sign so positive means "toward this attribute's supported decision side".
-    // sideNames.aName maps to low decisions (1-2), sideNames.bName maps to high decisions (4-5).
-    const normalizedAttribute = normalizeName(attribute);
-    const normalizedLowSide = normalizeName(sideNames.aName);
-    const normalizedHighSide = normalizeName(sideNames.bName);
-    if (normalizedAttribute === normalizedLowSide) {
-      return -rawSlope;
-    }
-    if (normalizedAttribute === normalizedHighSide) {
-      return rawSlope;
-    }
-    return rawSlope;
-  }, [modelScenarioMatrix, scenarioDimensions, sideNames.aName, sideNames.bName]);
+    return side === 'low' ? -rawSlope : rawSlope;
+  }, [modelScenarioMatrix, scenarioDimensions]);
 
   const countsByModel = useMemo(() => {
     const result: Record<string, {
@@ -241,8 +290,8 @@ function ConditionDecisionMatrix({
         neutral,
         b,
         total,
-        aSensitivity: getSensitivity(modelId, lowSideAttribute),
-        bSensitivity: getSensitivity(modelId, highSideAttribute),
+        aSensitivity: getSensitivity(modelId, lowSideAttribute, 'low'),
+        bSensitivity: getSensitivity(modelId, highSideAttribute, 'high'),
       };
     });
 
