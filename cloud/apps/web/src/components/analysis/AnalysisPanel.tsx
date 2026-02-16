@@ -11,15 +11,11 @@ import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { StatCard } from './StatCard';
-import { AnalysisFilters, filterByModels } from './AnalysisFilters';
-import type { FilterState } from './AnalysisFilters';
 import {
   OverviewTab,
   DecisionsTab,
   ScenariosTab,
   StabilityTab,
-  AgreementTab,
-  MethodsTab,
   TABS,
   type AnalysisTab,
 } from './tabs';
@@ -233,9 +229,6 @@ export function AnalysisPanel({
   );
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
-  const [filters, setFilters] = useState<FilterState>({
-    selectedModels: [],
-  });
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [odataLinkCopied, setOdataLinkCopied] = useState(false);
@@ -277,16 +270,9 @@ export function AnalysisPanel({
     }
   }, [runId]);
 
-  const availableModels = useMemo(
-    () => (analysis ? Object.keys(analysis.perModel).sort() : []),
+  const perModel = useMemo(
+    () => analysis?.perModel ?? {},
     [analysis]
-  );
-
-
-
-  const filteredPerModel = useMemo(
-    () => (analysis ? filterByModels(analysis.perModel, filters.selectedModels) : {}),
-    [analysis, filters.selectedModels]
   );
 
   const displayWarnings = useMemo<AnalysisWarning[]>(() => {
@@ -451,18 +437,6 @@ export function AnalysisPanel({
         />
       </div>
 
-      {/* Filters */}
-      <div className="mb-6">
-        {/* Filters */}
-        <div className="mb-6">
-          <AnalysisFilters
-            availableModels={availableModels}
-            filters={filters}
-            onFilterChange={setFilters}
-          />
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-4 -mb-px">
@@ -487,7 +461,7 @@ export function AnalysisPanel({
         {activeTab === 'overview' && (
           <OverviewTab
             runId={runId}
-            perModel={filteredPerModel}
+            perModel={perModel}
             visualizationData={analysis.visualizationData}
             dimensionLabels={dimensionLabels}
           />
@@ -495,7 +469,7 @@ export function AnalysisPanel({
         {activeTab === 'decisions' && (
           <DecisionsTab
             visualizationData={analysis.visualizationData}
-            perModel={filteredPerModel}
+            perModel={perModel}
             varianceAnalysis={analysis.varianceAnalysis}
             dimensionLabels={dimensionLabels}
           />
@@ -511,16 +485,10 @@ export function AnalysisPanel({
         {activeTab === 'stability' && (
           <StabilityTab
             runId={runId}
-            perModel={filteredPerModel}
+            perModel={perModel}
             visualizationData={loading ? null : analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
           />
-        )}
-        {activeTab === 'agreement' && (
-          <AgreementTab modelAgreement={analysis.modelAgreement} perModel={filteredPerModel} />
-        )}
-        {activeTab === 'methods' && (
-          <MethodsTab methodsUsed={analysis.methodsUsed} warnings={displayWarnings} />
         )}
       </div>
     </div>

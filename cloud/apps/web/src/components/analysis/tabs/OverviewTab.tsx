@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
-import { formatPercent } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
@@ -20,70 +19,16 @@ type OverviewTabProps = {
   dimensionLabels?: Record<string, string>;
 };
 
-/**
- * Model stats row component.
- */
-function ModelStatsRow({ modelId, stats }: { modelId: string; stats: PerModelStats }) {
-  // Get top 3 values by win rate
-  const sortedValues = Object.entries(stats.values)
-    .sort(([, a], [, b]) => b.winRate - a.winRate)
-    .slice(0, 3);
-
-  return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-medium text-gray-900 truncate" title={modelId}>
-          {modelId}
-        </h4>
-        <span className="text-sm text-gray-500">Transcripts: {stats.sampleSize}</span>
-      </div>
-
-      {/* Overall stats */}
-      <div className="grid grid-cols-4 gap-2 mb-3 text-sm">
-        <div>
-          <span className="text-gray-500">Mean:</span>
-          <span className="ml-1 font-medium">{stats.overall.mean.toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-gray-500">StdDev:</span>
-          <span className="ml-1 font-medium">{stats.overall.stdDev.toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-gray-500">Min:</span>
-          <span className="ml-1 font-medium">{stats.overall.min.toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="text-gray-500">Max:</span>
-          <span className="ml-1 font-medium">{stats.overall.max.toFixed(2)}</span>
-        </div>
-      </div>
-
-      {/* Top values */}
-      {sortedValues.length > 0 && (
-        <div className="border-t border-gray-100 pt-3">
-          <p className="text-xs text-gray-500 mb-2">Top Values by Win Rate</p>
-          <div className="flex flex-wrap gap-2">
-            {sortedValues.map(([valueId, valueStats]) => (
-              <span
-                key={valueId}
-                className="inline-flex items-center px-2 py-1 rounded-full bg-teal-50 text-teal-700 text-xs"
-                title={`${formatPercent(valueStats.winRate)} (${valueStats.count.prioritized}/${valueStats.count.prioritized + valueStats.count.deprioritized})`}
-              >
-                {valueId}: {formatPercent(valueStats.winRate)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 type ConditionRow = {
   id: string;
   attributeALevel: string;
   attributeBLevel: string;
   scenarioIds: string[];
+};
+
+type ConditionStats = {
+  mean: number;
+  sem: number | null;
 };
 
 function getHeatmapColor(value: number): string {
@@ -103,6 +48,10 @@ function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-700';
+}
+
+function normalizeName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function ConditionDecisionMatrix({
@@ -130,21 +79,9 @@ function ConditionDecisionMatrix({
     return Object.keys(firstScenario).sort();
   }, [scenarioDimensions]);
 
-  const [attributeA, setAttributeA] = useState<string>(availableAttributes[0] ?? '');
-  const [attributeB, setAttributeB] = useState<string>(availableAttributes[1] ?? availableAttributes[0] ?? '');
+  const attributeA = availableAttributes[0] ?? '';
+  const attributeB = availableAttributes[1] ?? availableAttributes[0] ?? '';
   const [selectedModels, setSelectedModels] = useState<string[]>(models);
-
-  useEffect(() => {
-    const nextA = availableAttributes[0] ?? '';
-    const nextB = availableAttributes[1] ?? availableAttributes[0] ?? '';
-
-    if (!availableAttributes.includes(attributeA)) {
-      setAttributeA(nextA);
-    }
-    if (!availableAttributes.includes(attributeB)) {
-      setAttributeB(nextB);
-    }
-  }, [availableAttributes, attributeA, attributeB]);
 
   useEffect(() => {
     setSelectedModels((current) => {
@@ -197,29 +134,87 @@ function ConditionDecisionMatrix({
   }, [scenarioDimensions, attributeA, attributeB]);
 
   const getMeanDecision = useCallback(
-    (modelId: string, scenarioIds: string[]): number | null => {
+    (modelId: string, scenarioIds: string[]): ConditionStats | null => {
       const byScenario = modelScenarioMatrix?.[modelId];
       if (!byScenario) return null;
 
-      let sum = 0;
-      let count = 0;
+      const values: number[] = [];
       scenarioIds.forEach((scenarioId) => {
         const score = byScenario[scenarioId];
         if (typeof score === 'number' && Number.isFinite(score)) {
-          sum += score;
-          count += 1;
+          values.push(score);
         }
       });
 
-      return count > 0 ? sum / count : null;
+      if (values.length === 0) return null;
+
+      const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+      if (values.length < 2) return { mean, sem: 0 };
+
+      const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
+      const stdDev = Math.sqrt(variance);
+      const sem = stdDev / Math.sqrt(values.length);
+      return { mean, sem };
     },
     [modelScenarioMatrix]
   );
 
   const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
+  const lowSideAttribute = sideNames.aName;
+  const highSideAttribute = sideNames.bName;
+
+  const getSensitivity = useCallback((modelId: string, attribute: string): number | null => {
+    if (!scenarioDimensions || !modelScenarioMatrix) return null;
+    const byScenario = modelScenarioMatrix[modelId];
+    if (!byScenario) return null;
+
+    const pairs: Array<{ x: number; y: number }> = [];
+    Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
+      const xRaw = dimensions[attribute];
+      const yRaw = byScenario[scenarioId];
+      const x = typeof xRaw === 'number' ? xRaw : Number.parseFloat(String(xRaw));
+      if (!Number.isFinite(x) || typeof yRaw !== 'number' || !Number.isFinite(yRaw)) {
+        return;
+      }
+      pairs.push({ x, y: yRaw });
+    });
+
+    if (pairs.length < 2) return null;
+    const meanX = pairs.reduce((sum, pair) => sum + pair.x, 0) / pairs.length;
+    const meanY = pairs.reduce((sum, pair) => sum + pair.y, 0) / pairs.length;
+    let numerator = 0;
+    let denominator = 0;
+    pairs.forEach(({ x, y }) => {
+      const centeredX = x - meanX;
+      numerator += centeredX * (y - meanY);
+      denominator += centeredX * centeredX;
+    });
+    if (denominator === 0) return null;
+    const rawSlope = numerator / denominator;
+
+    // Align sign so positive means "toward this attribute's supported decision side".
+    // sideNames.aName maps to low decisions (1-2), sideNames.bName maps to high decisions (4-5).
+    const normalizedAttribute = normalizeName(attribute);
+    const normalizedLowSide = normalizeName(sideNames.aName);
+    const normalizedHighSide = normalizeName(sideNames.bName);
+    if (normalizedAttribute === normalizedLowSide) {
+      return -rawSlope;
+    }
+    if (normalizedAttribute === normalizedHighSide) {
+      return rawSlope;
+    }
+    return rawSlope;
+  }, [modelScenarioMatrix, scenarioDimensions, sideNames.aName, sideNames.bName]);
 
   const countsByModel = useMemo(() => {
-    const result: Record<string, { a: number; neutral: number; b: number; total: number }> = {};
+    const result: Record<string, {
+      a: number;
+      neutral: number;
+      b: number;
+      total: number;
+      aSensitivity: number | null;
+      bSensitivity: number | null;
+    }> = {};
     if (!modelScenarioMatrix) return result;
     if (conditionRows.length === 0) return result;
 
@@ -230,9 +225,9 @@ function ConditionDecisionMatrix({
       let total = 0;
 
       conditionRows.forEach((row) => {
-        const mean = getMeanDecision(modelId, row.scenarioIds);
-        if (mean === null) return;
-        const rounded = Math.round(mean);
+        const stats = getMeanDecision(modelId, row.scenarioIds);
+        if (stats === null) return;
+        const rounded = Math.round(stats.mean);
         if (rounded < 1 || rounded > 5) return;
 
         total += 1;
@@ -241,11 +236,26 @@ function ConditionDecisionMatrix({
         else b += 1;
       });
 
-      result[modelId] = { a, neutral, b, total };
+      result[modelId] = {
+        a,
+        neutral,
+        b,
+        total,
+        aSensitivity: getSensitivity(modelId, lowSideAttribute),
+        bSensitivity: getSensitivity(modelId, highSideAttribute),
+      };
     });
 
     return result;
-  }, [visibleModels, conditionRows, modelScenarioMatrix, getMeanDecision]);
+  }, [
+    visibleModels,
+    conditionRows,
+    modelScenarioMatrix,
+    getMeanDecision,
+    getSensitivity,
+    lowSideAttribute,
+    highSideAttribute,
+  ]);
 
   const handleCellClick = (modelId: string, row: ConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
@@ -292,34 +302,6 @@ function ConditionDecisionMatrix({
   return (
     <div className="space-y-4 rounded-lg border border-gray-200 p-4">
       <div className="flex flex-wrap items-end gap-4">
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Attribute A</label>
-          <select
-            value={attributeA}
-            onChange={(event) => setAttributeA(event.target.value)}
-            className="block w-52 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500"
-          >
-            {availableAttributes.map((attribute) => (
-              <option key={attribute} value={attribute}>
-                {attribute}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Attribute B</label>
-          <select
-            value={attributeB}
-            onChange={(event) => setAttributeB(event.target.value)}
-            className="block w-52 rounded-md border-gray-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500"
-          >
-            {availableAttributes.map((attribute) => (
-              <option key={attribute} value={attribute}>
-                {attribute}
-              </option>
-            ))}
-          </select>
-        </div>
         <div>
           <label className="mb-1 block text-xs font-medium uppercase text-gray-500">AI Columns</label>
           <details className="relative">
@@ -369,7 +351,7 @@ function ConditionDecisionMatrix({
 
       <div ref={countsTableRef} className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <h4 className="text-xs font-semibold uppercase text-gray-500">Condition Bucket Counts</h4>
+          <h4 className="text-xs font-semibold uppercase text-gray-500">Decision Frequency</h4>
           <CopyVisualButton targetRef={countsTableRef} label="condition bucket counts table" />
         </div>
         <div className="overflow-x-auto">
@@ -388,11 +370,24 @@ function ConditionDecisionMatrix({
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {sideNames.bName}
               </th>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
+                {lowSideAttribute} Sensitivity
+              </th>
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
+                {highSideAttribute} Sensitivity
+              </th>
             </tr>
           </thead>
           <tbody>
             {visibleModels.map((modelId) => {
-              const counts = countsByModel[modelId] ?? { a: 0, neutral: 0, b: 0, total: 0 };
+              const counts = countsByModel[modelId] ?? {
+                a: 0,
+                neutral: 0,
+                b: 0,
+                total: 0,
+                aSensitivity: null,
+                bSensitivity: null,
+              };
               const maxCount = Math.max(counts.a, counts.neutral, counts.b);
               const highlightA = maxCount > 0 && counts.a === maxCount;
               const highlightNeutral = maxCount > 0 && counts.neutral === maxCount;
@@ -447,6 +442,12 @@ function ConditionDecisionMatrix({
                       {counts.b}
                     </Button>
                   </td>
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
+                    {counts.aSensitivity == null ? '-' : counts.aSensitivity.toFixed(3)}
+                  </td>
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
+                    {counts.bSensitivity == null ? '-' : counts.bSensitivity.toFixed(3)}
+                  </td>
                 </tr>
               );
             })}
@@ -463,7 +464,7 @@ function ConditionDecisionMatrix({
 
       <div ref={meanTableRef} className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Mean Decision</h4>
+          <h4 className="text-xs font-semibold uppercase text-gray-500">Condition Decisions</h4>
           <CopyVisualButton targetRef={meanTableRef} label="condition by AI mean decision table" />
         </div>
         <div className="overflow-x-auto">
@@ -491,13 +492,13 @@ function ConditionDecisionMatrix({
                   {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
                 </td>
                 {visibleModels.map((modelId) => {
-                  const mean = getMeanDecision(modelId, row.scenarioIds);
-                  const isOtherCell = mean === null;
+                  const stats = getMeanDecision(modelId, row.scenarioIds);
+                  const isOtherCell = stats === null;
                   return (
                     <td
                       key={`${row.id}-${modelId}`}
                       className="border border-gray-200 px-3 py-2 text-center text-sm transition-colors"
-                      style={{ backgroundColor: mean === null ? undefined : getHeatmapColor(mean) }}
+                      style={{ backgroundColor: stats === null ? undefined : getHeatmapColor(stats.mean) }}
                     >
                       <Button
                         type="button"
@@ -507,10 +508,15 @@ function ConditionDecisionMatrix({
                         title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`}
                         onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                       >
-                        {mean === null ? (
+                        {stats === null ? (
                           <span className="text-gray-500">-</span>
                         ) : (
-                          <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                          <span className={`inline-flex flex-col items-center ${getScoreTextColor(stats.mean)}`}>
+                            <span className="font-semibold">{stats.mean.toFixed(2)}</span>
+                            <span className="text-[10px] text-gray-500">
+                              SEM {stats.sem == null ? '-' : stats.sem.toFixed(2)}
+                            </span>
+                          </span>
                         )}
                       </Button>
                     </td>
@@ -531,26 +537,11 @@ function ConditionDecisionMatrix({
 
 export function OverviewTab({ runId, perModel, visualizationData, dimensionLabels }: OverviewTabProps) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">Condition x AI Mean Decision</h3>
-        <p className="text-xs text-gray-500">
-          Rows are condition combinations (attribute A level + attribute B level). Columns are target AIs.
-          Each cell shows the mean decision score.
-        </p>
-        <ConditionDecisionMatrix
-          runId={runId}
-          perModel={perModel}
-          visualizationData={visualizationData}
-          dimensionLabels={dimensionLabels}
-        />
-      </div>
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-700">Per-Model Statistics</h3>
-        {Object.entries(perModel).map(([modelId, stats]) => (
-          <ModelStatsRow key={modelId} modelId={modelId} stats={stats} />
-        ))}
-      </div>
-    </div>
+    <ConditionDecisionMatrix
+      runId={runId}
+      perModel={perModel}
+      visualizationData={visualizationData}
+      dimensionLabels={dimensionLabels}
+    />
   );
 }
