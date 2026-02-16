@@ -356,6 +356,9 @@ builder.mutationField('updateDefinition', (t) =>
       const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
       let needsVersionIncrement = false;
       let hasContentChange = false;
+      const hasNameChange = name !== null && name !== undefined && name !== existing.name;
+      let hasPreambleChange = false;
+      let hasSchemaOnlyContentDifference = false;
 
       if (name !== null && name !== undefined) {
         updateData.name = name;
@@ -368,11 +371,13 @@ builder.mutationField('updateDefinition', (t) =>
           throw new Error('Content must be a JSON object');
         }
         const processedContent = ensureSchemaVersion(parseResult.data);
-        const contentChanged = !jsonValuesEqual(existing.content, processedContent)
-          && !jsonValuesEqual(
-            stripRootSchemaVersion(existing.content),
-            stripRootSchemaVersion(processedContent)
-          );
+        const exactContentEqual = jsonValuesEqual(existing.content, processedContent);
+        const equalIgnoringSchemaVersion = jsonValuesEqual(
+          stripRootSchemaVersion(existing.content),
+          stripRootSchemaVersion(processedContent)
+        );
+        const contentChanged = !exactContentEqual && !equalIgnoringSchemaVersion;
+        hasSchemaOnlyContentDifference = !exactContentEqual && equalIgnoringSchemaVersion;
 
         if (contentChanged) {
           updateData.content = processedContent;
@@ -393,6 +398,7 @@ builder.mutationField('updateDefinition', (t) =>
         // Preamble change is a content change effectively
         if (existing.preambleVersionId !== preambleVersionId) {
           needsVersionIncrement = true;
+          hasPreambleChange = true;
         }
       }
 
@@ -405,6 +411,30 @@ builder.mutationField('updateDefinition', (t) =>
       if (needsVersionIncrement) {
         // Increment version on content or preamble change
         updateData.version = { increment: 1 };
+        ctx.log.info(
+          {
+            definitionId: id,
+            currentVersion: existing.version,
+            nextVersion: existing.version + 1,
+            hasNameChange,
+            hasContentChange,
+            hasPreambleChange,
+            hasSchemaOnlyContentDifference,
+          },
+          'Definition version incremented'
+        );
+      } else {
+        ctx.log.debug(
+          {
+            definitionId: id,
+            version: existing.version,
+            hasNameChange,
+            hasContentChange,
+            hasPreambleChange,
+            hasSchemaOnlyContentDifference,
+          },
+          'Definition version unchanged'
+        );
       }
 
       const definition = await db.definition.update({
