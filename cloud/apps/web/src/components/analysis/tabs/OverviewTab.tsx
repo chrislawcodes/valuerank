@@ -10,7 +10,7 @@ import type { PerModelStats } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
-import { getDecisionSideNames } from '../../../utils/decisionLabels';
+import { getDecisionSideNames, mapDecisionSidesToScenarioAttributes } from '../../../utils/decisionLabels';
 
 type OverviewTabProps = {
   runId: string;
@@ -48,67 +48,6 @@ function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-700';
-}
-
-function normalizeName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function tokenizeName(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0);
-}
-
-function nameSimilarity(a: string, b: string): number {
-  const normalizedA = normalizeName(a);
-  const normalizedB = normalizeName(b);
-  if (normalizedA === normalizedB) return 100;
-  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) return 60;
-
-  const tokensA = new Set(tokenizeName(a));
-  const tokensB = new Set(tokenizeName(b));
-  if (tokensA.size === 0 || tokensB.size === 0) return 0;
-
-  let overlap = 0;
-  tokensA.forEach((token) => {
-    if (tokensB.has(token)) overlap += 1;
-  });
-  return overlap * 10;
-}
-
-function mapDecisionSidesToScenarioAttributes(
-  lowSideName: string,
-  highSideName: string,
-  availableAttributes: string[]
-): { lowAttribute: string; highAttribute: string } {
-  if (availableAttributes.length < 2) {
-    return {
-      lowAttribute: lowSideName,
-      highAttribute: highSideName,
-    };
-  }
-
-  const attributeA = availableAttributes[0] ?? lowSideName;
-  const attributeB = availableAttributes[1] ?? highSideName;
-  const assignmentA =
-    nameSimilarity(lowSideName, attributeA) + nameSimilarity(highSideName, attributeB);
-  const assignmentB =
-    nameSimilarity(lowSideName, attributeB) + nameSimilarity(highSideName, attributeA);
-
-  if (assignmentB > assignmentA) {
-    return {
-      lowAttribute: attributeB,
-      highAttribute: attributeA,
-    };
-  }
-
-  return {
-    lowAttribute: attributeA,
-    highAttribute: attributeB,
-  };
 }
 
 function ConditionDecisionMatrix({
@@ -411,13 +350,13 @@ function ConditionDecisionMatrix({
                 AI
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                {sideNames.aName}
+                {lowSideAttribute}
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 Neutral
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                {sideNames.bName}
+                {highSideAttribute}
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {lowSideAttribute} Sensitivity
@@ -457,7 +396,7 @@ function ConditionDecisionMatrix({
                       variant="ghost"
                       size="sm"
                       className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.aName}`}
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${lowSideAttribute}`}
                       onClick={() => handleCountsCellClick(modelId, 'a')}
                     >
                       {counts.a}
@@ -485,7 +424,7 @@ function ConditionDecisionMatrix({
                       variant="ghost"
                       size="sm"
                       className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.bName}`}
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${highSideAttribute}`}
                       onClick={() => handleCountsCellClick(modelId, 'b')}
                     >
                       {counts.b}
