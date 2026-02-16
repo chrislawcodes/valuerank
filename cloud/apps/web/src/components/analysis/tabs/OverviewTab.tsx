@@ -10,7 +10,7 @@ import type { PerModelStats } from './types';
 import type { VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
-import { getDecisionSideNames } from '../../../utils/decisionLabels';
+import { getDecisionSideNames, mapDecisionSidesToScenarioAttributes } from '../../../utils/decisionLabels';
 
 type OverviewTabProps = {
   runId: string;
@@ -48,10 +48,6 @@ function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-700';
-}
-
-function normalizeName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function ConditionDecisionMatrix({
@@ -160,10 +156,14 @@ function ConditionDecisionMatrix({
   );
 
   const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
-  const lowSideAttribute = sideNames.aName;
-  const highSideAttribute = sideNames.bName;
+  const sideAttributeMap = useMemo(
+    () => mapDecisionSidesToScenarioAttributes(sideNames.aName, sideNames.bName, availableAttributes),
+    [availableAttributes, sideNames.aName, sideNames.bName]
+  );
+  const lowSideAttribute = sideAttributeMap.lowAttribute;
+  const highSideAttribute = sideAttributeMap.highAttribute;
 
-  const getSensitivity = useCallback((modelId: string, attribute: string): number | null => {
+  const getSensitivity = useCallback((modelId: string, attribute: string, side: 'low' | 'high'): number | null => {
     if (!scenarioDimensions || !modelScenarioMatrix) return null;
     const byScenario = modelScenarioMatrix[modelId];
     if (!byScenario) return null;
@@ -191,20 +191,8 @@ function ConditionDecisionMatrix({
     });
     if (denominator === 0) return null;
     const rawSlope = numerator / denominator;
-
-    // Align sign so positive means "toward this attribute's supported decision side".
-    // sideNames.aName maps to low decisions (1-2), sideNames.bName maps to high decisions (4-5).
-    const normalizedAttribute = normalizeName(attribute);
-    const normalizedLowSide = normalizeName(sideNames.aName);
-    const normalizedHighSide = normalizeName(sideNames.bName);
-    if (normalizedAttribute === normalizedLowSide) {
-      return -rawSlope;
-    }
-    if (normalizedAttribute === normalizedHighSide) {
-      return rawSlope;
-    }
-    return rawSlope;
-  }, [modelScenarioMatrix, scenarioDimensions, sideNames.aName, sideNames.bName]);
+    return side === 'low' ? -rawSlope : rawSlope;
+  }, [modelScenarioMatrix, scenarioDimensions]);
 
   const countsByModel = useMemo(() => {
     const result: Record<string, {
@@ -241,8 +229,8 @@ function ConditionDecisionMatrix({
         neutral,
         b,
         total,
-        aSensitivity: getSensitivity(modelId, lowSideAttribute),
-        bSensitivity: getSensitivity(modelId, highSideAttribute),
+        aSensitivity: getSensitivity(modelId, lowSideAttribute, 'low'),
+        bSensitivity: getSensitivity(modelId, highSideAttribute, 'high'),
       };
     });
 
@@ -355,31 +343,25 @@ function ConditionDecisionMatrix({
           <CopyVisualButton targetRef={countsTableRef} label="condition bucket counts table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
                 AI
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                {sideNames.aName}
+                {lowSideAttribute}
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 Neutral
               </th>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                {sideNames.bName}
+                {highSideAttribute}
               </th>
-              <th
-                className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap"
-                title={`Linear sensitivity coefficient for ${lowSideAttribute}. Positive = decisions move toward ${lowSideAttribute}; negative = away.`}
-              >
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {lowSideAttribute} Sensitivity
               </th>
-              <th
-                className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap"
-                title={`Linear sensitivity coefficient for ${highSideAttribute}. Positive = decisions move toward ${highSideAttribute}; negative = away.`}
-              >
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {highSideAttribute} Sensitivity
               </th>
             </tr>
@@ -414,7 +396,7 @@ function ConditionDecisionMatrix({
                       variant="ghost"
                       size="sm"
                       className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.aName}`}
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${lowSideAttribute}`}
                       onClick={() => handleCountsCellClick(modelId, 'a')}
                     >
                       {counts.a}
@@ -442,16 +424,16 @@ function ConditionDecisionMatrix({
                       variant="ghost"
                       size="sm"
                       className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                      title={`View transcripts for ${modelId} where condition mean rounds to ${sideNames.bName}`}
+                      title={`View transcripts for ${modelId} where condition mean rounds to ${highSideAttribute}`}
                       onClick={() => handleCountsCellClick(modelId, 'b')}
                     >
                       {counts.b}
                     </Button>
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-xs text-gray-700 whitespace-nowrap">
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
                     {counts.aSensitivity == null ? '-' : counts.aSensitivity.toFixed(3)}
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-xs text-gray-700 whitespace-nowrap">
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
                     {counts.bSensitivity == null ? '-' : counts.bSensitivity.toFixed(3)}
                   </td>
                 </tr>
@@ -467,8 +449,7 @@ function ConditionDecisionMatrix({
           Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
         </div>
         <div className="text-xs text-gray-500">
-          Sensitivity columns are linear coefficients: positive means decisions move toward that attribute&apos;s side,
-          negative means away from it.
+          Sensitivity: positive means decisions move toward that attribute&apos;s side; negative means away.
         </div>
       </div>
 
@@ -478,7 +459,7 @@ function ConditionDecisionMatrix({
           <CopyVisualButton targetRef={meanTableRef} label="condition by AI mean decision table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">

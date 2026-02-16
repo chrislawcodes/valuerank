@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { getDecisionSideNames, mapDecisionSidesToScenarioAttributes } from '../../utils/decisionLabels';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -39,30 +40,13 @@ function getScoreTextColor(value: number): string {
     return 'text-gray-600';
 }
 
-function extractAttributeName(label: string): string {
-    // Most common patterns for the decision scale labels.
-    const prefixes = [
-        'Strongly Support ',
-        'Somewhat Support ',
-        'Strongly Oppose ',
-        'Somewhat Oppose ',
-    ];
-    for (const prefix of prefixes) {
-        if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
-    }
-    return label.trim();
-}
-
 type LegendCounts = {
     low: number;
     neutral: number;
     high: number;
 };
 
-function Legend({ dimensionLabels, counts }: { dimensionLabels?: Record<string, string>; counts: LegendCounts }) {
-    const lowName = extractAttributeName(dimensionLabels?.['1'] || 'Low');
-    const highName = extractAttributeName(dimensionLabels?.['5'] || 'High');
-
+function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
     return (
         <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
             <div className="flex items-center gap-1">
@@ -102,6 +86,11 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
     const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
     // Default to first alphabetical model if available
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
+    const decisionSideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
+    const sideAttributeMap = useMemo(
+        () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
+        [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]
+    );
 
     useEffect(() => {
         const nextRow = availableDimensions[0] ?? '';
@@ -257,7 +246,11 @@ export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }
 
                 <div className="ml-auto flex items-center gap-2">
                     <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
-                    <Legend dimensionLabels={dimensionLabels} counts={legendCounts} />
+                    <Legend
+                        lowName={sideAttributeMap.lowAttribute}
+                        highName={sideAttributeMap.highAttribute}
+                        counts={legendCounts}
+                    />
                 </div>
             </div>
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
+  mapDecisionSidesToScenarioAttributes,
 } from '../../src/utils/decisionLabels';
 
 describe('decisionLabels', () => {
@@ -98,5 +99,27 @@ describe('decisionLabels', () => {
 
     expect(names.aName).toBe('Achievement');
     expect(names.bName).toBe('Self_Direction_Action');
+  });
+
+  it('maps decision sides to selected scenario attributes when names are swapped', () => {
+    const mapped = mapDecisionSidesToScenarioAttributes(
+      'Achievement',
+      'Self_Direction_Action',
+      ['Self_Direction_Action', 'Achievement']
+    );
+
+    expect(mapped).toEqual({
+      lowAttribute: 'Achievement',
+      highAttribute: 'Self_Direction_Action',
+    });
+  });
+
+  it('falls back to provided side names when scenario attributes are unavailable', () => {
+    const mapped = mapDecisionSidesToScenarioAttributes('Power_Dominance', 'Universalism_Concern', []);
+
+    expect(mapped).toEqual({
+      lowAttribute: 'Power_Dominance',
+      highAttribute: 'Universalism_Concern',
+    });
   });
 });
