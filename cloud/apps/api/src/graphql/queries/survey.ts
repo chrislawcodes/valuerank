@@ -7,7 +7,7 @@ type SurveyPlan = {
 };
 
 function isSurveyExperiment(analysisPlan: unknown): boolean {
-  if (!analysisPlan || typeof analysisPlan !== 'object') {
+  if (analysisPlan === null || analysisPlan === undefined || typeof analysisPlan !== 'object') {
     return false;
   }
   const plan = analysisPlan as SurveyPlan;
@@ -25,11 +25,12 @@ builder.queryField('surveys', (t) =>
       }),
     },
     resolve: async (_root, args, ctx) => {
+      const search = typeof args.search === 'string' ? args.search.trim() : '';
       const experiments = await db.experiment.findMany({
-        where: args.search && args.search.trim() !== ''
+        where: search !== ''
           ? {
             name: {
-              contains: args.search.trim(),
+              contains: search,
               mode: 'insensitive',
             },
           }
@@ -58,7 +59,7 @@ builder.queryField('survey', (t) =>
         where: { id: surveyId },
       });
 
-      if (!experiment || !isSurveyExperiment(experiment.analysisPlan)) {
+      if (experiment === null || !isSurveyExperiment(experiment.analysisPlan)) {
         ctx.log.debug({ surveyId }, 'Survey not found');
         return null;
       }
