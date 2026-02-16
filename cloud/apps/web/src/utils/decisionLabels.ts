@@ -74,6 +74,31 @@ function normalizeDimensionToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function tokenizeName(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
+function nameSimilarity(a: string, b: string): number {
+  const normalizedA = normalizeDimensionToken(a);
+  const normalizedB = normalizeDimensionToken(b);
+  if (normalizedA === normalizedB) return 100;
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) return 60;
+
+  const tokensA = new Set(tokenizeName(a));
+  const tokensB = new Set(tokenizeName(b));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+
+  let overlap = 0;
+  tokensA.forEach((token) => {
+    if (tokensB.has(token)) overlap += 1;
+  });
+  return overlap * 10;
+}
+
 function tokenizeText(value: string): string[] {
   return value
     .toLowerCase()
@@ -278,4 +303,27 @@ export function getDecisionSideNames(
   const aName = dimensionLabels?.['1'] ? extractAttributeName(dimensionLabels['1']) : 'Attribute A';
   const bName = dimensionLabels?.['5'] ? extractAttributeName(dimensionLabels['5']) : 'Attribute B';
   return { aName, bName };
+}
+
+export function mapDecisionSidesToScenarioAttributes(
+  lowSideName: string,
+  highSideName: string,
+  availableAttributes: string[]
+): { lowAttribute: string; highAttribute: string } {
+  if (availableAttributes.length < 2) {
+    return { lowAttribute: lowSideName, highAttribute: highSideName };
+  }
+
+  const attributeA = availableAttributes[0] ?? lowSideName;
+  const attributeB = availableAttributes[1] ?? highSideName;
+  const assignmentA =
+    nameSimilarity(lowSideName, attributeA) + nameSimilarity(highSideName, attributeB);
+  const assignmentB =
+    nameSimilarity(lowSideName, attributeB) + nameSimilarity(highSideName, attributeA);
+
+  if (assignmentB > assignmentA) {
+    return { lowAttribute: attributeB, highAttribute: attributeA };
+  }
+
+  return { lowAttribute: attributeA, highAttribute: attributeB };
 }

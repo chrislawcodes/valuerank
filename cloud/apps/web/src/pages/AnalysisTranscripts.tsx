@@ -20,6 +20,7 @@ import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 import {
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
+  mapDecisionSidesToScenarioAttributes,
 } from '../utils/decisionLabels';
 
 export function AnalysisTranscripts() {
@@ -70,13 +71,17 @@ export function AnalysisTranscripts() {
     () => getDecisionSideNames(dimensionLabels),
     [dimensionLabels]
   );
+  const bucketAttributes = useMemo(
+    () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
+    [colDim, decisionSideNames.aName, decisionSideNames.bName, rowDim]
+  );
 
   const decisionBucketLabel = useMemo(() => {
-    if (decisionBucket === 'a') return decisionSideNames.aName;
-    if (decisionBucket === 'b') return decisionSideNames.bName;
+    if (decisionBucket === 'a') return bucketAttributes.lowAttribute;
+    if (decisionBucket === 'b') return bucketAttributes.highAttribute;
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
-  }, [decisionBucket, decisionSideNames]);
+  }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
     setUpdatingTranscriptIds((prev) => new Set(prev).add(transcript.id));

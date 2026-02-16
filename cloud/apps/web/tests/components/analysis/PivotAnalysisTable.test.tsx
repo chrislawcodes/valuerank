@@ -20,9 +20,9 @@ describe('PivotAnalysisTable', () => {
           visualizationData={{
             decisionDistribution: {},
             scenarioDimensions: {
-              s1: { A: 'a1', B: 'b1' },
-              s2: { A: 'a1', B: 'b2' },
-              s3: { A: 'a2', B: 'b2' },
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
             },
             modelScenarioMatrix: {
               model1: { s1: 1, s2: 3, s3: 5 },
@@ -37,4 +37,3 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
   });
 });
-
