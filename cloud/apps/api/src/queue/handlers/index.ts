@@ -132,8 +132,8 @@ const handlerRegistrations: HandlerRegistration[] = [
 
 /**
  * Registers provider-specific probe queue handlers.
- * Each provider queue has its own batchSize based on maxParallelRequests.
- * batchSize controls how many jobs are fetched and processed concurrently.
+ * Each provider queue gets N workers where N = maxParallelRequests.
+ * Each worker fetches one job at a time to preserve per-job retry semantics.
  */
 async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
   const providerQueues = await getAllProviderQueues();
@@ -143,16 +143,20 @@ async function registerProviderProbeHandlers(boss: PgBoss): Promise<number> {
 
   for (const [providerName, limits] of providerQueues) {
     const queueName = limits.queueName;
-    const batchSize = limits.maxParallelRequests;
+    const workerCount = limits.maxParallelRequests;
 
     log.info(
-      { provider: providerName, queueName, batchSize },
+      { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
       'Registering provider probe handler'
     );
 
-    // batchSize controls max concurrent jobs for this queue
-    await boss.work<ProbeScenarioJobData>(queueName, { batchSize }, probeHandler);
-    registeredCount++;
+    // Register one worker per parallel slot.
+    // Using batchSize > 1 causes pg-boss to mark the whole batch failed when one job throws.
+    // That can retry already-successful jobs and create duplicate transcripts.
+    for (let i = 0; i < workerCount; i++) {
+      await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+      registeredCount++;
+    }
   }
 
   return registeredCount;
@@ -261,7 +265,7 @@ export function getJobTypes(): JobType[] {
  * This function:
  * 1. Unregisters the existing handler for the provider queue (allows in-flight jobs to complete)
  * 2. Clears the parallelism cache to reload settings from DB
- * 3. Registers a new handler with the updated batchSize
+ * 3. Registers N new handlers with batchSize=1 where N=maxParallelRequests
  *
  * Note: Jobs in the queue are NOT affected - they remain queued and will be processed
  * by the new handler. In-flight jobs complete normally before the handler is replaced.
@@ -319,15 +323,17 @@ export async function reregisterProviderHandler(
     return;
   }
 
-  // 5. Register new handler with updated batchSize
-  //    This immediately starts processing queued jobs with the new concurrency
-  const batchSize = providerLimits.maxParallelRequests;
+  // 5. Register new handlers with batchSize=1.
+  //    This preserves per-job retry semantics while keeping provider concurrency.
+  const workerCount = providerLimits.maxParallelRequests;
   const probeHandler = createProbeScenarioHandler();
 
-  await boss.work<ProbeScenarioJobData>(queueName, { batchSize }, probeHandler);
+  for (let i = 0; i < workerCount; i++) {
+    await boss.work<ProbeScenarioJobData>(queueName, { batchSize: 1 }, probeHandler);
+  }
 
   log.info(
-    { provider: providerName, queueName, batchSize },
+    { provider: providerName, queueName, workerCount, workerBatchSize: 1 },
     'Provider queue handler re-registered with new settings'
   );
 

@@ -316,8 +316,9 @@ async function fetchScenario(scenarioId: string): Promise<ScenarioWithDefinition
     ...scenarioQuery,
   });
 
-  // Check scenario is not deleted and its definition is not deleted
-  if (!scenario || scenario.deletedAt !== null || scenario.definition.deletedAt !== null) {
+  // Allow probing soft-deleted scenarios/definitions so historical runs can be recovered
+  // even after newer definition versions have retired old scenarios.
+  if (!scenario) {
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
 
