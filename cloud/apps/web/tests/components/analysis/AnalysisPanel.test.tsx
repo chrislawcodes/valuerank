@@ -268,8 +268,20 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('100')).toBeInTheDocument();
   });
 
-  it('renders per-model statistics', () => {
-    const analysis = createMockAnalysis();
+  it('renders overview table titles', () => {
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+        },
+      },
+    });
     mockUseAnalysis.mockReturnValue({
       analysis,
       loading: false,
@@ -285,13 +297,11 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Per-Model Statistics')).toBeInTheDocument();
-    // Model names appear in both Per-Model Statistics and Model Comparison Matrix
-    expect(screen.getAllByText('gpt-4').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('claude-3').length).toBeGreaterThan(0);
+    expect(screen.getByText('Decision Frequency')).toBeInTheDocument();
+    expect(screen.getByText('Condition Decisions')).toBeInTheDocument();
   });
 
-  it('renders top values for each model', () => {
+  it('does not render removed tabs', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -308,9 +318,8 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    // Multiple models show "Top Values by Win Rate" - use getAllByText
-    expect(screen.getAllByText('Top Values by Win Rate').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Physical_Safety.*80\.0%/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Agreement/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Methods/i })).not.toBeInTheDocument();
   });
 
   it('renders warnings when present', () => {
@@ -407,30 +416,6 @@ describe('AnalysisPanel', () => {
 
     const button = screen.getByRole('button', { name: /Recompute/ });
     expect(button).toBeDisabled();
-  });
-
-  it('renders statistical methods documentation', async () => {
-    const analysis = createMockAnalysis();
-    mockUseAnalysis.mockReturnValue({
-      analysis,
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-      recompute: vi.fn(),
-      recomputing: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
-      </MemoryRouter>
-    );
-
-    // Navigate to Methods tab
-    const methodsTab = screen.getByRole('button', { name: /Methods/i });
-    await userEvent.click(methodsTab);
-
-    expect(screen.getByText('Statistical Methods Used')).toBeInTheDocument();
   });
 
   it('renders stability tab', async () => {

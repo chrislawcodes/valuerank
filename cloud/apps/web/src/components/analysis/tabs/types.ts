@@ -7,20 +7,20 @@
 import type { PerModelStats, AnalysisWarning, MethodsUsed } from '../../../api/operations/analysis';
 import type { FilterState } from '../AnalysisFilters';
 
-export type AnalysisTab = 'overview' | 'decisions' | 'scenarios' | 'stability' | 'agreement' | 'methods';
+export type AnalysisTab = 'overview' | 'decisions' | 'scenarios' | 'stability';
 
 export type TabDefinition = {
   id: AnalysisTab;
   label: string;
 };
 
+// Intentionally keep Analysis focused on actionable decision views.
+// Agreement and Methods tabs were removed by product decision to reduce noise.
 export const TABS: TabDefinition[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'decisions', label: 'Decisions' },
   { id: 'scenarios', label: 'Conditions' },
   { id: 'stability', label: 'Stability' },
-  { id: 'agreement', label: 'Agreement' },
-  { id: 'methods', label: 'Methods' },
 ];
 
 /**
