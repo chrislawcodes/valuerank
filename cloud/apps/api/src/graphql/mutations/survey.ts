@@ -158,7 +158,7 @@ function buildSurveyPrompt(
   const optionLines = responseOptions.map((option) => option.label.trim()).filter((label) => label !== '');
 
   const sections: string[] = [];
-  if (instructions && instructions.trim() !== '') {
+  if (typeof instructions === 'string' && instructions.trim() !== '') {
     sections.push(instructions.trim());
   }
   sections.push(questionText);
@@ -178,13 +178,15 @@ function buildSurveyPlan(
   instructions?: string,
   description?: string
 ): SurveyPlan {
+  const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+  const normalizedInstructions = typeof instructions === 'string' ? instructions.trim() : '';
   return {
     kind: 'survey',
     version,
     surveyKey,
     definitionId,
-    ...(description && description.trim() !== '' ? { description: description.trim() } : {}),
-    ...(instructions && instructions.trim() !== '' ? { instructions: instructions.trim() } : {}),
+    ...(normalizedDescription !== '' ? { description: normalizedDescription } : {}),
+    ...(normalizedInstructions !== '' ? { instructions: normalizedInstructions } : {}),
     responseOptions,
     questions,
   };
@@ -255,8 +257,8 @@ builder.mutationField('createSurvey', (t) =>
     },
     resolve: async (_root, args, ctx) => {
       const name = args.input.name.trim();
-      const description = args.input.description?.trim() || '';
-      const instructions = args.input.instructions?.trim() || '';
+      const description = typeof args.input.description === 'string' ? args.input.description.trim() : '';
+      const instructions = typeof args.input.instructions === 'string' ? args.input.instructions.trim() : '';
       const questions = normalizeQuestions(args.input.questions);
       const responseOptions = normalizeResponseOptions(args.input.responseOptions);
 
@@ -326,12 +328,13 @@ builder.mutationField('updateSurvey', (t) =>
         analysisPlan: existing.analysisPlan,
       });
 
-      const nextName = args.input.name?.trim() || parsed.name;
+      const trimmedInputName = typeof args.input.name === 'string' ? args.input.name.trim() : '';
+      const nextName = trimmedInputName !== '' ? trimmedInputName : parsed.name;
       const nextDescription = args.input.description !== undefined
-        ? (args.input.description?.trim() || '')
+        ? (typeof args.input.description === 'string' ? args.input.description.trim() : '')
         : parsed.description;
       const nextInstructions = args.input.instructions !== undefined
-        ? (args.input.instructions?.trim() || '')
+        ? (typeof args.input.instructions === 'string' ? args.input.instructions.trim() : '')
         : parsed.instructions;
       const nextQuestions = args.input.questions
         ? normalizeQuestions(args.input.questions)
@@ -420,7 +423,8 @@ builder.mutationField('duplicateSurvey', (t) =>
         analysisPlan: existing.analysisPlan,
       });
 
-      const duplicateName = args.name?.trim() || `${parsed.name} (Copy)`;
+      const trimmedDuplicateName = typeof args.name === 'string' ? args.name.trim() : '';
+      const duplicateName = trimmedDuplicateName !== '' ? trimmedDuplicateName : `${parsed.name} (Copy)`;
       const surveyKey = randomUUID();
 
       const duplicated = await db.$transaction(async (tx) => {
