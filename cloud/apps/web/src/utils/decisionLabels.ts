@@ -357,6 +357,9 @@ export function resolveScenarioAxisDimensions(
 export function getDominantScenarioAttributes(
   scenarioDimensions?: ScenarioDimensions
 ): string[] {
+  // Fallback source when vignette definition attributes are unavailable.
+  // We treat each scenario key-set as a signature and select the most frequent one.
+  // Ties are resolved lexicographically so the choice is deterministic.
   if (!scenarioDimensions) return [];
 
   const signatureCounts = new Map<string, number>();
@@ -385,6 +388,8 @@ export function getDominantScenarioAttributes(
 export function deriveScenarioAttributesFromDefinition(
   definitionContent: unknown
 ): string[] {
+  // Vignette definition is canonical for display labels.
+  // Decision-like dimensions are excluded because they are not scenario axes.
   const content = definitionContent as DefinitionContentShape | undefined;
   if (!content?.dimensions?.length) return [];
 
@@ -400,6 +405,10 @@ export function resolveScenarioAttributes(
   scenarioDimensions: ScenarioDimensions | undefined,
   preferredAttributes: string[]
 ): string[] {
+  // Resolution order:
+  // 1) Prefer vignette-derived attributes that are present in scenario data.
+  // 2) If only one preferred attribute is present, pair it with dominant fallback.
+  // 3) Otherwise use dominant scenario attribute signature.
   const dominant = getDominantScenarioAttributes(scenarioDimensions);
   if (!scenarioDimensions || preferredAttributes.length === 0) {
     return dominant;

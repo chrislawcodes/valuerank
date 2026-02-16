@@ -218,4 +218,40 @@ describe('decisionLabels', () => {
 
     expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
   });
+
+  it('falls back to dominant attributes when preferred list is empty', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+      },
+      []
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
+
+  it('falls back to dominant attributes when preferred attributes are absent', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+      },
+      ['Self_Direction_Action', 'Achievement']
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
+
+  it('keeps one preferred attribute and fills second slot from dominant fallback', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+      },
+      ['Benevolence_Dependability', 'Self_Direction_Action']
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
 });
