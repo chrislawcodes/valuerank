@@ -232,7 +232,7 @@ describe('decisionLabels', () => {
     expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
   });
 
-  it('falls back to dominant attributes when preferred attributes are absent', () => {
+  it('keeps vignette attributes as source-of-truth even when absent in scenario keys', () => {
     const attributes = resolveScenarioAttributes(
       {
         s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
@@ -241,10 +241,10 @@ describe('decisionLabels', () => {
       ['Self_Direction_Action', 'Achievement']
     );
 
-    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+    expect(attributes).toEqual(['Self_Direction_Action', 'Achievement']);
   });
 
-  it('keeps one preferred attribute and fills second slot from dominant fallback', () => {
+  it('keeps vignette pair even when one side differs from scenario keys', () => {
     const attributes = resolveScenarioAttributes(
       {
         s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
@@ -253,7 +253,7 @@ describe('decisionLabels', () => {
       ['Benevolence_Dependability', 'Self_Direction_Action']
     );
 
-    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Self_Direction_Action']);
   });
 
   it('uses signatures with analysis scores when model matrix is provided', () => {

@@ -408,10 +408,14 @@ export function resolveScenarioAttributes(
   modelScenarioMatrix?: ModelScenarioMatrix
 ): string[] {
   // Resolution order:
-  // 1) Prefer the scenario signature that best matches vignette-derived attributes.
-  // 2) If only one preferred attribute exists in that signature, pair it with that signature's fallback.
-  // 3) Otherwise use dominant scenario signature.
-  if (!scenarioDimensions) return [];
+  // 1) Vignette attributes are canonical source-of-truth for axis selection.
+  // 2) If vignette attributes are unavailable, use scored scenario signatures.
+  // 3) Fall back to dominant scenario signature.
+  if (preferredAttributes.length >= 2) {
+    return preferredAttributes.slice(0, 2);
+  }
+
+  if (!scenarioDimensions) return preferredAttributes.length > 0 ? preferredAttributes : [];
 
   const eligibleScenarioIds = new Set<string>();
   if (modelScenarioMatrix) {
@@ -437,7 +441,7 @@ export function resolveScenarioAttributes(
     signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
   });
 
-  if (signatureCounts.size === 0) return [];
+  if (signatureCounts.size === 0) return preferredAttributes.length > 0 ? preferredAttributes : [];
 
   const ranked = [...signatureCounts.entries()]
     .map(([signature, count]) => {
