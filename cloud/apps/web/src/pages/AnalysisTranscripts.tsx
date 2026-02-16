@@ -18,9 +18,11 @@ import { useRunMutations } from '../hooks/useRunMutations';
 import type { Transcript } from '../api/operations/runs';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 import {
+  deriveScenarioAttributesFromDefinition,
   deriveDecisionDimensionLabels,
   getDecisionSideNames,
   mapDecisionSidesToScenarioAttributes,
+  resolveScenarioAttributes,
   resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
 
@@ -56,12 +58,13 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const preferredAttributes = useMemo(
+    () => deriveScenarioAttributesFromDefinition(run?.definition?.content),
+    [run?.definition?.content]
+  );
   const availableAttributes = useMemo(() => {
-    if (!scenarioDimensions) return [];
-    const firstScenario = Object.values(scenarioDimensions)[0];
-    if (!firstScenario) return [];
-    return Object.keys(firstScenario).sort();
-  }, [scenarioDimensions]);
+    return resolveScenarioAttributes(scenarioDimensions, preferredAttributes);
+  }, [scenarioDimensions, preferredAttributes]);
   const resolvedAxes = useMemo(
     () => resolveScenarioAxisDimensions(availableAttributes, rowDim, colDim),
     [availableAttributes, colDim, rowDim]

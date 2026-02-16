@@ -3,12 +3,17 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-import { getDecisionSideNames, mapDecisionSidesToScenarioAttributes } from '../../utils/decisionLabels';
+import {
+    getDecisionSideNames,
+    mapDecisionSidesToScenarioAttributes,
+    resolveScenarioAttributes,
+} from '../../utils/decisionLabels';
 
 type PivotAnalysisTableProps = {
     runId: string;
     visualizationData: VisualizationData;
     dimensionLabels?: Record<string, string>;
+    expectedAttributes?: string[];
 };
 
 // Start color: Green 50 (bg-emerald-50)
@@ -65,18 +70,20 @@ function Legend({ lowName, highName, counts }: { lowName: string; highName: stri
     );
 }
 
-export function PivotAnalysisTable({ runId, visualizationData, dimensionLabels }: PivotAnalysisTableProps) {
+export function PivotAnalysisTable({
+    runId,
+    visualizationData,
+    dimensionLabels,
+    expectedAttributes = [],
+}: PivotAnalysisTableProps) {
     const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const { modelScenarioMatrix, scenarioDimensions } = visualizationData;
 
     // 1. Identify available dimensions
     const availableDimensions = useMemo(() => {
-        if (!scenarioDimensions) return [];
-        const firstScenario = Object.values(scenarioDimensions)[0];
-        if (!firstScenario) return [];
-        return Object.keys(firstScenario).sort();
-    }, [scenarioDimensions]);
+        return resolveScenarioAttributes(scenarioDimensions, expectedAttributes);
+    }, [expectedAttributes, scenarioDimensions]);
 
     // Models list
     const models = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);

@@ -14,9 +14,16 @@ type ScenariosTabProps = {
   visualizationData: VisualizationData | null | undefined;
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
+  expectedAttributes?: string[];
 };
 
-export function ScenariosTab({ runId, visualizationData, contestedScenarios, dimensionLabels }: ScenariosTabProps) {
+export function ScenariosTab({
+  runId,
+  visualizationData,
+  contestedScenarios,
+  dimensionLabels,
+  expectedAttributes = [],
+}: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
     visualizationData?.scenarioDimensions
     && Object.keys(visualizationData.scenarioDimensions).length > 0
@@ -42,6 +49,7 @@ export function ScenariosTab({ runId, visualizationData, contestedScenarios, dim
                 runId={runId}
                 visualizationData={visualizationData}
                 dimensionLabels={dimensionLabels}
+                expectedAttributes={expectedAttributes}
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">

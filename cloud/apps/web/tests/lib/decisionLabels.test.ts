@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveDecisionDimensionLabels,
+  deriveScenarioAttributesFromDefinition,
+  getDominantScenarioAttributes,
   getDecisionSideNames,
   mapDecisionSidesToScenarioAttributes,
+  resolveScenarioAttributes,
   resolveScenarioAxisDimensions,
 } from '../../src/utils/decisionLabels';
 
@@ -174,5 +177,45 @@ describe('decisionLabels', () => {
       rowDim: 'Benevolence_Dependability',
       colDim: 'Societal_Security',
     });
+  });
+
+  it('uses the dominant scenario attribute set when mixed keys exist', () => {
+    const attributes = getDominantScenarioAttributes({
+      s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+      s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+      s3: { Benevolence_Dependability: '3', Self_Direction_Action: '3' },
+    });
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
+
+  it('returns empty list when scenario dimensions are missing', () => {
+    const attributes = getDominantScenarioAttributes(undefined);
+    expect(attributes).toEqual([]);
+  });
+
+  it('derives expected scenario attributes from definition content', () => {
+    const attributes = deriveScenarioAttributesFromDefinition({
+      dimensions: [
+        { name: 'Benevolence_Dependability', levels: [] },
+        { name: 'Societal_Security', levels: [] },
+        { name: 'Decision', levels: [] },
+      ],
+    });
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
+
+  it('prefers vignette attributes when resolving scenario attributes', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Self_Direction_Action: '1' },
+        s2: { Benevolence_Dependability: '2', Self_Direction_Action: '2' },
+        s3: { Benevolence_Dependability: '3', Societal_Security: '3' },
+      },
+      ['Benevolence_Dependability', 'Societal_Security']
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
   });
 });
