@@ -234,6 +234,28 @@ describe('probe-scenario integration', () => {
       expect(snapshot).not.toBeNull();
       expect(snapshot.preamble).toBe('You are being evaluated on ethical reasoning.');
     });
+
+    it('processes probes for soft-deleted scenarios during recovery', async () => {
+      await db.scenario.update({
+        where: { id: TEST_IDS.scenario },
+        data: { deletedAt: new Date() },
+      });
+
+      await db.definition.update({
+        where: { id: TEST_IDS.definition },
+        data: { deletedAt: new Date() },
+      });
+
+      const handler = createProbeScenarioHandler();
+      await handler([createMockJob()]);
+
+      const transcript = await db.transcript.findFirst({
+        where: { runId: TEST_IDS.run, scenarioId: TEST_IDS.scenario },
+      });
+
+      expect(transcript).not.toBeNull();
+      expect(transcript?.modelId).toBe('gpt-4');
+    });
   });
 
   describe('concurrent job handling', () => {

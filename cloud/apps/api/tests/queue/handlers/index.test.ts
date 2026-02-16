@@ -181,11 +181,21 @@ describe('Handler Registration', () => {
         data: { maxParallelRequests: newMaxParallel },
       });
 
+      const workSpy = vi.spyOn(boss, 'work');
+
       // Re-register handler
       await reregisterProviderHandler(boss, testProvider.name);
 
-      // Verify the queue still exists and can accept jobs
+      // Verify we register one worker per parallel slot with batchSize: 1
       const queueName = `probe_${testProvider.name}`;
+      const queueWorkCalls = workSpy.mock.calls.filter((call) => call[0] === queueName);
+      expect(queueWorkCalls).toHaveLength(newMaxParallel);
+      for (const call of queueWorkCalls) {
+        expect(call[1]).toMatchObject({ batchSize: 1 });
+      }
+      workSpy.mockRestore();
+
+      // Verify the queue still exists and can accept jobs
       const jobId = await boss.send(queueName, {
         runId: 'test-reregister',
         definitionId: 'def',
