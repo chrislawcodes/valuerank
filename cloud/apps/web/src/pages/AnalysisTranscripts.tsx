@@ -58,13 +58,14 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
   const preferredAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(run?.definition?.content),
     [run?.definition?.content]
   );
   const availableAttributes = useMemo(() => {
-    return resolveScenarioAttributes(scenarioDimensions, preferredAttributes);
-  }, [scenarioDimensions, preferredAttributes]);
+    return resolveScenarioAttributes(scenarioDimensions, preferredAttributes, modelScenarioMatrix);
+  }, [scenarioDimensions, preferredAttributes, modelScenarioMatrix]);
   const resolvedAxes = useMemo(
     () => resolveScenarioAxisDimensions(availableAttributes, rowDim, colDim),
     [availableAttributes, colDim, rowDim]

@@ -10,6 +10,7 @@ type DefinitionContentShape = {
 };
 
 type ScenarioDimensions = Record<string, Record<string, string | number>>;
+type ModelScenarioMatrix = Record<string, Record<string, number>>;
 
 const TEMPLATE_STOP_WORDS = new Set([
   'a',
@@ -403,33 +404,75 @@ export function deriveScenarioAttributesFromDefinition(
 
 export function resolveScenarioAttributes(
   scenarioDimensions: ScenarioDimensions | undefined,
-  preferredAttributes: string[]
+  preferredAttributes: string[],
+  modelScenarioMatrix?: ModelScenarioMatrix
 ): string[] {
   // Resolution order:
-  // 1) Prefer vignette-derived attributes that are present in scenario data.
-  // 2) If only one preferred attribute is present, pair it with dominant fallback.
-  // 3) Otherwise use dominant scenario attribute signature.
-  const dominant = getDominantScenarioAttributes(scenarioDimensions);
-  if (!scenarioDimensions || preferredAttributes.length === 0) {
-    return dominant;
+  // 1) Prefer the scenario signature that best matches vignette-derived attributes.
+  // 2) If only one preferred attribute exists in that signature, pair it with that signature's fallback.
+  // 3) Otherwise use dominant scenario signature.
+  if (!scenarioDimensions) return [];
+
+  const eligibleScenarioIds = new Set<string>();
+  if (modelScenarioMatrix) {
+    Object.values(modelScenarioMatrix).forEach((byScenario) => {
+      Object.entries(byScenario).forEach(([scenarioId, score]) => {
+        if (typeof score === 'number' && Number.isFinite(score)) {
+          eligibleScenarioIds.add(scenarioId);
+        }
+      });
+    });
   }
 
-  const allObservedKeys = new Set<string>();
-  Object.values(scenarioDimensions).forEach((dimensions) => {
-    Object.keys(dimensions).forEach((key) => allObservedKeys.add(key));
+  const signatureCounts = new Map<string, number>();
+  const keysBySignature = new Map<string, string[]>();
+  Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
+    if (eligibleScenarioIds.size > 0 && !eligibleScenarioIds.has(scenarioId)) {
+      return;
+    }
+    const keys = Object.keys(dimensions).sort();
+    if (keys.length === 0) return;
+    const signature = keys.join('||');
+    keysBySignature.set(signature, keys);
+    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
   });
 
-  const preferredPresent = preferredAttributes.filter((name) => allObservedKeys.has(name));
+  if (signatureCounts.size === 0) return [];
+
+  const ranked = [...signatureCounts.entries()]
+    .map(([signature, count]) => {
+      const keys = keysBySignature.get(signature) ?? [];
+      const keySet = new Set(keys);
+      const overlap = preferredAttributes.reduce((total, attr) => (
+        keySet.has(attr) ? total + 1 : total
+      ), 0);
+      return { signature, keys, count, overlap };
+    })
+    .sort((a, b) => {
+      if (a.overlap !== b.overlap) return b.overlap - a.overlap;
+      if (a.count !== b.count) return b.count - a.count;
+      return a.signature.localeCompare(b.signature);
+    });
+
+  const chosen = ranked[0];
+  if (!chosen) return [];
+
+  if (preferredAttributes.length === 0) {
+    return chosen.keys;
+  }
+
+  const chosenSet = new Set(chosen.keys);
+  const preferredPresent = preferredAttributes.filter((name) => chosenSet.has(name));
   if (preferredPresent.length >= 2) {
     return preferredPresent.slice(0, 2);
   }
 
   if (preferredPresent.length === 1) {
     const preferred = preferredPresent[0];
-    if (!preferred) return dominant;
-    const fallback = dominant.find((name) => name !== preferred);
+    if (!preferred) return chosen.keys;
+    const fallback = chosen.keys.find((name) => name !== preferred);
     return fallback ? [preferred, fallback] : [preferred];
   }
 
-  return dominant;
+  return chosen.keys;
 }

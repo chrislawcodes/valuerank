@@ -212,6 +212,7 @@ describe('decisionLabels', () => {
         s1: { Benevolence_Dependability: '1', Self_Direction_Action: '1' },
         s2: { Benevolence_Dependability: '2', Self_Direction_Action: '2' },
         s3: { Benevolence_Dependability: '3', Societal_Security: '3' },
+        s4: { Benevolence_Dependability: '4', Societal_Security: '4' },
       },
       ['Benevolence_Dependability', 'Societal_Security']
     );
@@ -250,6 +251,25 @@ describe('decisionLabels', () => {
         s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
       },
       ['Benevolence_Dependability', 'Self_Direction_Action']
+    );
+
+    expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
+  });
+
+  it('uses signatures with analysis scores when model matrix is provided', () => {
+    const attributes = resolveScenarioAttributes(
+      {
+        s1: { Benevolence_Dependability: '1', Societal_Security: '1' },
+        s2: { Benevolence_Dependability: '2', Societal_Security: '2' },
+        s3: { Benevolence_Dependability: '3', Self_Direction_Action: '3' },
+      },
+      ['Benevolence_Dependability', 'Societal_Security'],
+      {
+        modelA: {
+          s1: 4,
+          s2: 3,
+        },
+      }
     );
 
     expect(attributes).toEqual(['Benevolence_Dependability', 'Societal_Security']);
