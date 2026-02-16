@@ -10,6 +10,7 @@ type DefinitionContentShape = {
 };
 
 type ScenarioDimensions = Record<string, Record<string, string | number>>;
+type ModelScenarioMatrix = Record<string, Record<string, number>>;
 
 const TEMPLATE_STOP_WORDS = new Set([
   'a',
@@ -403,33 +404,92 @@ export function deriveScenarioAttributesFromDefinition(
 
 export function resolveScenarioAttributes(
   scenarioDimensions: ScenarioDimensions | undefined,
-  preferredAttributes: string[]
+  preferredAttributes: string[],
+  modelScenarioMatrix?: ModelScenarioMatrix
 ): string[] {
+  /**
+   * Attribute resolution algorithm:
+   * 1) If vignette provides at least two attributes, use those exactly (source of truth).
+   * 2) Otherwise, select one scenario signature from scenarioDimensions.
+   *    - When modelScenarioMatrix exists, only scenario IDs with at least one finite numeric score
+   *      (from any model) are considered "scored" and eligible.
+   *    - Rank signatures by:
+   *      a) overlap count with preferredAttributes (desc)
+   *      b) signature frequency/count (desc)
+   *      c) signature string (asc) for deterministic tie-breaking.
+   * 3) Build final pair from the chosen signature.
+   */
   // Resolution order:
-  // 1) Prefer vignette-derived attributes that are present in scenario data.
-  // 2) If only one preferred attribute is present, pair it with dominant fallback.
-  // 3) Otherwise use dominant scenario attribute signature.
-  const dominant = getDominantScenarioAttributes(scenarioDimensions);
-  if (!scenarioDimensions || preferredAttributes.length === 0) {
-    return dominant;
+  // 1) Vignette attributes are canonical source-of-truth for axis selection.
+  // 2) If vignette attributes are unavailable, use scored scenario signatures.
+  // 3) Fall back to dominant scenario signature.
+  if (preferredAttributes.length >= 2) {
+    return preferredAttributes.slice(0, 2);
   }
 
-  const allObservedKeys = new Set<string>();
-  Object.values(scenarioDimensions).forEach((dimensions) => {
-    Object.keys(dimensions).forEach((key) => allObservedKeys.add(key));
+  if (!scenarioDimensions) return preferredAttributes.length > 0 ? preferredAttributes : [];
+
+  const eligibleScenarioIds = new Set<string>();
+  if (modelScenarioMatrix) {
+    Object.values(modelScenarioMatrix).forEach((byScenario) => {
+      Object.entries(byScenario).forEach(([scenarioId, score]) => {
+        // "Scored" means at least one model produced a finite numeric score for this scenario.
+        if (typeof score === 'number' && Number.isFinite(score)) {
+          eligibleScenarioIds.add(scenarioId);
+        }
+      });
+    });
+  }
+
+  const signatureCounts = new Map<string, number>();
+  const keysBySignature = new Map<string, string[]>();
+  Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
+    if (eligibleScenarioIds.size > 0 && !eligibleScenarioIds.has(scenarioId)) {
+      return;
+    }
+    const keys = Object.keys(dimensions).sort();
+    if (keys.length === 0) return;
+    const signature = keys.join('||');
+    keysBySignature.set(signature, keys);
+    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
   });
 
-  const preferredPresent = preferredAttributes.filter((name) => allObservedKeys.has(name));
+  if (signatureCounts.size === 0) return preferredAttributes.length > 0 ? preferredAttributes : [];
+
+  const ranked = [...signatureCounts.entries()]
+    .map(([signature, count]) => {
+      const keys = keysBySignature.get(signature) ?? [];
+      const keySet = new Set(keys);
+      const overlap = preferredAttributes.reduce((total, attr) => (
+        keySet.has(attr) ? total + 1 : total
+      ), 0);
+      return { signature, keys, count, overlap };
+    })
+    .sort((a, b) => {
+      if (a.overlap !== b.overlap) return b.overlap - a.overlap;
+      if (a.count !== b.count) return b.count - a.count;
+      return a.signature.localeCompare(b.signature);
+    });
+
+  const chosen = ranked[0];
+  if (!chosen) return [];
+
+  if (preferredAttributes.length === 0) {
+    return chosen.keys;
+  }
+
+  const chosenSet = new Set(chosen.keys);
+  const preferredPresent = preferredAttributes.filter((name) => chosenSet.has(name));
   if (preferredPresent.length >= 2) {
     return preferredPresent.slice(0, 2);
   }
 
   if (preferredPresent.length === 1) {
     const preferred = preferredPresent[0];
-    if (!preferred) return dominant;
-    const fallback = dominant.find((name) => name !== preferred);
+    if (!preferred) return chosen.keys;
+    const fallback = chosen.keys.find((name) => name !== preferred);
     return fallback ? [preferred, fallback] : [preferred];
   }
 
-  return dominant;
+  return chosen.keys;
 }

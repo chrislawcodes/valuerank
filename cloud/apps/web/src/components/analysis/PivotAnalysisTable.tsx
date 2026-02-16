@@ -82,8 +82,8 @@ export function PivotAnalysisTable({
 
     // 1. Identify available dimensions
     const availableDimensions = useMemo(() => {
-        return resolveScenarioAttributes(scenarioDimensions, expectedAttributes);
-    }, [expectedAttributes, scenarioDimensions]);
+        return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
+    }, [expectedAttributes, scenarioDimensions, modelScenarioMatrix]);
 
     // Models list
     const models = useMemo(() => Object.keys(modelScenarioMatrix || {}).sort(), [modelScenarioMatrix]);

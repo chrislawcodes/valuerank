@@ -63,8 +63,8 @@ export function AnalysisTranscripts() {
     [run?.definition?.content]
   );
   const availableAttributes = useMemo(() => {
-    return resolveScenarioAttributes(scenarioDimensions, preferredAttributes);
-  }, [scenarioDimensions, preferredAttributes]);
+    return resolveScenarioAttributes(scenarioDimensions, preferredAttributes, modelScenarioMatrix);
+  }, [scenarioDimensions, preferredAttributes, modelScenarioMatrix]);
   const resolvedAxes = useMemo(
     () => resolveScenarioAxisDimensions(availableAttributes, rowDim, colDim),
     [availableAttributes, colDim, rowDim]

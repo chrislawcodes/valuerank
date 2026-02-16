@@ -76,8 +76,8 @@ function ConditionDecisionMatrix({
   const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
 
   const availableAttributes = useMemo(() => {
-    return resolveScenarioAttributes(scenarioDimensions, expectedAttributes);
-  }, [scenarioDimensions, expectedAttributes]);
+    return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
+  }, [scenarioDimensions, expectedAttributes, modelScenarioMatrix]);
 
   const attributeA = availableAttributes[0] ?? '';
   const attributeB = availableAttributes[1] ?? availableAttributes[0] ?? '';
