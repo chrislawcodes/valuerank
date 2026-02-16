@@ -355,7 +355,7 @@ function ConditionDecisionMatrix({
           <CopyVisualButton targetRef={countsTableRef} label="condition bucket counts table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
@@ -370,16 +370,10 @@ function ConditionDecisionMatrix({
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {sideNames.bName}
               </th>
-              <th
-                className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap"
-                title={`Linear sensitivity coefficient for ${lowSideAttribute}. Positive = decisions move toward ${lowSideAttribute}; negative = away.`}
-              >
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {lowSideAttribute} Sensitivity
               </th>
-              <th
-                className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap"
-                title={`Linear sensitivity coefficient for ${highSideAttribute}. Positive = decisions move toward ${highSideAttribute}; negative = away.`}
-              >
+              <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
                 {highSideAttribute} Sensitivity
               </th>
             </tr>
@@ -448,10 +442,10 @@ function ConditionDecisionMatrix({
                       {counts.b}
                     </Button>
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-xs text-gray-700 whitespace-nowrap">
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
                     {counts.aSensitivity == null ? '-' : counts.aSensitivity.toFixed(3)}
                   </td>
-                  <td className="border border-gray-200 px-3 py-2 text-center text-xs text-gray-700 whitespace-nowrap">
+                  <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
                     {counts.bSensitivity == null ? '-' : counts.bSensitivity.toFixed(3)}
                   </td>
                 </tr>
@@ -466,10 +460,6 @@ function ConditionDecisionMatrix({
         <div className="text-xs text-gray-500">
           Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
         </div>
-        <div className="text-xs text-gray-500">
-          Sensitivity columns are linear coefficients: positive means decisions move toward that attribute&apos;s side,
-          negative means away from it.
-        </div>
       </div>
 
       <div ref={meanTableRef} className="space-y-2">
@@ -478,7 +468,7 @@ function ConditionDecisionMatrix({
           <CopyVisualButton targetRef={meanTableRef} label="condition by AI mean decision table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="min-w-full border-collapse">
           <thead>
             <tr>
               <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
