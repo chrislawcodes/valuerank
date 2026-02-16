@@ -27,10 +27,10 @@ describe('OverviewTab', () => {
           visualizationData={{
             decisionDistribution: {},
             scenarioDimensions: {
-              s1: { A: 'a1', B: 'b1' },
-              s2: { A: 'a1', B: 'b2' },
-              s3: { A: 'a2', B: 'b2' },
-              s4: { A: 'a2', B: 'b1' },
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
+              s4: { Freedom: 'a2', Harmony: 'b1' },
             },
             modelScenarioMatrix: {
               model1: {
