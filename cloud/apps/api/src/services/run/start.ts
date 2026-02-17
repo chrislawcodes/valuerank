@@ -85,10 +85,13 @@ type EnqueueFailure = {
   error: string;
 };
 
+const ENQUEUE_CHUNK_SIZE = 50;
+const RETRY_ENQUEUE_CHUNK_SIZE = 10;
+
 async function enqueueJobs(
   jobs: JobEntry[],
   send: (queueName: string, data: ProbeScenarioJobData, options: JobOptions) => Promise<string | null>,
-  chunkSize = 50
+  chunkSize = ENQUEUE_CHUNK_SIZE
 ): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
   const jobIds: string[] = [];
   const failures: EnqueueFailure[] = [];
@@ -110,12 +113,10 @@ async function enqueueJobs(
         jobIds.push(result.value);
         return;
       }
-      const failedJob = chunk[index];
-      if (failedJob === undefined) {
-        return;
-      }
       failures.push({
-        job: failedJob,
+        // Result order matches input order from Promise.allSettled.
+        // Index is guaranteed to map to an entry in `chunk`.
+        job: chunk[index]!,
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       });
     });
@@ -689,7 +690,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     const retryPass = await enqueueJobs(
       remainingFailures.map((failure) => failure.job),
       (queueName, data, options) => boss.send(queueName, data, options),
-      10
+      // Retry in smaller batches to reduce provider/queue backpressure bursts.
+      RETRY_ENQUEUE_CHUNK_SIZE
     );
 
     jobIds = jobIds.concat(retryPass.jobIds);
@@ -708,6 +710,8 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         completedAt: new Date(),
       },
     });
+    // Any jobs that were already enqueued before failure are safely ignored by workers:
+    // probe_scenario checks isRunTerminal(), which treats FAILED as terminal.
 
     log.error(
       {

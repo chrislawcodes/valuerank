@@ -202,6 +202,48 @@ describe('startRun service', () => {
       expect(mockBoss.send).toHaveBeenCalledTimes(2);
     });
 
+    it('retries only failed jobs in a multi-job batch', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Partial Retry Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+          {
+            definitionId: definition.id,
+            name: 'Scenario 2',
+            content: { test: 2 },
+          },
+        ],
+      });
+
+      // First pass: one job drops, one succeeds. Retry: only failed job is retried.
+      mockBoss.send
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('job-2')
+        .mockResolvedValueOnce('retry-job-1');
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      expect(result.jobCount).toBe(2);
+      expect(mockBoss.send).toHaveBeenCalledTimes(3);
+    });
+
     it('marks run as FAILED when jobs still cannot be enqueued after retry', async () => {
       const definition = await db.definition.create({
         data: {
@@ -211,12 +253,19 @@ describe('startRun service', () => {
       });
       createdDefinitionIds.push(definition.id);
 
-      await db.scenario.create({
-        data: {
-          definitionId: definition.id,
-          name: 'Scenario Fails',
-          content: { test: 1 },
-        },
+      await db.scenario.createMany({
+        data: [
+          {
+            definitionId: definition.id,
+            name: 'Scenario Fails 1',
+            content: { test: 1 },
+          },
+          {
+            definitionId: definition.id,
+            name: 'Scenario Fails 2',
+            content: { test: 2 },
+          },
+        ],
       });
 
       mockBoss.send.mockResolvedValue(null);
@@ -237,7 +286,8 @@ describe('startRun service', () => {
         createdRunIds.push(failedRun.id);
       }
       expect(failedRun?.status).toBe('FAILED');
-      expect(mockBoss.send).toHaveBeenCalledTimes(2);
+      // 2 jobs attempted, then both retried once.
+      expect(mockBoss.send).toHaveBeenCalledTimes(4);
     });
   });
 
