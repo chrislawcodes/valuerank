@@ -11,10 +11,12 @@ import { NotFoundError, ValidationError } from '@valuerank/shared';
 import { TEST_USER } from '../../test-utils.js';
 
 // Mock PgBoss
+const mockBoss = {
+  send: vi.fn().mockResolvedValue('mock-job-id'),
+};
+
 vi.mock('../../../src/queue/boss.js', () => ({
-  getBoss: vi.fn(() => ({
-    send: vi.fn().mockResolvedValue('mock-job-id'),
-  })),
+  getBoss: vi.fn(() => mockBoss),
 }));
 
 // Mock parallelism service - always returns default queue in tests
@@ -62,6 +64,8 @@ describe('startRun service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBoss.send.mockReset();
+    mockBoss.send.mockResolvedValue('mock-job-id');
   });
 
   afterEach(async () => {
@@ -162,6 +166,128 @@ describe('startRun service', () => {
       // 10 scenarios × 1 model = 10 jobs
       expect(result.jobCount).toBe(10);
       expect(result.run.progress.total).toBe(10);
+    });
+
+    it('retries dropped jobs and still succeeds when retry enqueues them', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Retry Enqueue Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario Retry',
+          content: { test: 1 },
+        },
+      });
+
+      // First send drops the job (null), retry succeeds.
+      mockBoss.send
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('retry-job-id');
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      expect(result.jobCount).toBe(1);
+      expect(mockBoss.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries only failed jobs in a multi-job batch', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Partial Retry Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          {
+            definitionId: definition.id,
+            name: 'Scenario 1',
+            content: { test: 1 },
+          },
+          {
+            definitionId: definition.id,
+            name: 'Scenario 2',
+            content: { test: 2 },
+          },
+        ],
+      });
+
+      // First pass: one job drops, one succeeds. Retry: only failed job is retried.
+      mockBoss.send
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('job-2')
+        .mockResolvedValueOnce('retry-job-1');
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      expect(result.jobCount).toBe(2);
+      expect(mockBoss.send).toHaveBeenCalledTimes(3);
+    });
+
+    it('marks run as FAILED when jobs still cannot be enqueued after retry', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Failed Enqueue Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.createMany({
+        data: [
+          {
+            definitionId: definition.id,
+            name: 'Scenario Fails 1',
+            content: { test: 1 },
+          },
+          {
+            definitionId: definition.id,
+            name: 'Scenario Fails 2',
+            content: { test: 2 },
+          },
+        ],
+      });
+
+      mockBoss.send.mockResolvedValue(null);
+
+      await expect(
+        startRun({
+          definitionId: definition.id,
+          models: ['gpt-4'],
+          userId: testUserId,
+        })
+      ).rejects.toThrow(/Run initialization failed/i);
+
+      const failedRun = await db.run.findFirst({
+        where: { definitionId: definition.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (failedRun) {
+        createdRunIds.push(failedRun.id);
+      }
+      expect(failedRun?.status).toBe('FAILED');
+      // 2 jobs attempted, then both retried once.
+      expect(mockBoss.send).toHaveBeenCalledTimes(4);
     });
   });
 

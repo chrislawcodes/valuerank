@@ -8,7 +8,7 @@
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
-import type { ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
+import type { JobOptions, ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
 import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
@@ -73,6 +73,57 @@ type SurveyPlan = {
     maxLabel?: string | null;
   };
 };
+
+type JobEntry = {
+  queueName: string;
+  data: ProbeScenarioJobData;
+  options: JobOptions;
+};
+
+type EnqueueFailure = {
+  job: JobEntry;
+  error: string;
+};
+
+const ENQUEUE_CHUNK_SIZE = 50;
+const RETRY_ENQUEUE_CHUNK_SIZE = 10;
+
+async function enqueueJobs(
+  jobs: JobEntry[],
+  send: (queueName: string, data: ProbeScenarioJobData, options: JobOptions) => Promise<string | null>,
+  chunkSize = ENQUEUE_CHUNK_SIZE
+): Promise<{ jobIds: string[]; failures: EnqueueFailure[] }> {
+  const jobIds: string[] = [];
+  const failures: EnqueueFailure[] = [];
+
+  for (let i = 0; i < jobs.length; i += chunkSize) {
+    const chunk = jobs.slice(i, i + chunkSize);
+    const chunkResults = await Promise.allSettled(
+      chunk.map(async (job) => {
+        const id = await send(job.queueName, job.data, job.options);
+        if (id === null) {
+          throw new Error('send returned null job id');
+        }
+        return id;
+      })
+    );
+
+    chunkResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        jobIds.push(result.value);
+        return;
+      }
+      failures.push({
+        // Result order matches input order from Promise.allSettled.
+        // Index is guaranteed to map to an entry in `chunk`.
+        job: chunk[index]!,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    });
+  }
+
+  return { jobIds, failures };
+}
 
 function buildSingleQuestionSurveyPrompt(
   questionText: string,
@@ -573,7 +624,6 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     priority: priorityValue,
   };
 
-  type JobEntry = { queueName: string; data: ProbeScenarioJobData; options: typeof baseJobOptions };
   const jobs: JobEntry[] = [];
 
   // Parallel queue resolution cache
@@ -616,15 +666,70 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   }
   log.debug({ runId: run.id, queueDistribution: Object.fromEntries(queueCounts) }, 'Job queue distribution');
 
-  // Enqueue in chunks
-  const jobIds: string[] = [];
-  const chunkSize = 50;
-  for (let i = 0; i < jobs.length; i += chunkSize) {
-    const chunk = jobs.slice(i, i + chunkSize);
-    const chunkIds = await Promise.all(
-      chunk.map((job) => boss.send(job.queueName, job.data, job.options))
+  // Enqueue in chunks, then retry any dropped jobs one more time.
+  const firstPass = await enqueueJobs(jobs, (queueName, data, options) => boss.send(queueName, data, options));
+  let jobIds = firstPass.jobIds;
+  let remainingFailures = firstPass.failures;
+
+  if (remainingFailures.length > 0) {
+    log.warn(
+      {
+        runId: run.id,
+        failedCount: remainingFailures.length,
+        sampleFailures: remainingFailures.slice(0, 5).map((failure) => ({
+          queueName: failure.job.queueName,
+          modelId: failure.job.data.modelId,
+          scenarioId: failure.job.data.scenarioId,
+          sampleIndex: failure.job.data.sampleIndex,
+          error: failure.error,
+        })),
+      },
+      'Initial enqueue had dropped jobs; retrying failed jobs'
     );
-    jobIds.push(...chunkIds.filter((id): id is string => id !== null));
+
+    const retryPass = await enqueueJobs(
+      remainingFailures.map((failure) => failure.job),
+      (queueName, data, options) => boss.send(queueName, data, options),
+      // Retry in smaller batches to reduce provider/queue backpressure bursts.
+      RETRY_ENQUEUE_CHUNK_SIZE
+    );
+
+    jobIds = jobIds.concat(retryPass.jobIds);
+    remainingFailures = retryPass.failures;
+  }
+
+  if (remainingFailures.length > 0 || jobIds.length !== totalJobs) {
+    const failureReason = remainingFailures.length > 0
+      ? `${remainingFailures.length} jobs failed to enqueue after retry`
+      : `Expected ${totalJobs} jobs but only ${jobIds.length} were enqueued`;
+
+    await db.run.update({
+      where: { id: run.id },
+      data: {
+        status: 'FAILED',
+        completedAt: new Date(),
+      },
+    });
+    // Any jobs that were already enqueued before failure are safely ignored by workers:
+    // probe_scenario checks isRunTerminal(), which treats FAILED as terminal.
+
+    log.error(
+      {
+        runId: run.id,
+        totalJobs,
+        enqueuedJobs: jobIds.length,
+        remainingFailures: remainingFailures.slice(0, 10).map((failure) => ({
+          queueName: failure.job.queueName,
+          modelId: failure.job.data.modelId,
+          scenarioId: failure.job.data.scenarioId,
+          sampleIndex: failure.job.data.sampleIndex,
+          error: failure.error,
+        })),
+      },
+      'Run failed during enqueue integrity check'
+    );
+
+    throw new Error(`Run initialization failed: ${failureReason}`);
   }
 
   log.info(
