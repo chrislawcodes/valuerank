@@ -11,6 +11,7 @@ import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useRun } from '../hooks/useRun';
+import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 
 export function AnalysisDetail() {
   const navigate = useNavigate();
@@ -93,7 +94,7 @@ export function AnalysisDetail() {
         <AnalysisPanel
           runId={run.id}
           analysisStatus={run.analysisStatus}
-          definitionContent={run.definition?.content}
+          definitionContent={getRunDefinitionContent(run)}
           isAggregate={isAggregate}
           pendingSince={run.completedAt}
         />

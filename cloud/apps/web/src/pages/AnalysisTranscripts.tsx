@@ -25,6 +25,7 @@ import {
   resolveScenarioAttributes,
   resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
+import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -58,9 +59,10 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const definitionContent = useMemo(() => getRunDefinitionContent(run), [run]);
   const preferredAttributes = useMemo(
-    () => deriveScenarioAttributesFromDefinition(run?.definition?.content),
-    [run?.definition?.content]
+    () => deriveScenarioAttributesFromDefinition(definitionContent),
+    [definitionContent]
   );
   const availableAttributes = useMemo(() => {
     return resolveScenarioAttributes(scenarioDimensions, preferredAttributes, modelScenarioMatrix);
@@ -79,8 +81,8 @@ export function AnalysisTranscripts() {
     && (decisionBucket === 'a' || decisionBucket === 'neutral' || decisionBucket === 'b')
   );
   const dimensionLabels = useMemo(
-    () => deriveDecisionDimensionLabels(run?.definition?.content),
-    [run?.definition?.content]
+    () => deriveDecisionDimensionLabels(definitionContent),
+    [definitionContent]
   );
 
   const decisionSideNames = useMemo(
