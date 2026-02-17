@@ -1,5 +1,6 @@
 type DefinitionContentShape = {
   dimensions?: unknown;
+  template?: unknown;
 };
 
 type RunWithDefinitionContent = {
@@ -11,7 +12,18 @@ type RunWithDefinitionContent = {
 };
 
 function hasDefinitionShape(value: unknown): value is DefinitionContentShape {
-  return value !== null && typeof value === 'object';
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+
+  // Accept snapshots that contain a recognizable definition payload.
+  if ('dimensions' in candidate) {
+    return Array.isArray(candidate.dimensions);
+  }
+  if ('template' in candidate) {
+    return typeof candidate.template === 'string';
+  }
+
+  return false;
 }
 
 /**
@@ -20,6 +32,8 @@ function hasDefinitionShape(value: unknown): value is DefinitionContentShape {
  * the exact definition used when scenarios were generated.
  */
 export function getRunDefinitionContent(run: RunWithDefinitionContent | null | undefined): unknown {
+  // `definitionSnapshot` is the canonical location.
+  // `config.definitionSnapshot` is retained for backward compatibility with older runs.
   const directSnapshot = run?.definitionSnapshot;
   if (hasDefinitionShape(directSnapshot)) {
     return directSnapshot;
