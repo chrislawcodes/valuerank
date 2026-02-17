@@ -70,6 +70,15 @@ export function AnalysisDetail() {
 
   // Determine if this is an Aggregate Run based on tags
   const isAggregate = run.tags?.some(t => t.name === 'Aggregate') ?? false;
+  const runDefinitionVersion = run.definitionVersion;
+  const latestDefinitionVersion = run.definition?.version;
+  const isOldVersion = (
+    runDefinitionVersion !== null
+    && runDefinitionVersion !== undefined
+    && latestDefinitionVersion !== null
+    && latestDefinitionVersion !== undefined
+    && runDefinitionVersion !== latestDefinitionVersion
+  );
 
   return (
     <div className="space-y-6">
@@ -95,6 +104,7 @@ export function AnalysisDetail() {
           runId={run.id}
           analysisStatus={run.analysisStatus}
           definitionContent={getRunDefinitionContent(run)}
+          isOldVersion={isOldVersion}
           isAggregate={isAggregate}
           pendingSince={run.completedAt}
         />
