@@ -172,6 +172,8 @@ describe('AnalysisCard', () => {
 
     expect(screen.queryByText('Old Version')).not.toBeInTheDocument();
     expect(screen.getByText('Current')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /Test Definition/i })).toHaveTextContent('Test Definition');
+    expect(screen.getByRole('heading', { level: 3, name: /Test Definition/i })).not.toHaveTextContent(/\sv\d+/);
   });
 
   it('handles missing definition name', () => {

@@ -52,7 +52,7 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const analysisStatus = run.analysisStatus || 'pending';
   const statusConfig = ANALYSIS_STATUS_CONFIG[analysisStatus] ?? DEFAULT_STATUS_CONFIG;
   const definitionName = run.definition?.name || 'Unnamed Vignette';
-  const definitionVersion = run.definitionVersion ?? run.definition?.version;
+  const definitionVersion = run.definitionVersion;
   const latestDefinitionVersion = run.definition?.version;
   const isOldVersion = (
     definitionVersion !== null
