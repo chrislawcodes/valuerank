@@ -31,6 +31,7 @@ type AnalysisPanelProps = {
   runId: string;
   analysisStatus?: string | null;
   definitionContent?: unknown;
+  isOldVersion?: boolean;
   isAggregate?: boolean;
   pendingSince?: string | null;
 };
@@ -218,6 +219,7 @@ export function AnalysisPanel({
   runId,
   analysisStatus,
   definitionContent,
+  isOldVersion = false,
   isAggregate,
   pendingSince,
 }: AnalysisPanelProps) {
@@ -439,8 +441,14 @@ export function AnalysisPanel({
         <StatCard label="Analysis Type" value={analysis.analysisType} detail={`v${analysis.codeVersion}`} />
         <StatCard
           label="Status"
-          value={analysis.status}
-          variant={analysis.status === 'CURRENT' ? 'success' : 'default'}
+          value={isOldVersion && analysis.status === 'CURRENT' ? 'OLD VERSION' : analysis.status}
+          variant={
+            isOldVersion && analysis.status === 'CURRENT'
+              ? 'error'
+              : analysis.status === 'CURRENT'
+                ? 'success'
+                : 'default'
+          }
         />
       </div>
 

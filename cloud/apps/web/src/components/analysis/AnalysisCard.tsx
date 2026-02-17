@@ -7,7 +7,6 @@
 
 import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import type { Run } from '../../api/operations/runs';
-import { getRunStatusLabel, getRunStatusVariant } from '../../lib/statusBadge';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
 
@@ -52,19 +51,29 @@ function formatDate(dateString: string): string {
 export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const analysisStatus = run.analysisStatus || 'pending';
   const statusConfig = ANALYSIS_STATUS_CONFIG[analysisStatus] ?? DEFAULT_STATUS_CONFIG;
-  const StatusIcon = statusConfig.icon;
   const definitionName = run.definition?.name || 'Unnamed Vignette';
   const definitionVersion = run.definitionVersion ?? run.definition?.version;
+  const latestDefinitionVersion = run.definition?.version;
+  const isOldVersion = (
+    definitionVersion !== null
+    && definitionVersion !== undefined
+    && latestDefinitionVersion !== null
+    && latestDefinitionVersion !== undefined
+    && definitionVersion !== latestDefinitionVersion
+  );
+  const effectiveStatusConfig: AnalysisStatusConfig = (
+    analysisStatus === 'completed' && isOldVersion
+      ? { ...statusConfig, label: '' }
+      : statusConfig
+  );
+  const StatusIcon = effectiveStatusConfig.icon;
+  const showAnalysisStatusBadge = effectiveStatusConfig.label !== '';
   const hasCustomRunName = run.name !== null && run.name !== undefined && run.name.trim() !== '';
 
   // Use completed date if available, otherwise created date
   const displayDate = run.completedAt || run.createdAt;
 
   const isDisabled = analysisStatus === 'computing' || analysisStatus === 'pending';
-  const runStatusLabel = run.status === 'SUMMARIZING' && run.summarizeProgress
-    ? `Run Summarizing (${run.summarizeProgress.completed}/${run.summarizeProgress.total})`
-    : `Run ${getRunStatusLabel(run.status)}`;
-
   return (
     <Card
       onClick={onClick}
@@ -76,8 +85,8 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
       <div className="flex items-start justify-between gap-4">
         {/* Left: Status and Info */}
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className={`w-10 h-10 rounded-lg ${statusConfig.bg} flex items-center justify-center flex-shrink-0`}>
-            <BarChart2 className={`w-5 h-5 ${statusConfig.color}`} />
+          <div className={`w-10 h-10 rounded-lg ${effectiveStatusConfig.bg} flex items-center justify-center flex-shrink-0`}>
+            <BarChart2 className={`w-5 h-5 ${effectiveStatusConfig.color}`} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -87,12 +96,16 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
                   <span className="text-gray-400"> v{definitionVersion}</span>
                 )}
               </h3>
-              <Badge variant={getRunStatusVariant(run.status)} size="count">
-                {runStatusLabel}
-              </Badge>
-              <Badge variant={statusConfig.badgeVariant} size="count">
-                {statusConfig.label}
-              </Badge>
+              {showAnalysisStatusBadge && (
+                <Badge variant={effectiveStatusConfig.badgeVariant} size="count">
+                  {effectiveStatusConfig.label}
+                </Badge>
+              )}
+              {isOldVersion && (
+                <Badge variant="error" size="count">
+                  Old Version
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
               {hasCustomRunName ? `${run.name} · ` : ''}
@@ -135,8 +148,8 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
           </div>
 
           {/* Analysis Status Icon */}
-          <div className={`w-8 h-8 rounded-full ${statusConfig.bg} flex items-center justify-center`}>
-            <StatusIcon className={`w-4 h-4 ${statusConfig.color} ${analysisStatus === 'computing' ? 'animate-spin' : ''}`} />
+          <div className={`w-8 h-8 rounded-full ${effectiveStatusConfig.bg} flex items-center justify-center`}>
+            <StatusIcon className={`w-4 h-4 ${effectiveStatusConfig.color} ${analysisStatus === 'computing' ? 'animate-spin' : ''}`} />
           </div>
         </div>
       </div>

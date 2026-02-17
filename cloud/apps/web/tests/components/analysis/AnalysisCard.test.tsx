@@ -120,6 +120,60 @@ describe('AnalysisCard', () => {
     });
   });
 
+  it('shows old version badge and hides current badge when run version is stale', () => {
+    const run = createMockRun({
+      analysisStatus: 'completed',
+      definitionVersion: 2,
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 3,
+        tags: [],
+      },
+    });
+
+    render(<AnalysisCard run={run} />);
+
+    expect(screen.getByText('Old Version')).toBeInTheDocument();
+    expect(screen.queryByText('Current')).not.toBeInTheDocument();
+  });
+
+  it('does not show old version badge when run version matches latest', () => {
+    const run = createMockRun({
+      analysisStatus: 'completed',
+      definitionVersion: 3,
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 3,
+        tags: [],
+      },
+    });
+
+    render(<AnalysisCard run={run} />);
+
+    expect(screen.queryByText('Old Version')).not.toBeInTheDocument();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+  });
+
+  it('does not show old version badge when version metadata is missing', () => {
+    const run = createMockRun({
+      analysisStatus: 'completed',
+      definitionVersion: null,
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: undefined,
+        tags: [],
+      },
+    });
+
+    render(<AnalysisCard run={run} />);
+
+    expect(screen.queryByText('Old Version')).not.toBeInTheDocument();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+  });
+
   it('handles missing definition name', () => {
     const run = createMockRun({ definition: undefined as unknown as Run['definition'] });
     render(<AnalysisCard run={run} />);
