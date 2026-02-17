@@ -51,10 +51,24 @@ function formatDate(dateString: string): string {
 
 export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
   const analysisStatus = run.analysisStatus || 'pending';
-  const statusConfig = ANALYSIS_STATUS_CONFIG[analysisStatus] ?? DEFAULT_STATUS_CONFIG;
-  const StatusIcon = statusConfig.icon;
   const definitionName = run.definition?.name || 'Unnamed Vignette';
   const definitionVersion = run.definitionVersion ?? run.definition?.version;
+  const latestDefinitionVersion = run.definition?.version;
+  const isOldVersion = (
+    definitionVersion !== null
+    && definitionVersion !== undefined
+    && latestDefinitionVersion !== null
+    && latestDefinitionVersion !== undefined
+    && definitionVersion !== latestDefinitionVersion
+  );
+
+  const statusConfig = ANALYSIS_STATUS_CONFIG[analysisStatus] ?? DEFAULT_STATUS_CONFIG;
+  const effectiveStatusConfig: AnalysisStatusConfig = (
+    analysisStatus === 'completed' && isOldVersion
+  )
+    ? { ...statusConfig, label: 'Completed' }
+    : statusConfig;
+  const StatusIcon = effectiveStatusConfig.icon;
   const hasCustomRunName = run.name !== null && run.name !== undefined && run.name.trim() !== '';
 
   // Use completed date if available, otherwise created date
@@ -90,9 +104,14 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
               <Badge variant={getRunStatusVariant(run.status)} size="count">
                 {runStatusLabel}
               </Badge>
-              <Badge variant={statusConfig.badgeVariant} size="count">
-                {statusConfig.label}
+              <Badge variant={effectiveStatusConfig.badgeVariant} size="count">
+                {effectiveStatusConfig.label}
               </Badge>
+              {isOldVersion && (
+                <Badge variant="error" size="count">
+                  Old Version
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
               {hasCustomRunName ? `${run.name} · ` : ''}
@@ -135,8 +154,8 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
           </div>
 
           {/* Analysis Status Icon */}
-          <div className={`w-8 h-8 rounded-full ${statusConfig.bg} flex items-center justify-center`}>
-            <StatusIcon className={`w-4 h-4 ${statusConfig.color} ${analysisStatus === 'computing' ? 'animate-spin' : ''}`} />
+          <div className={`w-8 h-8 rounded-full ${effectiveStatusConfig.bg} flex items-center justify-center`}>
+            <StatusIcon className={`w-4 h-4 ${effectiveStatusConfig.color} ${analysisStatus === 'computing' ? 'animate-spin' : ''}`} />
           </div>
         </div>
       </div>
