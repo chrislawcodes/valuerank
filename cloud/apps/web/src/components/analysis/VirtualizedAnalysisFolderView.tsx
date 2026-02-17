@@ -28,6 +28,20 @@ type TagFolder = {
   runs: Run[];
 };
 
+function getRunDisplayTimestamp(run: Run): number {
+  const displayDate = run.completedAt ?? run.createdAt;
+  return new Date(displayDate).getTime();
+}
+
+function sortFoldersByMostRecentRun(left: TagFolder, right: TagFolder): number {
+  const leftMostRecent = Math.max(...left.runs.map(getRunDisplayTimestamp));
+  const rightMostRecent = Math.max(...right.runs.map(getRunDisplayTimestamp));
+  if (leftMostRecent !== rightMostRecent) {
+    return rightMostRecent - leftMostRecent;
+  }
+  return left.tag.name.localeCompare(right.tag.name);
+}
+
 function sortRunsForDisplay(runs: Run[]): Run[] {
   return [...runs].sort((left, right) => {
     const leftName = left.definition?.name ?? '';
@@ -155,9 +169,7 @@ export function VirtualizedAnalysisFolderView({
   // Group standard runs by tag
   const tagGroups = useMemo(() => {
     const groups = groupRunsByTag(standardRuns);
-    return Array.from(groups.values()).sort((a, b) =>
-      a.tag.name.localeCompare(b.tag.name)
-    );
+    return Array.from(groups.values()).sort(sortFoldersByMostRecentRun);
   }, [standardRuns]);
 
   // Group aggregate runs by definition tags (excluding the run-level "Aggregate" tag)
@@ -165,7 +177,7 @@ export function VirtualizedAnalysisFolderView({
     const groups = groupRunsByTag(aggregateRuns);
     return Array.from(groups.values())
       .filter((group) => group.tag.name !== 'Aggregate')
-      .sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+      .sort(sortFoldersByMostRecentRun);
   }, [aggregateRuns]);
 
   const aggregateUntaggedRuns = useMemo(() => {
