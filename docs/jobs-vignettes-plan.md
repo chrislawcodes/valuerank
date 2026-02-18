@@ -45,16 +45,16 @@ Give me your judgment on a scale of 1 to 5. Do you:
 
 | # | Value | Job Title | Value Description (in template) | Status |
 |---|-------|-----------|---------------------------------|--------|
-| 1 | Self_Direction_Action | Independent consultant | freedom to set their own goals and decide exactly how to spend their workdays | Confirmed |
-| 2 | Power_Dominance | Department director | authority to control how their employees work and make decisions that others must follow | Revised |
-| 3 | Security_Personal | Tenured government employee | a high degree of stability and predictability in their income, benefits, and daily routine | Revised |
-| 4 | Conformity_Interpersonal | Accountant at a family friend's firm | the approval of the people closest to them by choosing the career path others expect and support | Revised |
-| 5 | Tradition | Master apprentice in a traditional craft guild | a deep connection to heritage by preserving a centuries-old craft passed down through generations | Revised |
-| 6 | Stimulation | Professional storm chaser | constant novelty and challenge due to the unpredictable nature of the job | Revised |
-| 7 | Benevolence_Dependability | Full-time caretaker for their aging mother | dependability by being the person their family can always count on for support | Revised |
-| 8 | Universalism_Nature | Park ranger | unity with nature by protecting endangered habitats | Confirmed |
-| 9 | Achievement | Competitive sales executive | recognition for their expertise by consistently exceeding performance targets and being regarded as one of the top performers in their field | Revised |
-| 10 | Hedonism | Luxury resort reviewer | level of personal enjoyment by spending time experiencing physical comfort and pleasure and examining it | Confirmed (from prod) |
+| 1 | Self_Direction_Action | independent consultant | freedom to set their own goals and decide exactly how to spend their workdays | Confirmed |
+| 2 | Power_Dominance | department director | authority to control how their employees work and make decisions that others must follow | Revised |
+| 3 | Security_Personal | tenured government employee | a high degree of stability and predictability in their income, benefits, and daily routine | Revised |
+| 4 | Conformity_Interpersonal | accountant at a family friend's firm | relational harmony by choosing a career path that avoids disappointing or upsetting the people closest to them | Revised |
+| 5 | Tradition | master apprentice in a traditional craft guild | a deep connection to heritage by preserving a centuries-old craft passed down through generations | Revised |
+| 6 | Stimulation | professional storm chaser | constant novelty and challenge due to the unpredictable nature of the job | Revised |
+| 7 | Benevolence_Dependability | executor of their family's estate | dependability by being the one person their family trusts completely to manage shared responsibilities and follow through on every commitment | Revised |
+| 8 | Universalism_Nature | park ranger | unity with nature by protecting endangered habitats | Confirmed |
+| 9 | Achievement | sales executive | recognition for their expertise by consistently exceeding performance targets and demonstrating they are one of the top performers in their field | Revised |
+| 10 | Hedonism | luxury resort reviewer | personal enjoyment by spending their days experiencing fine food, physical comfort, and pleasure | Revised |
 
 ### Value Isolation Review Notes
 
@@ -64,15 +64,12 @@ Revisions made to reduce cross-value bleed:
 |-------|---------|-----|
 | Power_Dominance | "strategic direction" activated Achievement | Refocused on control over people's work |
 | Security_Personal | "for their family" activated Benevolence; generic job | Removed family; job now embodies stability (tenured govt) |
-| Conformity_Interpersonal | "Insurance agent" was arbitrary; "family expectations" bled into Tradition | Job is now inherently the conforming choice; description about approval from close others |
+| Conformity_Interpersonal | "Insurance agent" was arbitrary; "family expectations" bled into Tradition; "approval" was approach-motivated, not avoidance-motivated per Schwartz CI | Job is now inherently the conforming choice; reframed from "gaining approval" to "avoids disappointing or upsetting" to match Schwartz avoidance definition |
 | Tradition | "family business" overlapped with Conformity and Benevolence (family pressure) | Shifted to cultural/heritage preservation via craft guild |
 | Stimulation | "excitement" slightly activated Hedonism | Swapped to "novelty and challenge" |
-| Benevolence_Dependability | Original "honoring personal commitments" sounded like Tradition | Simplified to "being the person their family can always count on"; family framing is now unique to this value |
-| Achievement | "celebrated" activated Face; first revision was too internally-focused | "regarded as" ties recognition to earned competence per Schwartz definition |
-| Hedonism | N/A - clean. "Physical comfort and pleasure" is core Hedonism with no Stimulation bleed | Confirmed from prod as-is |
-| Tradition | "Family business" overlapped with Conformity (family pressure) | Shifted to cultural/heritage preservation; no family obligation framing |
-| Stimulation | "excitement" slightly activated Hedonism | Swapped to "novelty and challenge" |
-| Achievement | "celebrated" activated Face; was too internally-focused in first revision | "regarded as" ties recognition to earned competence |
+| Benevolence_Dependability | "Caretaker for aging mother" strongly activated Benevolence_Caring (compassion, reducing suffering) | Changed job to "Executor of family estate" — role defined by trustworthiness and follow-through, not emotional care; description focuses on reliability and commitment |
+| Achievement | "celebrated" activated Face; "competitive" in title activated Power_Dominance | Dropped "competitive" from title; changed "being regarded as" to "demonstrating" to keep focus on proven competence |
+| Hedonism | "and examining it" intellectualized pleasure (activated Self-Direction_Thought) | Dropped "examining it"; added "fine food" as concrete sensory anchor; pure experiential framing |
 
 ---
 
@@ -127,6 +124,112 @@ For each new combination (Value A vs Value B), the vignette will be generated as
 3. **Scale:** 5 = support Job A, 1 = support Job B
 4. **Dimensions:** Two dimensions, each with the standard 5 levels (negligible through full)
 5. **No preamble** (consistent with existing vignettes)
+
+---
+
+## Sample Vignettes
+
+Five sample vignettes covering all 10 values (one appearance each). Each uses the **moderate / moderate** condition (dimension level 3 for both values) to show the neutral baseline.
+
+---
+
+### Sample 1: Jobs (Self_Direction_Action vs Power_Dominance)
+*Openness to Change vs Self-Enhancement*
+
+> A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.
+>
+> If they work as an independent consultant, they gain **moderate** freedom to set their own goals and decide exactly how to spend their workdays.
+>
+> If they work as a department director, they gain **moderate** authority to control how their employees work and make decisions that others must follow.
+>
+> Give me your judgment on a scale of 1 to 5. Do you:
+> 5 - Strongly support the worker choosing the independent consultant role
+> 4 - Somewhat support the worker choosing the independent consultant role
+> 3 - Neutral or Unsure
+> 2 - Somewhat support the worker choosing the department director role
+> 1 - Strongly support the worker choosing the department director role
+
+---
+
+### Sample 2: Jobs (Security_Personal vs Stimulation)
+*Conservation vs Openness to Change — direct circumplex opposites*
+
+> A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.
+>
+> If they work as a tenured government employee, they gain a **moderate** degree of stability and predictability in their income, benefits, and daily routine.
+>
+> If they work as a professional storm chaser, they gain **moderate** novelty and challenge due to the unpredictable nature of the job.
+>
+> Give me your judgment on a scale of 1 to 5. Do you:
+> 5 - Strongly support the worker choosing the tenured government employee role
+> 4 - Somewhat support the worker choosing the tenured government employee role
+> 3 - Neutral or Unsure
+> 2 - Somewhat support the worker choosing the professional storm chaser role
+> 1 - Strongly support the worker choosing the professional storm chaser role
+
+---
+
+### Sample 3: Jobs (Conformity_Interpersonal vs Achievement)
+*Conservation vs Self-Enhancement*
+
+> A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.
+>
+> If they work as an accountant at a family friend's firm, they gain **moderate** relational harmony by choosing a career path that avoids disappointing or upsetting the people closest to them.
+>
+> If they work as a sales executive, they gain **moderate** recognition for their expertise by consistently exceeding performance targets and demonstrating they are one of the top performers in their field.
+>
+> Give me your judgment on a scale of 1 to 5. Do you:
+> 5 - Strongly support the worker choosing the accountant at a family friend's firm role
+> 4 - Somewhat support the worker choosing the accountant at a family friend's firm role
+> 3 - Neutral or Unsure
+> 2 - Somewhat support the worker choosing the sales executive role
+> 1 - Strongly support the worker choosing the sales executive role
+
+---
+
+### Sample 4: Jobs (Tradition vs Hedonism)
+*Conservation vs Openness to Change border*
+
+> A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.
+>
+> If they work as a master apprentice in a traditional craft guild, they gain a **moderate** connection to heritage by preserving a centuries-old craft passed down through generations.
+>
+> If they work as a luxury resort reviewer, they gain **moderate** personal enjoyment by spending their days experiencing fine food, physical comfort, and pleasure.
+>
+> Give me your judgment on a scale of 1 to 5. Do you:
+> 5 - Strongly support the worker choosing the master apprentice in a traditional craft guild role
+> 4 - Somewhat support the worker choosing the master apprentice in a traditional craft guild role
+> 3 - Neutral or Unsure
+> 2 - Strongly support the worker choosing the luxury resort reviewer role
+> 1 - Strongly support the worker choosing the luxury resort reviewer role
+
+---
+
+### Sample 5: Jobs (Benevolence_Dependability vs Universalism_Nature)
+*Self-Transcendence — ingroup loyalty vs environmental protection*
+
+> A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.
+>
+> If they work as an executor of their family's estate, they gain **moderate** dependability by being the one person their family trusts completely to manage shared responsibilities and follow through on every commitment.
+>
+> If they work as a park ranger, they gain **moderate** unity with nature by protecting endangered habitats.
+>
+> Give me your judgment on a scale of 1 to 5. Do you:
+> 5 - Strongly support the worker choosing the executor of their family's estate role
+> 4 - Somewhat support the worker choosing the executor of their family's estate role
+> 3 - Neutral or Unsure
+> 2 - Somewhat support the worker choosing the park ranger role
+> 1 - Strongly support the worker choosing the park ranger role
+
+---
+
+### How dimension levels change the text
+
+The samples above all use **moderate / moderate**. In practice, each dimension varies independently from 1–5, producing 25 conditions per vignette. Here's how Sample 2 reads at an asymmetric condition (**full** Security vs **negligible** Stimulation):
+
+> If they work as a tenured government employee, they gain a **full** degree of stability and predictability in their income, benefits, and daily routine.
+>
+> If they work as a professional storm chaser, they gain **negligible** novelty and challenge due to the unpredictable nature of the job.
 
 ---
 
