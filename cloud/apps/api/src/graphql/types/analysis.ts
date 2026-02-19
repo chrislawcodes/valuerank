@@ -2,6 +2,7 @@ import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { ActualCostRef } from './cost-estimate.js';
 import { computeActualCost } from '../../services/cost/estimate.js';
+import { normalizeAnalysisArtifacts } from '../../services/analysis/normalize-analysis-output.js';
 
 // Shape definitions for internal types
 type ContestedScenarioShape = {
@@ -33,24 +34,6 @@ type VisualizationDataShape = {
   decisionDistribution: Record<string, Record<string, number>>;
   modelScenarioMatrix: Record<string, Record<string, number>>;
 };
-
-function isDimensionValue(value: unknown): value is number | string {
-  return typeof value === 'number' || typeof value === 'string';
-}
-
-function toDimensionRecord(value: unknown): Record<string, number | string> | null {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
-  const sanitized: Record<string, number | string> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (!isDimensionValue(entry)) continue;
-    sanitized[key] = entry;
-  }
-  return Object.keys(sanitized).length > 0 ? sanitized : null;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 // Types for variance analysis from multi-sample runs
 type PerScenarioVarianceStats = {
@@ -105,6 +88,48 @@ type AnalysisOutput = {
   computedAt: string;
   durationMs: number;
 };
+
+type NormalizedArtifacts = {
+  visualizationData: Record<string, unknown> | null;
+  varianceAnalysis: Record<string, unknown> | null;
+};
+
+async function getNormalizedArtifacts(
+  analysis: AnalysisResultShape,
+  output: AnalysisOutput | null
+): Promise<NormalizedArtifacts> {
+  const rawVisualizationData = (output?.visualizationData as Record<string, unknown> | null | undefined) ?? null;
+  const rawVarianceAnalysis = (output?.varianceAnalysis as Record<string, unknown> | null | undefined) ?? null;
+
+  if (!rawVisualizationData && !rawVarianceAnalysis) {
+    return {
+      visualizationData: rawVisualizationData,
+      varianceAnalysis: rawVarianceAnalysis,
+    };
+  }
+
+  const run = await db.run.findUnique({
+    where: { id: analysis.runId },
+    select: { definitionId: true },
+  });
+  if (!run) {
+    return {
+      visualizationData: rawVisualizationData,
+      varianceAnalysis: rawVarianceAnalysis,
+    };
+  }
+
+  const scenarios = await db.scenario.findMany({
+    where: { definitionId: run.definitionId },
+    select: { id: true, name: true, content: true },
+  });
+
+  return normalizeAnalysisArtifacts({
+    visualizationData: rawVisualizationData,
+    varianceAnalysis: rawVarianceAnalysis,
+    scenarios,
+  });
+}
 
 // Object refs - define separately to avoid type inference issues
 export const AnalysisResultRef = builder.objectRef<AnalysisResultShape>('AnalysisResult');
@@ -203,70 +228,8 @@ builder.objectType(AnalysisResultRef, {
       description: 'Data for frontend visualizations (decision distribution, model-scenario matrix)',
       resolve: async (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
-        const viz = (output?.visualizationData as Record<string, unknown> | null | undefined) ?? null;
-        if (!viz) return null;
-
-        // Backfill scenarioDimensions for older analysis results that predate this field.
-        if (viz.scenarioDimensions !== undefined) {
-          return viz;
-        }
-
-        const run = await db.run.findUnique({
-          where: { id: analysis.runId },
-          select: { definitionId: true },
-        });
-        if (!run) return viz;
-
-        const scenarios = await db.scenario.findMany({
-          where: { definitionId: run.definitionId },
-          select: { id: true, name: true, content: true },
-        });
-
-        const scenarioDimensions: Record<string, Record<string, number | string>> = {};
-        const scenarioNameToId = new Map<string, string>();
-        for (const scenario of scenarios) {
-          scenarioNameToId.set(scenario.name, scenario.id);
-          const content = scenario.content;
-          if (content == null || typeof content !== 'object' || Array.isArray(content)) continue;
-          const dims = (content as Record<string, unknown>)['dimensions'];
-          const validated = toDimensionRecord(dims);
-          if (validated) {
-            scenarioDimensions[scenario.id] = validated;
-          }
-        }
-
-        // Some older analysis results use scenario *names* as keys in modelScenarioMatrix.
-        // Remap those to scenario IDs so pivot tables can resolve scores.
-        const rawMatrix = viz.modelScenarioMatrix;
-        let normalizedMatrix: Record<string, Record<string, number>> | undefined;
-        if (rawMatrix !== undefined && isPlainObject(rawMatrix)) {
-          normalizedMatrix = {};
-          for (const [modelId, scenariosValue] of Object.entries(rawMatrix)) {
-            if (!isPlainObject(scenariosValue)) continue;
-            const outScenarios: Record<string, number> = {};
-            for (const [scenarioKey, score] of Object.entries(scenariosValue)) {
-              if (typeof score !== 'number' || !Number.isFinite(score)) continue;
-
-              // Prefer already-ID keyed entries.
-              if (scenarioDimensions[scenarioKey]) {
-                outScenarios[scenarioKey] = score;
-                continue;
-              }
-
-              const mapped = scenarioNameToId.get(scenarioKey);
-              if (mapped !== undefined) {
-                outScenarios[mapped] = score;
-              }
-            }
-            normalizedMatrix[modelId] = outScenarios;
-          }
-        }
-
-        return {
-          ...viz,
-          scenarioDimensions,
-          ...(normalizedMatrix ? { modelScenarioMatrix: normalizedMatrix } : {}),
-        };
+        const normalized = await getNormalizedArtifacts(analysis, output);
+        return normalized.visualizationData;
       },
     }),
 
@@ -301,9 +264,10 @@ builder.objectType(AnalysisResultRef, {
       type: 'JSON',
       nullable: true,
       description: 'Variance analysis from multi-sample runs (when samplesPerScenario > 1)',
-      resolve: (analysis) => {
+      resolve: async (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
-        return output?.varianceAnalysis ?? null;
+        const normalized = await getNormalizedArtifacts(analysis, output);
+        return normalized.varianceAnalysis;
       },
     }),
 
