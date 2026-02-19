@@ -88,7 +88,7 @@ export type AuditAction =
  */
 export type AuditEntry = {
   action: AuditAction;
-  userId: string;
+  userId: string | null;
   entityId: string;
   entityType: 'definition' | 'run' | 'validation' | 'llm_model' | 'llm_provider' | 'system_setting';
   requestId: string;
@@ -101,7 +101,7 @@ export type AuditEntry = {
  */
 export type AuditErrorEntry = {
   action: AuditAction;
-  userId: string;
+  userId: string | null;
   requestId: string;
   error: string;
   timestamp?: Date;
@@ -183,7 +183,7 @@ export function createDefinitionAudit(params: {
  * Creates a standardized audit entry for run operations.
  */
 export function createRunAudit(params: {
-  userId: string;
+  userId: string | null;
   runId: string;
   definitionId: string;
   requestId: string;
