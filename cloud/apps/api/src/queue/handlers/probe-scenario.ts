@@ -154,6 +154,20 @@ type ProbeWorkerOutput =
 
 type ProbeStatus = 'SUCCESS' | 'FAILED' | null;
 
+function formatWorkerErrorMessage(error: { message: string; details?: string }): string {
+  const baseMessage = error.message;
+  const details = typeof error.details === 'string' ? error.details.trim() : '';
+  if (details === '') {
+    return baseMessage;
+  }
+
+  if (baseMessage.toLowerCase().includes(details.toLowerCase())) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} | ${details}`;
+}
+
 function getProgressDelta(
   previousStatus: ProbeStatus,
   nextStatus: 'SUCCESS' | 'FAILED'
@@ -605,6 +619,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
 
       // Use Python's retryable flag if available
       if (!err.retryable) {
+        const errorMessage = formatWorkerErrorMessage(err);
         // Non-retryable error - record failure and increment failed count
         await recordProbeFailure({
           runId,
@@ -612,7 +627,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
           modelId,
           sampleIndex,
           errorCode: err.code,
-          errorMessage: err.message,
+          errorMessage,
           retryCount: 0,
         });
         const { progress, status } = await applyProgressDelta(runId, previousProbeStatus, 'FAILED');
@@ -621,7 +636,7 @@ async function processProbeJob(job: PgBoss.Job<ProbeScenarioJobData>): Promise<v
       }
 
       // Retryable error - throw to trigger retry
-      throw new Error(`${err.code}: ${err.message}`);
+      throw new Error(`${err.code}: ${formatWorkerErrorMessage(err)}`);
     }
 
     // Validate transcript structure
