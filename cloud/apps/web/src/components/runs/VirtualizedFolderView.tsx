@@ -247,7 +247,7 @@ export function VirtualizedFolderView({
     setExpandedFolders(new Set());
   }, []);
 
-  if (tagGroups.length === 0 && untaggedRuns.length === 0) {
+  if (tagGroups.length === 0 && untaggedRuns.length === 0 && aggregateRuns.length === 0) {
     return null;
   }
 
