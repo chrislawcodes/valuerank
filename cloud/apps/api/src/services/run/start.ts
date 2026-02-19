@@ -24,7 +24,7 @@ export type StartRunInput = {
   samplesPerScenario?: number; // Number of samples per scenario-model pair (1-100, default 1)
   priority?: string;
   experimentId?: string;
-  userId: string;
+  userId?: string | null;
   finalTrial?: boolean;
   scenarioIds?: string[];
 };
