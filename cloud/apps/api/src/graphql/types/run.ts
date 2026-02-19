@@ -46,6 +46,13 @@ type QueueJobRow = {
   data: unknown;
 };
 
+type QueueFailurePayload = {
+  message?: unknown;
+  details?: unknown;
+  error?: unknown;
+  value?: unknown;
+};
+
 function parseDefinitionVersion(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -90,7 +97,9 @@ function normalizeTaskError(output: unknown): string | null {
     return String(output);
   }
 
-  const record = output as Record<string, unknown>;
+  // PgBoss failure output can be a direct string, an Error-like object,
+  // or nested payloads from worker/orchestrator wrappers.
+  const record = output as QueueFailurePayload;
   const parts: string[] = [];
 
   const pushIfPresent = (value: unknown): void => {
@@ -108,7 +117,7 @@ function normalizeTaskError(output: unknown): string | null {
 
   const error = record.error;
   if (error !== null && typeof error === 'object') {
-    const nested = error as Record<string, unknown>;
+    const nested = error as QueueFailurePayload;
     pushIfPresent(nested.message);
     pushIfPresent(nested.details);
   } else {
@@ -117,7 +126,7 @@ function normalizeTaskError(output: unknown): string | null {
 
   const value = record.value;
   if (value !== null && typeof value === 'object') {
-    const nested = value as Record<string, unknown>;
+    const nested = value as QueueFailurePayload;
     pushIfPresent(nested.message);
     pushIfPresent(nested.details);
   }

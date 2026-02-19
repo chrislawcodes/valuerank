@@ -168,6 +168,23 @@ class TestRateLimitRetry:
                 assert mock_post.call_count == 1
                 mock_sleep.assert_not_called()
 
+    def test_ambiguous_429_defaults_to_retryable_rate_limit(self) -> None:
+        """Ambiguous 429s should remain retryable unless billing markers are present."""
+        ambiguous_response = MockResponse(
+            {"error": "request rejected"},
+            status_code=429,
+            text="request rejected",
+        )
+
+        with patch("requests.post", return_value=ambiguous_response):
+            with patch("time.sleep") as mock_sleep:
+                with pytest.raises(LLMError) as exc_info:
+                    _post_json("http://test", {}, {})
+
+                assert exc_info.value.code == ErrorCode.RATE_LIMIT
+                assert exc_info.value.retryable is True
+                assert mock_sleep.call_count == MAX_RATE_LIMIT_RETRIES
+
     def test_logs_rate_limit_retry(self) -> None:
         """Test that rate limit retries are logged."""
         success_response = MockResponse({"data": "success"}, 200)
