@@ -159,6 +159,30 @@ interface AggregatedResult {
     valueAggregateStats: Record<string, ValueAggregateStats>;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isAggregatedVisualizationData(
+    value: unknown
+): value is AggregatedResult['visualizationData'] {
+    if (!isPlainObject(value)) return false;
+    return (
+        isPlainObject(value.decisionDistribution)
+        && isPlainObject(value.modelScenarioMatrix)
+        && isPlainObject(value.scenarioDimensions)
+    );
+}
+
+function isRunVarianceAnalysis(value: unknown): value is RunVarianceAnalysis {
+    if (!isPlainObject(value)) return false;
+    return (
+        typeof value.isMultiSample === 'boolean'
+        && typeof value.samplesPerScenario === 'number'
+        && isPlainObject(value.perModel)
+    );
+}
+
 function parseDefinitionVersion(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value !== 'string' || value.trim() === '') return null;
@@ -204,6 +228,7 @@ export async function updateAggregateRun(
         },
         select: {
             id: true,
+            name: true,
             content: true,
         },
     });
@@ -467,7 +492,7 @@ export async function updateAggregateRun(
 function aggregateAnalysesLogic(
     analyses: AnalysisOutput[],
     transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
-    scenarios: { id: string, content: Prisma.JsonValue }[]
+    scenarios: { id: string, name: string, content: Prisma.JsonValue }[]
 ): AggregatedResult {
 
     // Basic structural setup
@@ -726,22 +751,24 @@ function aggregateAnalysesLogic(
         varianceAnalysis,
         scenarios: scenarios.map((scenario) => ({
             id: scenario.id,
-            name: (() => {
-                const content = scenario.content;
-                if (content == null || typeof content !== 'object' || Array.isArray(content)) return scenario.id;
-                const name = (content as Record<string, unknown>).name;
-                return typeof name === 'string' && name.trim() !== '' ? name : scenario.id;
-            })(),
+            name: scenario.name,
             content: scenario.content,
         })),
     });
 
+    const normalizedVisualizationData = isAggregatedVisualizationData(normalizedArtifacts.visualizationData)
+        ? normalizedArtifacts.visualizationData
+        : mergedVizData;
+    const normalizedVarianceAnalysis = isRunVarianceAnalysis(normalizedArtifacts.varianceAnalysis)
+        ? normalizedArtifacts.varianceAnalysis
+        : varianceAnalysis;
+
     return {
         perModel: aggregatedPerModel,
         modelAgreement: template.modelAgreement,
-        visualizationData: (normalizedArtifacts.visualizationData as AggregatedResult['visualizationData']) ?? mergedVizData,
+        visualizationData: normalizedVisualizationData,
         mostContestedScenarios: mergedContested,
-        varianceAnalysis: (normalizedArtifacts.varianceAnalysis as RunVarianceAnalysis | null) ?? varianceAnalysis,
+        varianceAnalysis: normalizedVarianceAnalysis,
         decisionStats,
         valueAggregateStats
     };

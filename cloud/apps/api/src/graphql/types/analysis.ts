@@ -94,17 +94,10 @@ type NormalizedArtifacts = {
   varianceAnalysis: Record<string, unknown> | null;
 };
 
-const normalizedArtifactsCache = new Map<string, Promise<NormalizedArtifacts>>();
-
 async function getNormalizedArtifacts(
   analysis: AnalysisResultShape,
   output: AnalysisOutput | null
 ): Promise<NormalizedArtifacts> {
-  const cached = normalizedArtifactsCache.get(analysis.id);
-  if (cached) {
-    return cached;
-  }
-
   const rawVisualizationData = (output?.visualizationData as Record<string, unknown> | null | undefined) ?? null;
   const rawVarianceAnalysis = (output?.varianceAnalysis as Record<string, unknown> | null | undefined) ?? null;
 
@@ -115,32 +108,27 @@ async function getNormalizedArtifacts(
     };
   }
 
-  const promise = (async () => {
-    const run = await db.run.findUnique({
-      where: { id: analysis.runId },
-      select: { definitionId: true },
-    });
-    if (!run) {
-      return {
-        visualizationData: rawVisualizationData,
-        varianceAnalysis: rawVarianceAnalysis,
-      };
-    }
-
-    const scenarios = await db.scenario.findMany({
-      where: { definitionId: run.definitionId },
-      select: { id: true, name: true, content: true },
-    });
-
-    return normalizeAnalysisArtifacts({
+  const run = await db.run.findUnique({
+    where: { id: analysis.runId },
+    select: { definitionId: true },
+  });
+  if (!run) {
+    return {
       visualizationData: rawVisualizationData,
       varianceAnalysis: rawVarianceAnalysis,
-      scenarios,
-    });
-  })();
+    };
+  }
 
-  normalizedArtifactsCache.set(analysis.id, promise);
-  return promise;
+  const scenarios = await db.scenario.findMany({
+    where: { definitionId: run.definitionId },
+    select: { id: true, name: true, content: true },
+  });
+
+  return normalizeAnalysisArtifacts({
+    visualizationData: rawVisualizationData,
+    varianceAnalysis: rawVarianceAnalysis,
+    scenarios,
+  });
 }
 
 // Object refs - define separately to avoid type inference issues
