@@ -3,6 +3,7 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { z } from 'zod';
+import { normalizeAnalysisArtifacts } from './normalize-analysis-output.js';
 
 const log = createLogger('analysis:aggregate');
 
@@ -150,6 +151,7 @@ interface AggregatedResult {
     visualizationData: {
         decisionDistribution: Record<string, Record<string, number>>;
         modelScenarioMatrix: Record<string, Record<string, number>>;
+        scenarioDimensions: Record<string, Record<string, number | string>>;
     };
     mostContestedScenarios: ContestedScenario[];
     varianceAnalysis: RunVarianceAnalysis | null;
@@ -719,12 +721,27 @@ function aggregateAnalysesLogic(
     // Compute Variance Analysis
     const varianceAnalysis = computeVarianceAnalysis(transcripts, scenarios);
 
+    const normalizedArtifacts = normalizeAnalysisArtifacts({
+        visualizationData: mergedVizData,
+        varianceAnalysis,
+        scenarios: scenarios.map((scenario) => ({
+            id: scenario.id,
+            name: (() => {
+                const content = scenario.content;
+                if (content == null || typeof content !== 'object' || Array.isArray(content)) return scenario.id;
+                const name = (content as Record<string, unknown>).name;
+                return typeof name === 'string' && name.trim() !== '' ? name : scenario.id;
+            })(),
+            content: scenario.content,
+        })),
+    });
+
     return {
         perModel: aggregatedPerModel,
         modelAgreement: template.modelAgreement,
-        visualizationData: mergedVizData,
+        visualizationData: (normalizedArtifacts.visualizationData as AggregatedResult['visualizationData']) ?? mergedVizData,
         mostContestedScenarios: mergedContested,
-        varianceAnalysis,
+        varianceAnalysis: (normalizedArtifacts.varianceAnalysis as RunVarianceAnalysis | null) ?? varianceAnalysis,
         decisionStats,
         valueAggregateStats
     };
