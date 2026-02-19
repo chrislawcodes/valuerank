@@ -92,6 +92,14 @@ function useQueryLogging(): Plugin {
   };
 }
 
+function getOriginalError(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const maybeOriginal = (value as { originalError?: unknown }).originalError;
+  return maybeOriginal ?? null;
+}
+
 // Build the GraphQL schema
 export const schema = builder.toSchema();
 
@@ -139,8 +147,7 @@ export const yoga = createYoga<{
         typeof error === 'object' &&
         'originalError' in error
       ) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-        const original = (error as any).originalError;
+        const original = getOriginalError(error);
         if (original instanceof AppError) {
           appError = original;
         }

@@ -1,29 +1,18 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
-import type { RunStatus, AnalysisStatus } from '@valuerank/db';
 import { RunRef } from '../types/run.js';
 import { trackRunAccess } from '../../middleware/access-tracking.js';
 import { ValidationError } from '@valuerank/shared';
+import {
+  buildRunWhere,
+  parseAnalysisStatus,
+  parseRunStatus,
+  parseRunType,
+} from '../../services/run/query.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 const MAX_COMPARISON_RUNS = 10;
-
-// Type for where clause with analysis filtering
-type RunWhereInput = {
-  definitionId?: string;
-  experimentId?: string | null;
-  status?: RunStatus;
-  id?: { in: string[] };
-  definition?: {
-    is?: {
-      name?: {
-        startsWith?: string;
-        not?: { startsWith: string };
-      };
-    };
-  };
-};
 
 // Query: run(id: ID!) - Fetch single run by ID
 builder.queryField('run', (t) =>
@@ -119,66 +108,18 @@ builder.queryField('runs', (t) =>
         'Listing runs'
       );
 
-      // Build where clause (always exclude soft-deleted runs)
-      const where: RunWhereInput & { deletedAt: null } = {
-        deletedAt: null,
-      };
-      if (args.definitionId !== undefined && args.definitionId !== null && args.definitionId !== '') {
-        where.definitionId = args.definitionId;
-      }
-      if (args.experimentId !== undefined && args.experimentId !== null && args.experimentId !== '') {
-        where.experimentId = args.experimentId;
-      }
-      if (args.status !== undefined && args.status !== null && args.status !== '') {
-        where.status = args.status as RunStatus;
-      }
-      if (args.runType === 'SURVEY') {
-        where.definition = {
-          is: {
-            name: {
-              startsWith: '[Survey]',
-            },
-          },
-        };
-      } else if (args.runType === 'NON_SURVEY') {
-        where.definition = {
-          is: {
-            name: {
-              not: {
-                startsWith: '[Survey]',
-              },
-            },
-          },
-        };
-      }
+      const { where, noMatches } = await buildRunWhere({
+        definitionId: args.definitionId,
+        experimentId: args.experimentId,
+        status: parseRunStatus(args.status),
+        hasAnalysis: args.hasAnalysis,
+        analysisStatus: parseAnalysisStatus(args.analysisStatus),
+        runType: parseRunType(args.runType),
+      });
 
-      // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
-        const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
-          deletedAt: null,
-        };
-
-        // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
-          analysisWhere.status = args.analysisStatus as AnalysisStatus;
-        }
-
-        // Find all run IDs that have analysis results matching the criteria
-        const analysisResults = await db.analysisResult.findMany({
-          where: analysisWhere,
-          select: { runId: true },
-          distinct: ['runId'],
-        });
-
-        const runIdsWithAnalysis = analysisResults.map((a) => a.runId);
-
-        // If no runs have analysis, return empty array early
-        if (runIdsWithAnalysis.length === 0) {
-          ctx.log.debug({ count: 0 }, 'No runs with analysis found');
-          return [];
-        }
-
-        where.id = { in: runIdsWithAnalysis };
+      if (noMatches) {
+        ctx.log.debug({ count: 0 }, 'No runs with analysis found');
+        return [];
       }
 
       const runs = await db.run.findMany({
@@ -290,66 +231,18 @@ builder.queryField('runCount', (t) =>
         'Counting runs'
       );
 
-      // Build where clause (always exclude soft-deleted runs)
-      const where: RunWhereInput & { deletedAt: null } = {
-        deletedAt: null,
-      };
-      if (args.definitionId !== undefined && args.definitionId !== null && args.definitionId !== '') {
-        where.definitionId = args.definitionId;
-      }
-      if (args.experimentId !== undefined && args.experimentId !== null && args.experimentId !== '') {
-        where.experimentId = args.experimentId;
-      }
-      if (args.status !== undefined && args.status !== null && args.status !== '') {
-        where.status = args.status as RunStatus;
-      }
-      if (args.runType === 'SURVEY') {
-        where.definition = {
-          is: {
-            name: {
-              startsWith: '[Survey]',
-            },
-          },
-        };
-      } else if (args.runType === 'NON_SURVEY') {
-        where.definition = {
-          is: {
-            name: {
-              not: {
-                startsWith: '[Survey]',
-              },
-            },
-          },
-        };
-      }
+      const { where, noMatches } = await buildRunWhere({
+        definitionId: args.definitionId,
+        experimentId: args.experimentId,
+        status: parseRunStatus(args.status),
+        hasAnalysis: args.hasAnalysis,
+        analysisStatus: parseAnalysisStatus(args.analysisStatus),
+        runType: parseRunType(args.runType),
+      });
 
-      // Handle analysis filtering - requires subquery to find run IDs with analysis
-      if (args.hasAnalysis === true || (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '')) {
-        const analysisWhere: { status?: AnalysisStatus; deletedAt: null } = {
-          deletedAt: null,
-        };
-
-        // If analysisStatus provided, filter by that specific status
-        if (args.analysisStatus !== undefined && args.analysisStatus !== null && args.analysisStatus !== '') {
-          analysisWhere.status = args.analysisStatus as AnalysisStatus;
-        }
-
-        // Find all run IDs that have analysis results matching the criteria
-        const analysisResults = await db.analysisResult.findMany({
-          where: analysisWhere,
-          select: { runId: true },
-          distinct: ['runId'],
-        });
-
-        const runIdsWithAnalysis = analysisResults.map((a) => a.runId);
-
-        // If no runs have analysis, return 0 early
-        if (runIdsWithAnalysis.length === 0) {
-          ctx.log.debug({ count: 0 }, 'No runs with analysis found');
-          return 0;
-        }
-
-        where.id = { in: runIdsWithAnalysis };
+      if (noMatches) {
+        ctx.log.debug({ count: 0 }, 'No runs with analysis found');
+        return 0;
       }
 
       const count = await db.run.count({ where });
