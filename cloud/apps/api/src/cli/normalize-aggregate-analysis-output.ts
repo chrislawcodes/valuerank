@@ -11,6 +11,12 @@ type CliOptions = {
   dryRun: boolean;
 };
 
+type AggregateAnalysisRow = {
+  id: string;
+  runId: string;
+  output: unknown;
+};
+
 function parseOptions(argv: string[]): CliOptions {
   return {
     dryRun: argv.includes('--dry-run'),
@@ -34,7 +40,7 @@ async function main() {
   let hasNextPage = true;
 
   while (hasNextPage) {
-    const analyses = await db.analysisResult.findMany({
+    const analyses: AggregateAnalysisRow[] = await db.analysisResult.findMany({
       where: { analysisType: 'AGGREGATE' },
       select: {
         id: true,
