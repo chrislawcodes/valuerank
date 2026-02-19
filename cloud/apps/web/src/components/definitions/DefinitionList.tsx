@@ -85,17 +85,34 @@ export function DefinitionList({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // IntersectionObserver for infinite scroll
+  // Scroll-based infinite loading: listen on the nearest scrollable ancestor
+  // (the <main> element with overflow-auto), since IntersectionObserver with
+  // default root (viewport) doesn't fire inside nested scroll containers.
   useEffect(() => {
     if (!sentinelRef.current || !onLoadMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasNextPage && !loadingMore) onLoadMore();
-      },
-      { rootMargin: '200px' }
-    );
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
+
+    // Walk up the DOM to find the scrollable parent
+    let scrollParent: HTMLElement | null = sentinelRef.current.parentElement;
+    while (scrollParent) {
+      const style = getComputedStyle(scrollParent);
+      if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
+      scrollParent = scrollParent.parentElement;
+    }
+    if (!scrollParent) return;
+    const el = scrollParent;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      if (distanceFromBottom < 200 && hasNextPage && !loadingMore) {
+        onLoadMore();
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    // Check immediately in case content is already scrolled near the bottom
+    handleScroll();
+    return () => el.removeEventListener('scroll', handleScroll);
   }, [hasNextPage, loadingMore, onLoadMore]);
 
   const hasActiveFilters =
