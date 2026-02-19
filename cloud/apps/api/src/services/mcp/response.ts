@@ -36,6 +36,7 @@ export const TOKEN_BUDGETS = {
   get_dimension_analysis: 2 * 1024, // 2KB
   get_transcript_summary: 1 * 1024, // 1KB
   get_transcript: 10 * 1024, // 10KB
+  get_run_results: 8 * 1024, // 8KB
   graphql_query: 10 * 1024, // 10KB
 } as const;
 
