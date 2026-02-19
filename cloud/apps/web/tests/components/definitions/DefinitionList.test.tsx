@@ -40,6 +40,7 @@ function createMockClient() {
 function renderDefinitionList(props: {
   definitions: Definition[];
   loading: boolean;
+  loadingMore?: boolean;
   error: Error | null;
   onCreateNew?: () => void;
 }) {
@@ -64,12 +65,13 @@ describe('DefinitionList', () => {
       expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
-    it('should show "Loading more..." when loading with existing definitions', async () => {
+    it('should show "Loading more..." when loadingMore with existing definitions', async () => {
       const user = userEvent.setup();
       const definitions = [createMockDefinition()];
       renderDefinitionList({
         definitions,
-        loading: true,
+        loading: false,
+        loadingMore: true,
         error: null,
       });
       // Switch to flat view to see loading indicator with definitions

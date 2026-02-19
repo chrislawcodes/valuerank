@@ -8,9 +8,11 @@
 import { useMemo, useCallback } from 'react';
 import {
   RUNS_QUERY,
+  RUN_COUNT_QUERY,
   type Run,
   type RunsQueryVariables,
   type RunsQueryResult,
+  type RunCountQueryResult,
 } from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
 import { isNonSurveyRun } from '../lib/runClassification';
@@ -48,8 +50,8 @@ export function useInfiniteRunsWithAnalysis(
     [analysisStatus, definitionId, experimentId]
   );
 
-  // Count query filters
-  const countFilters = useMemo(
+  // Count query variables
+  const countVariables = useMemo(
     () => ({
       hasAnalysis: true as const,
       analysisStatus: analysisStatus || undefined,
@@ -65,11 +67,18 @@ export function useInfiniteRunsWithAnalysis(
     []
   );
 
+  const getCount = useCallback(
+    (data: unknown) => (data as RunCountQueryResult).runCount,
+    []
+  );
+
   const result = useInfiniteQuery<RunsQueryResult, RunsQueryVariables, Run>({
     query: RUNS_QUERY,
     filters,
     getItems,
-    countFilters,
+    countQuery: RUN_COUNT_QUERY,
+    countVariables,
+    getCount,
     pageSize,
     pause,
   });

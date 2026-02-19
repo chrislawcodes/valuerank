@@ -373,6 +373,13 @@ export const DELETE_DEFINITION_MUTATION = gql`
   }
 `;
 
+// Count of definitions matching filters
+export const DEFINITION_COUNT_QUERY = gql`
+  query DefinitionCount($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean) {
+    definitionCount(rootOnly: $rootOnly, search: $search, tagIds: $tagIds, hasRuns: $hasRuns)
+  }
+`;
+
 // ============================================================================
 // QUERY RESULT TYPES
 // ============================================================================
@@ -388,6 +395,17 @@ export type DefinitionsQueryVariables = {
 
 export type DefinitionsQueryResult = {
   definitions: Definition[];
+};
+
+export type DefinitionCountQueryVariables = {
+  rootOnly?: boolean;
+  search?: string;
+  tagIds?: string[];
+  hasRuns?: boolean;
+};
+
+export type DefinitionCountQueryResult = {
+  definitionCount: number;
 };
 
 export type DefinitionQueryVariables = {

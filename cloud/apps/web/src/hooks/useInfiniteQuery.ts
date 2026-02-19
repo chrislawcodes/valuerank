@@ -7,15 +7,10 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, type DocumentInput, type AnyVariables } from 'urql';
-import {
-  RUN_COUNT_QUERY,
-  type RunCountQueryVariables,
-  type RunCountQueryResult,
-} from '../api/operations/runs';
 
 const DEFAULT_PAGE_SIZE = 25;
 
-type FilterValue = string | boolean | number | undefined;
+type FilterValue = string | boolean | number | string[] | undefined;
 
 export type UseInfiniteQueryOptions<
   TData,
@@ -28,8 +23,12 @@ export type UseInfiniteQueryOptions<
   filters: Record<string, FilterValue>;
   /** Function to extract items array from query result */
   getItems: (data: TData) => TItem[];
-  /** Variables for the count query (filters that match runCount) */
-  countFilters?: RunCountQueryVariables;
+  /** The GraphQL count query document */
+  countQuery?: DocumentInput<unknown, Record<string, FilterValue>>;
+  /** Variables for the count query */
+  countVariables?: Record<string, FilterValue>;
+  /** Function to extract the total count from the count query result */
+  getCount?: (data: unknown) => number;
   /** Page size for pagination */
   pageSize?: number;
   /** Whether to pause the query */
@@ -63,7 +62,9 @@ export function useInfiniteQuery<
     query,
     filters,
     getItems,
-    countFilters,
+    countQuery,
+    countVariables,
+    getCount,
     pageSize = DEFAULT_PAGE_SIZE,
     pause = false,
   } = options;
@@ -91,15 +92,18 @@ export function useInfiniteQuery<
     requestPolicy: 'cache-and-network',
   });
 
-  // Fetch total count (if count filters provided)
-  const [countResult] = useQuery<RunCountQueryResult, RunCountQueryVariables>({
-    query: RUN_COUNT_QUERY,
-    variables: countFilters ?? {},
-    pause: pause || !countFilters,
+  // Fetch total count (if count query provided)
+  const hasCountQuery = countQuery != null && getCount != null;
+  const [countResult] = useQuery({
+    query: countQuery ?? query, // fallback to main query when paused (never actually used)
+    variables: countVariables ?? {},
+    pause: pause || !hasCountQuery,
     requestPolicy: 'cache-and-network',
   });
 
-  const totalCount = countResult.data?.runCount ?? null;
+  const totalCount = hasCountQuery && countResult.data != null && getCount != null
+    ? getCount(countResult.data)
+    : null;
 
   // Reset when filters change
   useEffect(() => {
