@@ -8,9 +8,11 @@
 import { useMemo, useCallback } from 'react';
 import {
   RUNS_QUERY,
+  RUN_COUNT_QUERY,
   type Run,
   type RunsQueryVariables,
   type RunsQueryResult,
+  type RunCountQueryResult,
 } from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
 
@@ -58,8 +60,8 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     [definitionId, experimentId, status, runTypeFilter]
   );
 
-  // Count query filters
-  const countFilters = useMemo(
+  // Count query variables
+  const countVariables = useMemo(
     () => ({
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
@@ -75,11 +77,18 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     []
   );
 
+  const getCount = useCallback(
+    (data: unknown) => (data as RunCountQueryResult).runCount,
+    []
+  );
+
   const result = useInfiniteQuery<RunsQueryResult, RunsQueryVariables, Run>({
     query: RUNS_QUERY,
     filters,
     getItems,
-    countFilters,
+    countQuery: RUN_COUNT_QUERY,
+    countVariables,
+    getCount,
     pageSize,
     pause,
   });

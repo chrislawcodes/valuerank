@@ -3,13 +3,19 @@ import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { Definitions } from '../../src/pages/Definitions';
 
-// Mock the useDefinitions hook
-vi.mock('../../src/hooks/useDefinitions', () => ({
-  useDefinitions: () => ({
+// Mock the useInfiniteDefinitions hook
+vi.mock('../../src/hooks/useInfiniteDefinitions', () => ({
+  useInfiniteDefinitions: () => ({
     definitions: [],
+    items: [],
     loading: false,
+    loadingMore: false,
     error: null,
+    hasNextPage: false,
+    totalCount: 0,
+    loadMore: vi.fn(),
     refetch: vi.fn(),
+    softRefetch: vi.fn(),
   }),
 }));
 

@@ -12,6 +12,10 @@ import {
   type ComparisonRunsListQueryVariables,
   type ComparisonRunsListQueryResult,
 } from '../api/operations/comparison';
+import {
+  RUN_COUNT_QUERY,
+  type RunCountQueryResult,
+} from '../api/operations/runs';
 import { useInfiniteQuery, type UseInfiniteQueryResult } from './useInfiniteQuery';
 import { isNonSurveyRun } from '../lib/runClassification';
 
@@ -46,9 +50,9 @@ export function useInfiniteComparisonRuns(
     [definitionId, analysisStatus]
   );
 
-  // Count query filters
+  // Count query variables
   // Note: hasAnalysis needs to be passed for runCount query
-  const countFilters = useMemo(
+  const countVariables = useMemo(
     () => ({
       hasAnalysis: true as const,
       definitionId: definitionId || undefined,
@@ -63,6 +67,11 @@ export function useInfiniteComparisonRuns(
     []
   );
 
+  const getCount = useCallback(
+    (data: unknown) => (data as RunCountQueryResult).runCount,
+    []
+  );
+
   const result = useInfiniteQuery<
     ComparisonRunsListQueryResult,
     ComparisonRunsListQueryVariables,
@@ -71,7 +80,9 @@ export function useInfiniteComparisonRuns(
     query: COMPARISON_RUNS_LIST_QUERY,
     filters,
     getItems,
-    countFilters,
+    countQuery: RUN_COUNT_QUERY,
+    countVariables,
+    getCount,
     pageSize,
     pause,
   });

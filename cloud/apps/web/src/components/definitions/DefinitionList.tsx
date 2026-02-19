@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
@@ -16,7 +16,11 @@ type ViewMode = 'flat' | 'folder';
 type DefinitionListProps = {
   definitions: Definition[];
   loading: boolean;
+  loadingMore?: boolean;
   error: Error | null;
+  hasNextPage?: boolean;
+  totalCount?: number | null;
+  onLoadMore?: () => void;
   onCreateNew?: () => void;
   filters?: DefinitionFilterState;
   onFiltersChange?: (filters: DefinitionFilterState) => void;
@@ -55,7 +59,11 @@ const defaultFilters: DefinitionFilterState = {
 export function DefinitionList({
   definitions,
   loading,
+  loadingMore = false,
   error,
+  hasNextPage = false,
+  totalCount,
+  onLoadMore,
   onCreateNew,
   filters: externalFilters,
   onFiltersChange: externalOnFiltersChange,
@@ -75,6 +83,20 @@ export function DefinitionList({
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current || !onLoadMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !loadingMore) onLoadMore();
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, loadingMore, onLoadMore]);
 
   const hasActiveFilters =
     filters.search.length > 0 ||
@@ -285,7 +307,9 @@ export function DefinitionList({
       {/* Results count */}
       {!loading && (
         <p className="text-sm text-gray-500">
-          {definitions.length} vignette{definitions.length !== 1 ? 's' : ''}
+          {totalCount != null
+            ? `Showing ${definitions.length} of ${totalCount} vignette${totalCount !== 1 ? 's' : ''}`
+            : `${definitions.length} vignette${definitions.length !== 1 ? 's' : ''}`}
           {hasActiveFilters && ' matching filters'}
         </p>
       )}
@@ -327,9 +351,17 @@ export function DefinitionList({
         />
       )}
 
+      {/* Infinite scroll sentinel */}
+      {definitions.length > 0 && <div ref={sentinelRef} />}
+
       {/* Loading indicator for pagination */}
-      {loading && definitions.length > 0 && (
+      {loadingMore && (
         <Loading size="sm" text="Loading more..." />
+      )}
+
+      {/* All loaded indicator */}
+      {!loading && !loadingMore && definitions.length > 0 && !hasNextPage && (
+        <p className="text-center text-sm text-gray-400 py-2">All vignettes loaded</p>
       )}
 
       {/* Import error toast */}
