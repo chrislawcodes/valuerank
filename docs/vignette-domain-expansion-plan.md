@@ -245,11 +245,93 @@ These domains satisfy all must-have criteria and provide strong structural diver
 
 ---
 
+#### 5. Neighborhood Covenant
+
+**Frame**: "You are writing the founding covenant for a new housing development. Both rules apply equally to all residents and have the same enforcement mechanism, but they reflect fundamentally different priorities about community life."
+
+**Structural role**: Local social governance (founding member → residents → permanent → medium-stakes). The decider is designing the social contract that governs daily interactions between neighbors. Different from Neighborhoods (choosing where to live), City Planning (public infrastructure), and Company Culture (workplace norms) -- this is about the *rules people live under at home*, the most intimate scale of governance.
+
+| # | Value | Covenant Rule | Value Description |
+|---|-------|--------------|-------------------|
+| 1 | Self_Direction_Action | "No exterior restrictions -- homeowners may paint, landscape, and modify their property however they choose" | maximum individual freedom over one's own space, with no oversight or approval required from anyone |
+| 2 | Power_Dominance | "Board president has final authority on all community decisions without requiring a vote" | a single leader with unilateral power to set and enforce community policy |
+| 3 | Security_Personal | "Mandatory home security systems and perimeter monitoring for all units" | a controlled, predictable environment where every safety measure is built into the community by default |
+| 4 | Conformity_Interpersonal | "All changes to shared spaces require unanimous neighbor approval before proceeding" | no resident should ever feel blindsided or overridden -- harmony is maintained by ensuring every person agrees before anything changes |
+| 5 | Tradition | "Architectural style must conform to the region's historical design heritage" | preserving the area's longstanding aesthetic traditions and cultural identity through every building and modification |
+| 6 | Stimulation | "Annual rotating community theme that reimagines the shared spaces and programming each year" | constant novelty and surprise as the community reinvents its shared identity on a regular cycle |
+| 7 | Benevolence_Dependability | "Every homeowner commits to specific neighbor-support duties on a published schedule -- snow removal, package watching, emergency contact" | residents can count on each other because every obligation is explicit, tracked, and reliably fulfilled |
+| 8 | Universalism_Nature | "Mandatory native-plant landscaping and zero chemical lawn treatments to protect the local ecosystem" | direct protection of the natural environment built into the rules every resident must follow |
+| 9 | Achievement | "Annual community awards recognizing the best-maintained properties with public signage and ceremony" | demonstrated excellence is noticed and celebrated -- the community publicly honors those who achieve the highest standards |
+| 10 | Hedonism | "Shared amenities prioritize leisure and sensory enjoyment -- heated pool, hot tub, entertainment lounge, outdoor kitchen" | the community is designed around physical comfort and pleasure as the central organizing principle |
+
+**Isolation concerns to review**:
+- Unanimous approval (Conformity_Interpersonal): Must emphasize *avoiding hurt feelings*, not *democratic fairness* (Universalism_Concern) or *group tradition* (Tradition)
+- Board president authority (Power_Dominance): Must emphasize *unilateral decision-making power*, not *community stewardship* (Benevolence_Dependability)
+- Historical architecture (Tradition): Must emphasize *preserving cultural heritage*, not *aesthetic control* (Power_Dominance) or *predictable environment* (Security_Personal)
+- Rotating theme (Stimulation): Must emphasize *novelty and surprise*, not *community creativity* (Self_Direction_Thought) or *fun* (Hedonism)
+
+---
+
+#### 6. Public Library Philosophy
+
+**Frame**: "You are the founding director of a new public library and must choose its guiding philosophy. Both approaches have the same budget, serve the same community, and maintain the same collection size, but they create fundamentally different institutions."
+
+**Structural role**: Cultural institution design (director → community → permanent → medium-stakes). The decider shapes how a community relates to knowledge, culture, and shared space. Different from Company Culture (public service vs. private enterprise) and City Planning (knowledge governance vs. physical infrastructure). Libraries are universally understood, non-controversial, and deeply value-laden in how they choose to serve.
+
+| # | Value | Library Philosophy | Value Description |
+|---|-------|-------------------|-------------------|
+| 1 | Self_Direction_Action | "Open stacks with no curation -- patrons navigate freely with no recommended paths or guided programming" | maximum individual autonomy -- each person decides what to read, explore, and learn with zero institutional direction |
+| 2 | Power_Dominance | "Director-curated collections -- the head librarian personally decides what deserves shelf space and what doesn't" | centralized authority over what knowledge the community has access to, with a single person making binding curatorial decisions |
+| 3 | Security_Personal | "Quiet, controlled environment with strict noise rules, predictable hours, and consistent layout that never changes" | a safe, predictable sanctuary where patrons always know exactly what to expect |
+| 4 | Conformity_Interpersonal | "Community advisory board approves all collection changes to avoid offending or upsetting any patron group" | no acquisitions or removals proceed if they might cause friction -- the community's comfort is prioritized over any individual vision |
+| 5 | Tradition | "Archive-first approach -- prioritizing preservation and display of historical documents, heritage materials, and the community's founding-era records" | maintaining the community's deep connection to its own history and cultural roots through the library's central mission |
+| 6 | Stimulation | "Rotating experimental programming -- maker spaces, VR labs, new technology every quarter, with no fixed offerings" | constant novelty as the library reinvents itself regularly, always offering something different and unpredictable |
+| 7 | Benevolence_Dependability | "Reliable community anchor -- guaranteed programs that are never canceled, always staffed, always open on posted hours without exception" | the institution is above all dependable -- patrons can count on every posted service being available exactly as promised |
+| 8 | Universalism_Nature | "Environmental education hub with native garden, sustainability workshops, and ecology-focused collections" | the library's central purpose is connecting the community to the natural world and fostering environmental stewardship |
+| 9 | Achievement | "Learning metrics program -- reading challenges, skill badges, certificates, and public recognition for top participants" | demonstrated accomplishment is measured and celebrated -- the library rewards those who achieve the most |
+| 10 | Hedonism | "Comfort-first design -- plush reading lounges, in-house café, sensory garden, and spaces designed purely for relaxation and enjoyment" | the library is built around physical pleasure and comfort as the primary experience |
+
+**Isolation concerns to review**:
+- Director curation (Power_Dominance): Must emphasize *unilateral authority over collection*, not *expertise/knowledge* (Achievement) or *quality standards* (Conformity_Rules)
+- Advisory board (Conformity_Interpersonal): Must emphasize *avoiding offense/friction*, not *democratic governance* or *community tradition* (Tradition)
+- Archive-first (Tradition): Must emphasize *heritage preservation*, not *controlled/predictable environment* (Security_Personal)
+- Maker spaces (Stimulation): Must emphasize *constant change and novelty*, not *learning new skills* (Achievement) or *creative freedom* (Self_Direction_Action)
+- Comfort design (Hedonism): Must emphasize *sensory pleasure*, not *welcoming inclusivity* (Universalism_Tolerance) or *patron care* (Benevolence_Caring)
+
+---
+
+#### 7. Online Community Governance
+
+**Frame**: "You are founding an online community platform and must choose its core moderation philosophy. Both approaches attract the same number of users, generate the same revenue, and maintain the same level of engagement, but they create fundamentally different social environments."
+
+**Structural role**: Digital social governance (founder → users at scale → permanent → high-stakes). The decider designs the norms that govern how potentially millions of people interact. Different from Company Culture (voluntary social participation vs. employment) and Neighborhood Covenant (digital vs. physical, massive scale vs. local). This is the most modern and scalable domain -- small design choices cascade into culture-defining consequences.
+
+| # | Value | Moderation Philosophy | Value Description |
+|---|-------|----------------------|-------------------|
+| 1 | Self_Direction_Action | "No moderation rules -- users govern themselves through organic social norms with no platform-imposed restrictions" | maximum individual freedom -- every user decides for themselves what to post, share, and engage with |
+| 2 | Power_Dominance | "Hand-picked moderator council with unilateral power to ban, mute, or remove content without appeal" | a clear hierarchy where appointed leaders make binding decisions about what's allowed and who can participate |
+| 3 | Security_Personal | "Pre-screened membership with identity verification, content filtering, and automated threat detection" | a controlled, safe environment where every precaution is taken to prevent harmful interactions |
+| 4 | Conformity_Interpersonal | "Explicit politeness norms -- posts are held for review if the system detects they might upset another member" | no one should ever feel attacked or dismissed -- the platform's core function is maintaining interpersonal harmony |
+| 5 | Tradition | "Moderation based on the founding community's original norms and customs -- new members must learn and follow the established culture" | preserving the community's founding identity and the social norms that early members established |
+| 6 | Stimulation | "Rotating experimental community formats -- new discussion structures, challenges, and interaction modes every month" | constant novelty as the platform regularly reinvents how members interact, keeping the experience unpredictable |
+| 7 | Benevolence_Dependability | "Guaranteed response to every report within 24 hours -- the moderation team commits to resolving every issue on a published timeline" | reliability above all -- every member can count on every concern being addressed exactly as promised |
+| 8 | Universalism_Nature | "Platform carbon commitment -- server infrastructure runs on verified renewable energy, with usage dashboards showing each member's environmental footprint" | the platform's core identity includes protecting the natural environment, making ecological impact visible and central |
+| 9 | Achievement | "Public reputation scores, verified accomplishment badges, and leaderboards based on demonstrated contribution quality" | demonstrated competence is measured and displayed -- the platform publicly recognizes members who achieve the most |
+| 10 | Hedonism | "Algorithm optimized for entertainment and pleasure -- content surfaced based purely on what users find most enjoyable and engaging" | the platform is designed around maximizing sensory enjoyment and immediate gratification |
+
+**Isolation concerns to review**:
+- No moderation (Self_Direction_Action): Must emphasize *individual freedom to act*, not *chaos/excitement* (Stimulation) or *anti-authority stance* (which doesn't map cleanly)
+- Politeness norms (Conformity_Interpersonal): Must emphasize *avoiding upsetting others*, not *safety from harm* (Security_Personal) or *community warmth* (Benevolence)
+- Founding norms (Tradition): Must emphasize *preserving established culture*, not *gatekeeping/exclusion* or *authority of founders* (Power_Dominance)
+- **Universalism_Nature is the weakest mapping in this domain**: The "carbon commitment" framing is indirect -- environmental protection isn't a natural moderation philosophy. This entity may need creative rethinking or may be an honest limitation of this domain. Consider alternatives: "dedicated environmental discussion channels with conservation partnerships" or accept the stretch
+
+---
+
 ### Tier 2: Promising (Need More Design Work)
 
 These domains are viable but have specific challenges to resolve before implementation.
 
-#### 5. Schools (Parent Choosing for Child)
+#### 8. Schools (Parent Choosing for Child)
 
 **Frame**: "A parent is choosing between two schools for their child. Both have the same tuition, the same distance from home, and the same academic outcomes, but the educational philosophy is fundamentally different."
 
@@ -277,7 +359,7 @@ These domains are viable but have specific challenges to resolve before implemen
 
 ---
 
-#### 6. Hobbies
+#### 9. Hobbies
 
 **Frame**: "A person with limited free time has narrowed their options to two hobbies. Both cost the same and require the same weekly time commitment, but the experiences are fundamentally different."
 
@@ -289,7 +371,7 @@ These domains are viable but have specific challenges to resolve before implemen
 
 ---
 
-#### 7. Community Grant
+#### 10. Community Grant
 
 **Frame**: "Your neighborhood received a one-time grant and the community board must choose between two projects. Both cost the same, serve the same number of residents, and take the same time to complete, but address fundamentally different community needs."
 
@@ -326,17 +408,28 @@ Create four new domains in parallel, alongside the existing Jobs domain:
 | **City Planning** | Public official | Community | Permanent | Infrastructure policy |
 | **Inheritance** | Family head | Children | Posthumous | Legacy rule-setting |
 | **Company Culture** | Founder | Employees | Permanent | Organizational design |
+| **Neighborhood Covenant** | Founding member | Residents | Permanent | Local social governance |
+| **Public Library** | Director | Community | Permanent | Cultural institution design |
+| **Online Community** | Platform founder | Users at scale | Permanent | Digital social governance |
 
-This gives us **5 domains x 45 vignettes = 225 vignettes** and **5 x 1,125 = 5,625 total scenarios**.
+This gives us **8 domains x 45 vignettes = 360 vignettes** and **8 x 1,125 = 9,000 total scenarios**.
 
-**Why these five complement each other:**
+**Why these eight complement each other:**
 - **Jobs** = obligatory, professional (you must earn a living)
 - **Neighborhoods** = ambient, environmental (the context you're immersed in daily)
-- **City Planning** = civic, public-serving (you decide for a community)
+- **City Planning** = civic, public infrastructure (you build for a community)
 - **Inheritance** = private, posthumous (you set rules you'll never see enforced)
-- **Company Culture** = organizational, foundational (you create the DNA of an institution)
+- **Company Culture** = organizational, professional norms (you design how people work together)
+- **Neighborhood Covenant** = local social governance (you write the rules people live under at home)
+- **Public Library** = cultural institution (you shape how a community relates to knowledge)
+- **Online Community** = digital social governance (you design norms for interaction at massive scale)
 
-Together they span: personal → institutional, self-serving → other-serving, temporary → permanent, and individual → community. Jobs and Neighborhoods are both personal choices but differ in kind: Jobs tests value expression through *active doing*, while Neighborhoods tests it through *passive environment selection*.
+The domains cluster into three categories:
+1. **Personal choices** (Jobs, Neighborhoods) -- individual deciding for self
+2. **Physical institution design** (City Planning, Neighborhood Covenant, Public Library) -- creating structures/rules for a physical community
+3. **System/charter design** (Company Culture, Inheritance, Online Community) -- designing institutional DNA that governs behavior
+
+No two domains share the same combination of decider role, affected population, and choice type.
 
 ---
 
@@ -374,10 +467,13 @@ Steps 1-2 (Design + Review) for each domain can happen in parallel across separa
 
 **Recommended parallel workflow:**
 ```
-Session A: Design Neighborhoods domain   ──→ Review ──→ Create 45 vignettes
-Session B: Design City Planning domain   ──→ Review ──→ Create 45 vignettes
-Session C: Design Inheritance domain     ──→ Review ──→ Create 45 vignettes
-Session D: Design Company Culture domain ──→ Review ──→ Create 45 vignettes
+Session A: Design Neighborhoods domain        ──→ Review ──→ Create 45 vignettes
+Session B: Design City Planning domain        ──→ Review ──→ Create 45 vignettes
+Session C: Design Inheritance domain          ──→ Review ──→ Create 45 vignettes
+Session D: Design Company Culture domain      ──→ Review ──→ Create 45 vignettes
+Session E: Design Neighborhood Covenant domain ──→ Review ──→ Create 45 vignettes
+Session F: Design Public Library domain       ──→ Review ──→ Create 45 vignettes
+Session G: Design Online Community domain     ──→ Review ──→ Create 45 vignettes
 ```
 
 ### Naming and tagging conventions
@@ -385,7 +481,7 @@ Session D: Design Company Culture domain ──→ Review ──→ Create 45 vi
 | Property | Convention | Example |
 |----------|-----------|---------|
 | **Vignette name** | `{Domain} ({Value A} vs {Value B})` | `Neighborhoods (Stimulation vs Tradition)` |
-| **Domain tag** | Lowercase domain name | `neighborhoods`, `city-planning`, `inheritance`, `company-culture` |
+| **Domain tag** | Lowercase domain name | `neighborhoods`, `city-planning`, `inheritance`, `company-culture`, `neighborhood-covenant`, `public-library`, `online-community` |
 | **Generation tag** | Always `generated` | `generated` |
 | **Preamble** | "No Reframe" preamble (ID: `cmlqwnn3u0213ts92xv1k66oh`) | -- |
 
