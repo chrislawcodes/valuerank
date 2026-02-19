@@ -13,6 +13,8 @@ import { buildMcpResponse, truncateArray } from '../../services/mcp/index.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:get-run-results');
+const MAX_DECISION_TEXT_CHARS = 500;
+const LARGE_TRANSCRIPT_BATCH_WARN_THRESHOLD = 200;
 
 const GetRunResultsInputSchema = {
   run_id: z.string().describe('Run ID (required)'),
@@ -96,13 +98,23 @@ function parseProgress(value: unknown): ProgressShape | null {
 
 function calculatePercentComplete(progress: ProgressShape): number {
   if (progress.total <= 0) return 0;
-  return Math.round(((progress.completed + progress.failed) / progress.total) * 100);
+  return Math.min(
+    100,
+    Math.round(((progress.completed + progress.failed) / progress.total) * 100)
+  );
 }
 
 function getStatusFilter(status: 'all' | 'success' | 'failed'): 'SUCCESS' | 'FAILED' | undefined {
   if (status === 'success') return 'SUCCESS';
   if (status === 'failed') return 'FAILED';
   return undefined;
+}
+
+function truncateDecisionText(value: string | null): string | null {
+  if (value === null || value.length <= MAX_DECISION_TEXT_CHARS) {
+    return value;
+  }
+  return `${value.slice(0, MAX_DECISION_TEXT_CHARS)}...`;
 }
 
 function registerGetRunResultsTool(server: McpServer): void {
@@ -120,9 +132,9 @@ Limited to 8KB token budget.`,
     async (args, extra) => {
       const startTime = Date.now();
       const requestId = String(extra.requestId ?? 'unknown');
-      const limit = args.limit ?? 100;
-      const offset = args.offset ?? 0;
-      const statusFilter = getStatusFilter(args.status ?? 'all');
+      const limit = args.limit;
+      const offset = args.offset;
+      const statusFilter = getStatusFilter(args.status);
 
       try {
         const run = await db.run.findUnique({
@@ -182,6 +194,13 @@ Limited to 8KB token budget.`,
           .map((row) => row.transcriptId)
           .filter((transcriptId): transcriptId is string => transcriptId !== null && transcriptId !== '');
 
+        if (transcriptIds.length > LARGE_TRANSCRIPT_BATCH_WARN_THRESHOLD) {
+          log.warn(
+            { requestId, runId: args.run_id, transcriptCount: transcriptIds.length },
+            'Large transcript lookup batch for get_run_results'
+          );
+        }
+
         const transcripts = transcriptIds.length > 0
           ? await db.transcript.findMany({
             where: {
@@ -208,7 +227,7 @@ Limited to 8KB token budget.`,
             status: row.status,
             transcriptId: row.transcriptId,
             decisionCode: transcript?.decisionCode ?? null,
-            decisionText: transcript?.decisionText ?? null,
+            decisionText: truncateDecisionText(transcript?.decisionText ?? null),
             errorCode: row.errorCode,
             errorMessage: row.errorMessage,
             completedAt: row.completedAt?.toISOString() ?? null,

@@ -109,6 +109,67 @@ describe('get_run_results tool', () => {
     expect(response.data.results[1].errorCode).toBe('PROBE_FAILED');
   });
 
+  it('clamps percentComplete to 100 on inconsistent progress', async () => {
+    vi.mocked(db.run.findUnique).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 10, completed: 9, failed: 5 },
+    } as never);
+    vi.mocked(db.probeResult.count).mockResolvedValue(0);
+    vi.mocked(db.probeResult.findMany).mockResolvedValue([]);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([]);
+
+    const result = await toolHandler(
+      { run_id: 'run-1', limit: 100, offset: 0 },
+      { requestId: 'req-clamp' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data.progress.percentComplete).toBe(100);
+  });
+
+  it('truncates long decisionText in row payloads', async () => {
+    const longText = 'x'.repeat(700);
+
+    vi.mocked(db.run.findUnique).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 1, completed: 1, failed: 0 },
+    } as never);
+    vi.mocked(db.probeResult.count).mockResolvedValue(1);
+    vi.mocked(db.probeResult.findMany).mockResolvedValue([
+      {
+        scenarioId: 'scenario-1',
+        modelId: 'gpt-4',
+        sampleIndex: 0,
+        status: 'SUCCESS',
+        transcriptId: 'tx-1',
+        errorCode: null,
+        errorMessage: null,
+        completedAt: new Date('2026-01-01T00:00:00Z'),
+        scenario: { name: 'Scenario 1' },
+      },
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      {
+        id: 'tx-1',
+        decisionCode: '4',
+        decisionText: longText,
+      },
+    ] as never);
+
+    const result = await toolHandler(
+      { run_id: 'run-1', limit: 100, offset: 0 },
+      { requestId: 'req-truncate' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data.results[0].decisionText.length).toBe(503);
+    expect(response.data.results[0].decisionText.endsWith('...')).toBe(true);
+  });
+
   it('applies status/model filters', async () => {
     vi.mocked(db.run.findUnique).mockResolvedValue({
       id: 'run-1',
@@ -145,5 +206,27 @@ describe('get_run_results tool', () => {
     const content = (result as { content: Array<{ text: string }> }).content;
     const response = JSON.parse(content[0].text);
     expect(response.error).toBe('NOT_FOUND');
+  });
+
+  it('returns empty result set when offset exceeds available rows', async () => {
+    vi.mocked(db.run.findUnique).mockResolvedValue({
+      id: 'run-1',
+      status: 'RUNNING',
+      progress: { total: 10, completed: 3, failed: 1 },
+    } as never);
+    vi.mocked(db.probeResult.count).mockResolvedValue(2);
+    vi.mocked(db.probeResult.findMany).mockResolvedValue([]);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([]);
+
+    const result = await toolHandler(
+      { run_id: 'run-1', limit: 100, offset: 99 },
+      { requestId: 'req-offset' }
+    );
+
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data.pagination.totalAvailable).toBe(2);
+    expect(response.data.pagination.returned).toBe(0);
+    expect(response.data.results).toEqual([]);
   });
 });
