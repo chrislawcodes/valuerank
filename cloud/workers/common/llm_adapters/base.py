@@ -21,6 +21,51 @@ from .types import LLMResponse
 
 log = get_logger("llm_adapters.base")
 
+RATE_LIMIT_PATTERNS = [
+    "rate limit",
+    "rate_limit",
+    "ratelimit",
+    "too many requests",
+    "requests per minute",
+    "rpm limit",
+    "tpm limit",
+    "tokens per minute",
+]
+
+# Provider-specific examples observed in common LLM APIs. Kept centralized so
+# classification behavior is explicit and easy to evolve as providers change.
+BILLING_EXHAUSTION_PATTERNS_BY_PROVIDER = {
+    "openai_like": [
+        "insufficient_quota",
+        "insufficient quota",
+        "exceeded your current quota",
+        "hard limit",
+    ],
+    "anthropic_like": [
+        "credit balance is too low",
+        "insufficient credits",
+        "insufficient credit",
+        "out of credits",
+    ],
+    "google_like": [
+        "resource_exhausted",
+        "quota exceeded",
+    ],
+    "generic": [
+        "out of funds",
+        "out of money",
+        "low balance",
+        "payment required",
+        "billing",
+    ],
+}
+
+BILLING_EXHAUSTION_PATTERNS = [
+    pattern
+    for patterns in BILLING_EXHAUSTION_PATTERNS_BY_PROVIDER.values()
+    for pattern in patterns
+]
+
 
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM providers."""
@@ -55,17 +100,27 @@ def is_rate_limit_response(status_code: int, response_text: str) -> bool:
         return True
     # Some providers return 400/503 with rate limit messages
     text_lower = response_text.lower()
-    return any(pattern in text_lower for pattern in [
-        "rate limit",
-        "rate_limit",
-        "ratelimit",
-        "too many requests",
-        "quota exceeded",
-        "requests per minute",
-        "rpm limit",
-        "tpm limit",
-        "tokens per minute",
-    ])
+    return any(pattern in text_lower for pattern in RATE_LIMIT_PATTERNS)
+
+
+def is_billing_exhaustion_response(status_code: int, response_text: str) -> bool:
+    """Check if a response indicates provider credits/budget exhaustion.
+
+    Decision rule:
+    - Never treat non-errors (<400) as billing exhaustion.
+    - If explicit rate-limit markers are present, classify as rate limit.
+    - Otherwise match known billing/quota patterns.
+    """
+    if status_code < 400:
+        return False
+
+    text_lower = response_text.lower()
+
+    # If explicit rate-limit markers are present, treat as rate limiting instead.
+    if any(pattern in text_lower for pattern in RATE_LIMIT_PATTERNS):
+        return False
+
+    return any(pattern in text_lower for pattern in BILLING_EXHAUSTION_PATTERNS)
 
 
 def post_json(
@@ -77,10 +132,13 @@ def post_json(
 ) -> dict:
     """Make a POST request with JSON body and retry logic.
 
-    Includes intelligent rate limit handling with exponential backoff:
-    - 429 responses trigger retries with 30s, 60s, 90s, 120s delays
-    - Rate limit detection also checks response body for limit messages
-    - Rate limit retries are independent of network error retries
+    Classification order for HTTP errors:
+    1. Billing/quota exhaustion (non-retryable, mapped to AUTH_ERROR)
+    2. Rate limit (retryable with exponential backoff)
+    3. Other HTTP errors (non-retryable unless caller classifies otherwise)
+
+    For ambiguous 429s without billing markers, we default to retryable
+    rate-limit handling to avoid failing prematurely on transient throttling.
     """
     last_exc: Optional[Exception] = None
     rate_limit_attempts = 0
@@ -95,6 +153,17 @@ def post_json(
 
             if response.status_code >= 400:
                 snippet = response.text[:500]
+
+                # Billing/quota exhaustion should fail fast (non-retryable).
+                if is_billing_exhaustion_response(response.status_code, snippet):
+                    # Reuse AUTH_ERROR because it is already modeled as
+                    # non-retryable and indicates user action is required.
+                    raise LLMError(
+                        message=f"Billing or quota exhausted: {snippet}",
+                        code=ErrorCode.AUTH_ERROR,
+                        status_code=response.status_code,
+                        details=snippet,
+                    )
 
                 # Check if this is a rate limit response
                 if is_rate_limit_response(response.status_code, snippet):

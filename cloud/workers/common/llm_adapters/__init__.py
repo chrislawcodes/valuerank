@@ -24,10 +24,11 @@ Usage:
 from .types import LLMResponse, StreamChunk
 
 # Base class and HTTP utilities
-from .base import BaseLLMAdapter, is_rate_limit_response, post_json
+from .base import BaseLLMAdapter, is_billing_exhaustion_response, is_rate_limit_response, post_json
 
 # Backward compatibility aliases for internal functions (used in tests)
 _is_rate_limit_response = is_rate_limit_response
+_is_billing_exhaustion_response = is_billing_exhaustion_response
 _post_json = post_json
 
 # Provider adapters (for direct use if needed)
@@ -75,9 +76,11 @@ __all__ = [
     # Base and HTTP utilities
     "BaseLLMAdapter",
     "is_rate_limit_response",
+    "is_billing_exhaustion_response",
     "post_json",
     # Backward compatibility aliases (used in tests)
     "_is_rate_limit_response",
+    "_is_billing_exhaustion_response",
     "_post_json",
     # Providers
     "OpenAIAdapter",
