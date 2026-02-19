@@ -52,6 +52,10 @@ import './list-system-settings.js';
 import './set-summarization-parallelism.js';
 import './cancel-summarization.js';
 import './restart-summarization.js';
+// Definition management tools
+import './update-definition.js';
+import './add-tags-to-definitions.js';
+import './remove-tags-from-definitions.js';
 // Feature 018 - MCP Operations Tools
 import './recover-run.js';
 import './trigger-recovery.js';

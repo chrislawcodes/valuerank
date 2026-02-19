@@ -77,7 +77,11 @@ export type AuditAction =
   | 'trigger_recovery'
   | 'get_job_queue_status'
   | 'get_unsummarized_transcripts'
-  | 'recompute_analysis';
+  | 'recompute_analysis'
+  // Definition management tools
+  | 'update_definition'
+  | 'add_tags_to_definitions'
+  | 'remove_tags_from_definitions';
 
 /**
  * Audit entry for MCP write operations
