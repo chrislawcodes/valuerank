@@ -1,11 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { DefinitionFolderView } from './DefinitionFolderView';
 import { EmptyState } from '../ui/EmptyState';
-import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Button } from '../ui/Button';
 import { importDefinitionFromMd, ImportApiError } from '../../api/import';
@@ -16,11 +15,7 @@ type ViewMode = 'flat' | 'folder';
 type DefinitionListProps = {
   definitions: Definition[];
   loading: boolean;
-  loadingMore?: boolean;
   error: Error | null;
-  hasNextPage?: boolean;
-  totalCount?: number | null;
-  onLoadMore?: () => void;
   onCreateNew?: () => void;
   filters?: DefinitionFilterState;
   onFiltersChange?: (filters: DefinitionFilterState) => void;
@@ -59,11 +54,7 @@ const defaultFilters: DefinitionFilterState = {
 export function DefinitionList({
   definitions,
   loading,
-  loadingMore = false,
   error,
-  hasNextPage = false,
-  totalCount,
-  onLoadMore,
   onCreateNew,
   filters: externalFilters,
   onFiltersChange: externalOnFiltersChange,
@@ -83,37 +74,6 @@ export function DefinitionList({
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  // Scroll-based infinite loading: listen on the nearest scrollable ancestor
-  // (the <main> element with overflow-auto), since IntersectionObserver with
-  // default root (viewport) doesn't fire inside nested scroll containers.
-  useEffect(() => {
-    if (!sentinelRef.current || !onLoadMore) return;
-
-    // Walk up the DOM to find the scrollable parent
-    let scrollParent: HTMLElement | null = sentinelRef.current.parentElement;
-    while (scrollParent) {
-      const style = getComputedStyle(scrollParent);
-      if (style.overflowY === 'auto' || style.overflowY === 'scroll') break;
-      scrollParent = scrollParent.parentElement;
-    }
-    if (!scrollParent) return;
-    const el = scrollParent;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-      if (distanceFromBottom < 200 && hasNextPage && !loadingMore) {
-        onLoadMore();
-      }
-    };
-
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    // Check immediately in case content is already scrolled near the bottom
-    handleScroll();
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, [hasNextPage, loadingMore, onLoadMore]);
 
   const hasActiveFilters =
     filters.search.length > 0 ||
@@ -324,9 +284,7 @@ export function DefinitionList({
       {/* Results count */}
       {!loading && (
         <p className="text-sm text-gray-500">
-          {totalCount != null
-            ? `Showing ${definitions.length} of ${totalCount} vignette${totalCount !== 1 ? 's' : ''}`
-            : `${definitions.length} vignette${definitions.length !== 1 ? 's' : ''}`}
+          {`${definitions.length} vignette${definitions.length !== 1 ? 's' : ''}`}
           {hasActiveFilters && ' matching filters'}
         </p>
       )}
@@ -366,19 +324,6 @@ export function DefinitionList({
           definitions={definitions}
           onDefinitionClick={handleDefinitionClick}
         />
-      )}
-
-      {/* Infinite scroll sentinel */}
-      {definitions.length > 0 && <div ref={sentinelRef} />}
-
-      {/* Loading indicator for pagination */}
-      {loadingMore && (
-        <Loading size="sm" text="Loading more..." />
-      )}
-
-      {/* All loaded indicator */}
-      {!loading && !loadingMore && definitions.length > 0 && !hasNextPage && (
-        <p className="text-center text-sm text-gray-400 py-2">All vignettes loaded</p>
       )}
 
       {/* Import error toast */}
