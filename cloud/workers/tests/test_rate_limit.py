@@ -8,6 +8,7 @@ import pytest
 from common.errors import ErrorCode, LLMError
 from common.llm_adapters import (
     OpenAIAdapter,
+    _is_billing_exhaustion_response,
     _is_rate_limit_response,
     _post_json,
     MAX_RATE_LIMIT_RETRIES,
@@ -31,7 +32,6 @@ class TestIsRateLimitResponse:
             "rate_limit_error",
             "ratelimit reached",
             "too many requests",
-            "quota exceeded",
             "requests per minute limit",
             "rpm limit exceeded",
             "tpm limit reached",
@@ -48,8 +48,30 @@ class TestIsRateLimitResponse:
     def test_non_rate_limit_errors(self) -> None:
         """Test that non-rate limit errors are not detected."""
         assert _is_rate_limit_response(400, "Invalid request") is False
+        assert _is_rate_limit_response(402, "quota exceeded") is False
         assert _is_rate_limit_response(401, "Unauthorized") is False
         assert _is_rate_limit_response(500, "Internal server error") is False
+
+
+class TestIsBillingExhaustionResponse:
+    """Tests for _is_billing_exhaustion_response helper."""
+
+    def test_detects_billing_markers(self) -> None:
+        """Test billing/quota exhaustion detection from response text."""
+        patterns = [
+            "insufficient_quota",
+            "out of funds",
+            "payment required",
+            "billing hard limit reached",
+            "you exceeded your current quota",
+        ]
+        for pattern in patterns:
+            assert _is_billing_exhaustion_response(402, pattern) is True, f"Failed for: {pattern}"
+
+    def test_does_not_confuse_rate_limits_as_billing(self) -> None:
+        """Rate-limit markers should still route through rate-limit logic."""
+        assert _is_billing_exhaustion_response(429, "too many requests") is False
+        assert _is_billing_exhaustion_response(400, "rate limit exceeded") is False
 
 
 class TestRateLimitRetry:
@@ -126,6 +148,25 @@ class TestRateLimitRetry:
 
                 assert result == {"data": "success"}
                 mock_sleep.assert_called_once_with(30)
+
+    def test_does_not_retry_on_billing_exhaustion(self) -> None:
+        """Billing/quota exhaustion should fail immediately without backoff retries."""
+        billing_response = MockResponse(
+            {"error": "insufficient_quota"},
+            status_code=402,
+            text="insufficient_quota: out of funds for this API key",
+        )
+
+        with patch("requests.post", return_value=billing_response) as mock_post:
+            with patch("time.sleep") as mock_sleep:
+                with pytest.raises(LLMError) as exc_info:
+                    _post_json("http://test", {}, {})
+
+                assert exc_info.value.code == ErrorCode.AUTH_ERROR
+                assert exc_info.value.retryable is False
+                assert "Billing or quota exhausted" in exc_info.value.message
+                assert mock_post.call_count == 1
+                mock_sleep.assert_not_called()
 
     def test_logs_rate_limit_retry(self) -> None:
         """Test that rate limit retries are logged."""

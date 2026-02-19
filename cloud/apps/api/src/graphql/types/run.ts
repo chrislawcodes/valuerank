@@ -77,6 +77,62 @@ function getJobDataRecord(data: unknown): Record<string, unknown> | null {
   return data !== null && typeof data === 'object' ? data as Record<string, unknown> : null;
 }
 
+function normalizeTaskError(output: unknown): string | null {
+  if (output === null || output === undefined) {
+    return null;
+  }
+
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (typeof output !== 'object') {
+    return String(output);
+  }
+
+  const record = output as Record<string, unknown>;
+  const parts: string[] = [];
+
+  const pushIfPresent = (value: unknown): void => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return;
+    if (!parts.includes(trimmed)) {
+      parts.push(trimmed);
+    }
+  };
+
+  // Common pg-boss/output shapes for thrown errors and worker payloads.
+  pushIfPresent(record.message);
+  pushIfPresent(record.details);
+
+  const error = record.error;
+  if (error !== null && typeof error === 'object') {
+    const nested = error as Record<string, unknown>;
+    pushIfPresent(nested.message);
+    pushIfPresent(nested.details);
+  } else {
+    pushIfPresent(error);
+  }
+
+  const value = record.value;
+  if (value !== null && typeof value === 'object') {
+    const nested = value as Record<string, unknown>;
+    pushIfPresent(nested.message);
+    pushIfPresent(nested.details);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(' | ');
+  }
+
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
 function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta: RunSnapshotMeta): boolean {
   const data = getJobDataRecord(jobData);
   if (data === null) {
@@ -334,7 +390,7 @@ builder.objectType(RunRef, {
             scenarioId: job.data.scenarioId,
             modelId: job.data.modelId,
             status: (job.state === 'completed' ? 'COMPLETED' : 'FAILED') as 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED',
-            error: job.state === 'failed' ? String(job.output) : null,
+            error: job.state === 'failed' ? normalizeTaskError(job.output) : null,
             completedAt: job.completed_on,
           }));
         } catch {
