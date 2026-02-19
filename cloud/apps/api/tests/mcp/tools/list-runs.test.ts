@@ -13,6 +13,9 @@ vi.mock('@valuerank/db', () => ({
     run: {
       findMany: vi.fn(),
     },
+    analysisResult: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -68,7 +71,11 @@ describe('list_runs tool', () => {
         description: expect.stringContaining('List evaluation runs'),
         inputSchema: expect.objectContaining({
           definition_id: expect.any(Object),
+          experiment_id: expect.any(Object),
           status: expect.any(Object),
+          has_analysis: expect.any(Object),
+          analysis_status: expect.any(Object),
+          run_type: expect.any(Object),
           limit: expect.any(Object),
           offset: expect.any(Object),
         }),
@@ -250,6 +257,58 @@ describe('list_runs tool', () => {
     const content = (result as { content: Array<{ text: string }> }).content;
     const response = JSON.parse(content[0].text);
     expect(response.error).toBe('INTERNAL_ERROR');
+  });
+
+  it('filters by experiment_id', async () => {
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler(
+      { experiment_id: 'exp-123' },
+      { requestId: 'req-12b' }
+    );
+
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          deletedAt: null,
+          experimentId: 'exp-123',
+        }),
+      })
+    );
+  });
+
+  it('filters by has_analysis', async () => {
+    vi.mocked(db.analysisResult.findMany).mockResolvedValue([{ runId: 'run-1' }] as never);
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    await toolHandler(
+      { has_analysis: true },
+      { requestId: 'req-12c' }
+    );
+
+    expect(db.analysisResult.findMany).toHaveBeenCalled();
+    expect(db.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ['run-1'] },
+        }),
+      })
+    );
+  });
+
+  it('returns empty result when has_analysis has no matching runs', async () => {
+    vi.mocked(db.analysisResult.findMany).mockResolvedValue([]);
+    vi.mocked(db.run.findMany).mockResolvedValue([]);
+
+    const result = await toolHandler(
+      { has_analysis: true },
+      { requestId: 'req-12d' }
+    );
+
+    expect(db.run.findMany).not.toHaveBeenCalled();
+    const content = (result as { content: Array<{ text: string }> }).content;
+    const response = JSON.parse(content[0].text);
+    expect(response.data).toEqual([]);
   });
 
   it('uses default values when args are undefined', async () => {

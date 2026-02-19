@@ -39,6 +39,24 @@ type DimensionAnalysisOutput = {
   method: string;
 };
 
+type DimensionStats = {
+  effectSize: number;
+  pValue: number;
+  significant: boolean;
+  rank: number;
+};
+
+type DimensionAnalysisPayload = {
+  dimensions?: Record<string, DimensionStats>;
+  varianceExplained?: number;
+  method?: string;
+};
+
+type AnalysisSelection = {
+  status: string;
+  output: unknown;
+};
+
 /**
  * Safe JSON object accessor with type assertion
  */
@@ -51,14 +69,36 @@ function safeJsonObject<T extends Record<string, unknown>>(
   return null;
 }
 
+function isDimensionStats(value: unknown): value is DimensionStats {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.effectSize === 'number'
+    && typeof record.pValue === 'number'
+    && typeof record.significant === 'boolean'
+    && typeof record.rank === 'number';
+}
+
+function toDimensionsRecord(value: unknown): Record<string, DimensionStats> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, DimensionStats> = {};
+  for (const [dimension, stats] of Object.entries(value)) {
+    if (isDimensionStats(stats)) {
+      out[dimension] = stats;
+    }
+  }
+  return out;
+}
 
 /**
  * Formats analysis result into dimension analysis output
  */
 function formatDimensionAnalysis(
   runId: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  analysis: { status: string; output: any } | null
+  analysis: AnalysisSelection | null
 ): DimensionAnalysisOutput {
   if (!analysis) {
     return {
@@ -77,21 +117,10 @@ function formatDimensionAnalysis(
         ? 'failed'
         : 'pending';
 
-  const output = safeJsonObject<{
-    dimensionAnalysis?: {
-      dimensions?: Record<string, {
-        effectSize: number;
-        pValue: number;
-        significant: boolean;
-        rank: number;
-      }>;
-      varianceExplained?: number;
-      method?: string;
-    };
-  }>(analysis.output);
+  const output = safeJsonObject<{ dimensionAnalysis?: DimensionAnalysisPayload }>(analysis.output);
 
   const dimensionData = output?.dimensionAnalysis;
-  const dimensions = dimensionData?.dimensions || {};
+  const dimensions = toDimensionsRecord(dimensionData?.dimensions);
 
   // Convert dimensions object to ranked array
   const rankedDimensions = Object.entries(dimensions)
@@ -158,7 +187,7 @@ Limited to 2KB token budget.`,
         }
 
         // Query analysis result
-        const analysis = await db.analysisResult.findFirst({
+  const analysis = await db.analysisResult.findFirst({
           where: {
             runId: args.run_id,
             analysisType: 'basic', // Use basic analysis which includes dimension data

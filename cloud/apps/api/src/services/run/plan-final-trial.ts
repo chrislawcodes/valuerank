@@ -5,7 +5,7 @@ import { resolveModelIdFromAvailable } from '../models/aliases.js';
 
 const log = createLogger('services:run:plan-final-trial');
 
-type ConditionPlan = {
+export type ConditionPlan = {
   scenarioId: string;
   conditionKey: string;
   currentSamples: number;
@@ -14,7 +14,7 @@ type ConditionPlan = {
   neededSamples: number;
 };
 
-type ModelPlan = {
+export type ModelPlan = {
   modelId: string;
   conditions: ConditionPlan[];
   totalNeededSamples: number;

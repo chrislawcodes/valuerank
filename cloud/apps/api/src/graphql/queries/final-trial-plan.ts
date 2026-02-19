@@ -1,15 +1,13 @@
 import { builder } from '../builder.js';
-import { planFinalTrial } from '../../services/run/plan-final-trial.js';
+import {
+  planFinalTrial,
+  type ConditionPlan,
+  type ModelPlan,
+  type FinalTrialPlan,
+} from '../../services/run/plan-final-trial.js';
 
 
-const ConditionPlanRef = builder.objectRef<{
-    scenarioId: string;
-    conditionKey: string;
-    currentSamples: number;
-    currentSEM: number | null;
-    status: string;
-    neededSamples: number;
-}>('ConditionPlan').implement({
+const ConditionPlanRef = builder.objectRef<ConditionPlan>('ConditionPlan').implement({
     fields: (t) => ({
         scenarioId: t.exposeString('scenarioId'),
         conditionKey: t.exposeString('conditionKey'),
@@ -20,34 +18,18 @@ const ConditionPlanRef = builder.objectRef<{
     }),
 });
 
-const ModelPlanRef = builder.objectRef<{
-    modelId: string;
-    conditions: unknown[]; // Using unknown[] to avoid circular ref issues or strict typing complexities here for now
-    totalNeededSamples: number;
-}>('ModelPlan').implement({
+const ModelPlanRef = builder.objectRef<ModelPlan>('ModelPlan').implement({
     fields: (t) => ({
         modelId: t.exposeString('modelId'),
-        conditions: t.field({
-            type: [ConditionPlanRef],
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
-            resolve: (parent) => (parent as any).conditions
-        }),
+        conditions: t.expose('conditions', { type: [ConditionPlanRef] }),
         totalNeededSamples: t.exposeInt('totalNeededSamples'),
     }),
 });
 
-const FinalTrialPlanRef = builder.objectRef<{
-    definitionId: string;
-    models: unknown[];
-    totalJobs: number;
-}>('FinalTrialPlan').implement({
+const FinalTrialPlanRef = builder.objectRef<FinalTrialPlan>('FinalTrialPlan').implement({
     fields: (t) => ({
         definitionId: t.exposeString('definitionId'),
-        models: t.field({
-            type: [ModelPlanRef],
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
-            resolve: (parent) => (parent as any).models
-        }),
+        models: t.expose('models', { type: [ModelPlanRef] }),
         totalJobs: t.exposeInt('totalJobs'),
     }),
 });
@@ -62,8 +44,7 @@ builder.queryField('finalTrialPlan', (t) =>
         resolve: (_root, args, ctx) => {
             // Auth check? StartRun requires auth.
             if (ctx.user === undefined || ctx.user === null) throw new Error('Unauthorized');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
-            return planFinalTrial(args.definitionId, args.models) as any;
+            return planFinalTrial(args.definitionId, args.models);
         },
     })
 );

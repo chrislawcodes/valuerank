@@ -15,6 +15,11 @@ import {
   formatRunListItem,
   type RunListItem,
 } from '../../services/mcp/index.js';
+import {
+  buildRunWhere,
+  parseAnalysisStatus,
+  parseRunType,
+} from '../../services/run/query.js';
 import { addToolRegistrar } from './registry.js';
 
 const log = createLogger('mcp:tools:list-runs');
@@ -24,10 +29,24 @@ const log = createLogger('mcp:tools:list-runs');
  */
 const ListRunsInputSchema = {
   definition_id: z.string().optional().describe('Filter by definition UUID'),
+  experiment_id: z.string().optional().describe('Filter by experiment UUID'),
   status: z
     .enum(['pending', 'running', 'completed', 'failed'])
     .optional()
     .describe('Filter by run status'),
+  has_analysis: z
+    .boolean()
+    .optional()
+    .describe('Filter to runs that have analysis results'),
+  analysis_status: z
+    .enum(['current', 'superseded'])
+    .optional()
+    .describe('Filter by analysis status'),
+  run_type: z
+    .enum(['all', 'survey', 'non_survey'])
+    .optional()
+    .default('all')
+    .describe('Filter by run type'),
   limit: z
     .number()
     .int()
@@ -79,25 +98,47 @@ Limited to 2KB token budget.`,
         const where: {
           definitionId?: string;
           status?: RunStatus;
-          deletedAt: null;
-        } = {
-          deletedAt: null, // Exclude soft-deleted runs
-        };
-
-        if (args.definition_id !== undefined && args.definition_id !== null && args.definition_id !== '') {
-          where.definitionId = args.definition_id;
-        }
-
-        if (args.status !== undefined && args.status !== null) {
-          where.status = statusToPrisma[args.status];
-        }
+        } = {};
 
         // Query runs with transcript count and pagination
         const limit = args.limit ?? 20;
         const offset = args.offset ?? 0;
+        if (args.definition_id !== undefined && args.definition_id !== null && args.definition_id !== '') {
+          where.definitionId = args.definition_id;
+        }
+        if (args.status !== undefined && args.status !== null) {
+          where.status = statusToPrisma[args.status];
+        }
+
+        const { where: runWhere, noMatches } = await buildRunWhere({
+          definitionId: where.definitionId,
+          experimentId: args.experiment_id ?? undefined,
+          status: where.status,
+          hasAnalysis: args.has_analysis ?? undefined,
+          analysisStatus: parseAnalysisStatus(args.analysis_status?.toUpperCase()),
+          runType: parseRunType(args.run_type?.toUpperCase()),
+        });
+
+        if (noMatches) {
+          const emptyResponse = buildMcpResponse({
+            toolName: 'list_runs',
+            data: [] as RunListItem[],
+            requestId,
+            startTime,
+            truncator: (data) => truncateArray(data, 10),
+          });
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(emptyResponse, null, 2),
+              },
+            ],
+          };
+        }
 
         const runs = await db.run.findMany({
-          where,
+          where: runWhere,
           orderBy: { createdAt: 'desc' },
           take: limit,
           skip: offset,
