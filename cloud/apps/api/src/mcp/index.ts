@@ -15,6 +15,7 @@ import { registerAllResources } from './resources/index.js';
 import { mcpAuthMiddleware } from './auth.js';
 import { mcpRateLimiter } from './rate-limit.js';
 import { protectedResourceMetadata } from './oauth/metadata.js';
+import { runWithMcpContext } from './request-context.js';
 
 const log = createLogger('mcp:router');
 
@@ -83,8 +84,11 @@ export function createMcpRouter(): Router {
         // Connect transport to server
         await mcpServer.connect(transport);
 
-        // Handle the request
-        await transport.handleRequest(req, res, req.body);
+        // Handle the request (with user context from auth middleware)
+        await runWithMcpContext(
+          { user: req.user ?? null },
+          () => transport.handleRequest(req, res, req.body)
+        );
         return;
       }
 
@@ -103,7 +107,10 @@ export function createMcpRouter(): Router {
           transports.set(sessionId, transport);
         }
 
-        await transport.handleRequest(req, res, req.body);
+        await runWithMcpContext(
+          { user: req.user ?? null },
+          () => transport.handleRequest(req, res, req.body)
+        );
         return;
       }
 
@@ -114,7 +121,10 @@ export function createMcpRouter(): Router {
           enableJsonResponse: false, // Enable SSE for GET
         });
         await mcpServer.connect(transport);
-        await transport.handleRequest(req, res);
+        await runWithMcpContext(
+          { user: req.user ?? null },
+          () => transport.handleRequest(req, res)
+        );
         return;
       }
 
