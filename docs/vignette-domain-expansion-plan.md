@@ -129,7 +129,7 @@ Domains should vary across multiple structural dimensions, not just topic. A goo
 | **Stakes** | Leisure → Livelihood → Governance → Legacy |
 | **Choice type** | Personal preference → Policy design → Resource structure → Rule-setting |
 
-The first version of this plan over-indexed on "how do I spend my time" (Hobbies, Neighborhoods, Vacations). The revised candidates below prioritize structural variety.
+The first version of this plan over-indexed on "how do I spend my time" (Hobbies, Vacations). The revised candidates below prioritize structural variety, keeping Neighborhoods as the one personal-environment domain alongside Jobs.
 
 ---
 
@@ -137,29 +137,29 @@ The first version of this plan over-indexed on "how do I spend my time" (Hobbies
 
 These domains satisfy all must-have criteria and provide strong structural diversity from each other and from the existing Jobs domain.
 
-#### 1. Hobbies
+#### 1. Neighborhoods
 
-**Frame**: "A person with limited free time has narrowed their options to two hobbies. Both cost the same and require the same weekly time commitment, but the experiences are fundamentally different."
+**Frame**: "A person is relocating and must choose between two neighborhoods. Both have the same rent, the same commute time, and the same quality of housing, but the community character is fundamentally different."
 
-**Structural role**: Personal leisure choice (individual → self → recurring → low-stakes). The one "how I spend my time" domain we keep alongside Jobs, justified because leisure choices strip away obligation and reveal purer preference signals.
+**Structural role**: Environmental/ambient choice (individual → self → ongoing → medium-stakes). Where you live reflects deep values about how you want your daily environment to function. Unlike Jobs (career obligation) or Hobbies (leisure activity), neighborhoods are about the *ambient context* you choose to be immersed in every day -- passive value expression through environment rather than active value expression through action.
 
-| # | Value | Hobby Entity | Value Description |
-|---|-------|-------------|-------------------|
-| 1 | Self_Direction_Action | Solo wilderness backpacking | freedom to choose their own route, pace, and destination with no one else's agenda to follow |
-| 2 | Power_Dominance | Competitive debate club captain | authority to direct team strategy and make decisions that other members must follow |
-| 3 | Security_Personal | Home woodworking in their own workshop | a predictable, controlled routine in a safe, familiar environment they fully control |
-| 4 | Conformity_Interpersonal | Joining the book club their friends have been asking them to join | relational harmony by participating in an activity that avoids disappointing the people closest to them |
-| 5 | Tradition | Traditional calligraphy in a master-student lineage | a deep connection to heritage by learning a centuries-old art form passed down through generations |
-| 6 | Stimulation | Whitewater kayaking on unfamiliar rivers | constant novelty and challenge due to the unpredictable nature of each new run |
-| 7 | Benevolence_Dependability | Coaching a youth sports team they committed to for the season | dependability by being the one person these families trust completely to show up every week and follow through on every commitment |
-| 8 | Universalism_Nature | Volunteering for a local habitat restoration project | unity with nature by directly protecting and restoring endangered ecosystems |
-| 9 | Achievement | Training for a competitive triathlon | recognition for their dedication by consistently improving their times and demonstrating they are one of the top performers in their age group |
-| 10 | Hedonism | Gourmet cooking classes focused on fine cuisine | personal enjoyment by spending their time experiencing rich flavors, textures, and the pleasure of creating beautiful food |
+| # | Value | Neighborhood Entity | Value Description |
+|---|-------|---------------------|-------------------|
+| 1 | Self_Direction_Action | An area known for independent artists and self-employed entrepreneurs | freedom to live among people who set their own schedules and make their own rules about how to spend their days |
+| 2 | Power_Dominance | A prestigious enclave with an influential homeowners' association board | authority to shape how the community operates and make decisions about neighborhood policies that others must follow |
+| 3 | Security_Personal | A gated community with round-the-clock security and low crime | a high degree of safety and predictability in their daily environment |
+| 4 | Conformity_Interpersonal | The neighborhood where their extended family already lives | relational harmony by living close to family, avoiding the disappointment or hurt feelings that would come from choosing to live far away |
+| 5 | Tradition | A historic district with deep cultural roots and longstanding community rituals | a deep connection to heritage by living in a place where centuries-old customs and traditions are actively preserved |
+| 6 | Stimulation | An eclectic district with constantly rotating pop-up events, new venues, and an unpredictable social scene | constant novelty and surprise due to the ever-changing character of the neighborhood |
+| 7 | Benevolence_Dependability | A close-knit block where neighbors rely on each other for daily support | dependability by being the one neighbor everyone trusts to watch their homes, collect their mail, and follow through on every shared responsibility |
+| 8 | Universalism_Nature | A community bordering a protected nature preserve with active conservation programs | unity with nature by living adjacent to and helping protect endangered habitats |
+| 9 | Achievement | A high-achieving enclave known for ambitious professionals and visible markers of success | recognition for their accomplishments by living among peers who notice and respect demonstrated competence and results |
+| 10 | Hedonism | A walkable district famous for its restaurants, spas, and entertainment | personal enjoyment by spending their days with easy access to fine food, physical comfort, and pleasure |
 
 **Isolation concerns to review**:
-- Coaching (Benevolence_Dependability): Must emphasize *reliability/follow-through*, not *caring for kids* (would bleed into Benevolence_Caring)
-- Backpacking (Self_Direction_Action): Must emphasize *choosing your own path*, not *excitement of the unknown* (would bleed into Stimulation)
-- Woodworking (Security_Personal): Must emphasize *safe, predictable routine*, not *creating things* (would bleed into Achievement)
+- Artists' area (Self_Direction_Action): Must emphasize *autonomy*, not *creativity* (would bleed into Self_Direction_Thought) or *novelty* (Stimulation)
+- Family neighborhood (Conformity_Interpersonal): Must emphasize *avoiding disappointment*, not *family warmth* (would bleed into Benevolence) or *family tradition* (Tradition)
+- High-achieving enclave (Achievement): Must emphasize *demonstrated competence*, not *wealth/status* (would bleed into Power_Resources) or *reputation* (Face)
 
 ---
 
@@ -277,15 +277,15 @@ These domains are viable but have specific challenges to resolve before implemen
 
 ---
 
-#### 6. Neighborhoods
+#### 6. Hobbies
 
-**Frame**: "A person is relocating and must choose between two neighborhoods. Both have the same rent, the same commute time, and the same quality of housing, but the community character is fundamentally different."
+**Frame**: "A person with limited free time has narrowed their options to two hobbies. Both cost the same and require the same weekly time commitment, but the experiences are fundamentally different."
 
-**Structural role**: Environmental/ambient choice (individual → self → ongoing → medium-stakes). Viable but overlaps with the "personal lifestyle" category that Jobs and Hobbies already cover. Could be promoted to Tier 1 if we want a fifth domain.
+**Structural role**: Personal leisure choice (individual → self → recurring → low-stakes). Leisure choices strip away obligation and reveal purer preference signals.
 
-**Draft entity mappings available** (see git history for full table). Core entities: artists' district (Self_Direction_Action), HOA enclave (Power_Dominance), gated community (Security_Personal), family neighborhood (Conformity_Interpersonal), historic district (Tradition), eclectic district (Stimulation), close-knit block (Benevolence_Dependability), nature preserve border (Universalism_Nature), high-achiever enclave (Achievement), restaurant/spa district (Hedonism).
+**Draft entity mappings available** (see git history for full table). Core entities: solo backpacking (Self_Direction_Action), debate club captain (Power_Dominance), home woodworking (Security_Personal), friends' book club (Conformity_Interpersonal), traditional calligraphy (Tradition), whitewater kayaking (Stimulation), youth sports coaching (Benevolence_Dependability), habitat restoration (Universalism_Nature), competitive triathlon (Achievement), gourmet cooking (Hedonism).
 
-**Status**: Well-designed but structurally similar to other personal-choice domains. Lower priority than City Planning, Inheritance, and Company Culture.
+**Status**: Well-designed but structurally overlaps with Jobs (both are personal activity choices). Consider promoting if we want a sixth domain focused on pure leisure signals.
 
 ---
 
@@ -322,7 +322,7 @@ Create four new domains in parallel, alongside the existing Jobs domain:
 | Domain | Decider Role | Who's Affected | Time Horizon | Choice Type |
 |--------|-------------|----------------|-------------|-------------|
 | **Jobs** (existing) | Individual | Self | Ongoing | Personal livelihood |
-| **Hobbies** | Individual | Self | Recurring | Personal leisure |
+| **Neighborhoods** | Individual | Self | Ongoing | Environment/ambient |
 | **City Planning** | Public official | Community | Permanent | Infrastructure policy |
 | **Inheritance** | Family head | Children | Posthumous | Legacy rule-setting |
 | **Company Culture** | Founder | Employees | Permanent | Organizational design |
@@ -331,12 +331,12 @@ This gives us **5 domains x 45 vignettes = 225 vignettes** and **5 x 1,125 = 5,6
 
 **Why these five complement each other:**
 - **Jobs** = obligatory, professional (you must earn a living)
-- **Hobbies** = voluntary, personal (what you choose when free)
+- **Neighborhoods** = ambient, environmental (the context you're immersed in daily)
 - **City Planning** = civic, public-serving (you decide for a community)
 - **Inheritance** = private, posthumous (you set rules you'll never see enforced)
 - **Company Culture** = organizational, foundational (you create the DNA of an institution)
 
-Together they span: personal → institutional, self-serving → other-serving, temporary → permanent, and individual → community. No two domains share the same structural profile.
+Together they span: personal → institutional, self-serving → other-serving, temporary → permanent, and individual → community. Jobs and Neighborhoods are both personal choices but differ in kind: Jobs tests value expression through *active doing*, while Neighborhoods tests it through *passive environment selection*.
 
 ---
 
@@ -374,7 +374,7 @@ Steps 1-2 (Design + Review) for each domain can happen in parallel across separa
 
 **Recommended parallel workflow:**
 ```
-Session A: Design Hobbies domain        ──→ Review ──→ Create 45 vignettes
+Session A: Design Neighborhoods domain   ──→ Review ──→ Create 45 vignettes
 Session B: Design City Planning domain   ──→ Review ──→ Create 45 vignettes
 Session C: Design Inheritance domain     ──→ Review ──→ Create 45 vignettes
 Session D: Design Company Culture domain ──→ Review ──→ Create 45 vignettes
@@ -384,8 +384,8 @@ Session D: Design Company Culture domain ──→ Review ──→ Create 45 vi
 
 | Property | Convention | Example |
 |----------|-----------|---------|
-| **Vignette name** | `{Domain} ({Value A} vs {Value B})` | `Hobbies (Stimulation vs Tradition)` |
-| **Domain tag** | Lowercase domain name | `hobbies`, `neighborhoods`, `vacations` |
+| **Vignette name** | `{Domain} ({Value A} vs {Value B})` | `Neighborhoods (Stimulation vs Tradition)` |
+| **Domain tag** | Lowercase domain name | `neighborhoods`, `city-planning`, `inheritance`, `company-culture` |
 | **Generation tag** | Always `generated` | `generated` |
 | **Preamble** | "No Reframe" preamble (ID: `cmlqwnn3u0213ts92xv1k66oh`) | -- |
 
