@@ -30,9 +30,10 @@ async function main() {
   let inspected = 0;
   let updated = 0;
   let skipped = 0;
-  let cursor: string | undefined;
+  let cursor: string | undefined = undefined;
+  let hasNextPage = true;
 
-  while (true) {
+  while (hasNextPage) {
     const analyses = await db.analysisResult.findMany({
       where: { analysisType: 'AGGREGATE' },
       select: {
@@ -42,7 +43,7 @@ async function main() {
       },
       orderBy: { id: 'asc' },
       take: BATCH_SIZE,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      ...(cursor !== undefined ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
     if (analyses.length === 0) {
@@ -81,7 +82,7 @@ async function main() {
       }
 
       const definitionId = definitionByRun.get(analysis.runId);
-      if (!definitionId) {
+      if (definitionId === undefined) {
         skipped += 1;
         continue;
       }
@@ -123,7 +124,9 @@ async function main() {
       log.info({ analysisId: analysis.id, runId: analysis.runId, vizChanged, varianceChanged }, 'Normalized analysis output');
     }
 
-    cursor = analyses[analyses.length - 1]?.id;
+    const lastAnalysis = analyses[analyses.length - 1];
+    cursor = lastAnalysis?.id;
+    hasNextPage = analyses.length === BATCH_SIZE && cursor !== undefined;
   }
 
   log.info({ inspected, updated, skipped, dryRun: options.dryRun }, 'Aggregate analysis output normalization complete');

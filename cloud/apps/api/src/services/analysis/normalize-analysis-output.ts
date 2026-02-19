@@ -13,6 +13,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 function isDimensionValue(value: unknown): value is number | string {
   return typeof value === 'number' || typeof value === 'string';
 }
@@ -129,8 +133,8 @@ function normalizeVarianceAnalysis(
   }
 
   const normalizeScenarioList = (value: unknown): unknown => {
-    if (!Array.isArray(value)) return value;
-    return value.map((entry) => {
+    if (!isUnknownArray(value)) return value;
+    return value.map((entry: unknown) => {
       if (!isPlainObject(entry)) return entry;
       const rawScenarioId = typeof entry.scenarioId === 'string' ? entry.scenarioId : null;
       if (rawScenarioId === null) return entry;
