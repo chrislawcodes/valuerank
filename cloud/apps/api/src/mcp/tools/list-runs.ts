@@ -112,9 +112,9 @@ Limited to 2KB token budget.`,
 
         const { where: runWhere, noMatches } = await buildRunWhere({
           definitionId: where.definitionId,
-          experimentId: args.experiment_id ?? undefined,
+          experimentId: args.experiment_id,
           status: where.status,
-          hasAnalysis: args.has_analysis ?? undefined,
+          hasAnalysis: args.has_analysis,
           analysisStatus: parseAnalysisStatus(args.analysis_status?.toUpperCase()),
           runType: parseRunType(args.run_type?.toUpperCase()),
         });

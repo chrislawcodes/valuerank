@@ -44,7 +44,8 @@ builder.queryField('finalTrialPlan', (t) =>
         resolve: (_root, args, ctx) => {
             // Auth check? StartRun requires auth.
             if (ctx.user === undefined || ctx.user === null) throw new Error('Unauthorized');
-            return planFinalTrial(args.definitionId, args.models);
+            const plan: Promise<FinalTrialPlan> = planFinalTrial(args.definitionId, args.models);
+            return plan;
         },
     })
 );

@@ -50,6 +50,21 @@ describe('run query filters', () => {
     });
   });
 
+  it('ignores null and empty-string filters', async () => {
+    const result = await buildRunWhere({
+      definitionId: null,
+      experimentId: '',
+      runType: 'ALL',
+    });
+
+    expect(result.noMatches).toBe(false);
+    expect(result.where).toMatchObject({
+      deletedAt: null,
+    });
+    expect(result.where).not.toHaveProperty('definitionId');
+    expect(result.where).not.toHaveProperty('experimentId');
+  });
+
   it('applies survey run type filter', async () => {
     const result = await buildRunWhere({ runType: 'SURVEY' });
     expect(result.where).toMatchObject({

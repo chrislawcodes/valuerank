@@ -109,10 +109,10 @@ builder.queryField('runs', (t) =>
       );
 
       const { where, noMatches } = await buildRunWhere({
-        definitionId: args.definitionId ?? undefined,
-        experimentId: args.experimentId ?? undefined,
+        definitionId: args.definitionId,
+        experimentId: args.experimentId,
         status: parseRunStatus(args.status),
-        hasAnalysis: args.hasAnalysis ?? undefined,
+        hasAnalysis: args.hasAnalysis,
         analysisStatus: parseAnalysisStatus(args.analysisStatus),
         runType: parseRunType(args.runType),
       });
@@ -232,10 +232,10 @@ builder.queryField('runCount', (t) =>
       );
 
       const { where, noMatches } = await buildRunWhere({
-        definitionId: args.definitionId ?? undefined,
-        experimentId: args.experimentId ?? undefined,
+        definitionId: args.definitionId,
+        experimentId: args.experimentId,
         status: parseRunStatus(args.status),
-        hasAnalysis: args.hasAnalysis ?? undefined,
+        hasAnalysis: args.hasAnalysis,
         analysisStatus: parseAnalysisStatus(args.analysisStatus),
         runType: parseRunType(args.runType),
       });

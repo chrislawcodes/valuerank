@@ -3,10 +3,10 @@ import { db, type AnalysisStatus, type Prisma, type RunStatus } from '@valuerank
 export type RunTypeFilter = 'ALL' | 'SURVEY' | 'NON_SURVEY';
 
 export type RunQueryFilters = {
-  definitionId?: string;
+  definitionId?: string | null;
   experimentId?: string | null;
   status?: RunStatus;
-  hasAnalysis?: boolean;
+  hasAnalysis?: boolean | null;
   analysisStatus?: AnalysisStatus;
   runType?: RunTypeFilter;
 };
@@ -69,7 +69,7 @@ export async function buildRunWhere(filters: RunQueryFilters): Promise<ResolvedR
     deletedAt: null,
   };
 
-  if (filters.definitionId !== undefined && filters.definitionId !== '') {
+  if (filters.definitionId !== undefined && filters.definitionId !== null && filters.definitionId !== '') {
     where.definitionId = filters.definitionId;
   }
 
