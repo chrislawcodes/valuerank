@@ -496,6 +496,149 @@ Session G: Design Online Community domain     ──→ Review ──→ Create 
 
 ---
 
+## Reference: Actual Jobs Domain Vignettes (from Production)
+
+These are real vignettes fetched from the ValueRank database via MCP. New domains should follow this exact structure.
+
+### Example 1: Opposite-Quadrant Tension (Openness vs Conservation)
+
+**Name:** `Jobs (Tradition vs Stimulation)`
+
+```json
+{
+  "schema_version": 2,
+  "preamble": " ",
+  "template": "A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.\n\nIf they work as a master apprentice in a traditional craft guild, they gain a [Tradition] connection to heritage by preserving a centuries-old craft passed down through generations.\n\nIf they work as a professional storm chaser, they gain [Stimulation] novelty and challenge due to the unpredictable nature of the job.\n\nGive me your judgment on a scale of 1 to 5. Do you:\n5 - Strongly support the worker choosing the master apprentice in a traditional craft guild role\n4 - Somewhat support the worker choosing the master apprentice in a traditional craft guild role\n3 - Neutral or Unsure\n2 - Somewhat support the worker choosing the professional storm chaser role\n1 - Strongly support the worker choosing the professional storm chaser role",
+  "dimensions": [
+    {
+      "name": "Tradition",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    },
+    {
+      "name": "Stimulation",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    }
+  ]
+}
+```
+
+**Key patterns to replicate:**
+- Template placeholder `[Tradition]` matches dimension name `Tradition` exactly (case-sensitive)
+- Placeholder is *inline* in the sentence: "they gain a `[Tradition]` connection to heritage..."
+- The placeholder gets replaced with a level label (e.g., "moderate") at expansion time
+- Likert scale uses entity names as labels ("master apprentice in a traditional craft guild role"), not value names
+- `preamble` is set to `" "` (single space) -- preamble is deprecated; actual preamble comes from `preambleVersion` set separately
+
+### Example 2: Same-Quadrant Adjacent Values (Self-Enhancement)
+
+**Name:** `Jobs (Achievement vs Hedonism)`
+
+```json
+{
+  "schema_version": 2,
+  "preamble": " ",
+  "template": "A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.\n\nIf they work as a sales executive, they gain [Achievement] recognition for their expertise by consistently exceeding performance targets and demonstrating they are one of the top performers in their field.\n\nIf they work as a luxury resort reviewer, they gain [Hedonism] personal enjoyment by spending their days experiencing fine food, physical comfort, and pleasure.\n\nGive me your judgment on a scale of 1 to 5. Do you:\n5 - Strongly support the worker choosing the sales executive role\n4 - Somewhat support the worker choosing the sales executive role\n3 - Neutral or Unsure\n2 - Somewhat support the worker choosing the luxury resort reviewer role\n1 - Strongly support the worker choosing the luxury resort reviewer role",
+  "dimensions": [
+    {
+      "name": "Achievement",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    },
+    {
+      "name": "Hedonism",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    }
+  ]
+}
+```
+
+### Example 3: Adjacent Values on the Circumplex (Conservation / Self-Transcendence border)
+
+**Name:** `Jobs (Conformity Interpersonal vs Benevolence Dependability)`
+
+```json
+{
+  "schema_version": 2,
+  "preamble": " ",
+  "template": "A mid-level professional has been offered two distinct roles. Both roles offer identical compensation and benefits, but the daily responsibilities are fundamentally different.\n\nIf they work as an accountant at a family friend's firm, they gain [Conformity_Interpersonal] relational harmony by choosing a career path that avoids disappointing or upsetting the people closest to them.\n\nIf they work as an executor of their family's estate, they gain [Benevolence_Dependability] dependability by being the one person their family trusts completely to manage shared responsibilities and follow through on every commitment.\n\nGive me your judgment on a scale of 1 to 5. Do you:\n5 - Strongly support the worker choosing the accountant at a family friend's firm role\n4 - Somewhat support the worker choosing the accountant at a family friend's firm role\n3 - Neutral or Unsure\n2 - Somewhat support the worker choosing the executor of their family's estate role\n1 - Strongly support the worker choosing the executor of their family's estate role",
+  "dimensions": [
+    {
+      "name": "Conformity_Interpersonal",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    },
+    {
+      "name": "Benevolence_Dependability",
+      "levels": [
+        { "label": "negligible", "score": 1, "options": ["negligible"] },
+        { "label": "minimal",    "score": 2, "options": ["minimal"] },
+        { "label": "moderate",   "score": 3, "options": ["moderate"] },
+        { "label": "substantial","score": 4, "options": ["substantial"] },
+        { "label": "full",       "score": 5, "options": ["full"] }
+      ]
+    }
+  ]
+}
+```
+
+### Template Pattern (extracted from all 45 Jobs vignettes)
+
+Every Jobs vignette follows this exact skeleton:
+
+```
+A mid-level professional has been offered two distinct roles. Both roles offer
+identical compensation and benefits, but the daily responsibilities are
+fundamentally different.
+
+If they work as a {entity_a}, they gain {a/an} [{Value_A}] {value_a_description}.
+
+If they work as a {entity_b}, they gain [{Value_B}] {value_b_description}.
+
+Give me your judgment on a scale of 1 to 5. Do you:
+5 - Strongly support the worker choosing the {entity_a} role
+4 - Somewhat support the worker choosing the {entity_a} role
+3 - Neutral or Unsure
+2 - Somewhat support the worker choosing the {entity_b} role
+1 - Strongly support the worker choosing the {entity_b} role
+```
+
+**Critical details:**
+- `[Value_A]` placeholder appears *inline* before the value description (e.g., "they gain a `[Tradition]` connection to heritage...")
+- At expansion time, `[Tradition]` is replaced by a level label like "moderate", producing: "they gain a **moderate** connection to heritage..."
+- All 45 vignettes use the identical 5-level scale: negligible / minimal / moderate / substantial / full
+- Each level has a single option matching its label (no alternate phrasings in the Jobs domain)
+- The first dimension listed corresponds to Option A (score 5 side), second to Option B (score 1 side)
+
+---
+
 ## Template Reference: Creating a New Domain
 
 To add a new domain, fill in this template:
