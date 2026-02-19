@@ -96,6 +96,9 @@ Get detailed run results and value rankings.
 ### `get_transcript_summary`
 Get transcript content and analysis.
 
+### `get_run_results`
+Get paginated per-task results for in-progress or completed runs.
+
 ### `get_dimension_analysis`
 Analyze how dimensions affect value priorities.
 

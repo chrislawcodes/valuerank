@@ -27,6 +27,7 @@ import './graphql-query.js';
 import './get-dimension-analysis.js';
 import './get-transcript-summary.js';
 import './get-transcript.js';
+import './get-run-results.js';
 // Stage 14 - Write Tools
 import './create-definition.js';
 import './fork-definition.js';
