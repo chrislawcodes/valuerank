@@ -1,11 +1,11 @@
 # =========================================================
 # ValueRank | PRD (Synced from Google Doc)
 # Source: https://docs.google.com/document/d/1LzDtvGhGyH88JaIgNWkbwqMElk9MW7pWgqwCZE4WhyU
-# Last Synced: 2026-02-03
+# Last Updated: 2026-02-19
 # =========================================================
 
 meta:
-  version: "Google Doc Live"
+  version: "Cloud Platform V1"
   mission: "Map the behavioral profiles of AI systems"
 
 # ---------------------------------------------------------
@@ -17,92 +17,82 @@ Vision:
   Goal: "Determine the human values embedded in AI decision-making by running vignette-based stress tests."
   Approach: "Scientific endeavor: Reproducible, Transparent, Neutral (no value judgements)."
 
-  Milestones:
-    1: "Ensure values methodology is sound & explore different approaches"
-    2: "Attitudinal survey work"
-    3: "Revisit values"
-    4: "Make our findings robust and defensible"
-    5: "Explore who's interested in these types of findings"
-    6: "Explore other areas that affect AI decision making"
-
 # ---------------------------------------------------------
 # 2. Methodology
 # ---------------------------------------------------------
 Methodology:
-  Framework: "Schwartz framework of 10 human values"
+  Framework: "Schwartz framework of human values (currently testing 10 core values due to cost/efficiency, though the platform supports all 19)."
   Goals:
     1: "Find out which values each AI prioritizes."
     2: "Predict which value an AI will prioritize in a scenario."
 
   Vignette_Structure:
-    1: "Context sentence"
-    2: "Two options (A and B) representing conflicting values"
-    3: "Statement describing each option"
-    4: "Statement describing how strongly the subject cares about the value"
-    5: "5-point choice scale: Strongly Support A (5) ... Neutral (3) ... Strongly Support B (1)"
-    6: "Generic titles/subjects to avoid naming bias"
+    1: "Domain Setup: Context sentence with an equal-footing clause to remove confounders."
+    2: "Two options (A and B) representing conflicting values mapped to concrete entities."
+    3: "Statement describing how strongly the subject cares about the value (1-5 scale)."
+    4: "5-point choice scale: Strongly Support A (5) ... Neutral (3) ... Strongly Support B (1)"
+    5: "Generic titles/subjects to avoid naming bias"
 
   Experimental_Design:
     - "Vary each value on a scale of 1-5."
-    - "Standardize level descriptions (5 = core belief, 1 = no preference)."
     - "Result: 25 combinations (Conditions) for each vignette."
-    - "Metric: Boundary dominance (fraction of 5x5 grid where A 'wins' vs B 'wins')."
+    - "Metric 1: Win Rate (prioritized / (prioritized + deprioritized))."
+    - "Metric 2: Pairwise Matrix (how often one value beats another in direct conflict)."
+    - "Diagnostic Metric: Unmatched Values (when models bypass the intended values)."
 
   Project_Procedure:
-    1: "Validate vignette: 1% sample run (single batch). Sanity check."
-    2: "Baseline stability: 10 batches of vignette. Check for Standard Error of Mean (SEM) < 0.1."
-    3: "Refine unstable conditions: Do 10 more batches where SEM > 0.1."
-    4: "Evaluate Confidence Interval: If 95% CI is one-sided, stop. If it crosses values, AI is inconsistent."
+    Goal: "Smart Sampling"
+    - "Focus on statistical convergence (where the win-rate matrix stabilizes) rather than fixed batch counts to optimize API costs."
+    - "Run definitive baseline benchmarks across frontier models once convergence points are established."
 
 # ---------------------------------------------------------
 # 3. Critical User Journeys
 # ---------------------------------------------------------
 User_Journeys:
-  Flow: "Scenario Creation -> Target AI Probing -> Summary -> Analysis"
+  Flow: "Domain Expansion -> Vignette Creation -> Target AI Probing -> Analysis & Export"
 
   Initial_Setup:
-    - "Preamble creation: Primes Target AI to focus on moral reasoning, not logistics."
-    - "Value Rubric creation: Outline Schwartz values (1-5 scale)."
+    - "Preamble creation: Primes Target AIs to focus on moral reasoning via system prompts."
+    - "Value Rubric: Selecting the values to test for the specific domain."
 
   Scenario_Creation:
-    - "Baseline Scenario: Moral dilemma, first person, two defensible choices."
-    - "Scenario Variation: Identify variables, customize along scale 1-5 (25 conditions)."
+    - "Author Vignettes securely in the React-based DevTool, defining dimensions (values) and extracting the full 5x5 baseline scenario grid."
 
-  Target_AI_Probing:
-    - "Run probe script against Target AIs (ChatGPT, Claude, Gemini, Grok, Mistral, Deepseek)."
-    - "Send Preamble + Scenario (Condition)."
+  Execution_Engine:
+    - "Orchestrate evaluation runs against target models (GPT-4o, Claude 3.5, Gemini 1.5, etc) via a highly-concurrent PostgreSQL/PgBoss job queue paired with Python execution workers (probe, summarize, analyze)."
 
-  Summary_Analysis:
-    - "Summary AI summarizes probing result."
-    - "Researcher analyzes tipping points."
+  Evaluation_Phase:
+    - "The Target AI is prompted to return a 1-5 rating directly."
+    - "The summarize worker extracts this explicit numerical decision deterministically. There is no separate Judge AI; the models score themselves on the given scale."
+
+  Analysis_Export:
+    - "Review aggregate statistics (Win Rates, Pairwise Matrices) via the Web UI."
+    - "Export compact datasets (CSV) or OData for unified external analysis (e.g., in Google Sheets)."
 
 # ---------------------------------------------------------
-# 4. Definitions
+# 4. Terminology
 # ---------------------------------------------------------
 Definitions:
-  Vignette: "The complete experimental unit (Master Template). Consists of Task Framing and Narrative."
-  Task_Framing: "Initial instructions or 'persona' constraints (Preamble)."
-  Narrative: "The descriptive scenario or 'story'."
+  Domain: "A life context (e.g., Jobs, Neighborhoods, City Planning) that provides a natural binary-choice frame."
+  Vignette: "The complete experimental narrative and unit of testing."
   Attribute: "Specific Schwartz human values (e.g., Universalism, Security)."
   Level: "Degree of prominence/weight assigned to an Attribute (1-5)."
-  Condition: "A specific realization of a Vignette where Attribute levels are fixed (e.g., a single cell in a 5x5 grid)."
-  Vignette_Universe: "Collection of every possible Condition for a Vignette."
-  Trial: "Act of presenting a single Condition to one or more Target AIs."
-  Batch: "Complete execution of an experiment where all Target AIs are tested against every available Condition."
-  Response: "The AI’s response (categorical decision + justification)."
+  Condition: "A specific realization of a Vignette where Attribute levels are fixed (a cell in a 5x5 grid)."
+  Trial: "Act of presenting a single Condition to a Target AI."
+  Batch: "Complete execution of an experiment across conditions."
 
 # ---------------------------------------------------------
 # 5. Design Decisions
 # ---------------------------------------------------------
 Design:
-  Values_Model: "Schwartz 10 Values (decided against 19)."
-  Sample_Size: "Start with 10 runs per vignette for statistical significance."
-  Order_Effect: "Tested and found negligible (AI didn't change answer based on statement order)."
+  Values_Model: "Schwartz 10 Values chosen for the initial rollout and first wave of domain expansions for cost-efficiency. The system fundamentally models the full 19 values."
+  Sample_Size: "Dynamically determined by convergence point testing (Smart Sampling strategy)."
 
 # ---------------------------------------------------------
-# 6. Feature Requests (from Doc)
+# 6. Roadmap & Priorities
 # ---------------------------------------------------------
-Feature_Requests:
-  - "Inclusion of previous answers in multiple trials"
-  - "Prominent 'aggregate' button on analysis page"
-  - "Walk through analysis charts and improve usefulness"
+Roadmap:
+  - "Robustness & Meta-Evaluation (loophole analysis, prompt sensitivity)"
+  - "Vignette Domain Expansion (Scaling to new contrasting domains like City Planning to test context-sensitivity)"
+  - "Smart Sampling Execution (Implement statistical convergence testing)"
+  - "Baseline Leaderboards (Publish comparative analysis across frontier models)"
