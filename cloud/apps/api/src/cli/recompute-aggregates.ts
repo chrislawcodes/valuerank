@@ -3,6 +3,7 @@
 import { db } from '@valuerank/db';
 import { updateAggregateRun } from '../services/analysis/aggregate.js';
 import { createLogger } from '@valuerank/shared';
+import { parseTemperature } from '../utils/temperature.js';
 
 const log = createLogger('cli:trigger-aggregation');
 
@@ -33,6 +34,11 @@ export function getDefinitionVersion(config: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function getTemperature(config: unknown): number | null {
+    if (!isRecord(config)) return null;
+    return parseTemperature(config.temperature);
+}
+
 async function main() {
     log.info('Starting manual aggregation update...');
 
@@ -60,6 +66,7 @@ async function main() {
         definitionId: string;
         preambleVersionId: string | null;
         definitionVersion: number | null;
+        temperature: number | null;
         runCount: number;
     };
     const grouped = new Map<string, Group>();
@@ -67,7 +74,8 @@ async function main() {
     for (const run of sourceRuns) {
         const preambleVersionId = getPreambleVersionId(run.config);
         const definitionVersion = getDefinitionVersion(run.config);
-        const key = `${run.definitionId}::${preambleVersionId ?? 'null'}::${definitionVersion ?? 'null'}`;
+        const temperature = getTemperature(run.config);
+        const key = `${run.definitionId}::${preambleVersionId ?? 'null'}::${definitionVersion ?? 'null'}::${temperature ?? 'null'}`;
         const existing = grouped.get(key);
         if (existing) {
             existing.runCount += 1;
@@ -77,6 +85,7 @@ async function main() {
             definitionId: run.definitionId,
             preambleVersionId,
             definitionVersion,
+            temperature,
             runCount: 1,
         });
     }
@@ -89,7 +98,7 @@ async function main() {
     for (const group of grouped.values()) {
         log.info(group, 'Updating aggregate group');
         try {
-            await updateAggregateRun(group.definitionId, group.preambleVersionId, group.definitionVersion);
+            await updateAggregateRun(group.definitionId, group.preambleVersionId, group.definitionVersion, group.temperature);
 
             log.info(group, 'Successfully updated aggregate group');
         } catch (err) {

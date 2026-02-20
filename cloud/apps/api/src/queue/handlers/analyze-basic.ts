@@ -14,6 +14,7 @@ import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -272,6 +273,8 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 }
               };
               const definitionId = run.definitionId;
+              const runConfig = run.config as { temperature?: unknown } | null;
+              const temperature = parseTemperature(runConfig?.temperature);
               const preambleVersionId =
                 config.definitionSnapshot?._meta?.preambleVersionId ??
                 config.definitionSnapshot?.preambleVersionId ??
@@ -297,18 +300,18 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
 
               const boss = getBoss();
-              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}`;
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}:${temperature ?? 'null'}`;
 
               await boss.send(
                 'aggregate_analysis',
-                { definitionId, preambleVersionId, definitionVersion },
+                { definitionId, preambleVersionId, definitionVersion, temperature },
                 {
                   ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
                   singletonKey
                 }
               );
 
-              log.info({ runId, definitionId, preambleVersionId, definitionVersion }, 'Enqueued aggregate_analysis job');
+              log.info({ runId, definitionId, preambleVersionId, definitionVersion, temperature }, 'Enqueued aggregate_analysis job');
             }
           }
         } catch (err) {

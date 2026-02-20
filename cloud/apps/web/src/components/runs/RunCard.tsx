@@ -8,6 +8,7 @@ import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 
 import type { Run, RunStatus } from '../../api/operations/runs';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
+import { formatTemperatureSetting } from '../../lib/temperature';
 
 type RunCardProps = {
   run: Run;
@@ -105,6 +106,7 @@ export function RunCard({ run, onClick }: RunCardProps) {
             <p className="text-sm text-gray-500 mt-0.5">
               {run.name && <span className="font-medium text-gray-700 mr-1.5">{run.name} ·</span>}
               {formatDate(run.createdAt)}
+              <span className="ml-2">{formatTemperatureSetting(run.config?.temperature)}</span>
             </p>
           </div>
         </div>

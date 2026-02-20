@@ -19,6 +19,7 @@ import type { StartRunInput } from '../../api/operations/runs';
 type RunFormProps = {
   definitionId: string;
   scenarioCount?: number;
+  initialTemperature?: number | null;
   onSubmit: (input: StartRunInput) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
@@ -28,6 +29,7 @@ type RunFormState = {
   selectedModels: string[];
   samplePercentage: number;
   samplesPerScenario: number;
+  temperatureInput: string;
 };
 
 const SAMPLE_OPTIONS = [
@@ -47,6 +49,7 @@ const SAMPLES_PER_SCENARIO_OPTIONS = [
 export function RunForm({
   definitionId,
   scenarioCount,
+  initialTemperature = null,
   onSubmit,
   onCancel,
   isSubmitting = false,
@@ -61,6 +64,7 @@ export function RunForm({
     selectedModels: [],
     samplePercentage: 10, // Default to 10% run
     samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
+    temperatureInput: initialTemperature === null ? '' : String(initialTemperature),
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -160,6 +164,13 @@ export function RunForm({
     });
   }, [models, loadingModels, hasUserChangedSelection]);
 
+  useEffect(() => {
+    setFormState((prev) => ({
+      ...prev,
+      temperatureInput: initialTemperature === null ? '' : String(initialTemperature),
+    }));
+  }, [initialTemperature]);
+
   const handleModelSelectionChange = useCallback((models: string[]) => {
     setHasUserChangedSelection(true);
     setFormState((prev) => ({ ...prev, selectedModels: models }));
@@ -180,6 +191,11 @@ export function RunForm({
     setFormState((prev) => ({ ...prev, samplesPerScenario: value }));
   }, []);
 
+  const handleTemperatureChange = useCallback((value: string) => {
+    setFormState((prev) => ({ ...prev, temperatureInput: value }));
+    setValidationError(null);
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -196,6 +212,17 @@ export function RunForm({
         return;
       }
 
+      const trimmedTemperature = formState.temperatureInput.trim();
+      let temperature: number | undefined;
+      if (trimmedTemperature !== '') {
+        const parsedTemperature = Number.parseFloat(trimmedTemperature);
+        if (!Number.isFinite(parsedTemperature) || parsedTemperature < 0 || parsedTemperature > 2) {
+          setValidationError('Temperature must be between 0 and 2');
+          return;
+        }
+        temperature = parsedTemperature;
+      }
+
       // Build input
       const input: StartRunInput = {
         definitionId,
@@ -203,6 +230,7 @@ export function RunForm({
         samplePercentage: isFinalTrial || isSpecificConditionTrial ? undefined : formState.samplePercentage,
         samplesPerScenario: isFinalTrial ? undefined : formState.samplesPerScenario,
         scenarioIds: isSpecificConditionTrial ? selectedConditionScenarioIds : undefined,
+        temperature,
         finalTrial: isFinalTrial,
       };
 
@@ -460,6 +488,26 @@ export function RunForm({
             )}
           </div>
         )}
+      </div>
+
+      {/* Temperature */}
+      <div>
+        <label htmlFor="temperature" className="block text-sm font-medium text-gray-700 mb-2">
+          Temperature
+        </label>
+        <input
+          id="temperature"
+          type="number"
+          min={0}
+          max={2}
+          step={0.1}
+          value={formState.temperatureInput}
+          onChange={(e) => handleTemperatureChange(e.target.value)}
+          placeholder="default"
+          disabled={isSubmitting}
+          className="w-48 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50"
+        />
+        <p className="mt-2 text-xs text-gray-500">Leave blank to use provider default.</p>
       </div>
 
       {/* Trials per Narrative */}

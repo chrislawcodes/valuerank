@@ -11,6 +11,7 @@ import { Button } from '../ui/Button';
 import { RunForm } from './RunForm';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import type { Run, StartRunInput } from '../../api/operations/runs';
+import { formatTemperatureSetting } from '../../lib/temperature';
 
 export type RerunDialogProps = {
   run: Run;
@@ -110,6 +111,10 @@ export function RerunDialog({
                 <span className="text-gray-500">Status:</span>{' '}
                 {run.status}
               </p>
+              <p>
+                <span className="text-gray-500">Temperature:</span>{' '}
+                {formatTemperatureSetting(run.config?.temperature)}
+              </p>
             </div>
           </div>
 
@@ -124,6 +129,7 @@ export function RerunDialog({
           <RunForm
             definitionId={run.definitionId}
             scenarioCount={scenarioCount}
+            initialTemperature={run.config?.temperature ?? null}
             onSubmit={handleSubmit}
             onCancel={onClose}
             isSubmitting={loading}

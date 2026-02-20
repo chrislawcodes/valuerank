@@ -51,6 +51,8 @@ export type AggregateAnalysisJobData = {
   preambleVersionId: string | null;
   // Optional for backward compatibility with already-queued legacy jobs.
   definitionVersion?: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  temperature?: number | null;
 };
 
 // Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
