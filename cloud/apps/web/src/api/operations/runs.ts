@@ -67,6 +67,7 @@ export type RunConfig = {
   models: string[];
   samplePercentage?: number;
   sampleSeed?: number;
+  temperature?: number | null;
   priority?: string;
 };
 
@@ -420,6 +421,7 @@ export type StartRunInput = {
   models: string[];
   samplePercentage?: number;
   samplesPerScenario?: number;
+  temperature?: number;
   scenarioIds?: string[];
   sampleSeed?: number;
   priority?: 'LOW' | 'NORMAL' | 'HIGH';

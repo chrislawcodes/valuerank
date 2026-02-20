@@ -2,6 +2,7 @@ import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { updateAggregateRun } from '../analysis/aggregate.js';
 import { resolveModelIdFromAvailable } from '../models/aliases.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('services:run:plan-final-trial');
 
@@ -172,7 +173,8 @@ function generateInitialPlan(
 
 export async function planFinalTrial(
   definitionId: string,
-  modelIds: string[]
+  modelIds: string[],
+  temperature: number | null = null
 ): Promise<FinalTrialPlan> {
   const definition = await db.definition.findUnique({
     where: { id: definitionId },
@@ -215,11 +217,11 @@ export async function planFinalTrial(
     };
   }
 
-  log.info({ definitionId, modelIds }, 'Planning final trial');
+  log.info({ definitionId, modelIds, temperature }, 'Planning final trial');
 
-  await updateAggregateRun(definitionId, definition.preambleVersionId, definition.version);
+  await updateAggregateRun(definitionId, definition.preambleVersionId, definition.version, temperature);
 
-  const aggregateRun = await db.run.findFirst({
+  const aggregateRuns = await db.run.findMany({
     where: {
       definitionId,
       status: 'COMPLETED',
@@ -234,6 +236,12 @@ export async function planFinalTrial(
       },
     },
     orderBy: { updatedAt: 'desc' },
+  });
+
+  const aggregateRun = aggregateRuns.find((run) => {
+    const config = (run.config ?? null) as { temperature?: unknown } | null;
+    const runTemperature = parseTemperature(config?.temperature);
+    return runTemperature === temperature;
   });
 
   const analysis = (aggregateRun?.analysisResults[0]?.output ?? null) as AnalysisShape | null;

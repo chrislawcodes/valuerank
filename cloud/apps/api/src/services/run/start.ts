@@ -22,6 +22,7 @@ export type StartRunInput = {
   samplePercentage?: number;
   sampleSeed?: number;
   samplesPerScenario?: number; // Number of samples per scenario-model pair (1-100, default 1)
+  temperature?: number;
   priority?: string;
   experimentId?: string;
   userId?: string | null;
@@ -343,6 +344,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     samplePercentage = 100,
     sampleSeed,
     samplesPerScenario = 1,
+    temperature,
     priority = 'NORMAL',
     experimentId,
     userId,
@@ -368,6 +370,10 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
   // Validate samplesPerScenario (only if not final trial)
   if (!finalTrial && (samplesPerScenario < 1 || samplesPerScenario > 100)) {
     throw new ValidationError('samplesPerScenario must be between 1 and 100');
+  }
+
+  if (temperature !== undefined && (temperature < 0 || temperature > 2)) {
+    throw new ValidationError('temperature must be between 0 and 2');
   }
 
   if (finalTrial && Array.isArray(scenarioIds) && scenarioIds.length > 0) {
@@ -444,7 +450,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   if (finalTrial) {
     // Adaptive Sampling Strategy
-    const plan = await planFinalTrial(definitionId, models);
+    const plan = await planFinalTrial(definitionId, models, temperature ?? null);
 
     // Flatten plan into job entries
     plan.models.forEach(modelPlan => {
@@ -555,6 +561,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     samplePercentage: finalTrial ? null : samplePercentage,
     sampleSeed: finalTrial ? null : sampleSeed,
     samplesPerScenario: finalTrial ? null : samplesPerScenario,
+    temperature: temperature ?? null,
     scenarioIds: finalTrial ? null : (selectedScenarioIds.length > 0 ? selectedScenarioIds : null),
     runMode: finalTrial ? 'FINAL' : (Array.isArray(scenarioIds) && scenarioIds.length > 0 ? 'SPECIFIC_CONDITION' : 'PERCENTAGE'),
     isFinalTrial: finalTrial,
@@ -652,7 +659,10 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
           scenarioId: item.scenarioId,
           modelId: item.modelId,
           sampleIndex: i, // TODO: Consider offsetting if appending to existing results?
-          config: { maxTurns: 10 },
+          config: {
+            maxTurns: 10,
+            ...(temperature !== undefined ? { temperature } : {}),
+          },
         },
         options: baseJobOptions
       });

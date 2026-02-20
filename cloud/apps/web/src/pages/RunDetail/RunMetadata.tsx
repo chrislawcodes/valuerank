@@ -5,11 +5,13 @@
  */
 
 import { Calendar, Clock, Play } from 'lucide-react';
+import { formatTemperatureSetting } from '../../lib/temperature';
 
 type RunMetadataProps = {
   createdAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  temperature?: number | null;
 };
 
 /**
@@ -49,7 +51,7 @@ function calculateDuration(startedAt: string | null, completedAt: string | null)
   return `${seconds}s`;
 }
 
-export function RunMetadata({ createdAt, startedAt, completedAt }: RunMetadataProps) {
+export function RunMetadata({ createdAt, startedAt, completedAt, temperature }: RunMetadataProps) {
   return (
     <div className="flex items-center gap-6 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
       <span className="flex items-center gap-1">
@@ -66,6 +68,7 @@ export function RunMetadata({ createdAt, startedAt, completedAt }: RunMetadataPr
         <Clock className="w-4 h-4" />
         Duration: {calculateDuration(startedAt, completedAt)}
       </span>
+      <span>{formatTemperatureSetting(temperature)}</span>
     </div>
   );
 }

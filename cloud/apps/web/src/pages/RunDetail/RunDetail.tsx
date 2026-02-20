@@ -25,6 +25,7 @@ import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { formatTemperatureSetting } from '../../lib/temperature';
 
 function formatDate(dateString: string | Date): string {
   const date = new Date(dateString);
@@ -414,6 +415,7 @@ export function RunDetail() {
           createdAt={run.createdAt}
           startedAt={run.startedAt}
           completedAt={run.completedAt}
+          temperature={run.config?.temperature}
         />
 
         {/* Analysis link banner */}
@@ -447,6 +449,10 @@ export function RunDetail() {
             <div>
               <span className="text-gray-500">Sample:</span>
               <span className="ml-2 text-gray-900">{run.config?.samplePercentage ?? 100}%</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Temperature:</span>
+              <span className="ml-2 text-gray-900">{formatTemperatureSetting(run.config?.temperature)}</span>
             </div>
           </div>
         </div>
