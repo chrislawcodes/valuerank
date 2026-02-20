@@ -36,14 +36,15 @@ Methodology:
   Experimental_Design:
     - "Vary each value on a scale of 1-5."
     - "Result: 25 combinations (Conditions) for each vignette."
-    - "Metric 1: Win Rate (prioritized / (prioritized + deprioritized))."
-    - "Metric 2: Pairwise Matrix (how often one value beats another in direct conflict)."
-    - "Diagnostic Metric: Unmatched Values (when models bypass the intended values)."
+    - "Temperature: All target models are run at Temperature 0 to ensure deterministic preference signals rather than stochastic noise."
+    - "Metric 1: Overall Win Rate (computed across all 25 grid responses to capture robustness of preference across varying intensity levels)."
+    - "Metric 2: Bradley-Terry Pairwise Ranking (derived from the full win-rate matrix with BT-implied uncertainty)."
 
   Project_Procedure:
-    Goal: "Smart Sampling"
-    - "Focus on statistical convergence (where the win-rate matrix stabilizes) rather than fixed batch counts to optimize API costs."
-    - "Run definitive baseline benchmarks across frontier models once convergence points are established."
+    Goal: "Deterministic Grid Sampling"
+    - "Phase 1 (Estimation): Run the full 25-condition grid for each vignette exactly once per domain (N=1 per condition at Temp 0). Total: 1,125 trials per domain."
+    - "Phase 2 (Validity Check): Verify manipulation works by ensuring corners (5,1) and (1,5) enforce intended directionality, and regression coefficients are properly signed."
+    - "Phase 3 (Cross-domain Replication): Replicate across structurally distinct domains to test if value orderings hold, evaluating stable value profiles (e.g. via Kendall's τ)."
 
 # ---------------------------------------------------------
 # 3. Critical User Journeys
@@ -86,13 +87,13 @@ Definitions:
 # ---------------------------------------------------------
 Design:
   Values_Model: "Schwartz 10 Values chosen for the initial rollout and first wave of domain expansions for cost-efficiency. The system fundamentally models the full 19 values."
-  Sample_Size: "Dynamically determined by convergence point testing (Smart Sampling strategy)."
+  Sample_Size: "Fixed deterministic sampling: N=1 per condition per vignette for Phase 1 runs (fallback to N=3 if non-determinism detected at Temp 0)."
 
 # ---------------------------------------------------------
 # 6. Roadmap & Priorities
 # ---------------------------------------------------------
 Roadmap:
-  - "Robustness & Meta-Evaluation (loophole analysis, prompt sensitivity)"
-  - "Vignette Domain Expansion (Scaling to new contrasting domains like City Planning to test context-sensitivity)"
-  - "Smart Sampling Execution (Implement statistical convergence testing)"
-  - "Baseline Leaderboards (Publish comparative analysis across frontier models)"
+  - "Robustness & Meta-Evaluation (manipulation validity checks, transitivity checks, framing floor effects)"
+  - "Vignette Domain Expansion (Scaling to structurally distinct domains like Neighborhoods and City Planning to calculate cross-domain replication stable value profiles)"
+  - "Deterministic Execution Architecture (Implement Temperature 0, 25-cell pooled win rate analysis)"
+  - "Baseline Leaderboards (Publish pairwise win rate matrices and Bradley-Terry score rankings across frontier models)"
