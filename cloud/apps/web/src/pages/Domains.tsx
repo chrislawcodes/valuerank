@@ -37,10 +37,16 @@ export function Domains() {
   const [createName, setCreateName] = useState('');
   const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
 
   const {
     domains,
-    loading: domainLoading,
+    queryLoading: domainQueryLoading,
+    creating,
+    renaming,
+    deleting,
+    assigningByIds,
+    assigningByFilter,
     error: domainError,
     refetch: refetchDomains,
     createDomain,
@@ -81,13 +87,19 @@ export function Domains() {
       withoutDomain: definitionFilterArgs.withoutDomain,
     },
   });
-  const shownCount = countData?.definitionCount ?? definitions.length;
+  const shownCount = countData?.definitionCount ?? null;
 
   const [{ data: noneCountData }] = useQuery<DefinitionCountQueryResult, DefinitionCountQueryVariables>({
     query: DEFINITION_COUNT_QUERY,
     variables: { withoutDomain: true },
   });
   const noneCount = noneCountData?.definitionCount ?? 0;
+
+  const [{ data: allCountData }] = useQuery<DefinitionCountQueryResult, DefinitionCountQueryVariables>({
+    query: DEFINITION_COUNT_QUERY,
+    variables: {},
+  });
+  const allCount = allCountData?.definitionCount ?? null;
 
   const resetSelection = useCallback(() => {
     setSelectedDefinitionIds(new Set());
@@ -110,10 +122,12 @@ export function Domains() {
 
   const handleBulkAssign = async () => {
     setInlineError(null);
+    setInlineSuccess(null);
     const targetDomainId = assignTargetDomainId === 'none' ? null : assignTargetDomainId;
     try {
+      let result: { success: boolean; affectedDefinitions: number } | null = null;
       if (selectAllShown) {
-        await assignDomainToDefinitionsByFilter({
+        result = await assignDomainToDefinitionsByFilter({
           domainId: targetDomainId,
           search: filters.search || undefined,
           rootOnly: filters.rootOnly || undefined,
@@ -123,11 +137,15 @@ export function Domains() {
           withoutDomain: selectedFolder === 'none' ? true : undefined,
         });
       } else if (selectedDefinitionIds.size > 0) {
-        await assignDomainToDefinitions(Array.from(selectedDefinitionIds), targetDomainId);
+        result = await assignDomainToDefinitions(Array.from(selectedDefinitionIds), targetDomainId);
       } else {
         setInlineError('Select one or more vignettes first.');
         return;
       }
+      const targetName = targetDomainId === null
+        ? 'None'
+        : (domains.find((domain) => domain.id === targetDomainId)?.name ?? 'selected domain');
+      setInlineSuccess(`${result?.affectedDefinitions ?? 0} vignette${(result?.affectedDefinitions ?? 0) === 1 ? '' : 's'} assigned to ${targetName}.`);
       resetSelection();
       refetchDefinitions();
       refetchDomains();
@@ -142,6 +160,7 @@ export function Domains() {
 
   const handleCreateDomain = async () => {
     setInlineError(null);
+    setInlineSuccess(null);
     try {
       if (createName.trim() === '') return;
       const created = await createDomain(createName);
@@ -157,7 +176,9 @@ export function Domains() {
   const handleRenameDomain = async () => {
     if (!selectedDomain) return;
     setInlineError(null);
+    setInlineSuccess(null);
     try {
+      if (renameName.trim() === '') return;
       await renameDomain(selectedDomain.id, renameName);
       setRenameName('');
     } catch (error) {
@@ -168,6 +189,7 @@ export function Domains() {
   const handleDeleteDomain = async () => {
     if (!selectedDomain) return;
     setInlineError(null);
+    setInlineSuccess(null);
     const ok = window.confirm(
       `Delete domain "${selectedDomain.name}"? Attached vignettes will be moved to None.`
     );
@@ -182,7 +204,7 @@ export function Domains() {
   };
 
   const folderRows: Array<{ key: FolderKey; name: string; count: number }> = [
-    { key: 'all', name: 'All', count: domains.reduce((sum, d) => sum + d.definitionCount, 0) + noneCount },
+    { key: 'all', name: 'All', count: allCount ?? domains.reduce((sum, d) => sum + d.definitionCount, 0) + noneCount },
     { key: 'none', name: 'None', count: noneCount },
     ...domains.map((domain) => ({ key: domain.id, name: domain.name, count: domain.definitionCount })),
   ];
@@ -232,10 +254,16 @@ export function Domains() {
                 type="text"
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleCreateDomain();
+                  }
+                }}
                 placeholder="New domain name"
                 className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
               />
-              <Button onClick={() => void handleCreateDomain()} size="sm" variant="secondary">
+              <Button onClick={() => void handleCreateDomain()} size="sm" variant="secondary" disabled={creating}>
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
@@ -246,14 +274,20 @@ export function Domains() {
                     type="text"
                     value={renameName}
                     onChange={(e) => setRenameName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleRenameDomain();
+                      }
+                    }}
                     placeholder={selectedDomain.name}
                     className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
                   />
-                  <Button onClick={() => void handleRenameDomain()} size="sm" variant="secondary">
+                  <Button onClick={() => void handleRenameDomain()} size="sm" variant="secondary" disabled={renaming}>
                     <Pencil className="w-4 h-4" />
                   </Button>
                 </div>
-                <Button onClick={() => void handleDeleteDomain()} size="sm" variant="secondary" className="w-full">
+                <Button onClick={() => void handleDeleteDomain()} size="sm" variant="secondary" className="w-full" disabled={deleting}>
                   <Trash2 className="w-4 h-4 mr-1" />
                   Delete Domain
                 </Button>
@@ -268,7 +302,7 @@ export function Domains() {
           <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div className="text-sm text-gray-600">
-                {shownCount} vignette{shownCount !== 1 ? 's' : ''} shown
+                {shownCount === null ? '...' : shownCount} vignette{shownCount === 1 ? '' : 's'} shown
                 {getFilterSummary(filters) !== '' && ` (${getFilterSummary(filters)})`}
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -281,7 +315,7 @@ export function Domains() {
                       if (e.target.checked) setSelectedDefinitionIds(new Set());
                     }}
                   />
-                  Select all shown ({shownCount})
+                  Select all shown ({shownCount ?? '...'})
                 </label>
                 <select
                   value={assignTargetDomainId}
@@ -295,8 +329,8 @@ export function Domains() {
                     </option>
                   ))}
                 </select>
-                <Button onClick={() => void handleBulkAssign()} size="sm">
-                  Assign
+                <Button onClick={() => void handleBulkAssign()} size="sm" disabled={assigningByIds || assigningByFilter}>
+                  {(assigningByIds || assigningByFilter) ? 'Assigning...' : 'Assign'}
                 </Button>
               </div>
             </div>
@@ -304,8 +338,16 @@ export function Domains() {
             {inlineError && (
               <div className="text-sm text-red-600">{inlineError}</div>
             )}
+            {inlineSuccess && (
+              <div className="text-sm text-green-700">{inlineSuccess}</div>
+            )}
+            {shownCount !== null && shownCount > definitions.length && (
+              <p className="text-xs text-amber-700">
+                Showing first {definitions.length} of {shownCount} matching vignettes.
+              </p>
+            )}
 
-            {definitionsLoading || domainLoading ? (
+            {definitionsLoading || domainQueryLoading ? (
               <p className="text-sm text-gray-500">Loading...</p>
             ) : definitions.length === 0 ? (
               <p className="text-sm text-gray-500">No vignettes found for this folder/filter.</p>

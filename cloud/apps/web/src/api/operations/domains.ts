@@ -96,3 +96,56 @@ export type DomainsQueryVariables = {
   limit?: number;
   offset?: number;
 };
+
+export type CreateDomainMutationResult = {
+  createDomain: Domain;
+};
+
+export type CreateDomainMutationVariables = {
+  name: string;
+};
+
+export type RenameDomainMutationResult = {
+  renameDomain: Domain;
+};
+
+export type RenameDomainMutationVariables = {
+  id: string;
+  name: string;
+};
+
+export type DomainMutationResult = {
+  success: boolean;
+  affectedDefinitions: number;
+};
+
+export type DeleteDomainMutationResult = {
+  deleteDomain: DomainMutationResult;
+};
+
+export type DeleteDomainMutationVariables = {
+  id: string;
+};
+
+export type AssignDomainToDefinitionsMutationResult = {
+  assignDomainToDefinitions: DomainMutationResult;
+};
+
+export type AssignDomainToDefinitionsMutationVariables = {
+  definitionIds: string[];
+  domainId?: string | null;
+};
+
+export type AssignDomainToDefinitionsByFilterMutationResult = {
+  assignDomainToDefinitionsByFilter: DomainMutationResult;
+};
+
+export type AssignDomainToDefinitionsByFilterMutationVariables = {
+  domainId?: string | null;
+  rootOnly?: boolean;
+  search?: string;
+  tagIds?: string[];
+  hasRuns?: boolean;
+  sourceDomainId?: string;
+  withoutDomain?: boolean;
+};

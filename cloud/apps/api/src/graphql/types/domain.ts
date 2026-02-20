@@ -14,6 +14,9 @@ builder.objectType(DomainRef, {
     definitionCount: t.field({
       type: 'Int',
       resolve: async (domain) => {
+        if ('definitionCount' in domain && typeof domain.definitionCount === 'number') {
+          return domain.definitionCount;
+        }
         return db.definition.count({
           where: { domainId: domain.id, deletedAt: null },
         });
