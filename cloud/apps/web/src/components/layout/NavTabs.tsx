@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 const tabs = [
   { name: 'Domains', path: '/domains', icon: FolderTree },
@@ -18,6 +20,8 @@ const vignetteMenuItems = [
 
 export function NavTabs() {
   const location = useLocation();
+  const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
+  const vignetteMenuRef = useRef<HTMLDivElement>(null);
 
   // Check if the current path matches or is a child of the tab path
   const isTabActive = (tabPath: string) => {
@@ -25,26 +29,59 @@ export function NavTabs() {
   };
   const isVignettesActive = vignetteMenuItems.some((item) => isTabActive(item.path));
 
+  useEffect(() => {
+    setIsVignettesMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isVignettesMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (vignetteMenuRef.current && !vignetteMenuRef.current.contains(event.target as Node)) {
+        setIsVignettesMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isVignettesMenuOpen]);
+
   return (
     // Hidden on mobile (< 640px), visible on tablet/desktop
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
-          <div className="relative group">
-            <NavLink
-              to="/definitions"
+          <div
+            ref={vignetteMenuRef}
+            className="relative group"
+            onMouseEnter={() => setIsVignettesMenuOpen(true)}
+            onMouseLeave={() => setIsVignettesMenuOpen(false)}
+          >
+            <div
               className={
-                `flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isVignettesActive
+                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isVignettesActive
                   ? 'text-white border-teal-500'
                   : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
                 }`
               }
             >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Vignettes</span>
-              <ChevronDown className="w-4 h-4" />
-            </NavLink>
-            <div className="absolute left-0 top-full z-50 min-w-[180px] pt-1 opacity-0 invisible pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto">
+              <NavLink to="/definitions" className="flex items-center gap-2 px-3 py-3">
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Vignettes</span>
+              </NavLink>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Toggle Vignettes menu"
+                aria-expanded={isVignettesMenuOpen}
+                onClick={() => setIsVignettesMenuOpen((prev) => !prev)}
+                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isVignettesMenuOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
+            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isVignettesMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
               <div className="rounded-md border border-gray-200 bg-white shadow-lg py-1">
                 {vignetteMenuItems.map((item) => {
                   const isActive = isTabActive(item.path);
