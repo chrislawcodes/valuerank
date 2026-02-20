@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
-import { Folder, FolderOpen, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
@@ -38,6 +38,8 @@ export function Domains() {
   const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runSuccess, setRunSuccess] = useState<string | null>(null);
 
   const {
     domains,
@@ -45,6 +47,7 @@ export function Domains() {
     creating,
     renaming,
     deleting,
+    runningDomainTrials,
     assigningByIds,
     assigningByFilter,
     error: domainError,
@@ -54,6 +57,7 @@ export function Domains() {
     deleteDomain,
     assignDomainToDefinitions,
     assignDomainToDefinitionsByFilter,
+    runTrialsForDomain,
   } = useDomains();
 
   const definitionFilterArgs = useMemo(() => {
@@ -151,6 +155,29 @@ export function Domains() {
       refetchDomains();
     } catch (error) {
       setInlineError(error instanceof Error ? error.message : 'Failed to assign domain');
+    }
+  };
+
+  const handleRunDomainTrials = async () => {
+    if (!selectedDomain) return;
+    setRunError(null);
+    setRunSuccess(null);
+    const confirmed = window.confirm(
+      `Start trials for domain "${selectedDomain.name}"?\n\nThis will run only the latest version per vignette lineage in this domain using default active models.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = await runTrialsForDomain(selectedDomain.id);
+      if (result === null) {
+        setRunError('Failed to start domain trials.');
+        return;
+      }
+      setRunSuccess(
+        `Started ${result.startedRuns}/${result.targetedDefinitions} latest-version vignette trials (${result.failedDefinitions} failed).`
+      );
+    } catch (error) {
+      setRunError(error instanceof Error ? error.message : 'Failed to start domain trials');
     }
   };
 
@@ -298,6 +325,31 @@ export function Domains() {
 
         <section className="space-y-4">
           <DefinitionFilters filters={filters} onFiltersChange={setFilters} />
+
+          <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-teal-900">Run Domain Trials</h3>
+                <p className="text-xs text-teal-800">
+                  Start one trial for each latest vignette version in the selected domain.
+                </p>
+              </div>
+              <Button
+                onClick={() => void handleRunDomainTrials()}
+                disabled={selectedDomain === null || runningDomainTrials}
+              >
+                <Play className="w-4 h-4 mr-1" />
+                {runningDomainTrials ? 'Starting Trials...' : 'Run Domain Trials'}
+              </Button>
+            </div>
+            {selectedDomain === null && (
+              <p className="text-xs text-teal-800">
+                Select a specific domain folder to run domain trials.
+              </p>
+            )}
+            {runError && <p className="text-sm text-red-600">{runError}</p>}
+            {runSuccess && <p className="text-sm text-green-700">{runSuccess}</p>}
+          </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

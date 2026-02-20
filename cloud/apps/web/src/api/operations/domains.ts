@@ -87,6 +87,18 @@ export const ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION = gql`
   }
 `;
 
+export const RUN_TRIALS_FOR_DOMAIN_MUTATION = gql`
+  mutation RunTrialsForDomain($domainId: ID!, $temperature: Float) {
+    runTrialsForDomain(domainId: $domainId, temperature: $temperature) {
+      success
+      totalDefinitions
+      targetedDefinitions
+      startedRuns
+      failedDefinitions
+    }
+  }
+`;
+
 export type DomainsQueryResult = {
   domains: Domain[];
 };
@@ -148,4 +160,19 @@ export type AssignDomainToDefinitionsByFilterMutationVariables = {
   hasRuns?: boolean;
   sourceDomainId?: string;
   withoutDomain?: boolean;
+};
+
+export type RunTrialsForDomainMutationResult = {
+  runTrialsForDomain: {
+    success: boolean;
+    totalDefinitions: number;
+    targetedDefinitions: number;
+    startedRuns: number;
+    failedDefinitions: number;
+  };
+};
+
+export type RunTrialsForDomainMutationVariables = {
+  domainId: string;
+  temperature?: number;
 };
