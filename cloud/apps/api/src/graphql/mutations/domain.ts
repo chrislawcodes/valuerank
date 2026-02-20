@@ -3,163 +3,32 @@ import { db, Prisma } from '@valuerank/db';
 import { DomainRef } from '../types/domain.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
+import { buildDefinitionWhere } from '../utils/definition-filters.js';
+import { randomUUID } from 'crypto';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
+const MAX_BULK_ASSIGN_IDS = 5000;
 
-type DomainDefinitionFilterArgs = {
-  rootOnly?: boolean | null;
-  search?: string | null;
-  tagIds?: readonly (string | number)[] | null;
-  hasRuns?: boolean | null;
-  domainId?: string | number | null;
-  withoutDomain?: boolean | null;
-};
-
-type ParsedSearch = {
-  terms: string[];
-  operator: 'AND' | 'OR';
-};
-
-type DomainDeleteResult = {
+type DomainMutationResult = {
   success: boolean;
   affectedDefinitions: number;
 };
 
-type DomainAssignmentResult = {
-  success: boolean;
-  affectedDefinitions: number;
-};
+const DomainMutationResultRef = builder.objectRef<DomainMutationResult>('DomainMutationResult');
 
-const DomainDeleteResultRef = builder.objectRef<DomainDeleteResult>('DomainDeleteResult');
-const DomainAssignmentResultRef = builder.objectRef<DomainAssignmentResult>('DomainAssignmentResult');
-
-builder.objectType(DomainDeleteResultRef, {
+builder.objectType(DomainMutationResultRef, {
   fields: (t) => ({
     success: t.exposeBoolean('success'),
     affectedDefinitions: t.exposeInt('affectedDefinitions'),
   }),
 });
-
-builder.objectType(DomainAssignmentResultRef, {
-  fields: (t) => ({
-    success: t.exposeBoolean('success'),
-    affectedDefinitions: t.exposeInt('affectedDefinitions'),
-  }),
-});
-
-function parseDefinitionSearch(search?: string | null): ParsedSearch | null {
-  if (search === undefined || search === null) return null;
-  const trimmed = search.trim();
-  if (trimmed.length === 0) return null;
-  const hasExplicitOr = /\s+or\s+/i.test(trimmed);
-  const rawTerms = hasExplicitOr ? trimmed.split(/\s+or\s+/i) : trimmed.split(/\s+/);
-  const terms = [...new Set(rawTerms.map((term) => term.trim()).filter((term) => term.length > 0))];
-  if (terms.length === 0) return null;
-  return { terms, operator: hasExplicitOr ? 'OR' : 'AND' };
-}
-
-async function findDefinitionIdsByMetadataSearch(parsed: ParsedSearch): Promise<string[]> {
-  const termClauses = parsed.terms.map((term) => {
-    const pattern = `%${term}%`;
-    return Prisma.sql`(
-      d.id::text ILIKE ${pattern}
-      OR d.name ILIKE ${pattern}
-      OR COALESCE(d.content::text, '') ILIKE ${pattern}
-      OR EXISTS (
-        SELECT 1
-        FROM definition_tags dt
-        INNER JOIN tags t ON t.id = dt.tag_id
-        WHERE dt.definition_id = d.id
-          AND dt.deleted_at IS NULL
-          AND t.name ILIKE ${pattern}
-      )
-    )`;
-  });
-
-  const matches = await db.$queryRaw<{ id: string }[]>`
-    SELECT DISTINCT d.id
-    FROM definitions d
-    WHERE d.deleted_at IS NULL
-      AND (${Prisma.join(termClauses, parsed.operator === 'OR' ? ' OR ' : ' AND ')})
-  `;
-
-  return matches.map((row) => row.id);
-}
-
-async function findDefinitionIdsByTags(tagIds: readonly string[]): Promise<string[]> {
-  const matchingDefinitions = await db.$queryRaw<{ id: string }[]>`
-    WITH RECURSIVE
-    direct_tagged AS (
-      SELECT DISTINCT dt.definition_id as id
-      FROM definition_tags dt
-      WHERE dt.tag_id = ANY(${tagIds}::text[])
-      AND dt.deleted_at IS NULL
-    ),
-    inherited AS (
-      SELECT d.id, d.parent_id
-      FROM definitions d
-      JOIN direct_tagged dt ON d.id = dt.id
-      WHERE d.deleted_at IS NULL
-      UNION ALL
-      SELECT d.id, d.parent_id
-      FROM definitions d
-      JOIN inherited i ON d.parent_id = i.id
-      WHERE d.deleted_at IS NULL
-    )
-    SELECT DISTINCT id FROM inherited
-  `;
-  return matchingDefinitions.map((d) => d.id);
-}
-
-function intersectIds(currentIds: string[] | null, nextIds: string[]): string[] {
-  if (currentIds === null) return nextIds;
-  const nextSet = new Set(nextIds);
-  return currentIds.filter((id) => nextSet.has(id));
-}
-
-async function buildDefinitionWhere(args: DomainDefinitionFilterArgs): Promise<{
-  where: Prisma.DefinitionWhereInput;
-  empty: boolean;
-}> {
-  const where: Prisma.DefinitionWhereInput = { deletedAt: null };
-
-  if (args.rootOnly === true) {
-    where.parentId = null;
+function parseOptionalId(value: string | number | null | undefined, argName: string): string | null {
+  if (value === undefined || value === null) return null;
+  const id = String(value).trim();
+  if (id === '') {
+    throw new Error(`${argName} cannot be an empty string. Use null for unassignment.`);
   }
-  if (args.domainId !== undefined && args.domainId !== null && args.domainId !== '') {
-    where.domainId = String(args.domainId);
-  }
-  if (args.withoutDomain === true) {
-    if (where.domainId !== undefined) {
-      throw new Error('Cannot combine domainId and withoutDomain filters');
-    }
-    where.domainId = null;
-  }
-
-  let constrainedIds: string[] | null = null;
-
-  const parsedSearch = parseDefinitionSearch(args.search);
-  if (parsedSearch !== null) {
-    const searchMatchingIds = await findDefinitionIdsByMetadataSearch(parsedSearch);
-    constrainedIds = intersectIds(constrainedIds, searchMatchingIds);
-  }
-
-  if (args.tagIds !== undefined && args.tagIds !== null && args.tagIds.length > 0) {
-    const tagIdStrings = args.tagIds.map(String);
-    const tagMatchingIds = await findDefinitionIdsByTags(tagIdStrings);
-    constrainedIds = intersectIds(constrainedIds, tagMatchingIds);
-  }
-
-  if (constrainedIds !== null) {
-    if (constrainedIds.length === 0) return { where, empty: true };
-    where.id = { in: constrainedIds };
-  }
-
-  if (args.hasRuns === true) {
-    where.runs = { some: {} };
-  }
-
-  return { where, empty: false };
+  return id;
 }
 
 builder.mutationField('createDomain', (t) =>
@@ -177,20 +46,22 @@ builder.mutationField('createDomain', (t) =>
     resolve: async (_root, args, ctx) => {
       const { displayName, normalizedName } = normalizeDomainName(args.name);
       if (displayName.length === 0) throw new Error('Domain name is required');
-
-      const existing = await db.domain.findUnique({ where: { normalizedName } });
-      if (existing) {
-        throw new Error(`Domain "${displayName}" already exists`);
+      let domain;
+      try {
+        domain = await db.domain.create({
+          data: {
+            name: displayName,
+            normalizedName,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new Error(`Domain "${displayName}" already exists`);
+        }
+        throw error;
       }
 
-      const domain = await db.domain.create({
-        data: {
-          name: displayName,
-          normalizedName,
-        },
-      });
-
-      void createAuditLog({
+      await createAuditLog({
         action: 'CREATE',
         entityType: 'Domain',
         entityId: domain.id,
@@ -224,17 +95,20 @@ builder.mutationField('renameDomain', (t) =>
       const { displayName, normalizedName } = normalizeDomainName(args.name);
       if (displayName.length === 0) throw new Error('Domain name is required');
 
-      const conflict = await db.domain.findUnique({ where: { normalizedName } });
-      if (conflict && conflict.id !== id) {
-        throw new Error(`Domain "${displayName}" already exists`);
+      let updated;
+      try {
+        updated = await db.domain.update({
+          where: { id },
+          data: { name: displayName, normalizedName },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new Error(`Domain "${displayName}" already exists`);
+        }
+        throw error;
       }
 
-      const updated = await db.domain.update({
-        where: { id },
-        data: { name: displayName, normalizedName },
-      });
-
-      void createAuditLog({
+      await createAuditLog({
         action: 'UPDATE',
         entityType: 'Domain',
         entityId: updated.id,
@@ -249,7 +123,7 @@ builder.mutationField('renameDomain', (t) =>
 
 builder.mutationField('deleteDomain', (t) =>
   t.field({
-    type: DomainDeleteResultRef,
+    type: DomainMutationResultRef,
     args: {
       id: t.arg.id({ required: true }),
     },
@@ -267,7 +141,7 @@ builder.mutationField('deleteDomain', (t) =>
         return unassignResult.count;
       });
 
-      void createAuditLog({
+      await createAuditLog({
         action: 'DELETE',
         entityType: 'Domain',
         entityId: id,
@@ -282,7 +156,7 @@ builder.mutationField('deleteDomain', (t) =>
 
 builder.mutationField('assignDomainToDefinitions', (t) =>
   t.field({
-    type: DomainAssignmentResultRef,
+    type: DomainMutationResultRef,
     args: {
       definitionIds: t.arg.idList({ required: true }),
       domainId: t.arg.id({ required: false }),
@@ -290,11 +164,11 @@ builder.mutationField('assignDomainToDefinitions', (t) =>
     resolve: async (_root, args, ctx) => {
       const definitionIds = args.definitionIds.map(String);
       if (definitionIds.length === 0) return { success: true, affectedDefinitions: 0 };
+      if (definitionIds.length > MAX_BULK_ASSIGN_IDS) {
+        throw new Error(`Cannot assign more than ${MAX_BULK_ASSIGN_IDS} definitions in one request`);
+      }
 
-      const domainId =
-        args.domainId !== undefined && args.domainId !== null && args.domainId !== ''
-          ? String(args.domainId)
-          : null;
+      const domainId = parseOptionalId(args.domainId, 'domainId');
       let domainName: string | null = null;
       if (domainId !== null) {
         const domain = await db.domain.findUnique({ where: { id: domainId } });
@@ -307,12 +181,13 @@ builder.mutationField('assignDomainToDefinitions', (t) =>
         data: { domainId },
       });
 
-      void createAuditLog({
+      await createAuditLog({
         action: 'ACTION',
         entityType: 'DefinitionDomain',
-        entityId: `${domainId ?? 'none'}:bulk-ids`,
+        entityId: randomUUID(),
         userId: ctx.user?.id ?? null,
         metadata: {
+          operationType: 'bulk-ids',
           domainId,
           domainName,
           definitionIds,
@@ -327,7 +202,7 @@ builder.mutationField('assignDomainToDefinitions', (t) =>
 
 builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
   t.field({
-    type: DomainAssignmentResultRef,
+    type: DomainMutationResultRef,
     args: {
       domainId: t.arg.id({ required: false }),
       rootOnly: t.arg.boolean({ required: false }),
@@ -338,10 +213,7 @@ builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
       withoutDomain: t.arg.boolean({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
-      const domainId =
-        args.domainId !== undefined && args.domainId !== null && args.domainId !== ''
-          ? String(args.domainId)
-          : null;
+      const domainId = parseOptionalId(args.domainId, 'domainId');
       let targetDomainName: string | null = null;
       if (domainId !== null) {
         const domain = await db.domain.findUnique({ where: { id: domainId } });
@@ -354,7 +226,7 @@ builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
         search: args.search,
         tagIds: args.tagIds,
         hasRuns: args.hasRuns,
-        domainId: args.sourceDomainId,
+        domainId: parseOptionalId(args.sourceDomainId, 'sourceDomainId'),
         withoutDomain: args.withoutDomain,
       });
       if (empty) return { success: true, affectedDefinitions: 0 };
@@ -364,18 +236,16 @@ builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
         data: { domainId },
       });
 
-      void createAuditLog({
+      await createAuditLog({
         action: 'ACTION',
         entityType: 'DefinitionDomain',
-        entityId: `${domainId ?? 'none'}:bulk-filter`,
+        entityId: randomUUID(),
         userId: ctx.user?.id ?? null,
         metadata: {
+          operationType: 'bulk-filter',
           targetDomainId: domainId,
           targetDomainName,
-          sourceDomainId:
-            args.sourceDomainId !== undefined && args.sourceDomainId !== null && args.sourceDomainId !== ''
-              ? String(args.sourceDomainId)
-              : null,
+          sourceDomainId: parseOptionalId(args.sourceDomainId, 'sourceDomainId'),
           withoutDomain: args.withoutDomain === true,
           search: args.search ?? null,
           tagIds: args.tagIds?.map(String) ?? [],

@@ -2,7 +2,7 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { DomainRef } from '../types/domain.js';
 
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
 
 builder.queryField('domains', (t) =>
