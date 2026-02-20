@@ -25,6 +25,8 @@ import {
   type RunTrialsForDomainMutationVariables,
 } from '../api/operations/domains';
 
+type RunTrialsForDomainResult = RunTrialsForDomainMutationResult['runTrialsForDomain'];
+
 type UseDomainsResult = {
   domains: Domain[];
   loading: boolean;
@@ -50,13 +52,7 @@ type UseDomainsResult = {
     sourceDomainId?: string;
     withoutDomain?: boolean;
   }) => Promise<DomainMutationResult | null>;
-  runTrialsForDomain: (domainId: string, temperature?: number) => Promise<{
-    success: boolean;
-    totalDefinitions: number;
-    targetedDefinitions: number;
-    startedRuns: number;
-    failedDefinitions: number;
-  } | null>;
+  runTrialsForDomain: (domainId: string, temperature?: number) => Promise<RunTrialsForDomainResult | null>;
 };
 
 export function useDomains(): UseDomainsResult {
@@ -125,13 +121,7 @@ export function useDomains(): UseDomainsResult {
   const runTrialsForDomain = async (
     domainId: string,
     temperature?: number
-  ): Promise<{
-    success: boolean;
-    totalDefinitions: number;
-    targetedDefinitions: number;
-    startedRuns: number;
-    failedDefinitions: number;
-  } | null> => {
+  ): Promise<RunTrialsForDomainResult | null> => {
     const result = await runTrialsMutation({ domainId, temperature });
     if (result.error) throw new Error(result.error.message);
     return result.data?.runTrialsForDomain ?? null;

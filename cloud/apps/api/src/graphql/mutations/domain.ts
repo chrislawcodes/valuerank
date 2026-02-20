@@ -1,5 +1,6 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
+import { AuthenticationError } from '@valuerank/shared';
 import { DomainRef } from '../types/domain.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
@@ -9,6 +10,8 @@ import { startRun as startRunService } from '../../services/run/index.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
+const DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE = 10;
+const DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO = 1;
 
 type DomainMutationResult = {
   success: boolean;
@@ -75,10 +78,10 @@ function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string
 }
 
 function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
+  if (left.version !== right.version) return left.version > right.version;
   const leftUpdated = left.updatedAt.getTime();
   const rightUpdated = right.updatedAt.getTime();
   if (leftUpdated !== rightUpdated) return leftUpdated > rightUpdated;
-  if (left.version !== right.version) return left.version > right.version;
   return left.createdAt.getTime() > right.createdAt.getTime();
 }
 
@@ -334,6 +337,11 @@ builder.mutationField('runTrialsForDomain', (t) =>
       temperature: t.arg.float({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+      const userId = ctx.user.id;
+
       const domainId = String(args.domainId);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -375,29 +383,44 @@ builder.mutationField('runTrialsForDomain', (t) =>
       let startedRuns = 0;
       let failedDefinitions = 0;
 
-      for (const definition of latestDefinitions) {
-        try {
-          await startRunService({
+      const runResults = await Promise.allSettled(
+        latestDefinitions.map(async (definition) =>
+          startRunService({
             definitionId: definition.id,
             models,
-            samplePercentage: 10,
-            samplesPerScenario: 1,
+            // Domain runs default to lightweight trial settings to avoid unexpectedly large fan-out.
+            samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+            samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
             temperature: args.temperature ?? undefined,
             priority: 'NORMAL',
-            userId: ctx.user?.id ?? null,
+            userId,
             finalTrial: false,
-          });
+          })
+        )
+      );
+
+      runResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
           startedRuns += 1;
-        } catch {
-          failedDefinitions += 1;
+          return;
         }
-      }
+        failedDefinitions += 1;
+        const failedDefinition = latestDefinitions[index];
+        ctx.log.error(
+          {
+            domainId,
+            definitionId: failedDefinition?.id ?? null,
+            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          },
+          'Failed to start domain trial for definition'
+        );
+      });
 
       await createAuditLog({
         action: 'ACTION',
         entityType: 'Domain',
         entityId: domainId,
-        userId: ctx.user?.id ?? null,
+        userId,
         metadata: {
           operationType: 'run-trials-for-domain',
           domainName: domain.name,
