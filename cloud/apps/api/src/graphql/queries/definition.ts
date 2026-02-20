@@ -11,6 +11,8 @@ type DefinitionFilterArgs = {
   search?: string | null;
   tagIds?: readonly (string | number)[] | null;
   hasRuns?: boolean | null;
+  domainId?: string | number | null;
+  withoutDomain?: boolean | null;
 };
 
 type ParsedSearch = {
@@ -107,6 +109,15 @@ async function buildDefinitionWhere(args: DefinitionFilterArgs): Promise<{
   if (args.rootOnly === true) {
     where.parentId = null;
   }
+  if (args.domainId !== undefined && args.domainId !== null && args.domainId !== '') {
+    where.domainId = String(args.domainId);
+  }
+  if (args.withoutDomain === true) {
+    if (where.domainId !== undefined) {
+      throw new Error('Cannot combine domainId and withoutDomain filters');
+    }
+    where.domainId = null;
+  }
 
   let constrainedIds: string[] | null = null;
 
@@ -141,6 +152,7 @@ async function buildDefinitionWhere(args: DefinitionFilterArgs): Promise<{
 type RawDefinitionRow = {
   id: string;
   parent_id: string | null;
+  domain_id: string | null;
   name: string;
   content: Prisma.JsonValue;
   expansion_progress: Prisma.JsonValue | null;
@@ -209,6 +221,14 @@ builder.queryField('definitions', (t) =>
         required: false,
         description: 'Only definitions that have been used in runs',
       }),
+      domainId: t.arg.id({
+        required: false,
+        description: 'Filter by domain ID',
+      }),
+      withoutDomain: t.arg.boolean({
+        required: false,
+        description: 'Only definitions that are not assigned to any domain',
+      }),
       limit: t.arg.int({
         required: false,
         description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
@@ -224,7 +244,16 @@ builder.queryField('definitions', (t) =>
       const offset = args.offset ?? 0;
 
       ctx.log.debug(
-        { rootOnly: args.rootOnly, search: args.search, tagIds: args.tagIds, hasRuns: args.hasRuns, limit, offset },
+        {
+          rootOnly: args.rootOnly,
+          search: args.search,
+          tagIds: args.tagIds,
+          hasRuns: args.hasRuns,
+          domainId: args.domainId,
+          withoutDomain: args.withoutDomain,
+          limit,
+          offset,
+        },
         'Listing definitions'
       );
 
@@ -286,7 +315,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -296,6 +325,7 @@ builder.queryField('definitionAncestors', (t) =>
       const mappedAncestors = ancestors.map((a) => ({
         id: a.id,
         parentId: a.parent_id,
+        domainId: a.domain_id,
         name: a.name,
         content: a.content,
         expansionProgress: a.expansion_progress,
@@ -354,7 +384,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -364,6 +394,7 @@ builder.queryField('definitionDescendants', (t) =>
       const mappedDescendants = descendants.map((d) => ({
         id: d.id,
         parentId: d.parent_id,
+        domainId: d.domain_id,
         name: d.name,
         content: d.content,
         expansionProgress: d.expansion_progress,
@@ -405,10 +436,25 @@ builder.queryField('definitionCount', (t) =>
         required: false,
         description: 'Only definitions that have been used in runs',
       }),
+      domainId: t.arg.id({
+        required: false,
+        description: 'Filter by domain ID',
+      }),
+      withoutDomain: t.arg.boolean({
+        required: false,
+        description: 'Only definitions that are not assigned to any domain',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       ctx.log.debug(
-        { rootOnly: args.rootOnly, search: args.search, tagIds: args.tagIds, hasRuns: args.hasRuns },
+        {
+          rootOnly: args.rootOnly,
+          search: args.search,
+          tagIds: args.tagIds,
+          hasRuns: args.hasRuns,
+          domainId: args.domainId,
+          withoutDomain: args.withoutDomain,
+        },
         'Counting definitions'
       );
 

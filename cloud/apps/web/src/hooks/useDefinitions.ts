@@ -11,6 +11,8 @@ type UseDefinitionsOptions = {
   search?: string;
   tagIds?: string[];
   hasRuns?: boolean;
+  domainId?: string;
+  withoutDomain?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -28,6 +30,8 @@ export function useDefinitions(options: UseDefinitionsOptions = {}): UseDefiniti
     search: options.search || undefined,
     tagIds: options.tagIds?.length ? options.tagIds : undefined,
     hasRuns: options.hasRuns,
+    domainId: options.domainId,
+    withoutDomain: options.withoutDomain,
     limit: options.limit ?? 20,
     offset: options.offset ?? 0,
   };

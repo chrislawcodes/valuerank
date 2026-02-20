@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Menu, X, FileText, Play, BarChart2, GitCompare, ClipboardList, Settings } from 'lucide-react';
+import { Menu, X, FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, FolderTree } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
 const navItems = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
+  { name: 'Domains', path: '/domains', icon: FolderTree },
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },

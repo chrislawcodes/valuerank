@@ -14,6 +14,7 @@ import './scenario.js';
 import './transcript.js';
 import './experiment.js';
 import './tag.js';
+import './domain.js';
 
 // Queue-related types
 import './queue-status.js';

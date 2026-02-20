@@ -1,8 +1,9 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, ScrollText } from 'lucide-react';
+import { FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, ScrollText, FolderTree } from 'lucide-react';
 
 const tabs = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
+  { name: 'Domains', path: '/domains', icon: FolderTree },
   { name: 'Preambles', path: '/preambles', icon: ScrollText },
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
