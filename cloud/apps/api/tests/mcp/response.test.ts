@@ -21,7 +21,9 @@ describe('MCP Response Builder', () => {
       expect(TOKEN_BUDGETS.get_run_summary).toBe(5 * 1024);
       expect(TOKEN_BUDGETS.get_dimension_analysis).toBe(2 * 1024);
       expect(TOKEN_BUDGETS.get_transcript_summary).toBe(1 * 1024);
-      expect(TOKEN_BUDGETS.graphql_query).toBe(10 * 1024);
+      expect(TOKEN_BUDGETS.graphql_query).toBe(50 * 1024);
+      expect(TOKEN_BUDGETS.get_definition_value_pairs).toBe(10 * 1024);
+      expect(TOKEN_BUDGETS.export_pairwise_outcomes).toBe(100 * 1024);
     });
   });
 

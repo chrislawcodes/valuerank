@@ -109,17 +109,17 @@ describe('graphql_query tool', () => {
     });
 
     it('very large responses exceed budget', () => {
-      const largeResponse = { data: { items: 'x'.repeat(15000) } };
+      const largeResponse = { data: { items: 'x'.repeat(55000) } };
       expect(exceedsBudget('graphql_query', largeResponse)).toBe(true);
     });
 
-    it('10KB budget for graphql_query', () => {
-      // Just under 10KB
-      const justUnder = { data: { text: 'x'.repeat(9000) } };
+    it('50KB budget for graphql_query', () => {
+      // Just under 50KB
+      const justUnder = { data: { text: 'x'.repeat(49000) } };
       expect(exceedsBudget('graphql_query', justUnder)).toBe(false);
 
-      // Just over 10KB
-      const justOver = { data: { text: 'x'.repeat(11000) } };
+      // Just over 50KB
+      const justOver = { data: { text: 'x'.repeat(52000) } };
       expect(exceedsBudget('graphql_query', justOver)).toBe(true);
     });
   });
