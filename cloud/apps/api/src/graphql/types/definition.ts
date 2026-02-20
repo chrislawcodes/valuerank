@@ -7,7 +7,7 @@ import {
   type Prisma,
   type DefinitionOverrides,
 } from '@valuerank/db';
-import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef } from './refs.js';
+import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef, DomainRef } from './refs.js';
 import { UserRef } from './user.js';
 import {
   getDefinitionExpansionStatus,
@@ -132,6 +132,7 @@ builder.objectType(ExpansionStatusRef, {
 type RawDefinitionRow = {
   id: string;
   parent_id: string | null;
+  domain_id: string | null;
   name: string;
   content: Prisma.JsonValue;
   expansion_progress: Prisma.JsonValue | null;
@@ -154,6 +155,10 @@ builder.objectType(DefinitionRef, {
     parentId: t.exposeID('parentId', {
       nullable: true,
       description: 'ID of parent definition (null for root definitions)',
+    }),
+    domainId: t.exposeID('domainId', {
+      nullable: true,
+      description: 'ID of assigned domain (null means None)',
     }),
     content: t.expose('content', {
       type: 'JSON',
@@ -338,6 +343,15 @@ builder.objectType(DefinitionRef, {
         return ctx.loaders.tagsByDefinition.load(definition.id);
       },
     }),
+    domain: t.field({
+      type: DomainRef,
+      nullable: true,
+      description: 'Domain assigned to this definition',
+      resolve: async (definition) => {
+        if (definition.domainId === null || definition.domainId === undefined || definition.domainId === '') return null;
+        return db.domain.findUnique({ where: { id: definition.domainId } });
+      },
+    }),
 
     // =========================================================================
     // INHERITANCE FIELDS (Phase 12)
@@ -478,7 +492,7 @@ builder.objectType(DefinitionRef, {
             JOIN ancestry a ON d.id = a.parent_id
             WHERE a.parent_id IS NOT NULL AND a.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+          SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
           FROM ancestry
           WHERE id != ${definition.id}
           ORDER BY created_at ASC
@@ -487,6 +501,7 @@ builder.objectType(DefinitionRef, {
         return ancestors.map((a) => ({
           id: a.id,
           parentId: a.parent_id,
+          domainId: a.domain_id,
           name: a.name,
           content: a.content,
           expansionProgress: a.expansion_progress,
@@ -516,7 +531,7 @@ builder.objectType(DefinitionRef, {
             JOIN tree t ON d.parent_id = t.id
             WHERE t.depth < ${DEFAULT_MAX_DEPTH} AND d.deleted_at IS NULL
           )
-          SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+          SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
           FROM tree
           WHERE id != ${definition.id}
           ORDER BY created_at DESC
@@ -525,6 +540,7 @@ builder.objectType(DefinitionRef, {
         return descendants.map((d) => ({
           id: d.id,
           parentId: d.parent_id,
+          domainId: d.domain_id,
           name: d.name,
           content: d.content,
           expansionProgress: d.expansion_progress,

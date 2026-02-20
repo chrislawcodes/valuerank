@@ -20,6 +20,7 @@ export type {
   Rubric,
   Cohort,
   Tag,
+  Domain,
   DefinitionTag,
   LlmProvider,
   LlmModel,

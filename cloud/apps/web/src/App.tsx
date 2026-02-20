@@ -8,6 +8,7 @@ import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
+import { Domains } from './pages/Domains';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
@@ -53,6 +54,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Definitions />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains"
+              element={
+                <ProtectedLayout>
+                  <Domains />
                 </ProtectedLayout>
               }
             />

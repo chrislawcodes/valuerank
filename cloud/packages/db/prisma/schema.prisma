@@ -100,6 +100,7 @@ model OAuthRefreshToken {
 model Definition {
   id                String    @id @default(cuid())
   parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
   name              String
   content           Json      @db.JsonB
   expansionProgress Json?     @map("expansion_progress") @db.JsonB
@@ -115,6 +116,7 @@ model Definition {
 
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
 
   runs      Run[]
   scenarios Scenario[]
@@ -133,8 +135,21 @@ model Definition {
   tokenStatistics ModelTokenStatistics[]
 
   @@index([parentId])
+  @@index([domainId])
   @@index([preambleVersionId])
   @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  definitions Definition[]
+
+  @@map("domains")
 }
 
 model Preamble {

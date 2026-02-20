@@ -45,9 +45,16 @@ export function DefinitionCard({ definition, onClick }: DefinitionCardProps) {
       </div>
 
       {/* Tags */}
-      {definition.tags.length > 0 && (
-        <TagChips tags={definition.tags} maxDisplay={4} size="sm" className="mb-3" />
-      )}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {definition.domain?.name && (
+          <Badge variant="info" size="sm" className="rounded-full">
+            {definition.domain.name}
+          </Badge>
+        )}
+        {definition.tags.length > 0 && (
+          <TagChips tags={definition.tags} maxDisplay={4} size="sm" />
+        )}
+      </div>
 
       {/* Meta info */}
       <div className="flex items-center gap-4 text-sm text-gray-500">

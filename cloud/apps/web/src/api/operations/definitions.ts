@@ -61,6 +61,11 @@ export type ExpansionStatus = {
 export type Definition = {
   id: string;
   name: string;
+  domainId?: string | null;
+  domain?: {
+    id: string;
+    name: string;
+  } | null;
   parentId: string | null;
   content: DefinitionContent;
   createdAt: string;
@@ -133,6 +138,8 @@ export const DEFINITIONS_QUERY = gql`
     $search: String
     $tagIds: [ID!]
     $hasRuns: Boolean
+    $domainId: ID
+    $withoutDomain: Boolean
     $limit: Int
     $offset: Int
   ) {
@@ -141,11 +148,18 @@ export const DEFINITIONS_QUERY = gql`
       search: $search
       tagIds: $tagIds
       hasRuns: $hasRuns
+      domainId: $domainId
+      withoutDomain: $withoutDomain
       limit: $limit
       offset: $offset
     ) {
       id
       name
+      domainId
+      domain {
+        id
+        name
+      }
       parentId
       content
       createdAt
@@ -375,8 +389,22 @@ export const DELETE_DEFINITION_MUTATION = gql`
 
 // Count of definitions matching filters
 export const DEFINITION_COUNT_QUERY = gql`
-  query DefinitionCount($rootOnly: Boolean, $search: String, $tagIds: [ID!], $hasRuns: Boolean) {
-    definitionCount(rootOnly: $rootOnly, search: $search, tagIds: $tagIds, hasRuns: $hasRuns)
+  query DefinitionCount(
+    $rootOnly: Boolean
+    $search: String
+    $tagIds: [ID!]
+    $hasRuns: Boolean
+    $domainId: ID
+    $withoutDomain: Boolean
+  ) {
+    definitionCount(
+      rootOnly: $rootOnly
+      search: $search
+      tagIds: $tagIds
+      hasRuns: $hasRuns
+      domainId: $domainId
+      withoutDomain: $withoutDomain
+    )
   }
 `;
 
@@ -389,6 +417,8 @@ export type DefinitionsQueryVariables = {
   search?: string;
   tagIds?: string[];
   hasRuns?: boolean;
+  domainId?: string;
+  withoutDomain?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -402,6 +432,8 @@ export type DefinitionCountQueryVariables = {
   search?: string;
   tagIds?: string[];
   hasRuns?: boolean;
+  domainId?: string;
+  withoutDomain?: boolean;
 };
 
 export type DefinitionCountQueryResult = {

@@ -1,146 +1,19 @@
 import { builder } from '../builder.js';
-import { db, Prisma } from '@valuerank/db';
+import { db, type Prisma } from '@valuerank/db';
 import { DefinitionRef } from '../types/definition.js';
+import { buildDefinitionWhere } from '../utils/definition-filters.js';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
 const DEFAULT_MAX_DEPTH = 10;
 
-type DefinitionFilterArgs = {
-  rootOnly?: boolean | null;
-  search?: string | null;
-  tagIds?: readonly (string | number)[] | null;
-  hasRuns?: boolean | null;
-};
-
-type ParsedSearch = {
-  terms: string[];
-  operator: 'AND' | 'OR';
-};
-
-function parseDefinitionSearch(search?: string | null): ParsedSearch | null {
-  if (search === undefined || search === null) return null;
-  const trimmed = search.trim();
-  if (trimmed.length === 0) return null;
-
-  // Default to AND for space-separated terms. Only use OR when explicitly requested.
-  const hasExplicitOr = /\s+or\s+/i.test(trimmed);
-  const rawTerms = hasExplicitOr ? trimmed.split(/\s+or\s+/i) : trimmed.split(/\s+/);
-  const terms = [...new Set(rawTerms.map((term) => term.trim()).filter((term) => term.length > 0))];
-  if (terms.length === 0) return null;
-
-  return {
-    terms,
-    operator: hasExplicitOr ? 'OR' : 'AND',
-  };
-}
-
-async function findDefinitionIdsByMetadataSearch(parsed: ParsedSearch): Promise<string[]> {
-  const termClauses = parsed.terms.map((term) => {
-    const pattern = `%${term}%`;
-    return Prisma.sql`(
-      d.id::text ILIKE ${pattern}
-      OR d.name ILIKE ${pattern}
-      OR COALESCE(d.content::text, '') ILIKE ${pattern}
-      OR EXISTS (
-        SELECT 1
-        FROM definition_tags dt
-        INNER JOIN tags t ON t.id = dt.tag_id
-        WHERE dt.definition_id = d.id
-          AND dt.deleted_at IS NULL
-          AND t.name ILIKE ${pattern}
-      )
-    )`;
-  });
-
-  const matches = await db.$queryRaw<{ id: string }[]>`
-    SELECT DISTINCT d.id
-    FROM definitions d
-    WHERE d.deleted_at IS NULL
-      AND (${Prisma.join(termClauses, parsed.operator === 'OR' ? ' OR ' : ' AND ')})
-  `;
-
-  return matches.map((row) => row.id);
-}
-
-async function findDefinitionIdsByTags(tagIds: readonly string[]): Promise<string[]> {
-  const matchingDefinitions = await db.$queryRaw<{ id: string }[]>`
-    WITH RECURSIVE
-    -- Get definitions with direct tags
-    direct_tagged AS (
-      SELECT DISTINCT dt.definition_id as id
-      FROM definition_tags dt
-      WHERE dt.tag_id = ANY(${tagIds}::text[])
-      AND dt.deleted_at IS NULL
-    ),
-    -- Get all descendants of directly tagged definitions (they inherit the tag)
-    inherited AS (
-      SELECT d.id, d.parent_id
-      FROM definitions d
-      JOIN direct_tagged dt ON d.id = dt.id
-      WHERE d.deleted_at IS NULL
-      UNION ALL
-      SELECT d.id, d.parent_id
-      FROM definitions d
-      JOIN inherited i ON d.parent_id = i.id
-      WHERE d.deleted_at IS NULL
-    )
-    SELECT DISTINCT id FROM inherited
-  `;
-  return matchingDefinitions.map((d) => d.id);
-}
-
-function intersectIds(currentIds: string[] | null, nextIds: string[]): string[] {
-  if (currentIds === null) return nextIds;
-  const nextSet = new Set(nextIds);
-  return currentIds.filter((id) => nextSet.has(id));
-}
-
-async function buildDefinitionWhere(args: DefinitionFilterArgs): Promise<{
-  where: Prisma.DefinitionWhereInput;
-  empty: boolean;
-}> {
-  const where: Prisma.DefinitionWhereInput = {
-    deletedAt: null,
-  };
-
-  if (args.rootOnly === true) {
-    where.parentId = null;
-  }
-
-  let constrainedIds: string[] | null = null;
-
-  const parsedSearch = parseDefinitionSearch(args.search);
-  if (parsedSearch !== null) {
-    const searchMatchingIds = await findDefinitionIdsByMetadataSearch(parsedSearch);
-    constrainedIds = intersectIds(constrainedIds, searchMatchingIds);
-  }
-
-  if (args.tagIds !== undefined && args.tagIds !== null && args.tagIds.length > 0) {
-    const tagIdStrings = args.tagIds.map(String);
-    const tagMatchingIds = await findDefinitionIdsByTags(tagIdStrings);
-    constrainedIds = intersectIds(constrainedIds, tagMatchingIds);
-  }
-
-  if (constrainedIds !== null) {
-    if (constrainedIds.length === 0) {
-      return { where, empty: true };
-    }
-    where.id = { in: constrainedIds };
-  }
-
-  if (args.hasRuns === true) {
-    where.runs = { some: {} };
-  }
-
-  return { where, empty: false };
-}
 
 // Type for raw query results - content comes as JsonValue from Prisma
 // Note: deletedAt is intentionally omitted - soft delete is filtered at DB layer
 type RawDefinitionRow = {
   id: string;
   parent_id: string | null;
+  domain_id: string | null;
   name: string;
   content: Prisma.JsonValue;
   expansion_progress: Prisma.JsonValue | null;
@@ -209,6 +82,14 @@ builder.queryField('definitions', (t) =>
         required: false,
         description: 'Only definitions that have been used in runs',
       }),
+      domainId: t.arg.id({
+        required: false,
+        description: 'Filter by domain ID',
+      }),
+      withoutDomain: t.arg.boolean({
+        required: false,
+        description: 'Only definitions that are not assigned to any domain',
+      }),
       limit: t.arg.int({
         required: false,
         description: `Maximum number of results (default: ${DEFAULT_LIMIT}, max: ${MAX_LIMIT})`,
@@ -224,7 +105,16 @@ builder.queryField('definitions', (t) =>
       const offset = args.offset ?? 0;
 
       ctx.log.debug(
-        { rootOnly: args.rootOnly, search: args.search, tagIds: args.tagIds, hasRuns: args.hasRuns, limit, offset },
+        {
+          rootOnly: args.rootOnly,
+          search: args.search,
+          tagIds: args.tagIds,
+          hasRuns: args.hasRuns,
+          domainId: args.domainId,
+          withoutDomain: args.withoutDomain,
+          limit,
+          offset,
+        },
         'Listing definitions'
       );
 
@@ -286,7 +176,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -296,6 +186,7 @@ builder.queryField('definitionAncestors', (t) =>
       const mappedAncestors = ancestors.map((a) => ({
         id: a.id,
         parentId: a.parent_id,
+        domainId: a.domain_id,
         name: a.name,
         content: a.content,
         expansionProgress: a.expansion_progress,
@@ -354,7 +245,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -364,6 +255,7 @@ builder.queryField('definitionDescendants', (t) =>
       const mappedDescendants = descendants.map((d) => ({
         id: d.id,
         parentId: d.parent_id,
+        domainId: d.domain_id,
         name: d.name,
         content: d.content,
         expansionProgress: d.expansion_progress,
@@ -405,10 +297,25 @@ builder.queryField('definitionCount', (t) =>
         required: false,
         description: 'Only definitions that have been used in runs',
       }),
+      domainId: t.arg.id({
+        required: false,
+        description: 'Filter by domain ID',
+      }),
+      withoutDomain: t.arg.boolean({
+        required: false,
+        description: 'Only definitions that are not assigned to any domain',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       ctx.log.debug(
-        { rootOnly: args.rootOnly, search: args.search, tagIds: args.tagIds, hasRuns: args.hasRuns },
+        {
+          rootOnly: args.rootOnly,
+          search: args.search,
+          tagIds: args.tagIds,
+          hasRuns: args.hasRuns,
+          domainId: args.domainId,
+          withoutDomain: args.withoutDomain,
+        },
         'Counting definitions'
       );
 

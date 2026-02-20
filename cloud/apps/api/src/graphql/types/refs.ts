@@ -6,6 +6,7 @@ import type {
   Scenario,
   Experiment,
   Tag,
+  Domain,
   LlmProvider,
   LlmModel,
   SystemSetting,
@@ -31,6 +32,7 @@ export const TranscriptRef = builder.objectRef<Transcript>('Transcript');
 export const ScenarioRef = builder.objectRef<Scenario>('Scenario');
 export const ExperimentRef = builder.objectRef<Experiment>('Experiment');
 export const TagRef = builder.objectRef<Tag>('Tag');
+export const DomainRef = builder.objectRef<Domain>('Domain');
 
 // LLM Provider types
 export const LlmProviderRef = builder.objectRef<LlmProvider>('LlmProvider');
