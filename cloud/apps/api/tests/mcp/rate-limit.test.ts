@@ -107,15 +107,15 @@ describe('MCP Rate Limiter', () => {
   });
 
   describe('configuration values', () => {
-    it('is configured for 120 requests per minute', () => {
+    it('is configured for 200 requests per minute', () => {
       // These are the expected configuration values from the implementation
       const expectedConfig = {
         windowMs: 60 * 1000, // 1 minute
-        max: 120,           // 120 requests per window
+        max: 200,           // 200 requests per window
       };
 
       expect(expectedConfig.windowMs).toBe(60000);
-      expect(expectedConfig.max).toBe(120);
+      expect(expectedConfig.max).toBe(200);
     });
   });
 });

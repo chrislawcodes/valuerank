@@ -7,8 +7,9 @@
  */
 
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createLogger } from '@valuerank/shared';
+import { createLogger, AuthenticationError } from '@valuerank/shared';
 import { getMcpServer } from './server.js';
 import { registerAllTools } from './tools/index.js';
 import { registerAllResources } from './resources/index.js';
@@ -16,6 +17,7 @@ import { mcpAuthMiddleware } from './auth.js';
 import { mcpRateLimiter } from './rate-limit.js';
 import { protectedResourceMetadata } from './oauth/metadata.js';
 import { runWithMcpContext } from './request-context.js';
+import { jsonRpcError } from './jsonrpc-errors.js';
 
 const log = createLogger('mcp:router');
 
@@ -55,6 +57,15 @@ export function createMcpRouter(): Router {
 
   // Track active transports by session ID
   const transports = new Map<string, StreamableHTTPServerTransport>();
+
+  /**
+   * Extract the JSON-RPC request ID from the request body.
+   * Returns null if not available (safe default for JSON-RPC error responses).
+   */
+  function getJsonRpcId(req: Request): unknown {
+    const body = req.body as { id?: unknown } | undefined;
+    return body?.id ?? null;
+  }
 
   // Handle MCP protocol requests
   router.all('/', async (req, res) => {
@@ -98,13 +109,22 @@ export function createMcpRouter(): Router {
 
         if (!transport) {
           // Session not found - could be from a different server instance
-          // Create a new transport and try to handle it
+          // Create a new transport with proper cleanup callbacks
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => sessionId,
             enableJsonResponse: true,
+            onsessioninitialized: (newSessionId) => {
+              log.info({ sessionId: newSessionId, requestId }, 'MCP session re-initialized');
+              transports.set(newSessionId, transport!);
+            },
+            onsessionclosed: (closedSessionId) => {
+              log.info({ sessionId: closedSessionId, requestId }, 'MCP reconnected session closed');
+              transports.delete(closedSessionId);
+            },
           });
           await mcpServer.connect(transport);
           transports.set(sessionId, transport);
+          log.info({ sessionId, requestId }, 'MCP session transport recreated');
         }
 
         await runWithMcpContext(
@@ -128,19 +148,17 @@ export function createMcpRouter(): Router {
         return;
       }
 
-      // Unsupported method
-      res.status(405).json({
-        error: 'METHOD_NOT_ALLOWED',
-        message: `Method ${req.method} not allowed`,
-      });
+      // Unsupported method - return JSON-RPC error
+      res.status(405).json(
+        jsonRpcError(-32600, `Method ${req.method} not allowed`, getJsonRpcId(req))
+      );
     } catch (err) {
       log.error({ err, requestId }, 'MCP request failed');
 
       if (!res.headersSent) {
-        res.status(500).json({
-          error: 'INTERNAL_ERROR',
-          message: 'MCP request processing failed',
-        });
+        res.status(500).json(
+          jsonRpcError(-32603, 'MCP request processing failed', getJsonRpcId(req))
+        );
       }
     }
   });
@@ -150,10 +168,9 @@ export function createMcpRouter(): Router {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     if (sessionId === undefined || sessionId === '') {
-      res.status(400).json({
-        error: 'BAD_REQUEST',
-        message: 'Session ID required for DELETE',
-      });
+      res.status(400).json(
+        jsonRpcError(-32600, 'Session ID required for DELETE', getJsonRpcId(req))
+      );
       return;
     }
 
@@ -167,6 +184,24 @@ export function createMcpRouter(): Router {
     res.status(204).send();
   });
 
+  // Error handler for auth failures - must return JSON-RPC format
+  // This catches AuthenticationError thrown by mcpAuthMiddleware via next(err)
+  router.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof AuthenticationError) {
+      log.debug({ path: req.path, error: (err as Error).message }, 'MCP auth error');
+      res.status(401).json(
+        jsonRpcError(-32001, (err as Error).message, getJsonRpcId(req))
+      );
+      return;
+    }
+    // Re-throw non-auth errors to Express default handler
+    // (shouldn't normally happen since the route catch block handles errors)
+    log.error({ err, path: req.path }, 'Unhandled MCP error');
+    res.status(500).json(
+      jsonRpcError(-32603, 'Internal server error', getJsonRpcId(req))
+    );
+  });
+
   log.info('MCP router created');
   return router;
 }
@@ -177,3 +212,5 @@ export { registerAllTools } from './tools/index.js';
 export { registerAllResources, RESOURCE_URIS } from './resources/index.js';
 export { mcpAuthMiddleware } from './auth.js';
 export { mcpRateLimiter } from './rate-limit.js';
+export { jsonRpcError } from './jsonrpc-errors.js';
+export type { JsonRpcErrorResponse } from './jsonrpc-errors.js';

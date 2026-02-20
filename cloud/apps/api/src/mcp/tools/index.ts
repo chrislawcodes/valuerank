@@ -62,6 +62,9 @@ import './recover-run.js';
 import './trigger-recovery.js';
 import './get-job-queue-status.js';
 import './get-unsummarized-transcripts.js';
+// Cross-model value analysis tools
+import './get-value-pairs.js';
+import './export-pairwise-outcomes.js';
 
 /**
  * Registers all MCP tools on the given server
