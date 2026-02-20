@@ -11,6 +11,10 @@ import { AnalysisResultRef } from '../types/analysis.js';
 import { getBoss } from '../../queue/boss.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
+function parseTemperature(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 // recomputeAnalysis mutation
 builder.mutationField('recomputeAnalysis', (t) =>
   t.field({
@@ -66,6 +70,7 @@ builder.mutationField('recomputeAnalysis', (t) =>
       const boss = getBoss();
       const runConfig = (run.config ?? {}) as {
         isAggregate?: boolean;
+        temperature?: unknown;
         definitionSnapshot?: {
           _meta?: { preambleVersionId?: string; definitionVersion?: number | string };
           preambleVersionId?: string;
@@ -93,11 +98,13 @@ builder.mutationField('recomputeAnalysis', (t) =>
         const definitionVersion = Number.isFinite(parsedDefinitionVersion)
           ? parsedDefinitionVersion
           : null;
+        const temperature = parseTemperature(runConfig.temperature);
 
         jobId = await boss.send('aggregate_analysis', {
           definitionId: run.definitionId,
           preambleVersionId,
           definitionVersion,
+          temperature,
         });
       } else {
         // Queue new analysis job

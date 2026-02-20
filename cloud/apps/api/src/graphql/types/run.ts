@@ -26,6 +26,7 @@ type RunConfig = {
   samplePercentage?: number;
   sampleSeed?: number;
   samplesPerScenario?: number; // Multi-sample: number of samples per scenario-model pair
+  temperature?: number | null;
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
@@ -39,6 +40,7 @@ type AggregateRunConfig = RunConfig & {
 type RunSnapshotMeta = {
   preambleVersionId: string | null;
   definitionVersion: number | null;
+  temperatureSetting: number | null;
 };
 
 type QueueJobRow = {
@@ -76,8 +78,13 @@ function getSnapshotMeta(config: AggregateRunConfig | null): RunSnapshotMeta {
   const definitionVersion =
     parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
     parseDefinitionVersion(snapshot?.version);
+  const temperatureSetting = getTemperatureSetting(config?.temperature);
 
-  return { preambleVersionId, definitionVersion };
+  return { preambleVersionId, definitionVersion, temperatureSetting };
+}
+
+function getTemperatureSetting(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function getJobDataRecord(data: unknown): Record<string, unknown> | null {
@@ -161,6 +168,12 @@ function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta:
 
   const jobDefinitionVersion = parseDefinitionVersion(data.definitionVersion);
   if (jobDefinitionVersion !== runMeta.definitionVersion) {
+    return false;
+  }
+
+  const jobTemperature = getTemperatureSetting(data.temperature);
+  const runTemperature = runMeta.temperatureSetting;
+  if (jobTemperature !== runTemperature) {
     return false;
   }
 

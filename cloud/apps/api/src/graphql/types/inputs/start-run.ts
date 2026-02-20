@@ -30,6 +30,10 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'Number of samples per scenario-model pair for multi-sample runs (1-100, default 1). Higher values measure response variance.',
     }),
+    temperature: t.float({
+      required: false,
+      description: 'Optional sampling temperature (0-2). If omitted, provider default is used.',
+    }),
     priority: t.string({
       required: false,
       description: 'Priority level: LOW, NORMAL (default), HIGH',

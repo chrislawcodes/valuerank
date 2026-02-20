@@ -29,6 +29,7 @@ const zRunConfig = z.object({
     definitionSnapshot: zRunSnapshot.optional(),
     models: z.array(z.string()).optional(),
     isFinalTrial: z.boolean().optional(),
+    temperature: z.number().nullable().optional(),
 }).passthrough();
 
 function parseDefinitionVersion(value: unknown): number | null {
@@ -38,10 +39,14 @@ function parseDefinitionVersion(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-async function deriveDefinitionVersions(
+function parseTemperature(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+async function deriveDefinitionTargets(
     definitionId: string,
     preambleVersionId: string | null,
-): Promise<number[]> {
+): Promise<Array<{ definitionVersion: number; temperature: number | null }>> {
     const runs = await db.run.findMany({
         where: {
             definitionId,
@@ -56,7 +61,7 @@ async function deriveDefinitionVersions(
         select: { config: true },
     });
 
-    const versions = new Set<number>();
+    const targets = new Set<string>();
 
     for (const run of runs) {
         const parseResult = zRunConfig.safeParse(run.config);
@@ -77,12 +82,22 @@ async function deriveDefinitionVersions(
         const runDefinitionVersion =
             parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
             parseDefinitionVersion(snapshot?.version);
-        if (runDefinitionVersion !== null) {
-            versions.add(runDefinitionVersion);
-        }
+        if (runDefinitionVersion === null) continue;
+        const runTemperature = parseTemperature(parseResult.data.temperature);
+        targets.add(`${runDefinitionVersion}::${runTemperature ?? 'null'}`);
     }
 
-    return [...versions];
+    return [...targets].map((target) => {
+        const [versionPart, tempPart] = target.split('::');
+        const definitionVersion = Number.parseInt(versionPart ?? '', 10);
+        return {
+            definitionVersion,
+            temperature: tempPart === 'null' ? null : Number.parseFloat(tempPart ?? ''),
+        };
+    }).filter((target) =>
+        Number.isFinite(target.definitionVersion) &&
+        (target.temperature === null || Number.isFinite(target.temperature))
+    );
 }
 
 /**
@@ -95,20 +110,21 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
             const { definitionId, preambleVersionId } = job.data;
             // Backward compatibility: jobs queued before this change may omit definitionVersion.
             const definitionVersion = job.data.definitionVersion ?? null;
+            const temperature = parseTemperature(job.data.temperature);
             const jobId = job.id;
 
             log.info(
-                { jobId, definitionId, preambleVersionId, definitionVersion },
+                { jobId, definitionId, preambleVersionId, definitionVersion, temperature },
                 'Processing aggregate_analysis job'
             );
 
             try {
                 if (definitionVersion !== null) {
-                    await updateAggregateRun(definitionId, preambleVersionId, definitionVersion);
+                    await updateAggregateRun(definitionId, preambleVersionId, definitionVersion, temperature);
                 } else {
-                    const derivedVersions = await deriveDefinitionVersions(definitionId, preambleVersionId);
+                    const derivedTargets = await deriveDefinitionTargets(definitionId, preambleVersionId);
 
-                    if (derivedVersions.length === 0) {
+                    if (derivedTargets.length === 0) {
                         log.warn(
                             { jobId, definitionId, preambleVersionId },
                             'No definition versions found for legacy aggregate job; skipping'
@@ -116,8 +132,8 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         continue;
                     }
 
-                    for (const version of derivedVersions) {
-                        await updateAggregateRun(definitionId, preambleVersionId, version);
+                    for (const target of derivedTargets) {
+                        await updateAggregateRun(definitionId, preambleVersionId, target.definitionVersion, target.temperature);
                     }
                 }
 
@@ -147,11 +163,13 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         const snapshot = config.definitionSnapshot;
                         const runPreambleId = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId ?? null;
                         const runVersion = parseDefinitionVersion(snapshot?._meta?.definitionVersion) ?? parseDefinitionVersion(snapshot?.version);
+                        const runTemperature = parseTemperature(config.temperature);
 
                         const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
                         const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
+                        const temperatureMatch = runTemperature === temperature;
 
-                        return preambleMatch && versionMatch && config.isFinalTrial === true;
+                        return preambleMatch && versionMatch && temperatureMatch && config.isFinalTrial === true;
                     });
 
                     if (finalTrialRuns.length > 0) {
@@ -163,7 +181,7 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
 
                         if (modelIds.length > 0) {
                             log.info({ definitionId, modelIds }, 'Checking adaptive sampling stability');
-                            const plan = await planFinalTrial(definitionId, modelIds);
+                            const plan = await planFinalTrial(definitionId, modelIds, temperature);
 
                             if (plan.totalJobs > 0) {
                                 log.info({ definitionId, totalJobs: plan.totalJobs }, 'Stability criteria not met. Starting follow-up Final Trial run.');
@@ -171,6 +189,7 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                                     definitionId,
                                     models: modelIds,
                                     finalTrial: true,
+                                    temperature: temperature ?? undefined,
                                     userId: firstRun.createdByUserId ?? 'system',
                                     experimentId: firstRun.experimentId ?? undefined,
                                 });

@@ -66,6 +66,7 @@ type StartRunArgs = {
   samplePercentage?: number | null;
   sampleSeed?: number | null;
   samplesPerScenario?: number | null;
+  temperature?: number | null;
   priority?: string | null;
   experimentId?: string | number | null;
   finalTrial?: boolean | null;
@@ -125,6 +126,7 @@ builder.mutationField('startRun', (t) =>
         samplePercentage: input.samplePercentage ?? undefined,
         sampleSeed: input.sampleSeed ?? undefined,
         samplesPerScenario: input.samplesPerScenario ?? undefined,
+        temperature: input.temperature ?? undefined,
         priority: input.priority ?? 'NORMAL',
         experimentId: (input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== '') ? String(input.experimentId) : undefined,
         userId,

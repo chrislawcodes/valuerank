@@ -55,6 +55,10 @@ function toDimensionRecord(value: unknown): Record<string, number | string> | nu
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 }
 
+function getTemperatureSetting(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 /**
  * Python worker input structure.
  */
@@ -272,6 +276,8 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 }
               };
               const definitionId = run.definitionId;
+              const runConfig = run.config as { temperature?: unknown } | null;
+              const temperature = getTemperatureSetting(runConfig?.temperature);
               const preambleVersionId =
                 config.definitionSnapshot?._meta?.preambleVersionId ??
                 config.definitionSnapshot?.preambleVersionId ??
@@ -297,18 +303,18 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
 
               const boss = getBoss();
-              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}`;
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}:${temperature ?? 'null'}`;
 
               await boss.send(
                 'aggregate_analysis',
-                { definitionId, preambleVersionId, definitionVersion },
+                { definitionId, preambleVersionId, definitionVersion, temperature },
                 {
                   ...DEFAULT_JOB_OPTIONS.aggregate_analysis,
                   singletonKey
                 }
               );
 
-              log.info({ runId, definitionId, preambleVersionId, definitionVersion }, 'Enqueued aggregate_analysis job');
+              log.info({ runId, definitionId, preambleVersionId, definitionVersion, temperature }, 'Enqueued aggregate_analysis job');
             }
           }
         } catch (err) {
