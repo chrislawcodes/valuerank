@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { BrowserRouter, MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { NavTabs } from '../../../src/components/layout/NavTabs';
 
 function renderNavTabs(initialRoute = '/') {
@@ -33,7 +33,9 @@ describe('NavTabs Component', () => {
   it('should highlight active tab', () => {
     renderNavTabs('/definitions');
     const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
-    expect(vignettesLink.className).toContain('text-white');
-    expect(vignettesLink.className).toContain('border-teal-500');
+    const vignettesTrigger = vignettesLink.parentElement;
+    expect(vignettesTrigger).not.toBeNull();
+    expect(vignettesTrigger?.className).toContain('text-white');
+    expect(vignettesTrigger?.className).toContain('border-teal-500');
   });
 });
