@@ -82,14 +82,14 @@ export function NavTabs() {
               </Button>
             </div>
             <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isVignettesMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
-              <div className="rounded-md border border-gray-200 bg-white shadow-lg py-1">
+              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
                 {vignetteMenuItems.map((item) => {
                   const isActive = isTabActive(item.path);
                   return (
                     <NavLink
                       key={item.path}
                       to={item.path}
-                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-50 text-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
                     >
                       {item.name}
                     </NavLink>
