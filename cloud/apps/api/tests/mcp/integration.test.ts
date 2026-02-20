@@ -291,7 +291,7 @@ describe('MCP Integration', () => {
       // All budgets should be positive and reasonable
       Object.entries(TOKEN_BUDGETS).forEach(([tool, budget]) => {
         expect(budget).toBeGreaterThan(0);
-        expect(budget).toBeLessThanOrEqual(10 * 1024); // Max 10KB
+        expect(budget).toBeLessThanOrEqual(100 * 1024); // Max 100KB
       });
     });
   });

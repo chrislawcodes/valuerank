@@ -35,7 +35,7 @@ const zConfidenceInterval = z.object({
     method: z.string(),
 });
 
-const zValueStats = z.object({
+export const zValueStats = z.object({
     count: z.object({
         prioritized: z.number(),
         deprioritized: z.number(),
@@ -45,7 +45,7 @@ const zValueStats = z.object({
     confidenceInterval: zConfidenceInterval,
 });
 
-const zModelStats = z.object({
+export const zModelStats = z.object({
     sampleSize: z.number().optional(),
     values: z.record(zValueStats).optional(),
     overall: z.object({
@@ -112,7 +112,7 @@ type ModelVarianceStats = z.infer<typeof zModelVarianceStats>;
 type VarianceStats = z.infer<typeof zVarianceStats>;
 type ScenarioVarianceStats = z.infer<typeof zScenarioVarianceStats>;
 
-const zAnalysisOutput = z.object({
+export const zAnalysisOutput = z.object({
     perModel: z.record(zModelStats),
     visualizationData: zVisualizationData.optional(),
     mostContestedScenarios: z.array(zContestedScenario).optional(),
