@@ -13,6 +13,7 @@ import type { AggregateAnalysisJobData } from '../types.js';
 import { updateAggregateRun } from '../../services/analysis/aggregate.js';
 import { planFinalTrial } from '../../services/run/plan-final-trial.js';
 import { startRun } from '../../services/run/start.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('queue:aggregate-analysis');
 
@@ -39,10 +40,6 @@ function parseDefinitionVersion(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseTemperature(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
 async function deriveDefinitionTargets(
     definitionId: string,
     preambleVersionId: string | null,
@@ -61,7 +58,7 @@ async function deriveDefinitionTargets(
         select: { config: true },
     });
 
-    const targets = new Set<string>();
+    const targets = new Map<string, { definitionVersion: number; temperature: number | null }>();
 
     for (const run of runs) {
         const parseResult = zRunConfig.safeParse(run.config);
@@ -84,20 +81,14 @@ async function deriveDefinitionTargets(
             parseDefinitionVersion(snapshot?.version);
         if (runDefinitionVersion === null) continue;
         const runTemperature = parseTemperature(parseResult.data.temperature);
-        targets.add(`${runDefinitionVersion}::${runTemperature ?? 'null'}`);
+        const targetKey = `${runDefinitionVersion}::${runTemperature ?? 'null'}`;
+        targets.set(targetKey, {
+            definitionVersion: runDefinitionVersion,
+            temperature: runTemperature,
+        });
     }
 
-    return [...targets].map((target) => {
-        const [versionPart, tempPart] = target.split('::');
-        const definitionVersion = Number.parseInt(versionPart ?? '', 10);
-        return {
-            definitionVersion,
-            temperature: tempPart === 'null' ? null : Number.parseFloat(tempPart ?? ''),
-        };
-    }).filter((target) =>
-        Number.isFinite(target.definitionVersion) &&
-        (target.temperature === null || Number.isFinite(target.temperature))
-    );
+    return [...targets.values()];
 }
 
 /**
@@ -166,7 +157,10 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         const runTemperature = parseTemperature(config.temperature);
 
                         const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
+                        // Legacy jobs may omit definitionVersion; treat null as wildcard for compatibility.
                         const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
+                        // Temperature null means provider default; only aggregate with the same setting.
+                        // We intentionally use strict equality because both values originate from JSON-number storage.
                         const temperatureMatch = runTemperature === temperature;
 
                         return preambleMatch && versionMatch && temperatureMatch && config.isFinalTrial === true;

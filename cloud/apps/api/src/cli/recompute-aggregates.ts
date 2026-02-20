@@ -3,6 +3,7 @@
 import { db } from '@valuerank/db';
 import { updateAggregateRun } from '../services/analysis/aggregate.js';
 import { createLogger } from '@valuerank/shared';
+import { parseTemperature } from '../utils/temperature.js';
 
 const log = createLogger('cli:trigger-aggregation');
 
@@ -35,8 +36,7 @@ export function getDefinitionVersion(config: unknown): number | null {
 
 export function getTemperature(config: unknown): number | null {
     if (!isRecord(config)) return null;
-    const raw = config.temperature;
-    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+    return parseTemperature(config.temperature);
 }
 
 async function main() {

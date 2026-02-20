@@ -4,6 +4,7 @@ import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { z } from 'zod';
 import { normalizeAnalysisArtifacts } from './normalize-analysis-output.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('analysis:aggregate');
 
@@ -203,11 +204,6 @@ function getSnapshotMeta(config: RunConfig): { preambleVersionId: string | null;
     return { preambleVersionId, definitionVersion };
 }
 
-function parseTemperature(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
  * Uses advisory locks to ensure serial execution for a given definition.
@@ -299,6 +295,7 @@ export async function updateAggregateRun(
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
             const runTemperature = parseTemperature(config.temperature);
+            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
             const temperatureMatch = runTemperature === temperature;
             return preambleMatch && definitionVersionMatch && temperatureMatch;
         });
@@ -396,6 +393,7 @@ export async function updateAggregateRun(
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
             const runTemperature = parseTemperature(config.temperature);
+            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
             const temperatureMatch = runTemperature === temperature;
             return preambleMatch && definitionVersionMatch && temperatureMatch;
         });

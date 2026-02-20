@@ -14,6 +14,7 @@ import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -53,10 +54,6 @@ function toDimensionRecord(value: unknown): Record<string, number | string> | nu
     sanitized[key] = entry;
   }
   return Object.keys(sanitized).length > 0 ? sanitized : null;
-}
-
-function getTemperatureSetting(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -277,7 +274,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               };
               const definitionId = run.definitionId;
               const runConfig = run.config as { temperature?: unknown } | null;
-              const temperature = getTemperatureSetting(runConfig?.temperature);
+              const temperature = parseTemperature(runConfig?.temperature);
               const preambleVersionId =
                 config.definitionSnapshot?._meta?.preambleVersionId ??
                 config.definitionSnapshot?.preambleVersionId ??

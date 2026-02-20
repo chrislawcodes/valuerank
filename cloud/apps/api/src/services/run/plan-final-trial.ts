@@ -2,6 +2,7 @@ import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { updateAggregateRun } from '../analysis/aggregate.js';
 import { resolveModelIdFromAvailable } from '../models/aliases.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('services:run:plan-final-trial');
 
@@ -46,10 +47,6 @@ type AnalysisShape = {
     modelScenarioMatrix?: Record<string, Record<string, number>>;
   };
 };
-
-function parseTemperature(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
 
 function getConditionKey(dimensions: Record<string, string | number>): string {
   return Object.entries(dimensions)

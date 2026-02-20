@@ -10,10 +10,7 @@ import { AuthenticationError, NotFoundError } from '@valuerank/shared';
 import { AnalysisResultRef } from '../types/analysis.js';
 import { getBoss } from '../../queue/boss.js';
 import { createAuditLog } from '../../services/audit/index.js';
-
-function parseTemperature(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
+import { parseTemperature } from '../../utils/temperature.js';
 
 // recomputeAnalysis mutation
 builder.mutationField('recomputeAnalysis', (t) =>
