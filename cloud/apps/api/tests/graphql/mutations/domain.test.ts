@@ -139,7 +139,7 @@ describe('GraphQL Domain Mutations', () => {
     expect(startedDefinitionIds).not.toContain(mid.id);
   });
 
-  it('rejects domain trial execution when user does not own domain definitions', async () => {
+  it('allows domain trial execution when domain definitions are owned by another user', async () => {
     const domain = await db.domain.create({
       data: { name: 'Domain Unauthorized', normalizedName: `domain-unauthorized-${Date.now()}` },
     });
@@ -173,9 +173,11 @@ describe('GraphQL Domain Mutations', () => {
         variables: { domainId: domain.id },
       });
 
-    expect([200, 401]).toContain(response.status);
-    const message = response.body?.errors?.[0]?.message ?? response.body?.error ?? '';
-    expect(String(message)).toContain('Not authorized to run trials for this domain');
-    expect(startRunMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.runTrialsForDomain.targetedDefinitions).toBe(1);
+    expect(response.body.data.runTrialsForDomain.startedRuns).toBe(1);
+    expect(startRunMock).toHaveBeenCalledTimes(1);
+    expect(startRunMock.mock.calls[0]?.[0]?.definitionId).toBe(foreignDefinition.id);
   });
 });

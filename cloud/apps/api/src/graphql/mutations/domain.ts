@@ -1,6 +1,6 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
-import { AppError, AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError } from '@valuerank/shared';
 import { DomainRef } from '../types/domain.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
@@ -396,7 +396,6 @@ builder.mutationField('runTrialsForDomain', (t) =>
           version: true,
           createdAt: true,
           updatedAt: true,
-          createdByUserId: true,
         },
       });
 
@@ -408,14 +407,6 @@ builder.mutationField('runTrialsForDomain', (t) =>
           startedRuns: 0,
           failedDefinitions: 0,
         };
-      }
-
-      const hasOwnedDefinitions = definitions.some((definition) => definition.createdByUserId === userId);
-      const hasForeignOwnedDefinitions = definitions.some(
-        (definition) => definition.createdByUserId !== null && definition.createdByUserId !== userId
-      );
-      if (!hasOwnedDefinitions || hasForeignOwnedDefinitions) {
-        throw new AppError('Not authorized to run trials for this domain', 'FORBIDDEN', 403);
       }
 
       const definitionsById = await hydrateDefinitionAncestors(definitions);
