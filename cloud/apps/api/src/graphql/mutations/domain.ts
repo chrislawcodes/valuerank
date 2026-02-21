@@ -1,20 +1,33 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
+import { AuthenticationError } from '@valuerank/shared';
 import { DomainRef } from '../types/domain.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
 import { randomUUID } from 'crypto';
+import { startRun as startRunService } from '../../services/run/index.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
+const DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE = 10;
+const DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO = 1;
 
 type DomainMutationResult = {
   success: boolean;
   affectedDefinitions: number;
 };
 
+type DomainTrialRunResult = {
+  success: boolean;
+  totalDefinitions: number;
+  targetedDefinitions: number;
+  startedRuns: number;
+  failedDefinitions: number;
+};
+
 const DomainMutationResultRef = builder.objectRef<DomainMutationResult>('DomainMutationResult');
+const DomainTrialRunResultRef = builder.objectRef<DomainTrialRunResult>('DomainTrialRunResult');
 
 builder.objectType(DomainMutationResultRef, {
   fields: (t) => ({
@@ -22,6 +35,17 @@ builder.objectType(DomainMutationResultRef, {
     affectedDefinitions: t.exposeInt('affectedDefinitions'),
   }),
 });
+
+builder.objectType(DomainTrialRunResultRef, {
+  fields: (t) => ({
+    success: t.exposeBoolean('success'),
+    totalDefinitions: t.exposeInt('totalDefinitions'),
+    targetedDefinitions: t.exposeInt('targetedDefinitions'),
+    startedRuns: t.exposeInt('startedRuns'),
+    failedDefinitions: t.exposeInt('failedDefinitions'),
+  }),
+});
+
 function parseOptionalId(value: string | number | null | undefined, argName: string): string | null {
   if (value === undefined || value === null) return null;
   const id = String(value).trim();
@@ -29,6 +53,51 @@ function parseOptionalId(value: string | number | null | undefined, argName: str
     throw new Error(`${argName} cannot be an empty string. Use null for unassignment.`);
   }
   return id;
+}
+
+type DefinitionRow = {
+  id: string;
+  parentId: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
+  let current = definition;
+  const visited = new Set<string>([current.id]);
+
+  while (current.parentId !== null) {
+    const parent = definitionsById.get(current.parentId);
+    if (!parent || visited.has(parent.id)) break;
+    visited.add(parent.id);
+    current = parent;
+  }
+
+  return current.id;
+}
+
+function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
+  if (left.version !== right.version) return left.version > right.version;
+  const leftUpdated = left.updatedAt.getTime();
+  const rightUpdated = right.updatedAt.getTime();
+  if (leftUpdated !== rightUpdated) return leftUpdated > rightUpdated;
+  return left.createdAt.getTime() > right.createdAt.getTime();
+}
+
+function selectLatestDefinitionPerLineage(definitions: DefinitionRow[]): DefinitionRow[] {
+  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+  const latestByLineage = new Map<string, DefinitionRow>();
+
+  for (const definition of definitions) {
+    const lineageRootId = getLineageRootId(definition, definitionsById);
+    const existing = latestByLineage.get(lineageRootId);
+    if (!existing || isNewerDefinition(definition, existing)) {
+      latestByLineage.set(lineageRootId, definition);
+    }
+  }
+
+  return Array.from(latestByLineage.values());
 }
 
 builder.mutationField('createDomain', (t) =>
@@ -256,6 +325,122 @@ builder.mutationField('assignDomainToDefinitionsByFilter', (t) =>
       });
 
       return { success: true, affectedDefinitions: result.count };
+    },
+  })
+);
+
+builder.mutationField('runTrialsForDomain', (t) =>
+  t.field({
+    type: DomainTrialRunResultRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      temperature: t.arg.float({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+      const userId = ctx.user.id;
+
+      const domainId = String(args.domainId);
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: {
+          id: true,
+          parentId: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (definitions.length === 0) {
+        return {
+          success: true,
+          totalDefinitions: 0,
+          targetedDefinitions: 0,
+          startedRuns: 0,
+          failedDefinitions: 0,
+        };
+      }
+
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitions);
+
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        select: { modelId: true, isDefault: true },
+      });
+      const defaultModels = activeModels.filter((model) => model.isDefault).map((model) => model.modelId);
+      const fallbackModels = activeModels.map((model) => model.modelId);
+      const models = defaultModels.length > 0 ? defaultModels : fallbackModels;
+      if (models.length === 0) {
+        throw new Error('No active models are configured. Add an active model before running domain trials.');
+      }
+
+      let startedRuns = 0;
+      let failedDefinitions = 0;
+
+      const runResults = await Promise.allSettled(
+        latestDefinitions.map(async (definition) =>
+          startRunService({
+            definitionId: definition.id,
+            models,
+            // Domain runs default to lightweight trial settings to avoid unexpectedly large fan-out.
+            samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+            samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+            temperature: args.temperature ?? undefined,
+            priority: 'NORMAL',
+            userId,
+            finalTrial: false,
+          })
+        )
+      );
+
+      runResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          startedRuns += 1;
+          return;
+        }
+        failedDefinitions += 1;
+        const failedDefinition = latestDefinitions[index];
+        ctx.log.error(
+          {
+            domainId,
+            definitionId: failedDefinition?.id ?? null,
+            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          },
+          'Failed to start domain trial for definition'
+        );
+      });
+
+      await createAuditLog({
+        action: 'ACTION',
+        entityType: 'Domain',
+        entityId: domainId,
+        userId,
+        metadata: {
+          operationType: 'run-trials-for-domain',
+          domainName: domain.name,
+          totalDefinitions: definitions.length,
+          targetedDefinitions: latestDefinitions.length,
+          startedRuns,
+          failedDefinitions,
+          models,
+          temperature: args.temperature ?? null,
+          defaultsOnly: defaultModels.length > 0,
+        },
+      });
+
+      return {
+        success: failedDefinitions === 0,
+        totalDefinitions: definitions.length,
+        targetedDefinitions: latestDefinitions.length,
+        startedRuns,
+        failedDefinitions,
+      };
     },
   })
 );

@@ -6,6 +6,7 @@ import {
   DELETE_DOMAIN_MUTATION,
   ASSIGN_DOMAIN_TO_DEFINITIONS_MUTATION,
   ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION,
+  RUN_TRIALS_FOR_DOMAIN_MUTATION,
   type Domain,
   type DomainMutationResult,
   type DomainsQueryResult,
@@ -20,7 +21,11 @@ import {
   type AssignDomainToDefinitionsMutationVariables,
   type AssignDomainToDefinitionsByFilterMutationResult,
   type AssignDomainToDefinitionsByFilterMutationVariables,
+  type RunTrialsForDomainMutationResult,
+  type RunTrialsForDomainMutationVariables,
 } from '../api/operations/domains';
+
+type RunTrialsForDomainResult = RunTrialsForDomainMutationResult['runTrialsForDomain'];
 
 type UseDomainsResult = {
   domains: Domain[];
@@ -31,6 +36,7 @@ type UseDomainsResult = {
   deleting: boolean;
   assigningByIds: boolean;
   assigningByFilter: boolean;
+  runningDomainTrials: boolean;
   error: Error | null;
   refetch: () => void;
   createDomain: (name: string) => Promise<Domain | null>;
@@ -46,6 +52,7 @@ type UseDomainsResult = {
     sourceDomainId?: string;
     withoutDomain?: boolean;
   }) => Promise<DomainMutationResult | null>;
+  runTrialsForDomain: (domainId: string, temperature?: number) => Promise<RunTrialsForDomainResult | null>;
 };
 
 export function useDomains(): UseDomainsResult {
@@ -59,6 +66,7 @@ export function useDomains(): UseDomainsResult {
   const [deleteResult, deleteMutation] = useMutation<DeleteDomainMutationResult, DeleteDomainMutationVariables>(DELETE_DOMAIN_MUTATION);
   const [assignIdsResult, assignIdsMutation] = useMutation<AssignDomainToDefinitionsMutationResult, AssignDomainToDefinitionsMutationVariables>(ASSIGN_DOMAIN_TO_DEFINITIONS_MUTATION);
   const [assignFilterResult, assignFilterMutation] = useMutation<AssignDomainToDefinitionsByFilterMutationResult, AssignDomainToDefinitionsByFilterMutationVariables>(ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION);
+  const [runTrialsResult, runTrialsMutation] = useMutation<RunTrialsForDomainMutationResult, RunTrialsForDomainMutationVariables>(RUN_TRIALS_FOR_DOMAIN_MUTATION);
 
   const refetch = () => reexecuteQuery({ requestPolicy: 'network-only' });
 
@@ -110,6 +118,15 @@ export function useDomains(): UseDomainsResult {
     return result.data?.assignDomainToDefinitionsByFilter ?? null;
   };
 
+  const runTrialsForDomain = async (
+    domainId: string,
+    temperature?: number
+  ): Promise<RunTrialsForDomainResult | null> => {
+    const result = await runTrialsMutation({ domainId, temperature });
+    if (result.error) throw new Error(result.error.message);
+    return result.data?.runTrialsForDomain ?? null;
+  };
+
   return {
     domains: queryResult.data?.domains ?? [],
     loading:
@@ -118,13 +135,15 @@ export function useDomains(): UseDomainsResult {
       renameResult.fetching ||
       deleteResult.fetching ||
       assignIdsResult.fetching ||
-      assignFilterResult.fetching,
+      assignFilterResult.fetching ||
+      runTrialsResult.fetching,
     queryLoading: queryResult.fetching,
     creating: createResult.fetching,
     renaming: renameResult.fetching,
     deleting: deleteResult.fetching,
     assigningByIds: assignIdsResult.fetching,
     assigningByFilter: assignFilterResult.fetching,
+    runningDomainTrials: runTrialsResult.fetching,
     error: queryResult.error ? new Error(queryResult.error.message) : null,
     refetch,
     createDomain,
@@ -132,5 +151,6 @@ export function useDomains(): UseDomainsResult {
     deleteDomain,
     assignDomainToDefinitions,
     assignDomainToDefinitionsByFilter,
+    runTrialsForDomain,
   };
 }
