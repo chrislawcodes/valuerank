@@ -65,7 +65,7 @@ describe('Preamble Integration', () => {
         // Ensure User
         await db.user.upsert({
             where: { id: userId },
-            create: { id: userId, email: 'test@example.com', passwordHash: 'hash' },
+            create: { id: userId, email: 'preamble-test@example.com', passwordHash: 'hash' },
             update: {},
         });
     });
