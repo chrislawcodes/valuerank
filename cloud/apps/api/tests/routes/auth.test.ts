@@ -226,14 +226,13 @@ describe('Auth Routes', () => {
         email: 'test@example.com',
         name: 'Test User',
         passwordHash: 'hash',
-        lastLoginAt: new Date('2024-01-01'),
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date('2024-01-01'),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        lastLoginAt: new Date('2024-01-02T00:00:00Z'),
       };
 
-      vi.mocked(db.user.findUnique).mockResolvedValue(mockUser);
+      vi.mocked(db.user.findUnique).mockResolvedValue(mockUser as any);
 
-      const token = signToken({ id: 'user-123', email: 'test@example.com' });
+      const token = signToken({ id: mockUser.id, email: mockUser.email });
 
       const response = await request(app)
         .get('/api/auth/me')
@@ -241,9 +240,9 @@ describe('Auth Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        id: 'user-123',
-        email: 'test@example.com',
-        name: 'Test User',
+        id: mockUser.id,
+        email: mockUser.email,
+        name: mockUser.name,
         createdAt: mockUser.createdAt.toISOString(),
         lastLoginAt: mockUser.lastLoginAt.toISOString(),
       });
