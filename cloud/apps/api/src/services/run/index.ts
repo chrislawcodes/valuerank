@@ -63,3 +63,8 @@ export type {
   JobTypeCounts,
   JobFailure,
 } from './types.js';
+
+export {
+  DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+  DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+} from './config.js';

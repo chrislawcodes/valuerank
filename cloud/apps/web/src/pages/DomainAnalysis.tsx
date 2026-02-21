@@ -39,9 +39,13 @@ export function DomainAnalysis() {
             <li>Use <code>SORT BY</code> to compare models on one value at a time and quickly find outliers.</li>
             <li>Quadrant color bars label Schwartz higher-order groups to help read broader value orientation.</li>
           </ul>
+          <p className="mt-3 text-xs text-blue-800">
+            Current chart is a curated snapshot. Dynamic per-domain fetching and filtering will be wired in a follow-up.
+          </p>
         </section>
       )}
 
+      {/* TODO: Replace static chart snapshot with domain-scoped API-backed data. */}
       <BTChart />
     </div>
   );

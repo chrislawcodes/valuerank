@@ -27,6 +27,8 @@ type HoveredCell = {
   rank: number;
 };
 
+// Static snapshot from a validated analysis export.
+// TODO: Replace with API-backed per-domain data.
 const data: ModelEntry[] = [
   { model: 'claude-sonnet-4-5', label: 'Claude\nSonnet 4.5', values: { Self_Direction_Action: 1.6451, Universalism_Nature: 1.4332, Benevolence_Dependability: 0.5614, Security_Personal: 0.4356, Achievement: 0.2526, Hedonism: -0.1574, Tradition: -0.1741, Stimulation: -0.3415, Power_Dominance: -0.8556, Conformity_Interpersonal: -2.7994 } },
   { model: 'deepseek-chat', label: 'DeepSeek\nChat', values: { Self_Direction_Action: 1.1955, Tradition: 0.6793, Universalism_Nature: 0.3466, Benevolence_Dependability: 0.0318, Conformity_Interpersonal: 0.0038, Power_Dominance: -0.0191, Security_Personal: -0.255, Stimulation: -0.3927, Hedonism: -0.4592, Achievement: -1.1309 } },

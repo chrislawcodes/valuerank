@@ -2,6 +2,7 @@ import { type FocusEvent, type RefObject, useEffect, useRef, useState } from 're
 import { NavLink, useLocation } from 'react-router-dom';
 import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 const tabs = [
   { name: 'Compare', path: '/compare', icon: GitCompare },
@@ -41,31 +42,12 @@ export function NavTabs() {
     setIsDomainsMenuOpen(false);
   }, [location.pathname]);
 
-  useEffect(() => {
-    if (!isVignettesMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (vignetteMenuRef.current && !vignetteMenuRef.current.contains(event.target as Node)) {
-        setIsVignettesMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isVignettesMenuOpen]);
-
-  useEffect(() => {
-    if (!isDomainsMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (domainMenuRef.current && !domainMenuRef.current.contains(event.target as Node)) {
-        setIsDomainsMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isDomainsMenuOpen]);
+  useClickOutside(domainMenuRef, () => {
+    if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);
+  }, isDomainsMenuOpen);
+  useClickOutside(vignetteMenuRef, () => {
+    if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
+  }, isVignettesMenuOpen);
 
   const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
     setOpen(true);
@@ -102,7 +84,7 @@ export function NavTabs() {
                 }`
               }
             >
-              <NavLink to="/domains" className="flex items-center gap-2 px-3 py-3">
+              <NavLink to="/domains" end className="flex items-center gap-2 px-3 py-3">
                 <FolderTree className="w-4 h-4" />
                 <span className="hidden sm:inline">Domains</span>
               </NavLink>

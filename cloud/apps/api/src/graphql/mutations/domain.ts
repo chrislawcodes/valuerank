@@ -7,11 +7,13 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
 import { randomUUID } from 'crypto';
 import { startRun as startRunService } from '../../services/run/index.js';
+import {
+  DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+  DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+} from '../../services/run/config.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
-const DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE = 10;
-const DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO = 1;
 const DOMAIN_TRIAL_RUN_BATCH_SIZE = 25;
 
 type DomainMutationResult = {
@@ -62,6 +64,7 @@ type DefinitionRow = {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  createdByUserId?: string | null;
 };
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -393,6 +396,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
           version: true,
           createdAt: true,
           updatedAt: true,
+          createdByUserId: true,
         },
       });
 
@@ -404,6 +408,14 @@ builder.mutationField('runTrialsForDomain', (t) =>
           startedRuns: 0,
           failedDefinitions: 0,
         };
+      }
+
+      const hasOwnedDefinitions = definitions.some((definition) => definition.createdByUserId === userId);
+      const hasForeignOwnedDefinitions = definitions.some(
+        (definition) => definition.createdByUserId !== null && definition.createdByUserId !== userId
+      );
+      if (!hasOwnedDefinitions || hasForeignOwnedDefinitions) {
+        throw new AuthenticationError('Not authorized to run trials for this domain');
       }
 
       const definitionsById = await hydrateDefinitionAncestors(definitions);
