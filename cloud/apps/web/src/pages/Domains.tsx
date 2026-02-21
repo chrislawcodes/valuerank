@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
-import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
+import { Folder, FolderOpen, Plus, Pencil, Trash2, Play, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
@@ -17,6 +17,13 @@ const defaultFilters: DefinitionFilterState = {
 };
 
 type FolderKey = string;
+type DomainTrialStatus = {
+  domainName: string;
+  targetedDefinitions: number;
+  startedRuns: number;
+  failedDefinitions: number;
+  startedAt: number;
+};
 
 function getFilterSummary(filters: DefinitionFilterState): string {
   const parts: string[] = [];
@@ -40,6 +47,7 @@ export function Domains() {
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [runSuccess, setRunSuccess] = useState<string | null>(null);
+  const [lastDomainTrialStatus, setLastDomainTrialStatus] = useState<DomainTrialStatus | null>(null);
 
   const {
     domains,
@@ -162,6 +170,7 @@ export function Domains() {
     if (!selectedDomain) return;
     setRunError(null);
     setRunSuccess(null);
+    setLastDomainTrialStatus(null);
     const confirmed = window.confirm(
       `Start trials for domain "${selectedDomain.name}"?\n\nThis will run only the latest version per vignette lineage in this domain using default active models.`
     );
@@ -176,6 +185,13 @@ export function Domains() {
       setRunSuccess(
         `Started ${result.startedRuns}/${result.targetedDefinitions} latest-version vignette trials (${result.failedDefinitions} failed).`
       );
+      setLastDomainTrialStatus({
+        domainName: selectedDomain.name,
+        targetedDefinitions: result.targetedDefinitions,
+        startedRuns: result.startedRuns,
+        failedDefinitions: result.failedDefinitions,
+        startedAt: Date.now(),
+      });
     } catch (error) {
       setRunError(error instanceof Error ? error.message : 'Failed to start domain trials');
     }
@@ -350,6 +366,71 @@ export function Domains() {
             {runError && <p className="text-sm text-red-600">{runError}</p>}
             {runSuccess && <p className="text-sm text-green-700">{runSuccess}</p>}
           </div>
+
+          {(runningDomainTrials || lastDomainTrialStatus || runError) && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {runningDomainTrials ? (
+                    <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                  ) : runError ? (
+                    <XCircle className="w-4 h-4 text-red-600" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  )}
+                  <h3 className="text-sm font-semibold text-gray-900">Domain Trial Status</h3>
+                </div>
+                <Badge
+                  variant={runningDomainTrials ? 'warning' : runError ? 'error' : 'success'}
+                  size="count"
+                >
+                  {runningDomainTrials ? 'Starting' : runError ? 'Failed' : 'Started'}
+                </Badge>
+              </div>
+
+              {runningDomainTrials && (
+                <p className="text-sm text-gray-700">
+                  Starting domain trials now. This may take a minute for larger domains.
+                </p>
+              )}
+
+              {!runningDomainTrials && runError && (
+                <p className="text-sm text-red-600">{runError}</p>
+              )}
+
+              {!runningDomainTrials && !runError && lastDomainTrialStatus && (
+                <>
+                  <div className="text-sm text-gray-700">
+                    <span className="font-medium">{lastDomainTrialStatus.domainName}</span>: started {lastDomainTrialStatus.startedRuns} of {lastDomainTrialStatus.targetedDefinitions} latest-version trials.
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                      <span>Run start progress</span>
+                      <span>
+                        {lastDomainTrialStatus.targetedDefinitions > 0
+                          ? Math.round((lastDomainTrialStatus.startedRuns / lastDomainTrialStatus.targetedDefinitions) * 100)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-teal-500 transition-all duration-300"
+                        style={{
+                          width: `${lastDomainTrialStatus.targetedDefinitions > 0
+                            ? (lastDomainTrialStatus.startedRuns / lastDomainTrialStatus.targetedDefinitions) * 100
+                            : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Failed starts: {lastDomainTrialStatus.failedDefinitions}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
