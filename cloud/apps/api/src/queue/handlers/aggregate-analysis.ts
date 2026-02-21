@@ -158,8 +158,10 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
                         // Legacy jobs may omit definitionVersion; treat null as wildcard for compatibility.
                         const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
-                        // Legacy jobs may omit temperature; treat null as wildcard for compatibility.
-                        const temperatureMatch = temperature === null ? true : runTemperature === temperature;
+                        // Temperature null means provider default; runs are partitioned by exact setting.
+                        // We intentionally do not treat null as a wildcard because different
+                        // temperatures must never be merged for adaptive sampling decisions.
+                        const temperatureMatch = runTemperature === temperature;
                         return preambleMatch && versionMatch && temperatureMatch && config.isFinalTrial === true;
                     });
 
