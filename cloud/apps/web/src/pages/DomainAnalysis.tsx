@@ -14,8 +14,6 @@ type SortState = {
   direction: 'asc' | 'desc';
 };
 
-const MODEL_COLOR_PALETTE = ['#0f766e', '#2563eb', '#c2410c', '#7c3aed', '#be123c'] as const;
-
 function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
   const sorted = [...VALUES].sort((a, b) => model.values[b] - model.values[a]);
   return {
@@ -204,100 +202,53 @@ function DominanceSection() {
     () => new Map(DOMAIN_ANALYSIS_MODELS.map((model) => [model.model, model])),
     [],
   );
+  const selectedModel = modelById.get(selectedModelId);
+  const arrowColor = '#0f766e';
 
-  const selectedModelEntries = useMemo(() => {
-    const model = modelById.get(selectedModelId);
-    return model ? [model] : [];
-  }, [selectedModelId, modelById]);
-
-  const modelColorById = useMemo(() => {
-    const map = new Map<string, string>();
-    selectedModelEntries.forEach((model, index) => {
-      map.set(model.model, MODEL_COLOR_PALETTE[index % MODEL_COLOR_PALETTE.length] ?? '#334155');
-    });
-    return map;
-  }, [selectedModelEntries]);
-
-  const perModelEdges = useMemo(() => {
-    return selectedModelEntries.map((model) => {
-      const edges: Array<{ from: ValueKey; to: ValueKey; gap: number }> = [];
-      for (let i = 0; i < VALUES.length; i += 1) {
-        for (let j = i + 1; j < VALUES.length; j += 1) {
-          const a = VALUES[i];
-          const b = VALUES[j];
-          if (!a || !b) continue;
-          const av = model.values[a];
-          const bv = model.values[b];
-          if (av === bv) continue;
-          if (av > bv) edges.push({ from: a, to: b, gap: av - bv });
-          if (bv > av) edges.push({ from: b, to: a, gap: bv - av });
-        }
-      }
-      const sorted = edges.sort((left, right) => right.gap - left.gap);
-      const strongest = showAllArrows ? sorted : sorted.slice(0, edgeLimit);
-      return { model, edges: strongest };
-    });
-  }, [selectedModelEntries, edgeLimit, showAllArrows]);
-
-  const priorityValueRange = useMemo(() => {
-    const all = DOMAIN_ANALYSIS_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
-    return { min: Math.min(...all), max: Math.max(...all) };
-  }, []);
-
-  const valueTournament = useMemo(() => {
-    const winsByValue = new Map<ValueKey, Map<ValueKey, number>>();
-    for (const left of VALUES) {
-      const row = new Map<ValueKey, number>();
-      for (const right of VALUES) {
-        if (left === right) {
-          row.set(right, 0);
-          continue;
-        }
-        let wins = 0;
-        for (const currentModel of selectedModelEntries) {
-          if (currentModel.values[left] > currentModel.values[right]) wins += 1;
-        }
-        row.set(right, wins);
-      }
-      winsByValue.set(left, row);
-    }
-
-    const contestedPairs: Array<{ a: ValueKey; b: ValueKey; swing: number; aWins: number; bWins: number }> = [];
+  const edges = useMemo(() => {
+    if (!selectedModel) return [];
+    const allEdges: Array<{ from: ValueKey; to: ValueKey; gap: number }> = [];
     for (let i = 0; i < VALUES.length; i += 1) {
       for (let j = i + 1; j < VALUES.length; j += 1) {
         const a = VALUES[i];
         const b = VALUES[j];
         if (!a || !b) continue;
-        const aWins = winsByValue.get(a)?.get(b) ?? 0;
-        const bWins = winsByValue.get(b)?.get(a) ?? 0;
-        contestedPairs.push({ a, b, swing: Math.abs(aWins - bWins), aWins, bWins });
+        const av = selectedModel.values[a];
+        const bv = selectedModel.values[b];
+        if (av === bv) continue;
+        if (av > bv) allEdges.push({ from: a, to: b, gap: av - bv });
+        if (bv > av) allEdges.push({ from: b, to: a, gap: bv - av });
       }
     }
+    const sorted = allEdges.sort((left, right) => right.gap - left.gap);
+    return showAllArrows ? sorted : sorted.slice(0, edgeLimit);
+  }, [selectedModel, edgeLimit, showAllArrows]);
 
-    const cycles: string[] = [];
+  const contestedPairs = useMemo(() => {
+    if (!selectedModel) return [];
+    const pairs: Array<{ a: ValueKey; b: ValueKey; gap: number; winner: ValueKey }> = [];
     for (let i = 0; i < VALUES.length; i += 1) {
       for (let j = i + 1; j < VALUES.length; j += 1) {
-        for (let k = j + 1; k < VALUES.length; k += 1) {
-          const a = VALUES[i];
-          const b = VALUES[j];
-          const c = VALUES[k];
-          if (!a || !b || !c) continue;
-          const ab = (winsByValue.get(a)?.get(b) ?? 0) > (winsByValue.get(b)?.get(a) ?? 0);
-          const bc = (winsByValue.get(b)?.get(c) ?? 0) > (winsByValue.get(c)?.get(b) ?? 0);
-          const ca = (winsByValue.get(c)?.get(a) ?? 0) > (winsByValue.get(a)?.get(c) ?? 0);
-          const ac = (winsByValue.get(a)?.get(c) ?? 0) > (winsByValue.get(c)?.get(a) ?? 0);
-          const cb = (winsByValue.get(c)?.get(b) ?? 0) > (winsByValue.get(b)?.get(c) ?? 0);
-          const ba = (winsByValue.get(b)?.get(a) ?? 0) > (winsByValue.get(a)?.get(b) ?? 0);
-          if ((ab && bc && ca) || (ac && cb && ba)) {
-            cycles.push(`${VALUE_LABELS[a]} -> ${VALUE_LABELS[b]} -> ${VALUE_LABELS[c]} -> ${VALUE_LABELS[a]}`);
-          }
+        const a = VALUES[i];
+        const b = VALUES[j];
+        if (!a || !b) continue;
+        const aScore = selectedModel.values[a];
+        const bScore = selectedModel.values[b];
+        if (aScore === bScore) continue;
+        if (aScore > bScore) {
+          pairs.push({ a, b, gap: aScore - bScore, winner: a });
+        } else {
+          pairs.push({ a, b, gap: bScore - aScore, winner: b });
         }
       }
     }
+    return pairs.sort((left, right) => left.gap - right.gap).slice(0, 6);
+  }, [selectedModel]);
 
-    const sortedContested = contestedPairs.sort((a, b) => a.swing - b.swing).slice(0, 6);
-    return { sortedContested, cycles };
-  }, [selectedModelEntries]);
+  const priorityValueRange = useMemo(() => {
+    const all = DOMAIN_ANALYSIS_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
+    return { min: Math.min(...all), max: Math.max(...all) };
+  }, []);
 
   const nodePositions = useMemo(() => {
     const width = 1280;
@@ -345,7 +296,7 @@ function DominanceSection() {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-gray-600">Arrows per AI:</span>
+        <span className="text-xs font-medium text-gray-600">Arrows shown:</span>
         <Button
           type="button"
           variant="secondary"
@@ -371,17 +322,12 @@ function DominanceSection() {
         )}
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        {selectedModelEntries.map((model) => {
-          const color = modelColorById.get(model.model) ?? '#334155';
-          return (
-            <div key={model.model} className="flex items-center gap-1.5 text-xs text-gray-700">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              <span>{model.label}</span>
-            </div>
-          );
-        })}
-      </div>
+      {selectedModel && (
+        <div className="mb-3 flex items-center gap-1.5 text-xs text-gray-700">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: arrowColor }} />
+          <span>{selectedModel.label}</span>
+        </div>
+      )}
 
       <div className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2">
         <svg
@@ -391,80 +337,56 @@ function DominanceSection() {
           role="img"
           aria-label="Value dominance graph"
         >
-          <defs>
-            {selectedModelEntries.map((model) => {
-              const color = modelColorById.get(model.model) ?? '#334155';
-              const markerId = `dominance-arrow-${model.model}`;
-              return (
-                <marker
-                  key={markerId}
-                  id={markerId}
-                  markerWidth="1.6"
-                  markerHeight="1.6"
-                  refX="1.6"
-                  refY="0.8"
-                  orient="auto"
-                  markerUnits="strokeWidth"
-                >
-                  <path d="M-0.1,0 L1.6,0.8 L-0.1,1.6 z" fill={color} />
-                </marker>
-              );
-            })}
-          </defs>
-
-          {perModelEdges.flatMap(({ model, edges }) => {
-            const color = modelColorById.get(model.model) ?? '#334155';
-            return edges.map((edge) => {
-              const source = positionByValue.get(edge.from);
-              const target = positionByValue.get(edge.to);
-              if (!source || !target) return null;
-              const dx = target.x - source.x;
-              const dy = target.y - source.y;
-              const length = Math.hypot(dx, dy) || 1;
-              const ux = dx / length;
-              const uy = dy / length;
-              const nodeRadius = 68;
-              // Convert BT log-strength gap into implied pairwise win probability for this model.
-              const winRate = 1 / (1 + Math.exp(-edge.gap));
-              const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
-              const widthFactor = normalized ** 1.6;
-              const strokeWidth = 0.1 + widthFactor * 5.4;
-              const strokeOpacity = 0.15 + widthFactor * 0.75;
-              const startX = source.x + ux * nodeRadius;
-              const startY = source.y + uy * nodeRadius;
-              // Place marker tip exactly on the target circle boundary.
-              const endX = target.x - ux * nodeRadius;
-              const endY = target.y - uy * nodeRadius;
-              const headLength = 1.8 + strokeWidth * 1.9;
-              const headHalfWidth = 0.8 + strokeWidth * 0.95;
-              const baseX = endX - ux * headLength;
-              const baseY = endY - uy * headLength;
-              const px = -uy;
-              const py = ux;
-              const leftX = baseX + px * headHalfWidth;
-              const leftY = baseY + py * headHalfWidth;
-              const rightX = baseX - px * headHalfWidth;
-              const rightY = baseY - py * headHalfWidth;
-              return (
-                <g key={`${model.model}-${edge.from}-${edge.to}`}>
-                  <line
-                    x1={startX}
-                    y1={startY}
-                    x2={baseX}
-                    y2={baseY}
-                    stroke={color}
-                    strokeOpacity={strokeOpacity}
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                  />
-                  <polygon
-                    points={`${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`}
-                    fill={color}
-                    fillOpacity={strokeOpacity}
-                  />
-                </g>
-              );
-            });
+          {edges.map((edge) => {
+            const source = positionByValue.get(edge.from);
+            const target = positionByValue.get(edge.to);
+            if (!source || !target) return null;
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const length = Math.hypot(dx, dy) || 1;
+            const ux = dx / length;
+            const uy = dy / length;
+            const nodeRadius = 68;
+            // Convert BT log-strength gap into implied pairwise win probability for this model.
+            const winRate = 1 / (1 + Math.exp(-edge.gap));
+            const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
+            const widthFactor = normalized ** 1.6;
+            const strokeWidth = 0.1 + widthFactor * 5.4;
+            const strokeOpacity = 0.15 + widthFactor * 0.75;
+            const startX = source.x + ux * nodeRadius;
+            const startY = source.y + uy * nodeRadius;
+            // Place arrow tip exactly on the target circle boundary.
+            const endX = target.x - ux * nodeRadius;
+            const endY = target.y - uy * nodeRadius;
+            const headLength = 1.8 + strokeWidth * 1.9;
+            const headHalfWidth = 0.8 + strokeWidth * 0.95;
+            const baseX = endX - ux * headLength;
+            const baseY = endY - uy * headLength;
+            const px = -uy;
+            const py = ux;
+            const leftX = baseX + px * headHalfWidth;
+            const leftY = baseY + py * headHalfWidth;
+            const rightX = baseX - px * headHalfWidth;
+            const rightY = baseY - py * headHalfWidth;
+            return (
+              <g key={`${edge.from}-${edge.to}`}>
+                <line
+                  x1={startX}
+                  y1={startY}
+                  x2={baseX}
+                  y2={baseY}
+                  stroke={arrowColor}
+                  strokeOpacity={strokeOpacity}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                />
+                <polygon
+                  points={`${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`}
+                  fill={arrowColor}
+                  fillOpacity={strokeOpacity}
+                />
+              </g>
+            );
           })}
 
           {nodePositions.map((node) => (
@@ -473,11 +395,7 @@ function DominanceSection() {
                 cx={node.x}
                 cy={node.y}
                 r={68}
-                fill={getPriorityColor(
-                  selectedModelEntries[0]?.values[node.value] ?? 0,
-                  priorityValueRange.min,
-                  priorityValueRange.max,
-                )}
+                fill={getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)}
                 stroke="#94a3b8"
                 strokeWidth="2.2"
               />
@@ -514,12 +432,13 @@ function DominanceSection() {
           </ul>
           <h4 className="mt-3 text-sm font-medium text-gray-900">Most Contestable Value Pairs</h4>
           <p className="mt-2 text-xs text-gray-600">
-            For this selected AI. Low swing means two values are closely matched.
+            For this selected AI. Smaller BT score gap means two values are more closely matched.
           </p>
           <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {valueTournament.sortedContested.map((item, index) => (
+            {contestedPairs.map((item, index) => (
               <li key={`${item.a}-${item.b}`}>
-                {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.aWins}-{item.bWins})
+                {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.gap.toFixed(3)} gap,{' '}
+                {VALUE_LABELS[item.winner]} wins)
               </li>
             ))}
           </ol>
@@ -527,17 +446,9 @@ function DominanceSection() {
         <div className="rounded border border-gray-200 bg-gray-50 p-3">
           <h3 className="text-sm font-medium text-gray-900">Value Cycle Check</h3>
           <p className="mt-2 text-sm text-gray-700">
-            {valueTournament.cycles.length > 0
-              ? `Found ${valueTournament.cycles.length} value triads with cyclical majority outcomes.`
-              : 'No value-level majority cycles detected in this snapshot.'}
+            Majority-cycle detection is disabled in single-AI mode. Cycles require multi-model comparisons where
+            value orderings can conflict across models.
           </p>
-          {valueTournament.cycles.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-gray-700">
-              {valueTournament.cycles.slice(0, 4).map((cycle) => (
-                <li key={cycle}>{cycle}</li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
     </section>
