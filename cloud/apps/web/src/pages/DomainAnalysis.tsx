@@ -7,7 +7,7 @@ import {
   VALUE_LABELS,
   type ModelEntry,
   type ValueKey,
-} from '../components/domains/domainAnalysisData';
+} from '../data/domainAnalysisData';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -199,7 +199,7 @@ function SectionPlaceholder({ title, description }: { title: string; description
       <h2 className="text-base font-medium text-gray-900">{title}</h2>
       <p className="mt-1 text-sm text-gray-600">{description}</p>
       <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        Implemented in a follow-up table-specific PR.
+        This section is being rolled out in stages and will appear here soon.
       </p>
     </section>
   );

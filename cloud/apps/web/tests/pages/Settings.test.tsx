@@ -174,6 +174,9 @@ describe('Settings Page', () => {
     const mockClient = createMockClient(mockExecuteQuery);
     renderSettings(mockClient);
 
+    // Navigate to API Keys tab
+    await navigateToApiKeysTab();
+
     // Mock returns same error for all queries (API keys + SystemHealth), so multiple error messages appear
     await waitFor(() => {
       const errorMessages = screen.getAllByText('Failed to fetch API keys');
