@@ -15,7 +15,7 @@ import {
   ValidationError,
 } from '@valuerank/shared';
 
-import { verifyPassword, signToken } from '../auth/index.js';
+import { verifyPassword, signToken, hashPassword } from '../auth/index.js';
 import { loginRateLimiter } from '../auth/rate-limit.js';
 import type { LoginRequest, LoginResponse } from '../auth/index.js';
 
@@ -233,9 +233,6 @@ authRouter.put(
       }
 
       // Hash new password using the local auth implementation.
-      // We import it dynamically if not imported, or just use it if exported.
-      // We didn't import `hashPassword` at the top of the file yet, we need to do that!
-      const { hashPassword } = await import('../auth/index.js');
       const passwordHash = await hashPassword(newPassword);
 
       await db.user.update({

@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/hooks';
+import { API_BASE_URL } from '../../auth/context';
 import { Button } from '../ui/Button';
 import { Card, CardHeader, CardContent } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 
 export function AccountPanel() {
-    const { user, token, logout } = useAuth();
+    const { user, token, logout, updateToken } = useAuth();
 
     const [profileName, setProfileName] = useState(user?.name ?? '');
     const [profileEmail, setProfileEmail] = useState(user?.email ?? '');
@@ -21,6 +22,15 @@ export function AccountPanel() {
     const [passwordSaving, setPasswordSaving] = useState(false);
     const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+    useEffect(() => {
+        if (user) {
+            setProfileName(user.name ?? '');
+            setProfileEmail(user.email ?? '');
+        }
+    }, [user]);
+
+    if (!user) return null;
+
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setProfileMessage(null);
@@ -29,13 +39,22 @@ export function AccountPanel() {
 
         setProfileSaving(true);
         try {
-            const res = await fetch('/api/auth/me', {
+            const body: { name?: string; email?: string } = {};
+            if (profileName !== (user.name ?? '')) body.name = profileName;
+            if (profileEmail !== user.email) body.email = profileEmail;
+
+            if (Object.keys(body).length === 0) {
+                setProfileSaving(false);
+                return;
+            }
+
+            const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ name: profileName, email: profileEmail })
+                body: JSON.stringify(body)
             });
 
             const data = await res.json();
@@ -44,13 +63,15 @@ export function AccountPanel() {
                 throw new Error(data.message || 'Failed to update profile');
             }
 
-            setProfileMessage({ type: 'success', text: 'Profile updated successfully. Refreshing...' });
-
-            // If the email changed, we got a new token. It's easiest to just force a reload,
-            // or logout the user, because we don't have a specific updateToken function in AuthContext.
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            if (data.token && data.user) {
+                updateToken(data.token, data.user);
+                setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
+            } else {
+                if (data.user && token) {
+                    updateToken(token, data.user);
+                }
+                setProfileMessage({ type: 'success', text: 'Profile updated successfully.' });
+            }
 
         } catch (err) {
             setProfileMessage({ type: 'error', text: err instanceof Error ? err.message : 'An error occurred' });
@@ -75,7 +96,7 @@ export function AccountPanel() {
 
         setPasswordSaving(true);
         try {
-            const res = await fetch('/api/auth/password', {
+            const res = await fetch(`${API_BASE_URL}/api/auth/password`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -103,8 +124,6 @@ export function AccountPanel() {
             setPasswordSaving(false);
         }
     };
-
-    if (!user) return null;
 
     return (
         <div className="space-y-6">
@@ -158,7 +177,7 @@ export function AccountPanel() {
                 <CardContent>
                     <form className="space-y-4" onSubmit={handlePasswordSubmit}>
                         {passwordMessage && (
-                            <div className={`p-4 rounded-md flex gap-3 ${passwordMessage.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700 border border-green-500'}`}>
+                            <div className={`p-4 rounded-md flex gap-3 ${passwordMessage.type === 'error' ? 'bg-red-50 text-red-700 border border-red-500' : 'bg-green-50 text-green-700 border border-green-500'}`}>
                                 {passwordMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5 text-green-600" />}
                                 <p className="text-sm">{passwordMessage.text}</p>
                             </div>

@@ -20,4 +20,5 @@ export type AuthContextValue = {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateToken: (newToken: string, user: User) => void;
 };
