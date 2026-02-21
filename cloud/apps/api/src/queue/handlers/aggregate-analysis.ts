@@ -80,10 +80,11 @@ async function deriveDefinitionTargets(
             parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
             parseDefinitionVersion(snapshot?.version);
         if (runDefinitionVersion === null) continue;
-        const targetKey = `${runDefinitionVersion}`;
+        const temperature = parseTemperature(parseResult.data.temperature);
+        const targetKey = `${runDefinitionVersion}:${temperature ?? 'null'}`;
         targets.set(targetKey, {
             definitionVersion: runDefinitionVersion,
-            temperature: null,
+            temperature,
         });
     }
 
@@ -153,10 +154,13 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         const snapshot = config.definitionSnapshot;
                         const runPreambleId = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId ?? null;
                         const runVersion = parseDefinitionVersion(snapshot?._meta?.definitionVersion) ?? parseDefinitionVersion(snapshot?.version);
+                        const runTemperature = parseTemperature(config.temperature);
                         const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
                         // Legacy jobs may omit definitionVersion; treat null as wildcard for compatibility.
                         const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
-                        return preambleMatch && versionMatch && config.isFinalTrial === true;
+                        // Legacy jobs may omit temperature; treat null as wildcard for compatibility.
+                        const temperatureMatch = temperature === null ? true : runTemperature === temperature;
+                        return preambleMatch && versionMatch && temperatureMatch && config.isFinalTrial === true;
                     });
 
                     if (finalTrialRuns.length > 0) {

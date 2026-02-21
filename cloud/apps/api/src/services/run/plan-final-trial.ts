@@ -2,6 +2,7 @@ import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { updateAggregateRun } from '../analysis/aggregate.js';
 import { resolveModelIdFromAvailable } from '../models/aliases.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('services:run:plan-final-trial');
 
@@ -47,6 +48,18 @@ type AnalysisShape = {
   };
 };
 
+type AggregateRunConfig = {
+  definitionSnapshot?: {
+    _meta?: {
+      preambleVersionId?: string;
+      definitionVersion?: number | string;
+    };
+    preambleVersionId?: string;
+    version?: number | string;
+  };
+  temperature?: number | null;
+};
+
 function getConditionKey(dimensions: Record<string, string | number>): string {
   return Object.entries(dimensions)
     .sort(([k1], [k2]) => k1.localeCompare(k2))
@@ -61,6 +74,36 @@ function calculateSemFromScores(scores: number[]): number | null {
     scores.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) /
     (scores.length - 1);
   return Math.sqrt(variance / scores.length);
+}
+
+function parseDefinitionVersion(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function matchesAggregateTarget(
+  config: AggregateRunConfig | null | undefined,
+  preambleVersionId: string | null,
+  definitionVersion: number,
+  temperature: number | null
+): boolean {
+  if (!config) return false;
+  const snapshot = config.definitionSnapshot;
+  const runPreambleVersionId =
+    snapshot?._meta?.preambleVersionId ??
+    snapshot?.preambleVersionId ??
+    null;
+  const runDefinitionVersion =
+    parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
+    parseDefinitionVersion(snapshot?.version);
+  const runTemperature = parseTemperature(config.temperature);
+
+  const preambleMatch = runPreambleVersionId === preambleVersionId;
+  const versionMatch = runDefinitionVersion === definitionVersion;
+  const temperatureMatch = runTemperature === temperature;
+  return preambleMatch && versionMatch && temperatureMatch;
 }
 
 function calculateSemFromVarianceStats(
@@ -237,7 +280,15 @@ export async function planFinalTrial(
     orderBy: { updatedAt: 'desc' },
   });
 
-  const aggregateRun = aggregateRuns[0];
+  const aggregateRun = aggregateRuns.find((run) => {
+    const config = (run.config as AggregateRunConfig | null) ?? null;
+    return matchesAggregateTarget(
+      config,
+      definition.preambleVersionId,
+      definition.version,
+      temperature
+    );
+  });
 
   const analysis = (aggregateRun?.analysisResults[0]?.output ?? null) as AnalysisShape | null;
 

@@ -4,6 +4,7 @@ import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { z } from 'zod';
 import { normalizeAnalysisArtifacts } from './normalize-analysis-output.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('analysis:aggregate');
 
@@ -203,6 +204,10 @@ function getSnapshotMeta(config: RunConfig): { preambleVersionId: string | null;
     return { preambleVersionId, definitionVersion };
 }
 
+function getConfigTemperature(config: RunConfig): number | null {
+    return parseTemperature(config.temperature);
+}
+
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
  * Uses advisory locks to ensure serial execution for a given definition.
@@ -285,6 +290,7 @@ export async function updateAggregateRun(
 
             const config = parseResult.data;
             const runMeta = getSnapshotMeta(config);
+            const runTemperature = getConfigTemperature(config);
             const preambleMatch =
                 preambleVersionId === null
                     ? runMeta.preambleVersionId === null
@@ -293,7 +299,8 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            return preambleMatch && definitionVersionMatch;
+            const temperatureMatch = runTemperature === temperature;
+            return preambleMatch && definitionVersionMatch && temperatureMatch;
         });
 
         if (compatibleRuns.length === 0) {
@@ -380,6 +387,7 @@ export async function updateAggregateRun(
 
             const config = parseResult.data;
             const runMeta = getSnapshotMeta(config);
+            const runTemperature = getConfigTemperature(config);
             const preambleMatch =
                 preambleVersionId === null
                     ? runMeta.preambleVersionId === null
@@ -388,7 +396,8 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            return preambleMatch && definitionVersionMatch;
+            const temperatureMatch = runTemperature === temperature;
+            return preambleMatch && definitionVersionMatch && temperatureMatch;
         });
 
 
@@ -409,7 +418,7 @@ export async function updateAggregateRun(
             isAggregate: true,
             sourceRunIds: sourceRunIds,
             transcriptCount: sampleSize,
-            temperature: null,
+            temperature,
         };
 
         if (!aggregateRun) {
@@ -444,7 +453,7 @@ export async function updateAggregateRun(
                 ...existingConfig,
                 sourceRunIds: sourceRunIds,
                 transcriptCount: sampleSize,
-                temperature: null,
+                temperature,
             };
 
             await tx.run.update({

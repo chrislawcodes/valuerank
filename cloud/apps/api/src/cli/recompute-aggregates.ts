@@ -3,6 +3,7 @@
 import { db } from '@valuerank/db';
 import { updateAggregateRun } from '../services/analysis/aggregate.js';
 import { createLogger } from '@valuerank/shared';
+import { parseTemperature } from '../utils/temperature.js';
 
 const log = createLogger('cli:trigger-aggregation');
 
@@ -31,6 +32,11 @@ export function getDefinitionVersion(config: unknown): number | null {
     if (typeof raw !== 'string' || raw.trim() === '') return null;
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function getTemperature(config: unknown): number | null {
+    if (!isRecord(config)) return null;
+    return parseTemperature(config.temperature);
 }
 
 async function main() {
@@ -68,7 +74,8 @@ async function main() {
     for (const run of sourceRuns) {
         const preambleVersionId = getPreambleVersionId(run.config);
         const definitionVersion = getDefinitionVersion(run.config);
-        const key = `${run.definitionId}::${preambleVersionId ?? 'null'}::${definitionVersion ?? 'null'}`;
+        const temperature = getTemperature(run.config);
+        const key = `${run.definitionId}::${preambleVersionId ?? 'null'}::${definitionVersion ?? 'null'}::${temperature ?? 'null'}`;
         const existing = grouped.get(key);
         if (existing) {
             existing.runCount += 1;
@@ -78,7 +85,7 @@ async function main() {
             definitionId: run.definitionId,
             preambleVersionId,
             definitionVersion,
-            temperature: null,
+            temperature,
             runCount: 1,
         });
     }
