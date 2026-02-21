@@ -14,6 +14,13 @@ type SortState = {
   direction: 'asc' | 'desc';
 };
 
+type PairMetric = {
+  a: string;
+  b: string;
+  similarity: number;
+  distance: number;
+};
+
 const MODEL_COLOR_PALETTE = ['#0f766e', '#2563eb', '#c2410c', '#7c3aed', '#be123c'] as const;
 
 function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
@@ -57,6 +64,21 @@ function getPriorityColor(value: number, min: number, max: number): string {
   const normalized = (value - min) / (max - min);
   const similarityScale = Math.min(0.99, normalized * 2 - 1);
   return getSimilarityColor(similarityScale);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  let aNorm = 0;
+  let bNorm = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    dot += av * bv;
+    aNorm += av * av;
+    bNorm += bv * bv;
+  }
+  if (aNorm === 0 || bNorm === 0) return 0;
+  return dot / (Math.sqrt(aNorm) * Math.sqrt(bNorm));
 }
 
 function ValuePrioritiesSection() {
@@ -525,14 +547,114 @@ function DominanceSection() {
   );
 }
 
-function SectionPlaceholder({ title, description }: { title: string; description: string }) {
+function SimilaritySection() {
+  const matrix = useMemo(() => {
+    const vectors = new Map<string, number[]>();
+    for (const model of DOMAIN_ANALYSIS_MODELS) {
+      vectors.set(model.model, VALUES.map((value) => model.values[value]));
+    }
+
+    const similarities = new Map<string, Map<string, number>>();
+    const pairs: PairMetric[] = [];
+
+    for (const a of DOMAIN_ANALYSIS_MODELS) {
+      const row = new Map<string, number>();
+      for (const b of DOMAIN_ANALYSIS_MODELS) {
+        const av = vectors.get(a.model) ?? [];
+        const bv = vectors.get(b.model) ?? [];
+        const sim = cosineSimilarity(av, bv);
+        row.set(b.model, sim);
+        if (a.model < b.model) {
+          pairs.push({ a: a.label, b: b.label, similarity: sim, distance: 1 - sim });
+        }
+      }
+      similarities.set(a.model, row);
+    }
+
+    const mostSimilar = [...pairs].sort((a, b) => b.similarity - a.similarity).slice(0, 5);
+    const mostDifferent = [...pairs].sort((a, b) => b.distance - a.distance).slice(0, 5);
+    return { similarities, mostSimilar, mostDifferent };
+  }, []);
+
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
-      <h2 className="text-base font-medium text-gray-900">{title}</h2>
-      <p className="mt-1 text-sm text-gray-600">{description}</p>
-      <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        Implemented in a follow-up table-specific PR.
-      </p>
+      <div className="mb-3">
+        <h2 className="text-base font-medium text-gray-900">3. Similarity and Differences</h2>
+        <p className="text-sm text-gray-600">
+          Pairwise similarity of model value profiles (cosine similarity).
+        </p>
+      </div>
+
+      <div className="mb-3 flex items-center gap-2">
+        {[-1, -0.5, 0, 0.5, 1].map((tick) => (
+          <div
+            key={tick}
+            className="flex h-6 w-14 items-center justify-center rounded text-[10px] font-medium text-gray-900"
+            style={{ background: getSimilarityColor(tick) }}
+          >
+            {tick}
+          </div>
+        ))}
+        <span className="ml-1 text-xs text-gray-600">Red = less similar, Yellow = mid, Green = more similar</span>
+      </div>
+
+      <div className="mb-4 overflow-x-auto">
+        <table className="min-w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-200 text-gray-600">
+              <th className="px-2 py-2 text-left font-medium">Model</th>
+              {DOMAIN_ANALYSIS_MODELS.map((model) => (
+                <th key={model.model} className="px-2 py-2 text-right font-medium">{model.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {DOMAIN_ANALYSIS_MODELS.map((row) => (
+              <tr key={row.model} className="border-b border-gray-100">
+                <td className="px-2 py-2 font-medium text-gray-900">{row.label}</td>
+                {DOMAIN_ANALYSIS_MODELS.map((col) => {
+                  const rawSim = row.model === col.model
+                    ? 1
+                    : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
+                  const sim = Number(rawSim.toFixed(2));
+                  return (
+                    <td
+                      key={col.model}
+                      className="px-2 py-2 text-right text-gray-800"
+                      style={{ background: getSimilarityColor(sim) }}
+                    >
+                      {sim.toFixed(2)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded border border-gray-200 bg-gray-50 p-3">
+          <h3 className="text-sm font-medium text-gray-900">Most Similar Pairs</h3>
+          <ol className="mt-2 space-y-1 text-sm text-gray-700">
+            {matrix.mostSimilar.map((pair, index) => (
+              <li key={`${pair.a}-${pair.b}-sim`}>
+                {index + 1}. {pair.a} + {pair.b} ({pair.similarity.toFixed(2)})
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="rounded border border-gray-200 bg-gray-50 p-3">
+          <h3 className="text-sm font-medium text-gray-900">Most Different Pairs</h3>
+          <ol className="mt-2 space-y-1 text-sm text-gray-700">
+            {matrix.mostDifferent.map((pair, index) => (
+              <li key={`${pair.a}-${pair.b}-diff`}>
+                {index + 1}. {pair.a} + {pair.b} (distance {pair.distance.toFixed(2)})
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
     </section>
   );
 }
@@ -577,10 +699,7 @@ export function DomainAnalysis() {
 
       <ValuePrioritiesSection />
       <DominanceSection />
-      <SectionPlaceholder
-        title="3. Similarity and Differences"
-        description="Pairwise model similarity matrix and nearest/farthest pairs."
-      />
+      <SimilaritySection />
     </div>
   );
 }
