@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 const navItems = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Domains', path: '/domains', icon: FolderTree },
+  { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
   { name: 'Compare', path: '/compare', icon: GitCompare },

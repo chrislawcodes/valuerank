@@ -9,6 +9,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
+import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
@@ -62,6 +63,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Domains />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/analysis"
+              element={
+                <ProtectedLayout fullWidth>
+                  <DomainAnalysis />
                 </ProtectedLayout>
               }
             />
