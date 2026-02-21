@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type FocusEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -67,6 +67,20 @@ export function NavTabs() {
     };
   }, [isDomainsMenuOpen]);
 
+  const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
+    setOpen(true);
+  };
+
+  const handleMenuBlur =
+    (menuRef: RefObject<HTMLDivElement>, setOpen: (value: boolean) => void) =>
+    (event: FocusEvent<HTMLDivElement>) => {
+      const nextFocused = event.relatedTarget as Node | null;
+      if (menuRef.current && nextFocused && menuRef.current.contains(nextFocused)) {
+        return;
+      }
+      setOpen(false);
+    };
+
   return (
     // Hidden on mobile (< 640px), visible on tablet/desktop
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
@@ -77,6 +91,8 @@ export function NavTabs() {
             className="relative group"
             onMouseEnter={() => setIsDomainsMenuOpen(true)}
             onMouseLeave={() => setIsDomainsMenuOpen(false)}
+            onFocus={handleMenuFocus(setIsDomainsMenuOpen)}
+            onBlur={handleMenuBlur(domainMenuRef, setIsDomainsMenuOpen)}
           >
             <div
               className={
@@ -95,6 +111,7 @@ export function NavTabs() {
                 variant="ghost"
                 size="sm"
                 aria-label="Toggle Domains menu"
+                aria-haspopup="menu"
                 aria-expanded={isDomainsMenuOpen}
                 onClick={() => setIsDomainsMenuOpen((prev) => !prev)}
                 className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
@@ -124,6 +141,8 @@ export function NavTabs() {
             className="relative group"
             onMouseEnter={() => setIsVignettesMenuOpen(true)}
             onMouseLeave={() => setIsVignettesMenuOpen(false)}
+            onFocus={handleMenuFocus(setIsVignettesMenuOpen)}
+            onBlur={handleMenuBlur(vignetteMenuRef, setIsVignettesMenuOpen)}
           >
             <div
               className={
@@ -142,6 +161,7 @@ export function NavTabs() {
                 variant="ghost"
                 size="sm"
                 aria-label="Toggle Vignettes menu"
+                aria-haspopup="menu"
                 aria-expanded={isVignettesMenuOpen}
                 onClick={() => setIsVignettesMenuOpen((prev) => !prev)}
                 className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"

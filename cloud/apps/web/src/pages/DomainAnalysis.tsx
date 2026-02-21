@@ -12,7 +12,7 @@ export function DomainAnalysis() {
         <div>
           <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Analysis</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Cross-model Bradley-Terry analysis for values in the jobs domain.
+            Cross-model Bradley-Terry analysis for value preferences across models.
           </p>
         </div>
         <Button
@@ -35,8 +35,8 @@ export function DomainAnalysis() {
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-blue-900">
             <li>Each row is a model and each column is a Schwartz value.</li>
             <li>Cell number is Bradley-Terry log strength. Higher means that value is selected more often by that model.</li>
-            <li>Corner badge is rank within that model (`1` is most favored for that model).</li>
-            <li>Use `SORT BY` to compare models on one value at a time and quickly find outliers.</li>
+            <li>Corner badge is rank within that model (<code>1</code> is most favored for that model).</li>
+            <li>Use <code>SORT BY</code> to compare models on one value at a time and quickly find outliers.</li>
             <li>Quadrant color bars label Schwartz higher-order groups to help read broader value orientation.</li>
           </ul>
         </section>
@@ -46,4 +46,3 @@ export function DomainAnalysis() {
     </div>
   );
 }
-
