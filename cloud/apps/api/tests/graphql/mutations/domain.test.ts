@@ -26,6 +26,7 @@ const RUN_TRIALS_FOR_DOMAIN_MUTATION = `
 describe('GraphQL Domain Mutations', () => {
   const createdDomainIds: string[] = [];
   const createdDefinitionIds: string[] = [];
+  const createdUserIds: string[] = [];
   const startRunMock = vi.mocked(startRun);
 
   beforeAll(async () => {
@@ -58,6 +59,10 @@ describe('GraphQL Domain Mutations', () => {
     if (createdDomainIds.length > 0) {
       await db.domain.deleteMany({ where: { id: { in: createdDomainIds } } });
       createdDomainIds.length = 0;
+    }
+    if (createdUserIds.length > 0) {
+      await db.user.deleteMany({ where: { id: { in: createdUserIds } } });
+      createdUserIds.length = 0;
     }
   });
 
@@ -140,13 +145,22 @@ describe('GraphQL Domain Mutations', () => {
     });
     createdDomainIds.push(domain.id);
 
+    const foreignUser = await db.user.create({
+      data: {
+        id: `other-user-id-${Date.now()}`,
+        email: `other-user-${Date.now()}@example.com`,
+        passwordHash: 'test-hash',
+      },
+    });
+    createdUserIds.push(foreignUser.id);
+
     const foreignDefinition = await db.definition.create({
       data: {
         name: 'Foreign Definition',
         domainId: domain.id,
         version: 1,
         content: { schema_version: 1, preamble: 'foreign' },
-        createdByUserId: 'other-user-id',
+        createdByUserId: foreignUser.id,
       },
     });
     createdDefinitionIds.push(foreignDefinition.id);
@@ -165,4 +179,3 @@ describe('GraphQL Domain Mutations', () => {
     expect(startRunMock).not.toHaveBeenCalled();
   });
 });
-
