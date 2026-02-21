@@ -41,6 +41,9 @@ vi.mock('@valuerank/db', () => ({
     transcript: {
       findMany: vi.fn().mockResolvedValue([]), // Empty transcripts
     },
+    run: {
+      findUnique: vi.fn().mockResolvedValue(null), // No run metadata for aggregation trigger in these tests
+    },
   },
   Prisma: {
     JsonNull: null,
