@@ -7,7 +7,7 @@ import {
   VALUE_LABELS,
   type ModelEntry,
   type ValueKey,
-} from '../components/domains/domainAnalysisData';
+} from '../data/domainAnalysisData';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -20,13 +20,12 @@ function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: Value
   const sorted = [...VALUES].sort((a, b) => model.values[b] - model.values[a]);
   return {
     top: sorted.slice(0, 3),
-    bottom: sorted.slice(-3).reverse(),
+    bottom: sorted.slice(-3),
   };
 }
 
-function getSimilarityColor(value: number): string {
+function getHeatmapColor(value: number): string {
   const clamped = Math.max(-1, Math.min(1, value));
-  if (clamped === 1) return 'rgba(255, 255, 255, 0.35)';
   const stops = [
     { at: -1, rgb: [153, 27, 27] },
     { at: -0.6, rgb: [239, 68, 68] },
@@ -53,10 +52,10 @@ function getSimilarityColor(value: number): string {
 }
 
 function getPriorityColor(value: number, min: number, max: number): string {
-  if (max <= min) return getSimilarityColor(0);
+  if (max <= min) return getHeatmapColor(0);
   const normalized = (value - min) / (max - min);
-  const similarityScale = Math.min(0.99, normalized * 2 - 1);
-  return getSimilarityColor(similarityScale);
+  const heatmapScale = normalized * 2 - 1;
+  return getHeatmapColor(heatmapScale);
 }
 
 function ValuePrioritiesSection() {
@@ -75,12 +74,13 @@ function ValuePrioritiesSection() {
     const models = [...DOMAIN_ANALYSIS_MODELS];
     const key = sortState.key;
     if (key === 'model') {
-      models.sort((a, b) => a.label.localeCompare(b.label));
+      models.sort((a, b) =>
+        sortState.direction === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label),
+      );
     } else {
-      models.sort((a, b) => b.values[key] - a.values[key]);
-    }
-    if (sortState.direction === 'asc') {
-      models.reverse();
+      models.sort((a, b) =>
+        sortState.direction === 'asc' ? a.values[key] - b.values[key] : b.values[key] - a.values[key],
+      );
     }
     return models;
   }, [sortState]);
@@ -104,7 +104,16 @@ function ValuePrioritiesSection() {
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-gray-200 text-gray-600">
-              <th className="px-2 py-2 text-left font-medium">
+              <th
+                className="px-2 py-2 text-left font-medium"
+                aria-sort={
+                  sortState.key === 'model'
+                    ? sortState.direction === 'asc'
+                      ? 'ascending'
+                      : 'descending'
+                    : 'none'
+                }
+              >
                 <Button
                   type="button"
                   variant="ghost"
@@ -116,7 +125,17 @@ function ValuePrioritiesSection() {
                 </Button>
               </th>
               {VALUES.map((value) => (
-                <th key={value} className="px-2 py-2 text-right font-medium">
+                <th
+                  key={value}
+                  className="px-2 py-2 text-right font-medium"
+                  aria-sort={
+                    sortState.key === value
+                      ? sortState.direction === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
                   <Button
                     type="button"
                     variant="ghost"
@@ -531,7 +550,7 @@ function SectionPlaceholder({ title, description }: { title: string; description
       <h2 className="text-base font-medium text-gray-900">{title}</h2>
       <p className="mt-1 text-sm text-gray-600">{description}</p>
       <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        Implemented in a follow-up table-specific PR.
+        This section is being rolled out in stages and will appear here soon.
       </p>
     </section>
   );
