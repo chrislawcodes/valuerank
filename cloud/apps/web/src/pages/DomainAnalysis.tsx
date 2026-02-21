@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { BTChart } from '../components/domains/BTChart';
 import { Button } from '../components/ui/Button';
+
+function SectionPlaceholder({ title, description }: { title: string; description: string }) {
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <h2 className="text-base font-medium text-gray-900">{title}</h2>
+      <p className="mt-1 text-sm text-gray-600">{description}</p>
+      <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+        Implemented in a follow-up table-specific PR.
+      </p>
+    </section>
+  );
+}
 
 export function DomainAnalysis() {
   const [showInterpretation, setShowInterpretation] = useState(true);
@@ -12,7 +23,7 @@ export function DomainAnalysis() {
         <div>
           <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Analysis</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Cross-model Bradley-Terry analysis for value preferences across models.
+            Structured model-value analysis across priorities, ranking behavior, and similarity.
           </p>
         </div>
         <Button
@@ -31,22 +42,28 @@ export function DomainAnalysis() {
 
       {showInterpretation && (
         <section id="domain-analysis-interpretation" className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-          <h2 className="text-sm font-semibold text-blue-900">How to interpret this chart</h2>
+          <h2 className="text-sm font-semibold text-blue-900">How to read this page</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-blue-900">
-            <li>Each row is a model and each column is a Schwartz value.</li>
-            <li>Cell number is Bradley-Terry log strength. Higher means that value is selected more often by that model.</li>
-            <li>Corner badge is rank within that model (<code>1</code> is most favored for that model).</li>
-            <li>Use <code>SORT BY</code> to compare models on one value at a time and quickly find outliers.</li>
-            <li>Quadrant color bars label Schwartz higher-order groups to help read broader value orientation.</li>
+            <li>Section 1 shows what each model prioritizes by value strengths.</li>
+            <li>Section 2 ranks values and surfaces cyclical value relationships.</li>
+            <li>Section 3 compares model profiles to find nearest neighbors and outliers.</li>
+            <li>All charts currently use a curated snapshot and will be wired to live per-domain data.</li>
           </ul>
-          <p className="mt-3 text-xs text-blue-800">
-            Current chart is a curated snapshot. Dynamic per-domain fetching and filtering will be wired in a follow-up.
-          </p>
         </section>
       )}
 
-      {/* TODO: Replace static chart snapshot with domain-scoped API-backed data. */}
-      <BTChart />
+      <SectionPlaceholder
+        title="1. Value Priorities by AI"
+        description="Column-sortable value comparison table by model."
+      />
+      <SectionPlaceholder
+        title="2. Ranking and Cycles"
+        description="Directed value graph for head-to-head dominance behavior."
+      />
+      <SectionPlaceholder
+        title="3. Similarity and Differences"
+        description="Pairwise model similarity matrix and nearest/farthest pairs."
+      />
     </div>
   );
 }
