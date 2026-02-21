@@ -36,23 +36,23 @@ skipIfNoDb('User Queries (Integration)', () => {
   describe('createUser', () => {
     it('creates a user with valid email and password hash', async () => {
       const result = await createUser({
-        email: 'test@example.com',
+        email: 'users-db-test@example.com',
         passwordHash: 'hashed_password_123',
         name: 'Test User',
       });
 
       expect(result.id).toBeDefined();
-      expect(result.email).toBe('test@example.com');
+      expect(result.email).toBe('users-db-test@example.com');
       expect(result.name).toBe('Test User');
     });
 
     it('normalizes email to lowercase', async () => {
       const result = await createUser({
-        email: 'TEST@EXAMPLE.COM',
+        email: 'USERS-DB-TEST@EXAMPLE.COM',
         passwordHash: 'hash',
       });
 
-      expect(result.email).toBe('test@example.com');
+      expect(result.email).toBe('users-db-test@example.com');
     });
 
     it('throws on empty email', async () => {
@@ -83,7 +83,7 @@ skipIfNoDb('User Queries (Integration)', () => {
 
     it('throws on missing password hash', async () => {
       await expect(
-        createUser({ email: 'test@example.com', passwordHash: '' })
+        createUser({ email: 'users-db-test@example.com', passwordHash: '' })
       ).rejects.toThrow('Password hash is required');
     });
   });
