@@ -409,6 +409,8 @@ builder.mutationField('runTrialsForDomain', (t) =>
         };
       }
 
+      // Intentionally no ownership gate: domain-level trial runs are collaborative and
+      // any authenticated teammate may trigger runs for latest definitions in the domain.
       const definitionsById = await hydrateDefinitionAncestors(definitions);
       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
 
