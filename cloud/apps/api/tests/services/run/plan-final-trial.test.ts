@@ -53,7 +53,13 @@ describe('planFinalTrial service', () => {
                 definitionId: definition.id,
                 name: 'Aggregate Run',
                 status: 'COMPLETED',
-                config: {},
+                config: {
+                    definitionSnapshot: {
+                        preambleVersionId: definition.preambleVersionId,
+                        version: definition.version,
+                    },
+                    temperature: null,
+                },
                 progress: { total: 0, completed: 0, failed: 0 },
             },
         });

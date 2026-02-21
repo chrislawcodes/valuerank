@@ -204,6 +204,10 @@ function getSnapshotMeta(config: RunConfig): { preambleVersionId: string | null;
     return { preambleVersionId, definitionVersion };
 }
 
+function getConfigTemperature(config: RunConfig): number | null {
+    return parseTemperature(config.temperature);
+}
+
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
  * Uses advisory locks to ensure serial execution for a given definition.
@@ -286,6 +290,7 @@ export async function updateAggregateRun(
 
             const config = parseResult.data;
             const runMeta = getSnapshotMeta(config);
+            const runTemperature = getConfigTemperature(config);
             const preambleMatch =
                 preambleVersionId === null
                     ? runMeta.preambleVersionId === null
@@ -294,8 +299,6 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            const runTemperature = parseTemperature(config.temperature);
-            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
             const temperatureMatch = runTemperature === temperature;
             return preambleMatch && definitionVersionMatch && temperatureMatch;
         });
@@ -384,6 +387,7 @@ export async function updateAggregateRun(
 
             const config = parseResult.data;
             const runMeta = getSnapshotMeta(config);
+            const runTemperature = getConfigTemperature(config);
             const preambleMatch =
                 preambleVersionId === null
                     ? runMeta.preambleVersionId === null
@@ -392,8 +396,6 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            const runTemperature = parseTemperature(config.temperature);
-            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
             const temperatureMatch = runTemperature === temperature;
             return preambleMatch && definitionVersionMatch && temperatureMatch;
         });
