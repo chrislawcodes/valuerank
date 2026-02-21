@@ -80,11 +80,10 @@ async function deriveDefinitionTargets(
             parseDefinitionVersion(snapshot?._meta?.definitionVersion) ??
             parseDefinitionVersion(snapshot?.version);
         if (runDefinitionVersion === null) continue;
-        const runTemperature = parseTemperature(parseResult.data.temperature);
-        const targetKey = `${runDefinitionVersion}::${runTemperature ?? 'null'}`;
+        const targetKey = `${runDefinitionVersion}`;
         targets.set(targetKey, {
             definitionVersion: runDefinitionVersion,
-            temperature: runTemperature,
+            temperature: null,
         });
     }
 
@@ -154,16 +153,10 @@ export function createAggregateAnalysisHandler(): PgBoss.WorkHandler<AggregateAn
                         const snapshot = config.definitionSnapshot;
                         const runPreambleId = snapshot?._meta?.preambleVersionId ?? snapshot?.preambleVersionId ?? null;
                         const runVersion = parseDefinitionVersion(snapshot?._meta?.definitionVersion) ?? parseDefinitionVersion(snapshot?.version);
-                        const runTemperature = parseTemperature(config.temperature);
-
                         const preambleMatch = preambleVersionId === null ? runPreambleId === null : runPreambleId === preambleVersionId;
                         // Legacy jobs may omit definitionVersion; treat null as wildcard for compatibility.
                         const versionMatch = definitionVersion === null ? true : runVersion === definitionVersion;
-                        // Temperature null means provider default; only aggregate with the same setting.
-                        // We intentionally use strict equality because both values originate from JSON-number storage.
-                        const temperatureMatch = runTemperature === temperature;
-
-                        return preambleMatch && versionMatch && temperatureMatch && config.isFinalTrial === true;
+                        return preambleMatch && versionMatch && config.isFinalTrial === true;
                     });
 
                     if (finalTrialRuns.length > 0) {

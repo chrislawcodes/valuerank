@@ -4,7 +4,6 @@ import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { z } from 'zod';
 import { normalizeAnalysisArtifacts } from './normalize-analysis-output.js';
-import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('analysis:aggregate');
 
@@ -294,10 +293,7 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            const runTemperature = parseTemperature(config.temperature);
-            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
-            const temperatureMatch = runTemperature === temperature;
-            return preambleMatch && definitionVersionMatch && temperatureMatch;
+            return preambleMatch && definitionVersionMatch;
         });
 
         if (compatibleRuns.length === 0) {
@@ -392,10 +388,7 @@ export async function updateAggregateRun(
                 definitionVersion === null
                     ? runMeta.definitionVersion === null
                     : runMeta.definitionVersion === definitionVersion;
-            const runTemperature = parseTemperature(config.temperature);
-            // Temperature null means provider default; aggregate runs stay partitioned by exact setting.
-            const temperatureMatch = runTemperature === temperature;
-            return preambleMatch && definitionVersionMatch && temperatureMatch;
+            return preambleMatch && definitionVersionMatch;
         });
 
 
@@ -416,7 +409,7 @@ export async function updateAggregateRun(
             isAggregate: true,
             sourceRunIds: sourceRunIds,
             transcriptCount: sampleSize,
-            temperature,
+            temperature: null,
         };
 
         if (!aggregateRun) {
@@ -451,7 +444,7 @@ export async function updateAggregateRun(
                 ...existingConfig,
                 sourceRunIds: sourceRunIds,
                 transcriptCount: sampleSize,
-                temperature,
+                temperature: null,
             };
 
             await tx.run.update({

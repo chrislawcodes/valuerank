@@ -300,7 +300,9 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               const { DEFAULT_JOB_OPTIONS } = await import('../types.js');
 
               const boss = getBoss();
-              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}:${temperature ?? 'null'}`;
+              // Aggregate jobs are keyed without temperature so analyses from different
+              // temperatures merge into one aggregate run for the same definition version.
+              const singletonKey = `aggregate:${definitionId}:${preambleVersionId ?? 'null'}:${definitionVersion ?? 'null'}`;
 
               await boss.send(
                 'aggregate_analysis',

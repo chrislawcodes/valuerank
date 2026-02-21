@@ -2,7 +2,6 @@ import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import { updateAggregateRun } from '../analysis/aggregate.js';
 import { resolveModelIdFromAvailable } from '../models/aliases.js';
-import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('services:run:plan-final-trial');
 
@@ -238,11 +237,7 @@ export async function planFinalTrial(
     orderBy: { updatedAt: 'desc' },
   });
 
-  const aggregateRun = aggregateRuns.find((run) => {
-    const config = (run.config ?? null) as { temperature?: unknown } | null;
-    const runTemperature = parseTemperature(config?.temperature);
-    return runTemperature === temperature;
-  });
+  const aggregateRun = aggregateRuns[0];
 
   const analysis = (aggregateRun?.analysisResults[0]?.output ?? null) as AnalysisShape | null;
 
