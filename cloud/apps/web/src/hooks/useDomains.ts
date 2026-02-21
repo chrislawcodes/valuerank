@@ -124,11 +124,18 @@ export function useDomains(): UseDomainsResult {
   ): Promise<RunTrialsForDomainResult | null> => {
     const result = await runTrialsMutation({ domainId, temperature });
     if (result.error) throw new Error(result.error.message);
-    return result.data?.runTrialsForDomain ?? null;
+    const payload = result.data?.runTrialsForDomain ?? null;
+    if (payload && payload.failedDefinitions > 0) {
+      throw new Error(
+        `Started ${payload.startedRuns}/${payload.targetedDefinitions} domain trials; ${payload.failedDefinitions} failed to start.`
+      );
+    }
+    return payload;
   };
 
   return {
     domains: queryResult.data?.domains ?? [],
+    // Aggregate loading flag for simple screens. Prefer granular flags for precise UX control.
     loading:
       queryResult.fetching ||
       createResult.fetching ||

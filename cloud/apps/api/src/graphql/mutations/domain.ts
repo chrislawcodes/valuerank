@@ -7,11 +7,14 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
 import { randomUUID } from 'crypto';
 import { startRun as startRunService } from '../../services/run/index.js';
+import {
+  DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+  DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+} from '../../services/run/config.js';
 
 const MAX_DOMAIN_NAME_LENGTH = 120;
 const MAX_BULK_ASSIGN_IDS = 5000;
-const DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE = 10;
-const DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO = 1;
+const DOMAIN_TRIAL_RUN_BATCH_SIZE = 25;
 
 type DomainMutationResult = {
   success: boolean;
@@ -61,6 +64,7 @@ type DefinitionRow = {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  createdByUserId?: string | null;
 };
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -85,8 +89,10 @@ function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
   return left.createdAt.getTime() > right.createdAt.getTime();
 }
 
-function selectLatestDefinitionPerLineage(definitions: DefinitionRow[]): DefinitionRow[] {
-  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+function selectLatestDefinitionPerLineage(
+  definitions: DefinitionRow[],
+  definitionsById: Map<string, DefinitionRow> = new Map(definitions.map((definition) => [definition.id, definition]))
+): DefinitionRow[] {
   const latestByLineage = new Map<string, DefinitionRow>();
 
   for (const definition of definitions) {
@@ -98,6 +104,42 @@ function selectLatestDefinitionPerLineage(definitions: DefinitionRow[]): Definit
   }
 
   return Array.from(latestByLineage.values());
+}
+
+async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise<Map<string, DefinitionRow>> {
+  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+
+  let missingParentIds = new Set(
+    definitions
+      .map((definition) => definition.parentId)
+      .filter((parentId): parentId is string => parentId !== null && !definitionsById.has(parentId))
+  );
+
+  while (missingParentIds.size > 0) {
+    const parentIdsBatch = Array.from(missingParentIds);
+    missingParentIds = new Set<string>();
+
+    const missingParents = await db.definition.findMany({
+      where: { id: { in: parentIdsBatch } },
+      select: {
+        id: true,
+        parentId: true,
+        version: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    for (const parent of missingParents) {
+      if (definitionsById.has(parent.id)) continue;
+      definitionsById.set(parent.id, parent);
+      if (parent.parentId !== null && !definitionsById.has(parent.parentId)) {
+        missingParentIds.add(parent.parentId);
+      }
+    }
+  }
+
+  return definitionsById;
 }
 
 builder.mutationField('createDomain', (t) =>
@@ -354,6 +396,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
           version: true,
           createdAt: true,
           updatedAt: true,
+          createdByUserId: true,
         },
       });
 
@@ -367,7 +410,16 @@ builder.mutationField('runTrialsForDomain', (t) =>
         };
       }
 
-      const latestDefinitions = selectLatestDefinitionPerLineage(definitions);
+      const hasOwnedDefinitions = definitions.some((definition) => definition.createdByUserId === userId);
+      const hasForeignOwnedDefinitions = definitions.some(
+        (definition) => definition.createdByUserId !== null && definition.createdByUserId !== userId
+      );
+      if (!hasOwnedDefinitions || hasForeignOwnedDefinitions) {
+        throw new AuthenticationError('Not authorized to run trials for this domain');
+      }
+
+      const definitionsById = await hydrateDefinitionAncestors(definitions);
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
 
       const activeModels = await db.llmModel.findMany({
         where: { status: 'ACTIVE' },
@@ -383,38 +435,41 @@ builder.mutationField('runTrialsForDomain', (t) =>
       let startedRuns = 0;
       let failedDefinitions = 0;
 
-      const runResults = await Promise.allSettled(
-        latestDefinitions.map(async (definition) =>
-          startRunService({
-            definitionId: definition.id,
-            models,
-            // Domain runs default to lightweight trial settings to avoid unexpectedly large fan-out.
-            samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
-            samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
-            temperature: args.temperature ?? undefined,
-            priority: 'NORMAL',
-            userId,
-            finalTrial: false,
-          })
-        )
-      );
-
-      runResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          startedRuns += 1;
-          return;
-        }
-        failedDefinitions += 1;
-        const failedDefinition = latestDefinitions[index];
-        ctx.log.error(
-          {
-            domainId,
-            definitionId: failedDefinition?.id ?? null,
-            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-          },
-          'Failed to start domain trial for definition'
+      for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
+        const batch = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
+        const runResults = await Promise.allSettled(
+          batch.map(async (definition) =>
+            startRunService({
+              definitionId: definition.id,
+              models,
+              // Domain runs default to lightweight trial settings to avoid unexpectedly large fan-out.
+              samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+              samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+              temperature: args.temperature ?? undefined,
+              priority: 'NORMAL',
+              userId,
+              finalTrial: false,
+            })
+          )
         );
-      });
+
+        runResults.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            startedRuns += 1;
+            return;
+          }
+          failedDefinitions += 1;
+          const failedDefinition = batch[index];
+          ctx.log.error(
+            {
+              domainId,
+              definitionId: failedDefinition?.id ?? null,
+              error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+            },
+            'Failed to start domain trial for definition'
+          );
+        });
+      }
 
       await createAuditLog({
         action: 'ACTION',
