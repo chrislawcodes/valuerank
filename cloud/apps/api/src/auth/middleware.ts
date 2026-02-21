@@ -110,6 +110,21 @@ export async function authMiddleware(
       // Verify JWT (includes 30-second clock skew tolerance)
       const payload = verifyToken(token);
 
+      // Check if password was changed after this token was issued
+      const user = await db.user.findUnique({
+        where: { id: payload.sub },
+        select: { passwordChangedAt: true },
+      });
+
+      if (user?.passwordChangedAt != null && payload.iat != null) {
+        const changedAtSeconds = Math.floor(user.passwordChangedAt.getTime() / 1000);
+        if (payload.iat < changedAtSeconds) {
+          log.warn({ userId: payload.sub }, 'Token issued before password change, rejecting');
+          next(new AuthenticationError('Token invalidated by password change'));
+          return;
+        }
+      }
+
       // Populate request with user info
       req.user = {
         id: payload.sub,

@@ -39,6 +39,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: 'Test User',
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -68,6 +69,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: 'Test User',
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -108,6 +110,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: null,
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -128,6 +131,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: null,
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -151,6 +155,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: null,
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -194,6 +199,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: null,
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -293,6 +299,7 @@ describe('Auth Routes', () => {
         passwordHash,
         name: null,
         lastLoginAt: null,
+        passwordChangedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -308,6 +315,215 @@ describe('Auth Routes', () => {
       // - RateLimit-Limit
       // - RateLimit-Remaining
       // - RateLimit-Reset
+    });
+  });
+
+  describe('PATCH /api/auth/me', () => {
+    const mockUser = {
+      id: 'user-123',
+      email: 'test@example.com',
+      name: 'Test User',
+      passwordHash: 'hash',
+      passwordChangedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      lastLoginAt: null,
+        passwordChangedAt: null,
+      updatedAt: new Date(),
+    };
+
+    function getToken() {
+      return signToken({ id: mockUser.id, email: mockUser.email });
+    }
+
+    it('updates name successfully', async () => {
+      // First findUnique call is from middleware (passwordChangedAt check)
+      // Second findUnique call would be for email conflict check (not needed for name-only)
+      vi.mocked(db.user.findUnique).mockResolvedValue(mockUser as any);
+      vi.mocked(db.user.update).mockResolvedValue({ ...mockUser, name: 'New Name' } as any);
+
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ name: 'New Name' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.name).toBe('New Name');
+      expect(response.body.token).toBeUndefined(); // No token issued for name-only change
+    });
+
+    it('updates email and returns new token', async () => {
+      vi.mocked(db.user.findUnique)
+        .mockResolvedValueOnce(mockUser as any)   // middleware passwordChangedAt check
+        .mockResolvedValueOnce(null);              // email conflict check (no conflict)
+      vi.mocked(db.user.update).mockResolvedValue({ ...mockUser, email: 'new@example.com' } as any);
+
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ email: 'new@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.email).toBe('new@example.com');
+      expect(response.body.token).toBeDefined();
+      expect(response.body.token).toMatch(/^eyJ/);
+    });
+
+    it('rejects email already in use by another user', async () => {
+      vi.mocked(db.user.findUnique)
+        .mockResolvedValueOnce(mockUser as any)                              // middleware
+        .mockResolvedValueOnce({ id: 'other-user', email: 'taken@example.com' } as any); // conflict
+
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ email: 'taken@example.com' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Email is already in use by another account');
+    });
+
+    it('rejects blank name with no other changes', async () => {
+      vi.mocked(db.user.findUnique).mockResolvedValue(mockUser as any);
+
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ name: '   ' }); // whitespace-only name
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('No valid fields to update');
+    });
+
+    it('rejects when no fields provided', async () => {
+      vi.mocked(db.user.findUnique).mockResolvedValue(mockUser as any);
+
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Nothing to update');
+    });
+
+    it('returns 401 when not authenticated', async () => {
+      const response = await request(app)
+        .patch('/api/auth/me')
+        .send({ name: 'New Name' });
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe('PUT /api/auth/password', () => {
+    const passwordHash = '$2b$12$placeholder'; // will be overridden per test
+
+    function getToken() {
+      return signToken({ id: 'user-123', email: 'test@example.com' });
+    }
+
+    it('changes password successfully', async () => {
+      const realHash = await hashPassword('currentPassword');
+      const mockUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test',
+        passwordHash: realHash,
+        passwordChangedAt: null,
+        createdAt: new Date(),
+        lastLoginAt: null,
+        passwordChangedAt: null,
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(db.user.findUnique)
+        .mockResolvedValueOnce(mockUser as any)   // middleware
+        .mockResolvedValueOnce(mockUser as any);   // password route user lookup
+      vi.mocked(db.user.update).mockResolvedValue(mockUser as any);
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ currentPassword: 'currentPassword', newPassword: 'newPassword123' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+
+      // Verify passwordChangedAt is set
+      expect(db.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: {
+          passwordHash: expect.any(String),
+          passwordChangedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('rejects wrong current password', async () => {
+      const realHash = await hashPassword('correctPassword');
+      const mockUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        name: 'Test',
+        passwordHash: realHash,
+        passwordChangedAt: null,
+        createdAt: new Date(),
+        lastLoginAt: null,
+        passwordChangedAt: null,
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(db.user.findUnique)
+        .mockResolvedValueOnce(mockUser as any)   // middleware
+        .mockResolvedValueOnce(mockUser as any);   // password route
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ currentPassword: 'wrongPassword', newPassword: 'newPassword123' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.message).toBe('Current password is incorrect');
+    });
+
+    it('rejects new password shorter than 8 chars', async () => {
+      vi.mocked(db.user.findUnique).mockResolvedValue({
+        id: 'user-123',
+        email: 'test@example.com',
+        passwordChangedAt: null,
+      } as any);
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({ currentPassword: 'current', newPassword: 'short' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('New password must be at least 8 characters long');
+    });
+
+    it('rejects missing fields', async () => {
+      vi.mocked(db.user.findUnique).mockResolvedValue({
+        id: 'user-123',
+        email: 'test@example.com',
+        passwordChangedAt: null,
+      } as any);
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${getToken()}`)
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Current password and new password are required');
+    });
+
+    it('returns 401 when not authenticated', async () => {
+      const response = await request(app)
+        .put('/api/auth/password')
+        .send({ currentPassword: 'old', newPassword: 'newPassword123' });
+
+      expect(response.status).toBe(401);
     });
   });
 });

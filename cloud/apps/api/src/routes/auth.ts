@@ -171,6 +171,10 @@ authRouter.patch(
         }
       }
 
+      if (Object.keys(updateData).length === 0) {
+        throw new ValidationError('No valid fields to update');
+      }
+
       const user = await db.user.update({
         where: { id: req.user.id },
         data: updateData,
@@ -237,7 +241,7 @@ authRouter.put(
 
       await db.user.update({
         where: { id: req.user.id },
-        data: { passwordHash },
+        data: { passwordHash, passwordChangedAt: new Date() },
       });
 
       log.info({ userId: req.user.id }, 'User changed password successfully');
