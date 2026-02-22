@@ -17,6 +17,7 @@ import {
 
 import { verifyPassword, signToken, hashPassword } from '../auth/index.js';
 import { loginRateLimiter } from '../auth/rate-limit.js';
+import { invalidatePasswordChangedAtCache } from '../auth/middleware.js';
 import type { LoginRequest, LoginResponse } from '../auth/index.js';
 
 const log = createLogger('auth');
@@ -245,6 +246,7 @@ authRouter.put(
       });
 
       log.info({ userId: req.user.id }, 'User changed password successfully');
+      invalidatePasswordChangedAtCache(req.user.id);
 
       res.json({ success: true });
     } catch (err) {

@@ -56,6 +56,14 @@ export function clearPasswordChangedAtCacheForTests(): void {
   }
 }
 
+/**
+ * Evict a user's passwordChangedAt cache entry after a password change
+ * so the next JWT check hits the DB immediately.
+ */
+export function invalidatePasswordChangedAtCache(userId: string): void {
+  passwordChangedAtCache.delete(userId);
+}
+
 // Extend Express Request to include auth info
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
