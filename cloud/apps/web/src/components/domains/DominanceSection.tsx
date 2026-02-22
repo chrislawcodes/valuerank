@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Button } from '../ui/Button';
 import { DOMAIN_ANALYSIS_MODELS, VALUES, VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 
 export function DominanceSection() {
-  const [edgeLimit, setEdgeLimit] = useState(10);
-  const [showAllArrows, setShowAllArrows] = useState(true);
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_MODELS[0]?.model ?? '');
+  const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
 
   const modelById = useMemo(
     () => new Map(DOMAIN_ANALYSIS_MODELS.map((model) => [model.model, model])),
@@ -14,6 +12,8 @@ export function DominanceSection() {
   );
   const selectedModel = modelById.get(selectedModelId);
   const arrowColor = '#0f766e';
+  const outgoingFocusedColor = '#16a34a';
+  const incomingFocusedColor = '#dc2626';
 
   const edges = useMemo(() => {
     if (!selectedModel) return [];
@@ -30,9 +30,8 @@ export function DominanceSection() {
         if (bv > av) allEdges.push({ from: b, to: a, gap: bv - av });
       }
     }
-    const sorted = allEdges.sort((left, right) => right.gap - left.gap);
-    return showAllArrows ? sorted : sorted.slice(0, edgeLimit);
-  }, [selectedModel, edgeLimit, showAllArrows]);
+    return allEdges.sort((left, right) => right.gap - left.gap);
+  }, [selectedModel]);
 
   const contestedPairs = useMemo(() => {
     if (!selectedModel) return [];
@@ -83,6 +82,16 @@ export function DominanceSection() {
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <style>{`
+        @keyframes neonPulseStroke {
+          0%, 100% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 5px currentColor); }
+          50% { filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 10px currentColor); }
+        }
+        @keyframes neonPulseCircle {
+          0%, 100% { filter: drop-shadow(0 0 3px rgba(59,130,246,0.45)) drop-shadow(0 0 9px rgba(59,130,246,0.35)); }
+          50% { filter: drop-shadow(0 0 6px rgba(59,130,246,0.65)) drop-shadow(0 0 14px rgba(59,130,246,0.55)); }
+        }
+      `}</style>
       <div className="mb-3">
         <h2 className="text-base font-medium text-gray-900">2. Ranking and Cycles</h2>
         <p className="text-sm text-gray-600">
@@ -105,39 +114,9 @@ export function DominanceSection() {
         </select>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-gray-600">Arrows shown:</span>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="h-auto min-h-0 px-2 py-1 text-xs"
-          onClick={() => setShowAllArrows((current) => !current)}
-        >
-          {showAllArrows ? 'Showing all arrows' : 'Show all arrows'}
-        </Button>
-        {!showAllArrows && (
-          <>
-            <input
-              type="range"
-              min={4}
-              max={20}
-              value={edgeLimit}
-              onChange={(event) => setEdgeLimit(Number(event.target.value))}
-              className="w-44"
-              aria-label="Number of value dominance arrows"
-            />
-            <span className="text-xs text-gray-700">{edgeLimit}</span>
-          </>
-        )}
-      </div>
-
-      {selectedModel && (
-        <div className="mb-3 flex items-center gap-1.5 text-xs text-gray-700">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: arrowColor }} />
-          <span>{selectedModel.label}</span>
-        </div>
-      )}
+      <p className="mb-3 text-xs text-gray-600">
+        Click a value circle to focus it and fade unrelated arrows. Click it again to clear focus.
+      </p>
 
       <div className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2">
         <svg
@@ -151,6 +130,10 @@ export function DominanceSection() {
             const source = positionByValue.get(edge.from);
             const target = positionByValue.get(edge.to);
             if (!source || !target) return null;
+            const isFocusedEdge =
+              focusedValue == null || edge.from === focusedValue || edge.to === focusedValue;
+            const isOutgoingFromFocused = focusedValue != null && edge.from === focusedValue;
+            const isIncomingToFocused = focusedValue != null && edge.to === focusedValue;
             const dx = target.x - source.x;
             const dy = target.y - source.y;
             const length = Math.hypot(dx, dy) || 1;
@@ -161,7 +144,19 @@ export function DominanceSection() {
             const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
             const widthFactor = normalized ** 1.6;
             const strokeWidth = 0.1 + widthFactor * 5.4;
-            const strokeOpacity = 0.15 + widthFactor * 0.75;
+            const baseOpacity = 0.15 + widthFactor * 0.75;
+            const strokeOpacity = isOutgoingFromFocused
+              ? Math.max(0.9, baseOpacity)
+              : isIncomingToFocused
+                ? Math.max(0.9, baseOpacity)
+                : isFocusedEdge
+                  ? Math.max(0.48, baseOpacity * 0.72)
+                  : Math.max(0.18, baseOpacity * 0.32);
+            const edgeColor = isOutgoingFromFocused
+              ? outgoingFocusedColor
+              : isIncomingToFocused
+                ? incomingFocusedColor
+                : arrowColor;
             const startX = source.x + ux * nodeRadius;
             const startY = source.y + uy * nodeRadius;
             const endX = target.x - ux * nodeRadius;
@@ -183,50 +178,104 @@ export function DominanceSection() {
                   y1={startY}
                   x2={baseX}
                   y2={baseY}
-                  stroke={arrowColor}
-                  strokeOpacity={strokeOpacity}
+                  stroke={edgeColor}
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
+                  style={
+                    focusedValue != null && isFocusedEdge
+                      ? {
+                          color: edgeColor,
+                          strokeOpacity,
+                          animation: 'neonPulseStroke 1.7s ease-in-out infinite',
+                          transition:
+                            'stroke-opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                        }
+                      : {
+                          strokeOpacity,
+                          animation: 'neonPulseStroke 2.6s ease-in-out infinite',
+                          transition:
+                            'stroke-opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                        }
+                  }
                 />
                 <polygon
                   points={`${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`}
-                  fill={arrowColor}
-                  fillOpacity={strokeOpacity}
+                  fill={edgeColor}
+                  style={
+                    focusedValue != null && isFocusedEdge
+                      ? {
+                          color: edgeColor,
+                          fillOpacity: strokeOpacity,
+                          animation: 'neonPulseStroke 1.9s ease-in-out infinite',
+                          transition: 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease',
+                        }
+                      : {
+                          fillOpacity: strokeOpacity,
+                          transition: 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease',
+                        }
+                  }
                 />
               </g>
             );
           })}
 
-          {nodePositions.map((node) => (
-            <g key={node.value}>
+          {nodePositions.map((node) => {
+            const isSelectedNode = focusedValue != null && node.value === focusedValue;
+            const isConnectedToFocused =
+              focusedValue != null &&
+              edges.some(
+                (edge) =>
+                  (edge.from === focusedValue && edge.to === node.value) ||
+                  (edge.to === focusedValue && edge.from === node.value),
+              );
+            const nodeOpacity =
+              focusedValue == null ? 1 : isSelectedNode ? 1 : isConnectedToFocused ? 0.72 : 0.35;
+            const nodeStroke = isSelectedNode ? '#111827' : '#94a3b8';
+            const nodeStrokeWidth = isSelectedNode ? 4 : 2.2;
+            const labelParts = VALUE_LABELS[node.value].split(' ');
+            const labelLineOne = labelParts[0] ?? '';
+            const labelLineTwo = labelParts.slice(1).join(' ');
+
+            return (
+            <g
+              key={node.value}
+              onClick={() => setFocusedValue((current) => (current === node.value ? null : node.value))}
+              style={{ cursor: 'pointer' }}
+            >
               <circle
                 cx={node.x}
                 cy={node.y}
                 r={68}
                 fill={getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)}
-                stroke="#94a3b8"
-                strokeWidth="2.2"
+                stroke={nodeStroke}
+                strokeWidth={nodeStrokeWidth}
+                style={{
+                  opacity: nodeOpacity,
+                  animation: isSelectedNode ? 'neonPulseCircle 1.8s ease-in-out infinite' : undefined,
+                  transition:
+                    'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                }}
               />
               <text
                 x={node.x}
-                y={node.y - 10}
+                y={node.y}
                 textAnchor="middle"
-                className="fill-gray-900 font-medium"
-                style={{ fontSize: '16px' }}
+                dominantBaseline="middle"
+                className="fill-gray-900 font-medium select-none"
+                style={{ fontSize: '16px', opacity: nodeOpacity, transition: 'opacity 280ms ease' }}
               >
-                {VALUE_LABELS[node.value].split(' ')[0]}
-              </text>
-              <text
-                x={node.x}
-                y={node.y + 18}
-                textAnchor="middle"
-                className="fill-gray-500"
-                style={{ fontSize: '14px' }}
-              >
-                {VALUE_LABELS[node.value].split(' ').slice(1).join(' ')}
+                <tspan x={node.x} dy={labelLineTwo.length > 0 ? '-0.35em' : '0'}>
+                  {labelLineOne}
+                </tspan>
+                {labelLineTwo.length > 0 && (
+                  <tspan x={node.x} dy="1.2em" className="fill-gray-500" style={{ fontSize: '14px' }}>
+                    {labelLineTwo}
+                  </tspan>
+                )}
               </text>
             </g>
-          ))}
+            );
+          })}
         </svg>
       </div>
 
@@ -235,7 +284,7 @@ export function DominanceSection() {
           <h3 className="text-sm font-medium text-gray-900">Arrow Meaning</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
             <li>Arrow direction: winner value points to loser value.</li>
-            <li>Arrow color: selected AI.</li>
+            <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
             <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
           </ul>
           <h4 className="mt-3 text-sm font-medium text-gray-900">Most Contestable Value Pairs</h4>
