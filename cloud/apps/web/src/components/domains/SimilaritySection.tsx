@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { DOMAIN_ANALYSIS_MODELS, VALUES } from '../../data/domainAnalysisData';
+import { DOMAIN_ANALYSIS_AVAILABLE_MODELS, VALUES } from '../../data/domainAnalysisData';
 
 type PairMetric = {
   a: string;
@@ -54,16 +54,16 @@ function getSimilarityColor(value: number): string {
 export function SimilaritySection() {
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
-    for (const model of DOMAIN_ANALYSIS_MODELS) {
+    for (const model of DOMAIN_ANALYSIS_AVAILABLE_MODELS) {
       vectors.set(model.model, VALUES.map((value) => model.values[value]));
     }
 
     const similarities = new Map<string, Map<string, number>>();
     const pairs: PairMetric[] = [];
 
-    for (const a of DOMAIN_ANALYSIS_MODELS) {
+    for (const a of DOMAIN_ANALYSIS_AVAILABLE_MODELS) {
       const row = new Map<string, number>();
-      for (const b of DOMAIN_ANALYSIS_MODELS) {
+      for (const b of DOMAIN_ANALYSIS_AVAILABLE_MODELS) {
         const av = vectors.get(a.model) ?? [];
         const bv = vectors.get(b.model) ?? [];
         const similarity = cosineSimilarity(av, bv);
@@ -113,7 +113,7 @@ export function SimilaritySection() {
               <th scope="col" className="px-2 py-2 text-left font-medium">
                 Model
               </th>
-              {DOMAIN_ANALYSIS_MODELS.map((model) => (
+              {DOMAIN_ANALYSIS_AVAILABLE_MODELS.map((model) => (
                 <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium">
                   {model.label}
                 </th>
@@ -121,12 +121,12 @@ export function SimilaritySection() {
             </tr>
           </thead>
           <tbody>
-            {DOMAIN_ANALYSIS_MODELS.map((row) => (
+            {DOMAIN_ANALYSIS_AVAILABLE_MODELS.map((row) => (
               <tr key={row.model} className="border-b border-gray-100">
                 <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">
                   {row.label}
                 </th>
-                {DOMAIN_ANALYSIS_MODELS.map((col) => {
+                {DOMAIN_ANALYSIS_AVAILABLE_MODELS.map((col) => {
                   const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
                   return (
                     <td

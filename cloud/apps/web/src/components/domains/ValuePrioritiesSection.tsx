@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import {
-  DOMAIN_ANALYSIS_MODELS,
+  DOMAIN_ANALYSIS_AVAILABLE_MODELS,
   VALUES,
   VALUE_LABELS,
   type ModelEntry,
@@ -35,7 +35,7 @@ export function ValuePrioritiesSection() {
   };
 
   const ordered = useMemo(() => {
-    const models = [...DOMAIN_ANALYSIS_MODELS];
+    const models = [...DOMAIN_ANALYSIS_AVAILABLE_MODELS];
     const key = sortState.key;
     if (key === 'model') {
       models.sort((a, b) =>
@@ -50,7 +50,7 @@ export function ValuePrioritiesSection() {
   }, [sortState]);
 
   const valueRange = useMemo(() => {
-    const all = DOMAIN_ANALYSIS_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = DOMAIN_ANALYSIS_AVAILABLE_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
     return { min: Math.min(...all), max: Math.max(...all) };
   }, []);
 
