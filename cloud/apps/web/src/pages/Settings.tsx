@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Key, Cpu, Activity, Settings2 } from 'lucide-react';
+import { Key, Cpu, Activity, Settings2, User } from 'lucide-react';
 import type { Tab } from '../components/ui/Tabs';
 import { Tabs } from '../components/ui/Tabs';
 import { SystemHealth } from '../components/settings/SystemHealth';
 import { ApiKeysPanel } from '../components/settings/ApiKeysPanel';
 import { ModelsPanel } from '../components/settings/models';
 import { InfraPanel } from '../components/settings/infra';
+import { AccountPanel } from '../components/settings/AccountPanel';
 
 const TABS: Tab[] = [
+  { id: 'account', label: 'Account', icon: <User className="w-4 h-4" /> },
   { id: 'health', label: 'System Health', icon: <Activity className="w-4 h-4" /> },
   { id: 'models', label: 'Models', icon: <Cpu className="w-4 h-4" /> },
   { id: 'infra', label: 'Infrastructure', icon: <Settings2 className="w-4 h-4" /> },
@@ -15,7 +17,7 @@ const TABS: Tab[] = [
 ];
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState('health');
+  const [activeTab, setActiveTab] = useState('account');
 
   return (
     <div className="space-y-6">
@@ -24,6 +26,7 @@ export function Settings() {
       <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
       <div className="mt-6">
+        {activeTab === 'account' && <AccountPanel />}
         {activeTab === 'health' && <SystemHealth />}
         {activeTab === 'models' && <ModelsPanel />}
         {activeTab === 'infra' && <InfraPanel />}

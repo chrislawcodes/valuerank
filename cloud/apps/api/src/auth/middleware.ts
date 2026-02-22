@@ -16,6 +16,54 @@ import type { AuthUser, AuthMethod } from './types.js';
 
 const log = createLogger('auth:middleware');
 
+const PASSWORD_CHANGED_CACHE_TTL_MS = 5000;
+const PASSWORD_CHANGED_CACHE_MAX_ENTRIES = 10000;
+type PasswordChangedCacheEntry = {
+  fetchedAtMs: number;
+  passwordChangedAtMs: number | null;
+};
+const passwordChangedAtCache = new Map<string, PasswordChangedCacheEntry>();
+
+async function getPasswordChangedAtMs(userId: string): Promise<number | null> {
+  const now = Date.now();
+  const cached = passwordChangedAtCache.get(userId);
+  if (cached !== undefined && now - cached.fetchedAtMs < PASSWORD_CHANGED_CACHE_TTL_MS) {
+    return cached.passwordChangedAtMs;
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { passwordChangedAt: true },
+  });
+
+  const passwordChangedAtMs = user?.passwordChangedAt?.getTime() ?? null;
+  passwordChangedAtCache.set(userId, { fetchedAtMs: now, passwordChangedAtMs });
+
+  if (passwordChangedAtCache.size > PASSWORD_CHANGED_CACHE_MAX_ENTRIES) {
+    const oldestKey = passwordChangedAtCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      passwordChangedAtCache.delete(oldestKey);
+    }
+  }
+
+  return passwordChangedAtMs;
+}
+
+// Test hook: clears shared auth cache between integration tests.
+export function clearPasswordChangedAtCacheForTests(): void {
+  if (process.env.NODE_ENV === 'test') {
+    passwordChangedAtCache.clear();
+  }
+}
+
+/**
+ * Evict a user's passwordChangedAt cache entry after a password change
+ * so the next JWT check hits the DB immediately.
+ */
+export function invalidatePasswordChangedAtCache(userId: string): void {
+  passwordChangedAtCache.delete(userId);
+}
+
 // Extend Express Request to include auth info
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -109,6 +157,17 @@ export async function authMiddleware(
     try {
       // Verify JWT (includes 30-second clock skew tolerance)
       const payload = verifyToken(token);
+
+      // Check if password was changed after this token was issued.
+      const passwordChangedAtMs = await getPasswordChangedAtMs(payload.sub);
+      if (passwordChangedAtMs != null && payload.iat != null) {
+        const changedAtSeconds = Math.floor(passwordChangedAtMs / 1000);
+        if (payload.iat <= changedAtSeconds) {
+          log.warn({ userId: payload.sub }, 'Token issued before password change, rejecting');
+          next(new AuthenticationError('Token invalidated by password change'));
+          return;
+        }
+      }
 
       // Populate request with user info
       req.user = {

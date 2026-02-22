@@ -6,7 +6,7 @@ import type { AuthContextValue, LoginResponse } from './types';
 const TOKEN_KEY = 'valuerank_token';
 
 // API base URL - empty string means same origin (dev), full URL for production
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '';
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -103,6 +103,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null);
   }, []);
 
+  const updateToken = useCallback((newToken: string, updatedUser: User) => {
+    localStorage.setItem(TOKEN_KEY, newToken);
+    setToken(newToken);
+    setUser(updatedUser);
+  }, []);
+
   const value: AuthContextValue = {
     user,
     token,
@@ -110,6 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!token && !!user,
     login,
     logout,
+    updateToken,
   };
 
   return (
