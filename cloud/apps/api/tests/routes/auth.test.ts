@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../src/server.js';
 import { hashPassword, signToken } from '../../src/auth/index.js';
+import { clearPasswordChangedAtCacheForTests } from '../../src/auth/middleware.js';
 
 // Mock the db module
 vi.mock('@valuerank/db', () => ({
@@ -28,6 +29,7 @@ describe('Auth Routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearPasswordChangedAtCacheForTests();
   });
 
   describe('POST /api/auth/login', () => {
@@ -327,7 +329,6 @@ describe('Auth Routes', () => {
       passwordChangedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
       lastLoginAt: null,
-        passwordChangedAt: null,
       updatedAt: new Date(),
     };
 
@@ -432,7 +433,6 @@ describe('Auth Routes', () => {
         passwordChangedAt: null,
         createdAt: new Date(),
         lastLoginAt: null,
-        passwordChangedAt: null,
         updatedAt: new Date(),
       };
 
@@ -469,7 +469,6 @@ describe('Auth Routes', () => {
         passwordChangedAt: null,
         createdAt: new Date(),
         lastLoginAt: null,
-        passwordChangedAt: null,
         updatedAt: new Date(),
       };
 
