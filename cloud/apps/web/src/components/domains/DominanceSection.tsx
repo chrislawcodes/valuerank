@@ -1,10 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DOMAIN_ANALYSIS_MODELS, VALUES, VALUE_LABELS, type ValueKey } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 
 export function DominanceSection() {
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_MODELS[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener('change', updatePreference);
+    return () => mediaQuery.removeEventListener('change', updatePreference);
+  }, []);
 
   const modelById = useMemo(
     () => new Map(DOMAIN_ANALYSIS_MODELS.map((model) => [model.model, model])),
@@ -186,13 +196,12 @@ export function DominanceSection() {
                       ? {
                           color: edgeColor,
                           strokeOpacity,
-                          animation: 'neonPulseStroke 1.7s ease-in-out infinite',
+                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.7s ease-in-out infinite',
                           transition:
                             'stroke-opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                         }
                       : {
                           strokeOpacity,
-                          animation: 'neonPulseStroke 2.6s ease-in-out infinite',
                           transition:
                             'stroke-opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                         }
@@ -206,7 +215,7 @@ export function DominanceSection() {
                       ? {
                           color: edgeColor,
                           fillOpacity: strokeOpacity,
-                          animation: 'neonPulseStroke 1.9s ease-in-out infinite',
+                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
                           transition: 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease',
                         }
                       : {
@@ -251,7 +260,10 @@ export function DominanceSection() {
                 strokeWidth={nodeStrokeWidth}
                 style={{
                   opacity: nodeOpacity,
-                  animation: isSelectedNode ? 'neonPulseCircle 1.8s ease-in-out infinite' : undefined,
+                  animation:
+                    isSelectedNode && !prefersReducedMotion
+                      ? 'neonPulseCircle 1.8s ease-in-out infinite'
+                      : undefined,
                   transition:
                     'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                 }}
