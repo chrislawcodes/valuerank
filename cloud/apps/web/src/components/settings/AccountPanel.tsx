@@ -148,6 +148,7 @@ export function AccountPanel() {
                                 value={profileName}
                                 onChange={(e) => setProfileName(e.target.value)}
                                 placeholder="Your name"
+                                required
                             />
                         </div>
 
@@ -162,7 +163,7 @@ export function AccountPanel() {
                             />
                         </div>
 
-                        <Button type="submit" disabled={profileSaving || (profileName === (user.name ?? '') && profileEmail === user.email)}>
+                        <Button type="submit" disabled={profileSaving || profileName.trim() === '' || (profileName === (user.name ?? '') && profileEmail === user.email)}>
                             {profileSaving ? 'Saving...' : 'Save Changes'}
                         </Button>
                     </form>

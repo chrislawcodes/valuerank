@@ -118,7 +118,7 @@ export async function authMiddleware(
 
       if (user?.passwordChangedAt != null && payload.iat != null) {
         const changedAtSeconds = Math.floor(user.passwordChangedAt.getTime() / 1000);
-        if (payload.iat < changedAtSeconds) {
+        if (payload.iat <= changedAtSeconds) {
           log.warn({ userId: payload.sub }, 'Token issued before password change, rejecting');
           next(new AuthenticationError('Token invalidated by password change'));
           return;
