@@ -9,6 +9,8 @@ import {
 import { getPriorityColor } from './domainAnalysisColors';
 
 export function DominanceSection() {
+  const CLOSE_WINRATE_DELTA = 0.08;
+  const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -25,9 +27,9 @@ export function DominanceSection() {
     return () => mediaQuery.removeEventListener('change', updatePreference);
   }, []);
 
-  // Staggered speeds: all start together, top circle fastest, each subsequent one 50ms slower
-  const baseDurationMs = 300; // fastest node (top)
-  const perNodeSlowdown = 50; // each clockwise node takes this much longer
+  // Staggered speeds: all start together, top circle fastest, each subsequent one noticeably slower
+  const baseDurationMs = 360; // fastest node (top)
+  const perNodeSlowdown = 120; // each clockwise node takes this much longer
   const slowestDuration = baseDurationMs + (VALUES.length - 1) * perNodeSlowdown;
 
   // Model-switch collapse/expand animation
@@ -236,41 +238,66 @@ export function DominanceSection() {
             const winRate = 1 / (1 + Math.exp(-edge.gap));
             const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
             const widthFactor = normalized ** 1.6;
-            const strokeWidth = 0.1 + widthFactor * 5.4;
-            // Lighter default lines
-            const baseOpacity = 0.08 + widthFactor * 0.45;
-            const strokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
-              ? Math.max(0.9, baseOpacity)
+            const isCloseWinRate = Math.abs(winRate - 0.5) <= CLOSE_WINRATE_DELTA;
+            const regularStrokeWidth = 0.3 + widthFactor * 7.2;
+            const emphasizedStrokeWidth = 0.3 + widthFactor * 14.4;
+            // Keep brightness independent of win rate; width alone encodes win-rate strength.
+            const rawStrokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
+              ? 0.9
               : isFocusedEdge
-                ? Math.max(0.48, baseOpacity * 0.72)
-                : Math.max(0.08, baseOpacity * 0.18);
-            const edgeColor = isOutgoingFromFocused
-              ? outgoingFocusedColor
-              : isIncomingToFocused
-                ? incomingFocusedColor
-                : arrowColor;
-            const startX = source.x + ux * nodeRadius;
-            const startY = source.y + uy * nodeRadius;
+                ? 0.78
+                : 0.72;
+            const rawStrokeWidth = isCloseWinRate
+              ? CLOSE_EDGE_MEDIUM_WIDTH
+              : focusedValue != null && isOutgoingFromFocused
+                ? emphasizedStrokeWidth
+                : regularStrokeWidth;
+            const losingAdjustedWidth = isIncomingToFocused ? rawStrokeWidth * 2.25 : rawStrokeWidth;
+            const sourceIsSelected = focusedValue != null && edge.from === focusedValue;
+            const isFromUnselectedCircle = focusedValue == null || !sourceIsSelected;
+            const strokeWidth = isFromUnselectedCircle ? losingAdjustedWidth * 0.64 : losingAdjustedWidth;
+            const strokeOpacity = isFromUnselectedCircle ? rawStrokeOpacity * 0.42 : rawStrokeOpacity;
+            const edgeColor = focusedValue == null
+              ? '#94a3b8'
+              : isCloseWinRate
+                ? '#eab308'
+                : isOutgoingFromFocused
+                  ? outgoingFocusedColor
+                  : isIncomingToFocused
+                    ? incomingFocusedColor
+                    : arrowColor;
+            // Extra source-side gap for thicker strokes so they don't intrude into the origin circle.
+            const sourceGap = nodeRadius + Math.min(8, strokeWidth * 0.6 + 2);
+            const startX = source.x + ux * sourceGap;
+            const startY = source.y + uy * sourceGap;
             const endX = target.x - ux * nodeRadius;
             const endY = target.y - uy * nodeRadius;
             const headLength = 1.8 + strokeWidth * 1.9;
             const headHalfWidth = 0.8 + strokeWidth * 0.95;
+            const sourceBaseX = startX + ux * headLength;
+            const sourceBaseY = startY + uy * headLength;
             const baseX = endX - ux * headLength;
             const baseY = endY - uy * headLength;
+            const lineStartX = isCloseWinRate ? sourceBaseX : startX;
+            const lineStartY = isCloseWinRate ? sourceBaseY : startY;
             const px = -uy;
             const py = ux;
             const leftX = baseX + px * headHalfWidth;
             const leftY = baseY + py * headHalfWidth;
             const rightX = baseX - px * headHalfWidth;
             const rightY = baseY - py * headHalfWidth;
-            // Stagger edge appearance clockwise: 10ms per rank (disabled for reduced motion)
+            const sourceLeftX = sourceBaseX + px * headHalfWidth;
+            const sourceLeftY = sourceBaseY + py * headHalfWidth;
+            const sourceRightX = sourceBaseX - px * headHalfWidth;
+            const sourceRightY = sourceBaseY - py * headHalfWidth;
+            // Stagger edge appearance clockwise for a visible "light-up" wave.
             const clockwiseRank = edgeClockwiseOrder.get(edgeIndex) ?? edgeIndex;
-            const edgeDelay = (!prefersReducedMotion && edgesVisible) ? `${clockwiseRank * 10}ms` : '0ms';
+            const edgeDelay = (!prefersReducedMotion && edgesVisible) ? `${clockwiseRank * 12}ms` : '0ms';
             return (
               <g key={`${edge.from}-${edge.to}`}>
                 <line
-                  x1={startX}
-                  y1={startY}
+                  x1={lineStartX}
+                  y1={lineStartY}
                   x2={baseX}
                   y2={baseY}
                   stroke={edgeColor}
@@ -311,6 +338,27 @@ export function DominanceSection() {
                       }
                   }
                 />
+                {isCloseWinRate && (
+                  <polygon
+                    points={`${startX},${startY} ${sourceLeftX},${sourceLeftY} ${sourceRightX},${sourceRightY}`}
+                    fill={edgeColor}
+                    style={
+                      focusedValue != null && isFocusedEdge
+                        ? {
+                          color: edgeColor,
+                          fillOpacity: edgesVisible ? strokeOpacity : 0,
+                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
+                          transition: fillTransition,
+                          transitionDelay: edgeDelay,
+                        }
+                        : {
+                          fillOpacity: edgesVisible ? strokeOpacity : 0,
+                          transition: fillTransition,
+                          transitionDelay: edgeDelay,
+                        }
+                    }
+                  />
+                )}
               </g>
             );
           })}
@@ -366,6 +414,7 @@ export function DominanceSection() {
                   cursor: 'pointer',
                   transform: nodeTranslate,
                   transition: nodeTransition,
+                  willChange: animationPhase === 'idle' ? undefined : 'transform',
                 }}
               >
                 <circle
@@ -413,6 +462,7 @@ export function DominanceSection() {
             <li>Arrow direction: winner value points to loser value.</li>
             <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
             <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
+            <li>Yellow double-headed arrows: near-even win rates (values are highly contestable).</li>
           </ul>
           <h4 className="mt-3 text-sm font-medium text-gray-900">Most Contestable Value Pairs</h4>
           <p className="mt-2 text-xs text-gray-600">
