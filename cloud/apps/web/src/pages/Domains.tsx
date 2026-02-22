@@ -38,6 +38,11 @@ function formatTime(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatTemperature(value: number | null | undefined): string {
+  if (value === null || value === undefined) return 'default';
+  return value.toFixed(2);
+}
+
 export function Domains() {
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
   const [selectedFolder, setSelectedFolder] = useState<FolderKey>('all');
@@ -116,6 +121,10 @@ export function Domains() {
     variables: {},
   });
   const allCount = allCountData?.definitionCount ?? null;
+  const trialValidationErrors = useMemo(
+    () => definitions.filter((definition) => definition.trialConfig?.isConsistent === false),
+    [definitions],
+  );
 
   const resetSelection = useCallback(() => {
     setSelectedDefinitionIds(new Set());
@@ -484,6 +493,24 @@ export function Domains() {
             {inlineSuccess && (
               <div className="text-sm text-green-700">{inlineSuccess}</div>
             )}
+            {trialValidationErrors.length > 0 && (
+              <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <p className="font-medium">
+                  Validation error: {trialValidationErrors.length} vignette
+                  {trialValidationErrors.length === 1 ? '' : 's'} have mixed version/temperature across trials.
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
+                  {trialValidationErrors.slice(0, 8).map((definition) => (
+                    <li key={definition.id}>
+                      {definition.name}: {definition.trialConfig?.message ?? 'Inconsistent trial settings.'}
+                    </li>
+                  ))}
+                </ul>
+                {trialValidationErrors.length > 8 && (
+                  <p className="mt-1 text-xs">Showing first 8 rows only.</p>
+                )}
+              </div>
+            )}
             {shownCount !== null && shownCount > definitions.length && (
               <p className="text-xs text-amber-700">
                 Showing first {definitions.length} of {shownCount} matching vignettes.
@@ -501,13 +528,20 @@ export function Domains() {
                     <tr className="text-left text-gray-500 border-b border-gray-200">
                       <th className="py-2 pr-3">Select</th>
                       <th className="py-2 pr-3">Vignette</th>
+                      <th className="py-2 pr-3">Version</th>
+                      <th className="py-2 pr-3">Temperature</th>
                       <th className="py-2 pr-3">Domain</th>
                       <th className="py-2 pr-3">Trials</th>
                     </tr>
                   </thead>
                   <tbody>
                     {definitions.map((definition) => (
-                      <tr key={definition.id} className="border-b border-gray-100">
+                      <tr
+                        key={definition.id}
+                        className={`border-b border-gray-100 ${
+                          definition.trialConfig?.isConsistent === false ? 'bg-red-50/40' : ''
+                        }`}
+                      >
                         <td className="py-2 pr-3">
                           <input
                             type="checkbox"
@@ -517,8 +551,18 @@ export function Domains() {
                           />
                         </td>
                         <td className="py-2 pr-3 text-gray-900">{definition.name}</td>
+                        <td className="py-2 pr-3 text-gray-600">
+                          {definition.trialConfig?.isConsistent === false
+                            ? 'Mixed'
+                            : definition.trialConfig?.definitionVersion ?? definition.version}
+                        </td>
+                        <td className="py-2 pr-3 text-gray-600">
+                          {definition.trialConfig?.isConsistent === false
+                            ? 'Mixed'
+                            : formatTemperature(definition.trialConfig?.temperature)}
+                        </td>
                         <td className="py-2 pr-3 text-gray-600">{definition.domain?.name ?? 'None'}</td>
-                        <td className="py-2 pr-3 text-gray-600">{definition.runCount}</td>
+                        <td className="py-2 pr-3 text-gray-600">{definition.trialCount}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -72,6 +72,13 @@ export type Definition = {
   updatedAt: string;
   lastAccessedAt: string | null;
   runCount: number;
+  trialCount: number;
+  trialConfig?: {
+    definitionVersion: number | null;
+    temperature: number | null;
+    isConsistent: boolean;
+    message: string | null;
+  };
   scenarioCount?: number;
   version: number;
   preambleVersionId: string | null;
@@ -165,7 +172,15 @@ export const DEFINITIONS_QUERY = gql`
       createdAt
       updatedAt
       lastAccessedAt
+      version
       runCount
+      trialCount
+      trialConfig {
+        definitionVersion
+        temperature
+        isConsistent
+        message
+      }
       tags {
         id
         name
@@ -189,7 +204,15 @@ export const DEFINITION_QUERY = gql`
       createdAt
       updatedAt
       lastAccessedAt
+      version
       runCount
+      trialCount
+      trialConfig {
+        definitionVersion
+        temperature
+        isConsistent
+        message
+      }
       scenarioCount
       version
       preambleVersionId

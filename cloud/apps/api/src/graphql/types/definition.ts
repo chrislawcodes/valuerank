@@ -14,6 +14,7 @@ import {
   type DefinitionExpansionStatus,
   type ExpansionProgress,
 } from '../../services/scenario/index.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -22,6 +23,96 @@ const DEFAULT_MAX_DEPTH = 10;
 
 // GraphQL type for inheritance override indicators
 const DefinitionOverridesRef = builder.objectRef<DefinitionOverrides>('DefinitionOverrides');
+type TrialConfigSummary = {
+  definitionVersion: number | null;
+  temperature: number | null;
+  isConsistent: boolean;
+  message: string | null;
+};
+const TrialConfigSummaryRef = builder.objectRef<TrialConfigSummary>('TrialConfigSummary');
+
+function parseDefinitionVersion(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function encodeNullableNumber(value: number | null): string {
+  return value === null ? 'null' : String(value);
+}
+
+function decodeNullableNumber(value: string | undefined): number | null {
+  if (value === undefined || value === 'null') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function getTrialConfigSummary(definitionId: string): Promise<TrialConfigSummary> {
+  const runs = await db.run.findMany({
+    where: {
+      definitionId,
+      deletedAt: null,
+      transcripts: {
+        some: {
+          deletedAt: null,
+        },
+      },
+    },
+    select: {
+      config: true,
+    },
+  });
+
+  if (runs.length === 0) {
+    return {
+      definitionVersion: null,
+      temperature: null,
+      isConsistent: true,
+      message: null,
+    };
+  }
+
+  const versions = new Set<string>();
+  const temperatures = new Set<string>();
+
+  for (const run of runs) {
+    const config = run.config as {
+      definitionSnapshot?: {
+        _meta?: { definitionVersion?: unknown };
+        version?: unknown;
+      };
+      temperature?: unknown;
+    } | null;
+    const definitionVersion =
+      parseDefinitionVersion(config?.definitionSnapshot?._meta?.definitionVersion) ??
+      parseDefinitionVersion(config?.definitionSnapshot?.version);
+    const temperature = parseTemperature(config?.temperature);
+
+    versions.add(encodeNullableNumber(definitionVersion));
+    temperatures.add(encodeNullableNumber(temperature));
+  }
+
+  const isConsistent = versions.size <= 1 && temperatures.size <= 1;
+  if (!isConsistent) {
+    const mismatchParts: string[] = [];
+    if (versions.size > 1) mismatchParts.push(`versions: ${Array.from(versions).join(', ')}`);
+    if (temperatures.size > 1) mismatchParts.push(`temperatures: ${Array.from(temperatures).join(', ')}`);
+    return {
+      definitionVersion: null,
+      temperature: null,
+      isConsistent: false,
+      message: `Inconsistent trial settings detected (${mismatchParts.join('; ')}).`,
+    };
+  }
+
+  return {
+    definitionVersion: decodeNullableNumber(Array.from(versions)[0]),
+    temperature: decodeNullableNumber(Array.from(temperatures)[0]),
+    isConsistent: true,
+    message: null,
+  };
+}
 
 builder.objectType(DefinitionOverridesRef, {
   description: 'Indicates which content fields are locally overridden vs inherited from parent',
@@ -35,6 +126,29 @@ builder.objectType(DefinitionOverridesRef, {
     }),
     matchingRules: t.exposeBoolean('matching_rules', {
       description: 'True if matching rules are locally defined, false if inherited',
+    }),
+  }),
+});
+
+builder.objectType(TrialConfigSummaryRef, {
+  description: 'Summary of trial configuration consistency for a definition',
+  fields: (t) => ({
+    definitionVersion: t.int({
+      nullable: true,
+      description: 'Definition version used by these trials',
+      resolve: (summary) => summary.definitionVersion,
+    }),
+    temperature: t.float({
+      nullable: true,
+      description: 'Temperature used by these trials',
+      resolve: (summary) => summary.temperature,
+    }),
+    isConsistent: t.exposeBoolean('isConsistent', {
+      description: 'Whether all trials for this definition use the same version and temperature',
+    }),
+    message: t.exposeString('message', {
+      nullable: true,
+      description: 'Validation error message when trial settings are inconsistent',
     }),
   }),
 });
@@ -279,6 +393,31 @@ builder.objectType(DefinitionRef, {
         return db.run.count({
           where: { definitionId: definition.id, deletedAt: null },
         });
+      },
+    }),
+
+    // Computed: trialCount - Number of prompt/response trials using this definition
+    trialCount: t.field({
+      type: 'Int',
+      description: 'Number of prompt/response trials (transcripts) for this definition',
+      resolve: async (definition) => {
+        return db.transcript.count({
+          where: {
+            deletedAt: null,
+            run: {
+              definitionId: definition.id,
+              deletedAt: null,
+            },
+          },
+        });
+      },
+    }),
+
+    trialConfig: t.field({
+      type: TrialConfigSummaryRef,
+      description: 'Version and temperature consistency across trials for this definition',
+      resolve: async (definition) => {
+        return getTrialConfigSummary(definition.id);
       },
     }),
 
