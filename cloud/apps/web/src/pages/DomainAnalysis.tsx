@@ -1,20 +1,9 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { DominanceSection } from '../components/domains/DominanceSection';
+import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { Button } from '../components/ui/Button';
-
-function SectionPlaceholder({ title, description }: { title: string; description: string }) {
-  return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4">
-      <h2 className="text-base font-medium text-gray-900">{title}</h2>
-      <p className="mt-1 text-sm text-gray-600">{description}</p>
-      <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-        This section is being rolled out in stages and will appear here soon.
-      </p>
-    </section>
-  );
-}
 
 export function DomainAnalysis() {
   const [showInterpretation, setShowInterpretation] = useState(true);
@@ -56,10 +45,7 @@ export function DomainAnalysis() {
 
       <ValuePrioritiesSection />
       <DominanceSection />
-      <SectionPlaceholder
-        title="3. Similarity and Differences"
-        description="Pairwise model similarity matrix and nearest/farthest pairs."
-      />
+      <SimilaritySection />
     </div>
   );
 }
