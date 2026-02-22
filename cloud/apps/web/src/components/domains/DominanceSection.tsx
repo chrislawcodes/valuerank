@@ -25,6 +25,11 @@ export function DominanceSection() {
     return () => mediaQuery.removeEventListener('change', updatePreference);
   }, []);
 
+  // Staggered speeds: all start together, top circle fastest, each subsequent one 50ms slower
+  const baseDurationMs = 300; // fastest node (top)
+  const perNodeSlowdown = 50; // each clockwise node takes this much longer
+  const slowestDuration = baseDurationMs + (VALUES.length - 1) * perNodeSlowdown;
+
   // Model-switch collapse/expand animation
   useEffect(() => {
     if (selectedModelId === prevModelId.current) return;
@@ -32,14 +37,17 @@ export function DominanceSection() {
     if (prefersReducedMotion) return;
 
     setAnimationPhase('collapse');
-    const expandTimer = setTimeout(() => setAnimationPhase('expand'), 500);
-    const idleTimer = setTimeout(() => setAnimationPhase('idle'), 1000);
+    // Wait for the slowest node to finish collapsing, then expand
+    const expandTimer = setTimeout(() => setAnimationPhase('expand'), slowestDuration);
+    // Wait for the slowest node to finish expanding, then go idle
+    const idleTimer = setTimeout(() => setAnimationPhase('idle'), 2 * slowestDuration);
     return () => {
       clearTimeout(expandTimer);
       clearTimeout(idleTimer);
     };
-  }, [selectedModelId, prefersReducedMotion]);
+  }, [selectedModelId, prefersReducedMotion, slowestDuration]);
 
+  // Guard against selecting an unavailable model
   useEffect(() => {
     if (!DOMAIN_ANALYSIS_AVAILABLE_MODELS.some((model) => model.model === selectedModelId)) {
       setSelectedModelId(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
@@ -96,7 +104,6 @@ export function DominanceSection() {
 
   const priorityValueRange = useMemo(() => {
     const all = DOMAIN_ANALYSIS_AVAILABLE_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
-    if (all.length === 0) return { min: 0, max: 0 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, []);
 
@@ -121,21 +128,40 @@ export function DominanceSection() {
     [nodePositions],
   );
 
+  // Map each value to its clockwise index (0 = top)
+  const valueIndexMap = useMemo(
+    () => new Map(VALUES.map((v, i) => [v, i])),
+    [],
+  );
+
+  // Compute clockwise appearance order for edges, relative to focused circle
+  const edgeClockwiseOrder = useMemo(() => {
+    const focusedIdx = focusedValue != null ? (valueIndexMap.get(focusedValue) ?? 0) : 0;
+    const n = VALUES.length;
+    const indexed = edges.map((edge, i) => {
+      const fromIdx = valueIndexMap.get(edge.from) ?? 0;
+      const toIdx = valueIndexMap.get(edge.to) ?? 0;
+      // For focused edges, order by how far the OTHER node is clockwise from the focused one
+      const otherIdx = fromIdx === focusedIdx ? toIdx : toIdx === focusedIdx ? fromIdx : Math.min(fromIdx, toIdx);
+      const clockwiseDist = (otherIdx - focusedIdx + n) % n;
+      return { originalIndex: i, sortKey: clockwiseDist };
+    });
+    indexed.sort((a, b) => a.sortKey - b.sortKey);
+    const orderMap = new Map<number, number>();
+    indexed.forEach((item, rank) => orderMap.set(item.originalIndex, rank));
+    return orderMap;
+  }, [edges, valueIndexMap, focusedValue]);
+
   // Shared transition strings
   const edgeTransition = 'stroke-opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease';
   const fillTransition = 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease';
 
-  // Animation transform for the SVG content group
-  const graphTransformOrigin = '640px 560px'; // center of the 1280x1120 viewBox
-  let graphTransform = 'scale(1)';
-  let graphTransition = 'transform 500ms cubic-bezier(0.4, 0, 0.2, 1)';
-  if (animationPhase === 'collapse') {
-    graphTransform = 'scale(0)';
-    graphTransition = 'transform 500ms cubic-bezier(0.4, 0, 0.2, 1)';
-  } else if (animationPhase === 'expand') {
-    graphTransform = 'scale(1)';
-    graphTransition = 'transform 500ms cubic-bezier(0.0, 0, 0.2, 1)';
-  }
+  // Center of viewBox (where nodes converge during animation)
+  const viewCenterX = 640;
+  const viewCenterY = 560;
+
+  // Edges fade out during animation phases
+  const edgesVisible = animationPhase === 'idle';
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -193,173 +219,190 @@ export function DominanceSection() {
           role="img"
           aria-label="Value dominance graph"
         >
-          <g
-            style={{
-              transform: graphTransform,
-              transformOrigin: graphTransformOrigin,
-              transition: animationPhase !== 'idle' ? graphTransition : undefined,
-            }}
-          >
-            {edges.map((edge) => {
-              const source = positionByValue.get(edge.from);
-              const target = positionByValue.get(edge.to);
-              if (!source || !target) return null;
-              const isFocusedEdge =
-                focusedValue == null || edge.from === focusedValue || edge.to === focusedValue;
-              const isOutgoingFromFocused = focusedValue != null && edge.from === focusedValue;
-              const isIncomingToFocused = focusedValue != null && edge.to === focusedValue;
-              const dx = target.x - source.x;
-              const dy = target.y - source.y;
-              const length = Math.hypot(dx, dy) || 1;
-              const ux = dx / length;
-              const uy = dy / length;
-              const nodeRadius = 68;
-              const winRate = 1 / (1 + Math.exp(-edge.gap));
-              const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
-              const widthFactor = normalized ** 1.6;
-              const strokeWidth = 0.1 + widthFactor * 5.4;
-              // Lighter default lines: reduced from 0.15+w*0.75 to 0.08+w*0.45
-              const baseOpacity = 0.08 + widthFactor * 0.45;
-              const strokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
-                ? Math.max(0.9, baseOpacity)
-                : isFocusedEdge
-                  ? Math.max(0.48, baseOpacity * 0.72)
-                  : Math.max(0.1, baseOpacity * 0.28);
-              const edgeColor = isOutgoingFromFocused
-                ? outgoingFocusedColor
-                : isIncomingToFocused
-                  ? incomingFocusedColor
-                  : arrowColor;
-              const startX = source.x + ux * nodeRadius;
-              const startY = source.y + uy * nodeRadius;
-              const endX = target.x - ux * nodeRadius;
-              const endY = target.y - uy * nodeRadius;
-              const headLength = 1.8 + strokeWidth * 1.9;
-              const headHalfWidth = 0.8 + strokeWidth * 0.95;
-              const baseX = endX - ux * headLength;
-              const baseY = endY - uy * headLength;
-              const px = -uy;
-              const py = ux;
-              const leftX = baseX + px * headHalfWidth;
-              const leftY = baseY + py * headHalfWidth;
-              const rightX = baseX - px * headHalfWidth;
-              const rightY = baseY - py * headHalfWidth;
-              return (
-                <g key={`${edge.from}-${edge.to}`}>
-                  <line
-                    x1={startX}
-                    y1={startY}
-                    x2={baseX}
-                    y2={baseY}
-                    stroke={edgeColor}
-                    strokeWidth={strokeWidth}
-                    strokeLinecap="round"
-                    style={
-                      focusedValue != null && isFocusedEdge
-                        ? {
-                          color: edgeColor,
-                          strokeOpacity,
-                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.7s ease-in-out infinite',
-                          transition: edgeTransition,
-                        }
-                        : {
-                          strokeOpacity,
-                          transition: edgeTransition,
-                        }
-                    }
-                  />
-                  <polygon
-                    points={`${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`}
-                    fill={edgeColor}
-                    style={
-                      focusedValue != null && isFocusedEdge
-                        ? {
-                          color: edgeColor,
-                          fillOpacity: strokeOpacity,
-                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
-                          transition: fillTransition,
-                        }
-                        : {
-                          fillOpacity: strokeOpacity,
-                          transition: fillTransition,
-                        }
-                    }
-                  />
-                </g>
+          {edges.map((edge, edgeIndex) => {
+            const source = positionByValue.get(edge.from);
+            const target = positionByValue.get(edge.to);
+            if (!source || !target) return null;
+            const isFocusedEdge =
+              focusedValue == null || edge.from === focusedValue || edge.to === focusedValue;
+            const isOutgoingFromFocused = focusedValue != null && edge.from === focusedValue;
+            const isIncomingToFocused = focusedValue != null && edge.to === focusedValue;
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const length = Math.hypot(dx, dy) || 1;
+            const ux = dx / length;
+            const uy = dy / length;
+            const nodeRadius = 68;
+            const winRate = 1 / (1 + Math.exp(-edge.gap));
+            const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
+            const widthFactor = normalized ** 1.6;
+            const strokeWidth = 0.1 + widthFactor * 5.4;
+            // Lighter default lines
+            const baseOpacity = 0.08 + widthFactor * 0.45;
+            const strokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
+              ? Math.max(0.9, baseOpacity)
+              : isFocusedEdge
+                ? Math.max(0.48, baseOpacity * 0.72)
+                : Math.max(0.08, baseOpacity * 0.18);
+            const edgeColor = isOutgoingFromFocused
+              ? outgoingFocusedColor
+              : isIncomingToFocused
+                ? incomingFocusedColor
+                : arrowColor;
+            const startX = source.x + ux * nodeRadius;
+            const startY = source.y + uy * nodeRadius;
+            const endX = target.x - ux * nodeRadius;
+            const endY = target.y - uy * nodeRadius;
+            const headLength = 1.8 + strokeWidth * 1.9;
+            const headHalfWidth = 0.8 + strokeWidth * 0.95;
+            const baseX = endX - ux * headLength;
+            const baseY = endY - uy * headLength;
+            const px = -uy;
+            const py = ux;
+            const leftX = baseX + px * headHalfWidth;
+            const leftY = baseY + py * headHalfWidth;
+            const rightX = baseX - px * headHalfWidth;
+            const rightY = baseY - py * headHalfWidth;
+            // Stagger edge appearance clockwise: 10ms per rank (disabled for reduced motion)
+            const clockwiseRank = edgeClockwiseOrder.get(edgeIndex) ?? edgeIndex;
+            const edgeDelay = (!prefersReducedMotion && edgesVisible) ? `${clockwiseRank * 10}ms` : '0ms';
+            return (
+              <g key={`${edge.from}-${edge.to}`}>
+                <line
+                  x1={startX}
+                  y1={startY}
+                  x2={baseX}
+                  y2={baseY}
+                  stroke={edgeColor}
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  style={
+                    focusedValue != null && isFocusedEdge
+                      ? {
+                        color: edgeColor,
+                        strokeOpacity: edgesVisible ? strokeOpacity : 0,
+                        animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.7s ease-in-out infinite',
+                        transition: edgeTransition,
+                        transitionDelay: edgeDelay,
+                      }
+                      : {
+                        strokeOpacity: edgesVisible ? strokeOpacity : 0,
+                        transition: edgeTransition,
+                        transitionDelay: edgeDelay,
+                      }
+                  }
+                />
+                <polygon
+                  points={`${endX},${endY} ${leftX},${leftY} ${rightX},${rightY}`}
+                  fill={edgeColor}
+                  style={
+                    focusedValue != null && isFocusedEdge
+                      ? {
+                        color: edgeColor,
+                        fillOpacity: edgesVisible ? strokeOpacity : 0,
+                        animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
+                        transition: fillTransition,
+                        transitionDelay: edgeDelay,
+                      }
+                      : {
+                        fillOpacity: edgesVisible ? strokeOpacity : 0,
+                        transition: fillTransition,
+                        transitionDelay: edgeDelay,
+                      }
+                  }
+                />
+              </g>
+            );
+          })}
+
+          {nodePositions.map((node, nodeIndex) => {
+            const isSelectedNode = focusedValue != null && node.value === focusedValue;
+            const isHovered = hoveredValue === node.value;
+            const isConnectedToFocused =
+              focusedValue != null &&
+              edges.some(
+                (edge) =>
+                  (edge.from === focusedValue && edge.to === node.value) ||
+                  (edge.to === focusedValue && edge.from === node.value),
               );
-            })}
+            const nodeOpacity =
+              focusedValue == null ? 1 : isSelectedNode ? 1 : isConnectedToFocused ? 0.72 : 0.35;
+            const nodeStroke = isSelectedNode ? '#111827' : isHovered ? '#3b82f6' : '#94a3b8';
+            const nodeStrokeWidth = isSelectedNode ? 4 : isHovered ? 3.5 : 2.2;
+            const labelParts = VALUE_LABELS[node.value].split(' ');
+            const labelLineOne = labelParts[0] ?? '';
+            const labelLineTwo = labelParts.slice(1).join(' ');
 
-            {nodePositions.map((node) => {
-              const isSelectedNode = focusedValue != null && node.value === focusedValue;
-              const isHovered = hoveredValue === node.value;
-              const isConnectedToFocused =
-                focusedValue != null &&
-                edges.some(
-                  (edge) =>
-                    (edge.from === focusedValue && edge.to === node.value) ||
-                    (edge.to === focusedValue && edge.from === node.value),
-                );
-              const nodeOpacity =
-                focusedValue == null ? 1 : isSelectedNode ? 1 : isConnectedToFocused ? 0.72 : 0.35;
-              const nodeStroke = isSelectedNode ? '#111827' : isHovered ? '#3b82f6' : '#94a3b8';
-              const nodeStrokeWidth = isSelectedNode ? 4 : isHovered ? 3.5 : 2.2;
-              const labelParts = VALUE_LABELS[node.value].split(' ');
-              const labelLineOne = labelParts[0] ?? '';
-              const labelLineTwo = labelParts.slice(1).join(' ');
+            // All nodes start at the same time; top is fastest, each clockwise node is slower
+            const nodeDuration = baseDurationMs + nodeIndex * perNodeSlowdown;
+            let nodeTranslate = 'translate(0, 0)';
+            let nodeTransition = 'transform 280ms ease';
+            if (animationPhase === 'collapse') {
+              const tx = viewCenterX - node.x;
+              const ty = viewCenterY - node.y;
+              nodeTranslate = `translate(${tx}px, ${ty}px)`;
+              nodeTransition = `transform ${nodeDuration}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            } else if (animationPhase === 'expand') {
+              nodeTranslate = 'translate(0, 0)';
+              nodeTransition = `transform ${nodeDuration}ms cubic-bezier(0.0, 0, 0.2, 1)`;
+            }
 
-              // Hover glow + selected glow
-              let circleAnimation: string | undefined;
-              let circleFilter: string | undefined;
-              if (isSelectedNode && !prefersReducedMotion) {
-                circleAnimation = 'neonPulseCircle 1.8s ease-in-out infinite';
-              } else if (isHovered && !isSelectedNode) {
-                circleFilter = 'drop-shadow(0 0 6px rgba(59,130,246,0.5)) drop-shadow(0 0 12px rgba(59,130,246,0.3))';
-              }
+            // Hover glow + selected glow
+            let circleAnimation: string | undefined;
+            let circleFilter: string | undefined;
+            if (isSelectedNode && !prefersReducedMotion) {
+              circleAnimation = 'neonPulseCircle 1.8s ease-in-out infinite';
+            } else if (isHovered && !isSelectedNode) {
+              circleFilter = 'drop-shadow(0 0 6px rgba(59,130,246,0.5)) drop-shadow(0 0 12px rgba(59,130,246,0.3))';
+            }
 
-              return (
-                <g
-                  key={node.value}
-                  onClick={() => setFocusedValue((current) => (current === node.value ? null : node.value))}
-                  onMouseEnter={() => setHoveredValue(node.value)}
-                  onMouseLeave={() => setHoveredValue(null)}
-                  style={{ cursor: 'pointer' }}
+            return (
+              <g
+                key={node.value}
+                onClick={() => setFocusedValue((current) => (current === node.value ? null : node.value))}
+                onMouseEnter={() => setHoveredValue(node.value)}
+                onMouseLeave={() => setHoveredValue(null)}
+                style={{
+                  cursor: 'pointer',
+                  transform: nodeTranslate,
+                  transition: nodeTransition,
+                }}
+              >
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={68}
+                  fill={getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)}
+                  stroke={nodeStroke}
+                  strokeWidth={nodeStrokeWidth}
+                  style={{
+                    opacity: nodeOpacity,
+                    filter: circleFilter,
+                    animation: circleAnimation,
+                    transition:
+                      'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                  }}
+                />
+                <text
+                  x={node.x}
+                  y={node.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-gray-900 font-medium select-none"
+                  style={{ fontSize: '16px', opacity: nodeOpacity, transition: 'opacity 280ms ease' }}
                 >
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={68}
-                    fill={getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)}
-                    stroke={nodeStroke}
-                    strokeWidth={nodeStrokeWidth}
-                    style={{
-                      opacity: nodeOpacity,
-                      filter: circleFilter,
-                      animation: circleAnimation,
-                      transition:
-                        'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
-                    }}
-                  />
-                  <text
-                    x={node.x}
-                    y={node.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="fill-gray-900 font-medium select-none"
-                    style={{ fontSize: '16px', opacity: nodeOpacity, transition: 'opacity 280ms ease' }}
-                  >
-                    <tspan x={node.x} dy={labelLineTwo.length > 0 ? '-0.35em' : '0'}>
-                      {labelLineOne}
+                  <tspan x={node.x} dy={labelLineTwo.length > 0 ? '-0.35em' : '0'}>
+                    {labelLineOne}
+                  </tspan>
+                  {labelLineTwo.length > 0 && (
+                    <tspan x={node.x} dy="1.2em" className="fill-gray-500" style={{ fontSize: '14px' }}>
+                      {labelLineTwo}
                     </tspan>
-                    {labelLineTwo.length > 0 && (
-                      <tspan x={node.x} dy="1.2em" className="fill-gray-500" style={{ fontSize: '14px' }}>
-                        {labelLineTwo}
-                      </tspan>
-                    )}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
+                  )}
+                </text>
+              </g>
+            );
+          })}
         </svg>
       </div>
 
