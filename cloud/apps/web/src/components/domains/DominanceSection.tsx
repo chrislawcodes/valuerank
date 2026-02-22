@@ -227,6 +227,15 @@ export function DominanceSection() {
 
   // Edges fade out during animation phases
   const edgesVisible = animationPhase === 'idle';
+  const svgStyle = isSciFi
+    ? {
+      height: 'calc(100vh - 140px)',
+      minHeight: '900px',
+      transform: 'perspective(1800px) rotateX(9deg) scale(0.97)',
+      transformOrigin: '50% 26%',
+      transition: 'transform 320ms ease',
+    }
+    : { height: 'calc(100vh - 140px)', minHeight: '900px' };
 
   return (
     <section className={`rounded-lg border p-4 ${themeColors.panelBorder} ${themeColors.panelBg}`}>
@@ -325,7 +334,7 @@ export function DominanceSection() {
         <svg
           viewBox="0 0 1280 1120"
           className="w-full min-w-[1120px]"
-          style={{ height: 'calc(100vh - 140px)', minHeight: '900px' }}
+          style={svgStyle}
           role="img"
           aria-label="Value dominance graph"
         >
@@ -554,6 +563,22 @@ export function DominanceSection() {
                       'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                   }}
                 />
+                {!isSciFi && (
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={74}
+                    fill="none"
+                    stroke={isSelectedNode ? '#22d3ee' : '#38bdf8'}
+                    strokeWidth={isSelectedNode ? 2.1 : 1.4}
+                    style={{
+                      opacity: nodeOpacity * (isSelectedNode ? 0.82 : 0.46),
+                      filter: isSelectedNode ? 'drop-shadow(0 0 5px rgba(34,211,238,0.5))' : undefined,
+                      transition:
+                        'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                    }}
+                  />
+                )}
                 <text
                   x={node.x}
                   y={node.y}
