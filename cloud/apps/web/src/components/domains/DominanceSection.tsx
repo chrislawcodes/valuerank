@@ -8,9 +8,36 @@ import {
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 
+const CLOSE_WINRATE_DELTA = 0.08;
+const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
+
+function getEdgeColor(params: {
+  focusedValue: ValueKey | null;
+  isCloseWinRate: boolean;
+  isOutgoingFromFocused: boolean;
+  isIncomingToFocused: boolean;
+  outgoingFocusedColor: string;
+  incomingFocusedColor: string;
+  arrowColor: string;
+}): string {
+  const {
+    focusedValue,
+    isCloseWinRate,
+    isOutgoingFromFocused,
+    isIncomingToFocused,
+    outgoingFocusedColor,
+    incomingFocusedColor,
+    arrowColor,
+  } = params;
+
+  if (focusedValue == null) return '#94a3b8';
+  if (isCloseWinRate) return '#eab308';
+  if (isOutgoingFromFocused) return outgoingFocusedColor;
+  if (isIncomingToFocused) return incomingFocusedColor;
+  return arrowColor;
+}
+
 export function DominanceSection() {
-  const CLOSE_WINRATE_DELTA = 0.08;
-  const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -257,15 +284,15 @@ export function DominanceSection() {
             const isFromUnselectedCircle = focusedValue == null || !sourceIsSelected;
             const strokeWidth = isFromUnselectedCircle ? losingAdjustedWidth * 0.64 : losingAdjustedWidth;
             const strokeOpacity = isFromUnselectedCircle ? rawStrokeOpacity * 0.42 : rawStrokeOpacity;
-            const edgeColor = focusedValue == null
-              ? '#94a3b8'
-              : isCloseWinRate
-                ? '#eab308'
-                : isOutgoingFromFocused
-                  ? outgoingFocusedColor
-                  : isIncomingToFocused
-                    ? incomingFocusedColor
-                    : arrowColor;
+            const edgeColor = getEdgeColor({
+              focusedValue,
+              isCloseWinRate,
+              isOutgoingFromFocused,
+              isIncomingToFocused,
+              outgoingFocusedColor,
+              incomingFocusedColor,
+              arrowColor,
+            });
             // Extra source-side gap for thicker strokes so they don't intrude into the origin circle.
             const sourceGap = nodeRadius + Math.min(8, strokeWidth * 0.6 + 2);
             const startX = source.x + ux * sourceGap;
@@ -347,7 +374,6 @@ export function DominanceSection() {
                         ? {
                           color: edgeColor,
                           fillOpacity: edgesVisible ? strokeOpacity : 0,
-                          animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
                           transition: fillTransition,
                           transitionDelay: edgeDelay,
                         }
