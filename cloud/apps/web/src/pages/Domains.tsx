@@ -40,7 +40,7 @@ function formatTime(timestampMs: number): string {
 
 function formatTemperature(value: number | null | undefined): string {
   if (value === null || value === undefined) return 'default';
-  return value.toFixed(2);
+  return String(Number(value.toFixed(2)));
 }
 
 export function Domains() {

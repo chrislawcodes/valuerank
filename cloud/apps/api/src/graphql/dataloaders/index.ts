@@ -1,6 +1,7 @@
 import type DataLoader from 'dataloader';
 import type { Definition, Run, Transcript, Scenario, Experiment, Tag, LlmProvider, LlmModel } from '@valuerank/db';
 import { createDefinitionLoader } from './definition.js';
+import { createDefinitionTrialSummaryLoader, type DefinitionTrialSummary } from './definition-trial-summary.js';
 import { createRunLoader } from './run.js';
 import {
   createTranscriptLoader,
@@ -16,6 +17,7 @@ import { createLlmProviderLoader, createLlmModelLoader, createLlmModelsByProvide
 // DataLoader types
 export interface DataLoaders {
   definition: DataLoader<string, Definition | null>;
+  definitionTrialSummary: DataLoader<string, DefinitionTrialSummary>;
   run: DataLoader<string, Run | null>;
   transcript: DataLoader<string, Transcript | null>;
   transcriptsByRun: DataLoader<string, Transcript[]>;
@@ -34,6 +36,7 @@ export interface DataLoaders {
 export function createDataLoaders(): DataLoaders {
   return {
     definition: createDefinitionLoader(),
+    definitionTrialSummary: createDefinitionTrialSummaryLoader(),
     run: createRunLoader(),
     transcript: createTranscriptLoader(),
     transcriptsByRun: createTranscriptsByRunLoader(),
