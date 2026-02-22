@@ -16,6 +16,12 @@ export type ModelEntry = {
   values: Record<ValueKey, number>;
 };
 
+export type DomainAnalysisModelAvailability = {
+  model: string;
+  label: string;
+  reason: string;
+};
+
 export const VALUES: ValueKey[] = [
   'Self_Direction_Action',
   'Universalism_Nature',
@@ -222,3 +228,19 @@ export const DOMAIN_ANALYSIS_MODELS: ModelEntry[] = [
     },
   },
 ];
+
+// Models can be temporarily unavailable when systemic probe failures leave no reliable data.
+export const DOMAIN_ANALYSIS_UNAVAILABLE_MODELS: DomainAnalysisModelAvailability[] = [
+  {
+    model: 'gpt-5-mini',
+    label: 'GPT-5 Mini',
+    reason:
+      'Unavailable in this snapshot due to systemic probe failure (temperature setting unsupported for this model).',
+  },
+];
+
+const unavailableModelIds = new Set(DOMAIN_ANALYSIS_UNAVAILABLE_MODELS.map((model) => model.model));
+
+export const DOMAIN_ANALYSIS_AVAILABLE_MODELS: ModelEntry[] = DOMAIN_ANALYSIS_MODELS.filter(
+  (model) => !unavailableModelIds.has(model.model),
+);
