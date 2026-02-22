@@ -14,6 +14,7 @@ import {
   type DefinitionExpansionStatus,
   type ExpansionProgress,
 } from '../../services/scenario/index.js';
+import type { TrialConfigSummary } from '../dataloaders/definition-trial-summary.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -22,6 +23,7 @@ const DEFAULT_MAX_DEPTH = 10;
 
 // GraphQL type for inheritance override indicators
 const DefinitionOverridesRef = builder.objectRef<DefinitionOverrides>('DefinitionOverrides');
+const TrialConfigSummaryRef = builder.objectRef<TrialConfigSummary>('TrialConfigSummary');
 
 builder.objectType(DefinitionOverridesRef, {
   description: 'Indicates which content fields are locally overridden vs inherited from parent',
@@ -35,6 +37,29 @@ builder.objectType(DefinitionOverridesRef, {
     }),
     matchingRules: t.exposeBoolean('matching_rules', {
       description: 'True if matching rules are locally defined, false if inherited',
+    }),
+  }),
+});
+
+builder.objectType(TrialConfigSummaryRef, {
+  description: 'Summary of trial configuration consistency for a definition',
+  fields: (t) => ({
+    definitionVersion: t.int({
+      nullable: true,
+      description: 'Definition version used by these trials',
+      resolve: (summary) => summary.definitionVersion,
+    }),
+    temperature: t.float({
+      nullable: true,
+      description: 'Temperature used by these trials',
+      resolve: (summary) => summary.temperature,
+    }),
+    isConsistent: t.exposeBoolean('isConsistent', {
+      description: 'Whether all trials for this definition use the same version and temperature',
+    }),
+    message: t.exposeString('message', {
+      nullable: true,
+      description: 'Validation error message when trial settings are inconsistent',
     }),
   }),
 });
@@ -279,6 +304,25 @@ builder.objectType(DefinitionRef, {
         return db.run.count({
           where: { definitionId: definition.id, deletedAt: null },
         });
+      },
+    }),
+
+    // Computed: trialCount - Number of prompt/response trials using this definition
+    trialCount: t.field({
+      type: 'Int',
+      description: 'Number of prompt/response trials (transcripts) for this definition',
+      resolve: async (definition, _args, ctx) => {
+        const summary = await ctx.loaders.definitionTrialSummary.load(definition.id);
+        return summary.trialCount;
+      },
+    }),
+
+    trialConfig: t.field({
+      type: TrialConfigSummaryRef,
+      description: 'Version and temperature consistency across trials for this definition',
+      resolve: async (definition, _args, ctx) => {
+        const summary = await ctx.loaders.definitionTrialSummary.load(definition.id);
+        return summary.trialConfig;
       },
     }),
 
