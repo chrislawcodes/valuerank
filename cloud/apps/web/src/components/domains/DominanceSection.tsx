@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DOMAIN_ANALYSIS_AVAILABLE_MODELS,
-  DOMAIN_ANALYSIS_UNAVAILABLE_MODELS,
   VALUES,
   VALUE_LABELS,
+  type DomainAnalysisModelAvailability,
+  type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
@@ -44,8 +44,13 @@ function getEdgeColor(params: {
   return arrowColor;
 }
 
-export function DominanceSection() {
-  const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
+type DominanceSectionProps = {
+  models: ModelEntry[];
+  unavailableModels: DomainAnalysisModelAvailability[];
+};
+
+export function DominanceSection({ models, unavailableModels }: DominanceSectionProps) {
+  const [selectedModelId, setSelectedModelId] = useState(models[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -85,14 +90,14 @@ export function DominanceSection() {
 
   // Guard against selecting an unavailable model
   useEffect(() => {
-    if (!DOMAIN_ANALYSIS_AVAILABLE_MODELS.some((model) => model.model === selectedModelId)) {
-      setSelectedModelId(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
+    if (!models.some((model) => model.model === selectedModelId)) {
+      setSelectedModelId(models[0]?.model ?? '');
     }
-  }, [selectedModelId]);
+  }, [models, selectedModelId]);
 
   const modelById = useMemo(
-    () => new Map(DOMAIN_ANALYSIS_AVAILABLE_MODELS.map((model) => [model.model, model])),
-    [],
+    () => new Map(models.map((model) => [model.model, model])),
+    [models],
   );
   const selectedModel = modelById.get(selectedModelId);
   const themeColors = {
@@ -153,9 +158,10 @@ export function DominanceSection() {
   }, [selectedModel]);
 
   const priorityValueRange = useMemo(() => {
-    const all = DOMAIN_ANALYSIS_AVAILABLE_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = models.flatMap((model) => VALUES.map((value) => model.values[value]));
+    if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
-  }, []);
+  }, [models]);
 
   const nodePositions = useMemo(() => {
     const width = 1280;
@@ -240,23 +246,29 @@ export function DominanceSection() {
           value={selectedModelId}
           onChange={(event) => setSelectedModelId(event.target.value)}
         >
-          {DOMAIN_ANALYSIS_AVAILABLE_MODELS.map((model) => (
+          {models.map((model) => (
             <option key={model.model} value={model.model}>
               {model.label}
             </option>
           ))}
-          {DOMAIN_ANALYSIS_UNAVAILABLE_MODELS.length > 0 && (
+          {unavailableModels.length > 0 && (
             <option disabled value="">
               ----------
             </option>
           )}
-          {DOMAIN_ANALYSIS_UNAVAILABLE_MODELS.map((model) => (
+          {unavailableModels.map((model) => (
             <option key={model.model} value={model.model} disabled>
               {model.label} (Unavailable)
             </option>
           ))}
         </select>
       </div>
+
+      {models.length === 0 && (
+        <p className={`mb-3 text-xs ${themeColors.panelMutedText}`}>
+          No analyzed model data is available for this domain yet.
+        </p>
+      )}
 
       <p className={`mb-3 text-xs ${themeColors.panelMutedText}`}>
         Click a value circle to focus it and fade unrelated arrows. Click it again to clear focus.
