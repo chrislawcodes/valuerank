@@ -8,6 +8,7 @@ import { parseTemperature } from '../../utils/temperature.js';
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
+const DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE = 5;
 // Domain analysis visualizations are intentionally scoped to the 10-value set used by
 // the current product experience. Keep this aligned with web `VALUES` and do not
 // expand to all Schwartz values without corresponding UI/product updates.
@@ -839,21 +840,29 @@ builder.queryField('domainTrialsPlan', (t) =>
       let totalEstimatedCost = 0;
 
       if (modelIds.length > 0) {
-        for (const definition of latestDefinitions) {
-          const estimate = await estimateCostService({
-            definitionId: definition.id,
-            modelIds,
-            samplePercentage: 100,
-            samplesPerScenario: 1,
-          });
+        for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE) {
+          const chunk = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE);
+          const estimates = await Promise.all(
+            chunk.map(async (definition) => {
+              const estimate = await estimateCostService({
+                definitionId: definition.id,
+                modelIds,
+                samplePercentage: 100,
+                samplesPerScenario: 1,
+              });
+              return { definitionId: definition.id, estimate };
+            })
+          );
 
-          for (const modelEstimate of estimate.perModel) {
-            cellEstimates.push({
-              definitionId: definition.id,
-              modelId: modelEstimate.modelId,
-              estimatedCost: modelEstimate.totalCost,
-            });
-            totalEstimatedCost += modelEstimate.totalCost;
+          for (const { definitionId, estimate } of estimates) {
+            for (const modelEstimate of estimate.perModel) {
+              cellEstimates.push({
+                definitionId,
+                modelId: modelEstimate.modelId,
+                estimatedCost: modelEstimate.totalCost,
+              });
+              totalEstimatedCost += modelEstimate.totalCost;
+            }
           }
         }
       }
