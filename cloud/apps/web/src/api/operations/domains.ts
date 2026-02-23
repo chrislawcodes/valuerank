@@ -95,6 +95,82 @@ export const RUN_TRIALS_FOR_DOMAIN_MUTATION = gql`
       targetedDefinitions
       startedRuns
       failedDefinitions
+      runs {
+        definitionId
+        runId
+        modelIds
+      }
+    }
+  }
+`;
+
+export const DOMAIN_TRIALS_PLAN_QUERY = gql`
+  query DomainTrialsPlan($domainId: ID!, $temperature: Float) {
+    domainTrialsPlan(domainId: $domainId, temperature: $temperature) {
+      domainId
+      domainName
+      vignettes {
+        definitionId
+        definitionName
+        definitionVersion
+        scenarioCount
+      }
+      models {
+        modelId
+        label
+        isDefault
+        supportsTemperature
+      }
+      cellEstimates {
+        definitionId
+        modelId
+        estimatedCost
+      }
+      totalEstimatedCost
+      existingTemperatures
+      defaultTemperature
+      temperatureWarning
+    }
+  }
+`;
+
+export const DOMAIN_TRIAL_RUNS_STATUS_QUERY = gql`
+  query DomainTrialRunsStatus($runIds: [ID!]!) {
+    domainTrialRunsStatus(runIds: $runIds) {
+      runId
+      definitionId
+      status
+      modelStatuses {
+        modelId
+        generationCompleted
+        generationFailed
+        generationTotal
+        summarizationCompleted
+        summarizationFailed
+        summarizationTotal
+      }
+    }
+  }
+`;
+
+export const RETRY_DOMAIN_TRIAL_CELL_MUTATION = gql`
+  mutation RetryDomainTrialCell(
+    $domainId: ID!
+    $definitionId: ID!
+    $modelId: String!
+    $temperature: Float
+  ) {
+    retryDomainTrialCell(
+      domainId: $domainId
+      definitionId: $definitionId
+      modelId: $modelId
+      temperature: $temperature
+    ) {
+      success
+      definitionId
+      modelId
+      runId
+      message
     }
   }
 `;
@@ -169,10 +245,86 @@ export type RunTrialsForDomainMutationResult = {
     targetedDefinitions: number;
     startedRuns: number;
     failedDefinitions: number;
+    runs: Array<{
+      definitionId: string;
+      runId: string;
+      modelIds: string[];
+    }>;
   };
 };
 
 export type RunTrialsForDomainMutationVariables = {
   domainId: string;
+  temperature?: number;
+};
+
+export type DomainTrialsPlanQueryResult = {
+  domainTrialsPlan: {
+    domainId: string;
+    domainName: string;
+    vignettes: Array<{
+      definitionId: string;
+      definitionName: string;
+      definitionVersion: number;
+      scenarioCount: number;
+    }>;
+    models: Array<{
+      modelId: string;
+      label: string;
+      isDefault: boolean;
+      supportsTemperature: boolean;
+    }>;
+    cellEstimates: Array<{
+      definitionId: string;
+      modelId: string;
+      estimatedCost: number;
+    }>;
+    totalEstimatedCost: number;
+    existingTemperatures: number[];
+    defaultTemperature: number | null;
+    temperatureWarning: string | null;
+  };
+};
+
+export type DomainTrialsPlanQueryVariables = {
+  domainId: string;
+  temperature?: number;
+};
+
+export type DomainTrialRunsStatusQueryResult = {
+  domainTrialRunsStatus: Array<{
+    runId: string;
+    definitionId: string;
+    status: string;
+    modelStatuses: Array<{
+      modelId: string;
+      generationCompleted: number;
+      generationFailed: number;
+      generationTotal: number;
+      summarizationCompleted: number;
+      summarizationFailed: number;
+      summarizationTotal: number;
+    }>;
+  }>;
+};
+
+export type DomainTrialRunsStatusQueryVariables = {
+  runIds: string[];
+};
+
+export type RetryDomainTrialCellMutationResult = {
+  retryDomainTrialCell: {
+    success: boolean;
+    definitionId: string;
+    modelId: string;
+    runId: string | null;
+    message: string | null;
+  };
+};
+
+export type RetryDomainTrialCellMutationVariables = {
+  domainId: string;
+  definitionId: string;
+  modelId: string;
   temperature?: number;
 };

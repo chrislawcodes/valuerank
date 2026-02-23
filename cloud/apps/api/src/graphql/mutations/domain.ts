@@ -27,15 +27,40 @@ type DomainTrialRunResult = {
   targetedDefinitions: number;
   startedRuns: number;
   failedDefinitions: number;
+  runs: DomainTrialRunEntry[];
+};
+
+type DomainTrialRunEntry = {
+  definitionId: string;
+  runId: string;
+  modelIds: string[];
+};
+
+type RetryDomainTrialCellResult = {
+  success: boolean;
+  definitionId: string;
+  modelId: string;
+  runId: string | null;
+  message: string | null;
 };
 
 const DomainMutationResultRef = builder.objectRef<DomainMutationResult>('DomainMutationResult');
+const DomainTrialRunEntryRef = builder.objectRef<DomainTrialRunEntry>('DomainTrialRunEntry');
 const DomainTrialRunResultRef = builder.objectRef<DomainTrialRunResult>('DomainTrialRunResult');
+const RetryDomainTrialCellResultRef = builder.objectRef<RetryDomainTrialCellResult>('RetryDomainTrialCellResult');
 
 builder.objectType(DomainMutationResultRef, {
   fields: (t) => ({
     success: t.exposeBoolean('success'),
     affectedDefinitions: t.exposeInt('affectedDefinitions'),
+  }),
+});
+
+builder.objectType(DomainTrialRunEntryRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    runId: t.exposeID('runId'),
+    modelIds: t.exposeStringList('modelIds'),
   }),
 });
 
@@ -46,6 +71,20 @@ builder.objectType(DomainTrialRunResultRef, {
     targetedDefinitions: t.exposeInt('targetedDefinitions'),
     startedRuns: t.exposeInt('startedRuns'),
     failedDefinitions: t.exposeInt('failedDefinitions'),
+    runs: t.field({
+      type: [DomainTrialRunEntryRef],
+      resolve: (parent) => parent.runs,
+    }),
+  }),
+});
+
+builder.objectType(RetryDomainTrialCellResultRef, {
+  fields: (t) => ({
+    success: t.exposeBoolean('success'),
+    definitionId: t.exposeID('definitionId'),
+    modelId: t.exposeString('modelId'),
+    runId: t.exposeID('runId', { nullable: true }),
+    message: t.exposeString('message', { nullable: true }),
   }),
 });
 
@@ -406,6 +445,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
           targetedDefinitions: 0,
           startedRuns: 0,
           failedDefinitions: 0,
+          runs: [],
         };
       }
 
@@ -427,6 +467,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
 
       let startedRuns = 0;
       let failedDefinitions = 0;
+      const runs: DomainTrialRunEntry[] = [];
 
       for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
         const batch = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
@@ -449,6 +490,11 @@ builder.mutationField('runTrialsForDomain', (t) =>
         runResults.forEach((result, index) => {
           if (result.status === 'fulfilled') {
             startedRuns += 1;
+            runs.push({
+              definitionId: result.value.run.definitionId,
+              runId: result.value.run.id,
+              modelIds: models,
+            });
             return;
           }
           failedDefinitions += 1;
@@ -488,6 +534,82 @@ builder.mutationField('runTrialsForDomain', (t) =>
         targetedDefinitions: latestDefinitions.length,
         startedRuns,
         failedDefinitions,
+        runs,
+      };
+    },
+  })
+);
+
+builder.mutationField('retryDomainTrialCell', (t) =>
+  t.field({
+    type: RetryDomainTrialCellResultRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      definitionId: t.arg.id({ required: true }),
+      modelId: t.arg.string({ required: true }),
+      temperature: t.arg.float({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const userId = ctx.user.id;
+      const domainId = String(args.domainId);
+      const definitionId = String(args.definitionId);
+      const modelId = String(args.modelId);
+
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const definition = await db.definition.findFirst({
+        where: { id: definitionId, domainId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!definition) {
+        throw new Error('Selected vignette is not part of this domain.');
+      }
+
+      const model = await db.llmModel.findFirst({
+        where: { modelId, status: 'ACTIVE' },
+        select: { modelId: true },
+      });
+      if (!model) {
+        throw new Error(`Model is not active: ${modelId}`);
+      }
+
+      const run = await startRunService({
+        definitionId,
+        models: [modelId],
+        samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+        samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+        temperature: args.temperature ?? undefined,
+        priority: 'NORMAL',
+        userId,
+        finalTrial: false,
+      });
+
+      await createAuditLog({
+        action: 'ACTION',
+        entityType: 'Domain',
+        entityId: domainId,
+        userId,
+        metadata: {
+          operationType: 'retry-domain-trial-cell',
+          domainName: domain.name,
+          definitionId,
+          modelId,
+          runId: run.run.id,
+          temperature: args.temperature ?? null,
+        },
+      });
+
+      return {
+        success: true,
+        definitionId,
+        modelId,
+        runId: run.run.id,
+        message: null,
       };
     },
   })

@@ -27,6 +27,7 @@ type ValuePrioritiesSectionProps = {
   selectedDomainId: string;
   scoreMethod: 'LOG_ODDS' | 'FULL_BT';
   onScoreMethodChange: (method: 'LOG_ODDS' | 'FULL_BT') => void;
+  btEnabled: boolean;
 };
 
 export function ValuePrioritiesSection({
@@ -34,6 +35,7 @@ export function ValuePrioritiesSection({
   selectedDomainId,
   scoreMethod,
   onScoreMethodChange,
+  btEnabled,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
@@ -104,6 +106,8 @@ export function ValuePrioritiesSection({
               size="sm"
               className="h-7 min-h-0 px-2 text-xs"
               onClick={() => onScoreMethodChange('FULL_BT')}
+              disabled={!btEnabled}
+              title={btEnabled ? 'Use full Bradley-Terry scoring' : 'Full BT unavailable until API deployment is updated'}
             >
               Full BT
             </Button>

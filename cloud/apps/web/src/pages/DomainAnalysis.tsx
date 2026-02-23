@@ -5,6 +5,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import {
   DOMAIN_ANALYSIS_QUERY,
+  DOMAIN_ANALYSIS_QUERY_LEGACY,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
 } from '../api/operations/domainAnalysis';
@@ -26,6 +27,7 @@ export function DomainAnalysis() {
   const [scoreMethod, setScoreMethod] = useState<'LOG_ODDS' | 'FULL_BT'>(
     searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS',
   );
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
 
   useEffect(() => {
     if (domains.length === 0) return;
@@ -43,12 +45,30 @@ export function DomainAnalysis() {
     setSearchParams(next, { replace: true });
   }, [scoreMethod, searchParams, selectedDomainId, setSearchParams]);
 
-  const [{ data, fetching, error }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: { domainId: selectedDomainId, scoreMethod },
-    pause: selectedDomainId === '',
+    pause: selectedDomainId === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
+    query: DOMAIN_ANALYSIS_QUERY_LEGACY,
+    variables: { domainId: selectedDomainId },
+    pause: selectedDomainId === '' || !useLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    if (message.includes('Unknown argument "scoreMethod"') && !useLegacyQuery) {
+      setUseLegacyQuery(true);
+      setScoreMethod('LOG_ODDS');
+    }
+  }, [scoredError, useLegacyQuery]);
+
+  const data = useLegacyQuery ? legacyData : scoredData;
+  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+  const error = useLegacyQuery ? legacyError : scoredError;
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -124,6 +144,7 @@ export function DomainAnalysis() {
             selectedDomainId={selectedDomainId}
             scoreMethod={scoreMethod}
             onScoreMethodChange={setScoreMethod}
+            btEnabled={!useLegacyQuery}
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />

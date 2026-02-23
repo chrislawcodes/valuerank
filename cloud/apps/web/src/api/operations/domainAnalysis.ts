@@ -30,9 +30,80 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
   }
 `;
 
+export const DOMAIN_ANALYSIS_QUERY_LEGACY = gql`
+  query DomainAnalysisLegacy($domainId: ID!) {
+    domainAnalysis(domainId: $domainId) {
+      domainId
+      domainName
+      totalDefinitions
+      targetedDefinitions
+      definitionsWithAnalysis
+      generatedAt
+      models {
+        model
+        label
+        values {
+          valueKey
+          score
+          prioritized
+          deprioritized
+          neutral
+          totalComparisons
+        }
+      }
+      unavailableModels {
+        model
+        label
+        reason
+      }
+    }
+  }
+`;
+
 export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
   query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String) {
     domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod) {
+      domainId
+      domainName
+      modelId
+      modelLabel
+      valueKey
+      score
+      prioritized
+      deprioritized
+      neutral
+      totalTrials
+      generatedAt
+      vignettes {
+        definitionId
+        definitionName
+        definitionVersion
+        aggregateRunId
+        otherValueKey
+        prioritized
+        deprioritized
+        neutral
+        totalTrials
+        selectedValueWinRate
+        conditions {
+          scenarioId
+          conditionName
+          dimensions
+          prioritized
+          deprioritized
+          neutral
+          totalTrials
+          selectedValueWinRate
+          meanDecisionScore
+        }
+      }
+    }
+  }
+`;
+
+export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY = gql`
+  query DomainAnalysisValueDetailLegacy($domainId: ID!, $modelId: String!, $valueKey: String!) {
+    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey) {
       domainId
       domainName
       modelId

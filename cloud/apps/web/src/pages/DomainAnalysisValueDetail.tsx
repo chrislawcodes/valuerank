@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Button } from '../components/ui/Button';
@@ -9,6 +9,7 @@ import type { Transcript } from '../api/operations/runs';
 import {
   DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
   DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
+  DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY,
   type DomainAnalysisConditionTranscriptsQueryResult,
   type DomainAnalysisConditionTranscriptsQueryVariables,
   type DomainAnalysisValueDetailQueryResult,
@@ -176,16 +177,37 @@ export function DomainAnalysisValueDetail() {
   const backLink = domainId
     ? `/domains/analysis?domainId=${encodeURIComponent(domainId)}&scoreMethod=${encodeURIComponent(scoreMethod)}`
     : '/domains/analysis';
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
 
-  const [{ data, fetching, error }] = useQuery<
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainAnalysisValueDetailQueryResult,
     DomainAnalysisValueDetailQueryVariables
   >({
     query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
     variables: { domainId, modelId, valueKey, scoreMethod },
-    pause: domainId === '' || modelId === '' || valueKey === '',
+    pause: domainId === '' || modelId === '' || valueKey === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
+    DomainAnalysisValueDetailQueryResult,
+    { domainId: string; modelId: string; valueKey: string }
+  >({
+    query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY,
+    variables: { domainId, modelId, valueKey },
+    pause: domainId === '' || modelId === '' || valueKey === '' || !useLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    if (message.includes('Unknown argument "scoreMethod"') && !useLegacyQuery) {
+      setUseLegacyQuery(true);
+    }
+  }, [scoredError, useLegacyQuery]);
+
+  const data = useLegacyQuery ? legacyData : scoredData;
+  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+  const error = useLegacyQuery ? legacyError : scoredError;
   const [selectedCondition, setSelectedCondition] = useState<{
     definitionId: string;
     conditionName: string;
