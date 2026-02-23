@@ -34,6 +34,7 @@ type AnalysisPanelProps = {
   isOldVersion?: boolean;
   isAggregate?: boolean;
   pendingSince?: string | null;
+  initialTab?: AnalysisTab;
 };
 
 /**
@@ -222,6 +223,7 @@ export function AnalysisPanel({
   isOldVersion = false,
   isAggregate,
   pendingSince,
+  initialTab = 'overview',
 }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
@@ -237,7 +239,7 @@ export function AnalysisPanel({
     [definitionContent]
   );
 
-  const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
+  const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [odataLinkCopied, setOdataLinkCopied] = useState(false);

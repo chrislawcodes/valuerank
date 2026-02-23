@@ -90,6 +90,7 @@ type DomainAnalysisVignetteDetail = {
   definitionId: string;
   definitionName: string;
   definitionVersion: number;
+  aggregateRunId: string | null;
   otherValueKey: DomainAnalysisValueKey;
   prioritized: number;
   deprioritized: number;
@@ -207,6 +208,7 @@ builder.objectType(DomainAnalysisVignetteDetailRef, {
     definitionId: t.exposeID('definitionId'),
     definitionName: t.exposeString('definitionName'),
     definitionVersion: t.exposeInt('definitionVersion'),
+    aggregateRunId: t.exposeID('aggregateRunId', { nullable: true }),
     otherValueKey: t.exposeString('otherValueKey'),
     prioritized: t.exposeInt('prioritized'),
     deprioritized: t.exposeInt('deprioritized'),
@@ -776,15 +778,16 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         },
         orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
         select: {
+          id: true,
           definitionId: true,
           config: true,
         },
       });
 
-      const latestRunByDefinition = new Map<string, { config: unknown }>();
+      const latestRunByDefinition = new Map<string, { id: string; config: unknown }>();
       for (const run of aggregateRuns) {
         if (latestRunByDefinition.has(run.definitionId)) continue;
-        latestRunByDefinition.set(run.definitionId, { config: run.config });
+        latestRunByDefinition.set(run.definitionId, { id: run.id, config: run.config });
       }
 
       const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
@@ -806,6 +809,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         definitionId: string;
         definitionName: string;
         definitionVersion: number;
+        aggregateRunId: string | null;
         otherValueKey: DomainAnalysisValueKey;
         prioritized: number;
         deprioritized: number;
@@ -820,11 +824,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         const definitionName = definitionNameById.get(definitionId);
         const definitionVersion = definitionVersionById.get(definitionId);
         if (!pair || definitionName == null || definitionVersion === undefined) continue;
+        const aggregateRunId = latestRunByDefinition.get(definitionId)?.id ?? null;
         const otherValueKey = pair.valueA === valueKey ? pair.valueB : pair.valueA;
         vignetteByDefinitionId.set(definitionId, {
           definitionId,
           definitionName,
           definitionVersion,
+          aggregateRunId,
           otherValueKey,
           prioritized: 0,
           deprioritized: 0,
@@ -945,6 +951,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             definitionId: vignette.definitionId,
             definitionName: vignette.definitionName,
             definitionVersion: vignette.definitionVersion,
+            aggregateRunId: vignette.aggregateRunId,
             otherValueKey: vignette.otherValueKey,
             prioritized: vignette.prioritized,
             deprioritized: vignette.deprioritized,
