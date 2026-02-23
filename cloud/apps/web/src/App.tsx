@@ -9,6 +9,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
+import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
@@ -64,6 +65,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Domains />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/:domainId/run-trials"
+              element={
+                <ProtectedLayout fullWidth>
+                  <DomainTrialsDashboard />
                 </ProtectedLayout>
               }
             />

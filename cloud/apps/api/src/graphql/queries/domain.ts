@@ -2,6 +2,8 @@ import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { DomainRef } from '../types/domain.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
+import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
+import { parseTemperature } from '../../utils/temperature.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -27,6 +29,7 @@ type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 type DefinitionRow = {
   id: string;
+  name?: string;
   parentId: string | null;
   version: number;
   createdAt: Date;
@@ -117,6 +120,55 @@ type DomainAnalysisValueDetailResult = {
   generatedAt: Date;
 };
 
+type DomainTrialPlanModel = {
+  modelId: string;
+  label: string;
+  isDefault: boolean;
+  supportsTemperature: boolean;
+};
+
+type DomainTrialPlanVignette = {
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number;
+  scenarioCount: number;
+};
+
+type DomainTrialPlanCellEstimate = {
+  definitionId: string;
+  modelId: string;
+  estimatedCost: number;
+};
+
+type DomainTrialPlanResult = {
+  domainId: string;
+  domainName: string;
+  vignettes: DomainTrialPlanVignette[];
+  models: DomainTrialPlanModel[];
+  cellEstimates: DomainTrialPlanCellEstimate[];
+  totalEstimatedCost: number;
+  existingTemperatures: number[];
+  defaultTemperature: number | null;
+  temperatureWarning: string | null;
+};
+
+type DomainTrialModelStatus = {
+  modelId: string;
+  generationCompleted: number;
+  generationFailed: number;
+  generationTotal: number;
+  summarizationCompleted: number;
+  summarizationFailed: number;
+  summarizationTotal: number;
+};
+
+type DomainTrialRunStatus = {
+  runId: string;
+  definitionId: string;
+  status: string;
+  modelStatuses: DomainTrialModelStatus[];
+};
+
 type DomainAnalysisConditionTranscript = {
   id: string;
   runId: string;
@@ -139,6 +191,12 @@ const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditi
 const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
 const DomainAnalysisValueDetailResultRef = builder.objectRef<DomainAnalysisValueDetailResult>('DomainAnalysisValueDetailResult');
 const DomainAnalysisConditionTranscriptRef = builder.objectRef<DomainAnalysisConditionTranscript>('DomainAnalysisConditionTranscript');
+const DomainTrialPlanModelRef = builder.objectRef<DomainTrialPlanModel>('DomainTrialPlanModel');
+const DomainTrialPlanVignetteRef = builder.objectRef<DomainTrialPlanVignette>('DomainTrialPlanVignette');
+const DomainTrialPlanCellEstimateRef = builder.objectRef<DomainTrialPlanCellEstimate>('DomainTrialPlanCellEstimate');
+const DomainTrialPlanResultRef = builder.objectRef<DomainTrialPlanResult>('DomainTrialPlanResult');
+const DomainTrialModelStatusRef = builder.objectRef<DomainTrialModelStatus>('DomainTrialModelStatus');
+const DomainTrialRunStatusRef = builder.objectRef<DomainTrialRunStatus>('DomainTrialRunStatus');
 
 builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
@@ -264,6 +322,82 @@ builder.objectType(DomainAnalysisConditionTranscriptRef, {
       resolve: (parent) => parent.createdAt,
     }),
     content: t.expose('content', { type: 'JSON' }),
+  }),
+});
+
+builder.objectType(DomainTrialPlanModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    isDefault: t.exposeBoolean('isDefault'),
+    supportsTemperature: t.exposeBoolean('supportsTemperature'),
+  }),
+});
+
+builder.objectType(DomainTrialPlanVignetteRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    definitionName: t.exposeString('definitionName'),
+    definitionVersion: t.exposeInt('definitionVersion'),
+    scenarioCount: t.exposeInt('scenarioCount'),
+  }),
+});
+
+builder.objectType(DomainTrialPlanCellEstimateRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    modelId: t.exposeString('modelId'),
+    estimatedCost: t.exposeFloat('estimatedCost'),
+  }),
+});
+
+builder.objectType(DomainTrialPlanResultRef, {
+  fields: (t) => ({
+    domainId: t.exposeID('domainId'),
+    domainName: t.exposeString('domainName'),
+    vignettes: t.field({
+      type: [DomainTrialPlanVignetteRef],
+      resolve: (parent) => parent.vignettes,
+    }),
+    models: t.field({
+      type: [DomainTrialPlanModelRef],
+      resolve: (parent) => parent.models,
+    }),
+    cellEstimates: t.field({
+      type: [DomainTrialPlanCellEstimateRef],
+      resolve: (parent) => parent.cellEstimates,
+    }),
+    totalEstimatedCost: t.exposeFloat('totalEstimatedCost'),
+    existingTemperatures: t.field({
+      type: ['Float'],
+      resolve: (parent) => parent.existingTemperatures,
+    }),
+    defaultTemperature: t.exposeFloat('defaultTemperature', { nullable: true }),
+    temperatureWarning: t.exposeString('temperatureWarning', { nullable: true }),
+  }),
+});
+
+builder.objectType(DomainTrialModelStatusRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    generationCompleted: t.exposeInt('generationCompleted'),
+    generationFailed: t.exposeInt('generationFailed'),
+    generationTotal: t.exposeInt('generationTotal'),
+    summarizationCompleted: t.exposeInt('summarizationCompleted'),
+    summarizationFailed: t.exposeInt('summarizationFailed'),
+    summarizationTotal: t.exposeInt('summarizationTotal'),
+  }),
+});
+
+builder.objectType(DomainTrialRunStatusRef, {
+  fields: (t) => ({
+    runId: t.exposeID('runId'),
+    definitionId: t.exposeID('definitionId'),
+    status: t.exposeString('status'),
+    modelStatuses: t.field({
+      type: [DomainTrialModelStatusRef],
+      resolve: (parent) => parent.modelStatuses,
+    }),
   }),
 });
 
@@ -502,6 +636,13 @@ function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string
   return current.id;
 }
 
+function supportsTemperature(apiConfig: unknown): boolean {
+  if (apiConfig === null || typeof apiConfig !== 'object') return true;
+  const candidate = (apiConfig as Record<string, unknown>).supportsTemperature;
+  if (typeof candidate === 'boolean') return candidate;
+  return true;
+}
+
 function isNewerDefinition(left: DefinitionRow, right: DefinitionRow): boolean {
   if (left.version !== right.version) return left.version > right.version;
   const leftUpdated = left.updatedAt.getTime();
@@ -625,6 +766,260 @@ builder.queryField('domain', (t) =>
     },
     resolve: async (_root, args) => {
       return db.domain.findUnique({ where: { id: String(args.id) } });
+    },
+  })
+);
+
+builder.queryField('domainTrialsPlan', (t) =>
+  t.field({
+    type: DomainTrialPlanResultRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      temperature: t.arg.float({ required: false }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = String(args.domainId);
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          parentId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (definitions.length === 0) {
+        return {
+          domainId,
+          domainName: domain.name,
+          vignettes: [],
+          models: [],
+          cellEstimates: [],
+          totalEstimatedCost: 0,
+          existingTemperatures: [],
+          defaultTemperature: args.temperature ?? null,
+          temperatureWarning: null,
+        };
+      }
+
+      const definitionsById = await hydrateDefinitionAncestors(definitions);
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+
+      const scenarioCounts = await db.scenario.groupBy({
+        by: ['definitionId'],
+        where: { definitionId: { in: latestDefinitionIds }, deletedAt: null },
+        _count: { _all: true },
+      });
+      const scenarioCountByDefinition = new Map(
+        scenarioCounts.map((row) => [row.definitionId, row._count._all])
+      );
+
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          modelId: true,
+          displayName: true,
+          isDefault: true,
+          apiConfig: true,
+        },
+        orderBy: { displayName: 'asc' },
+      });
+      const defaultModels = activeModels.filter((model) => model.isDefault);
+      const selectedModels = defaultModels.length > 0 ? defaultModels : activeModels;
+
+      const modelIds = selectedModels.map((model) => model.modelId);
+      const cellEstimates: DomainTrialPlanCellEstimate[] = [];
+      let totalEstimatedCost = 0;
+
+      if (modelIds.length > 0) {
+        for (const definition of latestDefinitions) {
+          const estimate = await estimateCostService({
+            definitionId: definition.id,
+            modelIds,
+            samplePercentage: 100,
+            samplesPerScenario: 1,
+          });
+
+          for (const modelEstimate of estimate.perModel) {
+            cellEstimates.push({
+              definitionId: definition.id,
+              modelId: modelEstimate.modelId,
+              estimatedCost: modelEstimate.totalCost,
+            });
+            totalEstimatedCost += modelEstimate.totalCost;
+          }
+        }
+      }
+
+      const existingRuns = await db.run.findMany({
+        where: {
+          definitionId: { in: latestDefinitionIds },
+          deletedAt: null,
+        },
+        select: { config: true },
+      });
+      const existingTemperatureSet = new Set<number>();
+      for (const run of existingRuns) {
+        const config = run.config as { temperature?: unknown } | null;
+        const parsed = parseTemperature(config?.temperature);
+        if (parsed !== null) {
+          existingTemperatureSet.add(parsed);
+        }
+      }
+      const existingTemperatures = Array.from(existingTemperatureSet.values()).sort((a, b) => a - b);
+
+      const selectedTemperature = args.temperature ?? null;
+      let temperatureWarning: string | null = null;
+      if (existingTemperatures.length > 0) {
+        if (selectedTemperature === null) {
+          temperatureWarning = 'Existing domain trials include explicit temperatures. Running with provider default may produce separate versions.';
+        } else if (!existingTemperatures.includes(selectedTemperature)) {
+          temperatureWarning = `Selected temperature (${selectedTemperature}) differs from existing temperatures (${existingTemperatures.join(', ')}).`;
+        }
+      }
+
+      return {
+        domainId,
+        domainName: domain.name,
+        vignettes: latestDefinitions.map((definition) => ({
+          definitionId: definition.id,
+          definitionName: definition.name ?? 'Untitled vignette',
+          definitionVersion: definition.version,
+          scenarioCount: scenarioCountByDefinition.get(definition.id) ?? 0,
+        })),
+        models: selectedModels.map((model) => ({
+          modelId: model.modelId,
+          label: model.displayName,
+          isDefault: model.isDefault,
+          supportsTemperature: supportsTemperature(model.apiConfig),
+        })),
+        cellEstimates,
+        totalEstimatedCost,
+        existingTemperatures,
+        defaultTemperature: selectedTemperature,
+        temperatureWarning,
+      };
+    },
+  })
+);
+
+builder.queryField('domainTrialRunsStatus', (t) =>
+  t.field({
+    type: [DomainTrialRunStatusRef],
+    args: {
+      runIds: t.arg.idList({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const runIds = args.runIds.map(String);
+      if (runIds.length === 0) return [];
+
+      const runs = await db.run.findMany({
+        where: {
+          id: { in: runIds },
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          definitionId: true,
+          status: true,
+          config: true,
+        },
+      });
+
+      const probeRows = await db.probeResult.groupBy({
+        by: ['runId', 'modelId', 'status'],
+        where: { runId: { in: runIds } },
+        _count: { _all: true },
+      });
+      const transcripts = await db.transcript.groupBy({
+        by: ['runId', 'modelId'],
+        where: { runId: { in: runIds }, deletedAt: null },
+        _count: { _all: true },
+      });
+      const summarizedRows = await db.transcript.groupBy({
+        by: ['runId', 'modelId'],
+        where: { runId: { in: runIds }, deletedAt: null, summarizedAt: { not: null } },
+        _count: { _all: true },
+      });
+      const summarizeFailedRows = await db.transcript.groupBy({
+        by: ['runId', 'modelId'],
+        where: { runId: { in: runIds }, deletedAt: null, decisionCode: 'error' },
+        _count: { _all: true },
+      });
+      const selectedScenarioCounts = await db.runScenarioSelection.groupBy({
+        by: ['runId'],
+        where: { runId: { in: runIds } },
+        _count: { _all: true },
+      });
+
+      const probeByKey = new Map<string, { completed: number; failed: number }>();
+      for (const row of probeRows) {
+        const key = `${row.runId}::${row.modelId}`;
+        const existing = probeByKey.get(key) ?? { completed: 0, failed: 0 };
+        if (row.status === 'SUCCESS') {
+          existing.completed = row._count._all;
+        } else if (row.status === 'FAILED') {
+          existing.failed = row._count._all;
+        }
+        probeByKey.set(key, existing);
+      }
+
+      const transcriptTotalByKey = new Map<string, number>();
+      for (const row of transcripts) {
+        transcriptTotalByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
+      }
+      const summarizedByKey = new Map<string, number>();
+      for (const row of summarizedRows) {
+        summarizedByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
+      }
+      const summarizeFailedByKey = new Map<string, number>();
+      for (const row of summarizeFailedRows) {
+        summarizeFailedByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
+      }
+
+      const scenarioCountByRun = new Map(
+        selectedScenarioCounts.map((row) => [row.runId, row._count._all])
+      );
+
+      return runs.map((run) => {
+        const runConfig = run.config as { models?: unknown; samplesPerScenario?: unknown } | null;
+        const models = Array.isArray(runConfig?.models)
+          ? runConfig.models.filter((model): model is string => typeof model === 'string')
+          : [];
+        const samplesPerScenario = typeof runConfig?.samplesPerScenario === 'number' && Number.isFinite(runConfig.samplesPerScenario)
+          ? runConfig.samplesPerScenario
+          : 1;
+        const generationTotal = (scenarioCountByRun.get(run.id) ?? 0) * samplesPerScenario;
+
+        const modelStatuses = models.map((modelId) => {
+          const key = `${run.id}::${modelId}`;
+          const probe = probeByKey.get(key) ?? { completed: 0, failed: 0 };
+          const summarizationTotal = transcriptTotalByKey.get(key) ?? 0;
+          return {
+            modelId,
+            generationCompleted: probe.completed,
+            generationFailed: probe.failed,
+            generationTotal,
+            summarizationCompleted: summarizedByKey.get(key) ?? 0,
+            summarizationFailed: summarizeFailedByKey.get(key) ?? 0,
+            summarizationTotal,
+          };
+        });
+
+        return {
+          runId: run.id,
+          definitionId: run.definitionId,
+          status: run.status,
+          modelStatuses,
+        };
+      });
     },
   })
 );

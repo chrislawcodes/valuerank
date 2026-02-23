@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
-import { Folder, FolderOpen, Plus, Pencil, Trash2, Play, Loader2, CheckCircle, XCircle, X } from 'lucide-react';
+import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
@@ -17,13 +18,6 @@ const defaultFilters: DefinitionFilterState = {
 };
 
 type FolderKey = string;
-type DomainTrialStatus = {
-  domainName: string;
-  targetedDefinitions: number;
-  startedRuns: number;
-  failedDefinitions: number;
-  startedAt: number;
-};
 
 function getFilterSummary(filters: DefinitionFilterState): string {
   const parts: string[] = [];
@@ -34,16 +28,13 @@ function getFilterSummary(filters: DefinitionFilterState): string {
   return parts.join(', ');
 }
 
-function formatTime(timestampMs: number): string {
-  return new Date(timestampMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
 function formatTemperature(value: number | null | undefined): string {
   if (value === null || value === undefined) return 'default';
   return String(Number(value.toFixed(2)));
 }
 
 export function Domains() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
   const [selectedFolder, setSelectedFolder] = useState<FolderKey>('all');
   const [selectedDefinitionIds, setSelectedDefinitionIds] = useState<Set<string>>(new Set());
@@ -54,9 +45,6 @@ export function Domains() {
   const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
-  const [runError, setRunError] = useState<string | null>(null);
-  const [lastDomainTrialStatus, setLastDomainTrialStatus] = useState<DomainTrialStatus | null>(null);
-  const [domainTrialStatusDismissed, setDomainTrialStatusDismissed] = useState(false);
 
   const {
     domains,
@@ -64,7 +52,6 @@ export function Domains() {
     creating,
     renaming,
     deleting,
-    runningDomainTrials,
     assigningByIds,
     assigningByFilter,
     error: domainError,
@@ -74,7 +61,6 @@ export function Domains() {
     deleteDomain,
     assignDomainToDefinitions,
     assignDomainToDefinitionsByFilter,
-    runTrialsForDomain,
   } = useDomains();
 
   const definitionFilterArgs = useMemo(() => {
@@ -179,32 +165,9 @@ export function Domains() {
     }
   };
 
-  const handleRunDomainTrials = async () => {
+  const handleRunDomainTrials = () => {
     if (!selectedDomain) return;
-    setRunError(null);
-    setLastDomainTrialStatus(null);
-    setDomainTrialStatusDismissed(false);
-    const confirmed = window.confirm(
-      `Start trials for domain "${selectedDomain.name}"?\n\nThis will run only the latest version per vignette lineage in this domain using default active models.`
-    );
-    if (!confirmed) return;
-
-    try {
-      const result = await runTrialsForDomain(selectedDomain.id);
-      if (result === null) {
-        setRunError('Failed to start domain trials.');
-        return;
-      }
-      setLastDomainTrialStatus({
-        domainName: selectedDomain.name,
-        targetedDefinitions: result.targetedDefinitions,
-        startedRuns: result.startedRuns,
-        failedDefinitions: result.failedDefinitions,
-        startedAt: Date.now(),
-      });
-    } catch (error) {
-      setRunError(error instanceof Error ? error.message : 'Failed to start domain trials');
-    }
+    navigate(`/domains/${selectedDomain.id}/run-trials`);
   };
 
   const selectedDomain = selectedFolder !== 'all' && selectedFolder !== 'none'
@@ -261,12 +224,6 @@ export function Domains() {
     { key: 'none', name: 'None', count: noneCount },
     ...domains.map((domain) => ({ key: domain.id, name: domain.name, count: domain.definitionCount })),
   ];
-  const startPercent = lastDomainTrialStatus && lastDomainTrialStatus.targetedDefinitions > 0
-    ? (lastDomainTrialStatus.startedRuns / lastDomainTrialStatus.targetedDefinitions) * 100
-    : 0;
-  const showDomainTrialStatusPanel =
-    !domainTrialStatusDismissed && (runningDomainTrials || lastDomainTrialStatus !== null || runError !== null);
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domains</h1>
@@ -367,10 +324,10 @@ export function Domains() {
               </div>
               <Button
                 onClick={() => void handleRunDomainTrials()}
-                disabled={selectedDomain === null || runningDomainTrials}
+                disabled={selectedDomain === null}
               >
                 <Play className="w-4 h-4 mr-1" />
-                {runningDomainTrials ? 'Starting Trials...' : 'Run Domain Trials'}
+                Run Domain Trials
               </Button>
             </div>
             {selectedDomain === null && (
@@ -379,77 +336,6 @@ export function Domains() {
               </p>
             )}
           </div>
-
-          {showDomainTrialStatusPanel && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  {runningDomainTrials ? (
-                    <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                  ) : runError ? (
-                    <XCircle className="w-4 h-4 text-red-600" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                  )}
-                  <h3 className="text-sm font-semibold text-gray-900">Domain Trial Status</h3>
-                </div>
-                <Badge
-                  variant={runningDomainTrials ? 'warning' : runError ? 'error' : 'success'}
-                  size="count"
-                >
-                  {runningDomainTrials ? 'Starting' : runError ? 'Failed' : 'Started'}
-                </Badge>
-                {!runningDomainTrials && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDomainTrialStatusDismissed(true)}
-                    className="!p-1 text-gray-500 hover:text-gray-700"
-                    aria-label="Dismiss domain trial status"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-
-              {runningDomainTrials && (
-                <p className="text-sm text-gray-700">
-                  Starting domain trials now. This may take a minute for larger domains.
-                </p>
-              )}
-
-              {!runningDomainTrials && runError && (
-                <p className="text-sm text-red-600">{runError}</p>
-              )}
-
-              {!runningDomainTrials && !runError && lastDomainTrialStatus && (
-                <>
-                  <div className="text-sm text-gray-700">
-                    <span className="font-medium">{lastDomainTrialStatus.domainName}</span>: started {lastDomainTrialStatus.startedRuns} of {lastDomainTrialStatus.targetedDefinitions} latest-version trials.
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Started at {formatTime(lastDomainTrialStatus.startedAt)}
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                      <span>Trials queued</span>
-                      <span>{Math.round(startPercent)}%</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-teal-500 transition-all duration-300"
-                        style={{ width: `${startPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    Failed starts: {lastDomainTrialStatus.failedDefinitions}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
           <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
