@@ -109,6 +109,8 @@ export function DominanceSection() {
     panelBg: 'bg-white',
     cardBg: 'bg-gray-50',
     cardBorder: 'border-gray-200',
+    selectedRingColor: '#22d3ee',
+    idleRingColor: '#38bdf8',
   };
 
   const edges = useMemo(() => {
@@ -492,7 +494,7 @@ export function DominanceSection() {
                   cy={node.y}
                   r={isSelectedNode ? 69 : 74}
                   fill="none"
-                  stroke={isSelectedNode ? '#22d3ee' : '#38bdf8'}
+                  stroke={isSelectedNode ? themeColors.selectedRingColor : themeColors.idleRingColor}
                   strokeWidth={isSelectedNode ? 7 : 1.4}
                   style={{
                     opacity: nodeOpacity * (isSelectedNode ? 0.98 : 0.46),
@@ -525,28 +527,26 @@ export function DominanceSection() {
         </svg>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
-          <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
-          <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
-            <li>Arrow direction: winner value points to loser value.</li>
-            <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
-            <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
-            <li>Yellow double-headed arrows: near-even win rates (values are highly contestable).</li>
-          </ul>
-          <h4 className={`mt-3 text-sm font-medium ${themeColors.panelText}`}>Most Contestable Value Pairs</h4>
-          <p className={`mt-2 text-xs ${themeColors.panelMutedText}`}>
-            For this selected AI. Smaller BT score gap means two values are more closely matched.
-          </p>
-          <ol className={`mt-2 space-y-1 text-sm ${themeColors.panelMutedText}`}>
-            {contestedPairs.map((item, index) => (
-              <li key={`${item.a}-${item.b}`}>
-                {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.gap.toFixed(3)} gap,{' '}
-                {VALUE_LABELS[item.winner]} wins)
-              </li>
-            ))}
-          </ol>
-        </div>
+      <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
+        <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+        <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
+          <li>Arrow direction: winner value points to loser value.</li>
+          <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
+          <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
+          <li>Yellow double-headed arrows: near-even win rates (values are highly contestable).</li>
+        </ul>
+        <h4 className={`mt-3 text-sm font-medium ${themeColors.panelText}`}>Most Contestable Value Pairs</h4>
+        <p className={`mt-2 text-xs ${themeColors.panelMutedText}`}>
+          For this selected AI. Smaller BT score gap means two values are more closely matched.
+        </p>
+        <ol className={`mt-2 space-y-1 text-sm ${themeColors.panelMutedText}`}>
+          {contestedPairs.map((item, index) => (
+            <li key={`${item.a}-${item.b}`}>
+              {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.gap.toFixed(3)} gap,{' '}
+              {VALUE_LABELS[item.winner]} wins)
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
