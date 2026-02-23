@@ -23,21 +23,148 @@ function toPercent(value: number | null): string {
 
 function getHeatmapColor(value: number): string {
   if (value < 1 || value > 5) return 'rgba(243, 244, 246, 0.8)';
-  if (value <= 2.5) {
-    const intensity = Math.max(0.1, (3 - value) / 2);
-    return `rgba(59, 130, 246, ${intensity * 0.3})`;
+  // Continuous blue -> gray -> orange scale across the full 1..5 range.
+  // This avoids a wide neutral dead-zone where 2.6 and 3.4 looked too similar.
+  if (value <= 3) {
+    const t = (value - 1) / 2; // 1..3 => 0..1
+    const r = Math.round(59 + t * (156 - 59));
+    const g = Math.round(130 + t * (163 - 130));
+    const b = Math.round(246 + t * (175 - 246));
+    const alpha = 0.34 - t * 0.18; // stronger at extremes
+    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
   }
-  if (value >= 3.5) {
-    const intensity = Math.max(0.1, (value - 3) / 2);
-    return `rgba(249, 115, 22, ${intensity * 0.3})`;
-  }
-  return 'rgba(156, 163, 175, 0.15)';
+  const t = (value - 3) / 2; // 3..5 => 0..1
+  const r = Math.round(156 + t * (249 - 156));
+  const g = Math.round(163 - t * (163 - 115));
+  const b = Math.round(175 - t * (175 - 22));
+  const alpha = 0.16 + t * 0.18;
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
 }
 
 function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-600';
+}
+
+type MatrixCondition = {
+  scenarioId: string | null;
+  conditionName: string;
+  dimensions: Record<string, string | number> | null;
+  meanDecisionScore: number | null;
+};
+
+type ConditionMatrixProps = {
+  vignetteId: string;
+  conditions: MatrixCondition[];
+  selectedConditionKey: string;
+  onSelect: (definitionId: string, conditionName: string, scenarioId: string | null) => void;
+};
+
+function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+  const dimensions = Array.from(
+    new Set(
+      conditions.flatMap((condition) =>
+        Object.keys(condition.dimensions ?? {}),
+      ),
+    ),
+  ).sort();
+
+  if (dimensions.length < 2) {
+    return (
+      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+      </div>
+    );
+  }
+
+  const rowDim = dimensions[0]!;
+  const colDim = dimensions[1]!;
+  const rows = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+  ).sort();
+  const cols = Array.from(
+    new Set(conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+  ).sort();
+
+  const cellByKey = new Map<string, MatrixCondition>();
+  for (const condition of conditions) {
+    const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+    const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+    cellByKey.set(`${rowValue}::${colValue}`, condition);
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+            <th
+              colSpan={cols.length}
+              className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+            >
+              {colDim}
+            </th>
+          </tr>
+          <tr>
+            <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+              {rowDim}
+            </th>
+            {cols.map((col) => (
+              <th
+                key={col}
+                className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row}>
+              <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+                {row}
+              </td>
+              {cols.map((col) => {
+                const condition = cellByKey.get(`${row}::${col}`);
+                const mean = condition?.meanDecisionScore ?? null;
+                const conditionKey = condition
+                  ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
+                  : '';
+                const isSelected = condition != null && selectedConditionKey === conditionKey;
+
+                return (
+                  <td
+                    key={`${row}-${col}`}
+                    className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                      condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                    } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+                    style={{ backgroundColor: mean == null ? undefined : getHeatmapColor(mean) }}
+                    onClick={() => {
+                      if (!condition) return;
+                      onSelect(vignetteId, condition.conditionName, condition.scenarioId);
+                    }}
+                    title={condition?.conditionName ?? 'No condition'}
+                  >
+                    {mean == null ? (
+                      <span className="text-gray-400">-</span>
+                    ) : (
+                      <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-2 text-xs text-gray-500">
+        Click a colored cell to load condition transcripts below.
+      </div>
+    </div>
+  );
 }
 
 export function DomainAnalysisValueDetail() {
@@ -229,111 +356,12 @@ export function DomainAnalysisValueDetail() {
                 <div className="px-3 py-3 text-center text-xs text-gray-500">No condition-level trials available.</div>
               ) : (
                 <div className="space-y-3 px-3 py-3">
-                  {(() => {
-                    const dimensions = Array.from(
-                      new Set(
-                        vignette.conditions.flatMap((condition) =>
-                          Object.keys(condition.dimensions ?? {}),
-                        ),
-                      ),
-                    ).sort();
-
-                    if (dimensions.length < 2) {
-                      return (
-                        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                          Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
-                        </div>
-                      );
-                    }
-
-                    const rowDim = dimensions[0]!;
-                    const colDim = dimensions[1]!;
-                    const rows = Array.from(
-                      new Set(vignette.conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
-                    ).sort();
-                    const cols = Array.from(
-                      new Set(vignette.conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
-                    ).sort();
-
-                    const cellByKey = new Map<string, (typeof vignette.conditions)[number]>();
-                    for (const condition of vignette.conditions) {
-                      const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
-                      const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
-                      cellByKey.set(`${rowValue}::${colValue}`, condition);
-                    }
-
-                    return (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse text-xs">
-                          <thead>
-                            <tr>
-                              <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
-                              <th
-                                colSpan={cols.length}
-                                className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
-                              >
-                                {colDim}
-                              </th>
-                            </tr>
-                            <tr>
-                              <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
-                                {rowDim}
-                              </th>
-                              {cols.map((col) => (
-                                <th
-                                  key={col}
-                                  className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
-                                >
-                                  {col}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((row) => (
-                              <tr key={row}>
-                                <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
-                                  {row}
-                                </td>
-                                {cols.map((col) => {
-                                  const condition = cellByKey.get(`${row}::${col}`);
-                                  const mean = condition?.meanDecisionScore ?? null;
-                                  const conditionKey = condition
-                                    ? `${vignette.definitionId}:${condition.scenarioId ?? '__unknown__'}`
-                                    : '';
-                                  const isSelected = condition != null && selectedConditionKey === conditionKey;
-
-                                  return (
-                                    <td
-                                      key={`${row}-${col}`}
-                                      className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
-                                        condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
-                                      } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
-                                      style={{ backgroundColor: mean == null ? undefined : getHeatmapColor(mean) }}
-                                      onClick={() => {
-                                        if (!condition) return;
-                                        handleConditionClick(vignette.definitionId, condition.conditionName, condition.scenarioId);
-                                      }}
-                                      title={condition?.conditionName ?? 'No condition'}
-                                    >
-                                      {mean == null ? (
-                                        <span className="text-gray-400">-</span>
-                                      ) : (
-                                        <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
-                                      )}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div className="mt-2 text-xs text-gray-500">
-                          Click a colored cell to load condition transcripts below.
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  <ConditionMatrix
+                    vignetteId={vignette.definitionId}
+                    conditions={vignette.conditions}
+                    selectedConditionKey={selectedConditionKey}
+                    onSelect={handleConditionClick}
+                  />
                 </div>
               )}
               {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
