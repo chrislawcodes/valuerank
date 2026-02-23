@@ -23,6 +23,9 @@ export function DomainAnalysis() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
+  const [scoreMethod, setScoreMethod] = useState<'LOG_ODDS' | 'FULL_BT'>(
+    searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS',
+  );
 
   useEffect(() => {
     if (domains.length === 0) return;
@@ -33,15 +36,16 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     if (selectedDomainId === '') return;
-    if (searchParams.get('domainId') === selectedDomainId) return;
+    if (searchParams.get('domainId') === selectedDomainId && searchParams.get('scoreMethod') === scoreMethod) return;
     const next = new URLSearchParams(searchParams);
     next.set('domainId', selectedDomainId);
+    next.set('scoreMethod', scoreMethod);
     setSearchParams(next, { replace: true });
-  }, [searchParams, selectedDomainId, setSearchParams]);
+  }, [scoreMethod, searchParams, selectedDomainId, setSearchParams]);
 
   const [{ data, fetching, error }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
-    variables: { domainId: selectedDomainId },
+    variables: { domainId: selectedDomainId, scoreMethod },
     pause: selectedDomainId === '',
     requestPolicy: 'cache-and-network',
   });
@@ -115,7 +119,12 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ValuePrioritiesSection models={models} selectedDomainId={selectedDomainId} />
+          <ValuePrioritiesSection
+            models={models}
+            selectedDomainId={selectedDomainId}
+            scoreMethod={scoreMethod}
+            onScoreMethodChange={setScoreMethod}
+          />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />
         </>

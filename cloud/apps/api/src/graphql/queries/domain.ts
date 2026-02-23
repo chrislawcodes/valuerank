@@ -23,6 +23,7 @@ const DOMAIN_ANALYSIS_VALUE_KEYS = [
 ] as const;
 
 type DomainAnalysisValueKey = (typeof DOMAIN_ANALYSIS_VALUE_KEYS)[number];
+type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 type DefinitionRow = {
   id: string;
@@ -270,6 +271,10 @@ function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKe
   return DOMAIN_ANALYSIS_VALUE_KEYS.includes(value as DomainAnalysisValueKey);
 }
 
+function parseDomainAnalysisScoreMethod(value: string | null | undefined): DomainAnalysisScoreMethod {
+  return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
+}
+
 function parseSourceRunIds(config: unknown): string[] {
   if (config == null || typeof config !== 'object' || Array.isArray(config)) return [];
   const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
@@ -285,6 +290,97 @@ function incrementValueCount(
   const current = modelMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
   current[field] += 1;
   modelMap.set(valueKey, current);
+}
+
+function incrementPairwiseWin(
+  pairwiseWins: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+  winner: DomainAnalysisValueKey,
+  loser: DomainAnalysisValueKey,
+): void {
+  const winnerMap = pairwiseWins.get(winner) ?? new Map<DomainAnalysisValueKey, number>();
+  winnerMap.set(loser, (winnerMap.get(loser) ?? 0) + 1);
+  pairwiseWins.set(winner, winnerMap);
+}
+
+function getPairwiseWinCount(
+  pairwiseWins: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+  winner: DomainAnalysisValueKey,
+  loser: DomainAnalysisValueKey,
+): number {
+  return pairwiseWins.get(winner)?.get(loser) ?? 0;
+}
+
+function computeSmoothedLogOddsScore(wins: number, losses: number): number {
+  return Math.log((wins + 1) / (losses + 1));
+}
+
+function computeFullBTScores(
+  valueKeys: readonly DomainAnalysisValueKey[],
+  pairwiseWins: Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>,
+): Map<DomainAnalysisValueKey, number> {
+  const EPSILON = 1e-6;
+  const MAX_ITERATIONS = 500;
+  const TOLERANCE = 1e-8;
+
+  const strengths = new Map<DomainAnalysisValueKey, number>(valueKeys.map((valueKey) => [valueKey, 1]));
+
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
+    const nextStrengths = new Map<DomainAnalysisValueKey, number>();
+    let maxLogDelta = 0;
+
+    for (const valueKey of valueKeys) {
+      const currentStrength = strengths.get(valueKey) ?? 1;
+      let totalWins = 0;
+      let denominator = 0;
+      let hasComparisons = false;
+
+      for (const opponent of valueKeys) {
+        if (opponent === valueKey) continue;
+        const wins = getPairwiseWinCount(pairwiseWins, valueKey, opponent);
+        const losses = getPairwiseWinCount(pairwiseWins, opponent, valueKey);
+        const matches = wins + losses;
+        if (matches <= 0) continue;
+
+        const opponentStrength = strengths.get(opponent) ?? 1;
+        const sumStrength = currentStrength + opponentStrength;
+        if (sumStrength <= 0) continue;
+
+        hasComparisons = true;
+        totalWins += wins;
+        denominator += matches / sumStrength;
+      }
+
+      let nextStrength = currentStrength;
+      if (hasComparisons && denominator > 0) {
+        nextStrength = totalWins / denominator;
+      }
+      if (!Number.isFinite(nextStrength) || nextStrength <= 0) {
+        nextStrength = EPSILON;
+      }
+      nextStrengths.set(valueKey, nextStrength);
+    }
+
+    const logValues = valueKeys.map((valueKey) => Math.log(Math.max(nextStrengths.get(valueKey) ?? EPSILON, EPSILON)));
+    const meanLog = logValues.reduce((sum, value) => sum + value, 0) / (logValues.length || 1);
+    const normalizationFactor = Math.exp(meanLog);
+
+    for (const valueKey of valueKeys) {
+      const normalized = Math.max((nextStrengths.get(valueKey) ?? EPSILON) / normalizationFactor, EPSILON);
+      const prev = Math.max(strengths.get(valueKey) ?? EPSILON, EPSILON);
+      const logDelta = Math.abs(Math.log(normalized) - Math.log(prev));
+      if (logDelta > maxLogDelta) maxLogDelta = logDelta;
+      strengths.set(valueKey, normalized);
+    }
+
+    if (maxLogDelta < TOLERANCE) break;
+  }
+
+  return new Map(
+    valueKeys.map((valueKey) => {
+      const strength = Math.max(strengths.get(valueKey) ?? EPSILON, EPSILON);
+      return [valueKey, Math.log(strength)];
+    }),
+  );
 }
 
 async function resolveValuePairsInChunks(
@@ -345,9 +441,11 @@ function aggregateValueCountsFromTranscripts(
   valuePairByDefinition: Map<string, DomainAnalysisValuePair>,
 ): {
   aggregatedByModel: Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>;
+  pairwiseWinsByModel: Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>;
   analyzedDefinitionIds: Set<string>;
 } {
   const aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+  const pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
   const analyzedDefinitionIds = new Set<string>();
 
   for (const transcript of transcripts) {
@@ -365,12 +463,20 @@ function aggregateValueCountsFromTranscripts(
       aggregatedByModel.set(transcript.modelId, valueMap);
     }
 
+    let pairwiseWins = pairwiseWinsByModel.get(transcript.modelId);
+    if (!pairwiseWins) {
+      pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+      pairwiseWinsByModel.set(transcript.modelId, pairwiseWins);
+    }
+
     if (decision >= 4) {
       incrementValueCount(valueMap, pair.valueA, 'prioritized');
       incrementValueCount(valueMap, pair.valueB, 'deprioritized');
+      incrementPairwiseWin(pairwiseWins, pair.valueA, pair.valueB);
     } else if (decision <= 2) {
       incrementValueCount(valueMap, pair.valueA, 'deprioritized');
       incrementValueCount(valueMap, pair.valueB, 'prioritized');
+      incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
     } else {
       incrementValueCount(valueMap, pair.valueA, 'neutral');
       incrementValueCount(valueMap, pair.valueB, 'neutral');
@@ -379,7 +485,7 @@ function aggregateValueCountsFromTranscripts(
     analyzedDefinitionIds.add(definitionId);
   }
 
-  return { aggregatedByModel, analyzedDefinitionIds };
+  return { aggregatedByModel, pairwiseWinsByModel, analyzedDefinitionIds };
 }
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -528,9 +634,11 @@ builder.queryField('domainAnalysis', (t) =>
     type: DomainAnalysisResultRef,
     args: {
       domainId: t.arg.id({ required: true }),
+      scoreMethod: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const domainId = String(args.domainId);
+      const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
@@ -605,6 +713,7 @@ builder.queryField('domainAnalysis', (t) =>
       );
 
       let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+      let pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
       let analyzedDefinitionIds = new Set<string>();
       if (sourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
@@ -625,6 +734,7 @@ builder.queryField('domainAnalysis', (t) =>
           valuePairByDefinition,
         );
         aggregatedByModel = aggregated.aggregatedByModel;
+        pairwiseWinsByModel = aggregated.pairwiseWinsByModel;
         analyzedDefinitionIds = aggregated.analyzedDefinitionIds;
       }
 
@@ -637,11 +747,18 @@ builder.queryField('domainAnalysis', (t) =>
       const models: DomainAnalysisModel[] = modelsWithData.map((modelId) => {
         const valueMap = aggregatedByModel.get(modelId)
           ?? new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
+        const pairwiseWins = pairwiseWinsByModel.get(modelId)
+          ?? new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+        const btScores = scoreMethod === 'FULL_BT'
+          ? computeFullBTScores(DOMAIN_ANALYSIS_VALUE_KEYS, pairwiseWins)
+          : null;
         const values: DomainAnalysisValueScore[] = DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
           const counts = valueMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
           const wins = counts.prioritized;
           const losses = counts.deprioritized;
-          const score = Math.log((wins + 1) / (losses + 1));
+          const score = scoreMethod === 'FULL_BT'
+            ? (btScores?.get(valueKey) ?? 0)
+            : computeSmoothedLogOddsScore(wins, losses);
           return {
             valueKey,
             score,
@@ -688,11 +805,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       domainId: t.arg.id({ required: true }),
       modelId: t.arg.string({ required: true }),
       valueKey: t.arg.string({ required: true }),
+      scoreMethod: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
+      const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new Error(`Unsupported value key: ${rawValueKey}`);
       }
@@ -747,6 +866,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         const pair = valuePairByDefinition.get(definitionId);
         return pair?.valueA === valueKey || pair?.valueB === valueKey;
       });
+      const scoreDefinitionIds = scoreMethod === 'FULL_BT' ? latestDefinitionIds : targetDefinitionIds;
 
       if (targetDefinitionIds.length === 0) {
         return {
@@ -767,7 +887,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
 
       const aggregateRuns = await db.run.findMany({
         where: {
-          definitionId: { in: targetDefinitionIds },
+          definitionId: { in: scoreDefinitionIds },
           status: 'COMPLETED',
           deletedAt: null,
           tags: {
@@ -793,9 +913,10 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       }
 
       const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
-        targetDefinitionIds,
+        scoreDefinitionIds,
         latestRunByDefinition,
       );
+      const targetDefinitionIdSet = new Set(targetDefinitionIds);
 
       type MutableCondition = {
         scenarioId: string | null;
@@ -846,6 +967,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       let totalPrioritized = 0;
       let totalDeprioritized = 0;
       let totalNeutral = 0;
+      const pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
 
       if (sourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
@@ -908,6 +1030,14 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           if (!Number.isFinite(decision)) continue;
 
           const selectedIsValueA = pair.valueA === valueKey;
+          if (decision >= 4) {
+            incrementPairwiseWin(pairwiseWins, pair.valueA, pair.valueB);
+          } else if (decision <= 2) {
+            incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
+          }
+
+          if (!targetDefinitionIdSet.has(definitionId)) continue;
+
           const outcome = classifyDecisionForSelectedValue(decision, selectedIsValueA);
 
           if (outcome === 'prioritized') {
@@ -991,7 +1121,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         modelId,
         modelLabel,
         valueKey,
-        score: Math.log((totalPrioritized + 1) / (totalDeprioritized + 1)),
+        score: scoreMethod === 'FULL_BT'
+          ? (computeFullBTScores(DOMAIN_ANALYSIS_VALUE_KEYS, pairwiseWins).get(valueKey) ?? 0)
+          : computeSmoothedLogOddsScore(totalPrioritized, totalDeprioritized),
         prioritized: totalPrioritized,
         deprioritized: totalDeprioritized,
         neutral: totalNeutral,

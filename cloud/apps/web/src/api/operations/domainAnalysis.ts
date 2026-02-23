@@ -1,8 +1,8 @@
 import { gql } from 'urql';
 
 export const DOMAIN_ANALYSIS_QUERY = gql`
-  query DomainAnalysis($domainId: ID!) {
-    domainAnalysis(domainId: $domainId) {
+  query DomainAnalysis($domainId: ID!, $scoreMethod: String) {
+    domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod) {
       domainId
       domainName
       totalDefinitions
@@ -31,8 +31,8 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
 `;
 
 export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
-  query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!) {
-    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey) {
+  query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String) {
+    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod) {
       domainId
       domainName
       modelId
@@ -141,6 +141,7 @@ export type DomainAnalysisQueryResult = {
 
 export type DomainAnalysisQueryVariables = {
   domainId: string;
+  scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
 };
 
 export type DomainAnalysisValueDetailCondition = {
@@ -192,6 +193,7 @@ export type DomainAnalysisValueDetailQueryVariables = {
   domainId: string;
   modelId: string;
   valueKey: string;
+  scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
 };
 
 export type DomainAnalysisConditionTranscript = {
