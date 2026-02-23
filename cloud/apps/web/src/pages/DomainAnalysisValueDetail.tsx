@@ -43,6 +43,7 @@ export function DomainAnalysisValueDetail() {
     scenarioId: string | null;
   } | null>(null);
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+  const [showMethodology, setShowMethodology] = useState(false);
 
   const [{ data: transcriptData, fetching: transcriptsFetching, error: transcriptsError }] = useQuery<
     DomainAnalysisConditionTranscriptsQueryResult,
@@ -123,38 +124,58 @@ export function DomainAnalysisValueDetail() {
           ← Back to Domain Analysis
         </Link>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Value Score Detail</h1>
-        <p className="text-sm text-gray-600">
-          {detail.modelLabel} · {label} · {detail.domainName}
-        </p>
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-gray-600">
+            {detail.modelLabel} · {label} · {detail.domainName} · Score:{' '}
+            <span className="font-semibold text-gray-900">{detail.score > 0 ? '+' : ''}{detail.score.toFixed(2)}</span>
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowMethodology((current) => !current)}
+          >
+            {showMethodology ? 'Hide score method' : 'How this score is calculated'}
+          </Button>
+        </div>
       </div>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="text-base font-medium text-gray-900">1. How This Score Is Calculated</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          We compare how often this value wins vs. loses across all relevant vignettes. Neutral outcomes are tracked, but the score
-          itself uses wins and losses.
-        </p>
-        <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-          <div className="rounded border border-gray-200 bg-gray-50 p-2">Wins (prioritized): {detail.prioritized}</div>
-          <div className="rounded border border-gray-200 bg-gray-50 p-2">Losses (deprioritized): {detail.deprioritized}</div>
-          <div className="rounded border border-gray-200 bg-gray-50 p-2">Neutral: {detail.neutral}</div>
-          <div className="rounded border border-gray-200 bg-gray-50 p-2">Total trials: {detail.totalTrials}</div>
-        </div>
-        <div className="mt-3 rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-          <p className="font-medium">Formula (high-school version)</p>
-          <p className="mt-1">Score = ln((wins + 1) / (losses + 1))</p>
-          <p className="mt-1">
-            Score = ln(({detail.prioritized} + 1) / ({detail.deprioritized} + 1)) = ln({ratio.toFixed(4)}) ={' '}
-            {detail.score.toFixed(4)}
+      {showMethodology && (
+        <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="text-base font-medium text-gray-900">Score Method (Smoothed Log-Odds)</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            We compare how often this value wins vs. loses across relevant vignettes. Neutral outcomes are still shown, but the score
+            itself uses wins and losses.
           </p>
-          <p className="mt-1 text-xs text-sky-800">
-            Positive score means this value is favored more often. Negative means it loses more often. Around 0 means close to even.
-          </p>
-        </div>
-      </section>
+          <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+            <div className="rounded border border-gray-200 bg-gray-50 p-2">Wins (prioritized): {detail.prioritized}</div>
+            <div className="rounded border border-gray-200 bg-gray-50 p-2">Losses (deprioritized): {detail.deprioritized}</div>
+            <div className="rounded border border-gray-200 bg-gray-50 p-2">Neutral: {detail.neutral}</div>
+            <div className="rounded border border-gray-200 bg-gray-50 p-2">Total trials: {detail.totalTrials}</div>
+          </div>
+          <div className="mt-3 rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+            <p className="font-medium">Formula (high-school version)</p>
+            <p className="mt-1">Score = logarithm((wins + 1) / (losses + 1))</p>
+            <p className="mt-1 text-xs text-sky-800">
+              Here, “logarithm” means the natural logarithm (often written as <code>ln</code>).
+            </p>
+            <p className="mt-1">
+              Score = logarithm(({detail.prioritized} + 1) / ({detail.deprioritized} + 1)) = logarithm({ratio.toFixed(4)}) ={' '}
+              {detail.score.toFixed(4)}
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-sky-800">
+              <li>Name: Smoothed Log-Odds Score.</li>
+              <li>It centers “even” results at 0, making interpretation easy.</li>
+              <li>It handles very different win/loss counts without the scale exploding.</li>
+              <li>The +1 smoothing prevents divide-by-zero when wins or losses are zero.</li>
+              <li>Positive values mean favored more often; negative values mean disfavored more often.</li>
+            </ul>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="text-base font-medium text-gray-900">2. Vignette Condition Tables ({label})</h2>
+        <h2 className="text-base font-medium text-gray-900">Vignette Condition Tables ({label})</h2>
         <p className="mt-1 text-sm text-gray-600">
           Each table is one vignette containing this value, filtered to {detail.modelLabel}.
         </p>
