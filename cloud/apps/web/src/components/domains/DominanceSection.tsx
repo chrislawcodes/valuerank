@@ -8,6 +8,42 @@ import {
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
 
+const CLOSE_WINRATE_DELTA = 0.08;
+const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
+
+function getEdgeColor(params: {
+  focusedValue: ValueKey | null;
+  isFocusedEdge: boolean;
+  isCloseWinRate: boolean;
+  isOutgoingFromFocused: boolean;
+  isIncomingToFocused: boolean;
+  neutralColor: string;
+  closeWinColor: string;
+  outgoingFocusedColor: string;
+  incomingFocusedColor: string;
+  arrowColor: string;
+}): string {
+  const {
+    focusedValue,
+    isFocusedEdge,
+    isCloseWinRate,
+    isOutgoingFromFocused,
+    isIncomingToFocused,
+    neutralColor,
+    closeWinColor,
+    outgoingFocusedColor,
+    incomingFocusedColor,
+    arrowColor,
+  } = params;
+
+  if (focusedValue == null) return neutralColor;
+  if (!isFocusedEdge) return neutralColor;
+  if (isCloseWinRate) return closeWinColor;
+  if (isOutgoingFromFocused) return outgoingFocusedColor;
+  if (isIncomingToFocused) return incomingFocusedColor;
+  return arrowColor;
+}
+
 export function DominanceSection() {
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
@@ -25,9 +61,9 @@ export function DominanceSection() {
     return () => mediaQuery.removeEventListener('change', updatePreference);
   }, []);
 
-  // Staggered speeds: all start together, top circle fastest, each subsequent one 50ms slower
-  const baseDurationMs = 300; // fastest node (top)
-  const perNodeSlowdown = 50; // each clockwise node takes this much longer
+  // Staggered speeds: all start together, top circle fastest, each subsequent one noticeably slower
+  const baseDurationMs = 360; // fastest node (top)
+  const perNodeSlowdown = 120; // each clockwise node takes this much longer
   const slowestDuration = baseDurationMs + (VALUES.length - 1) * perNodeSlowdown;
 
   // Model-switch collapse/expand animation
@@ -59,9 +95,23 @@ export function DominanceSection() {
     [],
   );
   const selectedModel = modelById.get(selectedModelId);
-  const arrowColor = '#0f766e';
-  const outgoingFocusedColor = '#16a34a';
-  const incomingFocusedColor = '#dc2626';
+  const themeColors = {
+    arrowColor: '#0f766e',
+    outgoingFocusedColor: '#16a34a',
+    incomingFocusedColor: '#dc2626',
+    neutralColor: '#94a3b8',
+    closeWinColor: '#eab308',
+    nodeLabelColor: '#111827',
+    nodeSubLabelColor: '#6b7280',
+    panelText: 'text-gray-900',
+    panelMutedText: 'text-gray-600',
+    panelBorder: 'border-gray-200',
+    panelBg: 'bg-white',
+    cardBg: 'bg-gray-50',
+    cardBorder: 'border-gray-200',
+    selectedRingColor: '#22d3ee',
+    idleRingColor: '#38bdf8',
+  };
 
   const edges = useMemo(() => {
     if (!selectedModel) return [];
@@ -162,9 +212,10 @@ export function DominanceSection() {
 
   // Edges fade out during animation phases
   const edgesVisible = animationPhase === 'idle';
+  const svgStyle = { height: 'calc(100vh - 140px)', minHeight: '900px' };
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4">
+    <section className={`rounded-lg border p-4 ${themeColors.panelBorder} ${themeColors.panelBg}`}>
       <style>{`
         @keyframes neonPulseStroke {
           0%, 100% { filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 5px currentColor); }
@@ -176,14 +227,14 @@ export function DominanceSection() {
         }
       `}</style>
       <div className="mb-3">
-        <h2 className="text-base font-medium text-gray-900">2. Ranking and Cycles</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
+        <p className={`text-sm ${themeColors.panelMutedText}`}>
           Directed value graph for one selected AI: arrows point from stronger value to weaker value.
         </p>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-gray-600">Select AI:</span>
+        <span className={`text-xs font-medium ${themeColors.panelMutedText}`}>Select AI:</span>
         <select
           className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800"
           value={selectedModelId}
@@ -207,15 +258,17 @@ export function DominanceSection() {
         </select>
       </div>
 
-      <p className="mb-3 text-xs text-gray-600">
+      <p className={`mb-3 text-xs ${themeColors.panelMutedText}`}>
         Click a value circle to focus it and fade unrelated arrows. Click it again to clear focus.
       </p>
 
-      <div className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2">
+      <div
+        className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2"
+      >
         <svg
           viewBox="0 0 1280 1120"
           className="w-full min-w-[1120px]"
-          style={{ height: 'calc(100vh - 140px)', minHeight: '900px' }}
+          style={svgStyle}
           role="img"
           aria-label="Value dominance graph"
         >
@@ -236,41 +289,69 @@ export function DominanceSection() {
             const winRate = 1 / (1 + Math.exp(-edge.gap));
             const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
             const widthFactor = normalized ** 1.6;
-            const strokeWidth = 0.1 + widthFactor * 5.4;
-            // Lighter default lines
-            const baseOpacity = 0.08 + widthFactor * 0.45;
-            const strokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
-              ? Math.max(0.9, baseOpacity)
+            const isCloseWinRate = Math.abs(winRate - 0.5) <= CLOSE_WINRATE_DELTA;
+            const regularStrokeWidth = 0.3 + widthFactor * 7.2;
+            const emphasizedStrokeWidth = 0.3 + widthFactor * 14.4;
+            // Keep brightness independent of win rate; width alone encodes win-rate strength.
+            const rawStrokeOpacity = (isOutgoingFromFocused || isIncomingToFocused)
+              ? 0.9
               : isFocusedEdge
-                ? Math.max(0.48, baseOpacity * 0.72)
-                : Math.max(0.08, baseOpacity * 0.18);
-            const edgeColor = isOutgoingFromFocused
-              ? outgoingFocusedColor
-              : isIncomingToFocused
-                ? incomingFocusedColor
-                : arrowColor;
-            const startX = source.x + ux * nodeRadius;
-            const startY = source.y + uy * nodeRadius;
+                ? 0.78
+                : 0.72;
+            const rawStrokeWidth = isCloseWinRate
+              ? CLOSE_EDGE_MEDIUM_WIDTH
+              : focusedValue != null && isOutgoingFromFocused
+                ? emphasizedStrokeWidth
+                : regularStrokeWidth;
+            const losingAdjustedWidth = isIncomingToFocused ? rawStrokeWidth * 2.25 : rawStrokeWidth;
+            const sourceIsSelected = focusedValue != null && edge.from === focusedValue;
+            const isFromUnselectedCircle = focusedValue == null || !sourceIsSelected;
+            const strokeWidth = isFromUnselectedCircle ? losingAdjustedWidth * 0.64 : losingAdjustedWidth;
+            const strokeOpacity = isFromUnselectedCircle ? rawStrokeOpacity * 0.42 : rawStrokeOpacity;
+            const edgeColor = getEdgeColor({
+              focusedValue,
+              isFocusedEdge,
+              isCloseWinRate,
+              isOutgoingFromFocused,
+              isIncomingToFocused,
+              neutralColor: themeColors.neutralColor,
+              closeWinColor: themeColors.closeWinColor,
+              outgoingFocusedColor: themeColors.outgoingFocusedColor,
+              incomingFocusedColor: themeColors.incomingFocusedColor,
+              arrowColor: themeColors.arrowColor,
+            });
+            // Extra source-side gap for thicker strokes so they don't intrude into the origin circle.
+            const sourceGap = nodeRadius + Math.min(8, strokeWidth * 0.6 + 2);
+            const startX = source.x + ux * sourceGap;
+            const startY = source.y + uy * sourceGap;
             const endX = target.x - ux * nodeRadius;
             const endY = target.y - uy * nodeRadius;
             const headLength = 1.8 + strokeWidth * 1.9;
             const headHalfWidth = 0.8 + strokeWidth * 0.95;
+            const sourceBaseX = startX + ux * headLength;
+            const sourceBaseY = startY + uy * headLength;
             const baseX = endX - ux * headLength;
             const baseY = endY - uy * headLength;
+            const lineStartX = isCloseWinRate ? sourceBaseX : startX;
+            const lineStartY = isCloseWinRate ? sourceBaseY : startY;
             const px = -uy;
             const py = ux;
             const leftX = baseX + px * headHalfWidth;
             const leftY = baseY + py * headHalfWidth;
             const rightX = baseX - px * headHalfWidth;
             const rightY = baseY - py * headHalfWidth;
-            // Stagger edge appearance clockwise: 10ms per rank (disabled for reduced motion)
+            const sourceLeftX = sourceBaseX + px * headHalfWidth;
+            const sourceLeftY = sourceBaseY + py * headHalfWidth;
+            const sourceRightX = sourceBaseX - px * headHalfWidth;
+            const sourceRightY = sourceBaseY - py * headHalfWidth;
+            // Stagger edge appearance clockwise for a visible "light-up" wave.
             const clockwiseRank = edgeClockwiseOrder.get(edgeIndex) ?? edgeIndex;
-            const edgeDelay = (!prefersReducedMotion && edgesVisible) ? `${clockwiseRank * 10}ms` : '0ms';
+            const edgeDelay = (!prefersReducedMotion && edgesVisible) ? `${clockwiseRank * 12}ms` : '0ms';
             return (
               <g key={`${edge.from}-${edge.to}`}>
                 <line
-                  x1={startX}
-                  y1={startY}
+                  x1={lineStartX}
+                  y1={lineStartY}
                   x2={baseX}
                   y2={baseY}
                   stroke={edgeColor}
@@ -311,6 +392,26 @@ export function DominanceSection() {
                       }
                   }
                 />
+                {isCloseWinRate && (
+                  <polygon
+                    points={`${startX},${startY} ${sourceLeftX},${sourceLeftY} ${sourceRightX},${sourceRightY}`}
+                    fill={edgeColor}
+                    style={
+                      focusedValue != null && isFocusedEdge
+                        ? {
+                          color: edgeColor,
+                          fillOpacity: edgesVisible ? strokeOpacity : 0,
+                          transition: fillTransition,
+                          transitionDelay: edgeDelay,
+                        }
+                        : {
+                          fillOpacity: edgesVisible ? strokeOpacity : 0,
+                          transition: fillTransition,
+                          transitionDelay: edgeDelay,
+                        }
+                    }
+                  />
+                )}
               </g>
             );
           })}
@@ -329,6 +430,8 @@ export function DominanceSection() {
               focusedValue == null ? 1 : isSelectedNode ? 1 : isConnectedToFocused ? 0.72 : 0.35;
             const nodeStroke = isSelectedNode ? '#111827' : isHovered ? '#3b82f6' : '#94a3b8';
             const nodeStrokeWidth = isSelectedNode ? 4 : isHovered ? 3.5 : 2.2;
+            const nodeMainStroke = isSelectedNode ? 'transparent' : nodeStroke;
+            const nodeMainStrokeWidth = isSelectedNode ? 0 : nodeStrokeWidth;
             const labelParts = VALUE_LABELS[node.value].split(' ');
             const labelLineOne = labelParts[0] ?? '';
             const labelLineTwo = labelParts.slice(1).join(' ');
@@ -366,19 +469,36 @@ export function DominanceSection() {
                   cursor: 'pointer',
                   transform: nodeTranslate,
                   transition: nodeTransition,
+                  willChange: animationPhase === 'idle' ? undefined : 'transform',
                 }}
               >
                 <circle
                   cx={node.x}
                   cy={node.y}
                   r={68}
-                  fill={getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)}
-                  stroke={nodeStroke}
-                  strokeWidth={nodeStrokeWidth}
+                  fill={
+                    getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)
+                  }
+                  stroke={nodeMainStroke}
+                  strokeWidth={nodeMainStrokeWidth}
                   style={{
                     opacity: nodeOpacity,
                     filter: circleFilter,
                     animation: circleAnimation,
+                    transition:
+                      'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                  }}
+                />
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={isSelectedNode ? 69 : 74}
+                  fill="none"
+                  stroke={isSelectedNode ? themeColors.selectedRingColor : themeColors.idleRingColor}
+                  strokeWidth={isSelectedNode ? 7 : 1.4}
+                  style={{
+                    opacity: nodeOpacity * (isSelectedNode ? 0.98 : 0.46),
+                    filter: isSelectedNode ? 'drop-shadow(0 0 8px rgba(34,211,238,0.7))' : undefined,
                     transition:
                       'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                   }}
@@ -388,14 +508,15 @@ export function DominanceSection() {
                   y={node.y}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  className="fill-gray-900 font-medium select-none"
+                  className="font-medium select-none"
+                  fill={themeColors.nodeLabelColor}
                   style={{ fontSize: '16px', opacity: nodeOpacity, transition: 'opacity 280ms ease' }}
                 >
                   <tspan x={node.x} dy={labelLineTwo.length > 0 ? '-0.35em' : '0'}>
                     {labelLineOne}
                   </tspan>
                   {labelLineTwo.length > 0 && (
-                    <tspan x={node.x} dy="1.2em" className="fill-gray-500" style={{ fontSize: '14px' }}>
+                    <tspan x={node.x} dy="1.2em" fill={themeColors.nodeSubLabelColor} style={{ fontSize: '14px' }}>
                       {labelLineTwo}
                     </tspan>
                   )}
@@ -406,34 +527,26 @@ export function DominanceSection() {
         </svg>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Arrow Meaning</h3>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
-            <li>Arrow direction: winner value points to loser value.</li>
-            <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
-            <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
-          </ul>
-          <h4 className="mt-3 text-sm font-medium text-gray-900">Most Contestable Value Pairs</h4>
-          <p className="mt-2 text-xs text-gray-600">
-            For this selected AI. Smaller BT score gap means two values are more closely matched.
-          </p>
-          <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {contestedPairs.map((item, index) => (
-              <li key={`${item.a}-${item.b}`}>
-                {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.gap.toFixed(3)} gap,{' '}
-                {VALUE_LABELS[item.winner]} wins)
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Value Cycle Check</h3>
-          <p className="mt-2 text-sm text-gray-700">
-            Majority-cycle detection is disabled in single-AI mode. Cycles require multi-model comparisons where
-            value orderings can conflict across models.
-          </p>
-        </div>
+      <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
+        <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+        <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
+          <li>Arrow direction: winner value points to loser value.</li>
+          <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
+          <li>Arrow thickness: higher pairwise win rate for that value over the other in this AI.</li>
+          <li>Yellow double-headed arrows: near-even win rates (values are highly contestable).</li>
+        </ul>
+        <h4 className={`mt-3 text-sm font-medium ${themeColors.panelText}`}>Most Contestable Value Pairs</h4>
+        <p className={`mt-2 text-xs ${themeColors.panelMutedText}`}>
+          For this selected AI. Smaller BT score gap means two values are more closely matched.
+        </p>
+        <ol className={`mt-2 space-y-1 text-sm ${themeColors.panelMutedText}`}>
+          {contestedPairs.map((item, index) => (
+            <li key={`${item.a}-${item.b}`}>
+              {index + 1}. {VALUE_LABELS[item.a]} vs {VALUE_LABELS[item.b]} ({item.gap.toFixed(3)} gap,{' '}
+              {VALUE_LABELS[item.winner]} wins)
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
