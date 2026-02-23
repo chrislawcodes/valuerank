@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import {
-  DOMAIN_ANALYSIS_AVAILABLE_MODELS,
   VALUES,
   VALUE_LABELS,
   type ModelEntry,
@@ -22,7 +21,11 @@ function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: Value
   };
 }
 
-export function ValuePrioritiesSection() {
+type ValuePrioritiesSectionProps = {
+  models: ModelEntry[];
+};
+
+export function ValuePrioritiesSection({ models }: ValuePrioritiesSectionProps) {
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
   const updateSort = (key: 'model' | ValueKey) => {
@@ -35,24 +38,25 @@ export function ValuePrioritiesSection() {
   };
 
   const ordered = useMemo(() => {
-    const models = [...DOMAIN_ANALYSIS_AVAILABLE_MODELS];
+    const nextModels = [...models];
     const key = sortState.key;
     if (key === 'model') {
-      models.sort((a, b) =>
+      nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label),
       );
     } else {
-      models.sort((a, b) =>
+      nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.values[key] - b.values[key] : b.values[key] - a.values[key],
       );
     }
-    return models;
-  }, [sortState]);
+    return nextModels;
+  }, [models, sortState]);
 
   const valueRange = useMemo(() => {
-    const all = DOMAIN_ANALYSIS_AVAILABLE_MODELS.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = models.flatMap((model) => VALUES.map((value) => model.values[value]));
+    if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
-  }, []);
+  }, [models]);
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
