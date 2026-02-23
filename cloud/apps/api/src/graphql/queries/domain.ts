@@ -78,6 +78,7 @@ type DomainAnalysisResult = {
 type DomainAnalysisConditionDetail = {
   scenarioId: string | null;
   conditionName: string;
+  dimensions: Record<string, string | number> | null;
   prioritized: number;
   deprioritized: number;
   neutral: number;
@@ -194,6 +195,7 @@ builder.objectType(DomainAnalysisConditionDetailRef, {
   fields: (t) => ({
     scenarioId: t.exposeID('scenarioId', { nullable: true }),
     conditionName: t.exposeString('conditionName'),
+    dimensions: t.expose('dimensions', { type: 'JSON', nullable: true }),
     prioritized: t.exposeInt('prioritized'),
     deprioritized: t.exposeInt('deprioritized'),
     neutral: t.exposeInt('neutral'),
@@ -798,6 +800,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       type MutableCondition = {
         scenarioId: string | null;
         conditionName: string;
+        dimensions: Record<string, string | number> | null;
         prioritized: number;
         deprioritized: number;
         neutral: number;
@@ -871,9 +874,27 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           ? []
           : await db.scenario.findMany({
             where: { id: { in: scenarioIds } },
-            select: { id: true, name: true },
+            select: { id: true, name: true, content: true },
           });
         const scenarioNameById = new Map(scenarios.map((scenario) => [scenario.id, scenario.name]));
+        const scenarioDimensionsById = new Map<string, Record<string, string | number>>();
+        const isDimensionValue = (value: unknown): value is string | number =>
+          typeof value === 'string' || typeof value === 'number';
+        for (const scenario of scenarios) {
+          if (scenario.content == null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) continue;
+          const content = scenario.content as Record<string, unknown>;
+          const dimensions = content.dimensions;
+          if (dimensions == null || typeof dimensions !== 'object' || Array.isArray(dimensions)) continue;
+          const sanitized: Record<string, string | number> = {};
+          for (const [key, value] of Object.entries(dimensions)) {
+            if (isDimensionValue(value)) {
+              sanitized[key] = value;
+            }
+          }
+          if (Object.keys(sanitized).length > 0) {
+            scenarioDimensionsById.set(scenario.id, sanitized);
+          }
+        }
 
         for (const transcript of transcripts) {
           const definitionId = sourceRunDefinitionById.get(transcript.runId);
@@ -911,6 +932,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           const condition = existingCondition ?? {
             scenarioId,
             conditionName,
+            dimensions: scenarioId === null ? null : (scenarioDimensionsById.get(scenarioId) ?? null),
             prioritized: 0,
             deprioritized: 0,
             neutral: 0,
@@ -937,6 +959,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
               return {
                 scenarioId: condition.scenarioId,
                 conditionName: condition.conditionName,
+                dimensions: condition.dimensions,
                 prioritized: condition.prioritized,
                 deprioritized: condition.deprioritized,
                 neutral: condition.neutral,

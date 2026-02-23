@@ -21,6 +21,25 @@ function toPercent(value: number | null): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function getHeatmapColor(value: number): string {
+  if (value < 1 || value > 5) return 'rgba(243, 244, 246, 0.8)';
+  if (value <= 2.5) {
+    const intensity = Math.max(0.1, (3 - value) / 2);
+    return `rgba(59, 130, 246, ${intensity * 0.3})`;
+  }
+  if (value >= 3.5) {
+    const intensity = Math.max(0.1, (value - 3) / 2);
+    return `rgba(249, 115, 22, ${intensity * 0.3})`;
+  }
+  return 'rgba(156, 163, 175, 0.15)';
+}
+
+function getScoreTextColor(value: number): string {
+  if (value <= 2.5) return 'text-blue-700';
+  if (value >= 3.5) return 'text-orange-700';
+  return 'text-gray-600';
+}
+
 export function DomainAnalysisValueDetail() {
   const [searchParams] = useSearchParams();
   const domainId = searchParams.get('domainId') ?? '';
@@ -186,7 +205,7 @@ export function DomainAnalysisValueDetail() {
             </div>
           )}
           {detail.vignettes.map((vignette) => (
-            <article key={vignette.definitionId} className="rounded border border-gray-200">
+            <article key={vignette.definitionId} className="rounded border border-gray-200 bg-white">
               <header className="border-b border-gray-200 bg-gray-50 px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium text-gray-900">
@@ -206,60 +225,117 @@ export function DomainAnalysisValueDetail() {
                   {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
                 </p>
               </header>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-gray-600">
-                      <th className="px-2 py-2 text-left font-medium">Condition</th>
-                      <th className="px-2 py-2 text-right font-medium">Trials</th>
-                      <th className="px-2 py-2 text-right font-medium">{label} Wins</th>
-                      <th className="px-2 py-2 text-right font-medium">Other Wins</th>
-                      <th className="px-2 py-2 text-right font-medium">Neutral</th>
-                      <th className="px-2 py-2 text-right font-medium">Win Rate</th>
-                      <th className="px-2 py-2 text-right font-medium">Avg Decision</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vignette.conditions.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-2 py-3 text-center text-gray-500">
-                          No condition-level trials available.
-                        </td>
-                      </tr>
-                    )}
-                    {vignette.conditions.map((condition) => {
-                      const conditionKey = `${vignette.definitionId}:${condition.scenarioId ?? '__unknown__'}`;
-                      const isSelected = selectedConditionKey === conditionKey;
+              {vignette.conditions.length === 0 ? (
+                <div className="px-3 py-3 text-center text-xs text-gray-500">No condition-level trials available.</div>
+              ) : (
+                <div className="space-y-3 px-3 py-3">
+                  {(() => {
+                    const dimensions = Array.from(
+                      new Set(
+                        vignette.conditions.flatMap((condition) =>
+                          Object.keys(condition.dimensions ?? {}),
+                        ),
+                      ),
+                    ).sort();
+
+                    if (dimensions.length < 2) {
                       return (
-                        <tr
-                          key={condition.scenarioId ?? condition.conditionName}
-                          className={`border-b border-gray-100 ${isSelected ? 'bg-sky-50' : 'hover:bg-gray-50'}`}
-                        >
-                          <td className="px-2 py-2 text-gray-900">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto min-h-0 !p-0 text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
-                              onClick={() => handleConditionClick(vignette.definitionId, condition.conditionName, condition.scenarioId)}
-                            >
-                              {condition.conditionName}
-                            </Button>
-                          </td>
-                          <td className="px-2 py-2 text-right text-gray-800">{condition.totalTrials}</td>
-                          <td className="px-2 py-2 text-right text-emerald-700">{condition.prioritized}</td>
-                          <td className="px-2 py-2 text-right text-rose-700">{condition.deprioritized}</td>
-                          <td className="px-2 py-2 text-right text-gray-700">{condition.neutral}</td>
-                          <td className="px-2 py-2 text-right text-gray-800">{toPercent(condition.selectedValueWinRate)}</td>
-                          <td className="px-2 py-2 text-right text-gray-800">
-                            {condition.meanDecisionScore === null ? '-' : condition.meanDecisionScore.toFixed(2)}
-                          </td>
-                        </tr>
+                        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Scenario dimensions are missing for this vignette, so pivot matrix rendering is unavailable.
+                        </div>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    }
+
+                    const rowDim = dimensions[0]!;
+                    const colDim = dimensions[1]!;
+                    const rows = Array.from(
+                      new Set(vignette.conditions.map((condition) => String(condition.dimensions?.[rowDim] ?? 'N/A'))),
+                    ).sort();
+                    const cols = Array.from(
+                      new Set(vignette.conditions.map((condition) => String(condition.dimensions?.[colDim] ?? 'N/A'))),
+                    ).sort();
+
+                    const cellByKey = new Map<string, (typeof vignette.conditions)[number]>();
+                    for (const condition of vignette.conditions) {
+                      const rowValue = String(condition.dimensions?.[rowDim] ?? 'N/A');
+                      const colValue = String(condition.dimensions?.[colDim] ?? 'N/A');
+                      cellByKey.set(`${rowValue}::${colValue}`, condition);
+                    }
+
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-xs">
+                          <thead>
+                            <tr>
+                              <th className="border border-gray-200 border-b-0 bg-gray-50 p-2" />
+                              <th
+                                colSpan={cols.length}
+                                className="border border-gray-200 bg-gray-100 p-2 text-center text-xs font-bold uppercase text-gray-700"
+                              >
+                                {colDim}
+                              </th>
+                            </tr>
+                            <tr>
+                              <th className="w-32 border border-gray-200 bg-gray-100 p-2 text-left text-xs font-bold uppercase text-gray-700">
+                                {rowDim}
+                              </th>
+                              {cols.map((col) => (
+                                <th
+                                  key={col}
+                                  className="border border-gray-200 bg-gray-50 p-2 text-center font-mono text-xs font-medium text-gray-500"
+                                >
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row) => (
+                              <tr key={row}>
+                                <td className="whitespace-nowrap border border-gray-200 bg-gray-50 p-2 font-mono text-sm font-bold text-gray-900">
+                                  {row}
+                                </td>
+                                {cols.map((col) => {
+                                  const condition = cellByKey.get(`${row}::${col}`);
+                                  const mean = condition?.meanDecisionScore ?? null;
+                                  const conditionKey = condition
+                                    ? `${vignette.definitionId}:${condition.scenarioId ?? '__unknown__'}`
+                                    : '';
+                                  const isSelected = condition != null && selectedConditionKey === conditionKey;
+
+                                  return (
+                                    <td
+                                      key={`${row}-${col}`}
+                                      className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
+                                        condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
+                                      } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
+                                      style={{ backgroundColor: mean == null ? undefined : getHeatmapColor(mean) }}
+                                      onClick={() => {
+                                        if (!condition) return;
+                                        handleConditionClick(vignette.definitionId, condition.conditionName, condition.scenarioId);
+                                      }}
+                                      title={condition?.conditionName ?? 'No condition'}
+                                    >
+                                      {mean == null ? (
+                                        <span className="text-gray-400">-</span>
+                                      ) : (
+                                        <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                          Click a colored cell to load condition transcripts below.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
                 <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
