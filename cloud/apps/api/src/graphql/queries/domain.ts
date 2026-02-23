@@ -6,6 +6,9 @@ import { zAnalysisOutput } from '../../services/analysis/aggregate.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
+// Domain analysis visualizations are intentionally scoped to the 10-value set used by
+// the current product experience. Keep this aligned with web `VALUES` and do not
+// expand to all Schwartz values without corresponding UI/product updates.
 const DOMAIN_ANALYSIS_VALUE_KEYS = [
   'Self_Direction_Action',
   'Universalism_Nature',
