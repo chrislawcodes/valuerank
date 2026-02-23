@@ -142,7 +142,7 @@ export function DomainAnalysisValueDetail() {
 
       {showMethodology && (
         <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="text-base font-medium text-gray-900">1. Score Method (Smoothed Log-Odds)</h2>
+          <h2 className="text-base font-medium text-gray-900">Score Method (Smoothed Log-Odds)</h2>
           <p className="mt-1 text-sm text-gray-600">
             We compare how often this value wins vs. loses across relevant vignettes. Neutral outcomes are still shown, but the score
             itself uses wins and losses.
@@ -175,7 +175,7 @@ export function DomainAnalysisValueDetail() {
       )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="text-base font-medium text-gray-900">2. Vignette Condition Tables ({label})</h2>
+        <h2 className="text-base font-medium text-gray-900">Vignette Condition Tables ({label})</h2>
         <p className="mt-1 text-sm text-gray-600">
           Each table is one vignette containing this value, filtered to {detail.modelLabel}.
         </p>
