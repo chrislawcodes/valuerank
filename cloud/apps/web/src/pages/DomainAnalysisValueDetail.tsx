@@ -1,9 +1,16 @@
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
+import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
+import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+import type { Transcript } from '../api/operations/runs';
 import {
+  DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
   DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
+  type DomainAnalysisConditionTranscriptsQueryResult,
+  type DomainAnalysisConditionTranscriptsQueryVariables,
   type DomainAnalysisValueDetailQueryResult,
   type DomainAnalysisValueDetailQueryVariables,
 } from '../api/operations/domainAnalysis';
@@ -28,6 +35,29 @@ export function DomainAnalysisValueDetail() {
     query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
     variables: { domainId, modelId, valueKey },
     pause: domainId === '' || modelId === '' || valueKey === '',
+    requestPolicy: 'cache-and-network',
+  });
+  const [selectedCondition, setSelectedCondition] = useState<{
+    definitionId: string;
+    conditionName: string;
+    scenarioId: string | null;
+  } | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+
+  const [{ data: transcriptData, fetching: transcriptsFetching, error: transcriptsError }] = useQuery<
+    DomainAnalysisConditionTranscriptsQueryResult,
+    DomainAnalysisConditionTranscriptsQueryVariables
+  >({
+    query: DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
+    variables: {
+      domainId,
+      modelId,
+      valueKey,
+      definitionId: selectedCondition?.definitionId ?? '',
+      scenarioId: selectedCondition?.scenarioId ?? null,
+      limit: 100,
+    },
+    pause: selectedCondition === null || domainId === '' || modelId === '' || valueKey === '',
     requestPolicy: 'cache-and-network',
   });
 
@@ -58,7 +88,33 @@ export function DomainAnalysisValueDetail() {
   const label = VALUE_LABELS[detail.valueKey as ValueKey] ?? detail.valueKey;
   const mathNumerator = detail.prioritized + 1;
   const mathDenominator = detail.deprioritized + 1;
-  const ratio = mathDenominator === 0 ? 0 : mathNumerator / mathDenominator;
+  const ratio = mathNumerator / mathDenominator;
+  const selectedConditionKey = selectedCondition === null ? '' : `${selectedCondition.definitionId}:${selectedCondition.scenarioId ?? '__unknown__'}`;
+  const normalizedTranscripts: Transcript[] = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => ({
+    id: transcript.id,
+    runId: transcript.runId,
+    scenarioId: transcript.scenarioId,
+    modelId: transcript.modelId,
+    modelVersion: null,
+    content: transcript.content,
+    decisionCode: transcript.decisionCode,
+    decisionCodeSource: transcript.decisionCodeSource,
+    turnCount: transcript.turnCount,
+    tokenCount: transcript.tokenCount,
+    durationMs: transcript.durationMs,
+    estimatedCost: null,
+    createdAt: transcript.createdAt,
+    lastAccessedAt: null,
+  }));
+
+  const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
+    const clickedKey = `${definitionId}:${scenarioId ?? '__unknown__'}`;
+    if (selectedConditionKey === clickedKey) {
+      setSelectedCondition(null);
+      return;
+    }
+    setSelectedCondition({ definitionId, conditionName, scenarioId });
+  };
 
   return (
     <div className="space-y-6">
@@ -140,26 +196,114 @@ export function DomainAnalysisValueDetail() {
                         </td>
                       </tr>
                     )}
-                    {vignette.conditions.map((condition) => (
-                      <tr key={condition.scenarioId ?? condition.conditionName} className="border-b border-gray-100">
-                        <td className="px-2 py-2 text-gray-900">{condition.conditionName}</td>
-                        <td className="px-2 py-2 text-right text-gray-800">{condition.totalTrials}</td>
-                        <td className="px-2 py-2 text-right text-emerald-700">{condition.prioritized}</td>
-                        <td className="px-2 py-2 text-right text-rose-700">{condition.deprioritized}</td>
-                        <td className="px-2 py-2 text-right text-gray-700">{condition.neutral}</td>
-                        <td className="px-2 py-2 text-right text-gray-800">{toPercent(condition.selectedValueWinRate)}</td>
-                        <td className="px-2 py-2 text-right text-gray-800">
-                          {condition.meanDecisionScore === null ? '-' : condition.meanDecisionScore.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
+                    {vignette.conditions.map((condition) => {
+                      const conditionKey = `${vignette.definitionId}:${condition.scenarioId ?? '__unknown__'}`;
+                      const isSelected = selectedConditionKey === conditionKey;
+                      return (
+                        <tr
+                          key={condition.scenarioId ?? condition.conditionName}
+                          className={`border-b border-gray-100 ${isSelected ? 'bg-sky-50' : 'hover:bg-gray-50'}`}
+                        >
+                          <td className="px-2 py-2 text-gray-900">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto min-h-0 !p-0 text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                              onClick={() => handleConditionClick(vignette.definitionId, condition.conditionName, condition.scenarioId)}
+                            >
+                              {condition.conditionName}
+                            </Button>
+                          </td>
+                          <td className="px-2 py-2 text-right text-gray-800">{condition.totalTrials}</td>
+                          <td className="px-2 py-2 text-right text-emerald-700">{condition.prioritized}</td>
+                          <td className="px-2 py-2 text-right text-rose-700">{condition.deprioritized}</td>
+                          <td className="px-2 py-2 text-right text-gray-700">{condition.neutral}</td>
+                          <td className="px-2 py-2 text-right text-gray-800">{toPercent(condition.selectedValueWinRate)}</td>
+                          <td className="px-2 py-2 text-right text-gray-800">
+                            {condition.meanDecisionScore === null ? '-' : condition.meanDecisionScore.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+                <div className="border-t border-gray-200 bg-gray-50 px-3 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium text-gray-800">
+                      Transcripts for condition: {selectedCondition.conditionName}
+                    </p>
+                    <p className="text-[11px] text-gray-500">Click transcript to view full conversation</p>
+                  </div>
+                  {transcriptsFetching && <Loading size="sm" text="Loading transcripts..." />}
+                  {transcriptsError && (
+                    <ErrorMessage message={`Failed to load transcripts: ${transcriptsError.message}`} />
+                  )}
+                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length === 0 && (
+                    <p className="text-xs text-gray-500">No transcripts found for this condition and model.</p>
+                  )}
+                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-gray-600">
+                            <th className="px-2 py-2 text-left font-medium">Transcript</th>
+                            <th className="px-2 py-2 text-right font-medium">Decision</th>
+                            <th className="px-2 py-2 text-right font-medium">Turns</th>
+                            <th className="px-2 py-2 text-right font-medium">Tokens</th>
+                            <th className="px-2 py-2 text-right font-medium">Duration</th>
+                            <th className="px-2 py-2 text-right font-medium">Created</th>
+                            <th className="px-2 py-2 text-right font-medium">Run</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {normalizedTranscripts.map((transcript) => (
+                            <tr key={transcript.id} className="border-b border-gray-100 hover:bg-white">
+                              <td className="px-2 py-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto min-h-0 !p-0 text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                                  onClick={() => setSelectedTranscript(transcript)}
+                                >
+                                  {transcript.id.slice(0, 10)}...
+                                </Button>
+                              </td>
+                              <td className="px-2 py-2 text-right text-gray-800">{transcript.decisionCode ?? '-'}</td>
+                              <td className="px-2 py-2 text-right text-gray-800">{transcript.turnCount}</td>
+                              <td className="px-2 py-2 text-right text-gray-800">{transcript.tokenCount.toLocaleString()}</td>
+                              <td className="px-2 py-2 text-right text-gray-800">{Math.round(transcript.durationMs / 100) / 10}s</td>
+                              <td className="px-2 py-2 text-right text-gray-800">
+                                {new Date(transcript.createdAt).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <Link className="text-sky-700 hover:text-sky-900 hover:underline" to={`/runs/${transcript.runId}`}>
+                                  Open
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </article>
           ))}
         </div>
       </section>
+      {selectedTranscript !== null && (
+        <TranscriptViewer transcript={selectedTranscript} onClose={() => setSelectedTranscript(null)} />
+      )}
     </div>
   );
 }

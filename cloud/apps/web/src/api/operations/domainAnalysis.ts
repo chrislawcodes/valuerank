@@ -69,6 +69,38 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
   }
 `;
 
+export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
+  query DomainAnalysisConditionTranscripts(
+    $domainId: ID!
+    $modelId: String!
+    $valueKey: String!
+    $definitionId: ID!
+    $scenarioId: ID
+    $limit: Int
+  ) {
+    domainAnalysisConditionTranscripts(
+      domainId: $domainId
+      modelId: $modelId
+      valueKey: $valueKey
+      definitionId: $definitionId
+      scenarioId: $scenarioId
+      limit: $limit
+    ) {
+      id
+      runId
+      scenarioId
+      modelId
+      decisionCode
+      decisionCodeSource
+      turnCount
+      tokenCount
+      durationMs
+      createdAt
+      content
+    }
+  }
+`;
+
 export type DomainAnalysisValueScore = {
   valueKey: string;
   score: number;
@@ -156,4 +188,31 @@ export type DomainAnalysisValueDetailQueryVariables = {
   domainId: string;
   modelId: string;
   valueKey: string;
+};
+
+export type DomainAnalysisConditionTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  createdAt: string;
+  content: unknown;
+};
+
+export type DomainAnalysisConditionTranscriptsQueryResult = {
+  domainAnalysisConditionTranscripts: DomainAnalysisConditionTranscript[];
+};
+
+export type DomainAnalysisConditionTranscriptsQueryVariables = {
+  domainId: string;
+  modelId: string;
+  valueKey: string;
+  definitionId: string;
+  scenarioId?: string | null;
+  limit?: number;
 };

@@ -114,6 +114,20 @@ type DomainAnalysisValueDetailResult = {
   generatedAt: Date;
 };
 
+type DomainAnalysisConditionTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  createdAt: Date;
+  content: unknown;
+};
+
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
@@ -121,6 +135,7 @@ const DomainAnalysisResultRef = builder.objectRef<DomainAnalysisResult>('DomainA
 const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditionDetail>('DomainAnalysisConditionDetail');
 const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
 const DomainAnalysisValueDetailResultRef = builder.objectRef<DomainAnalysisValueDetailResult>('DomainAnalysisValueDetailResult');
+const DomainAnalysisConditionTranscriptRef = builder.objectRef<DomainAnalysisConditionTranscript>('DomainAnalysisConditionTranscript');
 
 builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
@@ -225,6 +240,25 @@ builder.objectType(DomainAnalysisValueDetailResultRef, {
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,
     }),
+  }),
+});
+
+builder.objectType(DomainAnalysisConditionTranscriptRef, {
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    runId: t.exposeID('runId'),
+    scenarioId: t.exposeID('scenarioId', { nullable: true }),
+    modelId: t.exposeString('modelId'),
+    decisionCode: t.exposeString('decisionCode', { nullable: true }),
+    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
+    turnCount: t.exposeInt('turnCount'),
+    tokenCount: t.exposeInt('tokenCount'),
+    durationMs: t.exposeInt('durationMs'),
+    createdAt: t.field({
+      type: 'DateTime',
+      resolve: (parent) => parent.createdAt,
+    }),
+    content: t.expose('content', { type: 'JSON' }),
   }),
 });
 
@@ -935,6 +969,110 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         vignettes,
         generatedAt: new Date(),
       };
+    },
+  }),
+);
+
+builder.queryField('domainAnalysisConditionTranscripts', (t) =>
+  t.field({
+    type: [DomainAnalysisConditionTranscriptRef],
+    args: {
+      domainId: t.arg.id({ required: true }),
+      modelId: t.arg.string({ required: true }),
+      valueKey: t.arg.string({ required: true }),
+      definitionId: t.arg.id({ required: true }),
+      scenarioId: t.arg.id({ required: false }),
+      limit: t.arg.int({ required: false }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = String(args.domainId);
+      const modelId = args.modelId;
+      const definitionId = String(args.definitionId);
+      const rawValueKey = args.valueKey;
+      if (!isDomainAnalysisValueKey(rawValueKey)) {
+        throw new Error(`Unsupported value key: ${rawValueKey}`);
+      }
+      const valueKey = rawValueKey;
+      const limit = Math.max(1, Math.min(args.limit ?? 50, 200));
+      const scenarioId = args.scenarioId != null && args.scenarioId !== '' ? String(args.scenarioId) : null;
+
+      const definition = await db.definition.findFirst({
+        where: { id: definitionId, domainId, deletedAt: null },
+        select: {
+          id: true,
+          parentId: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!definition) return [];
+
+      const definitionsInDomain = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: {
+          id: true,
+          parentId: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      const definitionsById = await hydrateDefinitionAncestors(definitionsInDomain);
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitionsInDomain, definitionsById);
+      const latestDefinitionIds = new Set(latestDefinitions.map((row) => row.id));
+      if (!latestDefinitionIds.has(definitionId)) return [];
+
+      const pairMap = await resolveValuePairsInChunks([definitionId]);
+      const pair = pairMap.get(definitionId);
+      if (!pair) return [];
+      if (pair.valueA !== valueKey && pair.valueB !== valueKey) return [];
+
+      const aggregateRun = await db.run.findFirst({
+        where: {
+          definitionId,
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: {
+            some: {
+              tag: {
+                name: 'Aggregate',
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { config: true },
+      });
+      if (!aggregateRun) return [];
+
+      const sourceRunIds = parseSourceRunIds(aggregateRun.config);
+      if (sourceRunIds.length === 0) return [];
+
+      return db.transcript.findMany({
+        where: {
+          runId: { in: sourceRunIds },
+          modelId,
+          scenarioId,
+          deletedAt: null,
+          decisionCode: { in: ['1', '2', '3', '4', '5'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          runId: true,
+          scenarioId: true,
+          modelId: true,
+          decisionCode: true,
+          decisionCodeSource: true,
+          turnCount: true,
+          tokenCount: true,
+          durationMs: true,
+          createdAt: true,
+          content: true,
+        },
+      });
     },
   }),
 );
