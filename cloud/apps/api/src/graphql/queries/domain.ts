@@ -5,6 +5,7 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
+const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
 // Domain analysis visualizations are intentionally scoped to the 10-value set used by
 // the current product experience. Keep this aligned with web `VALUES` and do not
 // expand to all Schwartz values without corresponding UI/product updates.
@@ -29,6 +30,17 @@ type DefinitionRow = {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type DomainAnalysisValueCounts = {
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+};
+
+type DomainAnalysisValuePair = {
+  valueA: DomainAnalysisValueKey;
+  valueB: DomainAnalysisValueKey;
 };
 
 type DomainAnalysisValueScore = {
@@ -132,13 +144,99 @@ function parseSourceRunIds(config: unknown): string[] {
 }
 
 function incrementValueCount(
-  modelMap: Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>,
+  modelMap: Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>,
   valueKey: DomainAnalysisValueKey,
   field: 'prioritized' | 'deprioritized' | 'neutral',
 ): void {
   const current = modelMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
   current[field] += 1;
   modelMap.set(valueKey, current);
+}
+
+async function resolveValuePairsInChunks(
+  definitionIds: string[],
+): Promise<Map<string, DomainAnalysisValuePair>> {
+  const valuePairByDefinition = new Map<string, DomainAnalysisValuePair>();
+
+  for (let offset = 0; offset < definitionIds.length; offset += VALUE_PAIR_RESOLVE_CHUNK_SIZE) {
+    const batch = definitionIds.slice(offset, offset + VALUE_PAIR_RESOLVE_CHUNK_SIZE);
+    const settled = await Promise.allSettled(
+      batch.map(async (definitionId) => {
+        const resolved = await resolveDefinitionContent(definitionId);
+        const valueA = resolved.resolvedContent.dimensions[0]?.name;
+        const valueB = resolved.resolvedContent.dimensions[1]?.name;
+        if (valueA == null || valueA === '' || valueB == null || valueB === '') return;
+        if (!isDomainAnalysisValueKey(valueA) || !isDomainAnalysisValueKey(valueB)) return;
+        valuePairByDefinition.set(definitionId, { valueA, valueB });
+      }),
+    );
+    settled.forEach(() => undefined);
+  }
+
+  return valuePairByDefinition;
+}
+
+function collectSourceRunsByDefinition(
+  latestDefinitionIds: string[],
+  latestRunByDefinition: Map<string, { config: unknown }>,
+): { sourceRunIds: string[]; sourceRunDefinitionById: Map<string, string> } {
+  const sourceRunIdSet = new Set<string>();
+  const sourceRunDefinitionById = new Map<string, string>();
+
+  for (const definitionId of latestDefinitionIds) {
+    const aggregateRun = latestRunByDefinition.get(definitionId);
+    if (!aggregateRun) continue;
+    const sourceRunIds = parseSourceRunIds(aggregateRun.config);
+    for (const sourceRunId of sourceRunIds) {
+      sourceRunIdSet.add(sourceRunId);
+      sourceRunDefinitionById.set(sourceRunId, definitionId);
+    }
+  }
+
+  return { sourceRunIds: Array.from(sourceRunIdSet), sourceRunDefinitionById };
+}
+
+function aggregateValueCountsFromTranscripts(
+  transcripts: Array<{ runId: string; modelId: string; decisionCode: string | null }>,
+  sourceRunDefinitionById: Map<string, string>,
+  valuePairByDefinition: Map<string, DomainAnalysisValuePair>,
+): {
+  aggregatedByModel: Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>;
+  analyzedDefinitionIds: Set<string>;
+} {
+  const aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+  const analyzedDefinitionIds = new Set<string>();
+
+  for (const transcript of transcripts) {
+    const definitionId = sourceRunDefinitionById.get(transcript.runId);
+    if (definitionId == null || definitionId === '') continue;
+    const pair = valuePairByDefinition.get(definitionId);
+    if (!pair) continue;
+    if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
+    const decision = Number.parseInt(transcript.decisionCode, 10);
+    if (!Number.isFinite(decision)) continue;
+
+    let valueMap = aggregatedByModel.get(transcript.modelId);
+    if (!valueMap) {
+      valueMap = new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
+      aggregatedByModel.set(transcript.modelId, valueMap);
+    }
+
+    if (decision >= 4) {
+      incrementValueCount(valueMap, pair.valueA, 'prioritized');
+      incrementValueCount(valueMap, pair.valueB, 'deprioritized');
+    } else if (decision <= 2) {
+      incrementValueCount(valueMap, pair.valueA, 'deprioritized');
+      incrementValueCount(valueMap, pair.valueB, 'prioritized');
+    } else {
+      incrementValueCount(valueMap, pair.valueA, 'neutral');
+      incrementValueCount(valueMap, pair.valueB, 'neutral');
+    }
+
+    analyzedDefinitionIds.add(definitionId);
+  }
+
+  return { aggregatedByModel, analyzedDefinitionIds };
 }
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -346,54 +444,25 @@ builder.queryField('domainAnalysis', (t) =>
         },
         orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
         select: {
-          id: true,
           definitionId: true,
           config: true,
-          createdAt: true,
         },
       });
 
-      const latestRunByDefinition = new Map<string, (typeof aggregateRuns)[number]>();
+      const latestRunByDefinition = new Map<string, { config: unknown }>();
       for (const run of aggregateRuns) {
         if (latestRunByDefinition.has(run.definitionId)) continue;
-        latestRunByDefinition.set(run.definitionId, run);
+        latestRunByDefinition.set(run.definitionId, { config: run.config });
       }
 
-      const aggregatedByModel = new Map<
-        string,
-        Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>
-      >();
-      const analyzedDefinitionIds = new Set<string>();
-      const valuePairByDefinition = new Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey }>();
-      await Promise.all(
-        latestDefinitionIds.map(async (definitionId) => {
-          try {
-            const resolved = await resolveDefinitionContent(definitionId);
-            const dimensions = resolved.resolvedContent.dimensions;
-            const valueA = dimensions[0]?.name;
-            const valueB = dimensions[1]?.name;
-            if (valueA == null || valueA === '' || valueB == null || valueB === '') return;
-            if (!isDomainAnalysisValueKey(valueA) || !isDomainAnalysisValueKey(valueB)) return;
-            valuePairByDefinition.set(definitionId, { valueA, valueB });
-          } catch {
-            // Ignore definitions whose content cannot be resolved.
-          }
-        }),
+      const valuePairByDefinition = await resolveValuePairsInChunks(latestDefinitionIds);
+      const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
+        latestDefinitionIds,
+        latestRunByDefinition,
       );
 
-      const sourceRunIdSet = new Set<string>();
-      const sourceRunDefinitionById = new Map<string, string>();
-      for (const definitionId of latestDefinitionIds) {
-        const aggregateRun = latestRunByDefinition.get(definitionId);
-        if (!aggregateRun) continue;
-        const sourceRunIds = parseSourceRunIds(aggregateRun.config);
-        for (const sourceRunId of sourceRunIds) {
-          sourceRunIdSet.add(sourceRunId);
-          sourceRunDefinitionById.set(sourceRunId, definitionId);
-        }
-      }
-
-      const sourceRunIds = Array.from(sourceRunIdSet);
+      let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
+      let analyzedDefinitionIds = new Set<string>();
       if (sourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
           where: {
@@ -407,35 +476,13 @@ builder.queryField('domainAnalysis', (t) =>
             decisionCode: true,
           },
         });
-
-        for (const transcript of transcripts) {
-          const definitionId = sourceRunDefinitionById.get(transcript.runId);
-          if (definitionId == null || definitionId === '') continue;
-          const pair = valuePairByDefinition.get(definitionId);
-          if (!pair) continue;
-          if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
-          const decision = Number.parseInt(transcript.decisionCode, 10);
-          if (!Number.isFinite(decision)) continue;
-
-          let valueMap = aggregatedByModel.get(transcript.modelId);
-          if (!valueMap) {
-            valueMap = new Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>();
-            aggregatedByModel.set(transcript.modelId, valueMap);
-          }
-
-          if (decision >= 4) {
-            incrementValueCount(valueMap, pair.valueA, 'prioritized');
-            incrementValueCount(valueMap, pair.valueB, 'deprioritized');
-          } else if (decision <= 2) {
-            incrementValueCount(valueMap, pair.valueA, 'deprioritized');
-            incrementValueCount(valueMap, pair.valueB, 'prioritized');
-          } else {
-            incrementValueCount(valueMap, pair.valueA, 'neutral');
-            incrementValueCount(valueMap, pair.valueB, 'neutral');
-          }
-
-          analyzedDefinitionIds.add(definitionId);
-        }
+        const aggregated = aggregateValueCountsFromTranscripts(
+          transcripts,
+          sourceRunDefinitionById,
+          valuePairByDefinition,
+        );
+        aggregatedByModel = aggregated.aggregatedByModel;
+        analyzedDefinitionIds = aggregated.analyzedDefinitionIds;
       }
 
       const modelsWithData = Array.from(aggregatedByModel.keys()).sort((left, right) => {
@@ -446,7 +493,7 @@ builder.queryField('domainAnalysis', (t) =>
 
       const models: DomainAnalysisModel[] = modelsWithData.map((modelId) => {
         const valueMap = aggregatedByModel.get(modelId)
-          ?? new Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>();
+          ?? new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
         const values: DomainAnalysisValueScore[] = DOMAIN_ANALYSIS_VALUE_KEYS.map((valueKey) => {
           const counts = valueMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
           const wins = counts.prioritized;
