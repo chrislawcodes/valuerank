@@ -141,14 +141,14 @@ export function ValuePrioritiesSection({ models, selectedDomainId }: ValuePriori
                   {VALUES.map((value) => (
                     <td
                       key={value}
-                      className="px-2 py-2 text-right text-gray-800"
+                      className="p-0 text-right text-gray-800 transition-all hover:brightness-105"
                       style={{ background: getPriorityColor(model.values[value], valueRange.min, valueRange.max) }}
                     >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-auto min-h-0 w-full !p-0 text-right text-xs text-gray-800 hover:underline"
+                        className="block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
                         onClick={() => handleValueCellClick(model.model, value)}
                         disabled={selectedDomainId === ''}
                         title={`View score calculation and vignette condition details for ${model.label} · ${VALUE_LABELS[value]}`}
