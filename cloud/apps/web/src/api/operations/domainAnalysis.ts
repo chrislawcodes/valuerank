@@ -58,6 +58,7 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
         conditions {
           scenarioId
           conditionName
+          dimensions
           prioritized
           deprioritized
           neutral
@@ -145,6 +146,7 @@ export type DomainAnalysisQueryVariables = {
 export type DomainAnalysisValueDetailCondition = {
   scenarioId: string | null;
   conditionName: string;
+  dimensions: Record<string, string | number> | null;
   prioritized: number;
   deprioritized: number;
   neutral: number;
