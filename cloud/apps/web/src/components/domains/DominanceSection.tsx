@@ -7,14 +7,13 @@ import {
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
-import { Button } from '../ui/Button';
 
 const CLOSE_WINRATE_DELTA = 0.08;
 const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
-type VisualMode = 'traditional' | 'scifi';
 
 function getEdgeColor(params: {
   focusedValue: ValueKey | null;
+  isFocusedEdge: boolean;
   isCloseWinRate: boolean;
   isOutgoingFromFocused: boolean;
   isIncomingToFocused: boolean;
@@ -26,6 +25,7 @@ function getEdgeColor(params: {
 }): string {
   const {
     focusedValue,
+    isFocusedEdge,
     isCloseWinRate,
     isOutgoingFromFocused,
     isIncomingToFocused,
@@ -37,6 +37,7 @@ function getEdgeColor(params: {
   } = params;
 
   if (focusedValue == null) return neutralColor;
+  if (!isFocusedEdge) return neutralColor;
   if (isCloseWinRate) return closeWinColor;
   if (isOutgoingFromFocused) return outgoingFocusedColor;
   if (isIncomingToFocused) return incomingFocusedColor;
@@ -47,11 +48,9 @@ export function DominanceSection() {
   const [selectedModelId, setSelectedModelId] = useState(DOMAIN_ANALYSIS_AVAILABLE_MODELS[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
-  const [visualMode, setVisualMode] = useState<VisualMode>('traditional');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'collapse' | 'expand'>('idle');
   const prevModelId = useRef(selectedModelId);
-  const isSciFi = visualMode === 'scifi';
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -96,37 +95,21 @@ export function DominanceSection() {
     [],
   );
   const selectedModel = modelById.get(selectedModelId);
-  const themeColors = isSciFi
-    ? {
-      arrowColor: '#22d3ee',
-      outgoingFocusedColor: '#22c55e',
-      incomingFocusedColor: '#f43f5e',
-      neutralColor: '#64748b',
-      closeWinColor: '#facc15',
-      nodeLabelColor: '#e2e8f0',
-      nodeSubLabelColor: '#67e8f9',
-      panelText: 'text-cyan-100',
-      panelMutedText: 'text-cyan-200/80',
-      panelBorder: 'border-cyan-500/40',
-      panelBg: 'bg-slate-950',
-      cardBg: 'bg-slate-900/70',
-      cardBorder: 'border-cyan-900/70',
-    }
-    : {
-      arrowColor: '#0f766e',
-      outgoingFocusedColor: '#16a34a',
-      incomingFocusedColor: '#dc2626',
-      neutralColor: '#94a3b8',
-      closeWinColor: '#eab308',
-      nodeLabelColor: '#111827',
-      nodeSubLabelColor: '#6b7280',
-      panelText: 'text-gray-900',
-      panelMutedText: 'text-gray-600',
-      panelBorder: 'border-gray-200',
-      panelBg: 'bg-white',
-      cardBg: 'bg-gray-50',
-      cardBorder: 'border-gray-200',
-    };
+  const themeColors = {
+    arrowColor: '#0f766e',
+    outgoingFocusedColor: '#16a34a',
+    incomingFocusedColor: '#dc2626',
+    neutralColor: '#94a3b8',
+    closeWinColor: '#eab308',
+    nodeLabelColor: '#111827',
+    nodeSubLabelColor: '#6b7280',
+    panelText: 'text-gray-900',
+    panelMutedText: 'text-gray-600',
+    panelBorder: 'border-gray-200',
+    panelBg: 'bg-white',
+    cardBg: 'bg-gray-50',
+    cardBorder: 'border-gray-200',
+  };
 
   const edges = useMemo(() => {
     if (!selectedModel) return [];
@@ -227,15 +210,7 @@ export function DominanceSection() {
 
   // Edges fade out during animation phases
   const edgesVisible = animationPhase === 'idle';
-  const svgStyle = isSciFi
-    ? {
-      height: 'calc(100vh - 140px)',
-      minHeight: '900px',
-      transform: 'perspective(1800px) rotateX(9deg) scale(0.97)',
-      transformOrigin: '50% 26%',
-      transition: 'transform 320ms ease',
-    }
-    : { height: 'calc(100vh - 140px)', minHeight: '900px' };
+  const svgStyle = { height: 'calc(100vh - 140px)', minHeight: '900px' };
 
   return (
     <section className={`rounded-lg border p-4 ${themeColors.panelBorder} ${themeColors.panelBg}`}>
@@ -250,37 +225,7 @@ export function DominanceSection() {
         }
       `}</style>
       <div className="mb-3">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
-          <div className="inline-flex rounded border border-gray-300 bg-white p-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setVisualMode('traditional')}
-              className={`h-7 min-h-0 rounded px-2 py-1 text-xs ${
-                visualMode === 'traditional'
-                  ? 'bg-gray-200 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Traditional
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setVisualMode('scifi')}
-              className={`h-7 min-h-0 rounded px-2 py-1 text-xs ${
-                visualMode === 'scifi'
-                  ? 'bg-cyan-500/25 text-cyan-100'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              Sci-Fi
-            </Button>
-          </div>
-        </div>
+        <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
         <p className={`text-sm ${themeColors.panelMutedText}`}>
           Directed value graph for one selected AI: arrows point from stronger value to weaker value.
         </p>
@@ -289,11 +234,7 @@ export function DominanceSection() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className={`text-xs font-medium ${themeColors.panelMutedText}`}>Select AI:</span>
         <select
-          className={`rounded border px-2 py-1 text-xs ${
-            isSciFi
-              ? 'border-cyan-500/40 bg-slate-900 text-cyan-100'
-              : 'border-gray-300 bg-white text-gray-800'
-          }`}
+          className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-800"
           value={selectedModelId}
           onChange={(event) => setSelectedModelId(event.target.value)}
         >
@@ -320,16 +261,7 @@ export function DominanceSection() {
       </p>
 
       <div
-        className={`mb-4 overflow-x-auto rounded border p-2 ${
-          isSciFi
-            ? 'border-cyan-900/60 bg-slate-950'
-            : 'border-gray-100 bg-gray-50'
-        }`}
-        style={isSciFi ? {
-          backgroundImage:
-            'radial-gradient(circle at 20% 20%, rgba(34,211,238,0.12), transparent 42%), radial-gradient(circle at 80% 0%, rgba(56,189,248,0.15), transparent 35%), linear-gradient(rgba(14,116,144,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,144,0.14) 1px, transparent 1px)',
-          backgroundSize: 'auto, auto, 34px 34px, 34px 34px',
-        } : undefined}
+        className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2"
       >
         <svg
           viewBox="0 0 1280 1120"
@@ -376,6 +308,7 @@ export function DominanceSection() {
             const strokeOpacity = isFromUnselectedCircle ? rawStrokeOpacity * 0.42 : rawStrokeOpacity;
             const edgeColor = getEdgeColor({
               focusedValue,
+              isFocusedEdge,
               isCloseWinRate,
               isOutgoingFromFocused,
               isIncomingToFocused,
@@ -430,13 +363,11 @@ export function DominanceSection() {
                         animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.7s ease-in-out infinite',
                         transition: edgeTransition,
                         transitionDelay: edgeDelay,
-                        filter: isSciFi ? 'drop-shadow(0 0 6px currentColor)' : undefined,
                       }
                       : {
                         strokeOpacity: edgesVisible ? strokeOpacity : 0,
                         transition: edgeTransition,
                         transitionDelay: edgeDelay,
-                        filter: isSciFi ? 'drop-shadow(0 0 5px currentColor)' : undefined,
                       }
                   }
                 />
@@ -451,13 +382,11 @@ export function DominanceSection() {
                         animation: prefersReducedMotion ? undefined : 'neonPulseStroke 1.9s ease-in-out infinite',
                         transition: fillTransition,
                         transitionDelay: edgeDelay,
-                        filter: isSciFi ? 'drop-shadow(0 0 6px currentColor)' : undefined,
                       }
                       : {
                         fillOpacity: edgesVisible ? strokeOpacity : 0,
                         transition: fillTransition,
                         transitionDelay: edgeDelay,
-                        filter: isSciFi ? 'drop-shadow(0 0 5px currentColor)' : undefined,
                       }
                   }
                 />
@@ -472,13 +401,11 @@ export function DominanceSection() {
                           fillOpacity: edgesVisible ? strokeOpacity : 0,
                           transition: fillTransition,
                           transitionDelay: edgeDelay,
-                          filter: isSciFi ? 'drop-shadow(0 0 6px currentColor)' : undefined,
                         }
                         : {
                           fillOpacity: edgesVisible ? strokeOpacity : 0,
                           transition: fillTransition,
                           transitionDelay: edgeDelay,
-                          filter: isSciFi ? 'drop-shadow(0 0 5px currentColor)' : undefined,
                         }
                     }
                   />
@@ -500,8 +427,9 @@ export function DominanceSection() {
             const nodeOpacity =
               focusedValue == null ? 1 : isSelectedNode ? 1 : isConnectedToFocused ? 0.72 : 0.35;
             const nodeStroke = isSelectedNode ? '#111827' : isHovered ? '#3b82f6' : '#94a3b8';
-            const sciFiNodeStroke = isSelectedNode ? '#67e8f9' : isHovered ? '#22d3ee' : '#0ea5e9';
             const nodeStrokeWidth = isSelectedNode ? 4 : isHovered ? 3.5 : 2.2;
+            const nodeMainStroke = isSelectedNode ? 'transparent' : nodeStroke;
+            const nodeMainStrokeWidth = isSelectedNode ? 0 : nodeStrokeWidth;
             const labelParts = VALUE_LABELS[node.value].split(' ');
             const labelLineOne = labelParts[0] ?? '';
             const labelLineTwo = labelParts.slice(1).join(' ');
@@ -547,38 +475,32 @@ export function DominanceSection() {
                   cy={node.y}
                   r={68}
                   fill={
-                    isSciFi
-                      ? 'rgba(8, 47, 73, 0.85)'
-                      : getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)
+                    getPriorityColor(selectedModel?.values[node.value] ?? 0, priorityValueRange.min, priorityValueRange.max)
                   }
-                  stroke={isSciFi ? sciFiNodeStroke : nodeStroke}
-                  strokeWidth={nodeStrokeWidth}
+                  stroke={nodeMainStroke}
+                  strokeWidth={nodeMainStrokeWidth}
                   style={{
                     opacity: nodeOpacity,
-                    filter: isSciFi
-                      ? `${circleFilter ?? ''} drop-shadow(0 0 8px rgba(34,211,238,0.45))`
-                      : circleFilter,
+                    filter: circleFilter,
                     animation: circleAnimation,
                     transition:
                       'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                   }}
                 />
-                {!isSciFi && (
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={74}
-                    fill="none"
-                    stroke={isSelectedNode ? '#22d3ee' : '#38bdf8'}
-                    strokeWidth={isSelectedNode ? 2.1 : 1.4}
-                    style={{
-                      opacity: nodeOpacity * (isSelectedNode ? 0.82 : 0.46),
-                      filter: isSelectedNode ? 'drop-shadow(0 0 5px rgba(34,211,238,0.5))' : undefined,
-                      transition:
-                        'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
-                    }}
-                  />
-                )}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={isSelectedNode ? 69 : 74}
+                  fill="none"
+                  stroke={isSelectedNode ? '#22d3ee' : '#38bdf8'}
+                  strokeWidth={isSelectedNode ? 7 : 1.4}
+                  style={{
+                    opacity: nodeOpacity * (isSelectedNode ? 0.98 : 0.46),
+                    filter: isSelectedNode ? 'drop-shadow(0 0 8px rgba(34,211,238,0.7))' : undefined,
+                    transition:
+                      'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
+                  }}
+                />
                 <text
                   x={node.x}
                   y={node.y}
@@ -624,13 +546,6 @@ export function DominanceSection() {
               </li>
             ))}
           </ol>
-        </div>
-        <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
-          <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Value Cycle Check</h3>
-          <p className={`mt-2 text-sm ${themeColors.panelMutedText}`}>
-            Majority-cycle detection is disabled in single-AI mode. Cycles require multi-model comparisons where
-            value orderings can conflict across models.
-          </p>
         </div>
       </div>
     </section>
