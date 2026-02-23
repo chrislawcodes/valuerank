@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
@@ -19,13 +20,24 @@ import {
 import { useDomains } from '../hooks/useDomains';
 
 export function DomainAnalysis() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
-  const [selectedDomainId, setSelectedDomainId] = useState<string>('');
+  const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
 
   useEffect(() => {
-    if (selectedDomainId !== '' || domains.length === 0) return;
+    if (domains.length === 0) return;
+    const selectedExists = selectedDomainId !== '' && domains.some((domain) => domain.id === selectedDomainId);
+    if (selectedExists) return;
     setSelectedDomainId(domains[0]?.id ?? '');
   }, [domains, selectedDomainId]);
+
+  useEffect(() => {
+    if (selectedDomainId === '') return;
+    if (searchParams.get('domainId') === selectedDomainId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('domainId', selectedDomainId);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, selectedDomainId, setSearchParams]);
 
   const [{ data, fetching, error }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
@@ -103,7 +115,7 @@ export function DomainAnalysis() {
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
-          <ValuePrioritiesSection models={models} />
+          <ValuePrioritiesSection models={models} selectedDomainId={selectedDomainId} />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />
         </>

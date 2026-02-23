@@ -75,10 +75,67 @@ type DomainAnalysisResult = {
   generatedAt: Date;
 };
 
+type DomainAnalysisConditionDetail = {
+  scenarioId: string | null;
+  conditionName: string;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  selectedValueWinRate: number | null;
+  meanDecisionScore: number | null;
+};
+
+type DomainAnalysisVignetteDetail = {
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number;
+  otherValueKey: DomainAnalysisValueKey;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  selectedValueWinRate: number | null;
+  conditions: DomainAnalysisConditionDetail[];
+};
+
+type DomainAnalysisValueDetailResult = {
+  domainId: string;
+  domainName: string;
+  modelId: string;
+  modelLabel: string;
+  valueKey: DomainAnalysisValueKey;
+  score: number;
+  prioritized: number;
+  deprioritized: number;
+  neutral: number;
+  totalTrials: number;
+  vignettes: DomainAnalysisVignetteDetail[];
+  generatedAt: Date;
+};
+
+type DomainAnalysisConditionTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  createdAt: Date;
+  content: unknown;
+};
+
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
 const DomainAnalysisResultRef = builder.objectRef<DomainAnalysisResult>('DomainAnalysisResult');
+const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditionDetail>('DomainAnalysisConditionDetail');
+const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
+const DomainAnalysisValueDetailResultRef = builder.objectRef<DomainAnalysisValueDetailResult>('DomainAnalysisValueDetailResult');
+const DomainAnalysisConditionTranscriptRef = builder.objectRef<DomainAnalysisConditionTranscript>('DomainAnalysisConditionTranscript');
 
 builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
@@ -129,6 +186,79 @@ builder.objectType(DomainAnalysisResultRef, {
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,
     }),
+  }),
+});
+
+builder.objectType(DomainAnalysisConditionDetailRef, {
+  fields: (t) => ({
+    scenarioId: t.exposeID('scenarioId', { nullable: true }),
+    conditionName: t.exposeString('conditionName'),
+    prioritized: t.exposeInt('prioritized'),
+    deprioritized: t.exposeInt('deprioritized'),
+    neutral: t.exposeInt('neutral'),
+    totalTrials: t.exposeInt('totalTrials'),
+    selectedValueWinRate: t.exposeFloat('selectedValueWinRate', { nullable: true }),
+    meanDecisionScore: t.exposeFloat('meanDecisionScore', { nullable: true }),
+  }),
+});
+
+builder.objectType(DomainAnalysisVignetteDetailRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    definitionName: t.exposeString('definitionName'),
+    definitionVersion: t.exposeInt('definitionVersion'),
+    otherValueKey: t.exposeString('otherValueKey'),
+    prioritized: t.exposeInt('prioritized'),
+    deprioritized: t.exposeInt('deprioritized'),
+    neutral: t.exposeInt('neutral'),
+    totalTrials: t.exposeInt('totalTrials'),
+    selectedValueWinRate: t.exposeFloat('selectedValueWinRate', { nullable: true }),
+    conditions: t.field({
+      type: [DomainAnalysisConditionDetailRef],
+      resolve: (parent) => parent.conditions,
+    }),
+  }),
+});
+
+builder.objectType(DomainAnalysisValueDetailResultRef, {
+  fields: (t) => ({
+    domainId: t.exposeID('domainId'),
+    domainName: t.exposeString('domainName'),
+    modelId: t.exposeString('modelId'),
+    modelLabel: t.exposeString('modelLabel'),
+    valueKey: t.exposeString('valueKey'),
+    score: t.exposeFloat('score'),
+    prioritized: t.exposeInt('prioritized'),
+    deprioritized: t.exposeInt('deprioritized'),
+    neutral: t.exposeInt('neutral'),
+    totalTrials: t.exposeInt('totalTrials'),
+    vignettes: t.field({
+      type: [DomainAnalysisVignetteDetailRef],
+      resolve: (parent) => parent.vignettes,
+    }),
+    generatedAt: t.field({
+      type: 'DateTime',
+      resolve: (parent) => parent.generatedAt,
+    }),
+  }),
+});
+
+builder.objectType(DomainAnalysisConditionTranscriptRef, {
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    runId: t.exposeID('runId'),
+    scenarioId: t.exposeID('scenarioId', { nullable: true }),
+    modelId: t.exposeString('modelId'),
+    decisionCode: t.exposeString('decisionCode', { nullable: true }),
+    decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
+    turnCount: t.exposeInt('turnCount'),
+    tokenCount: t.exposeInt('tokenCount'),
+    durationMs: t.exposeInt('durationMs'),
+    createdAt: t.field({
+      type: 'DateTime',
+      resolve: (parent) => parent.createdAt,
+    }),
+    content: t.expose('content', { type: 'JSON' }),
   }),
 });
 
@@ -194,6 +324,15 @@ function collectSourceRunsByDefinition(
   }
 
   return { sourceRunIds: Array.from(sourceRunIdSet), sourceRunDefinitionById };
+}
+
+function classifyDecisionForSelectedValue(
+  decision: number,
+  selectedIsValueA: boolean,
+): 'prioritized' | 'deprioritized' | 'neutral' {
+  if (decision >= 4) return selectedIsValueA ? 'prioritized' : 'deprioritized';
+  if (decision <= 2) return selectedIsValueA ? 'deprioritized' : 'prioritized';
+  return 'neutral';
 }
 
 function aggregateValueCountsFromTranscripts(
@@ -534,6 +673,385 @@ builder.queryField('domainAnalysis', (t) =>
         unavailableModels,
         generatedAt: new Date(),
       };
+    },
+  }),
+);
+
+builder.queryField('domainAnalysisValueDetail', (t) =>
+  t.field({
+    type: DomainAnalysisValueDetailResultRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      modelId: t.arg.string({ required: true }),
+      valueKey: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = String(args.domainId);
+      const modelId = args.modelId;
+      const rawValueKey = args.valueKey;
+      if (!isDomainAnalysisValueKey(rawValueKey)) {
+        throw new Error(`Unsupported value key: ${rawValueKey}`);
+      }
+      const valueKey = rawValueKey;
+
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      const modelMeta = await db.llmModel.findFirst({
+        where: { modelId, status: 'ACTIVE' },
+        select: { displayName: true },
+      });
+      const modelLabel = modelMeta?.displayName ?? modelId;
+
+      if (definitions.length === 0) {
+        return {
+          domainId: domain.id,
+          domainName: domain.name,
+          modelId,
+          modelLabel,
+          valueKey,
+          score: 0,
+          prioritized: 0,
+          deprioritized: 0,
+          neutral: 0,
+          totalTrials: 0,
+          vignettes: [],
+          generatedAt: new Date(),
+        };
+      }
+
+      const definitionsById = await hydrateDefinitionAncestors(definitions);
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+      const definitionNameById = new Map(definitions.map((definition) => [definition.id, definition.name]));
+      const definitionVersionById = new Map(definitions.map((definition) => [definition.id, definition.version]));
+
+      const valuePairByDefinition = await resolveValuePairsInChunks(latestDefinitionIds);
+      const targetDefinitionIds = latestDefinitionIds.filter((definitionId) => {
+        const pair = valuePairByDefinition.get(definitionId);
+        return pair?.valueA === valueKey || pair?.valueB === valueKey;
+      });
+
+      if (targetDefinitionIds.length === 0) {
+        return {
+          domainId: domain.id,
+          domainName: domain.name,
+          modelId,
+          modelLabel,
+          valueKey,
+          score: 0,
+          prioritized: 0,
+          deprioritized: 0,
+          neutral: 0,
+          totalTrials: 0,
+          vignettes: [],
+          generatedAt: new Date(),
+        };
+      }
+
+      const aggregateRuns = await db.run.findMany({
+        where: {
+          definitionId: { in: targetDefinitionIds },
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: {
+            some: {
+              tag: {
+                name: 'Aggregate',
+              },
+            },
+          },
+        },
+        orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+        select: {
+          definitionId: true,
+          config: true,
+        },
+      });
+
+      const latestRunByDefinition = new Map<string, { config: unknown }>();
+      for (const run of aggregateRuns) {
+        if (latestRunByDefinition.has(run.definitionId)) continue;
+        latestRunByDefinition.set(run.definitionId, { config: run.config });
+      }
+
+      const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
+        targetDefinitionIds,
+        latestRunByDefinition,
+      );
+
+      type MutableCondition = {
+        scenarioId: string | null;
+        conditionName: string;
+        prioritized: number;
+        deprioritized: number;
+        neutral: number;
+        totalTrials: number;
+        decisionSum: number;
+      };
+
+      type MutableVignette = {
+        definitionId: string;
+        definitionName: string;
+        definitionVersion: number;
+        otherValueKey: DomainAnalysisValueKey;
+        prioritized: number;
+        deprioritized: number;
+        neutral: number;
+        totalTrials: number;
+        conditions: Map<string, MutableCondition>;
+      };
+
+      const vignetteByDefinitionId = new Map<string, MutableVignette>();
+      for (const definitionId of targetDefinitionIds) {
+        const pair = valuePairByDefinition.get(definitionId);
+        const definitionName = definitionNameById.get(definitionId);
+        const definitionVersion = definitionVersionById.get(definitionId);
+        if (!pair || definitionName == null || definitionVersion === undefined) continue;
+        const otherValueKey = pair.valueA === valueKey ? pair.valueB : pair.valueA;
+        vignetteByDefinitionId.set(definitionId, {
+          definitionId,
+          definitionName,
+          definitionVersion,
+          otherValueKey,
+          prioritized: 0,
+          deprioritized: 0,
+          neutral: 0,
+          totalTrials: 0,
+          conditions: new Map(),
+        });
+      }
+
+      let totalPrioritized = 0;
+      let totalDeprioritized = 0;
+      let totalNeutral = 0;
+
+      if (sourceRunIds.length > 0) {
+        const transcripts = await db.transcript.findMany({
+          where: {
+            runId: { in: sourceRunIds },
+            modelId,
+            deletedAt: null,
+            decisionCode: { in: ['1', '2', '3', '4', '5'] },
+          },
+          select: {
+            runId: true,
+            scenarioId: true,
+            decisionCode: true,
+          },
+        });
+
+        const scenarioIds = Array.from(
+          new Set(
+            transcripts
+              .map((transcript) => transcript.scenarioId)
+              .filter((scenarioId): scenarioId is string => scenarioId !== null && scenarioId !== ''),
+          ),
+        );
+
+        const scenarios = scenarioIds.length === 0
+          ? []
+          : await db.scenario.findMany({
+            where: { id: { in: scenarioIds } },
+            select: { id: true, name: true },
+          });
+        const scenarioNameById = new Map(scenarios.map((scenario) => [scenario.id, scenario.name]));
+
+        for (const transcript of transcripts) {
+          const definitionId = sourceRunDefinitionById.get(transcript.runId);
+          if (definitionId == null || definitionId === '') continue;
+          const pair = valuePairByDefinition.get(definitionId);
+          const vignette = vignetteByDefinitionId.get(definitionId);
+          if (!pair || !vignette) continue;
+          if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
+
+          const decision = Number.parseInt(transcript.decisionCode, 10);
+          if (!Number.isFinite(decision)) continue;
+
+          const selectedIsValueA = pair.valueA === valueKey;
+          const outcome = classifyDecisionForSelectedValue(decision, selectedIsValueA);
+
+          if (outcome === 'prioritized') {
+            totalPrioritized += 1;
+            vignette.prioritized += 1;
+          } else if (outcome === 'deprioritized') {
+            totalDeprioritized += 1;
+            vignette.deprioritized += 1;
+          } else {
+            totalNeutral += 1;
+            vignette.neutral += 1;
+          }
+          vignette.totalTrials += 1;
+
+          const scenarioKey = transcript.scenarioId ?? '__unknown__';
+          const existingCondition = vignette.conditions.get(scenarioKey);
+          const hasScenarioId = transcript.scenarioId !== null && transcript.scenarioId !== '';
+          const scenarioId = hasScenarioId ? transcript.scenarioId : null;
+          const conditionName = scenarioId === null
+            ? 'Unknown Condition'
+            : (scenarioNameById.get(scenarioId) ?? scenarioId);
+          const condition = existingCondition ?? {
+            scenarioId,
+            conditionName,
+            prioritized: 0,
+            deprioritized: 0,
+            neutral: 0,
+            totalTrials: 0,
+            decisionSum: 0,
+          };
+
+          if (outcome === 'prioritized') condition.prioritized += 1;
+          if (outcome === 'deprioritized') condition.deprioritized += 1;
+          if (outcome === 'neutral') condition.neutral += 1;
+          condition.totalTrials += 1;
+          condition.decisionSum += decision;
+          vignette.conditions.set(scenarioKey, condition);
+        }
+      }
+
+      const vignettes: DomainAnalysisVignetteDetail[] = Array.from(vignetteByDefinitionId.values())
+        .sort((left, right) => left.definitionName.localeCompare(right.definitionName))
+        .map((vignette) => {
+          const conditions: DomainAnalysisConditionDetail[] = Array.from(vignette.conditions.values())
+            .sort((left, right) => left.conditionName.localeCompare(right.conditionName))
+            .map((condition) => {
+              const comparisonDenominator = condition.prioritized + condition.deprioritized;
+              return {
+                scenarioId: condition.scenarioId,
+                conditionName: condition.conditionName,
+                prioritized: condition.prioritized,
+                deprioritized: condition.deprioritized,
+                neutral: condition.neutral,
+                totalTrials: condition.totalTrials,
+                selectedValueWinRate: comparisonDenominator === 0 ? null : condition.prioritized / comparisonDenominator,
+                meanDecisionScore: condition.totalTrials === 0 ? null : condition.decisionSum / condition.totalTrials,
+              };
+            });
+
+          const comparisonDenominator = vignette.prioritized + vignette.deprioritized;
+          return {
+            definitionId: vignette.definitionId,
+            definitionName: vignette.definitionName,
+            definitionVersion: vignette.definitionVersion,
+            otherValueKey: vignette.otherValueKey,
+            prioritized: vignette.prioritized,
+            deprioritized: vignette.deprioritized,
+            neutral: vignette.neutral,
+            totalTrials: vignette.totalTrials,
+            selectedValueWinRate: comparisonDenominator === 0 ? null : vignette.prioritized / comparisonDenominator,
+            conditions,
+          };
+        });
+
+      return {
+        domainId: domain.id,
+        domainName: domain.name,
+        modelId,
+        modelLabel,
+        valueKey,
+        score: Math.log((totalPrioritized + 1) / (totalDeprioritized + 1)),
+        prioritized: totalPrioritized,
+        deprioritized: totalDeprioritized,
+        neutral: totalNeutral,
+        totalTrials: totalPrioritized + totalDeprioritized + totalNeutral,
+        vignettes,
+        generatedAt: new Date(),
+      };
+    },
+  }),
+);
+
+builder.queryField('domainAnalysisConditionTranscripts', (t) =>
+  t.field({
+    type: [DomainAnalysisConditionTranscriptRef],
+    args: {
+      domainId: t.arg.id({ required: true }),
+      modelId: t.arg.string({ required: true }),
+      valueKey: t.arg.string({ required: true }),
+      definitionId: t.arg.id({ required: true }),
+      scenarioId: t.arg.id({ required: false }),
+      limit: t.arg.int({ required: false }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = String(args.domainId);
+      const modelId = args.modelId;
+      const definitionId = String(args.definitionId);
+      const rawValueKey = args.valueKey;
+      if (!isDomainAnalysisValueKey(rawValueKey)) {
+        throw new Error(`Unsupported value key: ${rawValueKey}`);
+      }
+      const valueKey = rawValueKey;
+      const limit = Math.max(1, Math.min(args.limit ?? 50, 200));
+      const scenarioId = args.scenarioId != null && args.scenarioId !== '' ? String(args.scenarioId) : null;
+
+      const definition = await db.definition.findFirst({
+        where: { id: definitionId, domainId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!definition) return [];
+
+      const pairMap = await resolveValuePairsInChunks([definitionId]);
+      const pair = pairMap.get(definitionId);
+      if (!pair) return [];
+      if (pair.valueA !== valueKey && pair.valueB !== valueKey) return [];
+
+      const aggregateRun = await db.run.findFirst({
+        where: {
+          definitionId,
+          status: 'COMPLETED',
+          deletedAt: null,
+          tags: {
+            some: {
+              tag: {
+                name: 'Aggregate',
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { config: true },
+      });
+      if (!aggregateRun) return [];
+
+      const sourceRunIds = parseSourceRunIds(aggregateRun.config);
+      if (sourceRunIds.length === 0) return [];
+
+      return db.transcript.findMany({
+        where: {
+          runId: { in: sourceRunIds },
+          modelId,
+          ...(scenarioId === null ? {} : { scenarioId }),
+          deletedAt: null,
+          decisionCode: { in: ['1', '2', '3', '4', '5'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          runId: true,
+          scenarioId: true,
+          modelId: true,
+          decisionCode: true,
+          decisionCodeSource: true,
+          turnCount: true,
+          tokenCount: true,
+          durationMs: true,
+          createdAt: true,
+          content: true,
+        },
+      });
     },
   }),
 );
