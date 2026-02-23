@@ -8,7 +8,7 @@
 
 import path from 'path';
 import type * as PgBoss from 'pg-boss';
-import { db } from '@valuerank/db';
+import { db, resolveDefinitionContent } from '@valuerank/db';
 import type { Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
@@ -35,6 +35,7 @@ type TranscriptData = {
   sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
   summary: {
     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
+    values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
   };
   scenario: {
     name: string;
@@ -54,6 +55,30 @@ function toDimensionRecord(value: unknown): Record<string, number | string> | nu
     sanitized[key] = entry;
   }
   return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
+
+function buildValueOutcomes(
+  score: number | null,
+  valueA: string | null,
+  valueB: string | null
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+  if (score == null || valueA == null || valueB == null) return undefined;
+  if (score >= 4) {
+    return {
+      [valueA]: 'prioritized',
+      [valueB]: 'deprioritized',
+    };
+  }
+  if (score <= 2) {
+    return {
+      [valueA]: 'deprioritized',
+      [valueB]: 'prioritized',
+    };
+  }
+  return {
+    [valueA]: 'neutral',
+    [valueB]: 'neutral',
+  };
 }
 
 /**
@@ -154,6 +179,22 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
           },
         });
 
+        const runMeta = await db.run.findUnique({
+          where: { id: runId },
+          select: { definitionId: true },
+        });
+        let valueA: string | null = null;
+        let valueB: string | null = null;
+        if (runMeta?.definitionId != null && runMeta.definitionId !== '') {
+          try {
+            const resolved = await resolveDefinitionContent(runMeta.definitionId);
+            valueA = resolved.resolvedContent.dimensions[0]?.name ?? null;
+            valueB = resolved.resolvedContent.dimensions[1]?.name ?? null;
+          } catch (err) {
+            log.warn({ jobId, runId, err }, 'Failed to resolve definition value pair for analyze_basic');
+          }
+        }
+
         // Transform to worker input format (matches CSV export structure)
         const scenarioDimensions: Record<string, Record<string, number | string>> = {};
         const transcriptData: TranscriptData[] = transcripts
@@ -188,13 +229,14 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 score = parsed;
               }
             }
+            const values = buildValueOutcomes(score, valueA, valueB);
 
             return {
               id: t.id,
               modelId: t.modelId,
               scenarioId: t.scenarioId as string,
               sampleIndex: t.sampleIndex,
-              summary: { score },
+              summary: values ? { score, values } : { score },
               scenario: {
                 name: t.scenario!.name,
                 dimensions,

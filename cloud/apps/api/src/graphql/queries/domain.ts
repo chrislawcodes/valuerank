@@ -1,8 +1,7 @@
 import { builder } from '../builder.js';
-import { db } from '@valuerank/db';
+import { db, resolveDefinitionContent } from '@valuerank/db';
 import { DomainRef } from '../types/domain.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
-import { zAnalysisOutput } from '../../services/analysis/aggregate.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -123,6 +122,23 @@ builder.objectType(DomainAnalysisResultRef, {
 
 function isDomainAnalysisValueKey(value: string): value is DomainAnalysisValueKey {
   return DOMAIN_ANALYSIS_VALUE_KEYS.includes(value as DomainAnalysisValueKey);
+}
+
+function parseSourceRunIds(config: unknown): string[] {
+  if (config == null || typeof config !== 'object' || Array.isArray(config)) return [];
+  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
+  if (!Array.isArray(sourceRunIds)) return [];
+  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id !== '');
+}
+
+function incrementValueCount(
+  modelMap: Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>,
+  valueKey: DomainAnalysisValueKey,
+  field: 'prioritized' | 'deprioritized' | 'neutral',
+): void {
+  const current = modelMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
+  current[field] += 1;
+  modelMap.set(valueKey, current);
 }
 
 function getLineageRootId(definition: DefinitionRow, definitionsById: Map<string, DefinitionRow>): string {
@@ -330,16 +346,10 @@ builder.queryField('domainAnalysis', (t) =>
         },
         orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
         select: {
+          id: true,
           definitionId: true,
+          config: true,
           createdAt: true,
-          analysisResults: {
-            where: { status: 'CURRENT' },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: {
-              output: true,
-            },
-          },
         },
       });
 
@@ -354,38 +364,76 @@ builder.queryField('domainAnalysis', (t) =>
         Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>
       >();
       const analyzedDefinitionIds = new Set<string>();
+      const valuePairByDefinition = new Map<string, { valueA: DomainAnalysisValueKey; valueB: DomainAnalysisValueKey }>();
+      await Promise.all(
+        latestDefinitionIds.map(async (definitionId) => {
+          try {
+            const resolved = await resolveDefinitionContent(definitionId);
+            const dimensions = resolved.resolvedContent.dimensions;
+            const valueA = dimensions[0]?.name;
+            const valueB = dimensions[1]?.name;
+            if (valueA == null || valueA === '' || valueB == null || valueB === '') return;
+            if (!isDomainAnalysisValueKey(valueA) || !isDomainAnalysisValueKey(valueB)) return;
+            valuePairByDefinition.set(definitionId, { valueA, valueB });
+          } catch {
+            // Ignore definitions whose content cannot be resolved.
+          }
+        }),
+      );
 
+      const sourceRunIdSet = new Set<string>();
+      const sourceRunDefinitionById = new Map<string, string>();
       for (const definitionId of latestDefinitionIds) {
-        const run = latestRunByDefinition.get(definitionId);
-        const analysisOutput = run?.analysisResults[0]?.output;
-        if (analysisOutput == null) continue;
-        const parsedOutput = zAnalysisOutput.safeParse(analysisOutput);
-        if (!parsedOutput.success) continue;
-
-        let hadAnyModelData = false;
-        const perModelEntries = Object.entries(parsedOutput.data.perModel);
-        for (const [modelId, modelStats] of perModelEntries) {
-          const modelValues = modelStats.values;
-          if (!modelValues) continue;
-          hadAnyModelData = true;
-          let valueMap = aggregatedByModel.get(modelId);
-          if (!valueMap) {
-            valueMap = new Map();
-            aggregatedByModel.set(modelId, valueMap);
-          }
-
-          const valueEntries = Object.entries(modelValues);
-          for (const [valueKey, valueStats] of valueEntries) {
-            if (!isDomainAnalysisValueKey(valueKey)) continue;
-            const existing = valueMap.get(valueKey) ?? { prioritized: 0, deprioritized: 0, neutral: 0 };
-            existing.prioritized += valueStats.count.prioritized;
-            existing.deprioritized += valueStats.count.deprioritized;
-            existing.neutral += valueStats.count.neutral;
-            valueMap.set(valueKey, existing);
-          }
+        const aggregateRun = latestRunByDefinition.get(definitionId);
+        if (!aggregateRun) continue;
+        const sourceRunIds = parseSourceRunIds(aggregateRun.config);
+        for (const sourceRunId of sourceRunIds) {
+          sourceRunIdSet.add(sourceRunId);
+          sourceRunDefinitionById.set(sourceRunId, definitionId);
         }
+      }
 
-        if (hadAnyModelData) {
+      const sourceRunIds = Array.from(sourceRunIdSet);
+      if (sourceRunIds.length > 0) {
+        const transcripts = await db.transcript.findMany({
+          where: {
+            runId: { in: sourceRunIds },
+            deletedAt: null,
+            decisionCode: { in: ['1', '2', '3', '4', '5'] },
+          },
+          select: {
+            runId: true,
+            modelId: true,
+            decisionCode: true,
+          },
+        });
+
+        for (const transcript of transcripts) {
+          const definitionId = sourceRunDefinitionById.get(transcript.runId);
+          if (definitionId == null || definitionId === '') continue;
+          const pair = valuePairByDefinition.get(definitionId);
+          if (!pair) continue;
+          if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
+          const decision = Number.parseInt(transcript.decisionCode, 10);
+          if (!Number.isFinite(decision)) continue;
+
+          let valueMap = aggregatedByModel.get(transcript.modelId);
+          if (!valueMap) {
+            valueMap = new Map<DomainAnalysisValueKey, { prioritized: number; deprioritized: number; neutral: number }>();
+            aggregatedByModel.set(transcript.modelId, valueMap);
+          }
+
+          if (decision >= 4) {
+            incrementValueCount(valueMap, pair.valueA, 'prioritized');
+            incrementValueCount(valueMap, pair.valueB, 'deprioritized');
+          } else if (decision <= 2) {
+            incrementValueCount(valueMap, pair.valueA, 'deprioritized');
+            incrementValueCount(valueMap, pair.valueB, 'prioritized');
+          } else {
+            incrementValueCount(valueMap, pair.valueA, 'neutral');
+            incrementValueCount(valueMap, pair.valueB, 'neutral');
+          }
+
           analyzedDefinitionIds.add(definitionId);
         }
       }
@@ -426,7 +474,7 @@ builder.queryField('domainAnalysis', (t) =>
         .map((model) => ({
           model: model.modelId,
           label: model.displayName,
-          reason: 'No aggregate analysis data available for selected domain.',
+          reason: 'No aggregate transcript data available for selected domain.',
         }));
 
       return {
