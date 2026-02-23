@@ -48,6 +48,7 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
         definitionId
         definitionName
         definitionVersion
+        aggregateRunId
         otherValueKey
         prioritized
         deprioritized
@@ -156,6 +157,7 @@ export type DomainAnalysisValueDetailVignette = {
   definitionId: string;
   definitionName: string;
   definitionVersion: number;
+  aggregateRunId: string | null;
   otherValueKey: string;
   prioritized: number;
   deprioritized: number;

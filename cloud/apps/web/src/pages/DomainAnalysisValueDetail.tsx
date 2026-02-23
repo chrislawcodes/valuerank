@@ -167,9 +167,19 @@ export function DomainAnalysisValueDetail() {
           {detail.vignettes.map((vignette) => (
             <article key={vignette.definitionId} className="rounded border border-gray-200">
               <header className="border-b border-gray-200 bg-gray-50 px-3 py-2">
-                <p className="text-sm font-medium text-gray-900">
-                  {vignette.definitionName} (v{vignette.definitionVersion})
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-900">
+                    {vignette.definitionName} (v{vignette.definitionVersion})
+                  </p>
+                  {vignette.aggregateRunId !== null && (
+                    <Link
+                      to={`/analysis/${vignette.aggregateRunId}?tab=scenarios`}
+                      className="text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                    >
+                      Open in Vignette Analysis (Conditions)
+                    </Link>
+                  )}
+                </div>
                 <p className="text-xs text-gray-600">
                   Pair: {label} vs {VALUE_LABELS[vignette.otherValueKey as ValueKey] ?? vignette.otherValueKey} · Trials:{' '}
                   {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}

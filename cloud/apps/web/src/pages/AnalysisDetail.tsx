@@ -4,7 +4,7 @@
  * Displays detailed analysis for a single run with full AnalysisPanel.
  */
 
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
@@ -12,10 +12,20 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useRun } from '../hooks/useRun';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
+import type { AnalysisTab } from '../components/analysis/tabs';
+
+function parseAnalysisTab(value: string | null): AnalysisTab {
+  if (value === 'overview' || value === 'decisions' || value === 'scenarios' || value === 'stability') {
+    return value;
+  }
+  return 'overview';
+}
 
 export function AnalysisDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const initialTab = parseAnalysisTab(searchParams.get('tab'));
 
   const { run, loading, error } = useRun({
     id: id || '',
@@ -107,6 +117,7 @@ export function AnalysisDetail() {
           isOldVersion={isOldVersion}
           isAggregate={isAggregate}
           pendingSince={run.completedAt}
+          initialTab={initialTab}
         />
       )}
     </div>
