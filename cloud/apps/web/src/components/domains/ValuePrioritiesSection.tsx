@@ -25,9 +25,16 @@ function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: Value
 type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
+  scoreMethod: 'LOG_ODDS' | 'FULL_BT';
+  onScoreMethodChange: (method: 'LOG_ODDS' | 'FULL_BT') => void;
 };
 
-export function ValuePrioritiesSection({ models, selectedDomainId }: ValuePrioritiesSectionProps) {
+export function ValuePrioritiesSection({
+  models,
+  selectedDomainId,
+  scoreMethod,
+  onScoreMethodChange,
+}: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
@@ -67,6 +74,7 @@ export function ValuePrioritiesSection({ models, selectedDomainId }: ValuePriori
       domainId: selectedDomainId,
       modelId,
       valueKey,
+      scoreMethod,
     });
     navigate(`/domains/analysis/value-detail?${params.toString()}`);
   };
@@ -78,7 +86,29 @@ export function ValuePrioritiesSection({ models, selectedDomainId }: ValuePriori
           <h2 className="text-base font-medium text-gray-900">1. Value Priorities by AI</h2>
           <p className="text-sm text-gray-600">Which values each model favors most and least.</p>
         </div>
-        <p className="text-xs text-gray-500">Click a column heading to sort.</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">Click a column heading to sort.</p>
+          <div className="inline-flex rounded border border-gray-200 bg-gray-50 p-0.5">
+            <Button
+              type="button"
+              variant={scoreMethod === 'LOG_ODDS' ? 'primary' : 'ghost'}
+              size="sm"
+              className="h-7 min-h-0 px-2 text-xs"
+              onClick={() => onScoreMethodChange('LOG_ODDS')}
+            >
+              Log
+            </Button>
+            <Button
+              type="button"
+              variant={scoreMethod === 'FULL_BT' ? 'primary' : 'ghost'}
+              size="sm"
+              className="h-7 min-h-0 px-2 text-xs"
+              onClick={() => onScoreMethodChange('FULL_BT')}
+            >
+              Full BT
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
