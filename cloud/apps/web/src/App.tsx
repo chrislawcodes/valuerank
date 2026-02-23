@@ -10,6 +10,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainAnalysis } from './pages/DomainAnalysis';
+import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
@@ -71,6 +72,14 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <DomainAnalysis />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/analysis/value-detail"
+              element={
+                <ProtectedLayout fullWidth>
+                  <DomainAnalysisValueDetail />
                 </ProtectedLayout>
               }
             />

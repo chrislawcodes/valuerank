@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import {
   VALUES,
@@ -23,9 +24,11 @@ function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: Value
 
 type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
+  selectedDomainId: string;
 };
 
-export function ValuePrioritiesSection({ models }: ValuePrioritiesSectionProps) {
+export function ValuePrioritiesSection({ models, selectedDomainId }: ValuePrioritiesSectionProps) {
+  const navigate = useNavigate();
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
   const updateSort = (key: 'model' | ValueKey) => {
@@ -57,6 +60,16 @@ export function ValuePrioritiesSection({ models }: ValuePrioritiesSectionProps) 
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
+
+  const handleValueCellClick = (modelId: string, valueKey: ValueKey) => {
+    if (selectedDomainId === '') return;
+    const params = new URLSearchParams({
+      domainId: selectedDomainId,
+      modelId,
+      valueKey,
+    });
+    navigate(`/domains/analysis/value-detail?${params.toString()}`);
+  };
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -131,8 +144,18 @@ export function ValuePrioritiesSection({ models }: ValuePrioritiesSectionProps) 
                       className="px-2 py-2 text-right text-gray-800"
                       style={{ background: getPriorityColor(model.values[value], valueRange.min, valueRange.max) }}
                     >
-                      {model.values[value] > 0 ? '+' : ''}
-                      {model.values[value].toFixed(2)}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto min-h-0 w-full !p-0 text-right text-xs text-gray-800 hover:underline"
+                        onClick={() => handleValueCellClick(model.model, value)}
+                        disabled={selectedDomainId === ''}
+                        title={`View score calculation and vignette condition details for ${model.label} · ${VALUE_LABELS[value]}`}
+                      >
+                        {model.values[value] > 0 ? '+' : ''}
+                        {model.values[value].toFixed(2)}
+                      </Button>
                     </td>
                   ))}
                   <td className="px-2 py-2">
