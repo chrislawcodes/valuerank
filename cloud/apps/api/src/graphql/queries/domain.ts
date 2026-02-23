@@ -998,30 +998,9 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
 
       const definition = await db.definition.findFirst({
         where: { id: definitionId, domainId, deletedAt: null },
-        select: {
-          id: true,
-          parentId: true,
-          version: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: { id: true },
       });
       if (!definition) return [];
-
-      const definitionsInDomain = await db.definition.findMany({
-        where: { domainId, deletedAt: null },
-        select: {
-          id: true,
-          parentId: true,
-          version: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      const definitionsById = await hydrateDefinitionAncestors(definitionsInDomain);
-      const latestDefinitions = selectLatestDefinitionPerLineage(definitionsInDomain, definitionsById);
-      const latestDefinitionIds = new Set(latestDefinitions.map((row) => row.id));
-      if (!latestDefinitionIds.has(definitionId)) return [];
 
       const pairMap = await resolveValuePairsInChunks([definitionId]);
       const pair = pairMap.get(definitionId);
@@ -1053,7 +1032,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
         where: {
           runId: { in: sourceRunIds },
           modelId,
-          scenarioId,
+          ...(scenarioId === null ? {} : { scenarioId }),
           deletedAt: null,
           decisionCode: { in: ['1', '2', '3', '4', '5'] },
         },
