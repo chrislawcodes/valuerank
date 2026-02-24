@@ -88,13 +88,16 @@ export const ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION = gql`
 `;
 
 export const RUN_TRIALS_FOR_DOMAIN_MUTATION = gql`
-  mutation RunTrialsForDomain($domainId: ID!, $temperature: Float) {
-    runTrialsForDomain(domainId: $domainId, temperature: $temperature) {
+  mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float) {
+    runTrialsForDomain(domainId: $domainId, temperature: $temperature, maxBudgetUsd: $maxBudgetUsd) {
       success
       totalDefinitions
       targetedDefinitions
       startedRuns
       failedDefinitions
+      skippedForBudget
+      projectedCostUsd
+      blockedByActiveLaunch
       runs {
         definitionId
         runId
@@ -149,6 +152,7 @@ export const DOMAIN_TRIAL_RUNS_STATUS_QUERY = gql`
         summarizationCompleted
         summarizationFailed
         summarizationTotal
+        latestErrorMessage
       }
     }
   }
@@ -246,6 +250,9 @@ export type RunTrialsForDomainMutationResult = {
     targetedDefinitions: number;
     startedRuns: number;
     failedDefinitions: number;
+    skippedForBudget: number;
+    projectedCostUsd: number;
+    blockedByActiveLaunch: boolean;
     runs: Array<{
       definitionId: string;
       runId: string;
@@ -257,6 +264,7 @@ export type RunTrialsForDomainMutationResult = {
 export type RunTrialsForDomainMutationVariables = {
   domainId: string;
   temperature?: number;
+  maxBudgetUsd?: number;
 };
 
 export type DomainTrialsPlanQueryResult = {
@@ -306,6 +314,7 @@ export type DomainTrialRunsStatusQueryResult = {
       summarizationCompleted: number;
       summarizationFailed: number;
       summarizationTotal: number;
+      latestErrorMessage: string | null;
     }>;
   }>;
 };

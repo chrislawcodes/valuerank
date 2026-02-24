@@ -5,6 +5,7 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatTrialSignature } from '../../utils/trial-signature.js';
+import { AuthenticationError } from '@valuerank/shared';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -163,6 +164,7 @@ type DomainTrialModelStatus = {
   summarizationCompleted: number;
   summarizationFailed: number;
   summarizationTotal: number;
+  latestErrorMessage: string | null;
 };
 
 type DomainTrialRunStatus = {
@@ -390,6 +392,7 @@ builder.objectType(DomainTrialModelStatusRef, {
     summarizationCompleted: t.exposeInt('summarizationCompleted'),
     summarizationFailed: t.exposeInt('summarizationFailed'),
     summarizationTotal: t.exposeInt('summarizationTotal'),
+    latestErrorMessage: t.exposeString('latestErrorMessage', { nullable: true }),
   }),
 });
 
@@ -781,7 +784,10 @@ builder.queryField('domainTrialsPlan', (t) =>
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const domainId = String(args.domainId);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -929,7 +935,10 @@ builder.queryField('domainTrialRunsStatus', (t) =>
     args: {
       runIds: t.arg.idList({ required: true }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const runIds = args.runIds.map(String);
       if (runIds.length === 0) return [];
 
@@ -971,6 +980,21 @@ builder.queryField('domainTrialRunsStatus', (t) =>
         where: { runId: { in: runIds } },
         _count: { _all: true },
       });
+      const failedProbeRows = await db.probeResult.findMany({
+        where: {
+          runId: { in: runIds },
+          status: 'FAILED',
+        },
+        select: {
+          runId: true,
+          modelId: true,
+          errorCode: true,
+          errorMessage: true,
+          completedAt: true,
+          createdAt: true,
+        },
+        orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+      });
 
       const probeByKey = new Map<string, { completed: number; failed: number }>();
       for (const row of probeRows) {
@@ -995,6 +1019,15 @@ builder.queryField('domainTrialRunsStatus', (t) =>
       const summarizeFailedByKey = new Map<string, number>();
       for (const row of summarizeFailedRows) {
         summarizeFailedByKey.set(`${row.runId}::${row.modelId}`, row._count._all);
+      }
+      const latestErrorByKey = new Map<string, string>();
+      for (const row of failedProbeRows) {
+        const key = `${row.runId}::${row.modelId}`;
+        if (latestErrorByKey.has(key)) continue;
+        const messageParts = [row.errorCode, row.errorMessage].filter(
+          (part): part is string => typeof part === 'string' && part.trim() !== ''
+        );
+        latestErrorByKey.set(key, messageParts.length > 0 ? messageParts.join(' - ') : 'Model probe failed.');
       }
 
       const scenarioCountByRun = new Map(
@@ -1023,6 +1056,7 @@ builder.queryField('domainTrialRunsStatus', (t) =>
             summarizationCompleted: summarizedByKey.get(key) ?? 0,
             summarizationFailed: summarizeFailedByKey.get(key) ?? 0,
             summarizationTotal,
+            latestErrorMessage: latestErrorByKey.get(key) ?? null,
           };
         });
 
