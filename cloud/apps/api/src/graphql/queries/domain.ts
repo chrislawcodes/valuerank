@@ -76,6 +76,8 @@ type DomainAnalysisUnavailableModel = {
 type DomainAnalysisMissingDefinition = {
   definitionId: string;
   definitionName: string;
+  reasonCode: DomainAnalysisMissingReasonCode;
+  reasonLabel: string;
   missingAllModels: boolean;
   missingModelIds: string[];
   missingModelLabels: string[];
@@ -211,6 +213,16 @@ type DomainAnalysisConditionTranscript = {
   content: unknown;
 };
 
+type DomainAnalysisMissingReasonCode = 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+
+type SignatureResolutionResult = {
+  selectedSignature: string | null;
+  filteredSourceRunIds: string[];
+  filteredSourceRunDefinitionById: Map<string, string>;
+  coveredDefinitionIds: Set<string>;
+  missingReasonByDefinitionId: Map<string, DomainAnalysisMissingReasonCode>;
+};
+
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
@@ -262,6 +274,8 @@ builder.objectType(DomainAnalysisMissingDefinitionRef, {
   fields: (t) => ({
     definitionId: t.exposeID('definitionId'),
     definitionName: t.exposeString('definitionName'),
+    reasonCode: t.exposeString('reasonCode'),
+    reasonLabel: t.exposeString('reasonLabel'),
     missingAllModels: t.exposeBoolean('missingAllModels'),
     missingModelIds: t.exposeStringList('missingModelIds'),
     missingModelLabels: t.exposeStringList('missingModelLabels'),
@@ -469,13 +483,6 @@ function parseDomainAnalysisScoreMethod(value: string | null | undefined): Domai
   return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
 }
 
-function parseSourceRunIds(config: unknown): string[] {
-  if (config == null || typeof config !== 'object' || Array.isArray(config)) return [];
-  const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
-  if (!Array.isArray(sourceRunIds)) return [];
-  return sourceRunIds.filter((id): id is string => typeof id === 'string' && id !== '');
-}
-
 function formatRunSignature(config: unknown): string {
   const runConfig = config as {
     definitionSnapshot?: {
@@ -491,106 +498,126 @@ function formatRunSignature(config: unknown): string {
   return formatTrialSignature(definitionVersion, temperature);
 }
 
+function getMissingReasonLabel(reasonCode: DomainAnalysisMissingReasonCode): string {
+  switch (reasonCode) {
+    case 'NO_COMPLETED_RUNS':
+      return 'No completed runs were found for this vignette.';
+    case 'NO_SIGNATURE_MATCH':
+      return 'Completed runs exist, but none matched the selected signature.';
+    case 'NO_TRANSCRIPTS':
+      return 'Matching runs exist, but no analyzed transcripts were found for this signature.';
+    default:
+      return 'No compatible runs were found for this vignette.';
+  }
+}
+
+function selectDefaultVnewSignature(completedRuns: Array<{ config: unknown }>): string | null {
+  if (completedRuns.length === 0) return null;
+  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
+
+  for (const run of completedRuns) {
+    const runConfig = run.config as { temperature?: unknown } | null;
+    const temperature = parseTemperature(runConfig?.temperature);
+    const key = temperature === null ? 'd' : temperature.toString();
+    const existing = temperatureCounts.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      temperatureCounts.set(key, { temperature, count: 1 });
+    }
+  }
+
+  const winner = Array.from(temperatureCounts.values())
+    .sort((left, right) => {
+      const leftIsZero = left.temperature === 0;
+      const rightIsZero = right.temperature === 0;
+      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
+      if (left.count !== right.count) return right.count - left.count;
+      if (left.temperature === null) return 1;
+      if (right.temperature === null) return -1;
+      return left.temperature - right.temperature;
+    })[0];
+
+  if (!winner) return null;
+  return formatVnewSignature(winner.temperature);
+}
+
+function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+  if (isVnewSignature(signature)) {
+    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
+  }
+  return formatRunSignature(runConfig) === signature;
+}
+
 async function resolveSignatureRuns(
   latestDefinitionIds: string[],
-  sourceRunIds: string[],
-  sourceRunDefinitionById: Map<string, string>,
   selectedSignature: string | null,
-): Promise<{
-  filteredSourceRunIds: string[];
-  filteredSourceRunDefinitionById: Map<string, string>;
-  missingDefinitionIds: string[];
-}> {
+): Promise<SignatureResolutionResult> {
   if (latestDefinitionIds.length === 0) {
     return {
+      selectedSignature: selectedSignature,
       filteredSourceRunIds: [],
       filteredSourceRunDefinitionById: new Map(),
-      missingDefinitionIds: [],
+      coveredDefinitionIds: new Set<string>(),
+      missingReasonByDefinitionId: new Map<string, DomainAnalysisMissingReasonCode>(),
     };
   }
 
-  if (selectedSignature !== null && isVnewSignature(selectedSignature)) {
-    const temperature = parseVnewTemperature(selectedSignature);
-    // vnew signatures intentionally resolve from the freshest completed runs
-    // per latest definition lineage at the selected temperature. This can include
-    // completed runs not yet referenced by an aggregate run's sourceRunIds.
-    const completedRuns = await db.run.findMany({
-      where: {
-        definitionId: { in: latestDefinitionIds },
-        status: 'COMPLETED',
-        deletedAt: null,
-      },
-      orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        definitionId: true,
-        config: true,
-      },
-    });
+  const completedRuns = await db.run.findMany({
+    where: {
+      definitionId: { in: latestDefinitionIds },
+      status: 'COMPLETED',
+      deletedAt: null,
+    },
+    orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      definitionId: true,
+      config: true,
+    },
+  });
 
-    const filteredSourceRunIds: string[] = [];
-    const filteredSourceRunDefinitionById = new Map<string, string>();
-    const coveredDefinitionIds = new Set<string>();
-    for (const run of completedRuns) {
-      if (coveredDefinitionIds.has(run.definitionId)) continue;
-      const runConfig = run.config as { temperature?: unknown } | null;
-      const runTemperature = parseTemperature(runConfig?.temperature);
-      if (runTemperature !== temperature) continue;
-      filteredSourceRunIds.push(run.id);
-      filteredSourceRunDefinitionById.set(run.id, run.definitionId);
-      coveredDefinitionIds.add(run.definitionId);
+  const effectiveSignature = selectedSignature ?? selectDefaultVnewSignature(completedRuns);
+  const runsByDefinitionId = new Map<string, Array<{ id: string; definitionId: string; config: unknown }>>();
+  for (const run of completedRuns) {
+    const current = runsByDefinitionId.get(run.definitionId) ?? [];
+    current.push(run);
+    runsByDefinitionId.set(run.definitionId, current);
+  }
+
+  const filteredSourceRunIds: string[] = [];
+  const filteredSourceRunDefinitionById = new Map<string, string>();
+  const coveredDefinitionIds = new Set<string>();
+  const missingReasonByDefinitionId = new Map<string, DomainAnalysisMissingReasonCode>();
+
+  for (const definitionId of latestDefinitionIds) {
+    const runs = runsByDefinitionId.get(definitionId) ?? [];
+    if (runs.length === 0) {
+      missingReasonByDefinitionId.set(definitionId, 'NO_COMPLETED_RUNS');
+      continue;
     }
 
-    const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
-    return {
-      filteredSourceRunIds,
-      filteredSourceRunDefinitionById,
-      missingDefinitionIds,
-    };
-  }
-
-  if (selectedSignature !== null) {
-    const completedRuns = await db.run.findMany({
-      where: {
-        definitionId: { in: latestDefinitionIds },
-        status: 'COMPLETED',
-        deletedAt: null,
-      },
-      orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        definitionId: true,
-        config: true,
-      },
-    });
-
-    const filteredSourceRunIds: string[] = [];
-    const filteredSourceRunDefinitionById = new Map<string, string>();
-    const coveredDefinitionIds = new Set<string>();
-    for (const run of completedRuns) {
-      if (coveredDefinitionIds.has(run.definitionId)) continue;
-      if (formatRunSignature(run.config) !== selectedSignature) continue;
-      filteredSourceRunIds.push(run.id);
-      filteredSourceRunDefinitionById.set(run.id, run.definitionId);
-      coveredDefinitionIds.add(run.definitionId);
+    const matchedRuns = effectiveSignature === null
+      ? runs
+      : runs.filter((run) => runMatchesSignature(run.config, effectiveSignature));
+    if (matchedRuns.length === 0) {
+      missingReasonByDefinitionId.set(definitionId, 'NO_SIGNATURE_MATCH');
+      continue;
     }
 
-    const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
-    return {
-      filteredSourceRunIds,
-      filteredSourceRunDefinitionById,
-      missingDefinitionIds,
-    };
+    for (const matchedRun of matchedRuns) {
+      filteredSourceRunIds.push(matchedRun.id);
+      filteredSourceRunDefinitionById.set(matchedRun.id, definitionId);
+    }
+    coveredDefinitionIds.add(definitionId);
   }
 
-  const filteredSourceRunIds = sourceRunIds;
-  const filteredSourceRunDefinitionById = sourceRunDefinitionById;
-  const coveredDefinitionIds = new Set(filteredSourceRunDefinitionById.values());
-  const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
   return {
+    selectedSignature: effectiveSignature,
     filteredSourceRunIds,
     filteredSourceRunDefinitionById,
-    missingDefinitionIds,
+    coveredDefinitionIds,
+    missingReasonByDefinitionId,
   };
 }
 
@@ -716,26 +743,6 @@ async function resolveValuePairsInChunks(
   }
 
   return valuePairByDefinition;
-}
-
-function collectSourceRunsByDefinition(
-  latestDefinitionIds: string[],
-  latestRunByDefinition: Map<string, { config: unknown }>,
-): { sourceRunIds: string[]; sourceRunDefinitionById: Map<string, string> } {
-  const sourceRunIdSet = new Set<string>();
-  const sourceRunDefinitionById = new Map<string, string>();
-
-  for (const definitionId of latestDefinitionIds) {
-    const aggregateRun = latestRunByDefinition.get(definitionId);
-    if (!aggregateRun) continue;
-    const sourceRunIds = parseSourceRunIds(aggregateRun.config);
-    for (const sourceRunId of sourceRunIds) {
-      sourceRunIdSet.add(sourceRunId);
-      sourceRunDefinitionById.set(sourceRunId, definitionId);
-    }
-  }
-
-  return { sourceRunIds: Array.from(sourceRunIdSet), sourceRunDefinitionById };
 }
 
 function classifyDecisionForSelectedValue(
@@ -890,7 +897,7 @@ builder.queryField('domains', (t) =>
       limit: t.arg.int({ required: false }),
       offset: t.arg.int({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, _ctx) => {
       const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
       const offset = args.offset ?? 0;
       const search = args.search?.trim();
@@ -942,7 +949,7 @@ builder.queryField('domain', (t) =>
     args: {
       id: t.arg.id({ required: true }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, _ctx) => {
       return db.domain.findUnique({ where: { id: String(args.id) } });
     },
   })
@@ -1346,12 +1353,15 @@ builder.queryField('domainAnalysis', (t) =>
       scoreMethod: t.arg.string({ required: false }),
       signature: t.arg.string({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
-      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
+      if (requestedSignature === null) {
+        ctx.log.warn({ domainId }, 'domainAnalysis called without signature; defaulting to first vnew signature');
+      }
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
@@ -1400,42 +1410,10 @@ builder.queryField('domainAnalysis', (t) =>
         definitions.map((definition) => [definition.id, definition.name ?? definition.id]),
       );
 
-      const aggregateRuns = await db.run.findMany({
-        where: {
-          definitionId: { in: latestDefinitionIds },
-          status: 'COMPLETED',
-          deletedAt: null,
-          tags: {
-            some: {
-              tag: {
-                name: 'Aggregate',
-              },
-            },
-          },
-        },
-        orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
-        select: {
-          definitionId: true,
-          config: true,
-        },
-      });
-
-      const latestRunByDefinition = new Map<string, { config: unknown }>();
-      for (const run of aggregateRuns) {
-        if (latestRunByDefinition.has(run.definitionId)) continue;
-        latestRunByDefinition.set(run.definitionId, { config: run.config });
-      }
-
       const valuePairByDefinition = await resolveValuePairsInChunks(latestDefinitionIds);
-      const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
-        latestDefinitionIds,
-        latestRunByDefinition,
-      );
       const resolvedSignatureRuns = await resolveSignatureRuns(
         latestDefinitionIds,
-        sourceRunIds,
-        sourceRunDefinitionById,
-        selectedSignature,
+        requestedSignature,
       );
       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
@@ -1465,6 +1443,14 @@ builder.queryField('domainAnalysis', (t) =>
         pairwiseWinsByModel = aggregated.pairwiseWinsByModel;
         analyzedDefinitionIds = aggregated.analyzedDefinitionIds;
       }
+
+      const missingReasonByDefinitionId = new Map(resolvedSignatureRuns.missingReasonByDefinitionId);
+      for (const coveredDefinitionId of resolvedSignatureRuns.coveredDefinitionIds) {
+        if (!analyzedDefinitionIds.has(coveredDefinitionId)) {
+          missingReasonByDefinitionId.set(coveredDefinitionId, 'NO_TRANSCRIPTS');
+        }
+      }
+      const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => missingReasonByDefinitionId.has(definitionId));
 
       const modelsWithData = Array.from(aggregatedByModel.keys()).sort((left, right) => {
         const leftLabel = activeModelLabelById.get(left) ?? left;
@@ -1513,24 +1499,28 @@ builder.queryField('domainAnalysis', (t) =>
         }));
       const missingModelIds = activeModels.map((model) => model.modelId);
       const missingModelLabels = activeModels.map((model) => model.displayName ?? model.modelId);
-      // Current signature-level coverage is definition-scoped, so a missing definition
-      // means no matching-run coverage for any model. Keep explicit boolean for future
-      // partial model coverage support.
-      const missingDefinitions = resolvedSignatureRuns.missingDefinitionIds.map((definitionId) => ({
+      // Coverage is currently definition-scoped; missing definitions are treated as
+      // unavailable across all models until model-scoped coverage is implemented.
+      const missingDefinitions = missingDefinitionIds.map((definitionId) => {
+        const reasonCode = missingReasonByDefinitionId.get(definitionId) ?? 'NO_SIGNATURE_MATCH';
+        return {
         definitionId,
         definitionName: definitionNameById.get(definitionId) ?? definitionId,
+        reasonCode,
+        reasonLabel: getMissingReasonLabel(reasonCode),
         missingAllModels: true,
         missingModelIds,
         missingModelLabels,
-      }));
+        };
+      });
 
       return {
         domainId: domain.id,
         domainName: domain.name,
         totalDefinitions: definitions.length,
         targetedDefinitions: latestDefinitions.length,
-        coveredDefinitions: latestDefinitions.length - resolvedSignatureRuns.missingDefinitionIds.length,
-        missingDefinitionIds: resolvedSignatureRuns.missingDefinitionIds,
+        coveredDefinitions: resolvedSignatureRuns.coveredDefinitionIds.size,
+        missingDefinitionIds,
         missingDefinitions,
         definitionsWithAnalysis: analyzedDefinitionIds.size,
         models,
@@ -1551,14 +1541,17 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       scoreMethod: t.arg.string({ required: false }),
       signature: t.arg.string({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
       const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
-      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
+      if (requestedSignature === null) {
+        ctx.log.warn({ domainId, modelId, valueKey: rawValueKey }, 'domainAnalysisValueDetail called without signature; defaulting to first vnew signature');
+      }
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new Error(`Unsupported value key: ${rawValueKey}`);
       }
@@ -1638,6 +1631,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         };
       }
 
+      // Aggregate runs are used here only to expose aggregateRunId metadata per vignette.
+      // Signature filtering for analysis data is resolved exclusively via completed runs
+      // in resolveSignatureRuns (no aggregate wrapper dependency).
       const aggregateRuns = await db.run.findMany({
         where: {
           definitionId: { in: scoreDefinitionIds },
@@ -1655,25 +1651,18 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         select: {
           id: true,
           definitionId: true,
-          config: true,
         },
       });
 
-      const latestRunByDefinition = new Map<string, { id: string; config: unknown }>();
+      const latestRunByDefinition = new Map<string, { id: string }>();
       for (const run of aggregateRuns) {
         if (latestRunByDefinition.has(run.definitionId)) continue;
-        latestRunByDefinition.set(run.definitionId, { id: run.id, config: run.config });
+        latestRunByDefinition.set(run.definitionId, { id: run.id });
       }
 
-      const { sourceRunIds, sourceRunDefinitionById } = collectSourceRunsByDefinition(
-        scoreDefinitionIds,
-        latestRunByDefinition,
-      );
       const resolvedSignatureRuns = await resolveSignatureRuns(
         scoreDefinitionIds,
-        sourceRunIds,
-        sourceRunDefinitionById,
-        selectedSignature,
+        requestedSignature,
       );
       const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
@@ -1729,6 +1718,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       let totalDeprioritized = 0;
       let totalNeutral = 0;
       const pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
+      const analyzedDefinitionIds = new Set<string>();
 
       if (filteredSourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
@@ -1784,11 +1774,12 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           if (definitionId == null || definitionId === '') continue;
           const pair = valuePairByDefinition.get(definitionId);
           const vignette = vignetteByDefinitionId.get(definitionId);
-          if (!pair || !vignette) continue;
+          if (!pair) continue;
           if (transcript.decisionCode == null || transcript.decisionCode === '') continue;
 
           const decision = Number.parseInt(transcript.decisionCode, 10);
           if (!Number.isFinite(decision)) continue;
+          analyzedDefinitionIds.add(definitionId);
 
           const selectedIsValueA = pair.valueA === valueKey;
           if (decision >= 4) {
@@ -1797,7 +1788,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
             incrementPairwiseWin(pairwiseWins, pair.valueB, pair.valueA);
           }
 
-          if (!targetDefinitionIdSet.has(definitionId)) continue;
+          if (!targetDefinitionIdSet.has(definitionId) || !vignette) continue;
 
           const outcome = classifyDecisionForSelectedValue(decision, selectedIsValueA);
 
@@ -1876,6 +1867,14 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           };
         });
 
+      const missingReasonByDefinitionId = new Map(resolvedSignatureRuns.missingReasonByDefinitionId);
+      for (const coveredDefinitionId of resolvedSignatureRuns.coveredDefinitionIds) {
+        if (!analyzedDefinitionIds.has(coveredDefinitionId)) {
+          missingReasonByDefinitionId.set(coveredDefinitionId, 'NO_TRANSCRIPTS');
+        }
+      }
+      const missingDefinitionIds = scoreDefinitionIds.filter((id) => missingReasonByDefinitionId.has(id));
+
       return {
         domainId: domain.id,
         domainName: domain.name,
@@ -1890,8 +1889,8 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         neutral: totalNeutral,
         totalTrials: totalPrioritized + totalDeprioritized + totalNeutral,
         targetedDefinitions: scoreDefinitionIds.length,
-        coveredDefinitions: scoreDefinitionIds.length - resolvedSignatureRuns.missingDefinitionIds.length,
-        missingDefinitionIds: resolvedSignatureRuns.missingDefinitionIds,
+        coveredDefinitions: resolvedSignatureRuns.coveredDefinitionIds.size,
+        missingDefinitionIds,
         vignettes,
         generatedAt: new Date(),
       };
@@ -1911,7 +1910,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       limit: t.arg.int({ required: false }),
       signature: t.arg.string({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const definitionId = String(args.definitionId);
@@ -1922,9 +1921,12 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       const valueKey = rawValueKey;
       const limit = Math.max(1, Math.min(args.limit ?? 50, 200));
       const scenarioId = args.scenarioId != null && args.scenarioId !== '' ? String(args.scenarioId) : null;
-      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+      const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
+      if (requestedSignature === null) {
+        ctx.log.warn({ domainId, definitionId, modelId, valueKey }, 'domainAnalysisConditionTranscripts called without signature; defaulting to first vnew signature');
+      }
 
       const definition = await db.definition.findFirst({
         where: { id: definitionId, domainId, deletedAt: null },
@@ -1937,34 +1939,11 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       if (!pair) return [];
       if (pair.valueA !== valueKey && pair.valueB !== valueKey) return [];
 
-      const aggregateRun = await db.run.findFirst({
-        where: {
-          definitionId,
-          status: 'COMPLETED',
-          deletedAt: null,
-          tags: {
-            some: {
-              tag: {
-                name: 'Aggregate',
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { config: true },
-      });
-      if (!aggregateRun) return [];
-
-      let sourceRunIds = parseSourceRunIds(aggregateRun.config);
-      if (sourceRunIds.length === 0) return [];
-      const sourceRunDefinitionById = new Map(sourceRunIds.map((runId) => [runId, definitionId]));
       const resolvedSignatureRuns = await resolveSignatureRuns(
         [definitionId],
-        sourceRunIds,
-        sourceRunDefinitionById,
-        selectedSignature,
+        requestedSignature,
       );
-      sourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+      const sourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       if (sourceRunIds.length === 0) return [];
 
       return db.transcript.findMany({

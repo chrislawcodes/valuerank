@@ -12,6 +12,8 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
       missingDefinitions {
         definitionId
         definitionName
+        reasonCode
+        reasonLabel
         missingAllModels
         missingModelIds
         missingModelLabels
@@ -230,6 +232,8 @@ export type DomainAnalysisResult = {
   missingDefinitions: {
     definitionId: string;
     definitionName: string;
+    reasonCode: 'NO_COMPLETED_RUNS' | 'NO_SIGNATURE_MATCH' | 'NO_TRANSCRIPTS';
+    reasonLabel: string;
     missingAllModels: boolean;
     missingModelIds: string[];
     missingModelLabels: string[];
