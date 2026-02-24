@@ -109,7 +109,7 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
-    if ((message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
+    if ((message.includes('Unknown argument "scoreMethod"') || message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
       setUseLegacyQuery(true);
     }
   }, [scoredError, useLegacyQuery]);
