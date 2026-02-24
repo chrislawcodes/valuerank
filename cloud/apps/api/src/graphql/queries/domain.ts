@@ -76,6 +76,7 @@ type DomainAnalysisUnavailableModel = {
 type DomainAnalysisMissingDefinition = {
   definitionId: string;
   definitionName: string;
+  missingAllModels: boolean;
   missingModelIds: string[];
   missingModelLabels: string[];
 };
@@ -261,6 +262,7 @@ builder.objectType(DomainAnalysisMissingDefinitionRef, {
   fields: (t) => ({
     definitionId: t.exposeID('definitionId'),
     definitionName: t.exposeString('definitionName'),
+    missingAllModels: t.exposeBoolean('missingAllModels'),
     missingModelIds: t.exposeStringList('missingModelIds'),
     missingModelLabels: t.exposeStringList('missingModelLabels'),
   }),
@@ -952,6 +954,7 @@ builder.queryField('domainTrialsPlan', (t) =>
     args: {
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
+      definitionIds: t.arg.idList({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
@@ -989,7 +992,14 @@ builder.queryField('domainTrialsPlan', (t) =>
 
       const definitionsById = await hydrateDefinitionAncestors(definitions);
       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
-      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+      const requestedDefinitionIds = args.definitionIds?.map(String) ?? [];
+      const latestDefinitionById = new Map(latestDefinitions.map((definition) => [definition.id, definition]));
+      const selectedDefinitions = requestedDefinitionIds.length > 0
+        ? requestedDefinitionIds
+          .map((definitionId) => latestDefinitionById.get(definitionId))
+          .filter((definition): definition is DefinitionRow => definition !== undefined)
+        : latestDefinitions;
+      const latestDefinitionIds = selectedDefinitions.map((definition) => definition.id);
 
       const scenarioCounts = await db.scenario.groupBy({
         by: ['definitionId'],
@@ -1018,8 +1028,8 @@ builder.queryField('domainTrialsPlan', (t) =>
       let totalEstimatedCost = 0;
 
       if (modelIds.length > 0) {
-        for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE) {
-          const chunk = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE);
+        for (let offset = 0; offset < selectedDefinitions.length; offset += DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE) {
+          const chunk = selectedDefinitions.slice(offset, offset + DOMAIN_TRIAL_PLAN_COST_CHUNK_SIZE);
           const estimates = await Promise.all(
             chunk.map(async (definition) => {
               const estimate = await estimateCostService({
@@ -1075,7 +1085,7 @@ builder.queryField('domainTrialsPlan', (t) =>
       return {
         domainId,
         domainName: domain.name,
-        vignettes: latestDefinitions.map((definition) => ({
+        vignettes: selectedDefinitions.map((definition) => ({
           definitionId: definition.id,
           definitionName: definition.name ?? 'Untitled vignette',
           definitionVersion: definition.version,
@@ -1506,6 +1516,7 @@ builder.queryField('domainAnalysis', (t) =>
       const missingDefinitions = resolvedSignatureRuns.missingDefinitionIds.map((definitionId) => ({
         definitionId,
         definitionName: definitionNameById.get(definitionId) ?? definitionId,
+        missingAllModels: true,
         missingModelIds,
         missingModelLabels,
       }));

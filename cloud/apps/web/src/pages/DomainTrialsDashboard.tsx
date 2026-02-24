@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -34,6 +34,7 @@ const POLL_MS = 3000;
 type CellRunMap = Record<string, string>;
 export function DomainTrialsDashboard() {
   const { domainId } = useParams<{ domainId: string }>();
+  const [searchParams] = useSearchParams();
   const [useDefaultTemperature, setUseDefaultTemperature] = useState(true);
   const [temperatureInput, setTemperatureInput] = useState('0.7');
   const [started, setStarted] = useState(false);
@@ -55,10 +56,18 @@ export function DomainTrialsDashboard() {
   const selectedTemperature = !useDefaultTemperature && hasValidTemperature ? parsedTemperature : undefined;
   const parsedBudget = Number.parseFloat(maxBudgetInput);
   const hasValidBudget = Number.isFinite(parsedBudget) && parsedBudget > 0;
+  const filteredDefinitionIds = useMemo(() => {
+    const raw = searchParams.get('definitionIds');
+    if (!raw) return [];
+    return raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id !== '');
+  }, [searchParams]);
 
   const [planResult, refetchPlan] = useQuery<DomainTrialsPlanQueryResult, DomainTrialsPlanQueryVariables>({
     query: DOMAIN_TRIALS_PLAN_QUERY,
-    variables: { domainId: domainId ?? '', temperature: selectedTemperature },
+    variables: { domainId: domainId ?? '', temperature: selectedTemperature, definitionIds: filteredDefinitionIds },
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
@@ -178,6 +187,7 @@ export function DomainTrialsDashboard() {
       domainId,
       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
+      definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
     });
     if (result.error) {
       setRunError(result.error.message);
@@ -303,6 +313,11 @@ export function DomainTrialsDashboard() {
           <p className="text-sm text-gray-600">
             Review and run latest vignettes for <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
           </p>
+          {filteredDefinitionIds.length > 0 && (
+            <p className="text-xs text-amber-700">
+              Scoped to {filteredDefinitionIds.length} selected missing vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={() => refetchPlan({ requestPolicy: 'network-only' })}>

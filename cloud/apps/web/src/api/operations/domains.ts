@@ -88,8 +88,8 @@ export const ASSIGN_DOMAIN_TO_DEFINITIONS_BY_FILTER_MUTATION = gql`
 `;
 
 export const RUN_TRIALS_FOR_DOMAIN_MUTATION = gql`
-  mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float) {
-    runTrialsForDomain(domainId: $domainId, temperature: $temperature, maxBudgetUsd: $maxBudgetUsd) {
+  mutation RunTrialsForDomain($domainId: ID!, $temperature: Float, $maxBudgetUsd: Float, $definitionIds: [ID!]) {
+    runTrialsForDomain(domainId: $domainId, temperature: $temperature, maxBudgetUsd: $maxBudgetUsd, definitionIds: $definitionIds) {
       success
       totalDefinitions
       targetedDefinitions
@@ -108,8 +108,8 @@ export const RUN_TRIALS_FOR_DOMAIN_MUTATION = gql`
 `;
 
 export const DOMAIN_TRIALS_PLAN_QUERY = gql`
-  query DomainTrialsPlan($domainId: ID!, $temperature: Float) {
-    domainTrialsPlan(domainId: $domainId, temperature: $temperature) {
+  query DomainTrialsPlan($domainId: ID!, $temperature: Float, $definitionIds: [ID!]) {
+    domainTrialsPlan(domainId: $domainId, temperature: $temperature, definitionIds: $definitionIds) {
       domainId
       domainName
       vignettes {
@@ -265,6 +265,7 @@ export type RunTrialsForDomainMutationVariables = {
   domainId: string;
   temperature?: number;
   maxBudgetUsd?: number;
+  definitionIds?: string[];
 };
 
 export type DomainTrialsPlanQueryResult = {
@@ -299,6 +300,7 @@ export type DomainTrialsPlanQueryResult = {
 export type DomainTrialsPlanQueryVariables = {
   domainId: string;
   temperature?: number;
+  definitionIds?: string[];
 };
 
 export type DomainTrialRunsStatusQueryResult = {
