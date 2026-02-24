@@ -138,9 +138,6 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           if (aggregate.temperatures.size > 1) {
             mismatchParts.push(`temperatures: ${Array.from(aggregate.temperatures).join(', ')}`);
           }
-          if (aggregate.signatures.size > 1) {
-            mismatchParts.push(`signatures: ${Array.from(aggregate.signatures).join(', ')}`);
-          }
           return {
             trialCount: aggregate.trialCount,
             trialConfig: {
