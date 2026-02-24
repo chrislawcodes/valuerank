@@ -1,15 +1,77 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  VALUES,
   VALUE_LABELS,
   type DomainAnalysisModelAvailability,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 const CLOSE_WINRATE_DELTA = 0.08;
 const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
+const CHART_WIDTH = 1280;
+const CHART_HEIGHT = 1120;
+const CHART_CENTER_X = CHART_WIDTH / 2;
+const CHART_CENTER_Y = CHART_HEIGHT / 2;
+const NODE_RING_RADIUS = 450;
+const QUADRANT_SECTOR_RADIUS = 520;
+const QUADRANT_RING_RADIUS = 536;
+const QUADRANT_LABEL_RADIUS = 640;
+const NODE_RADIUS = 68;
+
+// Domain analysis intentionally renders the 10 canonical Schwartz values only.
+// The UI uses one representative value per mapped quadrant slot for readability.
+const DISPLAY_VALUES: ValueKey[] = [
+  'Universalism_Nature',
+  'Benevolence_Dependability',
+  'Conformity_Interpersonal',
+  'Tradition',
+  'Security_Personal',
+  'Power_Dominance',
+  'Achievement',
+  'Hedonism',
+  'Stimulation',
+  'Self_Direction_Action',
+];
+
+const QUADRANT_ARCS = [
+  { label: 'Self-Transcendence', startAngle: -Math.PI / 2, endAngle: 0, fill: 'rgba(245, 158, 11, 0.15)', ring: '#f59e0b' },
+  { label: 'Conservation', startAngle: 0, endAngle: Math.PI / 2, fill: 'rgba(132, 204, 22, 0.16)', ring: '#84cc16' },
+  { label: 'Self-Enhancement', startAngle: Math.PI / 2, endAngle: Math.PI, fill: 'rgba(249, 115, 22, 0.15)', ring: '#f97316' },
+  { label: 'Openness to Change', startAngle: Math.PI, endAngle: Math.PI * 1.5, fill: 'rgba(244, 114, 182, 0.15)', ring: '#f472b6' },
+] as const;
+
+const SELF_ENHANCEMENT_VALUES: ReadonlyArray<ValueKey> = ['Power_Dominance', 'Achievement'];
+const OPENNESS_NON_STRADDLE_VALUES: ReadonlyArray<ValueKey> = ['Stimulation', 'Self_Direction_Action'];
+
+function polarToCartesian(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+  return {
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  };
+}
+
+function describeSectorPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, radius, startAngle);
+  const end = polarToCartesian(cx, cy, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+}
+
+function describeArcPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, radius, startAngle);
+  const end = polarToCartesian(cx, cy, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+}
+
+function describeNodeHalfArc(cx: number, cy: number, radius: number, topHalf: boolean): string {
+  const startX = cx - radius;
+  const endX = cx + radius;
+  const sweepFlag = topHalf ? 1 : 0;
+  return `M ${startX} ${cy} A ${radius} ${radius} 0 0 ${sweepFlag} ${endX} ${cy}`;
+}
 
 function getEdgeColor(params: {
   focusedValue: ValueKey | null;
@@ -50,6 +112,8 @@ type DominanceSectionProps = {
 };
 
 export function DominanceSection({ models, unavailableModels }: DominanceSectionProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const contestableRef = useRef<HTMLDivElement>(null);
   const [selectedModelId, setSelectedModelId] = useState(models[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -69,7 +133,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   // Staggered speeds: all start together, top circle fastest, each subsequent one noticeably slower
   const baseDurationMs = 360; // fastest node (top)
   const perNodeSlowdown = 120; // each clockwise node takes this much longer
-  const slowestDuration = baseDurationMs + (VALUES.length - 1) * perNodeSlowdown;
+  const slowestDuration = baseDurationMs + (DISPLAY_VALUES.length - 1) * perNodeSlowdown;
 
   // Model-switch collapse/expand animation
   useEffect(() => {
@@ -121,10 +185,10 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const edges = useMemo(() => {
     if (!selectedModel) return [];
     const allEdges: Array<{ from: ValueKey; to: ValueKey; gap: number }> = [];
-    for (let i = 0; i < VALUES.length; i += 1) {
-      for (let j = i + 1; j < VALUES.length; j += 1) {
-        const a = VALUES[i];
-        const b = VALUES[j];
+    for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
+      for (let j = i + 1; j < DISPLAY_VALUES.length; j += 1) {
+        const a = DISPLAY_VALUES[i];
+        const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
         const av = selectedModel.values[a];
         const bv = selectedModel.values[b];
@@ -139,10 +203,10 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const contestedPairs = useMemo(() => {
     if (!selectedModel) return [];
     const pairs: Array<{ a: ValueKey; b: ValueKey; gap: number; winner: ValueKey }> = [];
-    for (let i = 0; i < VALUES.length; i += 1) {
-      for (let j = i + 1; j < VALUES.length; j += 1) {
-        const a = VALUES[i];
-        const b = VALUES[j];
+    for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
+      for (let j = i + 1; j < DISPLAY_VALUES.length; j += 1) {
+        const a = DISPLAY_VALUES[i];
+        const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
         const aScore = selectedModel.values[a];
         const bScore = selectedModel.values[b];
@@ -158,26 +222,52 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   }, [selectedModel]);
 
   const priorityValueRange = useMemo(() => {
-    const all = models.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = models.flatMap((model) => DISPLAY_VALUES.map((value) => model.values[value]));
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
 
+  const valueAngleById = useMemo(() => {
+    const result = new Map<ValueKey, number>();
+    const selfTranscendence = QUADRANT_ARCS[0];
+    ['Universalism_Nature', 'Benevolence_Dependability'].forEach((value, index) => {
+      const t = (index + 0.5) / 2;
+      result.set(value as ValueKey, selfTranscendence.startAngle + t * (selfTranscendence.endAngle - selfTranscendence.startAngle));
+    });
+
+    const conservation = QUADRANT_ARCS[1];
+    ['Conformity_Interpersonal', 'Tradition', 'Security_Personal'].forEach((value, index) => {
+      const t = (index + 0.5) / 3;
+      result.set(value as ValueKey, conservation.startAngle + t * (conservation.endAngle - conservation.startAngle));
+    });
+
+    const selfEnhancement = QUADRANT_ARCS[2];
+    SELF_ENHANCEMENT_VALUES.forEach((value, index) => {
+      const t = (index + 1) / (SELF_ENHANCEMENT_VALUES.length + 1);
+      result.set(value, selfEnhancement.startAngle + t * (selfEnhancement.endAngle - selfEnhancement.startAngle));
+    });
+
+    // Hedonism straddles Self-Enhancement and Openness to Change exactly at the shared boundary.
+    result.set('Hedonism', Math.PI);
+
+    const openness = QUADRANT_ARCS[3];
+    OPENNESS_NON_STRADDLE_VALUES.forEach((value, index) => {
+      const t = (index + 1) / (OPENNESS_NON_STRADDLE_VALUES.length + 1);
+      result.set(value, openness.startAngle + t * (openness.endAngle - openness.startAngle));
+    });
+    return result;
+  }, []);
+
   const nodePositions = useMemo(() => {
-    const width = 1280;
-    const height = 1120;
-    const cx = width / 2;
-    const cy = height / 2;
-    const radius = 450;
-    return VALUES.map((value, index) => {
-      const theta = (Math.PI * 2 * index) / VALUES.length - Math.PI / 2;
+    return DISPLAY_VALUES.map((value) => {
+      const theta = valueAngleById.get(value) ?? -Math.PI / 2;
       return {
         value,
-        x: cx + radius * Math.cos(theta),
-        y: cy + radius * Math.sin(theta),
+        x: CHART_CENTER_X + NODE_RING_RADIUS * Math.cos(theta),
+        y: CHART_CENTER_Y + NODE_RING_RADIUS * Math.sin(theta),
       };
     });
-  }, []);
+  }, [valueAngleById]);
 
   const positionByValue = useMemo(
     () => new Map(nodePositions.map((node) => [node.value, node])),
@@ -185,15 +275,12 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   );
 
   // Map each value to its clockwise index (0 = top)
-  const valueIndexMap = useMemo(
-    () => new Map(VALUES.map((v, i) => [v, i])),
-    [],
-  );
+  const valueIndexMap = useMemo(() => new Map(DISPLAY_VALUES.map((v, i) => [v, i])), []);
 
   // Compute clockwise appearance order for edges, relative to focused circle
   const edgeClockwiseOrder = useMemo(() => {
     const focusedIdx = focusedValue != null ? (valueIndexMap.get(focusedValue) ?? 0) : 0;
-    const n = VALUES.length;
+    const n = DISPLAY_VALUES.length;
     const indexed = edges.map((edge, i) => {
       const fromIdx = valueIndexMap.get(edge.from) ?? 0;
       const toIdx = valueIndexMap.get(edge.to) ?? 0;
@@ -213,8 +300,8 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const fillTransition = 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease';
 
   // Center of viewBox (where nodes converge during animation)
-  const viewCenterX = 640;
-  const viewCenterY = 560;
+  const viewCenterX = CHART_CENTER_X;
+  const viewCenterY = CHART_CENTER_Y;
 
   // Edges fade out during animation phases
   const edgesVisible = animationPhase === 'idle';
@@ -232,11 +319,14 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
           50% { filter: drop-shadow(0 0 6px rgba(59,130,246,0.65)) drop-shadow(0 0 14px rgba(59,130,246,0.55)); }
         }
       `}</style>
-      <div className="mb-3">
-        <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
-        <p className={`text-sm ${themeColors.panelMutedText}`}>
-          Directed value graph for one selected AI: arrows point from stronger value to weaker value.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
+          <p className={`text-sm ${themeColors.panelMutedText}`}>
+            Directed value graph for one selected AI: arrows point from stronger value to weaker value.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={chartRef} label="ranking and cycles chart" />
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -275,15 +365,45 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
       </p>
 
       <div
+        ref={chartRef}
         className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2"
       >
         <svg
-          viewBox="0 0 1280 1120"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           className="w-full min-w-[1120px]"
           style={svgStyle}
           role="img"
           aria-label="Value dominance graph"
         >
+          {QUADRANT_ARCS.map((quadrant) => {
+            const midAngle = (quadrant.startAngle + quadrant.endAngle) / 2;
+            const labelPoint = polarToCartesian(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_LABEL_RADIUS, midAngle);
+            return (
+              <g key={quadrant.label}>
+                <path
+                  d={describeSectorPath(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_SECTOR_RADIUS, quadrant.startAngle, quadrant.endAngle)}
+                  fill={quadrant.fill}
+                />
+                <path
+                  d={describeArcPath(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_RING_RADIUS, quadrant.startAngle, quadrant.endAngle)}
+                  fill="none"
+                  stroke={quadrant.ring}
+                  strokeWidth={18}
+                  opacity={0.75}
+                />
+                <text
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none"
+                  style={{ fontSize: '26px', fontWeight: 600, fill: '#374151' }}
+                >
+                  {quadrant.label}
+                </text>
+              </g>
+            );
+          })}
           {edges.map((edge, edgeIndex) => {
             const source = positionByValue.get(edge.from);
             const target = positionByValue.get(edge.to);
@@ -297,7 +417,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
             const length = Math.hypot(dx, dy) || 1;
             const ux = dx / length;
             const uy = dy / length;
-            const nodeRadius = 68;
+            const nodeRadius = NODE_RADIUS;
             const winRate = 1 / (1 + Math.exp(-edge.gap));
             const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
             const widthFactor = normalized ** 1.6;
@@ -429,6 +549,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
           })}
 
           {nodePositions.map((node, nodeIndex) => {
+            const isHedonismNode = node.value === 'Hedonism';
             const isSelectedNode = focusedValue != null && node.value === focusedValue;
             const isHovered = hoveredValue === node.value;
             const isConnectedToFocused =
@@ -501,6 +622,30 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
                       'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                   }}
                 />
+                {isHedonismNode && (
+                  <>
+                    <path
+                      d={describeNodeHalfArc(node.x, node.y, 75, false)}
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth={isSelectedNode ? 5.5 : 3.2}
+                      style={{
+                        opacity: nodeOpacity * 0.9,
+                        transition: 'opacity 280ms ease, stroke-width 280ms ease',
+                      }}
+                    />
+                    <path
+                      d={describeNodeHalfArc(node.x, node.y, 75, true)}
+                      fill="none"
+                      stroke="#f472b6"
+                      strokeWidth={isSelectedNode ? 5.5 : 3.2}
+                      style={{
+                        opacity: nodeOpacity * 0.9,
+                        transition: 'opacity 280ms ease, stroke-width 280ms ease',
+                      }}
+                    />
+                  </>
+                )}
                 <circle
                   cx={node.x}
                   cy={node.y}
@@ -539,8 +684,10 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
         </svg>
       </div>
 
-      <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
-        <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+      <div ref={contestableRef} className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+        </div>
         <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
           <li>Arrow direction: winner value points to loser value.</li>
           <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>
