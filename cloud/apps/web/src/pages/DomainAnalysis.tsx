@@ -163,8 +163,7 @@ export function DomainAnalysis() {
     })),
     [data],
   );
-  const coveredDefinitions = data?.domainAnalysis.coveredDefinitions ?? data?.domainAnalysis.targetedDefinitions ?? 0;
-  const excludedSignatureDefinitionCount = (data?.domainAnalysis.targetedDefinitions ?? 0) - coveredDefinitions;
+  const missingDefinitionCount = data?.domainAnalysis.missingDefinitions?.length ?? 0;
   const allMissingDefinitionIds = useMemo(
     () => (data?.domainAnalysis.missingDefinitions ?? []).map((missing) => missing.definitionId),
     [data?.domainAnalysis.missingDefinitions],
@@ -241,13 +240,18 @@ export function DomainAnalysis() {
             <p>
               {data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.
             </p>
-            {excludedSignatureDefinitionCount > 0 && (
+            {data.domainAnalysis.definitionsWithAnalysis === 0 && data.domainAnalysis.targetedDefinitions > 0 && (
+              <p className="text-amber-700">
+                No latest vignettes produced analyzable transcript data for the selected signature.
+              </p>
+            )}
+            {missingDefinitionCount > 0 && (
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-amber-700">
-                    Signature filter excluded {excludedSignatureDefinitionCount}
+                    Analysis filter excluded {missingDefinitionCount}
                     {' '}
-                    vignette{excludedSignatureDefinitionCount === 1 ? '' : 's'} due to missing completed runs.
+                    vignette{missingDefinitionCount === 1 ? '' : 's'}.
                   </p>
                   <Button
                     type="button"
@@ -264,7 +268,7 @@ export function DomainAnalysis() {
                     <li key={missing.definitionId}>
                       {missing.definitionName}
                       {' '}
-                      ({missing.definitionId}) - AIs: {missing.missingAllModels ? 'All AIs' : missing.missingModelLabels.join(', ')}
+                      ({missing.definitionId}) - {missing.reasonLabel} - AIs: {missing.missingAllModels ? 'All AIs' : missing.missingModelLabels.join(', ')}
                     </li>
                   ))}
                 </ul>
