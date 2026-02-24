@@ -20,6 +20,7 @@
     "db:seed": "npx prisma db seed --schema=packages/db/prisma/schema.prisma",
     "db:test:setup": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate",
     "db:test:reset": "DATABASE_URL=postgresql://valuerank:valuerank@localhost:5433/valuerank_test npx prisma db push --schema=packages/db/prisma/schema.prisma --force-reset --skip-generate",
+    "audit:domain-coverage": "tsx scripts/audit-domain-coverage.ts",
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
