@@ -24,6 +24,16 @@ import { formatTrialSignature } from '../utils/trial-signature';
 
 const ALL_SIGNATURES = 'all';
 
+const ALL_SIGNATURES = 'all';
+
+function formatTrialSignature(version: number | null | undefined, temperature: number | null | undefined): string {
+  const versionToken = version === null || version === undefined ? '?' : String(version);
+  const tempToken = temperature === null || temperature === undefined || !Number.isFinite(temperature)
+    ? 'd'
+    : temperature.toFixed(3).replace(/\.?0+$/, '');
+  return `v${versionToken}t${tempToken}`;
+}
+
 export function DomainAnalysis() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
