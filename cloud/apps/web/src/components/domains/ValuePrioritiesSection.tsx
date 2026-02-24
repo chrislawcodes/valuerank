@@ -26,18 +26,12 @@ type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
   selectedSignature: string | null;
-  scoreMethod: 'LOG_ODDS' | 'FULL_BT';
-  onScoreMethodChange: (method: 'LOG_ODDS' | 'FULL_BT') => void;
-  btEnabled: boolean;
 };
 
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
   selectedSignature,
-  scoreMethod,
-  onScoreMethodChange,
-  btEnabled,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
@@ -78,7 +72,7 @@ export function ValuePrioritiesSection({
       domainId: selectedDomainId,
       modelId,
       valueKey,
-      scoreMethod,
+      scoreMethod: 'FULL_BT',
     });
     if (selectedSignature !== null) {
       params.set('signature', selectedSignature);
@@ -95,28 +89,7 @@ export function ValuePrioritiesSection({
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">Click a column heading to sort.</p>
-          <div className="inline-flex rounded border border-gray-200 bg-gray-50 p-0.5">
-            <Button
-              type="button"
-              variant={scoreMethod === 'LOG_ODDS' ? 'primary' : 'ghost'}
-              size="sm"
-              className="h-7 min-h-0 px-2 text-xs"
-              onClick={() => onScoreMethodChange('LOG_ODDS')}
-            >
-              Log
-            </Button>
-            <Button
-              type="button"
-              variant={scoreMethod === 'FULL_BT' ? 'primary' : 'ghost'}
-              size="sm"
-              className="h-7 min-h-0 px-2 text-xs"
-              onClick={() => onScoreMethodChange('FULL_BT')}
-              disabled={!btEnabled}
-              title={btEnabled ? 'Use full Bradley-Terry scoring' : 'Full BT unavailable until API deployment is updated'}
-            >
-              Full BT
-            </Button>
-          </div>
+          <span className="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-700">Scoring: Full BT</span>
         </div>
       </div>
 
