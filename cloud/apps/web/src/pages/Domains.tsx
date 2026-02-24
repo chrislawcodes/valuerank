@@ -221,17 +221,18 @@ export function Domains() {
       let result: { success: boolean; affectedDefinitions: number } | null = null;
       if (selectAllShown) {
         const filteredDefinitionIds = Array.from(new Set(filteredRows.map((row) => row.definitionId)));
-        result = await assignDomainToDefinitionsByFilter({
-          domainId: targetDomainId,
-          search: filters.search || undefined,
-          rootOnly: filters.rootOnly || undefined,
-          hasRuns: filters.hasRuns || undefined,
-          tagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
-          sourceDomainId: selectedFolder === 'all' || selectedFolder === 'none' ? undefined : selectedFolder,
-          withoutDomain: selectedFolder === 'none' ? true : undefined,
-        });
         if (signatureFilter !== ALL_SIGNATURE_FILTER) {
           result = await assignDomainToDefinitions(filteredDefinitionIds, targetDomainId);
+        } else {
+          result = await assignDomainToDefinitionsByFilter({
+            domainId: targetDomainId,
+            search: filters.search || undefined,
+            rootOnly: filters.rootOnly || undefined,
+            hasRuns: filters.hasRuns || undefined,
+            tagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
+            sourceDomainId: selectedFolder === 'all' || selectedFolder === 'none' ? undefined : selectedFolder,
+            withoutDomain: selectedFolder === 'none' ? true : undefined,
+          });
         }
       } else if (selectedRowKeys.size > 0) {
         const selectedDefinitionIds = Array.from(
