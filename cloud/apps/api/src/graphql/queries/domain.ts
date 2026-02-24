@@ -417,13 +417,6 @@ function parseDomainAnalysisScoreMethod(value: string | null | undefined): Domai
   return value === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
 }
 
-function parseDefinitionVersion(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value !== 'string' || value.trim() === '') return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function parseSourceRunIds(config: unknown): string[] {
   if (config == null || typeof config !== 'object' || Array.isArray(config)) return [];
   const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
@@ -444,6 +437,40 @@ function formatRunSignature(config: unknown): string {
     parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
   const temperature = parseTemperature(runConfig?.temperature);
   return formatTrialSignature(definitionVersion, temperature);
+}
+
+async function filterSourceRunsBySignature(
+  sourceRunIds: string[],
+  sourceRunDefinitionById: Map<string, string>,
+  selectedSignature: string | null,
+): Promise<{ sourceRunIds: string[]; sourceRunDefinitionById: Map<string, string> }> {
+  if (selectedSignature === null || sourceRunIds.length === 0) {
+    return { sourceRunIds, sourceRunDefinitionById };
+  }
+
+  const sourceRuns = await db.run.findMany({
+    where: { id: { in: sourceRunIds }, deletedAt: null },
+    select: { id: true, config: true },
+  });
+  const signatureBySourceRunId = new Map<string, string>();
+  for (const run of sourceRuns) {
+    signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
+  }
+
+  const filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
+  const filteredSourceRunDefinitionById = new Map(
+    filteredSourceRunIds
+      .map((runId) => {
+        const definitionId = sourceRunDefinitionById.get(runId);
+        return definitionId == null ? null : [runId, definitionId] as const;
+      })
+      .filter((entry): entry is readonly [string, string] => entry !== null),
+  );
+
+  return {
+    sourceRunIds: filteredSourceRunIds,
+    sourceRunDefinitionById: filteredSourceRunDefinitionById,
+  };
 }
 
 function incrementValueCount(
@@ -1180,27 +1207,13 @@ builder.queryField('domainAnalysis', (t) =>
         latestDefinitionIds,
         latestRunByDefinition,
       );
-      let filteredSourceRunIds = sourceRunIds;
-      let filteredSourceRunDefinitionById = sourceRunDefinitionById;
-      if (selectedSignature !== null && sourceRunIds.length > 0) {
-        const sourceRuns = await db.run.findMany({
-          where: { id: { in: sourceRunIds }, deletedAt: null },
-          select: { id: true, config: true },
-        });
-        const signatureBySourceRunId = new Map<string, string>();
-        for (const run of sourceRuns) {
-          signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
-        }
-        filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
-        filteredSourceRunDefinitionById = new Map(
-          filteredSourceRunIds
-            .map((runId) => {
-              const definitionId = sourceRunDefinitionById.get(runId);
-              return definitionId == null ? null : [runId, definitionId] as const;
-            })
-            .filter((entry): entry is readonly [string, string] => entry !== null),
-        );
-      }
+      const filteredSourceRuns = await filterSourceRunsBySignature(
+        sourceRunIds,
+        sourceRunDefinitionById,
+        selectedSignature,
+      );
+      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
+      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
 
       let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
       let pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
@@ -1410,27 +1423,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         scoreDefinitionIds,
         latestRunByDefinition,
       );
-      let filteredSourceRunIds = sourceRunIds;
-      let filteredSourceRunDefinitionById = sourceRunDefinitionById;
-      if (selectedSignature !== null && sourceRunIds.length > 0) {
-        const sourceRuns = await db.run.findMany({
-          where: { id: { in: sourceRunIds }, deletedAt: null },
-          select: { id: true, config: true },
-        });
-        const signatureBySourceRunId = new Map<string, string>();
-        for (const run of sourceRuns) {
-          signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
-        }
-        filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
-        filteredSourceRunDefinitionById = new Map(
-          filteredSourceRunIds
-            .map((runId) => {
-              const definitionId = sourceRunDefinitionById.get(runId);
-              return definitionId == null ? null : [runId, definitionId] as const;
-            })
-            .filter((entry): entry is readonly [string, string] => entry !== null),
-        );
-      }
+      const filteredSourceRuns = await filterSourceRunsBySignature(
+        sourceRunIds,
+        sourceRunDefinitionById,
+        selectedSignature,
+      );
+      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
+      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
       const targetDefinitionIdSet = new Set(targetDefinitionIds);
 
       type MutableCondition = {
@@ -1708,18 +1707,10 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
 
       let sourceRunIds = parseSourceRunIds(aggregateRun.config);
       if (sourceRunIds.length === 0) return [];
-      if (selectedSignature !== null) {
-        const sourceRuns = await db.run.findMany({
-          where: { id: { in: sourceRunIds }, deletedAt: null },
-          select: { id: true, config: true },
-        });
-        const signatureBySourceRunId = new Map<string, string>();
-        for (const run of sourceRuns) {
-          signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
-        }
-        sourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
-        if (sourceRunIds.length === 0) return [];
-      }
+      sourceRunIds = (
+        await filterSourceRunsBySignature(sourceRunIds, new Map<string, string>(), selectedSignature)
+      ).sourceRunIds;
+      if (sourceRunIds.length === 0) return [];
 
       return db.transcript.findMany({
         where: {
