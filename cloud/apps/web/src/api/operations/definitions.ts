@@ -77,6 +77,12 @@ export type Definition = {
     definitionVersion: number | null;
     temperature: number | null;
     signature: string | null;
+    signatureBreakdown: Array<{
+      signature: string;
+      definitionVersion: number | null;
+      temperature: number | null;
+      trialCount: number;
+    }>;
     isConsistent: boolean;
     message: string | null;
   };
@@ -180,6 +186,12 @@ export const DEFINITIONS_QUERY = gql`
         definitionVersion
         temperature
         signature
+        signatureBreakdown {
+          signature
+          definitionVersion
+          temperature
+          trialCount
+        }
         isConsistent
         message
       }
@@ -213,6 +225,12 @@ export const DEFINITION_QUERY = gql`
         definitionVersion
         temperature
         signature
+        signatureBreakdown {
+          signature
+          definitionVersion
+          temperature
+          trialCount
+        }
         isConsistent
         message
       }
