@@ -1541,7 +1541,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       scoreMethod: t.arg.string({ required: false }),
       signature: t.arg.string({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
@@ -1549,6 +1549,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
+      if (requestedSignature === null) {
+        ctx.log.warn({ domainId, modelId, valueKey: rawValueKey }, 'domainAnalysisValueDetail called without signature; defaulting to first vnew signature');
+      }
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new Error(`Unsupported value key: ${rawValueKey}`);
       }
@@ -1628,6 +1631,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         };
       }
 
+      // Aggregate runs are used here only to expose aggregateRunId metadata per vignette.
+      // Signature filtering for analysis data is resolved exclusively via completed runs
+      // in resolveSignatureRuns (no aggregate wrapper dependency).
       const aggregateRuns = await db.run.findMany({
         where: {
           definitionId: { in: scoreDefinitionIds },
@@ -1645,14 +1651,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         select: {
           id: true,
           definitionId: true,
-          config: true,
         },
       });
 
-      const latestRunByDefinition = new Map<string, { id: string; config: unknown }>();
+      const latestRunByDefinition = new Map<string, { id: string }>();
       for (const run of aggregateRuns) {
         if (latestRunByDefinition.has(run.definitionId)) continue;
-        latestRunByDefinition.set(run.definitionId, { id: run.id, config: run.config });
+        latestRunByDefinition.set(run.definitionId, { id: run.id });
       }
 
       const resolvedSignatureRuns = await resolveSignatureRuns(
@@ -1905,7 +1910,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       limit: t.arg.int({ required: false }),
       signature: t.arg.string({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const definitionId = String(args.definitionId);
@@ -1919,6 +1924,9 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       const requestedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
         ? args.signature.trim()
         : null;
+      if (requestedSignature === null) {
+        ctx.log.warn({ domainId, definitionId, modelId, valueKey }, 'domainAnalysisConditionTranscripts called without signature; defaulting to first vnew signature');
+      }
 
       const definition = await db.definition.findFirst({
         where: { id: definitionId, domainId, deletedAt: null },

@@ -1,5 +1,11 @@
 import process from 'node:process';
 
+// NOTE: This script intentionally mirrors signature and lineage selection logic from:
+// - cloud/apps/api/src/graphql/queries/domain.ts (resolveSignatureRuns + latest lineage selection)
+// - cloud/apps/api/src/utils/trial-signature.ts
+// - cloud/apps/api/src/utils/vnew-signature.ts
+// Keep these in sync when signature semantics change.
+
 type LoginResponse = { token?: string; error?: string; message?: string };
 
 type DefinitionRun = {
