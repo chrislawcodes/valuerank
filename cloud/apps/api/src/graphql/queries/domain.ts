@@ -5,6 +5,7 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatTrialSignature } from '../../utils/trial-signature.js';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { AuthenticationError } from '@valuerank/shared';
 
 const MAX_LIMIT = 500;
@@ -421,6 +422,55 @@ function parseSourceRunIds(config: unknown): string[] {
   const sourceRunIds = (config as { sourceRunIds?: unknown }).sourceRunIds;
   if (!Array.isArray(sourceRunIds)) return [];
   return sourceRunIds.filter((id): id is string => typeof id === 'string' && id !== '');
+}
+
+function formatRunSignature(config: unknown): string {
+  const runConfig = config as {
+    definitionSnapshot?: {
+      _meta?: { definitionVersion?: unknown };
+      version?: unknown;
+    };
+    temperature?: unknown;
+  } | null;
+  const definitionVersion =
+    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+  const temperature = parseTemperature(runConfig?.temperature);
+  return formatTrialSignature(definitionVersion, temperature);
+}
+
+async function filterSourceRunsBySignature(
+  sourceRunIds: string[],
+  sourceRunDefinitionById: Map<string, string>,
+  selectedSignature: string | null,
+): Promise<{ sourceRunIds: string[]; sourceRunDefinitionById: Map<string, string> }> {
+  if (selectedSignature === null || sourceRunIds.length === 0) {
+    return { sourceRunIds, sourceRunDefinitionById };
+  }
+
+  const sourceRuns = await db.run.findMany({
+    where: { id: { in: sourceRunIds }, deletedAt: null },
+    select: { id: true, config: true },
+  });
+  const signatureBySourceRunId = new Map<string, string>();
+  for (const run of sourceRuns) {
+    signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
+  }
+
+  const filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
+  const filteredSourceRunDefinitionById = new Map(
+    filteredSourceRunIds
+      .map((runId) => {
+        const definitionId = sourceRunDefinitionById.get(runId);
+        return definitionId == null ? null : [runId, definitionId] as const;
+      })
+      .filter((entry): entry is readonly [string, string] => entry !== null),
+  );
+
+  return {
+    sourceRunIds: filteredSourceRunIds,
+    sourceRunDefinitionById: filteredSourceRunDefinitionById,
+  };
 }
 
 function incrementValueCount(
@@ -1077,10 +1127,14 @@ builder.queryField('domainAnalysis', (t) =>
     args: {
       domainId: t.arg.id({ required: true }),
       scoreMethod: t.arg.string({ required: false }),
+      signature: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const domainId = String(args.domainId);
       const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
 
@@ -1153,14 +1207,21 @@ builder.queryField('domainAnalysis', (t) =>
         latestDefinitionIds,
         latestRunByDefinition,
       );
+      const filteredSourceRuns = await filterSourceRunsBySignature(
+        sourceRunIds,
+        sourceRunDefinitionById,
+        selectedSignature,
+      );
+      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
+      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
 
       let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
       let pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
       let analyzedDefinitionIds = new Set<string>();
-      if (sourceRunIds.length > 0) {
+      if (filteredSourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
           where: {
-            runId: { in: sourceRunIds },
+            runId: { in: filteredSourceRunIds },
             deletedAt: null,
             decisionCode: { in: ['1', '2', '3', '4', '5'] },
           },
@@ -1172,7 +1233,7 @@ builder.queryField('domainAnalysis', (t) =>
         });
         const aggregated = aggregateValueCountsFromTranscripts(
           transcripts,
-          sourceRunDefinitionById,
+          filteredSourceRunDefinitionById,
           valuePairByDefinition,
         );
         aggregatedByModel = aggregated.aggregatedByModel;
@@ -1248,12 +1309,16 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       modelId: t.arg.string({ required: true }),
       valueKey: t.arg.string({ required: true }),
       scoreMethod: t.arg.string({ required: false }),
+      signature: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const domainId = String(args.domainId);
       const modelId = args.modelId;
       const rawValueKey = args.valueKey;
       const scoreMethod = parseDomainAnalysisScoreMethod(args.scoreMethod);
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
       if (!isDomainAnalysisValueKey(rawValueKey)) {
         throw new Error(`Unsupported value key: ${rawValueKey}`);
       }
@@ -1358,6 +1423,13 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         scoreDefinitionIds,
         latestRunByDefinition,
       );
+      const filteredSourceRuns = await filterSourceRunsBySignature(
+        sourceRunIds,
+        sourceRunDefinitionById,
+        selectedSignature,
+      );
+      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
+      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
       const targetDefinitionIdSet = new Set(targetDefinitionIds);
 
       type MutableCondition = {
@@ -1411,10 +1483,10 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
       let totalNeutral = 0;
       const pairwiseWins = new Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>();
 
-      if (sourceRunIds.length > 0) {
+      if (filteredSourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
           where: {
-            runId: { in: sourceRunIds },
+            runId: { in: filteredSourceRunIds },
             modelId,
             deletedAt: null,
             decisionCode: { in: ['1', '2', '3', '4', '5'] },
@@ -1461,7 +1533,7 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         }
 
         for (const transcript of transcripts) {
-          const definitionId = sourceRunDefinitionById.get(transcript.runId);
+          const definitionId = filteredSourceRunDefinitionById.get(transcript.runId);
           if (definitionId == null || definitionId === '') continue;
           const pair = valuePairByDefinition.get(definitionId);
           const vignette = vignetteByDefinitionId.get(definitionId);
@@ -1587,6 +1659,7 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       definitionId: t.arg.id({ required: true }),
       scenarioId: t.arg.id({ required: false }),
       limit: t.arg.int({ required: false }),
+      signature: t.arg.string({ required: false }),
     },
     resolve: async (_root, args) => {
       const domainId = String(args.domainId);
@@ -1599,6 +1672,9 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       const valueKey = rawValueKey;
       const limit = Math.max(1, Math.min(args.limit ?? 50, 200));
       const scenarioId = args.scenarioId != null && args.scenarioId !== '' ? String(args.scenarioId) : null;
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
 
       const definition = await db.definition.findFirst({
         where: { id: definitionId, domainId, deletedAt: null },
@@ -1629,7 +1705,11 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       });
       if (!aggregateRun) return [];
 
-      const sourceRunIds = parseSourceRunIds(aggregateRun.config);
+      let sourceRunIds = parseSourceRunIds(aggregateRun.config);
+      if (sourceRunIds.length === 0) return [];
+      sourceRunIds = (
+        await filterSourceRunsBySignature(sourceRunIds, new Map<string, string>(), selectedSignature)
+      ).sourceRunIds;
       if (sourceRunIds.length === 0) return [];
 
       return db.transcript.findMany({
