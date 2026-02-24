@@ -6,6 +6,7 @@ import { estimateCost as estimateCostService } from '../../services/cost/estimat
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatTrialSignature } from '../../utils/trial-signature.js';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
+import { formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 import { AuthenticationError } from '@valuerank/shared';
 
 const MAX_LIMIT = 500;
@@ -77,6 +78,8 @@ type DomainAnalysisResult = {
   domainName: string;
   totalDefinitions: number;
   targetedDefinitions: number;
+  coveredDefinitions: number;
+  missingDefinitionIds: string[];
   definitionsWithAnalysis: number;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
@@ -120,8 +123,18 @@ type DomainAnalysisValueDetailResult = {
   deprioritized: number;
   neutral: number;
   totalTrials: number;
+  targetedDefinitions: number;
+  coveredDefinitions: number;
+  missingDefinitionIds: string[];
   vignettes: DomainAnalysisVignetteDetail[];
   generatedAt: Date;
+};
+
+type DomainAvailableSignature = {
+  signature: string;
+  label: string;
+  isVirtual: boolean;
+  temperature: number | null;
 };
 
 type DomainTrialPlanModel = {
@@ -197,6 +210,7 @@ const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditi
 const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
 const DomainAnalysisValueDetailResultRef = builder.objectRef<DomainAnalysisValueDetailResult>('DomainAnalysisValueDetailResult');
 const DomainAnalysisConditionTranscriptRef = builder.objectRef<DomainAnalysisConditionTranscript>('DomainAnalysisConditionTranscript');
+const DomainAvailableSignatureRef = builder.objectRef<DomainAvailableSignature>('DomainAvailableSignature');
 const DomainTrialPlanModelRef = builder.objectRef<DomainTrialPlanModel>('DomainTrialPlanModel');
 const DomainTrialPlanVignetteRef = builder.objectRef<DomainTrialPlanVignette>('DomainTrialPlanVignette');
 const DomainTrialPlanCellEstimateRef = builder.objectRef<DomainTrialPlanCellEstimate>('DomainTrialPlanCellEstimate');
@@ -240,6 +254,8 @@ builder.objectType(DomainAnalysisResultRef, {
     domainName: t.exposeString('domainName'),
     totalDefinitions: t.exposeInt('totalDefinitions'),
     targetedDefinitions: t.exposeInt('targetedDefinitions'),
+    coveredDefinitions: t.exposeInt('coveredDefinitions'),
+    missingDefinitionIds: t.exposeIDList('missingDefinitionIds'),
     definitionsWithAnalysis: t.exposeInt('definitionsWithAnalysis'),
     models: t.field({
       type: [DomainAnalysisModelRef],
@@ -301,6 +317,9 @@ builder.objectType(DomainAnalysisValueDetailResultRef, {
     deprioritized: t.exposeInt('deprioritized'),
     neutral: t.exposeInt('neutral'),
     totalTrials: t.exposeInt('totalTrials'),
+    targetedDefinitions: t.exposeInt('targetedDefinitions'),
+    coveredDefinitions: t.exposeInt('coveredDefinitions'),
+    missingDefinitionIds: t.exposeIDList('missingDefinitionIds'),
     vignettes: t.field({
       type: [DomainAnalysisVignetteDetailRef],
       resolve: (parent) => parent.vignettes,
@@ -309,6 +328,15 @@ builder.objectType(DomainAnalysisValueDetailResultRef, {
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,
     }),
+  }),
+});
+
+builder.objectType(DomainAvailableSignatureRef, {
+  fields: (t) => ({
+    signature: t.exposeString('signature'),
+    label: t.exposeString('label'),
+    isVirtual: t.exposeBoolean('isVirtual'),
+    temperature: t.exposeFloat('temperature', { nullable: true }),
   }),
 });
 
@@ -439,37 +467,89 @@ function formatRunSignature(config: unknown): string {
   return formatTrialSignature(definitionVersion, temperature);
 }
 
-async function filterSourceRunsBySignature(
+async function resolveSignatureRuns(
+  latestDefinitionIds: string[],
   sourceRunIds: string[],
   sourceRunDefinitionById: Map<string, string>,
   selectedSignature: string | null,
-): Promise<{ sourceRunIds: string[]; sourceRunDefinitionById: Map<string, string> }> {
-  if (selectedSignature === null || sourceRunIds.length === 0) {
-    return { sourceRunIds, sourceRunDefinitionById };
+): Promise<{
+  filteredSourceRunIds: string[];
+  filteredSourceRunDefinitionById: Map<string, string>;
+  missingDefinitionIds: string[];
+}> {
+  if (latestDefinitionIds.length === 0) {
+    return {
+      filteredSourceRunIds: [],
+      filteredSourceRunDefinitionById: new Map(),
+      missingDefinitionIds: [],
+    };
   }
 
-  const sourceRuns = await db.run.findMany({
-    where: { id: { in: sourceRunIds }, deletedAt: null },
-    select: { id: true, config: true },
-  });
-  const signatureBySourceRunId = new Map<string, string>();
-  for (const run of sourceRuns) {
-    signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
+  if (selectedSignature !== null && isVnewSignature(selectedSignature)) {
+    const temperature = parseVnewTemperature(selectedSignature);
+    const completedRuns = await db.run.findMany({
+      where: {
+        definitionId: { in: latestDefinitionIds },
+        status: 'COMPLETED',
+        deletedAt: null,
+      },
+      orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        definitionId: true,
+        config: true,
+      },
+    });
+
+    const filteredSourceRunIds: string[] = [];
+    const filteredSourceRunDefinitionById = new Map<string, string>();
+    const coveredDefinitionIds = new Set<string>();
+    for (const run of completedRuns) {
+      if (coveredDefinitionIds.has(run.definitionId)) continue;
+      const runConfig = run.config as { temperature?: unknown } | null;
+      const runTemperature = parseTemperature(runConfig?.temperature);
+      if (runTemperature !== temperature) continue;
+      filteredSourceRunIds.push(run.id);
+      filteredSourceRunDefinitionById.set(run.id, run.definitionId);
+      coveredDefinitionIds.add(run.definitionId);
+    }
+
+    const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
+    return {
+      filteredSourceRunIds,
+      filteredSourceRunDefinitionById,
+      missingDefinitionIds,
+    };
   }
 
-  const filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
-  const filteredSourceRunDefinitionById = new Map(
-    filteredSourceRunIds
-      .map((runId) => {
-        const definitionId = sourceRunDefinitionById.get(runId);
-        return definitionId == null ? null : [runId, definitionId] as const;
-      })
-      .filter((entry): entry is readonly [string, string] => entry !== null),
-  );
+  let filteredSourceRunIds = sourceRunIds;
+  let filteredSourceRunDefinitionById = sourceRunDefinitionById;
+  if (selectedSignature !== null && sourceRunIds.length > 0) {
+    const sourceRuns = await db.run.findMany({
+      where: { id: { in: sourceRunIds }, deletedAt: null },
+      select: { id: true, config: true },
+    });
+    const signatureBySourceRunId = new Map<string, string>();
+    for (const run of sourceRuns) {
+      signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
+    }
+    filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
+    filteredSourceRunDefinitionById = new Map(
+      filteredSourceRunIds
+        .map((runId) => {
+          const definitionId = sourceRunDefinitionById.get(runId);
+          return definitionId == null ? null : [runId, definitionId] as const;
+        })
+        .filter((entry): entry is readonly [string, string] => entry !== null),
+    );
+  }
 
+  const coveredDefinitionIds = new Set(filteredSourceRunDefinitionById.values());
+  const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
   return {
-    sourceRunIds: filteredSourceRunIds,
-    sourceRunDefinitionById: filteredSourceRunDefinitionById,
+    filteredSourceRunIds,
+    filteredSourceRunDefinitionById,
+    missingDefinitionIds,
   };
 }
 
@@ -1121,6 +1201,90 @@ builder.queryField('domainTrialRunsStatus', (t) =>
   })
 );
 
+builder.queryField('domainAvailableSignatures', (t) =>
+  t.field({
+    type: [DomainAvailableSignatureRef],
+    args: {
+      domainId: t.arg.id({ required: true }),
+    },
+    resolve: async (_root, args) => {
+      const domainId = String(args.domainId);
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const definitions = await db.definition.findMany({
+        where: { domainId, deletedAt: null },
+        select: {
+          id: true,
+          parentId: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (definitions.length === 0) return [];
+
+      const definitionsById = await hydrateDefinitionAncestors(definitions);
+      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+
+      const runs = await db.run.findMany({
+        where: {
+          definitionId: { in: latestDefinitionIds },
+          status: 'COMPLETED',
+          deletedAt: null,
+        },
+        select: {
+          config: true,
+        },
+      });
+
+      const exactSignatureSet = new Set<string>();
+      const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
+      for (const run of runs) {
+        exactSignatureSet.add(formatRunSignature(run.config));
+        const runConfig = run.config as { temperature?: unknown } | null;
+        const temperature = parseTemperature(runConfig?.temperature);
+        const key = temperature === null ? 'd' : temperature.toString();
+        const existing = temperatureCounts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          temperatureCounts.set(key, { temperature, count: 1 });
+        }
+      }
+
+      const vnewCandidates = Array.from(temperatureCounts.values())
+        .sort((left, right) => {
+          const leftIsZero = left.temperature === 0;
+          const rightIsZero = right.temperature === 0;
+          if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
+          if (left.count !== right.count) return right.count - left.count;
+          if (left.temperature === null) return 1;
+          if (right.temperature === null) return -1;
+          return left.temperature - right.temperature;
+        });
+
+      const virtualSignatures = vnewCandidates.map((entry) => ({
+        signature: formatVnewSignature(entry.temperature),
+        label: formatVnewLabel(entry.temperature),
+        isVirtual: true,
+        temperature: entry.temperature,
+      }));
+      const exactSignatures = Array.from(exactSignatureSet.values())
+        .sort((left, right) => left.localeCompare(right))
+        .map((signature) => ({
+          signature,
+          label: signature,
+          isVirtual: false,
+          temperature: null,
+        }));
+
+      return [...virtualSignatures, ...exactSignatures];
+    },
+  }),
+);
+
 builder.queryField('domainAnalysis', (t) =>
   t.field({
     type: DomainAnalysisResultRef,
@@ -1161,6 +1325,8 @@ builder.queryField('domainAnalysis', (t) =>
           domainName: domain.name,
           totalDefinitions: 0,
           targetedDefinitions: 0,
+          coveredDefinitions: 0,
+          missingDefinitionIds: [],
           definitionsWithAnalysis: 0,
           models: [],
           unavailableModels: activeModels.map((model) => ({
@@ -1207,13 +1373,14 @@ builder.queryField('domainAnalysis', (t) =>
         latestDefinitionIds,
         latestRunByDefinition,
       );
-      const filteredSourceRuns = await filterSourceRunsBySignature(
+      const resolvedSignatureRuns = await resolveSignatureRuns(
+        latestDefinitionIds,
         sourceRunIds,
         sourceRunDefinitionById,
         selectedSignature,
       );
-      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
-      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
+      const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+      const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
 
       let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
       let pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
@@ -1292,6 +1459,8 @@ builder.queryField('domainAnalysis', (t) =>
         domainName: domain.name,
         totalDefinitions: definitions.length,
         targetedDefinitions: latestDefinitions.length,
+        coveredDefinitions: latestDefinitions.length - resolvedSignatureRuns.missingDefinitionIds.length,
+        missingDefinitionIds: resolvedSignatureRuns.missingDefinitionIds,
         definitionsWithAnalysis: analyzedDefinitionIds.size,
         models,
         unavailableModels,
@@ -1357,6 +1526,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           deprioritized: 0,
           neutral: 0,
           totalTrials: 0,
+          targetedDefinitions: 0,
+          coveredDefinitions: 0,
+          missingDefinitionIds: [],
           vignettes: [],
           generatedAt: new Date(),
         };
@@ -1387,6 +1559,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           deprioritized: 0,
           neutral: 0,
           totalTrials: 0,
+          targetedDefinitions: 0,
+          coveredDefinitions: 0,
+          missingDefinitionIds: [],
           vignettes: [],
           generatedAt: new Date(),
         };
@@ -1423,13 +1598,14 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         scoreDefinitionIds,
         latestRunByDefinition,
       );
-      const filteredSourceRuns = await filterSourceRunsBySignature(
+      const resolvedSignatureRuns = await resolveSignatureRuns(
+        scoreDefinitionIds,
         sourceRunIds,
         sourceRunDefinitionById,
         selectedSignature,
       );
-      const filteredSourceRunIds = filteredSourceRuns.sourceRunIds;
-      const filteredSourceRunDefinitionById = filteredSourceRuns.sourceRunDefinitionById;
+      const filteredSourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
+      const filteredSourceRunDefinitionById = resolvedSignatureRuns.filteredSourceRunDefinitionById;
       const targetDefinitionIdSet = new Set(targetDefinitionIds);
 
       type MutableCondition = {
@@ -1642,6 +1818,9 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
         deprioritized: totalDeprioritized,
         neutral: totalNeutral,
         totalTrials: totalPrioritized + totalDeprioritized + totalNeutral,
+        targetedDefinitions: scoreDefinitionIds.length,
+        coveredDefinitions: scoreDefinitionIds.length - resolvedSignatureRuns.missingDefinitionIds.length,
+        missingDefinitionIds: resolvedSignatureRuns.missingDefinitionIds,
         vignettes,
         generatedAt: new Date(),
       };
@@ -1708,8 +1887,8 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
       let sourceRunIds = parseSourceRunIds(aggregateRun.config);
       if (sourceRunIds.length === 0) return [];
       sourceRunIds = (
-        await filterSourceRunsBySignature(sourceRunIds, new Map<string, string>(), selectedSignature)
-      ).sourceRunIds;
+        await resolveSignatureRuns([definitionId], sourceRunIds, new Map(sourceRunIds.map((runId) => [runId, definitionId])), selectedSignature)
+      ).filteredSourceRunIds;
       if (sourceRunIds.length === 0) return [];
 
       return db.transcript.findMany({

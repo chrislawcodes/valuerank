@@ -7,6 +7,8 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
       domainName
       totalDefinitions
       targetedDefinitions
+      coveredDefinitions
+      missingDefinitionIds
       definitionsWithAnalysis
       generatedAt
       models {
@@ -73,6 +75,9 @@ export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
       deprioritized
       neutral
       totalTrials
+      targetedDefinitions
+      coveredDefinitions
+      missingDefinitionIds
       generatedAt
       vignettes {
         definitionId
@@ -176,6 +181,17 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
   }
 `;
 
+export const DOMAIN_AVAILABLE_SIGNATURES_QUERY = gql`
+  query DomainAvailableSignatures($domainId: ID!) {
+    domainAvailableSignatures(domainId: $domainId) {
+      signature
+      label
+      isVirtual
+      temperature
+    }
+  }
+`;
+
 export type DomainAnalysisValueScore = {
   valueKey: string;
   score: number;
@@ -202,6 +218,8 @@ export type DomainAnalysisResult = {
   domainName: string;
   totalDefinitions: number;
   targetedDefinitions: number;
+  coveredDefinitions: number;
+  missingDefinitionIds: string[];
   definitionsWithAnalysis: number;
   generatedAt: string;
   models: DomainAnalysisModel[];
@@ -255,8 +273,26 @@ export type DomainAnalysisValueDetailResult = {
   deprioritized: number;
   neutral: number;
   totalTrials: number;
+  targetedDefinitions: number;
+  coveredDefinitions: number;
+  missingDefinitionIds: string[];
   generatedAt: string;
   vignettes: DomainAnalysisValueDetailVignette[];
+};
+
+export type DomainAvailableSignature = {
+  signature: string;
+  label: string;
+  isVirtual: boolean;
+  temperature: number | null;
+};
+
+export type DomainAvailableSignaturesQueryResult = {
+  domainAvailableSignatures: DomainAvailableSignature[];
+};
+
+export type DomainAvailableSignaturesQueryVariables = {
+  domainId: string;
 };
 
 export type DomainAnalysisValueDetailQueryResult = {
