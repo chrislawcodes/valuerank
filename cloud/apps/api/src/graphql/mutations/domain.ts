@@ -7,6 +7,8 @@ import { normalizeDomainName } from '../../utils/domain-name.js';
 import { buildDefinitionWhere } from '../utils/definition-filters.js';
 import { randomUUID } from 'crypto';
 import { startRun as startRunService } from '../../services/run/index.js';
+import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
+import { parseTemperature } from '../../utils/temperature.js';
 import {
   DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
   DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
@@ -27,6 +29,9 @@ type DomainTrialRunResult = {
   targetedDefinitions: number;
   startedRuns: number;
   failedDefinitions: number;
+  skippedForBudget: number;
+  projectedCostUsd: number;
+  blockedByActiveLaunch: boolean;
   runs: DomainTrialRunEntry[];
 };
 
@@ -71,6 +76,9 @@ builder.objectType(DomainTrialRunResultRef, {
     targetedDefinitions: t.exposeInt('targetedDefinitions'),
     startedRuns: t.exposeInt('startedRuns'),
     failedDefinitions: t.exposeInt('failedDefinitions'),
+    skippedForBudget: t.exposeInt('skippedForBudget'),
+    projectedCostUsd: t.exposeFloat('projectedCostUsd'),
+    blockedByActiveLaunch: t.exposeBoolean('blockedByActiveLaunch'),
     runs: t.field({
       type: [DomainTrialRunEntryRef],
       resolve: (parent) => parent.runs,
@@ -95,6 +103,14 @@ function parseOptionalId(value: string | number | null | undefined, argName: str
     throw new Error(`${argName} cannot be an empty string. Use null for unassignment.`);
   }
   return id;
+}
+
+function normalizeModelSet(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  return models
+    .filter((model): model is string => typeof model === 'string')
+    .slice()
+    .sort((left, right) => left.localeCompare(right));
 }
 
 type DefinitionRow = {
@@ -416,6 +432,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
     args: {
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
+      maxBudgetUsd: t.arg.float({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
@@ -445,6 +462,9 @@ builder.mutationField('runTrialsForDomain', (t) =>
           targetedDefinitions: 0,
           startedRuns: 0,
           failedDefinitions: 0,
+          skippedForBudget: 0,
+          projectedCostUsd: 0,
+          blockedByActiveLaunch: false,
           runs: [],
         };
       }
@@ -453,6 +473,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
       // any authenticated teammate may trigger runs for latest definitions in the domain.
       const definitionsById = await hydrateDefinitionAncestors(definitions);
       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
 
       const activeModels = await db.llmModel.findMany({
         where: { status: 'ACTIVE' },
@@ -464,15 +485,69 @@ builder.mutationField('runTrialsForDomain', (t) =>
       if (models.length === 0) {
         throw new Error('No active models are configured. Add an active model before running domain trials.');
       }
+      const normalizedModels = models.slice().sort((left, right) => left.localeCompare(right));
+
+      const activeRuns = await db.run.findMany({
+        where: {
+          definitionId: { in: latestDefinitionIds },
+          status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          definitionId: true,
+          config: true,
+        },
+      });
+      const hasActiveEquivalentRun = activeRuns.some((run) => {
+        const config = run.config as { models?: unknown; temperature?: unknown } | null;
+        const runModels = normalizeModelSet(config?.models);
+        const runTemperature = parseTemperature(config?.temperature);
+        return runTemperature === (args.temperature ?? null)
+          && runModels.length === normalizedModels.length
+          && runModels.every((modelId, index) => modelId === normalizedModels[index]);
+      });
+      if (hasActiveEquivalentRun) {
+        throw new Error('Domain trial launch blocked: matching domain trials are already active for this domain and temperature.');
+      }
+
+      if (args.maxBudgetUsd !== undefined && args.maxBudgetUsd !== null && args.maxBudgetUsd <= 0) {
+        throw new Error('maxBudgetUsd must be greater than 0 when provided.');
+      }
+      const budgetCap = args.maxBudgetUsd ?? null;
 
       let startedRuns = 0;
       let failedDefinitions = 0;
+      let skippedForBudget = 0;
+      let projectedCostUsd = 0;
       const runs: DomainTrialRunEntry[] = [];
 
       for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
         const batch = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
+        const launchableDefinitions: DefinitionRow[] = [];
+        for (const definition of batch) {
+          if (budgetCap !== null) {
+            const estimate = await estimateCostService({
+              definitionId: definition.id,
+              modelIds: models,
+              samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+              samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+            });
+            if (projectedCostUsd + estimate.total > budgetCap) {
+              skippedForBudget += 1;
+              continue;
+            }
+            projectedCostUsd += estimate.total;
+          }
+          launchableDefinitions.push(definition);
+        }
+
+        if (launchableDefinitions.length === 0) {
+          continue;
+        }
+
         const runResults = await Promise.allSettled(
-          batch.map(async (definition) =>
+          launchableDefinitions.map(async (definition) =>
             startRunService({
               definitionId: definition.id,
               models,
@@ -498,7 +573,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
             return;
           }
           failedDefinitions += 1;
-          const failedDefinition = batch[index];
+          const failedDefinition = launchableDefinitions[index];
           ctx.log.error(
             {
               domainId,
@@ -522,8 +597,12 @@ builder.mutationField('runTrialsForDomain', (t) =>
           targetedDefinitions: latestDefinitions.length,
           startedRuns,
           failedDefinitions,
+          skippedForBudget,
+          projectedCostUsd,
+          blockedByActiveLaunch: false,
           models,
           temperature: args.temperature ?? null,
+          maxBudgetUsd: budgetCap,
           defaultsOnly: defaultModels.length > 0,
         },
       });
@@ -534,6 +613,9 @@ builder.mutationField('runTrialsForDomain', (t) =>
         targetedDefinitions: latestDefinitions.length,
         startedRuns,
         failedDefinitions,
+        skippedForBudget,
+        projectedCostUsd,
+        blockedByActiveLaunch: false,
         runs,
       };
     },
