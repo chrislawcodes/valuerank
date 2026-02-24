@@ -54,6 +54,11 @@ builder.objectType(TrialConfigSummaryRef, {
       description: 'Temperature used by these trials',
       resolve: (summary) => summary.temperature,
     }),
+    signature: t.string({
+      nullable: true,
+      description: 'Human-readable trial signature combining version and temperature (e.g. v3td, v2t0.7)',
+      resolve: (summary) => summary.signature,
+    }),
     isConsistent: t.exposeBoolean('isConsistent', {
       description: 'Whether all trials for this definition use the same version and temperature',
     }),

@@ -76,6 +76,7 @@ export type Definition = {
   trialConfig?: {
     definitionVersion: number | null;
     temperature: number | null;
+    signature: string | null;
     isConsistent: boolean;
     message: string | null;
   };
@@ -178,6 +179,7 @@ export const DEFINITIONS_QUERY = gql`
       trialConfig {
         definitionVersion
         temperature
+        signature
         isConsistent
         message
       }
@@ -210,6 +212,7 @@ export const DEFINITION_QUERY = gql`
       trialConfig {
         definitionVersion
         temperature
+        signature
         isConsistent
         message
       }

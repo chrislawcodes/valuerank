@@ -116,6 +116,7 @@ export const DOMAIN_TRIALS_PLAN_QUERY = gql`
         definitionId
         definitionName
         definitionVersion
+        signature
         scenarioCount
       }
       models {
@@ -274,6 +275,7 @@ export type DomainTrialsPlanQueryResult = {
       definitionId: string;
       definitionName: string;
       definitionVersion: number;
+      signature: string;
       scenarioCount: number;
     }>;
     models: Array<{
