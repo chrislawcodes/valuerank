@@ -10,6 +10,18 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 const CLOSE_WINRATE_DELTA = 0.08;
 const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
+const CHART_WIDTH = 1280;
+const CHART_HEIGHT = 1120;
+const CHART_CENTER_X = CHART_WIDTH / 2;
+const CHART_CENTER_Y = CHART_HEIGHT / 2;
+const NODE_RING_RADIUS = 450;
+const QUADRANT_SECTOR_RADIUS = 520;
+const QUADRANT_RING_RADIUS = 536;
+const QUADRANT_LABEL_RADIUS = 640;
+const NODE_RADIUS = 68;
+
+// Domain analysis intentionally renders the 10 canonical Schwartz values only.
+// The UI uses one representative value per mapped quadrant slot for readability.
 const DISPLAY_VALUES: ValueKey[] = [
   'Universalism_Nature',
   'Benevolence_Dependability',
@@ -247,17 +259,12 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   }, []);
 
   const nodePositions = useMemo(() => {
-    const width = 1280;
-    const height = 1120;
-    const cx = width / 2;
-    const cy = height / 2;
-    const radius = 450;
     return DISPLAY_VALUES.map((value) => {
       const theta = valueAngleById.get(value) ?? -Math.PI / 2;
       return {
         value,
-        x: cx + radius * Math.cos(theta),
-        y: cy + radius * Math.sin(theta),
+        x: CHART_CENTER_X + NODE_RING_RADIUS * Math.cos(theta),
+        y: CHART_CENTER_Y + NODE_RING_RADIUS * Math.sin(theta),
       };
     });
   }, [valueAngleById]);
@@ -293,8 +300,8 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const fillTransition = 'fill-opacity 280ms ease, fill 280ms ease, filter 280ms ease';
 
   // Center of viewBox (where nodes converge during animation)
-  const viewCenterX = 640;
-  const viewCenterY = 560;
+  const viewCenterX = CHART_CENTER_X;
+  const viewCenterY = CHART_CENTER_Y;
 
   // Edges fade out during animation phases
   const edgesVisible = animationPhase === 'idle';
@@ -362,43 +369,41 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
         className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2"
       >
         <svg
-          viewBox="0 0 1280 1120"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           className="w-full min-w-[1120px]"
           style={svgStyle}
           role="img"
           aria-label="Value dominance graph"
         >
-          {QUADRANT_ARCS.map((quadrant) => (
-            <g key={quadrant.label}>
-              <path
-                d={describeSectorPath(640, 560, 520, quadrant.startAngle, quadrant.endAngle)}
-                fill={quadrant.fill}
-              />
-              <path
-                d={describeArcPath(640, 560, 536, quadrant.startAngle, quadrant.endAngle)}
-                fill="none"
-                stroke={quadrant.ring}
-                strokeWidth={18}
-                opacity={0.75}
-              />
-              {(() => {
-                const mid = (quadrant.startAngle + quadrant.endAngle) / 2;
-                const labelPoint = polarToCartesian(640, 560, 640, mid);
-                return (
-                  <text
-                    x={labelPoint.x}
-                    y={labelPoint.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="select-none"
-                    style={{ fontSize: '26px', fontWeight: 600, fill: '#374151' }}
-                  >
-                    {quadrant.label}
-                  </text>
-                );
-              })()}
-            </g>
-          ))}
+          {QUADRANT_ARCS.map((quadrant) => {
+            const midAngle = (quadrant.startAngle + quadrant.endAngle) / 2;
+            const labelPoint = polarToCartesian(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_LABEL_RADIUS, midAngle);
+            return (
+              <g key={quadrant.label}>
+                <path
+                  d={describeSectorPath(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_SECTOR_RADIUS, quadrant.startAngle, quadrant.endAngle)}
+                  fill={quadrant.fill}
+                />
+                <path
+                  d={describeArcPath(CHART_CENTER_X, CHART_CENTER_Y, QUADRANT_RING_RADIUS, quadrant.startAngle, quadrant.endAngle)}
+                  fill="none"
+                  stroke={quadrant.ring}
+                  strokeWidth={18}
+                  opacity={0.75}
+                />
+                <text
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none"
+                  style={{ fontSize: '26px', fontWeight: 600, fill: '#374151' }}
+                >
+                  {quadrant.label}
+                </text>
+              </g>
+            );
+          })}
           {edges.map((edge, edgeIndex) => {
             const source = positionByValue.get(edge.from);
             const target = positionByValue.get(edge.to);
@@ -412,7 +417,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
             const length = Math.hypot(dx, dy) || 1;
             const ux = dx / length;
             const uy = dy / length;
-            const nodeRadius = 68;
+            const nodeRadius = NODE_RADIUS;
             const winRate = 1 / (1 + Math.exp(-edge.gap));
             const normalized = Math.max(0, Math.min(1, (winRate - 0.5) / 0.5));
             const widthFactor = normalized ** 1.6;
@@ -682,7 +687,6 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
       <div ref={contestableRef} className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
         <div className="mb-2 flex items-center justify-between">
           <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
-          <CopyVisualButton targetRef={contestableRef} label="ranking and cycles notes" />
         </div>
         <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
           <li>Arrow direction: winner value points to loser value.</li>
