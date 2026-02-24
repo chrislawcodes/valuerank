@@ -33,6 +33,16 @@ function formatTemperature(value: number | null | undefined): string {
   return String(Number(value.toFixed(2)));
 }
 
+function formatTrialSignature(version: number | null | undefined, temperature: number | null | undefined): string {
+  const versionToken = version === null || version === undefined ? '?' : String(version);
+  // Fallback only for older rows where backend trialConfig.signature is null.
+  // Keep this formatting aligned with API formatTrialSignature().
+  const tempToken = temperature === null || temperature === undefined || !Number.isFinite(temperature)
+    ? 'd'
+    : temperature.toFixed(3).replace(/\.?0+$/, '');
+  return `v${versionToken}t${tempToken}`;
+}
+
 export function Domains() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
@@ -414,6 +424,7 @@ export function Domains() {
                     <tr className="text-left text-gray-500 border-b border-gray-200">
                       <th className="py-2 pr-3">Select</th>
                       <th className="py-2 pr-3">Vignette</th>
+                      <th className="py-2 pr-3">Signature</th>
                       <th className="py-2 pr-3">Version</th>
                       <th className="py-2 pr-3">Temperature</th>
                       <th className="py-2 pr-3">Domain</th>
@@ -437,6 +448,15 @@ export function Domains() {
                           />
                         </td>
                         <td className="py-2 pr-3 text-gray-900">{definition.name}</td>
+                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">
+                          {definition.trialConfig?.isConsistent === false
+                            ? 'Mixed'
+                            : (definition.trialConfig?.signature
+                              ?? formatTrialSignature(
+                                definition.trialConfig?.definitionVersion ?? definition.version,
+                                definition.trialConfig?.temperature,
+                              ))}
+                        </td>
                         <td className="py-2 pr-3 text-gray-600">
                           {definition.trialConfig?.isConsistent === false
                             ? 'Mixed'
