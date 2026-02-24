@@ -13,8 +13,8 @@ const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
 const DISPLAY_VALUES: ValueKey[] = [
   'Universalism_Nature',
   'Benevolence_Dependability',
-  'Tradition',
   'Conformity_Interpersonal',
+  'Tradition',
   'Security_Personal',
   'Power_Dominance',
   'Achievement',
@@ -29,6 +29,9 @@ const QUADRANT_ARCS = [
   { label: 'Self-Enhancement', startAngle: Math.PI / 2, endAngle: Math.PI, fill: 'rgba(249, 115, 22, 0.15)', ring: '#f97316' },
   { label: 'Openness to Change', startAngle: Math.PI, endAngle: Math.PI * 1.5, fill: 'rgba(244, 114, 182, 0.15)', ring: '#f472b6' },
 ] as const;
+
+const SELF_ENHANCEMENT_VALUES: ReadonlyArray<ValueKey> = ['Power_Dominance', 'Achievement'];
+const OPENNESS_NON_STRADDLE_VALUES: ReadonlyArray<ValueKey> = ['Stimulation', 'Self_Direction_Action'];
 
 function polarToCartesian(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
   return {
@@ -49,6 +52,13 @@ function describeArcPath(cx: number, cy: number, radius: number, startAngle: num
   const end = polarToCartesian(cx, cy, radius, endAngle);
   const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+}
+
+function describeNodeHalfArc(cx: number, cy: number, radius: number, topHalf: boolean): string {
+  const startX = cx - radius;
+  const endX = cx + radius;
+  const sweepFlag = topHalf ? 1 : 0;
+  return `M ${startX} ${cy} A ${radius} ${radius} 0 0 ${sweepFlag} ${endX} ${cy}`;
 }
 
 function getEdgeColor(params: {
@@ -205,21 +215,52 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
 
+  const valueAngleById = useMemo(() => {
+    const result = new Map<ValueKey, number>();
+    const selfTranscendence = QUADRANT_ARCS[0];
+    ['Universalism_Nature', 'Benevolence_Dependability'].forEach((value, index) => {
+      const t = (index + 0.5) / 2;
+      result.set(value as ValueKey, selfTranscendence.startAngle + t * (selfTranscendence.endAngle - selfTranscendence.startAngle));
+    });
+
+    const conservation = QUADRANT_ARCS[1];
+    ['Conformity_Interpersonal', 'Tradition', 'Security_Personal'].forEach((value, index) => {
+      const t = (index + 0.5) / 3;
+      result.set(value as ValueKey, conservation.startAngle + t * (conservation.endAngle - conservation.startAngle));
+    });
+
+    const selfEnhancement = QUADRANT_ARCS[2];
+    SELF_ENHANCEMENT_VALUES.forEach((value, index) => {
+      const t = (index + 1) / (SELF_ENHANCEMENT_VALUES.length + 1);
+      result.set(value, selfEnhancement.startAngle + t * (selfEnhancement.endAngle - selfEnhancement.startAngle));
+    });
+
+    // Hedonism straddles Self-Enhancement and Openness to Change exactly at the shared boundary.
+    result.set('Hedonism', Math.PI);
+
+    const openness = QUADRANT_ARCS[3];
+    OPENNESS_NON_STRADDLE_VALUES.forEach((value, index) => {
+      const t = (index + 1) / (OPENNESS_NON_STRADDLE_VALUES.length + 1);
+      result.set(value, openness.startAngle + t * (openness.endAngle - openness.startAngle));
+    });
+    return result;
+  }, []);
+
   const nodePositions = useMemo(() => {
     const width = 1280;
     const height = 1120;
     const cx = width / 2;
     const cy = height / 2;
     const radius = 450;
-    return DISPLAY_VALUES.map((value, index) => {
-      const theta = (Math.PI * 2 * index) / DISPLAY_VALUES.length - Math.PI / 2;
+    return DISPLAY_VALUES.map((value) => {
+      const theta = valueAngleById.get(value) ?? -Math.PI / 2;
       return {
         value,
         x: cx + radius * Math.cos(theta),
         y: cy + radius * Math.sin(theta),
       };
     });
-  }, []);
+  }, [valueAngleById]);
 
   const positionByValue = useMemo(
     () => new Map(nodePositions.map((node) => [node.value, node])),
@@ -342,7 +383,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
               />
               {(() => {
                 const mid = (quadrant.startAngle + quadrant.endAngle) / 2;
-                const labelPoint = polarToCartesian(640, 560, 582, mid);
+                const labelPoint = polarToCartesian(640, 560, 640, mid);
                 return (
                   <text
                     x={labelPoint.x}
@@ -350,7 +391,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="select-none"
-                    style={{ fontSize: '17px', fontWeight: 600, fill: '#374151' }}
+                    style={{ fontSize: '26px', fontWeight: 600, fill: '#374151' }}
                   >
                     {quadrant.label}
                   </text>
@@ -503,6 +544,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
           })}
 
           {nodePositions.map((node, nodeIndex) => {
+            const isHedonismNode = node.value === 'Hedonism';
             const isSelectedNode = focusedValue != null && node.value === focusedValue;
             const isHovered = hoveredValue === node.value;
             const isConnectedToFocused =
@@ -575,6 +617,30 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
                       'opacity 280ms ease, stroke 280ms ease, stroke-width 280ms ease, filter 280ms ease',
                   }}
                 />
+                {isHedonismNode && (
+                  <>
+                    <path
+                      d={describeNodeHalfArc(node.x, node.y, 75, false)}
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth={isSelectedNode ? 5.5 : 3.2}
+                      style={{
+                        opacity: nodeOpacity * 0.9,
+                        transition: 'opacity 280ms ease, stroke-width 280ms ease',
+                      }}
+                    />
+                    <path
+                      d={describeNodeHalfArc(node.x, node.y, 75, true)}
+                      fill="none"
+                      stroke="#f472b6"
+                      strokeWidth={isSelectedNode ? 5.5 : 3.2}
+                      style={{
+                        opacity: nodeOpacity * 0.9,
+                        transition: 'opacity 280ms ease, stroke-width 280ms ease',
+                      }}
+                    />
+                  </>
+                )}
                 <circle
                   cx={node.x}
                   cy={node.y}

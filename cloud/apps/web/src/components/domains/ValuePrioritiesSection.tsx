@@ -15,6 +15,42 @@ type SortState = {
   direction: 'asc' | 'desc';
 };
 
+const COLUMN_VALUES: ValueKey[] = [
+  'Universalism_Nature',
+  'Benevolence_Dependability',
+  'Conformity_Interpersonal',
+  'Tradition',
+  'Security_Personal',
+  'Power_Dominance',
+  'Achievement',
+  'Hedonism',
+  'Stimulation',
+  'Self_Direction_Action',
+];
+
+const TOP_COLUMN_GROUPS: Array<{ label: string; values: ValueKey[] }> = [
+  { label: 'Self-Transcendence', values: ['Universalism_Nature', 'Benevolence_Dependability'] },
+  { label: 'Conservation', values: ['Conformity_Interpersonal', 'Tradition', 'Security_Personal'] },
+  { label: 'Self-Enhancement', values: ['Power_Dominance', 'Achievement'] },
+  { label: 'Openness to Change', values: ['Hedonism', 'Stimulation', 'Self_Direction_Action'] },
+];
+const HEDONISM_SPLIT_VALUE: ValueKey = 'Hedonism';
+const MODEL_COLUMN_WIDTH_PX = 260;
+const DEFAULT_VALUE_COLUMN_WIDTH_PX = 118;
+const HEDONISM_COLUMN_WIDTH_PX = 220;
+const OPENNESS_GROUP_WIDTH_PX = HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * 2;
+const HEDONISM_CENTER_IN_OPENNESS_PERCENT = ((HEDONISM_COLUMN_WIDTH_PX / 2) / OPENNESS_GROUP_WIDTH_PX) * 100;
+const TABLE_TOTAL_WIDTH_PX =
+  MODEL_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
+
+function hasGroupStartBorder(value: ValueKey): boolean {
+  return value === 'Universalism_Nature' || value === 'Conformity_Interpersonal' || value === 'Power_Dominance';
+}
+
+function hasGroupEndBorder(value: ValueKey): boolean {
+  return value === 'Benevolence_Dependability' || value === 'Security_Personal' || value === 'Self_Direction_Action';
+}
+
 function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
   const sorted = [...VALUES].sort((a, b) => model.values[b] - model.values[a]);
   return {
@@ -64,7 +100,7 @@ export function ValuePrioritiesSection({
   }, [models, sortState]);
 
   const valueRange = useMemo(() => {
-    const all = models.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = models.flatMap((model) => COLUMN_VALUES.map((value) => model.values[value]));
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
@@ -102,11 +138,21 @@ export function ValuePrioritiesSection({
           <CopyVisualButton targetRef={detailedTableRef} label="value priorities table" />
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-xs">
+          <table className="table-fixed text-xs" style={{ width: `${TABLE_TOTAL_WIDTH_PX}px` }}>
+            <colgroup>
+              <col style={{ width: `${MODEL_COLUMN_WIDTH_PX}px` }} />
+              {COLUMN_VALUES.map((value) => (
+                <col
+                  key={`col-${value}`}
+                  style={{ width: `${value === HEDONISM_SPLIT_VALUE ? HEDONISM_COLUMN_WIDTH_PX : DEFAULT_VALUE_COLUMN_WIDTH_PX}px` }}
+                />
+              ))}
+            </colgroup>
           <thead>
-            <tr className="border-b border-gray-200 text-gray-600">
+            <tr className="border-b border-gray-100 text-gray-500">
               <th
-                className="px-2 py-2 text-left font-medium"
+                className="border-r-2 border-gray-300 px-2 py-2 text-left font-medium"
+                rowSpan={2}
                 aria-sort={
                   sortState.key === 'model'
                     ? sortState.direction === 'asc'
@@ -125,10 +171,37 @@ export function ValuePrioritiesSection({
                   Model {sortState.key === 'model' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
                 </Button>
               </th>
-              {VALUES.map((value) => (
+              {TOP_COLUMN_GROUPS.map((group, groupIndex) => {
+                const isOpennessGroup = group.label === 'Openness to Change';
+                return (
+                <th
+                  key={group.label}
+                  className={`relative px-2 py-2 text-center align-middle text-[11px] font-semibold uppercase tracking-wide ${
+                    groupIndex === 0 || isOpennessGroup ? '' : 'border-l-2 border-gray-300'
+                  } ${groupIndex === TOP_COLUMN_GROUPS.length - 1 ? 'border-r-2 border-gray-300' : ''}`}
+                  colSpan={group.values.length}
+                >
+                  {isOpennessGroup && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 border-l-2 border-gray-300"
+                      style={{ left: `${HEDONISM_CENTER_IN_OPENNESS_PERCENT}%` }}
+                    />
+                  )}
+                  {group.label}
+                </th>
+                );
+              })}
+            </tr>
+            <tr className="border-b border-gray-200 text-gray-600">
+              {COLUMN_VALUES.map((value) => (
                 <th
                   key={value}
-                  className="px-2 py-2 text-right font-medium"
+                  className={`relative px-2 py-2 text-right font-medium ${
+                    hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
+                  } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
+                    value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
+                  }`}
                   aria-sort={
                     sortState.key === value
                       ? sortState.direction === 'asc'
@@ -141,11 +214,33 @@ export function ValuePrioritiesSection({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900"
+                    className={`h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900 ${
+                      value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
+                    }`}
                     onClick={() => updateSort(value)}
                   >
-                    {VALUE_LABELS[value]} {sortState.key === value ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                    {value === HEDONISM_SPLIT_VALUE ? (
+                      <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
+                        <span className="px-1 text-center">Hedonism</span>
+                        <span className="whitespace-nowrap px-1 text-center">(50/50 split)</span>
+                      </span>
+                    ) : (
+                      <>{VALUE_LABELS[value]}</>
+                    )}{' '}
+                    {sortState.key === value ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
                   </Button>
+                  {value === HEDONISM_SPLIT_VALUE && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 left-0 border-l border-gray-200"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 right-0 border-r border-gray-200"
+                      />
+                    </>
+                  )}
                 </th>
               ))}
             </tr>
@@ -154,18 +249,22 @@ export function ValuePrioritiesSection({
             {ordered.map((model) => {
               return (
                 <tr key={model.model} className="border-b border-gray-100">
-                  <td className="px-2 py-2 font-medium text-gray-900">{model.label}</td>
-                  {VALUES.map((value) => (
+                  <td className="border-r-2 border-gray-300 px-2 py-2 font-medium text-gray-900">{model.label}</td>
+                  {COLUMN_VALUES.map((value) => (
                     <td
                       key={value}
-                      className="p-0 text-right text-gray-800 transition-all hover:brightness-105"
+                      className={`p-0 text-right text-gray-800 transition-all hover:brightness-105 ${
+                        hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
+                      } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
+                        value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
+                      }`}
                       style={{ background: getPriorityColor(model.values[value], valueRange.min, valueRange.max) }}
                     >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
+                        className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
                         onClick={() => handleValueCellClick(model.model, value)}
                         disabled={selectedDomainId === ''}
                         title={`View score calculation and vignette condition details for ${model.label} · ${VALUE_LABELS[value]}`}
