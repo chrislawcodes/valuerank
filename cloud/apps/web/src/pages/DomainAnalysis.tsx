@@ -25,6 +25,25 @@ import {
 } from '../data/domainAnalysisData';
 import { useDomains } from '../hooks/useDomains';
 
+function parseTemperatureFromSignature(signature: string): number | null {
+  if (signature.trim() === '') return null;
+  const vnewMatch = signature.match(/^vnewt(.+)$/);
+  if (vnewMatch) {
+    const token = vnewMatch[1] ?? '';
+    if (token === 'd') return null;
+    const parsed = Number.parseFloat(token);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const standardMatch = signature.match(/t(.+)$/);
+  if (standardMatch) {
+    const token = standardMatch[1] ?? '';
+    if (token === 'd') return null;
+    const parsed = Number.parseFloat(token);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -155,7 +174,13 @@ export function DomainAnalysis() {
     if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
     const query = new URLSearchParams();
     query.set('definitionIds', allMissingDefinitionIds.join(','));
-    if (selectedSignature !== '') query.set('signature', selectedSignature);
+    if (selectedSignature !== '') {
+      query.set('signature', selectedSignature);
+      const signatureTemperature = parseTemperatureFromSignature(selectedSignature);
+      if (signatureTemperature !== null) {
+        query.set('temperature', String(signatureTemperature));
+      }
+    }
     navigate(`/domains/${selectedDomainId}/run-trials?${query.toString()}`);
   };
 

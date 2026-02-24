@@ -1513,6 +1513,9 @@ builder.queryField('domainAnalysis', (t) =>
         }));
       const missingModelIds = activeModels.map((model) => model.modelId);
       const missingModelLabels = activeModels.map((model) => model.displayName ?? model.modelId);
+      // Current signature-level coverage is definition-scoped, so a missing definition
+      // means no matching-run coverage for any model. Keep explicit boolean for future
+      // partial model coverage support.
       const missingDefinitions = resolvedSignatureRuns.missingDefinitionIds.map((definitionId) => ({
         definitionId,
         definitionName: definitionNameById.get(definitionId) ?? definitionId,

@@ -619,7 +619,6 @@ builder.mutationField('runTrialsForDomain', (t) =>
         success: failedDefinitions === 0,
         totalDefinitions: definitions.length,
         targetedDefinitions: targetedDefinitions.length,
-        requestedDefinitionIds,
         startedRuns,
         failedDefinitions,
         skippedForBudget,

@@ -35,8 +35,11 @@ type CellRunMap = Record<string, string>;
 export function DomainTrialsDashboard() {
   const { domainId } = useParams<{ domainId: string }>();
   const [searchParams] = useSearchParams();
-  const [useDefaultTemperature, setUseDefaultTemperature] = useState(true);
-  const [temperatureInput, setTemperatureInput] = useState('0.7');
+  const initialTemperatureParam = searchParams.get('temperature');
+  const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
+  const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
+  const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
+  const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
   const [started, setStarted] = useState(false);
   const [definitionRunIds, setDefinitionRunIds] = useState<Record<string, string>>({});
   const [cellOverrideRunIds, setCellOverrideRunIds] = useState<CellRunMap>({});
@@ -64,6 +67,7 @@ export function DomainTrialsDashboard() {
       .map((id) => id.trim())
       .filter((id) => id !== '');
   }, [searchParams]);
+  const filteredDefinitionIdCount = useMemo(() => new Set(filteredDefinitionIds).size, [filteredDefinitionIds]);
 
   const [planResult, refetchPlan] = useQuery<DomainTrialsPlanQueryResult, DomainTrialsPlanQueryVariables>({
     query: DOMAIN_TRIALS_PLAN_QUERY,
@@ -145,6 +149,7 @@ export function DomainTrialsDashboard() {
   const plan = planResult.data?.domainTrialsPlan;
   const models = plan?.models ?? [];
   const vignettes = plan?.vignettes ?? [];
+  const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
   const cellEstimates = useMemo(() => {
     const next = new Map<string, number>();
     for (const cell of plan?.cellEstimates ?? []) {
@@ -335,6 +340,9 @@ export function DomainTrialsDashboard() {
 
       {displayError && <ErrorMessage message={`Failed to load domain trial data: ${displayError.message ?? 'Unknown error'}`} />}
       {runError && <ErrorMessage message={runError} />}
+      {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
+        <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
+      )}
 
       <LaunchControlsPanel
         vignetteCount={vignettes.length}
