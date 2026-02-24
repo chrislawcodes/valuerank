@@ -4,6 +4,7 @@ import { DomainRef } from '../types/domain.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import { formatTrialSignature } from '../../utils/trial-signature.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -132,6 +133,7 @@ type DomainTrialPlanVignette = {
   definitionId: string;
   definitionName: string;
   definitionVersion: number;
+  signature: string;
   scenarioCount: number;
 };
 
@@ -340,6 +342,7 @@ builder.objectType(DomainTrialPlanVignetteRef, {
     definitionId: t.exposeID('definitionId'),
     definitionName: t.exposeString('definitionName'),
     definitionVersion: t.exposeInt('definitionVersion'),
+    signature: t.exposeString('signature'),
     scenarioCount: t.exposeInt('scenarioCount'),
   }),
 });
@@ -901,6 +904,7 @@ builder.queryField('domainTrialsPlan', (t) =>
           definitionId: definition.id,
           definitionName: definition.name ?? 'Untitled vignette',
           definitionVersion: definition.version,
+          signature: formatTrialSignature(definition.version, selectedTemperature),
           scenarioCount: scenarioCountByDefinition.get(definition.id) ?? 0,
         })),
         models: selectedModels.map((model) => ({

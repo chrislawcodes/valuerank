@@ -2,12 +2,14 @@ import DataLoader from 'dataloader';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { parseTemperature } from '../../utils/temperature.js';
+import { formatTrialSignature } from '../../utils/trial-signature.js';
 
 const log = createLogger('graphql:dataloader:definition-trial-summary');
 
 export type TrialConfigSummary = {
   definitionVersion: number | null;
   temperature: number | null;
+  signature: string | null;
   isConsistent: boolean;
   message: string | null;
 };
@@ -40,6 +42,7 @@ function emptySummary(): DefinitionTrialSummary {
     trialConfig: {
       definitionVersion: null,
       temperature: null,
+      signature: null,
       isConsistent: true,
       message: null,
     },
@@ -87,6 +90,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           trialCount: number;
           versions: Set<string>;
           temperatures: Set<string>;
+          signatures: Set<string>;
         }
       >();
 
@@ -98,6 +102,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           trialCount: 0,
           versions: new Set<string>(),
           temperatures: new Set<string>(),
+          signatures: new Set<string>(),
         };
 
         aggregate.trialCount += trialCountForRun;
@@ -116,6 +121,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
 
         aggregate.versions.add(encodeNullableNumber(definitionVersion));
         aggregate.temperatures.add(encodeNullableNumber(temperature));
+        aggregate.signatures.add(formatTrialSignature(definitionVersion, temperature));
         aggregateByDefinitionId.set(run.definitionId, aggregate);
       }
 
@@ -123,7 +129,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
         const aggregate = aggregateByDefinitionId.get(definitionId);
         if (!aggregate) return emptySummary();
 
-        const isConsistent = aggregate.versions.size <= 1 && aggregate.temperatures.size <= 1;
+        const isConsistent = aggregate.signatures.size <= 1;
         if (!isConsistent) {
           const mismatchParts: string[] = [];
           if (aggregate.versions.size > 1) {
@@ -132,22 +138,29 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           if (aggregate.temperatures.size > 1) {
             mismatchParts.push(`temperatures: ${Array.from(aggregate.temperatures).join(', ')}`);
           }
+          if (aggregate.signatures.size > 1) {
+            mismatchParts.push(`signatures: ${Array.from(aggregate.signatures).join(', ')}`);
+          }
           return {
             trialCount: aggregate.trialCount,
             trialConfig: {
               definitionVersion: null,
               temperature: null,
+              signature: null,
               isConsistent: false,
               message: `Inconsistent trial settings detected (${mismatchParts.join('; ')}).`,
             },
           };
         }
 
+        const definitionVersion = decodeNullableNumber(Array.from(aggregate.versions)[0]);
+        const temperature = decodeNullableNumber(Array.from(aggregate.temperatures)[0]);
         return {
           trialCount: aggregate.trialCount,
           trialConfig: {
-            definitionVersion: decodeNullableNumber(Array.from(aggregate.versions)[0]),
-            temperature: decodeNullableNumber(Array.from(aggregate.temperatures)[0]),
+            definitionVersion,
+            temperature,
+            signature: formatTrialSignature(definitionVersion, temperature),
             isConsistent: true,
             message: null,
           },

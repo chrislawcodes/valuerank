@@ -310,7 +310,7 @@ export function DomainTrialsDashboard() {
                 {vignettes.map((vignette) => (
                   <th key={vignette.definitionId} className="py-2 px-3 min-w-[220px]">
                     <div className="font-medium text-gray-900">{vignette.definitionName}</div>
-                    <div className="text-xs text-gray-500">v{vignette.definitionVersion} · {vignette.scenarioCount} conditions</div>
+                    <div className="text-xs text-gray-500">{vignette.signature} · {vignette.scenarioCount} conditions</div>
                   </th>
                 ))}
               </tr>
