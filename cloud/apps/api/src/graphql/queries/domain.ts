@@ -487,6 +487,9 @@ async function resolveSignatureRuns(
 
   if (selectedSignature !== null && isVnewSignature(selectedSignature)) {
     const temperature = parseVnewTemperature(selectedSignature);
+    // vnew signatures intentionally resolve from the freshest completed runs
+    // per latest definition lineage at the selected temperature. This can include
+    // completed runs not yet referenced by an aggregate run's sourceRunIds.
     const completedRuns = await db.run.findMany({
       where: {
         definitionId: { in: latestDefinitionIds },
@@ -1207,7 +1210,10 @@ builder.queryField('domainAvailableSignatures', (t) =>
     args: {
       domainId: t.arg.id({ required: true }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const domainId = String(args.domainId);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -1886,9 +1892,14 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
 
       let sourceRunIds = parseSourceRunIds(aggregateRun.config);
       if (sourceRunIds.length === 0) return [];
-      sourceRunIds = (
-        await resolveSignatureRuns([definitionId], sourceRunIds, new Map(sourceRunIds.map((runId) => [runId, definitionId])), selectedSignature)
-      ).filteredSourceRunIds;
+      const sourceRunDefinitionById = new Map(sourceRunIds.map((runId) => [runId, definitionId]));
+      const resolvedSignatureRuns = await resolveSignatureRuns(
+        [definitionId],
+        sourceRunIds,
+        sourceRunDefinitionById,
+        selectedSignature,
+      );
+      sourceRunIds = resolvedSignatureRuns.filteredSourceRunIds;
       if (sourceRunIds.length === 0) return [];
 
       return db.transcript.findMany({
