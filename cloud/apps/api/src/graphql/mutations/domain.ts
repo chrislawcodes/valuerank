@@ -109,7 +109,6 @@ function normalizeModelSet(models: unknown): string[] {
   if (!Array.isArray(models)) return [];
   return models
     .filter((model): model is string => typeof model === 'string')
-    .slice()
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -658,6 +657,26 @@ builder.mutationField('retryDomainTrialCell', (t) =>
       });
       if (!model) {
         throw new Error(`Model is not active: ${modelId}`);
+      }
+
+      const activeRuns = await db.run.findMany({
+        where: {
+          definitionId,
+          status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
+          deletedAt: null,
+        },
+        select: { id: true, config: true },
+      });
+      const hasEquivalentActiveRun = activeRuns.some((run) => {
+        const config = run.config as { models?: unknown; temperature?: unknown } | null;
+        const runModels = normalizeModelSet(config?.models);
+        const runTemperature = parseTemperature(config?.temperature);
+        return runTemperature === (args.temperature ?? null)
+          && runModels.length === 1
+          && runModels[0] === modelId;
+      });
+      if (hasEquivalentActiveRun) {
+        throw new Error('Retry blocked: this model/vignette cell already has an active run at the same temperature.');
       }
 
       const run = await startRunService({

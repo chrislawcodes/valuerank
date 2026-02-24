@@ -4,6 +4,7 @@ import { DomainRef } from '../types/domain.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import { AuthenticationError } from '@valuerank/shared';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -780,7 +781,10 @@ builder.queryField('domainTrialsPlan', (t) =>
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const domainId = String(args.domainId);
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -927,7 +931,10 @@ builder.queryField('domainTrialRunsStatus', (t) =>
     args: {
       runIds: t.arg.idList({ required: true }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const runIds = args.runIds.map(String);
       if (runIds.length === 0) return [];
 
