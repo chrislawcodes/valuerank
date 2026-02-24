@@ -18,6 +18,20 @@ const defaultFilters: DefinitionFilterState = {
 };
 
 type FolderKey = string;
+const ALL_SIGNATURE_FILTER = 'all';
+type SignatureFilterKey = string;
+
+type SignatureSplitRow = {
+  rowKey: string;
+  definitionId: string;
+  definitionName: string;
+  signature: string;
+  definitionVersion: number | null;
+  temperature: number | null;
+  domainName: string;
+  trialCount: number;
+  isFromMixedDefinition: boolean;
+};
 
 function getFilterSummary(filters: DefinitionFilterState): string {
   const parts: string[] = [];
@@ -47,9 +61,10 @@ export function Domains() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
   const [selectedFolder, setSelectedFolder] = useState<FolderKey>('all');
-  const [selectedDefinitionIds, setSelectedDefinitionIds] = useState<Set<string>>(new Set());
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
   const [selectAllShown, setSelectAllShown] = useState(false);
   const [assignTargetDomainId, setAssignTargetDomainId] = useState<string>('none');
+  const [signatureFilter, setSignatureFilter] = useState<SignatureFilterKey>(ALL_SIGNATURE_FILTER);
 
   const [createName, setCreateName] = useState('');
   const [renameName, setRenameName] = useState('');
@@ -121,9 +136,62 @@ export function Domains() {
     () => definitions.filter((definition) => definition.trialConfig?.isConsistent === false),
     [definitions],
   );
+  const signatureSplitRows = useMemo<SignatureSplitRow[]>(() => {
+    const rows: SignatureSplitRow[] = [];
+    for (const definition of definitions) {
+      const domainName = definition.domain?.name ?? 'None';
+      const breakdown = definition.trialConfig?.signatureBreakdown ?? [];
+      const hasBreakdown = breakdown.length > 0;
+      const mixed = hasBreakdown && breakdown.length > 1;
+
+      if (hasBreakdown) {
+        for (const item of breakdown) {
+          rows.push({
+            rowKey: `${definition.id}::${item.signature}`,
+            definitionId: definition.id,
+            definitionName: definition.name,
+            signature: item.signature,
+            definitionVersion: item.definitionVersion,
+            temperature: item.temperature,
+            domainName,
+            trialCount: item.trialCount,
+            isFromMixedDefinition: mixed,
+          });
+        }
+        continue;
+      }
+
+      const fallbackSignature = definition.trialConfig?.signature
+        ?? formatTrialSignature(
+          definition.trialConfig?.definitionVersion ?? definition.version,
+          definition.trialConfig?.temperature,
+        );
+      rows.push({
+        rowKey: `${definition.id}::${fallbackSignature}`,
+        definitionId: definition.id,
+        definitionName: definition.name,
+        signature: fallbackSignature,
+        definitionVersion: definition.trialConfig?.definitionVersion ?? definition.version,
+        temperature: definition.trialConfig?.temperature ?? null,
+        domainName,
+        trialCount: definition.trialCount,
+        isFromMixedDefinition: definition.trialConfig?.isConsistent === false,
+      });
+    }
+    return rows;
+  }, [definitions]);
+  const signatureOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of signatureSplitRows) values.add(row.signature);
+    return Array.from(values).sort((left, right) => left.localeCompare(right));
+  }, [signatureSplitRows]);
+  const filteredRows = useMemo(() => {
+    if (signatureFilter === ALL_SIGNATURE_FILTER) return signatureSplitRows;
+    return signatureSplitRows.filter((row) => row.signature === signatureFilter);
+  }, [signatureFilter, signatureSplitRows]);
 
   const resetSelection = useCallback(() => {
-    setSelectedDefinitionIds(new Set());
+    setSelectedRowKeys(new Set());
     setSelectAllShown(false);
   }, []);
 
@@ -131,12 +199,16 @@ export function Domains() {
     resetSelection();
   }, [selectedFolder, filters.search, filters.rootOnly, filters.hasRuns, filters.tagIds, resetSelection]);
 
-  const handleToggleDefinition = (id: string) => {
+  useEffect(() => {
+    resetSelection();
+  }, [signatureFilter, resetSelection]);
+
+  const handleToggleRow = (rowKey: string) => {
     setSelectAllShown(false);
-    setSelectedDefinitionIds((prev) => {
+    setSelectedRowKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
       return next;
     });
   };
@@ -148,6 +220,7 @@ export function Domains() {
     try {
       let result: { success: boolean; affectedDefinitions: number } | null = null;
       if (selectAllShown) {
+        const filteredDefinitionIds = Array.from(new Set(filteredRows.map((row) => row.definitionId)));
         result = await assignDomainToDefinitionsByFilter({
           domainId: targetDomainId,
           search: filters.search || undefined,
@@ -157,8 +230,18 @@ export function Domains() {
           sourceDomainId: selectedFolder === 'all' || selectedFolder === 'none' ? undefined : selectedFolder,
           withoutDomain: selectedFolder === 'none' ? true : undefined,
         });
-      } else if (selectedDefinitionIds.size > 0) {
-        result = await assignDomainToDefinitions(Array.from(selectedDefinitionIds), targetDomainId);
+        if (signatureFilter !== ALL_SIGNATURE_FILTER) {
+          result = await assignDomainToDefinitions(filteredDefinitionIds, targetDomainId);
+        }
+      } else if (selectedRowKeys.size > 0) {
+        const selectedDefinitionIds = Array.from(
+          new Set(
+            filteredRows
+              .filter((row) => selectedRowKeys.has(row.rowKey))
+              .map((row) => row.definitionId),
+          ),
+        );
+        result = await assignDomainToDefinitions(selectedDefinitionIds, targetDomainId);
       } else {
         setInlineError('Select one or more vignettes first.');
         return;
@@ -351,19 +434,33 @@ export function Domains() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div className="text-sm text-gray-600">
                 {shownCount === null ? '...' : shownCount} vignette{shownCount === 1 ? '' : 's'} shown
+                {` · ${filteredRows.length} signature row${filteredRows.length === 1 ? '' : 's'} visible`}
                 {getFilterSummary(filters) !== '' && ` (${getFilterSummary(filters)})`}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={signatureFilter}
+                  onChange={(e) => setSignatureFilter(e.target.value)}
+                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                >
+                  <option value={ALL_SIGNATURE_FILTER}>All signatures</option>
+                  {signatureOptions.map((signature) => (
+                    <option key={signature} value={signature}>
+                      {signature}
+                    </option>
+                  ))}
+                </select>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
                     checked={selectAllShown}
                     onChange={(e) => {
                       setSelectAllShown(e.target.checked);
-                      if (e.target.checked) setSelectedDefinitionIds(new Set());
+                      if (e.target.checked) setSelectedRowKeys(new Set(filteredRows.map((row) => row.rowKey)));
+                      if (!e.target.checked) setSelectedRowKeys(new Set());
                     }}
                   />
-                  Select all shown ({shownCount ?? '...'})
+                  Select all shown ({filteredRows.length})
                 </label>
                 <select
                   value={assignTargetDomainId}
@@ -390,10 +487,11 @@ export function Domains() {
               <div className="text-sm text-green-700">{inlineSuccess}</div>
             )}
             {trialValidationErrors.length > 0 && (
-              <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 <p className="font-medium">
-                  Validation error: {trialValidationErrors.length} vignette
-                  {trialValidationErrors.length === 1 ? '' : 's'} have mixed version/temperature across trials.
+                  Mixed settings detected on {trialValidationErrors.length} vignette
+                  {trialValidationErrors.length === 1 ? '' : 's'}.
+                  Showing split signature rows so you can filter/select a consistent signature.
                 </p>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
                   {trialValidationErrors.slice(0, 8).map((definition) => (
@@ -417,6 +515,8 @@ export function Domains() {
               <p className="text-sm text-gray-500">Loading...</p>
             ) : definitions.length === 0 ? (
               <p className="text-sm text-gray-500">No vignettes found for this folder/filter.</p>
+            ) : filteredRows.length === 0 ? (
+              <p className="text-sm text-gray-500">No rows match the selected signature filter.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
@@ -432,43 +532,29 @@ export function Domains() {
                     </tr>
                   </thead>
                   <tbody>
-                    {definitions.map((definition) => (
+                    {filteredRows.map((row) => (
                       <tr
-                        key={definition.id}
+                        key={row.rowKey}
                         className={`border-b border-gray-100 ${
-                          definition.trialConfig?.isConsistent === false ? 'bg-red-50/40' : ''
+                          row.isFromMixedDefinition ? 'bg-amber-50/40' : ''
                         }`}
                       >
                         <td className="py-2 pr-3">
                           <input
                             type="checkbox"
-                            checked={selectedDefinitionIds.has(definition.id)}
-                            onChange={() => handleToggleDefinition(definition.id)}
+                            checked={selectedRowKeys.has(row.rowKey)}
+                            onChange={() => handleToggleRow(row.rowKey)}
                             disabled={selectAllShown}
                           />
                         </td>
-                        <td className="py-2 pr-3 text-gray-900">{definition.name}</td>
-                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">
-                          {definition.trialConfig?.isConsistent === false
-                            ? 'Mixed'
-                            : (definition.trialConfig?.signature
-                              ?? formatTrialSignature(
-                                definition.trialConfig?.definitionVersion ?? definition.version,
-                                definition.trialConfig?.temperature,
-                              ))}
-                        </td>
+                        <td className="py-2 pr-3 text-gray-900">{row.definitionName}</td>
+                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">{row.signature}</td>
                         <td className="py-2 pr-3 text-gray-600">
-                          {definition.trialConfig?.isConsistent === false
-                            ? 'Mixed'
-                            : definition.trialConfig?.definitionVersion ?? definition.version}
+                          {row.definitionVersion ?? '?'}
                         </td>
-                        <td className="py-2 pr-3 text-gray-600">
-                          {definition.trialConfig?.isConsistent === false
-                            ? 'Mixed'
-                            : formatTemperature(definition.trialConfig?.temperature)}
-                        </td>
-                        <td className="py-2 pr-3 text-gray-600">{definition.domain?.name ?? 'None'}</td>
-                        <td className="py-2 pr-3 text-gray-600">{definition.trialCount}</td>
+                        <td className="py-2 pr-3 text-gray-600">{formatTemperature(row.temperature)}</td>
+                        <td className="py-2 pr-3 text-gray-600">{row.domainName}</td>
+                        <td className="py-2 pr-3 text-gray-600">{row.trialCount}</td>
                       </tr>
                     ))}
                   </tbody>

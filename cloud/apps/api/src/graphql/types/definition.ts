@@ -14,7 +14,7 @@ import {
   type DefinitionExpansionStatus,
   type ExpansionProgress,
 } from '../../services/scenario/index.js';
-import type { TrialConfigSummary } from '../dataloaders/definition-trial-summary.js';
+import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders/definition-trial-summary.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -24,6 +24,7 @@ const DEFAULT_MAX_DEPTH = 10;
 // GraphQL type for inheritance override indicators
 const DefinitionOverridesRef = builder.objectRef<DefinitionOverrides>('DefinitionOverrides');
 const TrialConfigSummaryRef = builder.objectRef<TrialConfigSummary>('TrialConfigSummary');
+const TrialSignatureBreakdownRef = builder.objectRef<TrialSignatureBreakdown>('TrialSignatureBreakdown');
 
 builder.objectType(DefinitionOverridesRef, {
   description: 'Indicates which content fields are locally overridden vs inherited from parent',
@@ -59,6 +60,11 @@ builder.objectType(TrialConfigSummaryRef, {
       description: 'Human-readable trial signature combining version and temperature (e.g. v3td, v2t0.7)',
       resolve: (summary) => summary.signature,
     }),
+    signatureBreakdown: t.field({
+      type: [TrialSignatureBreakdownRef],
+      description: 'Per-signature breakdown of trial counts for this definition',
+      resolve: (summary) => summary.signatureBreakdown,
+    }),
     isConsistent: t.exposeBoolean('isConsistent', {
       description: 'Whether all trials for this definition use the same version and temperature',
     }),
@@ -66,6 +72,16 @@ builder.objectType(TrialConfigSummaryRef, {
       nullable: true,
       description: 'Validation error message when trial settings are inconsistent',
     }),
+  }),
+});
+
+builder.objectType(TrialSignatureBreakdownRef, {
+  description: 'Trial count grouped by signature/version/temperature for a definition',
+  fields: (t) => ({
+    signature: t.exposeString('signature'),
+    definitionVersion: t.exposeInt('definitionVersion', { nullable: true }),
+    temperature: t.exposeFloat('temperature', { nullable: true }),
+    trialCount: t.exposeInt('trialCount'),
   }),
 });
 

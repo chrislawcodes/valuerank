@@ -10,8 +10,16 @@ export type TrialConfigSummary = {
   definitionVersion: number | null;
   temperature: number | null;
   signature: string | null;
+  signatureBreakdown: TrialSignatureBreakdown[];
   isConsistent: boolean;
   message: string | null;
+};
+
+export type TrialSignatureBreakdown = {
+  signature: string;
+  definitionVersion: number | null;
+  temperature: number | null;
+  trialCount: number;
 };
 
 export type DefinitionTrialSummary = {
@@ -43,6 +51,7 @@ function emptySummary(): DefinitionTrialSummary {
       definitionVersion: null,
       temperature: null,
       signature: null,
+      signatureBreakdown: [],
       isConsistent: true,
       message: null,
     },
@@ -91,6 +100,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           versions: Set<string>;
           temperatures: Set<string>;
           signatures: Set<string>;
+          signatureBreakdownByKey: Map<string, TrialSignatureBreakdown>;
         }
       >();
 
@@ -103,6 +113,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           versions: new Set<string>(),
           temperatures: new Set<string>(),
           signatures: new Set<string>(),
+          signatureBreakdownByKey: new Map<string, TrialSignatureBreakdown>(),
         };
 
         aggregate.trialCount += trialCountForRun;
@@ -119,15 +130,35 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
           parseDefinitionVersion(config?.definitionSnapshot?.version);
         const temperature = parseTemperature(config?.temperature);
 
+        const signature = formatTrialSignature(definitionVersion, temperature);
+        const breakdownKey = `${signature}::${encodeNullableNumber(definitionVersion)}::${encodeNullableNumber(temperature)}`;
+        const existingBreakdown = aggregate.signatureBreakdownByKey.get(breakdownKey);
+        if (existingBreakdown) {
+          existingBreakdown.trialCount += trialCountForRun;
+        } else {
+          aggregate.signatureBreakdownByKey.set(breakdownKey, {
+            signature,
+            definitionVersion,
+            temperature,
+            trialCount: trialCountForRun,
+          });
+        }
+
         aggregate.versions.add(encodeNullableNumber(definitionVersion));
         aggregate.temperatures.add(encodeNullableNumber(temperature));
-        aggregate.signatures.add(formatTrialSignature(definitionVersion, temperature));
+        aggregate.signatures.add(signature);
         aggregateByDefinitionId.set(run.definitionId, aggregate);
       }
 
       return ids.map((definitionId) => {
         const aggregate = aggregateByDefinitionId.get(definitionId);
         if (!aggregate) return emptySummary();
+
+        const signatureBreakdown = Array.from(aggregate.signatureBreakdownByKey.values())
+          .sort((left, right) => {
+            if (left.trialCount !== right.trialCount) return right.trialCount - left.trialCount;
+            return left.signature.localeCompare(right.signature);
+          });
 
         const isConsistent = aggregate.signatures.size <= 1;
         if (!isConsistent) {
@@ -144,6 +175,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
               definitionVersion: null,
               temperature: null,
               signature: null,
+              signatureBreakdown,
               isConsistent: false,
               message: `Inconsistent trial settings detected (${mismatchParts.join('; ')}).`,
             },
@@ -158,6 +190,7 @@ export function createDefinitionTrialSummaryLoader(): DataLoader<string, Definit
             definitionVersion,
             temperature,
             signature: formatTrialSignature(definitionVersion, temperature),
+            signatureBreakdown,
             isConsistent: true,
             message: null,
           },
