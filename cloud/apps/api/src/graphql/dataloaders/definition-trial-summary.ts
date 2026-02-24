@@ -3,6 +3,7 @@ import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatTrialSignature } from '../../utils/trial-signature.js';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
 
 const log = createLogger('graphql:dataloader:definition-trial-summary');
 
@@ -26,13 +27,6 @@ export type DefinitionTrialSummary = {
   trialCount: number;
   trialConfig: TrialConfigSummary;
 };
-
-function parseDefinitionVersion(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value !== 'string' || value.trim() === '') return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 function encodeNullableNumber(value: number | null): string {
   return value === null ? 'null' : String(value);

@@ -9,6 +9,7 @@ import { DefinitionFilters, type DefinitionFilterState } from '../components/def
 import { DEFINITION_COUNT_QUERY, type DefinitionCountQueryResult, type DefinitionCountQueryVariables } from '../api/operations/definitions';
 import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
+import { formatTrialSignature } from '../utils/trial-signature';
 
 const defaultFilters: DefinitionFilterState = {
   search: '',
@@ -45,16 +46,6 @@ function getFilterSummary(filters: DefinitionFilterState): string {
 function formatTemperature(value: number | null | undefined): string {
   if (value === null || value === undefined) return 'default';
   return String(Number(value.toFixed(2)));
-}
-
-function formatTrialSignature(version: number | null | undefined, temperature: number | null | undefined): string {
-  const versionToken = version === null || version === undefined ? '?' : String(version);
-  // Fallback only for older rows where backend trialConfig.signature is null.
-  // Keep this formatting aligned with API formatTrialSignature().
-  const tempToken = temperature === null || temperature === undefined || !Number.isFinite(temperature)
-    ? 'd'
-    : temperature.toFixed(3).replace(/\.?0+$/, '');
-  return `v${versionToken}t${tempToken}`;
 }
 
 export function Domains() {
