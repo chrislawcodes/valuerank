@@ -343,6 +343,9 @@ export function DomainTrialsDashboard() {
       {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
         <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
       )}
+      {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
+        <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
+      )}
 
       <LaunchControlsPanel
         vignetteCount={vignettes.length}
