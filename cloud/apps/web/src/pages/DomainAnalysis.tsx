@@ -47,6 +47,13 @@ export function DomainAnalysis() {
     () => signatureData?.domainAvailableSignatures ?? [],
     [signatureData],
   );
+  const hasValidSelectedSignature = useMemo(
+    () => selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature),
+    [selectedSignature, signatureOptions],
+  );
+  const signatureSelectionReady = selectedDomainId !== ''
+    && !signaturesLoading
+    && (signatureOptions.length === 0 || hasValidSelectedSignature);
 
   useEffect(() => {
     if (domains.length === 0) return;
@@ -94,7 +101,7 @@ export function DomainAnalysis() {
       scoreMethod,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '' || useLegacyQuery,
+    pause: selectedDomainId === '' || useLegacyQuery || !signatureSelectionReady,
     requestPolicy: 'cache-and-network',
   });
   const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<DomainAnalysisQueryResult, { domainId: string }>({
