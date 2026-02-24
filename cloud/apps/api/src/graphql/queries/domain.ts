@@ -73,6 +73,13 @@ type DomainAnalysisUnavailableModel = {
   reason: string;
 };
 
+type DomainAnalysisMissingDefinition = {
+  definitionId: string;
+  definitionName: string;
+  missingModelIds: string[];
+  missingModelLabels: string[];
+};
+
 type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
@@ -80,6 +87,7 @@ type DomainAnalysisResult = {
   targetedDefinitions: number;
   coveredDefinitions: number;
   missingDefinitionIds: string[];
+  missingDefinitions: DomainAnalysisMissingDefinition[];
   definitionsWithAnalysis: number;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
@@ -205,6 +213,7 @@ type DomainAnalysisConditionTranscript = {
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
+const DomainAnalysisMissingDefinitionRef = builder.objectRef<DomainAnalysisMissingDefinition>('DomainAnalysisMissingDefinition');
 const DomainAnalysisResultRef = builder.objectRef<DomainAnalysisResult>('DomainAnalysisResult');
 const DomainAnalysisConditionDetailRef = builder.objectRef<DomainAnalysisConditionDetail>('DomainAnalysisConditionDetail');
 const DomainAnalysisVignetteDetailRef = builder.objectRef<DomainAnalysisVignetteDetail>('DomainAnalysisVignetteDetail');
@@ -248,6 +257,15 @@ builder.objectType(DomainAnalysisUnavailableModelRef, {
   }),
 });
 
+builder.objectType(DomainAnalysisMissingDefinitionRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    definitionName: t.exposeString('definitionName'),
+    missingModelIds: t.exposeStringList('missingModelIds'),
+    missingModelLabels: t.exposeStringList('missingModelLabels'),
+  }),
+});
+
 builder.objectType(DomainAnalysisResultRef, {
   fields: (t) => ({
     domainId: t.exposeID('domainId'),
@@ -256,6 +274,10 @@ builder.objectType(DomainAnalysisResultRef, {
     targetedDefinitions: t.exposeInt('targetedDefinitions'),
     coveredDefinitions: t.exposeInt('coveredDefinitions'),
     missingDefinitionIds: t.exposeIDList('missingDefinitionIds'),
+    missingDefinitions: t.field({
+      type: [DomainAnalysisMissingDefinitionRef],
+      resolve: (parent) => parent.missingDefinitions,
+    }),
     definitionsWithAnalysis: t.exposeInt('definitionsWithAnalysis'),
     models: t.field({
       type: [DomainAnalysisModelRef],
@@ -525,28 +547,42 @@ async function resolveSignatureRuns(
     };
   }
 
-  let filteredSourceRunIds = sourceRunIds;
-  let filteredSourceRunDefinitionById = sourceRunDefinitionById;
-  if (selectedSignature !== null && sourceRunIds.length > 0) {
-    const sourceRuns = await db.run.findMany({
-      where: { id: { in: sourceRunIds }, deletedAt: null },
-      select: { id: true, config: true },
+  if (selectedSignature !== null) {
+    const completedRuns = await db.run.findMany({
+      where: {
+        definitionId: { in: latestDefinitionIds },
+        status: 'COMPLETED',
+        deletedAt: null,
+      },
+      orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        definitionId: true,
+        config: true,
+      },
     });
-    const signatureBySourceRunId = new Map<string, string>();
-    for (const run of sourceRuns) {
-      signatureBySourceRunId.set(run.id, formatRunSignature(run.config));
+
+    const filteredSourceRunIds: string[] = [];
+    const filteredSourceRunDefinitionById = new Map<string, string>();
+    const coveredDefinitionIds = new Set<string>();
+    for (const run of completedRuns) {
+      if (coveredDefinitionIds.has(run.definitionId)) continue;
+      if (formatRunSignature(run.config) !== selectedSignature) continue;
+      filteredSourceRunIds.push(run.id);
+      filteredSourceRunDefinitionById.set(run.id, run.definitionId);
+      coveredDefinitionIds.add(run.definitionId);
     }
-    filteredSourceRunIds = sourceRunIds.filter((runId) => signatureBySourceRunId.get(runId) === selectedSignature);
-    filteredSourceRunDefinitionById = new Map(
-      filteredSourceRunIds
-        .map((runId) => {
-          const definitionId = sourceRunDefinitionById.get(runId);
-          return definitionId == null ? null : [runId, definitionId] as const;
-        })
-        .filter((entry): entry is readonly [string, string] => entry !== null),
-    );
+
+    const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
+    return {
+      filteredSourceRunIds,
+      filteredSourceRunDefinitionById,
+      missingDefinitionIds,
+    };
   }
 
+  const filteredSourceRunIds = sourceRunIds;
+  const filteredSourceRunDefinitionById = sourceRunDefinitionById;
   const coveredDefinitionIds = new Set(filteredSourceRunDefinitionById.values());
   const missingDefinitionIds = latestDefinitionIds.filter((definitionId) => !coveredDefinitionIds.has(definitionId));
   return {
@@ -1222,6 +1258,7 @@ builder.queryField('domainAvailableSignatures', (t) =>
         where: { domainId, deletedAt: null },
         select: {
           id: true,
+          name: true,
           parentId: true,
           version: true,
           createdAt: true,
@@ -1312,6 +1349,7 @@ builder.queryField('domainAnalysis', (t) =>
         where: { domainId, deletedAt: null },
         select: {
           id: true,
+          name: true,
           parentId: true,
           version: true,
           createdAt: true,
@@ -1333,6 +1371,7 @@ builder.queryField('domainAnalysis', (t) =>
           targetedDefinitions: 0,
           coveredDefinitions: 0,
           missingDefinitionIds: [],
+          missingDefinitions: [],
           definitionsWithAnalysis: 0,
           models: [],
           unavailableModels: activeModels.map((model) => ({
@@ -1347,6 +1386,9 @@ builder.queryField('domainAnalysis', (t) =>
       const definitionsById = await hydrateDefinitionAncestors(definitions);
       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
       const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+      const definitionNameById = new Map<string, string>(
+        definitions.map((definition) => [definition.id, definition.name ?? definition.id]),
+      );
 
       const aggregateRuns = await db.run.findMany({
         where: {
@@ -1459,6 +1501,14 @@ builder.queryField('domainAnalysis', (t) =>
           label: model.displayName,
           reason: 'No aggregate transcript data available for selected domain.',
         }));
+      const missingModelIds = activeModels.map((model) => model.modelId);
+      const missingModelLabels = activeModels.map((model) => model.displayName ?? model.modelId);
+      const missingDefinitions = resolvedSignatureRuns.missingDefinitionIds.map((definitionId) => ({
+        definitionId,
+        definitionName: definitionNameById.get(definitionId) ?? definitionId,
+        missingModelIds,
+        missingModelLabels,
+      }));
 
       return {
         domainId: domain.id,
@@ -1467,6 +1517,7 @@ builder.queryField('domainAnalysis', (t) =>
         targetedDefinitions: latestDefinitions.length,
         coveredDefinitions: latestDefinitions.length - resolvedSignatureRuns.missingDefinitionIds.length,
         missingDefinitionIds: resolvedSignatureRuns.missingDefinitionIds,
+        missingDefinitions,
         definitionsWithAnalysis: analyzedDefinitionIds.size,
         models,
         unavailableModels,

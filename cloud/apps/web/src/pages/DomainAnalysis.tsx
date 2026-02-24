@@ -29,9 +29,6 @@ export function DomainAnalysis() {
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
-  const [scoreMethod, setScoreMethod] = useState<'LOG_ODDS' | 'FULL_BT'>(
-    searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS',
-  );
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -78,27 +75,26 @@ export function DomainAnalysis() {
     if (selectedDomainId === '') return;
     if (
       searchParams.get('domainId') === selectedDomainId
-      && searchParams.get('scoreMethod') === scoreMethod
       && (searchParams.get('signature') ?? '') === selectedSignature
     ) {
       return;
     }
     const next = new URLSearchParams(searchParams);
     next.set('domainId', selectedDomainId);
-    next.set('scoreMethod', scoreMethod);
+    next.set('scoreMethod', 'FULL_BT');
     if (selectedSignature === '') {
       next.delete('signature');
     } else {
       next.set('signature', selectedSignature);
     }
     setSearchParams(next, { replace: true });
-  }, [scoreMethod, searchParams, selectedDomainId, selectedSignature, setSearchParams]);
+  }, [searchParams, selectedDomainId, selectedSignature, setSearchParams]);
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
     variables: {
       domainId: selectedDomainId,
-      scoreMethod,
+      scoreMethod: 'FULL_BT',
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: selectedDomainId === '' || useLegacyQuery || !signatureSelectionReady,
@@ -115,7 +111,6 @@ export function DomainAnalysis() {
     const message = scoredError?.message ?? '';
     if ((message.includes('Unknown argument "scoreMethod"') || message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
       setUseLegacyQuery(true);
-      setScoreMethod('LOG_ODDS');
     }
   }, [scoredError, useLegacyQuery]);
 
@@ -208,11 +203,22 @@ export function DomainAnalysis() {
               {data.domainAnalysis.definitionsWithAnalysis} of {data.domainAnalysis.targetedDefinitions} latest vignettes currently have aggregate analysis data.
             </p>
             {excludedSignatureDefinitionCount > 0 && (
-              <p className="text-amber-700">
-                Signature filter excluded {excludedSignatureDefinitionCount}
-                {' '}
-                vignette{excludedSignatureDefinitionCount === 1 ? '' : 's'} due to missing completed runs.
-              </p>
+              <>
+                <p className="text-amber-700">
+                  Signature filter excluded {excludedSignatureDefinitionCount}
+                  {' '}
+                  vignette{excludedSignatureDefinitionCount === 1 ? '' : 's'} due to missing completed runs.
+                </p>
+                <ul className="list-disc space-y-1 pl-5 text-amber-800">
+                  {(data.domainAnalysis.missingDefinitions ?? []).map((missing) => (
+                    <li key={missing.definitionId}>
+                      {missing.definitionName}
+                      {' '}
+                      ({missing.definitionId}) - AIs: {missing.missingModelLabels.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )}
@@ -226,9 +232,6 @@ export function DomainAnalysis() {
             models={models}
             selectedDomainId={selectedDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
-            scoreMethod={scoreMethod}
-            onScoreMethodChange={setScoreMethod}
-            btEnabled={!useLegacyQuery}
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />
