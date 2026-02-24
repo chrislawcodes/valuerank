@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   VALUES,
   VALUE_LABELS,
@@ -40,6 +41,8 @@ export function ValuePrioritiesSection({
   btEnabled,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
+  const detailedTableRef = useRef<HTMLDivElement>(null);
+  const summaryTableRef = useRef<HTMLDivElement>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
   const updateSort = (key: 'model' | ValueKey) => {
@@ -120,8 +123,13 @@ export function ValuePrioritiesSection({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-xs">
+      <div ref={detailedTableRef} className="rounded border border-gray-100 bg-white p-2">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs text-gray-600">Detailed BT scores by value.</p>
+          <CopyVisualButton targetRef={detailedTableRef} label="value priorities table" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-gray-200 text-gray-600">
               <th
@@ -167,13 +175,10 @@ export function ValuePrioritiesSection({
                   </Button>
                 </th>
               ))}
-              <th className="px-2 py-2 text-left font-medium">Top 3</th>
-              <th className="px-2 py-2 text-left font-medium">Bottom 3</th>
             </tr>
           </thead>
           <tbody>
             {ordered.map((model) => {
-              const summary = getTopBottomValues(model);
               return (
                 <tr key={model.model} className="border-b border-gray-100">
                   <td className="px-2 py-2 font-medium text-gray-900">{model.label}</td>
@@ -197,29 +202,58 @@ export function ValuePrioritiesSection({
                       </Button>
                     </td>
                   ))}
-                  <td className="px-2 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {summary.top.map((value) => (
-                        <span key={value} className="rounded bg-teal-100 px-1.5 py-0.5 text-[11px] text-teal-800">
-                          {VALUE_LABELS[value]}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {summary.bottom.map((value) => (
-                        <span key={value} className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] text-rose-800">
-                          {VALUE_LABELS[value]}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
                 </tr>
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
+      </div>
+
+      <div ref={summaryTableRef} className="mt-3 rounded border border-gray-100 bg-white p-2">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs text-gray-600">Top 3 and Bottom 3 values by model.</p>
+          <CopyVisualButton targetRef={summaryTableRef} label="top and bottom values table" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-600">
+                <th className="px-2 py-2 text-left font-medium">Model</th>
+                <th className="px-2 py-2 text-left font-medium">Top 3</th>
+                <th className="px-2 py-2 text-left font-medium">Bottom 3</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map((model) => {
+                const summary = getTopBottomValues(model);
+                return (
+                  <tr key={`${model.model}-summary`} className="border-b border-gray-100">
+                    <td className="px-2 py-2 font-medium text-gray-900">{model.label}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {summary.top.map((value) => (
+                          <span key={`${model.model}-${value}-top`} className="rounded bg-teal-100 px-1.5 py-0.5 text-[11px] text-teal-800">
+                            {VALUE_LABELS[value]}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {summary.bottom.map((value) => (
+                          <span key={`${model.model}-${value}-bottom`} className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] text-rose-800">
+                            {VALUE_LABELS[value]}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

@@ -1,15 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  VALUES,
   VALUE_LABELS,
   type DomainAnalysisModelAvailability,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 const CLOSE_WINRATE_DELTA = 0.08;
 const CLOSE_EDGE_MEDIUM_WIDTH = 3.2;
+const DISPLAY_VALUES: ValueKey[] = [
+  'Universalism_Nature',
+  'Benevolence_Dependability',
+  'Tradition',
+  'Conformity_Interpersonal',
+  'Security_Personal',
+  'Power_Dominance',
+  'Achievement',
+  'Hedonism',
+  'Stimulation',
+  'Self_Direction_Action',
+];
+
+const QUADRANT_ARCS = [
+  { label: 'Self-Transcendence', startAngle: -Math.PI / 2, endAngle: 0, fill: 'rgba(245, 158, 11, 0.15)', ring: '#f59e0b' },
+  { label: 'Conservation', startAngle: 0, endAngle: Math.PI / 2, fill: 'rgba(132, 204, 22, 0.16)', ring: '#84cc16' },
+  { label: 'Self-Enhancement', startAngle: Math.PI / 2, endAngle: Math.PI, fill: 'rgba(249, 115, 22, 0.15)', ring: '#f97316' },
+  { label: 'Openness to Change', startAngle: Math.PI, endAngle: Math.PI * 1.5, fill: 'rgba(244, 114, 182, 0.15)', ring: '#f472b6' },
+] as const;
+
+function polarToCartesian(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+  return {
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  };
+}
+
+function describeSectorPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, radius, startAngle);
+  const end = polarToCartesian(cx, cy, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+}
+
+function describeArcPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, radius, startAngle);
+  const end = polarToCartesian(cx, cy, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+}
 
 function getEdgeColor(params: {
   focusedValue: ValueKey | null;
@@ -50,6 +90,8 @@ type DominanceSectionProps = {
 };
 
 export function DominanceSection({ models, unavailableModels }: DominanceSectionProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const contestableRef = useRef<HTMLDivElement>(null);
   const [selectedModelId, setSelectedModelId] = useState(models[0]?.model ?? '');
   const [focusedValue, setFocusedValue] = useState<ValueKey | null>(null);
   const [hoveredValue, setHoveredValue] = useState<ValueKey | null>(null);
@@ -69,7 +111,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   // Staggered speeds: all start together, top circle fastest, each subsequent one noticeably slower
   const baseDurationMs = 360; // fastest node (top)
   const perNodeSlowdown = 120; // each clockwise node takes this much longer
-  const slowestDuration = baseDurationMs + (VALUES.length - 1) * perNodeSlowdown;
+  const slowestDuration = baseDurationMs + (DISPLAY_VALUES.length - 1) * perNodeSlowdown;
 
   // Model-switch collapse/expand animation
   useEffect(() => {
@@ -121,10 +163,10 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const edges = useMemo(() => {
     if (!selectedModel) return [];
     const allEdges: Array<{ from: ValueKey; to: ValueKey; gap: number }> = [];
-    for (let i = 0; i < VALUES.length; i += 1) {
-      for (let j = i + 1; j < VALUES.length; j += 1) {
-        const a = VALUES[i];
-        const b = VALUES[j];
+    for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
+      for (let j = i + 1; j < DISPLAY_VALUES.length; j += 1) {
+        const a = DISPLAY_VALUES[i];
+        const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
         const av = selectedModel.values[a];
         const bv = selectedModel.values[b];
@@ -139,10 +181,10 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   const contestedPairs = useMemo(() => {
     if (!selectedModel) return [];
     const pairs: Array<{ a: ValueKey; b: ValueKey; gap: number; winner: ValueKey }> = [];
-    for (let i = 0; i < VALUES.length; i += 1) {
-      for (let j = i + 1; j < VALUES.length; j += 1) {
-        const a = VALUES[i];
-        const b = VALUES[j];
+    for (let i = 0; i < DISPLAY_VALUES.length; i += 1) {
+      for (let j = i + 1; j < DISPLAY_VALUES.length; j += 1) {
+        const a = DISPLAY_VALUES[i];
+        const b = DISPLAY_VALUES[j];
         if (!a || !b) continue;
         const aScore = selectedModel.values[a];
         const bScore = selectedModel.values[b];
@@ -158,7 +200,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   }, [selectedModel]);
 
   const priorityValueRange = useMemo(() => {
-    const all = models.flatMap((model) => VALUES.map((value) => model.values[value]));
+    const all = models.flatMap((model) => DISPLAY_VALUES.map((value) => model.values[value]));
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
@@ -169,8 +211,8 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
     const cx = width / 2;
     const cy = height / 2;
     const radius = 450;
-    return VALUES.map((value, index) => {
-      const theta = (Math.PI * 2 * index) / VALUES.length - Math.PI / 2;
+    return DISPLAY_VALUES.map((value, index) => {
+      const theta = (Math.PI * 2 * index) / DISPLAY_VALUES.length - Math.PI / 2;
       return {
         value,
         x: cx + radius * Math.cos(theta),
@@ -185,15 +227,12 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
   );
 
   // Map each value to its clockwise index (0 = top)
-  const valueIndexMap = useMemo(
-    () => new Map(VALUES.map((v, i) => [v, i])),
-    [],
-  );
+  const valueIndexMap = useMemo(() => new Map(DISPLAY_VALUES.map((v, i) => [v, i])), []);
 
   // Compute clockwise appearance order for edges, relative to focused circle
   const edgeClockwiseOrder = useMemo(() => {
     const focusedIdx = focusedValue != null ? (valueIndexMap.get(focusedValue) ?? 0) : 0;
-    const n = VALUES.length;
+    const n = DISPLAY_VALUES.length;
     const indexed = edges.map((edge, i) => {
       const fromIdx = valueIndexMap.get(edge.from) ?? 0;
       const toIdx = valueIndexMap.get(edge.to) ?? 0;
@@ -232,11 +271,14 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
           50% { filter: drop-shadow(0 0 6px rgba(59,130,246,0.65)) drop-shadow(0 0 14px rgba(59,130,246,0.55)); }
         }
       `}</style>
-      <div className="mb-3">
-        <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
-        <p className={`text-sm ${themeColors.panelMutedText}`}>
-          Directed value graph for one selected AI: arrows point from stronger value to weaker value.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h2 className={`text-base font-medium ${themeColors.panelText}`}>2. Ranking and Cycles</h2>
+          <p className={`text-sm ${themeColors.panelMutedText}`}>
+            Directed value graph for one selected AI: arrows point from stronger value to weaker value.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={chartRef} label="ranking and cycles chart" />
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -275,6 +317,7 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
       </p>
 
       <div
+        ref={chartRef}
         className="mb-4 overflow-x-auto rounded border border-gray-100 bg-gray-50 p-2"
       >
         <svg
@@ -284,6 +327,37 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
           role="img"
           aria-label="Value dominance graph"
         >
+          {QUADRANT_ARCS.map((quadrant) => (
+            <g key={quadrant.label}>
+              <path
+                d={describeSectorPath(640, 560, 520, quadrant.startAngle, quadrant.endAngle)}
+                fill={quadrant.fill}
+              />
+              <path
+                d={describeArcPath(640, 560, 536, quadrant.startAngle, quadrant.endAngle)}
+                fill="none"
+                stroke={quadrant.ring}
+                strokeWidth={18}
+                opacity={0.75}
+              />
+              {(() => {
+                const mid = (quadrant.startAngle + quadrant.endAngle) / 2;
+                const labelPoint = polarToCartesian(640, 560, 582, mid);
+                return (
+                  <text
+                    x={labelPoint.x}
+                    y={labelPoint.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="select-none"
+                    style={{ fontSize: '17px', fontWeight: 600, fill: '#374151' }}
+                  >
+                    {quadrant.label}
+                  </text>
+                );
+              })()}
+            </g>
+          ))}
           {edges.map((edge, edgeIndex) => {
             const source = positionByValue.get(edge.from);
             const target = positionByValue.get(edge.to);
@@ -539,8 +613,11 @@ export function DominanceSection({ models, unavailableModels }: DominanceSection
         </svg>
       </div>
 
-      <div className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
-        <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+      <div ref={contestableRef} className={`rounded border p-3 ${themeColors.cardBorder} ${themeColors.cardBg}`}>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className={`text-sm font-medium ${themeColors.panelText}`}>Arrow Meaning</h3>
+          <CopyVisualButton targetRef={contestableRef} label="ranking and cycles notes" />
+        </div>
         <ul className={`mt-2 list-disc space-y-1 pl-5 text-sm ${themeColors.panelMutedText}`}>
           <li>Arrow direction: winner value points to loser value.</li>
           <li>Focused view: green arrows go out from the clicked value, red arrows come in.</li>

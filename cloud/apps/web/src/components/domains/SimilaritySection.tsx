@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type PairMetric = {
   a: string;
@@ -56,6 +57,8 @@ type SimilaritySectionProps = {
 };
 
 export function SimilaritySection({ models }: SimilaritySectionProps) {
+  const matrixRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
@@ -110,8 +113,13 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
         <span className="ml-1 text-xs text-gray-600">Red = less similar, Yellow = mid, Green = more similar</span>
       </div>
 
-      <div className="mb-4 overflow-x-auto">
-        <table className="min-w-full text-xs">
+      <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs text-gray-600">Pairwise similarity matrix.</p>
+          <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b border-gray-200 text-gray-600">
               <th scope="col" className="px-2 py-2 text-left font-medium">
@@ -145,10 +153,15 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div ref={summaryRef} className="rounded border border-gray-100 bg-white p-2">
+        <div className="mb-2 flex items-center justify-end">
+          <CopyVisualButton targetRef={summaryRef} label="similarity summary tables" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded border border-gray-200 bg-gray-50 p-3">
           <h3 className="text-sm font-medium text-gray-900">Most Similar Pairs</h3>
           <ol className="mt-2 space-y-1 text-sm text-gray-700">
@@ -169,6 +182,7 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
             ))}
           </ol>
         </div>
+      </div>
       </div>
     </section>
   );
