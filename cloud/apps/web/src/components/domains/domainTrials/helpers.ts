@@ -14,6 +14,15 @@ export type DomainTrialCellStatus = {
   modelStatus: DomainTrialCellModelStatus | null;
 };
 
+export type DomainTrialLaunchSummary = {
+  targetedDefinitions: number;
+  startedRuns: number;
+  failedDefinitions: number;
+  skippedForBudget: number;
+  projectedCostUsd: number;
+  startedAt: number;
+};
+
 export function formatCost(cost: number): string {
   if (!Number.isFinite(cost) || cost <= 0) return '$0.00';
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
@@ -85,4 +94,3 @@ export function getStageText(status: DomainTrialCellStatus): string {
   }
   return `Generating ${generation}`;
 }
-

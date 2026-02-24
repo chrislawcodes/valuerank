@@ -1,18 +1,9 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
-import { formatCost } from './helpers';
-
-type LaunchSummary = {
-  targetedDefinitions: number;
-  startedRuns: number;
-  failedDefinitions: number;
-  skippedForBudget: number;
-  projectedCostUsd: number;
-  startedAt: number;
-};
+import { formatCost, type DomainTrialLaunchSummary } from './helpers';
 
 type LaunchStatusPanelProps = {
-  launchSummary: LaunchSummary | null;
+  launchSummary: DomainTrialLaunchSummary | null;
   started: boolean;
   statusSummary: {
     total: number;
@@ -78,4 +69,3 @@ export function LaunchStatusPanel({
     </div>
   );
 }
-

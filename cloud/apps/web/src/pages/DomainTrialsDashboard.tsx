@@ -11,6 +11,7 @@ import { TrialGridTable } from '../components/domains/domainTrials/TrialGridTabl
 import {
   cellKey,
   downloadCsv,
+  type DomainTrialLaunchSummary,
   type DomainTrialCellStatus,
 } from '../components/domains/domainTrials/helpers';
 import {
@@ -31,14 +32,6 @@ import {
 const POLL_MS = 3000;
 
 type CellRunMap = Record<string, string>;
-type LaunchSummary = {
-  targetedDefinitions: number;
-  startedRuns: number;
-  failedDefinitions: number;
-  skippedForBudget: number;
-  projectedCostUsd: number;
-  startedAt: number;
-};
 export function DomainTrialsDashboard() {
   const { domainId } = useParams<{ domainId: string }>();
   const [useDefaultTemperature, setUseDefaultTemperature] = useState(true);
@@ -48,7 +41,7 @@ export function DomainTrialsDashboard() {
   const [cellOverrideRunIds, setCellOverrideRunIds] = useState<CellRunMap>({});
   const [pendingRetryCell, setPendingRetryCell] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
-  const [launchSummary, setLaunchSummary] = useState<LaunchSummary | null>(null);
+  const [launchSummary, setLaunchSummary] = useState<DomainTrialLaunchSummary | null>(null);
   const [lastStatusUpdatedAt, setLastStatusUpdatedAt] = useState<number | null>(null);
   const [planNoContentRetries, setPlanNoContentRetries] = useState(0);
   const [statusNoContentRetries, setStatusNoContentRetries] = useState(0);
@@ -369,6 +362,7 @@ export function DomainTrialsDashboard() {
           definitionId: v.definitionId,
           definitionName: v.definitionName,
           definitionVersion: v.definitionVersion,
+          signature: v.signature,
           scenarioCount: v.scenarioCount,
         }))}
         cellEstimates={cellEstimates}
