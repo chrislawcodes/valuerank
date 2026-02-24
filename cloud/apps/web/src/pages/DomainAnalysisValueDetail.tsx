@@ -173,10 +173,13 @@ export function DomainAnalysisValueDetail() {
   const domainId = searchParams.get('domainId') ?? '';
   const modelId = searchParams.get('modelId') ?? '';
   const valueKey = searchParams.get('valueKey') ?? '';
+  const signature = searchParams.get('signature');
   const scoreMethod: 'LOG_ODDS' | 'FULL_BT' = searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS';
-  const backLink = domainId
-    ? `/domains/analysis?domainId=${encodeURIComponent(domainId)}&scoreMethod=${encodeURIComponent(scoreMethod)}`
-    : '/domains/analysis';
+  const backParams = new URLSearchParams();
+  if (domainId !== '') backParams.set('domainId', domainId);
+  backParams.set('scoreMethod', scoreMethod);
+  if (signature !== null && signature !== '') backParams.set('signature', signature);
+  const backLink = `/domains/analysis?${backParams.toString()}`;
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
@@ -184,7 +187,7 @@ export function DomainAnalysisValueDetail() {
     DomainAnalysisValueDetailQueryVariables
   >({
     query: DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
-    variables: { domainId, modelId, valueKey, scoreMethod },
+    variables: { domainId, modelId, valueKey, scoreMethod, signature: signature ?? undefined },
     pause: domainId === '' || modelId === '' || valueKey === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
@@ -200,7 +203,7 @@ export function DomainAnalysisValueDetail() {
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
-    if (message.includes('Unknown argument "scoreMethod"') && !useLegacyQuery) {
+    if ((message.includes('Unknown argument "scoreMethod"') || message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
       setUseLegacyQuery(true);
     }
   }, [scoredError, useLegacyQuery]);
@@ -228,6 +231,7 @@ export function DomainAnalysisValueDetail() {
       definitionId: selectedCondition?.definitionId ?? '',
       scenarioId: selectedCondition?.scenarioId ?? null,
       limit: 100,
+      signature: signature ?? undefined,
     },
     pause: selectedCondition === null || domainId === '' || modelId === '' || valueKey === '',
     requestPolicy: 'cache-and-network',

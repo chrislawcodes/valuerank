@@ -25,6 +25,7 @@ function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: Value
 type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
+  selectedSignature: string | null;
   scoreMethod: 'LOG_ODDS' | 'FULL_BT';
   onScoreMethodChange: (method: 'LOG_ODDS' | 'FULL_BT') => void;
   btEnabled: boolean;
@@ -33,6 +34,7 @@ type ValuePrioritiesSectionProps = {
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
+  selectedSignature,
   scoreMethod,
   onScoreMethodChange,
   btEnabled,
@@ -78,6 +80,9 @@ export function ValuePrioritiesSection({
       valueKey,
       scoreMethod,
     });
+    if (selectedSignature !== null) {
+      params.set('signature', selectedSignature);
+    }
     navigate(`/domains/analysis/value-detail?${params.toString()}`);
   };
 

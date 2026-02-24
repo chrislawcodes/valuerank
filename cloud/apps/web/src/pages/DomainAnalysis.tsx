@@ -18,16 +18,56 @@ import {
   type ModelEntry,
   type ValueKey,
 } from '../data/domainAnalysisData';
+import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
+
+const ALL_SIGNATURES = 'all';
+
+function formatTrialSignature(version: number | null | undefined, temperature: number | null | undefined): string {
+  const versionToken = version === null || version === undefined ? '?' : String(version);
+  const tempToken = temperature === null || temperature === undefined || !Number.isFinite(temperature)
+    ? 'd'
+    : temperature.toFixed(3).replace(/\.?0+$/, '');
+  return `v${versionToken}t${tempToken}`;
+}
 
 export function DomainAnalysis() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
+  const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? ALL_SIGNATURES);
   const [scoreMethod, setScoreMethod] = useState<'LOG_ODDS' | 'FULL_BT'>(
     searchParams.get('scoreMethod') === 'FULL_BT' ? 'FULL_BT' : 'LOG_ODDS',
   );
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const {
+    definitions: domainDefinitions,
+    loading: definitionsLoading,
+    error: definitionsError,
+  } = useDefinitions({
+    domainId: selectedDomainId === '' ? undefined : selectedDomainId,
+    limit: 1000,
+  });
+
+  const signatureOptions = useMemo(() => {
+    const options = new Set<string>();
+    for (const definition of domainDefinitions) {
+      const breakdown = definition.trialConfig?.signatureBreakdown ?? [];
+      if (breakdown.length > 0) {
+        for (const item of breakdown) {
+          options.add(item.signature);
+        }
+        continue;
+      }
+      const fallbackSignature = definition.trialConfig?.signature
+        ?? formatTrialSignature(
+          definition.trialConfig?.definitionVersion ?? definition.version,
+          definition.trialConfig?.temperature,
+        );
+      options.add(fallbackSignature);
+    }
+    return Array.from(options).sort((left, right) => left.localeCompare(right));
+  }, [domainDefinitions]);
 
   useEffect(() => {
     if (domains.length === 0) return;
@@ -37,17 +77,38 @@ export function DomainAnalysis() {
   }, [domains, selectedDomainId]);
 
   useEffect(() => {
+    if (selectedSignature === ALL_SIGNATURES) return;
+    if (signatureOptions.includes(selectedSignature)) return;
+    setSelectedSignature(ALL_SIGNATURES);
+  }, [selectedSignature, signatureOptions]);
+
+  useEffect(() => {
     if (selectedDomainId === '') return;
-    if (searchParams.get('domainId') === selectedDomainId && searchParams.get('scoreMethod') === scoreMethod) return;
+    if (
+      searchParams.get('domainId') === selectedDomainId
+      && searchParams.get('scoreMethod') === scoreMethod
+      && (searchParams.get('signature') ?? ALL_SIGNATURES) === selectedSignature
+    ) {
+      return;
+    }
     const next = new URLSearchParams(searchParams);
     next.set('domainId', selectedDomainId);
     next.set('scoreMethod', scoreMethod);
+    if (selectedSignature === ALL_SIGNATURES) {
+      next.delete('signature');
+    } else {
+      next.set('signature', selectedSignature);
+    }
     setSearchParams(next, { replace: true });
-  }, [scoreMethod, searchParams, selectedDomainId, setSearchParams]);
+  }, [scoreMethod, searchParams, selectedDomainId, selectedSignature, setSearchParams]);
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<DomainAnalysisQueryResult, DomainAnalysisQueryVariables>({
     query: DOMAIN_ANALYSIS_QUERY,
-    variables: { domainId: selectedDomainId, scoreMethod },
+    variables: {
+      domainId: selectedDomainId,
+      scoreMethod,
+      signature: selectedSignature === ALL_SIGNATURES ? undefined : selectedSignature,
+    },
     pause: selectedDomainId === '' || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
@@ -60,7 +121,7 @@ export function DomainAnalysis() {
 
   useEffect(() => {
     const message = scoredError?.message ?? '';
-    if (message.includes('Unknown argument "scoreMethod"') && !useLegacyQuery) {
+    if ((message.includes('Unknown argument "scoreMethod"') || message.includes('Unknown argument "signature"')) && !useLegacyQuery) {
       setUseLegacyQuery(true);
       setScoreMethod('LOG_ODDS');
     }
@@ -104,8 +165,8 @@ export function DomainAnalysis() {
         </p>
       </div>
 
-      {(domainsError || error) && (
-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? error)?.message ?? 'Unknown error'}`} />
+      {(domainsError || definitionsError || error) && (
+        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? definitionsError ?? error)?.message ?? 'Unknown error'}`} />
       )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -114,19 +175,34 @@ export function DomainAnalysis() {
             <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
             <p className="text-xs text-gray-600">Analysis is computed from live aggregate runs for latest vignettes in this domain.</p>
           </div>
-          <select
-            className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
-            value={selectedDomainId}
-            onChange={(event) => setSelectedDomainId(event.target.value)}
-            disabled={domainsLoading || domains.length === 0}
-          >
-            {domains.length === 0 && <option value="">No domains available</option>}
-            {domains.map((domain) => (
-              <option key={domain.id} value={domain.id}>
-                {domain.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-2 md:flex-row">
+            <select
+              className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              value={selectedDomainId}
+              onChange={(event) => setSelectedDomainId(event.target.value)}
+              disabled={domainsLoading || domains.length === 0}
+            >
+              {domains.length === 0 && <option value="">No domains available</option>}
+              {domains.map((domain) => (
+                <option key={domain.id} value={domain.id}>
+                  {domain.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              value={selectedSignature}
+              onChange={(event) => setSelectedSignature(event.target.value)}
+              disabled={definitionsLoading || signatureOptions.length === 0}
+            >
+              <option value={ALL_SIGNATURES}>All signatures</option>
+              {signatureOptions.map((signature) => (
+                <option key={signature} value={signature}>
+                  {signature}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {data?.domainAnalysis && (
           <p className="mt-2 text-xs text-gray-500">
@@ -135,13 +211,14 @@ export function DomainAnalysis() {
         )}
       </section>
 
-      {(domainsLoading || (selectedDomainId !== '' && fetching)) ? (
+      {(domainsLoading || definitionsLoading || (selectedDomainId !== '' && fetching)) ? (
         <Loading size="lg" text="Loading domain analysis..." />
       ) : (
         <>
           <ValuePrioritiesSection
             models={models}
             selectedDomainId={selectedDomainId}
+            selectedSignature={selectedSignature === ALL_SIGNATURES ? null : selectedSignature}
             scoreMethod={scoreMethod}
             onScoreMethodChange={setScoreMethod}
             btEnabled={!useLegacyQuery}

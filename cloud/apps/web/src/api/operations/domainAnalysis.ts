@@ -1,8 +1,8 @@
 import { gql } from 'urql';
 
 export const DOMAIN_ANALYSIS_QUERY = gql`
-  query DomainAnalysis($domainId: ID!, $scoreMethod: String) {
-    domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod) {
+  query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
+    domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
       domainId
       domainName
       totalDefinitions
@@ -61,8 +61,8 @@ export const DOMAIN_ANALYSIS_QUERY_LEGACY = gql`
 `;
 
 export const DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY = gql`
-  query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String) {
-    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod) {
+  query DomainAnalysisValueDetail($domainId: ID!, $modelId: String!, $valueKey: String!, $scoreMethod: String, $signature: String) {
+    domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
       domainId
       domainName
       modelId
@@ -150,6 +150,7 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
     $definitionId: ID!
     $scenarioId: ID
     $limit: Int
+    $signature: String
   ) {
     domainAnalysisConditionTranscripts(
       domainId: $domainId
@@ -158,6 +159,7 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
       definitionId: $definitionId
       scenarioId: $scenarioId
       limit: $limit
+      signature: $signature
     ) {
       id
       runId
@@ -213,6 +215,7 @@ export type DomainAnalysisQueryResult = {
 export type DomainAnalysisQueryVariables = {
   domainId: string;
   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+  signature?: string;
 };
 
 export type DomainAnalysisValueDetailCondition = {
@@ -265,6 +268,7 @@ export type DomainAnalysisValueDetailQueryVariables = {
   modelId: string;
   valueKey: string;
   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+  signature?: string;
 };
 
 export type DomainAnalysisConditionTranscript = {
@@ -292,4 +296,5 @@ export type DomainAnalysisConditionTranscriptsQueryVariables = {
   definitionId: string;
   scenarioId?: string | null;
   limit?: number;
+  signature?: string;
 };
