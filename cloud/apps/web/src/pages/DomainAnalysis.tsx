@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
+import { Button } from '../components/ui/Button';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
@@ -24,7 +25,27 @@ import {
 } from '../data/domainAnalysisData';
 import { useDomains } from '../hooks/useDomains';
 
+function parseTemperatureFromSignature(signature: string): number | null {
+  if (signature.trim() === '') return null;
+  const vnewMatch = signature.match(/^vnewt(.+)$/);
+  if (vnewMatch) {
+    const token = vnewMatch[1] ?? '';
+    if (token === 'd') return null;
+    const parsed = Number.parseFloat(token);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const standardMatch = signature.match(/t(.+)$/);
+  if (standardMatch) {
+    const token = standardMatch[1] ?? '';
+    if (token === 'd') return null;
+    const parsed = Number.parseFloat(token);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function DomainAnalysis() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
@@ -144,6 +165,24 @@ export function DomainAnalysis() {
   );
   const coveredDefinitions = data?.domainAnalysis.coveredDefinitions ?? data?.domainAnalysis.targetedDefinitions ?? 0;
   const excludedSignatureDefinitionCount = (data?.domainAnalysis.targetedDefinitions ?? 0) - coveredDefinitions;
+  const allMissingDefinitionIds = useMemo(
+    () => (data?.domainAnalysis.missingDefinitions ?? []).map((missing) => missing.definitionId),
+    [data?.domainAnalysis.missingDefinitions],
+  );
+
+  const handleRunMissingVignettes = () => {
+    if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
+    const query = new URLSearchParams();
+    query.set('definitionIds', allMissingDefinitionIds.join(','));
+    if (selectedSignature !== '') {
+      query.set('signature', selectedSignature);
+      const signatureTemperature = parseTemperatureFromSignature(selectedSignature);
+      if (signatureTemperature !== null) {
+        query.set('temperature', String(signatureTemperature));
+      }
+    }
+    navigate(`/domains/${selectedDomainId}/run-trials?${query.toString()}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -204,17 +243,28 @@ export function DomainAnalysis() {
             </p>
             {excludedSignatureDefinitionCount > 0 && (
               <>
-                <p className="text-amber-700">
-                  Signature filter excluded {excludedSignatureDefinitionCount}
-                  {' '}
-                  vignette{excludedSignatureDefinitionCount === 1 ? '' : 's'} due to missing completed runs.
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-amber-700">
+                    Signature filter excluded {excludedSignatureDefinitionCount}
+                    {' '}
+                    vignette{excludedSignatureDefinitionCount === 1 ? '' : 's'} due to missing completed runs.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRunMissingVignettes}
+                    disabled={allMissingDefinitionIds.length === 0}
+                  >
+                    Run Missing Vignettes
+                  </Button>
+                </div>
                 <ul className="list-disc space-y-1 pl-5 text-amber-800">
                   {(data.domainAnalysis.missingDefinitions ?? []).map((missing) => (
                     <li key={missing.definitionId}>
                       {missing.definitionName}
                       {' '}
-                      ({missing.definitionId}) - AIs: {missing.missingModelLabels.join(', ')}
+                      ({missing.definitionId}) - AIs: {missing.missingAllModels ? 'All AIs' : missing.missingModelLabels.join(', ')}
                     </li>
                   ))}
                 </ul>

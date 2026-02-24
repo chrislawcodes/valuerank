@@ -12,6 +12,7 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
       missingDefinitions {
         definitionId
         definitionName
+        missingAllModels
         missingModelIds
         missingModelLabels
       }
@@ -229,6 +230,7 @@ export type DomainAnalysisResult = {
   missingDefinitions: {
     definitionId: string;
     definitionName: string;
+    missingAllModels: boolean;
     missingModelIds: string[];
     missingModelLabels: string[];
   }[];

@@ -432,6 +432,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
       domainId: t.arg.id({ required: true }),
       temperature: t.arg.float({ required: false }),
       maxBudgetUsd: t.arg.float({ required: false }),
+      definitionIds: t.arg.idList({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
@@ -472,7 +473,14 @@ builder.mutationField('runTrialsForDomain', (t) =>
       // any authenticated teammate may trigger runs for latest definitions in the domain.
       const definitionsById = await hydrateDefinitionAncestors(definitions);
       const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
-      const latestDefinitionIds = latestDefinitions.map((definition) => definition.id);
+      const requestedDefinitionIds = args.definitionIds?.map(String) ?? [];
+      const latestDefinitionById = new Map(latestDefinitions.map((definition) => [definition.id, definition]));
+      const targetedDefinitions = requestedDefinitionIds.length > 0
+        ? requestedDefinitionIds
+          .map((definitionId) => latestDefinitionById.get(definitionId))
+          .filter((definition): definition is DefinitionRow => definition !== undefined)
+        : latestDefinitions;
+      const latestDefinitionIds = targetedDefinitions.map((definition) => definition.id);
 
       const activeModels = await db.llmModel.findMany({
         where: { status: 'ACTIVE' },
@@ -521,8 +529,8 @@ builder.mutationField('runTrialsForDomain', (t) =>
       let projectedCostUsd = 0;
       const runs: DomainTrialRunEntry[] = [];
 
-      for (let offset = 0; offset < latestDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
-        const batch = latestDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
+      for (let offset = 0; offset < targetedDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
+        const batch = targetedDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
         const launchableDefinitions: DefinitionRow[] = [];
         for (const definition of batch) {
           if (budgetCap !== null) {
@@ -593,7 +601,8 @@ builder.mutationField('runTrialsForDomain', (t) =>
           operationType: 'run-trials-for-domain',
           domainName: domain.name,
           totalDefinitions: definitions.length,
-          targetedDefinitions: latestDefinitions.length,
+          targetedDefinitions: targetedDefinitions.length,
+          requestedDefinitionIds,
           startedRuns,
           failedDefinitions,
           skippedForBudget,
@@ -609,7 +618,7 @@ builder.mutationField('runTrialsForDomain', (t) =>
       return {
         success: failedDefinitions === 0,
         totalDefinitions: definitions.length,
-        targetedDefinitions: latestDefinitions.length,
+        targetedDefinitions: targetedDefinitions.length,
         startedRuns,
         failedDefinitions,
         skippedForBudget,
