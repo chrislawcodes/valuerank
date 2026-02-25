@@ -4,14 +4,20 @@
  * Pure computation helpers for ranking shape analysis (#024).
  * No database access. No external dependencies.
  *
+ * Two-axis behavioral classification:
+ *   topStructure  — how the model's highest-scoring values are arranged
+ *   bottomStructure — whether the model has values it sharply rejects
+ *
  * Calibration constants — validate against real domain data before launch.
  * All threshold names match spec documentation for traceability.
  */
 
-export type RankingShapeLabel = 'dominant_leader' | 'gradual_slope' | 'no_clear_leader' | 'bimodal';
+export type TopStructureLabel = 'strong_leader' | 'tied_leaders' | 'even_spread';
+export type BottomStructureLabel = 'hard_no' | 'mild_avoidance' | 'no_hard_no';
 
 export type RankingShape = {
-  label: RankingShapeLabel;
+  topStructure: TopStructureLabel;
+  bottomStructure: BottomStructureLabel;
   topGap: number;
   bottomGap: number;
   spread: number;
@@ -36,20 +42,24 @@ export type RankingShapesResult = {
 };
 
 // --- Calibration constants ---
-const BIMODAL_GAP_FRACTION = 0.4; // each gap must consume >= 40% of total spread
-const BIMODAL_MIN_SPREAD = 0.3;   // guard: ignore near-flat profiles
-const DOMINANT_Z_THRESHOLD = 1.5;
-const NO_CLEAR_LEADER_Z_THRESHOLD = -0.5;
-const DOMINANT_ABS_THRESHOLD = 0.5;    // fallback when N < MIN_MODELS_FOR_Z_SCORE
-const NO_CLEAR_ABS_TOP_GAP = 0.1;      // fallback when N < MIN_MODELS_FOR_Z_SCORE
-const NO_CLEAR_ABS_SPREAD = 0.4;       // fallback when N < MIN_MODELS_FOR_Z_SCORE
-const MIN_MODELS_FOR_Z_SCORE = 4;
+// Top structure: one value clearly leads vs shared top vs no clear ordering
+const STRONG_LEADER_TOP_GAP = 0.28;   // topGap >= this → strong_leader
+const TIED_LEADERS_TOP_GAP = 0.15;    // topGap >= this (but < STRONG) → tied_leaders
+// (below TIED_LEADERS_TOP_GAP → even_spread)
+
+// Bottom structure: lowest score determines how strongly a value is rejected
+const HARD_NO_MIN_SCORE = -1.0;          // minScore < this → hard_no
+const MILD_AVOIDANCE_MIN_SCORE = -0.5;   // minScore < this → mild_avoidance
+// (minScore >= MILD_AVOIDANCE → no_hard_no)
+
+const MIN_MODELS_FOR_Z_SCORE = 4; // minimum models for computing domainStdTopGap
 
 type RawMetrics = {
   topGap: number;
   bottomGap: number;
   spread: number;
   steepness: number;
+  minScore: number;
 };
 
 /**
@@ -60,12 +70,13 @@ type RawMetrics = {
 export function computeRawShapeMetrics(sortedScores: number[]): RawMetrics {
   const n = sortedScores.length;
   if (n < 2) {
-    return { topGap: 0, bottomGap: 0, spread: 0, steepness: 0 };
+    return { topGap: 0, bottomGap: 0, spread: 0, steepness: 0, minScore: sortedScores[0] ?? 0 };
   }
 
   const topGap = (sortedScores[0] ?? 0) - (sortedScores[1] ?? 0);
   const bottomGap = (sortedScores[n - 2] ?? 0) - (sortedScores[n - 1] ?? 0);
   const spread = (sortedScores[0] ?? 0) - (sortedScores[n - 1] ?? 0);
+  const minScore = sortedScores[n - 1] ?? 0;
 
   const numDeltas = n - 1;
   let weightedSum = 0;
@@ -78,7 +89,7 @@ export function computeRawShapeMetrics(sortedScores: number[]): RawMetrics {
   }
   const steepness = weightSum > 0 ? weightedSum / weightSum : 0;
 
-  return { topGap, bottomGap, spread, steepness };
+  return { topGap, bottomGap, spread, steepness, minScore };
 }
 
 /**
@@ -112,50 +123,32 @@ export function computeDomainBenchmarks(allRaw: RawMetrics[]): RankingShapeBench
 }
 
 /**
- * Classify a single model's shape.
- * Rules applied in strict precedence order — mutually exclusive and exhaustive.
+ * Classify a single model's shape along two independent axes:
+ *   topStructure  — how the leading values are arranged
+ *   bottomStructure — how strongly the lowest values are rejected
+ *
+ * dominanceZScore is retained for diagnostics / potential future use.
  */
 export function classifyShape(raw: RawMetrics, benchmarks: RankingShapeBenchmarks): RankingShape {
-  const { topGap, bottomGap, spread, steepness } = raw;
-  const { domainMeanTopGap, domainStdTopGap, medianSpread } = benchmarks;
+  const { topGap, bottomGap, spread, steepness, minScore } = raw;
+  const { domainMeanTopGap, domainStdTopGap } = benchmarks;
 
   let dominanceZScore: number | null = null;
   if (domainStdTopGap !== null) {
     dominanceZScore = domainStdTopGap === 0 ? 0 : (topGap - domainMeanTopGap) / domainStdTopGap;
   }
 
-  let label: RankingShapeLabel;
+  const topStructure: TopStructureLabel =
+    topGap >= STRONG_LEADER_TOP_GAP ? 'strong_leader' :
+    topGap >= TIED_LEADERS_TOP_GAP ? 'tied_leaders' :
+    'even_spread';
 
-  // 1. Bimodal: top and bottom gaps each consume >= 40% of spread
-  if (
-    spread > BIMODAL_MIN_SPREAD &&
-    topGap > spread * BIMODAL_GAP_FRACTION &&
-    bottomGap > spread * BIMODAL_GAP_FRACTION
-  ) {
-    label = 'bimodal';
-  }
-  // 2. Dominant leader
-  else if (
-    dominanceZScore !== null
-      ? dominanceZScore > DOMINANT_Z_THRESHOLD
-      : topGap > DOMINANT_ABS_THRESHOLD
-  ) {
-    label = 'dominant_leader';
-  }
-  // 3. No clear leader
-  else if (
-    dominanceZScore !== null
-      ? dominanceZScore < NO_CLEAR_LEADER_Z_THRESHOLD && spread < medianSpread
-      : topGap < NO_CLEAR_ABS_TOP_GAP && spread < NO_CLEAR_ABS_SPREAD
-  ) {
-    label = 'no_clear_leader';
-  }
-  // 4. Default
-  else {
-    label = 'gradual_slope';
-  }
+  const bottomStructure: BottomStructureLabel =
+    minScore < HARD_NO_MIN_SCORE ? 'hard_no' :
+    minScore < MILD_AVOIDANCE_MIN_SCORE ? 'mild_avoidance' :
+    'no_hard_no';
 
-  return { label, topGap, bottomGap, spread, steepness, dominanceZScore };
+  return { topStructure, bottomStructure, topGap, bottomGap, spread, steepness, dominanceZScore };
 }
 
 /**

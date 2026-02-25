@@ -173,8 +173,6 @@ export function DomainAnalysis() {
     return map;
   }, [data]);
 
-  const rankingShapeBenchmarks = data?.domainAnalysis.rankingShapeBenchmarks;
-
   const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
     () => (data?.domainAnalysis.unavailableModels ?? []).map((model) => ({
       model: model.model,
@@ -335,7 +333,6 @@ export function DomainAnalysis() {
             selectedDomainId={selectedDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
             rankingShapes={rankingShapes}
-            rankingShapeBenchmarks={rankingShapeBenchmarks}
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />

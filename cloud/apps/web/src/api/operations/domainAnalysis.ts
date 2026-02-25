@@ -32,7 +32,8 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
           totalComparisons
         }
         rankingShape {
-          label
+          topStructure
+          bottomStructure
           topGap
           bottomGap
           spread
@@ -223,10 +224,12 @@ export type DomainAnalysisValueScore = {
   totalComparisons: number;
 };
 
-export type RankingShapeLabel = 'dominant_leader' | 'gradual_slope' | 'no_clear_leader' | 'bimodal';
+export type TopStructureLabel = 'strong_leader' | 'tied_leaders' | 'even_spread';
+export type BottomStructureLabel = 'hard_no' | 'mild_avoidance' | 'no_hard_no';
 
 export type RankingShape = {
-  label: RankingShapeLabel;
+  topStructure: TopStructureLabel;
+  bottomStructure: BottomStructureLabel;
   topGap: number;
   bottomGap: number;
   spread: number;

@@ -17,30 +17,41 @@ import {
 // ---------------------------------------------------------------------------
 
 describe('computeRawShapeMetrics', () => {
-  it('returns zeros for a single-element array', () => {
-    const result = computeRawShapeMetrics([1.5]);
-    expect(result).toEqual({ topGap: 0, bottomGap: 0, spread: 0, steepness: 0 });
-  });
-
   it('returns zeros for an empty array', () => {
     const result = computeRawShapeMetrics([]);
-    expect(result).toEqual({ topGap: 0, bottomGap: 0, spread: 0, steepness: 0 });
+    expect(result).toEqual({ topGap: 0, bottomGap: 0, spread: 0, steepness: 0, minScore: 0 });
   });
 
-  it('computes correct topGap, bottomGap, spread for two elements', () => {
-    // [2, 1]: topGap = 2-1=1, bottomGap = 2-1=1 (n-2=0, n-1=1 → s[0]-s[1]=1), spread=1
+  it('returns zeros for a single-element array (with minScore = that element)', () => {
+    const result = computeRawShapeMetrics([1.5]);
+    expect(result.topGap).toBe(0);
+    expect(result.bottomGap).toBe(0);
+    expect(result.spread).toBe(0);
+    expect(result.steepness).toBe(0);
+    expect(result.minScore).toBeCloseTo(1.5);
+  });
+
+  it('computes correct topGap, bottomGap, spread, minScore for two elements', () => {
     const result = computeRawShapeMetrics([2, 1]);
     expect(result.topGap).toBeCloseTo(1);
     expect(result.bottomGap).toBeCloseTo(1);
     expect(result.spread).toBeCloseTo(1);
+    expect(result.minScore).toBeCloseTo(1);
   });
 
   it('computes topGap and bottomGap independently', () => {
-    // [10, 4, 3, 1]: topGap=10-4=6, bottomGap=3-1=2, spread=10-1=9
+    // [10, 4, 3, 1]: topGap=10-4=6, bottomGap=3-1=2, spread=10-1=9, minScore=1
     const result = computeRawShapeMetrics([10, 4, 3, 1]);
     expect(result.topGap).toBeCloseTo(6);
     expect(result.bottomGap).toBeCloseTo(2);
     expect(result.spread).toBeCloseTo(9);
+    expect(result.minScore).toBeCloseTo(1);
+  });
+
+  it('captures negative minScore correctly', () => {
+    // Last element is negative
+    const result = computeRawShapeMetrics([1.5, 0.5, -1.2]);
+    expect(result.minScore).toBeCloseTo(-1.2);
   });
 
   it('computes steepness with linearly-decaying weights', () => {
@@ -62,6 +73,7 @@ describe('computeRawShapeMetrics', () => {
     expect(result.topGap).toBeCloseTo(0);
     expect(result.spread).toBeCloseTo(0);
     expect(result.steepness).toBeCloseTo(0);
+    expect(result.minScore).toBeCloseTo(1);
   });
 });
 
@@ -77,8 +89,8 @@ describe('computeDomainBenchmarks', () => {
 
   it('returns null domainStdTopGap when fewer than 4 models', () => {
     const raw = [
-      { topGap: 1, bottomGap: 0.5, spread: 2, steepness: 0.5 },
-      { topGap: 2, bottomGap: 0.5, spread: 3, steepness: 0.7 },
+      { topGap: 1, bottomGap: 0.5, spread: 2, steepness: 0.5, minScore: -0.5 },
+      { topGap: 2, bottomGap: 0.5, spread: 3, steepness: 0.7, minScore: -0.3 },
     ];
     const result = computeDomainBenchmarks(raw);
     expect(result.domainStdTopGap).toBeNull();
@@ -87,10 +99,10 @@ describe('computeDomainBenchmarks', () => {
 
   it('computes domainMeanTopGap correctly', () => {
     const raw = [
-      { topGap: 1, bottomGap: 0, spread: 1, steepness: 0 },
-      { topGap: 3, bottomGap: 0, spread: 3, steepness: 0 },
-      { topGap: 2, bottomGap: 0, spread: 2, steepness: 0 },
-      { topGap: 4, bottomGap: 0, spread: 4, steepness: 0 },
+      { topGap: 1, bottomGap: 0, spread: 1, steepness: 0, minScore: 0 },
+      { topGap: 3, bottomGap: 0, spread: 3, steepness: 0, minScore: 0 },
+      { topGap: 2, bottomGap: 0, spread: 2, steepness: 0, minScore: 0 },
+      { topGap: 4, bottomGap: 0, spread: 4, steepness: 0, minScore: 0 },
     ];
     const result = computeDomainBenchmarks(raw);
     expect(result.domainMeanTopGap).toBeCloseTo(2.5);
@@ -98,14 +110,13 @@ describe('computeDomainBenchmarks', () => {
 
   it('computes domainStdTopGap when N >= 4', () => {
     // topGaps = [1, 3, 2, 4], mean=2.5
-    // variance = ((1-2.5)^2 + (3-2.5)^2 + (2-2.5)^2 + (4-2.5)^2) / 4
-    //          = (2.25 + 0.25 + 0.25 + 2.25) / 4 = 5/4 = 1.25
+    // variance = ((1-2.5)^2 + (3-2.5)^2 + (2-2.5)^2 + (4-2.5)^2) / 4 = 1.25
     // std = sqrt(1.25) ≈ 1.118
     const raw = [
-      { topGap: 1, bottomGap: 0, spread: 1, steepness: 0 },
-      { topGap: 3, bottomGap: 0, spread: 3, steepness: 0 },
-      { topGap: 2, bottomGap: 0, spread: 2, steepness: 0 },
-      { topGap: 4, bottomGap: 0, spread: 4, steepness: 0 },
+      { topGap: 1, bottomGap: 0, spread: 1, steepness: 0, minScore: 0 },
+      { topGap: 3, bottomGap: 0, spread: 3, steepness: 0, minScore: 0 },
+      { topGap: 2, bottomGap: 0, spread: 2, steepness: 0, minScore: 0 },
+      { topGap: 4, bottomGap: 0, spread: 4, steepness: 0, minScore: 0 },
     ];
     const result = computeDomainBenchmarks(raw);
     expect(result.domainStdTopGap).toBeCloseTo(Math.sqrt(1.25), 4);
@@ -114,10 +125,10 @@ describe('computeDomainBenchmarks', () => {
   it('computes median spread for even count', () => {
     // spreads = [1, 2, 3, 4], sorted → median = (2+3)/2 = 2.5
     const raw = [
-      { topGap: 0, bottomGap: 0, spread: 3, steepness: 0 },
-      { topGap: 0, bottomGap: 0, spread: 1, steepness: 0 },
-      { topGap: 0, bottomGap: 0, spread: 4, steepness: 0 },
-      { topGap: 0, bottomGap: 0, spread: 2, steepness: 0 },
+      { topGap: 0, bottomGap: 0, spread: 3, steepness: 0, minScore: 0 },
+      { topGap: 0, bottomGap: 0, spread: 1, steepness: 0, minScore: 0 },
+      { topGap: 0, bottomGap: 0, spread: 4, steepness: 0, minScore: 0 },
+      { topGap: 0, bottomGap: 0, spread: 2, steepness: 0, minScore: 0 },
     ];
     const result = computeDomainBenchmarks(raw);
     expect(result.medianSpread).toBeCloseTo(2.5);
@@ -126,9 +137,9 @@ describe('computeDomainBenchmarks', () => {
   it('computes median spread for odd count', () => {
     // spreads = [1, 3, 5], sorted → median = 3
     const raw = [
-      { topGap: 0, bottomGap: 0, spread: 5, steepness: 0 },
-      { topGap: 0, bottomGap: 0, spread: 1, steepness: 0 },
-      { topGap: 0, bottomGap: 0, spread: 3, steepness: 0 },
+      { topGap: 0, bottomGap: 0, spread: 5, steepness: 0, minScore: 0 },
+      { topGap: 0, bottomGap: 0, spread: 1, steepness: 0, minScore: 0 },
+      { topGap: 0, bottomGap: 0, spread: 3, steepness: 0, minScore: 0 },
     ];
     const result = computeDomainBenchmarks(raw);
     expect(result.medianSpread).toBeCloseTo(3);
@@ -146,83 +157,131 @@ describe('classifyShape', () => {
     medianSpread: 1.0,
   };
 
-  it('classifies bimodal: large top and bottom gaps each > 40% of spread', () => {
-    // spread=1.0, topGap=0.45, bottomGap=0.45 → each > 0.4*1.0=0.4 and spread > 0.3
-    const raw = { topGap: 0.45, bottomGap: 0.45, spread: 1.0, steepness: 0.2 };
+  // --- Top structure ---
+
+  it('classifies strong_leader when topGap >= 0.28', () => {
+    const raw = { topGap: 0.5, bottomGap: 0.1, spread: 1.0, steepness: 0.2, minScore: -0.3 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).toBe('bimodal');
+    expect(result.topStructure).toBe('strong_leader');
   });
 
-  it('bimodal requires spread > BIMODAL_MIN_SPREAD=0.3', () => {
-    // spread=0.2 → below min, should NOT classify as bimodal
-    const raw = { topGap: 0.1, bottomGap: 0.1, spread: 0.2, steepness: 0.05 };
+  it('classifies strong_leader at exactly the threshold (0.28)', () => {
+    const raw = { topGap: 0.28, bottomGap: 0.1, spread: 1.0, steepness: 0.2, minScore: -0.3 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).not.toBe('bimodal');
+    expect(result.topStructure).toBe('strong_leader');
   });
 
-  it('classifies dominant_leader via z-score > 1.5', () => {
-    // topGap = mean + 2*std = 0.3 + 2*0.2 = 0.7 → z = (0.7-0.3)/0.2 = 2.0 > 1.5
-    const raw = { topGap: 0.7, bottomGap: 0.05, spread: 0.8, steepness: 0.3 };
-    // spread=0.8 > 0.3 but topGap=0.7 and bottomGap=0.05; 0.05 < 0.4*0.8=0.32 → not bimodal
+  it('classifies tied_leaders when 0.15 <= topGap < 0.28', () => {
+    const raw = { topGap: 0.20, bottomGap: 0.1, spread: 0.8, steepness: 0.1, minScore: -0.3 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).toBe('dominant_leader');
+    expect(result.topStructure).toBe('tied_leaders');
   });
 
-  it('classifies dominant_leader via abs threshold when N < 4 (no z-score)', () => {
-    // no z-score when domainStdTopGap is null, fallback: topGap > 0.5
-    const benchmarksNoZ = { domainMeanTopGap: 0.3, domainStdTopGap: null, medianSpread: 1.0 };
-    const raw = { topGap: 0.6, bottomGap: 0.05, spread: 0.7, steepness: 0.3 };
-    const result = classifyShape(raw, benchmarksNoZ);
-    expect(result.label).toBe('dominant_leader');
-  });
-
-  it('classifies no_clear_leader via z-score < -0.5 and spread < medianSpread', () => {
-    // topGap = mean - 1*std = 0.3 - 0.2 = 0.1 → z = (0.1-0.3)/0.2 = -1.0 < -0.5, spread=0.5 < 1.0
-    const raw = { topGap: 0.1, bottomGap: 0.05, spread: 0.5, steepness: 0.05 };
+  it('classifies tied_leaders at the lower boundary (topGap = 0.15)', () => {
+    const raw = { topGap: 0.15, bottomGap: 0.1, spread: 0.5, steepness: 0.05, minScore: -0.2 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).toBe('no_clear_leader');
+    expect(result.topStructure).toBe('tied_leaders');
   });
 
-  it('classifies no_clear_leader via abs thresholds when no z-score', () => {
-    const benchmarksNoZ = { domainMeanTopGap: 0.3, domainStdTopGap: null, medianSpread: 1.0 };
-    // topGap=0.05 < 0.1, spread=0.3 < 0.4
-    const raw = { topGap: 0.05, bottomGap: 0.02, spread: 0.3, steepness: 0.02 };
-    const result = classifyShape(raw, benchmarksNoZ);
-    expect(result.label).toBe('no_clear_leader');
-  });
-
-  it('defaults to gradual_slope when no other label applies', () => {
-    // z-score near 0, spread near median → falls through to default
-    const raw = { topGap: 0.3, bottomGap: 0.05, spread: 0.9, steepness: 0.1 };
+  it('classifies even_spread when topGap < 0.15', () => {
+    const raw = { topGap: 0.08, bottomGap: 0.05, spread: 0.4, steepness: 0.04, minScore: -0.1 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).toBe('gradual_slope');
+    expect(result.topStructure).toBe('even_spread');
   });
 
-  it('bimodal takes precedence over dominant_leader', () => {
-    // High topGap satisfies dominant_leader but bimodal check comes first
-    // topGap=0.7, bottomGap=0.45, spread=1.2, topGap/spread=0.583>0.4, bottomGap/spread=0.375<0.4 → NOT bimodal
-    // Let's use: topGap=0.6, bottomGap=0.55, spread=1.2 → topGap/spread=0.5>0.4, bottom/spread=0.458>0.4 → bimodal
-    const raw = { topGap: 0.6, bottomGap: 0.55, spread: 1.2, steepness: 0.3 };
+  it('classifies even_spread for uniform scores (topGap = 0)', () => {
+    const raw = { topGap: 0, bottomGap: 0, spread: 0, steepness: 0, minScore: 1.0 };
     const result = classifyShape(raw, defaultBenchmarks);
-    expect(result.label).toBe('bimodal');
+    expect(result.topStructure).toBe('even_spread');
   });
+
+  // --- Bottom structure ---
+
+  it('classifies hard_no when minScore < -1.0', () => {
+    const raw = { topGap: 0.3, bottomGap: 0.5, spread: 2.0, steepness: 0.2, minScore: -1.5 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('hard_no');
+  });
+
+  it('classifies hard_no at exactly below -1.0 (minScore = -1.001)', () => {
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 1.5, steepness: 0.15, minScore: -1.001 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('hard_no');
+  });
+
+  it('classifies mild_avoidance when -1.0 <= minScore < -0.5', () => {
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 1.0, steepness: 0.1, minScore: -0.75 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('mild_avoidance');
+  });
+
+  it('classifies mild_avoidance at exactly minScore = -1.0', () => {
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 1.5, steepness: 0.15, minScore: -1.0 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('mild_avoidance');
+  });
+
+  it('classifies no_hard_no at exactly minScore = -0.5 (boundary is exclusive)', () => {
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.8, steepness: 0.08, minScore: -0.5 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('no_hard_no');
+  });
+
+  it('classifies no_hard_no when minScore > -0.5', () => {
+    const raw = { topGap: 0.2, bottomGap: 0.05, spread: 0.5, steepness: 0.05, minScore: -0.2 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('no_hard_no');
+  });
+
+  it('classifies no_hard_no when all values are positive', () => {
+    const raw = { topGap: 0.1, bottomGap: 0.05, spread: 0.5, steepness: 0.05, minScore: 0.1 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.bottomStructure).toBe('no_hard_no');
+  });
+
+  // --- Two axes are independent ---
+
+  it('can classify strong_leader + hard_no', () => {
+    const raw = { topGap: 0.6, bottomGap: 1.0, spread: 3.0, steepness: 0.5, minScore: -2.0 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.topStructure).toBe('strong_leader');
+    expect(result.bottomStructure).toBe('hard_no');
+  });
+
+  it('can classify even_spread + no_hard_no', () => {
+    const raw = { topGap: 0.05, bottomGap: 0.05, spread: 0.3, steepness: 0.03, minScore: 0.0 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.topStructure).toBe('even_spread');
+    expect(result.bottomStructure).toBe('no_hard_no');
+  });
+
+  // --- dominanceZScore ---
 
   it('sets dominanceZScore to null when domainStdTopGap is null', () => {
     const benchmarksNoZ = { domainMeanTopGap: 0.3, domainStdTopGap: null, medianSpread: 1.0 };
-    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.5, steepness: 0.1 };
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.5, steepness: 0.1, minScore: -0.2 };
     const result = classifyShape(raw, benchmarksNoZ);
     expect(result.dominanceZScore).toBeNull();
   });
 
   it('sets dominanceZScore to 0 when domainStdTopGap is 0', () => {
     const benchmarksZeroStd = { domainMeanTopGap: 0.3, domainStdTopGap: 0, medianSpread: 1.0 };
-    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.5, steepness: 0.1 };
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.5, steepness: 0.1, minScore: -0.2 };
     const result = classifyShape(raw, benchmarksZeroStd);
     expect(result.dominanceZScore).toBe(0);
   });
 
+  it('computes dominanceZScore correctly', () => {
+    // topGap=0.7, mean=0.3, std=0.2 → z=(0.7-0.3)/0.2=2.0
+    const raw = { topGap: 0.7, bottomGap: 0.05, spread: 0.8, steepness: 0.3, minScore: -0.1 };
+    const result = classifyShape(raw, defaultBenchmarks);
+    expect(result.dominanceZScore).toBeCloseTo(2.0);
+  });
+
+  // --- Output includes all raw metrics ---
+
   it('includes all raw metrics in the output', () => {
-    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.9, steepness: 0.15 };
+    const raw = { topGap: 0.3, bottomGap: 0.1, spread: 0.9, steepness: 0.15, minScore: -0.6 };
     const result = classifyShape(raw, defaultBenchmarks);
     expect(result.topGap).toBeCloseTo(0.3);
     expect(result.bottomGap).toBeCloseTo(0.1);
@@ -265,27 +324,47 @@ describe('computeRankingShapes', () => {
     expect(result.benchmarks.domainStdTopGap).toBeNull();
   });
 
-  it('classifies dominant_leader for a model with a large topGap relative to peers', () => {
-    // Create 4 models so z-score is available. Three models with topGap~0.1, one with topGap=1.0
-    const flat = (start: number): number[] =>
-      Array.from({ length: 10 }, (_, i) => start - i * 0.01);
+  it('classifies strong_leader for a model with a large topGap', () => {
+    // topGap = 2.0 - 1.0 = 1.0 → strong_leader (>= 0.28)
     const models: ModelWithSortedScores[] = [
       { model: 'dominant', sortedScores: [2.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2] },
-      { model: 'm1', sortedScores: flat(1.0) },
-      { model: 'm2', sortedScores: flat(0.9) },
-      { model: 'm3', sortedScores: flat(0.8) },
     ];
     const result = computeRankingShapes(models);
-    const dominantShape = result.shapes.get('dominant');
-    expect(dominantShape?.label).toBe('dominant_leader');
+    expect(result.shapes.get('dominant')?.topStructure).toBe('strong_leader');
   });
 
-  it('shape label is one of the four valid values', () => {
+  it('classifies hard_no for a model with a strongly negative bottom score', () => {
+    // minScore = -1.5 → hard_no (< -1.0)
+    const models: ModelWithSortedScores[] = [
+      { model: 'm1', sortedScores: [1.5, 1.0, 0.8, 0.6, 0.4, 0.3, 0.2, 0.1, 0.05, -1.5] },
+    ];
+    const result = computeRankingShapes(models);
+    expect(result.shapes.get('m1')?.bottomStructure).toBe('hard_no');
+  });
+
+  it('classifies no_hard_no for a model with all positive scores', () => {
     const models: ModelWithSortedScores[] = [
       { model: 'm1', sortedScores: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1] },
     ];
     const result = computeRankingShapes(models);
-    const label = result.shapes.get('m1')?.label;
-    expect(['dominant_leader', 'gradual_slope', 'no_clear_leader', 'bimodal']).toContain(label);
+    expect(result.shapes.get('m1')?.bottomStructure).toBe('no_hard_no');
+  });
+
+  it('topStructure is one of the three valid values', () => {
+    const models: ModelWithSortedScores[] = [
+      { model: 'm1', sortedScores: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1] },
+    ];
+    const result = computeRankingShapes(models);
+    const topStructure = result.shapes.get('m1')?.topStructure;
+    expect(['strong_leader', 'tied_leaders', 'even_spread']).toContain(topStructure);
+  });
+
+  it('bottomStructure is one of the three valid values', () => {
+    const models: ModelWithSortedScores[] = [
+      { model: 'm1', sortedScores: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1] },
+    ];
+    const result = computeRankingShapes(models);
+    const bottomStructure = result.shapes.get('m1')?.bottomStructure;
+    expect(['hard_no', 'mild_avoidance', 'no_hard_no']).toContain(bottomStructure);
   });
 });

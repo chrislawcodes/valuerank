@@ -251,7 +251,8 @@ const DomainTrialRunStatusRef = builder.objectRef<DomainTrialRunStatus>('DomainT
 
 builder.objectType(RankingShapeRef, {
   fields: (t) => ({
-    label: t.exposeString('label'),
+    topStructure: t.exposeString('topStructure'),
+    bottomStructure: t.exposeString('bottomStructure'),
     topGap: t.exposeFloat('topGap'),
     bottomGap: t.exposeFloat('bottomGap'),
     spread: t.exposeFloat('spread'),
@@ -1538,7 +1539,8 @@ builder.queryField('domainAnalysis', (t) =>
       const models: DomainAnalysisModel[] = modelsBase.map((m) => ({
         ...m,
         rankingShape: shapes.get(m.model) ?? {
-          label: 'gradual_slope' as const,
+          topStructure: 'even_spread' as const,
+          bottomStructure: 'no_hard_no' as const,
           topGap: 0,
           bottomGap: 0,
           spread: 0,
