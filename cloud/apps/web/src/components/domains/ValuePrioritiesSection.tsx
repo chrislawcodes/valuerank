@@ -5,6 +5,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   VALUES,
   VALUE_LABELS,
+  VALUE_DESCRIPTIONS,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
@@ -220,6 +221,7 @@ export function ValuePrioritiesSection({
               {COLUMN_VALUES.map((value) => (
                 <th
                   key={value}
+                  title={VALUE_DESCRIPTIONS[value]}
                   className={`relative px-2 py-2 text-right font-medium ${
                     hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
                   } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
