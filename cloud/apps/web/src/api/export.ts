@@ -263,6 +263,64 @@ export async function exportDefinitionAsMd(definitionId: string): Promise<void> 
 }
 
 /**
+ * Export all analyzable transcripts for a domain as CSV and trigger download.
+ *
+ * Scoped to the given domainId and optional signature (defaults to the domain's
+ * primary vnew signature when omitted).
+ *
+ * @param domainId - The domain ID to export transcripts for
+ * @param signature - Optional signature filter (e.g. "vnewt0")
+ * @returns Promise that resolves when download starts
+ */
+export async function exportDomainTranscriptsAsCSV(
+  domainId: string,
+  signature?: string,
+): Promise<void> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const params = signature !== undefined && signature !== '' ? `?signature=${encodeURIComponent(signature)}` : '';
+  const url = `${baseUrl}/api/export/domains/${domainId}/transcripts.csv${params}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Export failed: ${response.status} ${errorText}`);
+  }
+
+  const contentDisposition = response.headers.get('Content-Disposition');
+  let filename = `domain-${domainId.slice(0, 8)}-transcripts.csv`;
+
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (match?.[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(blobUrl);
+}
+
+/**
  * Export scenarios as CLI-compatible YAML and trigger download.
  *
  * @param definitionId - The definition ID to export scenarios for

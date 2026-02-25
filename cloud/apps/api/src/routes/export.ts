@@ -25,6 +25,7 @@ import {
 import { exportDefinitionAsMd } from '../services/export/md.js';
 import { exportScenariosAsYaml } from '../services/export/yaml.js';
 import { generateExcelExport, type RunExportData } from '../services/export/xlsx/index.js';
+import { resolveDomainSignatureRunIds } from '../services/domain.js';
 
 const log = createLogger('export');
 
@@ -229,6 +230,108 @@ exportRouter.get(
 
       // Send buffer
       res.send(result.buffer);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/export/domains/:id/transcripts.csv
+ *
+ * Download all analyzable transcripts for a domain scoped to the selected
+ * signature (or the default vnew signature if omitted).
+ *
+ * Includes all models and all latest-vignette runs matching the signature.
+ * Only rows with decisionCode in 1–5 are included (consistent with domain analysis).
+ * Streams the response to handle large exports.
+ *
+ * Requires authentication.
+ */
+exportRouter.get(
+  '/domains/:id/transcripts.csv',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const domainId = req.params.id;
+      if (domainId === undefined || domainId === null || domainId === '') {
+        throw new NotFoundError('Domain', 'missing');
+      }
+
+      const signature = typeof req.query.signature === 'string' && req.query.signature.trim() !== ''
+        ? req.query.signature.trim()
+        : null;
+
+      log.info({ userId: req.user.id, domainId, signature }, 'Exporting domain transcripts as CSV');
+
+      const resolved = await resolveDomainSignatureRunIds(domainId, signature);
+      if (!resolved) {
+        throw new NotFoundError('Domain', domainId);
+      }
+
+      const { domain, filteredSourceRunIds, resolvedSignature } = resolved;
+
+      const transcripts = filteredSourceRunIds.length > 0
+        ? await db.transcript.findMany({
+          where: {
+            runId: { in: filteredSourceRunIds },
+            deletedAt: null,
+            decisionCode: { in: ['1', '2', '3', '4', '5'] },
+          },
+          include: {
+            scenario: true,
+            run: { select: { name: true } },
+          },
+          orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
+        })
+        : [];
+
+      log.info(
+        { domainId, transcriptCount: transcripts.length, resolvedSignature },
+        'Transcripts fetched for domain CSV export',
+      );
+
+      // Collect variable names for dynamic column headers
+      const variableSet = new Set<string>();
+      for (const transcript of transcripts) {
+        const content = transcript.scenario?.content as { dimensions?: Record<string, unknown> } | null;
+        if (content?.dimensions) {
+          for (const [key, value] of Object.entries(content.dimensions)) {
+            if (typeof value === 'number') {
+              variableSet.add(key);
+            }
+          }
+        }
+      }
+      const variableNames = Array.from(variableSet).sort();
+
+      // Build filename: omit signature segment when not resolved
+      const safeName = domain.name.replace(/[^a-z0-9-]/gi, '_').toLowerCase();
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = resolvedSignature !== null
+        ? `domain-${safeName}-${resolvedSignature.replace(/[^a-z0-9-]/gi, '_').toLowerCase()}-transcripts-${date}.csv`
+        : `domain-${safeName}-transcripts-${date}.csv`;
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      res.write('\uFEFF');
+      res.write(getCSVHeader(variableNames) + '\n');
+
+      for (const transcript of transcripts) {
+        const row = transcriptToCSVRow(transcript);
+        res.write(formatCSVRow(row, variableNames) + '\n');
+      }
+
+      log.info(
+        { domainId, rowsWritten: transcripts.length, variableCount: variableNames.length },
+        'Domain CSV export complete',
+      );
+
+      res.end();
     } catch (err) {
       next(err);
     }

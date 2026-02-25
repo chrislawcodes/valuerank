@@ -529,3 +529,229 @@ describe('CSV Serialization Helper', () => {
     expect(formatted).toContain('gpt-4o,,3,2,1');
   });
 });
+
+describe('Domain Transcript CSV Export Endpoint', () => {
+  let testDomainId: string | undefined;
+  let testDefinitionId: string | undefined;
+  let testRunId: string | undefined;
+  let testScenarioId: string | undefined;
+
+  beforeEach(async () => {
+    const domain = await db.domain.create({
+      data: { name: 'Test Domain For CSV', normalizedName: 'test_domain_for_csv_' + Date.now() },
+    });
+    testDomainId = domain.id;
+
+    const definition = await db.definition.create({
+      data: { name: 'Domain CSV Def ' + Date.now(), content: {}, domainId: testDomainId },
+    });
+    testDefinitionId = definition.id;
+
+    const scenario = await db.scenario.create({
+      data: {
+        definitionId: testDefinitionId,
+        name: 'Domain CSV Scenario',
+        content: { dimensions: { Stakes: 3, Certainty: 1 } },
+      },
+    });
+    testScenarioId = scenario.id;
+
+    const run = await db.run.create({
+      data: {
+        definitionId: testDefinitionId,
+        status: 'COMPLETED',
+        config: { temperature: 0 },
+        progress: { total: 2, completed: 2, failed: 0 },
+      },
+    });
+    testRunId = run.id;
+
+    await db.transcript.createMany({
+      data: [
+        {
+          runId: testRunId,
+          scenarioId: testScenarioId,
+          modelId: 'anthropic:claude-3-5-sonnet-20241022',
+          sampleIndex: 0,
+          content: {},
+          turnCount: 2,
+          tokenCount: 100,
+          durationMs: 1000,
+          decisionCode: '1',
+        },
+        {
+          runId: testRunId,
+          scenarioId: testScenarioId,
+          modelId: 'openai:gpt-4o-20241120',
+          sampleIndex: 0,
+          content: {},
+          turnCount: 2,
+          tokenCount: 100,
+          durationMs: 1000,
+          decisionCode: '3',
+        },
+        // This transcript has decisionCode '0' — should be excluded
+        {
+          runId: testRunId,
+          scenarioId: testScenarioId,
+          modelId: 'openai:gpt-4o-20241120',
+          sampleIndex: 1,
+          content: {},
+          turnCount: 1,
+          tokenCount: 50,
+          durationMs: 500,
+          decisionCode: '0',
+        },
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    if (testRunId) {
+      await db.transcript.deleteMany({ where: { runId: testRunId } });
+      await db.run.deleteMany({ where: { id: testRunId } });
+    }
+    if (testDefinitionId) {
+      await db.scenario.deleteMany({ where: { definitionId: testDefinitionId } });
+      await db.definition.delete({ where: { id: testDefinitionId } });
+    }
+    if (testDomainId) {
+      await db.domain.delete({ where: { id: testDomainId } });
+    }
+  });
+
+  it('requires authentication', async () => {
+    const response = await request(app).get(`/api/export/domains/${testDomainId}/transcripts.csv`);
+    expect(response.status).toBe(401);
+  });
+
+  it('returns 404 for unknown domain', async () => {
+    const response = await request(app)
+      .get('/api/export/domains/non-existent-domain-id/transcripts.csv')
+      .set('Authorization', getAuthHeader());
+    expect(response.status).toBe(404);
+  });
+
+  it('returns CSV with correct content-type and attachment header', async () => {
+    const response = await request(app)
+      .get(`/api/export/domains/${testDomainId}/transcripts.csv`)
+      .set('Authorization', getAuthHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/text\/csv/);
+    expect(response.headers['content-disposition']).toMatch(/attachment/);
+    expect(response.headers['content-disposition']).toMatch(/\.csv/);
+  });
+
+  it('includes BOM and correct CSV header', async () => {
+    const response = await request(app)
+      .get(`/api/export/domains/${testDomainId}/transcripts.csv`)
+      .set('Authorization', getAuthHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.text.charCodeAt(0)).toBe(0xfeff);
+    const headerLine = response.text.split('\n')[0]?.replace('\uFEFF', '');
+    expect(headerLine).toContain('AI Model Name');
+    expect(headerLine).toContain('Decision Code');
+  });
+
+  it('excludes transcripts with decisionCode outside 1-5', async () => {
+    const response = await request(app)
+      .get(`/api/export/domains/${testDomainId}/transcripts.csv`)
+      .set('Authorization', getAuthHeader());
+
+    expect(response.status).toBe(200);
+    const lines = response.text.split('\n').filter((l) => l.trim());
+    // header + 2 rows (codes 1 and 3); code 0 excluded
+    expect(lines.length).toBe(3);
+  });
+
+  it('returns header-only CSV when domain has no runs', async () => {
+    // Create a domain with a definition but no runs
+    const emptyDomain = await db.domain.create({
+      data: { name: 'Empty Domain ' + Date.now(), normalizedName: 'empty_domain_' + Date.now() },
+    });
+    const emptyDef = await db.definition.create({
+      data: { name: 'Empty Def ' + Date.now(), content: {}, domainId: emptyDomain.id },
+    });
+
+    try {
+      const response = await request(app)
+        .get(`/api/export/domains/${emptyDomain.id}/transcripts.csv`)
+        .set('Authorization', getAuthHeader());
+
+      expect(response.status).toBe(200);
+      const lines = response.text.split('\n').filter((l) => l.trim());
+      expect(lines.length).toBe(1); // header only
+    } finally {
+      await db.definition.delete({ where: { id: emptyDef.id } });
+      await db.domain.delete({ where: { id: emptyDomain.id } });
+    }
+  });
+
+  it('filename omits signature segment when no signature resolves', async () => {
+    // Create a domain/definition with no runs so signature cannot resolve
+    const noRunDomain = await db.domain.create({
+      data: { name: 'No Run Domain ' + Date.now(), normalizedName: 'no_run_domain_' + Date.now() },
+    });
+    await db.definition.create({
+      data: { name: 'No Run Def ' + Date.now(), content: {}, domainId: noRunDomain.id },
+    });
+
+    try {
+      const response = await request(app)
+        .get(`/api/export/domains/${noRunDomain.id}/transcripts.csv`)
+        .set('Authorization', getAuthHeader());
+
+      expect(response.status).toBe(200);
+      const cd = response.headers['content-disposition'] as string;
+      // Should not contain '--' artifact from empty signature
+      expect(cd).not.toContain('--');
+    } finally {
+      await db.definition.deleteMany({ where: { domainId: noRunDomain.id } });
+      await db.domain.delete({ where: { id: noRunDomain.id } });
+    }
+  });
+
+  it('signature scoping: only returns transcripts from runs matching the requested signature', async () => {
+    // The beforeEach run has config: { temperature: 0 } → vnewt0 signature.
+    // Create a second run with temperature: 1 (vnewt1) and its own transcript.
+    const runT1 = await db.run.create({
+      data: {
+        definitionId: testDefinitionId!,
+        status: 'COMPLETED',
+        config: { temperature: 1 },
+        progress: { total: 1, completed: 1, failed: 0 },
+      },
+    });
+    await db.transcript.create({
+      data: {
+        runId: runT1.id,
+        scenarioId: testScenarioId!,
+        modelId: 'anthropic:claude-3-5-sonnet-20241022',
+        sampleIndex: 0,
+        content: {},
+        turnCount: 1,
+        tokenCount: 50,
+        durationMs: 500,
+        decisionCode: '2',
+      },
+    });
+
+    try {
+      // Request with vnewt0 — should only include transcripts from the temperature=0 run
+      const response = await request(app)
+        .get(`/api/export/domains/${testDomainId}/transcripts.csv?signature=vnewt0`)
+        .set('Authorization', getAuthHeader());
+
+      expect(response.status).toBe(200);
+      const lines = response.text.split('\n').filter((l) => l.trim());
+      // beforeEach creates 2 analyzable transcripts (codes 1 and 3) in the temperature=0 run.
+      // The temperature=1 run transcript should NOT be included.
+      expect(lines.length).toBe(3); // header + 2 rows
+    } finally {
+      await db.transcript.deleteMany({ where: { runId: runT1.id } });
+      await db.run.delete({ where: { id: runT1.id } });
+    }
+  });
+});
