@@ -202,7 +202,7 @@ REST endpoints for exporting definitions and scenarios, and importing from markd
 
 ### Export Definition as Markdown
 
-Download a definition in devtool-compatible markdown format.
+Download a definition in markdown format.
 
 ```
 GET /api/export/definitions/:id/md

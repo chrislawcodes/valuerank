@@ -344,11 +344,3 @@ Each line = one scenario. Each vertical axis = one dimension or model decision.
 | Heatmaps | `seaborn.clustermap` |
 | PCA | `sklearn.decomposition.PCA` |
 
----
-
-## Integration with ValueRank DevTool
-
-The analysis is exposed via:
-1. **Python script**: `devtool/scripts/deep_analysis.py`
-2. **Server endpoint**: `POST /api/analysis/deep` (accepts CSV, returns analysis results)
-3. **Frontend**: "Deep Analysis" tab in the Analysis view

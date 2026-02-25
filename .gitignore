@@ -55,3 +55,4 @@ yarn-error.log*
 # Always keep scenario definitions under version control
 !scenarios/
 !scenarios/**
+.agents/tmp/

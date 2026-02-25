@@ -11,7 +11,7 @@ Cloud ValueRank supports data portability through export and import features, en
 The export/import system provides:
 
 1. **Definition Export (Markdown)** - Export definitions to CLI-compatible `.md` format
-2. **Definition Import (Markdown)** - Import `.md` files from devtool or colleagues
+2. **Definition Import (Markdown)** - Import `.md` files from colleagues
 3. **Scenario Export (YAML)** - Export scenarios for use with CLI `probe.py`
 4. **Run Export (CSV)** - Export transcript data for analysis in external tools
 
@@ -39,7 +39,7 @@ All export/import operations use REST endpoints (not GraphQL) for efficient file
 
 ## Definition Export (Markdown)
 
-Export a definition to devtool-compatible Markdown format.
+Export a definition to Markdown format.
 
 ### Request
 
@@ -100,7 +100,7 @@ exclude: victims=1 AND action=1
 ### Round-Trip Fidelity
 
 The export format is designed for round-trip compatibility:
-- `exportDefinitionAsMd()` produces valid devtool format
+- `exportDefinitionAsMd()` produces round-trip compatible Markdown
 - `parseMdToDefinition()` can re-import the exported file
 - All fields (preamble, template, dimensions, rules) are preserved
 
