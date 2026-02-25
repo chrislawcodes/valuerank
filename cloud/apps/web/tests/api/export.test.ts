@@ -444,3 +444,146 @@ describe('exportScenariosAsYaml', () => {
     expect(mockRevokeObjectURL).toHaveBeenCalled();
   });
 });
+
+describe('exportDomainTranscriptsAsCSV', () => {
+  let originalLocalStorage: Storage;
+  let originalFetch: typeof fetch;
+  let exportDomainTranscriptsAsCSV: (domainId: string, signature?: string) => Promise<void>;
+
+  beforeEach(async () => {
+    originalLocalStorage = global.localStorage;
+    originalFetch = global.fetch;
+
+    Object.defineProperty(global, 'localStorage', {
+      value: mockLocalStorage,
+      writable: true,
+    });
+
+    global.fetch = mockFetch;
+
+    mockCreateObjectURL.mockReturnValue('blob:test-url');
+    global.URL.createObjectURL = mockCreateObjectURL;
+    global.URL.revokeObjectURL = mockRevokeObjectURL;
+
+    const mockLink = { href: '', download: '', click: mockClick };
+    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+    vi.spyOn(document.body, 'appendChild').mockImplementation(mockAppendChild);
+    vi.spyOn(document.body, 'removeChild').mockImplementation(mockRemoveChild);
+
+    vi.clearAllMocks();
+
+    const module = await import('../../src/api/export');
+    exportDomainTranscriptsAsCSV = module.exportDomainTranscriptsAsCSV;
+  });
+
+  afterEach(() => {
+    Object.defineProperty(global, 'localStorage', {
+      value: originalLocalStorage,
+      writable: true,
+    });
+    global.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('throws when not authenticated', async () => {
+    mockLocalStorage.getItem.mockReturnValue(null);
+    await expect(exportDomainTranscriptsAsCSV('domain-123')).rejects.toThrow('Not authenticated');
+  });
+
+  it('constructs correct URL without signature', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['csv data'])),
+    });
+
+    await exportDomainTranscriptsAsCSV('domain-abc');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/export/domains/domain-abc/transcripts.csv'),
+      expect.any(Object),
+    );
+    const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
+    expect(calledUrl).not.toContain('?signature');
+  });
+
+  it('constructs correct URL with signature', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['csv data'])),
+    });
+
+    await exportDomainTranscriptsAsCSV('domain-abc', 'vnewt0');
+
+    const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toContain('?signature=vnewt0');
+  });
+
+  it('includes Authorization header', async () => {
+    mockLocalStorage.getItem.mockReturnValue('my-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['csv data'])),
+    });
+
+    await exportDomainTranscriptsAsCSV('domain-abc');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer my-token' }),
+      }),
+    );
+  });
+
+  it('uses filename from Content-Disposition header', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    const headers = new Headers({
+      'Content-Disposition': 'attachment; filename="domain-myname-vnewt0-transcripts-2026-02-25.csv"',
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers,
+      blob: vi.fn().mockResolvedValue(new Blob(['csv data'])),
+    });
+
+    const mockLink = { href: '', download: '', click: mockClick };
+    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+
+    await exportDomainTranscriptsAsCSV('domain-abc', 'vnewt0');
+
+    expect(mockLink.download).toBe('domain-myname-vnewt0-transcripts-2026-02-25.csv');
+  });
+
+  it('uses fallback filename when Content-Disposition is absent', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['csv data'])),
+    });
+
+    const mockLink = { href: '', download: '', click: mockClick };
+    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement);
+
+    await exportDomainTranscriptsAsCSV('domain-abcdefgh');
+
+    // 'domain-abcdefgh'.slice(0,8) = 'domain-a' (d-o-m-a-i-n---a)
+    expect(mockLink.download).toBe('domain-domain-a-transcripts.csv');
+  });
+
+  it('throws on non-ok response', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: vi.fn().mockResolvedValue('Domain not found'),
+    });
+
+    await expect(exportDomainTranscriptsAsCSV('domain-abc')).rejects.toThrow('Export failed: 404');
+  });
+});
