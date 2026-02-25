@@ -334,7 +334,7 @@ A hospital with limited resources must decide...
 ```
 
 **Notes**:
-- Compatible with devtool's `parseScenarioMd()` parser
+- Compatible with the `parseMdToDefinition()` import endpoint for round-trip fidelity
 - Includes inherited content from base definition (if forked)
 - Tag information included in frontmatter
 

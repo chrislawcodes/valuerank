@@ -84,7 +84,7 @@ apps/api/src/
 - Must validate Stages 5-6 integration before run UI is useful
 - Users need visibility into provider connectivity (not just key existence)
 - Queue/worker status prevents mysterious "jobs not processing" issues
-- Pattern established in devtool (see `devtool/src/client/App.tsx` lines 328-362)
+- Pattern established in the original CLI devtool (now removed)
 
 **Components**:
 1. **LLM Provider Status** (Settings page):
