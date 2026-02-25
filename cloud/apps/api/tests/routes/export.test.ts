@@ -712,4 +712,46 @@ describe('Domain Transcript CSV Export Endpoint', () => {
       await db.domain.delete({ where: { id: noRunDomain.id } });
     }
   });
+
+  it('signature scoping: only returns transcripts from runs matching the requested signature', async () => {
+    // The beforeEach run has config: { temperature: 0 } → vnewt0 signature.
+    // Create a second run with temperature: 1 (vnewt1) and its own transcript.
+    const runT1 = await db.run.create({
+      data: {
+        definitionId: testDefinitionId!,
+        status: 'COMPLETED',
+        config: { temperature: 1 },
+        progress: { total: 1, completed: 1, failed: 0 },
+      },
+    });
+    await db.transcript.create({
+      data: {
+        runId: runT1.id,
+        scenarioId: testScenarioId!,
+        modelId: 'anthropic:claude-3-5-sonnet-20241022',
+        sampleIndex: 0,
+        content: {},
+        turnCount: 1,
+        tokenCount: 50,
+        durationMs: 500,
+        decisionCode: '2',
+      },
+    });
+
+    try {
+      // Request with vnewt0 — should only include transcripts from the temperature=0 run
+      const response = await request(app)
+        .get(`/api/export/domains/${testDomainId}/transcripts.csv?signature=vnewt0`)
+        .set('Authorization', getAuthHeader());
+
+      expect(response.status).toBe(200);
+      const lines = response.text.split('\n').filter((l) => l.trim());
+      // beforeEach creates 2 analyzable transcripts (codes 1 and 3) in the temperature=0 run.
+      // The temperature=1 run transcript should NOT be included.
+      expect(lines.length).toBe(3); // header + 2 rows
+    } finally {
+      await db.transcript.deleteMany({ where: { runId: runT1.id } });
+      await db.run.delete({ where: { id: runT1.id } });
+    }
+  });
 });

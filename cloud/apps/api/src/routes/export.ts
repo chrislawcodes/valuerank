@@ -261,8 +261,8 @@ exportRouter.get(
         throw new NotFoundError('Domain', 'missing');
       }
 
-      const signature = typeof req.query.signature === 'string' && req.query.signature !== ''
-        ? req.query.signature
+      const signature = typeof req.query.signature === 'string' && req.query.signature.trim() !== ''
+        ? req.query.signature.trim()
         : null;
 
       log.info({ userId: req.user.id, domainId, signature }, 'Exporting domain transcripts as CSV');
