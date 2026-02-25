@@ -243,6 +243,7 @@ export function ValuePrioritiesSection({
                       value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
                     }`}
                     onClick={() => updateSort(value)}
+                    title={VALUE_DESCRIPTIONS[value]}
                   >
                     {value === HEDONISM_SPLIT_VALUE ? (
                       <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
