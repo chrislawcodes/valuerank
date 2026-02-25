@@ -24,6 +24,7 @@ import {
   type ValueKey,
 } from '../data/domainAnalysisData';
 import { useDomains } from '../hooks/useDomains';
+import { exportDomainTranscriptsAsCSV } from '../api/export';
 
 function parseTemperatureFromSignature(signature: string): number | null {
   if (signature.trim() === '') return null;
@@ -51,6 +52,8 @@ export function DomainAnalysis() {
   const [selectedDomainId, setSelectedDomainId] = useState<string>(searchParams.get('domainId') ?? '');
   const [selectedSignature, setSelectedSignature] = useState<string>(searchParams.get('signature') ?? '');
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
     DomainAvailableSignaturesQueryVariables
@@ -91,6 +94,10 @@ export function DomainAnalysis() {
     if (selectedExists) return;
     setSelectedSignature(signatureOptions[0]?.signature ?? '');
   }, [selectedSignature, signatureOptions]);
+
+  useEffect(() => {
+    setExportError(null);
+  }, [selectedDomainId, selectedSignature]);
 
   useEffect(() => {
     if (selectedDomainId === '') return;
@@ -169,6 +176,22 @@ export function DomainAnalysis() {
     [data?.domainAnalysis.missingDefinitions],
   );
 
+  const handleExport = async () => {
+    if (selectedDomainId === '') return;
+    setExportLoading(true);
+    setExportError(null);
+    try {
+      await exportDomainTranscriptsAsCSV(
+        selectedDomainId,
+        selectedSignature !== '' ? selectedSignature : undefined,
+      );
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const handleRunMissingVignettes = () => {
     if (selectedDomainId === '' || allMissingDefinitionIds.length === 0) return;
     const query = new URLSearchParams();
@@ -202,7 +225,7 @@ export function DomainAnalysis() {
             <h2 className="text-sm font-semibold text-gray-900">Domain Selection</h2>
             <p className="text-xs text-gray-600">Analysis is computed from live aggregate runs for latest vignettes in this domain.</p>
           </div>
-          <div className="flex flex-col gap-2 md:flex-row">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <select
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
               value={selectedDomainId}
@@ -233,7 +256,19 @@ export function DomainAnalysis() {
                 </option>
               ))}
             </select>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleExport}
+              disabled={selectedDomainId === '' || exportLoading}
+            >
+              {exportLoading ? 'Exporting…' : 'Export CSV'}
+            </Button>
           </div>
+          {exportError !== null && (
+            <p className="mt-1 text-xs text-amber-700">{exportError}</p>
+          )}
         </div>
         {data?.domainAnalysis && (
           <div className="mt-2 space-y-1 text-xs text-gray-500">
