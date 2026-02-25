@@ -12,7 +12,7 @@ import { getPriorityColor } from './domainAnalysisColors';
 import { type RankingShape, type RankingShapeBenchmarks } from '../../api/operations/domainAnalysis';
 
 type SortState = {
-  key: 'model' | 'shape' | ValueKey;
+  key: 'model' | ValueKey;
   direction: 'asc' | 'desc';
 };
 
@@ -37,13 +37,12 @@ const TOP_COLUMN_GROUPS: Array<{ label: string; values: ValueKey[] }> = [
 ];
 const HEDONISM_SPLIT_VALUE: ValueKey = 'Hedonism';
 const MODEL_COLUMN_WIDTH_PX = 260;
-const SHAPE_COLUMN_WIDTH_PX = 120;
 const DEFAULT_VALUE_COLUMN_WIDTH_PX = 118;
 const HEDONISM_COLUMN_WIDTH_PX = 220;
 const OPENNESS_GROUP_WIDTH_PX = HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * 2;
 const HEDONISM_CENTER_IN_OPENNESS_PERCENT = ((HEDONISM_COLUMN_WIDTH_PX / 2) / OPENNESS_GROUP_WIDTH_PX) * 100;
 const TABLE_TOTAL_WIDTH_PX =
-  MODEL_COLUMN_WIDTH_PX + SHAPE_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
+  MODEL_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
 
 function hasGroupStartBorder(value: ValueKey): boolean {
   return value === 'Universalism_Nature' || value === 'Conformity_Interpersonal' || value === 'Power_Dominance';
@@ -99,7 +98,7 @@ export function ValuePrioritiesSection({
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
-  const updateSort = (key: 'model' | 'shape' | ValueKey) => {
+  const updateSort = (key: 'model' | ValueKey) => {
     setSortState((prev) => {
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
@@ -115,19 +114,13 @@ export function ValuePrioritiesSection({
       nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label),
       );
-    } else if (key === 'shape') {
-      nextModels.sort((a, b) => {
-        const aSteepness = rankingShapes.get(a.model)?.steepness ?? 0;
-        const bSteepness = rankingShapes.get(b.model)?.steepness ?? 0;
-        return sortState.direction === 'asc' ? aSteepness - bSteepness : bSteepness - aSteepness;
-      });
     } else {
       nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.values[key] - b.values[key] : b.values[key] - a.values[key],
       );
     }
     return nextModels;
-  }, [models, sortState, rankingShapes]);
+  }, [models, sortState]);
 
   const valueRange = useMemo(() => {
     const all = models.flatMap((model) => COLUMN_VALUES.map((value) => model.values[value]));
@@ -171,7 +164,6 @@ export function ValuePrioritiesSection({
           <table className="table-fixed text-xs" style={{ width: `${TABLE_TOTAL_WIDTH_PX}px` }}>
             <colgroup>
               <col style={{ width: `${MODEL_COLUMN_WIDTH_PX}px` }} />
-              <col style={{ width: `${SHAPE_COLUMN_WIDTH_PX}px` }} />
               {COLUMN_VALUES.map((value) => (
                 <col
                   key={`col-${value}`}
@@ -200,27 +192,6 @@ export function ValuePrioritiesSection({
                   onClick={() => updateSort('model')}
                 >
                   Model {sortState.key === 'model' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                </Button>
-              </th>
-              <th
-                className="border-r border-gray-200 px-2 py-2 text-left font-medium text-gray-500"
-                rowSpan={2}
-                aria-sort={
-                  sortState.key === 'shape'
-                    ? sortState.direction === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                }
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900"
-                  onClick={() => updateSort('shape')}
-                >
-                  Shape {sortState.key === 'shape' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
                 </Button>
               </th>
               {TOP_COLUMN_GROUPS.map((group, groupIndex) => {
@@ -302,11 +273,11 @@ export function ValuePrioritiesSection({
               const shape = rankingShapes.get(model.model);
               return (
                 <tr key={model.model} className="border-b border-gray-100">
-                  <td className="border-r-2 border-gray-300 px-2 py-2 font-medium text-gray-900">{model.label}</td>
-                  <td className="border-r border-gray-200 px-2 py-1">
+                  <td className="border-r-2 border-gray-300 px-2 py-2">
+                    <div className="font-medium text-gray-900">{model.label}</div>
                     {shape != null && (
                       <span
-                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getShapeChipStyle(shape.label)}`}
+                        className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] ${getShapeChipStyle(shape.label)}`}
                         title={`Top gap: ${shape.topGap.toFixed(3)} | Domain avg: ${rankingShapeBenchmarks?.domainMeanTopGap.toFixed(3) ?? 'N/A'}`}
                       >
                         {getShapeLabel(shape.label)}
@@ -342,6 +313,21 @@ export function ValuePrioritiesSection({
             })}
           </tbody>
           </table>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-gray-100 pt-2">
+          {(
+            [
+              { label: 'dominant_leader' as const, name: 'Dominant Leader', desc: 'One value stands far above the rest' },
+              { label: 'gradual_slope' as const, name: 'Gradual Slope', desc: 'Scores decrease steadily — preferences spread out' },
+              { label: 'no_clear_leader' as const, name: 'No Clear Leader', desc: 'All values score similarly — no strong preference' },
+              { label: 'bimodal' as const, name: 'Bimodal', desc: 'Two clusters: strongly favored and strongly avoided' },
+            ]
+          ).map(({ label, name, desc }) => (
+            <span key={label} className="flex items-center gap-1.5 text-xs">
+              <span className={`rounded px-1.5 py-0.5 text-[10px] ${getShapeChipStyle(label)}`}>{name}</span>
+              <span className="text-gray-500">{desc}</span>
+            </span>
+          ))}
         </div>
       </div>
 
