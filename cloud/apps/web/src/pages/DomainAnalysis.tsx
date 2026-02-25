@@ -13,6 +13,7 @@ import {
   type DomainAvailableSignaturesQueryVariables,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
+  type RankingShape,
 } from '../api/operations/domainAnalysis';
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
@@ -161,6 +162,18 @@ export function DomainAnalysis() {
       };
     });
   }, [data]);
+
+  const rankingShapes = useMemo<Map<string, RankingShape>>(() => {
+    const map = new Map<string, RankingShape>();
+    for (const model of data?.domainAnalysis.models ?? []) {
+      if (model.rankingShape != null) {
+        map.set(model.model, model.rankingShape);
+      }
+    }
+    return map;
+  }, [data]);
+
+  const rankingShapeBenchmarks = data?.domainAnalysis.rankingShapeBenchmarks;
 
   const unavailableModels = useMemo<DomainAnalysisModelAvailability[]>(
     () => (data?.domainAnalysis.unavailableModels ?? []).map((model) => ({
@@ -321,6 +334,8 @@ export function DomainAnalysis() {
             models={models}
             selectedDomainId={selectedDomainId}
             selectedSignature={selectedSignature === '' ? null : selectedSignature}
+            rankingShapes={rankingShapes}
+            rankingShapeBenchmarks={rankingShapeBenchmarks}
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} />

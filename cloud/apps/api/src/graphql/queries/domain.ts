@@ -8,6 +8,11 @@ import { formatTrialSignature } from '../../utils/trial-signature.js';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 import { AuthenticationError } from '@valuerank/shared';
+import {
+  computeRankingShapes,
+  type RankingShape,
+  type RankingShapeBenchmarks,
+} from './domain-shape.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -65,6 +70,7 @@ type DomainAnalysisModel = {
   model: string;
   label: string;
   values: DomainAnalysisValueScore[];
+  rankingShape: RankingShape;
 };
 
 type DomainAnalysisUnavailableModel = {
@@ -95,6 +101,7 @@ type DomainAnalysisResult = {
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
   generatedAt: Date;
+  rankingShapeBenchmarks: RankingShapeBenchmarks;
 };
 
 type DomainAnalysisConditionDetail = {
@@ -223,6 +230,8 @@ type SignatureResolutionResult = {
   missingReasonByDefinitionId: Map<string, DomainAnalysisMissingReasonCode>;
 };
 
+const RankingShapeRef = builder.objectRef<RankingShape>('RankingShape');
+const RankingShapeBenchmarksRef = builder.objectRef<RankingShapeBenchmarks>('RankingShapeBenchmarks');
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
@@ -239,6 +248,25 @@ const DomainTrialPlanCellEstimateRef = builder.objectRef<DomainTrialPlanCellEsti
 const DomainTrialPlanResultRef = builder.objectRef<DomainTrialPlanResult>('DomainTrialPlanResult');
 const DomainTrialModelStatusRef = builder.objectRef<DomainTrialModelStatus>('DomainTrialModelStatus');
 const DomainTrialRunStatusRef = builder.objectRef<DomainTrialRunStatus>('DomainTrialRunStatus');
+
+builder.objectType(RankingShapeRef, {
+  fields: (t) => ({
+    label: t.exposeString('label'),
+    topGap: t.exposeFloat('topGap'),
+    bottomGap: t.exposeFloat('bottomGap'),
+    spread: t.exposeFloat('spread'),
+    steepness: t.exposeFloat('steepness'),
+    dominanceZScore: t.exposeFloat('dominanceZScore', { nullable: true }),
+  }),
+});
+
+builder.objectType(RankingShapeBenchmarksRef, {
+  fields: (t) => ({
+    domainMeanTopGap: t.exposeFloat('domainMeanTopGap'),
+    domainStdTopGap: t.exposeFloat('domainStdTopGap', { nullable: true }),
+    medianSpread: t.exposeFloat('medianSpread'),
+  }),
+});
 
 builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
@@ -258,6 +286,10 @@ builder.objectType(DomainAnalysisModelRef, {
     values: t.field({
       type: [DomainAnalysisValueScoreRef],
       resolve: (parent) => parent.values,
+    }),
+    rankingShape: t.field({
+      type: RankingShapeRef,
+      resolve: (parent) => parent.rankingShape,
     }),
   }),
 });
@@ -306,6 +338,10 @@ builder.objectType(DomainAnalysisResultRef, {
     generatedAt: t.field({
       type: 'DateTime',
       resolve: (parent) => parent.generatedAt,
+    }),
+    rankingShapeBenchmarks: t.field({
+      type: RankingShapeBenchmarksRef,
+      resolve: (parent) => parent.rankingShapeBenchmarks,
     }),
   }),
 });
@@ -1400,6 +1436,7 @@ builder.queryField('domainAnalysis', (t) =>
             reason: 'No analyzed vignettes found in this domain.',
           })),
           generatedAt: new Date(),
+          rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
         };
       }
 
@@ -1458,7 +1495,9 @@ builder.queryField('domainAnalysis', (t) =>
         return leftLabel.localeCompare(rightLabel);
       });
 
-      const models: DomainAnalysisModel[] = modelsWithData.map((modelId) => {
+      // Pass 1: build models with values + collect sorted BT scores for shape analysis
+      const modelsSortedScores: Array<{ model: string; sortedScores: number[] }> = [];
+      const modelsBase = modelsWithData.map((modelId) => {
         const valueMap = aggregatedByModel.get(modelId)
           ?? new Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>();
         const pairwiseWins = pairwiseWinsByModel.get(modelId)
@@ -1483,12 +1522,30 @@ builder.queryField('domainAnalysis', (t) =>
           };
         });
 
+        // Collect sorted scores for shape analysis (only meaningful for FULL_BT)
+        const sortedScores = [...values.map((v) => v.score)].sort((a, b) => b - a);
+        modelsSortedScores.push({ model: modelId, sortedScores });
+
         return {
           model: modelId,
           label: activeModelLabelById.get(modelId) ?? modelId,
           values,
         };
       });
+
+      // Pass 2: compute shape analysis
+      const { shapes, benchmarks: rankingShapeBenchmarks } = computeRankingShapes(modelsSortedScores);
+      const models: DomainAnalysisModel[] = modelsBase.map((m) => ({
+        ...m,
+        rankingShape: shapes.get(m.model) ?? {
+          label: 'gradual_slope' as const,
+          topGap: 0,
+          bottomGap: 0,
+          spread: 0,
+          steepness: 0,
+          dominanceZScore: null,
+        },
+      }));
 
       const unavailableModels = activeModels
         .filter((model) => !aggregatedByModel.has(model.modelId))
@@ -1526,6 +1583,7 @@ builder.queryField('domainAnalysis', (t) =>
         models,
         unavailableModels,
         generatedAt: new Date(),
+        rankingShapeBenchmarks,
       };
     },
   }),

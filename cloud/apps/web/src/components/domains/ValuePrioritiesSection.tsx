@@ -9,9 +9,10 @@ import {
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
+import { type RankingShape, type RankingShapeBenchmarks } from '../../api/operations/domainAnalysis';
 
 type SortState = {
-  key: 'model' | ValueKey;
+  key: 'model' | 'shape' | ValueKey;
   direction: 'asc' | 'desc';
 };
 
@@ -36,12 +37,13 @@ const TOP_COLUMN_GROUPS: Array<{ label: string; values: ValueKey[] }> = [
 ];
 const HEDONISM_SPLIT_VALUE: ValueKey = 'Hedonism';
 const MODEL_COLUMN_WIDTH_PX = 260;
+const SHAPE_COLUMN_WIDTH_PX = 120;
 const DEFAULT_VALUE_COLUMN_WIDTH_PX = 118;
 const HEDONISM_COLUMN_WIDTH_PX = 220;
 const OPENNESS_GROUP_WIDTH_PX = HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * 2;
 const HEDONISM_CENTER_IN_OPENNESS_PERCENT = ((HEDONISM_COLUMN_WIDTH_PX / 2) / OPENNESS_GROUP_WIDTH_PX) * 100;
 const TABLE_TOTAL_WIDTH_PX =
-  MODEL_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
+  MODEL_COLUMN_WIDTH_PX + SHAPE_COLUMN_WIDTH_PX + HEDONISM_COLUMN_WIDTH_PX + DEFAULT_VALUE_COLUMN_WIDTH_PX * (COLUMN_VALUES.length - 1);
 
 function hasGroupStartBorder(value: ValueKey): boolean {
   return value === 'Universalism_Nature' || value === 'Conformity_Interpersonal' || value === 'Power_Dominance';
@@ -49,6 +51,24 @@ function hasGroupStartBorder(value: ValueKey): boolean {
 
 function hasGroupEndBorder(value: ValueKey): boolean {
   return value === 'Benevolence_Dependability' || value === 'Security_Personal' || value === 'Self_Direction_Action';
+}
+
+function getShapeChipStyle(label: RankingShape['label']): string {
+  switch (label) {
+    case 'dominant_leader': return 'bg-teal-100 text-teal-800';
+    case 'gradual_slope': return 'bg-sky-100 text-sky-800';
+    case 'no_clear_leader': return 'bg-amber-100 text-amber-800';
+    case 'bimodal': return 'bg-purple-100 text-purple-800';
+  }
+}
+
+function getShapeLabel(label: RankingShape['label']): string {
+  switch (label) {
+    case 'dominant_leader': return 'Dominant Leader';
+    case 'gradual_slope': return 'Gradual Slope';
+    case 'no_clear_leader': return 'No Clear Leader';
+    case 'bimodal': return 'Bimodal';
+  }
 }
 
 function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
@@ -63,19 +83,23 @@ type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
   selectedSignature: string | null;
+  rankingShapes: Map<string, RankingShape>;
+  rankingShapeBenchmarks: RankingShapeBenchmarks | undefined;
 };
 
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
   selectedSignature,
+  rankingShapes,
+  rankingShapeBenchmarks,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
 
-  const updateSort = (key: 'model' | ValueKey) => {
+  const updateSort = (key: 'model' | 'shape' | ValueKey) => {
     setSortState((prev) => {
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
@@ -91,13 +115,19 @@ export function ValuePrioritiesSection({
       nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label),
       );
+    } else if (key === 'shape') {
+      nextModels.sort((a, b) => {
+        const aSteepness = rankingShapes.get(a.model)?.steepness ?? 0;
+        const bSteepness = rankingShapes.get(b.model)?.steepness ?? 0;
+        return sortState.direction === 'asc' ? aSteepness - bSteepness : bSteepness - aSteepness;
+      });
     } else {
       nextModels.sort((a, b) =>
         sortState.direction === 'asc' ? a.values[key] - b.values[key] : b.values[key] - a.values[key],
       );
     }
     return nextModels;
-  }, [models, sortState]);
+  }, [models, sortState, rankingShapes]);
 
   const valueRange = useMemo(() => {
     const all = models.flatMap((model) => COLUMN_VALUES.map((value) => model.values[value]));
@@ -141,6 +171,7 @@ export function ValuePrioritiesSection({
           <table className="table-fixed text-xs" style={{ width: `${TABLE_TOTAL_WIDTH_PX}px` }}>
             <colgroup>
               <col style={{ width: `${MODEL_COLUMN_WIDTH_PX}px` }} />
+              <col style={{ width: `${SHAPE_COLUMN_WIDTH_PX}px` }} />
               {COLUMN_VALUES.map((value) => (
                 <col
                   key={`col-${value}`}
@@ -169,6 +200,27 @@ export function ValuePrioritiesSection({
                   onClick={() => updateSort('model')}
                 >
                   Model {sortState.key === 'model' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </Button>
+              </th>
+              <th
+                className="border-r border-gray-200 px-2 py-2 text-left font-medium text-gray-500"
+                rowSpan={2}
+                aria-sort={
+                  sortState.key === 'shape'
+                    ? sortState.direction === 'asc'
+                      ? 'ascending'
+                      : 'descending'
+                    : 'none'
+                }
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900"
+                  onClick={() => updateSort('shape')}
+                >
+                  Shape {sortState.key === 'shape' ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
                 </Button>
               </th>
               {TOP_COLUMN_GROUPS.map((group, groupIndex) => {
@@ -247,9 +299,20 @@ export function ValuePrioritiesSection({
           </thead>
           <tbody>
             {ordered.map((model) => {
+              const shape = rankingShapes.get(model.model);
               return (
                 <tr key={model.model} className="border-b border-gray-100">
                   <td className="border-r-2 border-gray-300 px-2 py-2 font-medium text-gray-900">{model.label}</td>
+                  <td className="border-r border-gray-200 px-2 py-1">
+                    {shape != null && (
+                      <span
+                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getShapeChipStyle(shape.label)}`}
+                        title={`Top gap: ${shape.topGap.toFixed(3)} | Domain avg: ${rankingShapeBenchmarks?.domainMeanTopGap.toFixed(3) ?? 'N/A'}`}
+                      >
+                        {getShapeLabel(shape.label)}
+                      </span>
+                    )}
+                  </td>
                   {COLUMN_VALUES.map((value) => (
                     <td
                       key={value}
