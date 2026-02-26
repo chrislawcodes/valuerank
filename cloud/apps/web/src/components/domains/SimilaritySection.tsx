@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
+import { HelpCircle, X } from 'lucide-react';
 import { VALUES, VALUE_LABELS, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
+import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
-import type { ClusterAnalysis, DomainCluster, ClusterPairFaultLines } from '../../api/operations/domainAnalysis';
+import type { ClusterAnalysis, DomainCluster } from '../../api/operations/domainAnalysis';
 
 type PairMetric = {
   a: string;
@@ -69,6 +71,33 @@ function getShortValueLabel(valueKey: string): string {
   return VALUE_LABELS[valueKey as ValueKey] ?? valueKey.replace(/_/g, ' ');
 }
 
+type ChartHelpProps = {
+  show: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+};
+
+function ChartHelp({ show, onToggle, children }: ChartHelpProps) {
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggle}
+        className="h-5 w-5 text-gray-400 hover:text-gray-600"
+        aria-label={show ? 'Hide explanation' : 'Show explanation'}
+      >
+        {show ? <X className="h-3.5 w-3.5" /> : <HelpCircle className="h-3.5 w-3.5" />}
+      </Button>
+      {show && (
+        <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
+          {children}
+        </div>
+      )}
+    </>
+  );
+}
+
 type ClusterMapProps = {
   clusters: DomainCluster[];
   clusterIndexById: Map<string, number>;
@@ -87,13 +116,9 @@ function ClusterMap({ clusters, clusterIndexById }: ClusterMapProps) {
               {cluster.members.map((member) => (
                 <span
                   key={member.model}
-                  title={member.isOutlier ? `Outlier (silhouette: ${member.silhouetteScore.toFixed(2)})` : undefined}
-                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-white ${color.bg} ${
-                    member.isOutlier ? 'outline outline-2 outline-offset-1 outline-dashed outline-gray-400' : ''
-                  }`}
+                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-white ${color.bg}`}
                 >
                   {member.label}
-                  {member.isOutlier && <span className="ml-1 opacity-80">⚠</span>}
                 </span>
               ))}
             </div>
@@ -113,77 +138,12 @@ function ClusterMap({ clusters, clusterIndexById }: ClusterMapProps) {
   );
 }
 
-type FaultLineBarProps = {
-  pair: ClusterPairFaultLines;
-  clusterIndexById: Map<string, number>;
-  clusters: DomainCluster[];
-};
-
-function FaultLinesPanel({ pair, clusterIndexById, clusters }: FaultLineBarProps) {
-  const clusterA = clusters.find((c) => c.id === pair.clusterAId);
-  const clusterB = clusters.find((c) => c.id === pair.clusterBId);
-  const idxA = clusterIndexById.get(pair.clusterAId) ?? 0;
-  const idxB = clusterIndexById.get(pair.clusterBId) ?? 0;
-  const colorA = getClusterColor(idxA);
-  const colorB = getClusterColor(idxB);
-
-  if (pair.faultLines.length === 0) return null;
-
-  // Find scale: max abs score across all fault line values
-  const allScores = pair.faultLines.flatMap((fl) => [Math.abs(fl.clusterAScore), Math.abs(fl.clusterBScore)]);
-  const maxScore = Math.max(...allScores, 0.01);
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center gap-3 text-xs text-gray-600">
-        <span className="flex items-center gap-1">
-          <span className={`inline-block h-3 w-3 rounded-sm ${colorA.bg}`} />
-          {clusterA?.name ?? pair.clusterAId}
-        </span>
-        <span className="text-gray-400">vs</span>
-        <span className="flex items-center gap-1">
-          <span className={`inline-block h-3 w-3 rounded-sm ${colorB.bg}`} />
-          {clusterB?.name ?? pair.clusterBId}
-        </span>
-        <span className="ml-auto text-gray-400">distance: {pair.distance.toFixed(3)}</span>
-      </div>
-      <div className="space-y-2">
-        {pair.faultLines.map((fl) => {
-          const barA = (Math.abs(fl.clusterAScore) / maxScore) * 100;
-          const barB = (Math.abs(fl.clusterBScore) / maxScore) * 100;
-          return (
-            <div key={fl.valueKey} className="rounded border border-gray-100 bg-gray-50 p-2">
-              <p className="mb-1 text-xs font-medium text-gray-700">{getShortValueLabel(fl.valueKey)}</p>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className={`w-20 truncate text-right text-[10px] ${colorA.text}`}>{clusterA?.name ?? pair.clusterAId}</span>
-                  <div className="flex flex-1 items-center gap-1">
-                    <div className={`h-4 rounded-sm ${colorA.bg}`} style={{ width: `${barA}%` }} />
-                    <span className="text-[10px] text-gray-500">{fl.clusterAScore.toFixed(2)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-20 truncate text-right text-[10px] ${colorB.text}`}>{clusterB?.name ?? pair.clusterBId}</span>
-                  <div className="flex flex-1 items-center gap-1">
-                    <div className={`h-4 rounded-sm ${colorB.bg}`} style={{ width: `${barB}%` }} />
-                    <span className="text-[10px] text-gray-500">{fl.clusterBScore.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 type ClusterSectionProps = {
   clusterAnalysis: ClusterAnalysis;
 };
 
 function ClusterSection({ clusterAnalysis }: ClusterSectionProps) {
-  const { clusters, faultLinesByPair, defaultPair, skipped, skipReason } = clusterAnalysis;
+  const { clusters, skipped, skipReason } = clusterAnalysis;
 
   const clusterIndexById = useMemo(() => {
     const map = new Map<string, number>();
@@ -191,16 +151,7 @@ function ClusterSection({ clusterAnalysis }: ClusterSectionProps) {
     return map;
   }, [clusters]);
 
-  const pairKeys = useMemo(() => Object.keys(faultLinesByPair), [faultLinesByPair]);
-
-  const defaultPairKey = useMemo(() => {
-    if (defaultPair == null || defaultPair.length < 2) return pairKeys[0] ?? null;
-    return `${defaultPair[0]}:${defaultPair[1]}`;
-  }, [defaultPair, pairKeys]);
-
-  const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
-  const activePairKey = selectedPairKey ?? defaultPairKey;
-  const activePair = activePairKey != null ? faultLinesByPair[activePairKey] : null;
+  const [showGroupsHelp, setShowGroupsHelp] = useState(false);
 
   if (skipped) {
     return (
@@ -211,44 +162,16 @@ function ClusterSection({ clusterAnalysis }: ClusterSectionProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-gray-800">Model Clusters</h3>
-        <ClusterMap
-          clusters={clusters}
-          clusterIndexById={clusterIndexById}
-        />
+    <div>
+      <div className="mb-2 flex items-center gap-1.5">
+        <h3 className="text-sm font-medium text-gray-800">Model Groups</h3>
+        <ChartHelp show={showGroupsHelp} onToggle={() => setShowGroupsHelp((v) => !v)}>
+          Models are automatically grouped by how similar their overall value priorities are.
+          Models in the same group tend to make similar moral trade-offs across scenarios.
+          The small tags below each group name show the values that define it.
+        </ChartHelp>
       </div>
-
-      {activePair != null && (
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-800">Fault Lines</h3>
-            {pairKeys.length > 1 && (
-              <select
-                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700"
-                value={activePairKey ?? ''}
-                onChange={(e) => setSelectedPairKey(e.target.value)}
-              >
-                {pairKeys.map((key) => {
-                  const p = faultLinesByPair[key];
-                  if (p == null) return null;
-                  const idxA = clusterIndexById.get(p.clusterAId) ?? 0;
-                  const idxB = clusterIndexById.get(p.clusterBId) ?? 0;
-                  const nameA = clusters[idxA]?.name ?? p.clusterAId;
-                  const nameB = clusters[idxB]?.name ?? p.clusterBId;
-                  return <option key={key} value={key}>{nameA} vs {nameB}</option>;
-                })}
-              </select>
-            )}
-          </div>
-          <FaultLinesPanel
-            pair={activePair}
-            clusterIndexById={clusterIndexById}
-            clusters={clusters}
-          />
-        </div>
-      )}
+      <ClusterMap clusters={clusters} clusterIndexById={clusterIndexById} />
     </div>
   );
 }
@@ -260,6 +183,8 @@ type SimilaritySectionProps = {
 
 export function SimilaritySection({ models, clusterAnalysis }: SimilaritySectionProps) {
   const matrixRef = useRef<HTMLDivElement>(null);
+  const [showMatrixHelp, setShowMatrixHelp] = useState(false);
+
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
@@ -331,7 +256,15 @@ export function SimilaritySection({ models, clusterAnalysis }: SimilaritySection
 
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs text-gray-600">Pairwise similarity matrix.</p>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-medium text-gray-800">Pairwise Similarity Matrix</h3>
+            <ChartHelp show={showMatrixHelp} onToggle={() => setShowMatrixHelp((v) => !v)}>
+              Each cell shows how similar two models&apos; value profiles are — how much they agree on
+              which values matter most. 1.0 = identical priorities, 0 = unrelated.
+              Green = think alike, yellow = partial overlap, red = consistently prioritize different things.
+              The diagonal is always 1.0 (a model compared to itself).
+            </ChartHelp>
+          </div>
           <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
         </div>
         <div className="overflow-x-auto">

@@ -62,10 +62,36 @@ export type ClusterModelInput = {
 
 // --- Calibration constants ---
 const OUTLIER_SILHOUETTE_THRESHOLD = 0.2;
-const MIN_CLUSTER_GAP = 0.05;
+const MIN_CLUSTER_GAP = 0.015;
 const MAX_CLUSTERS = 4;
 const MIN_MODELS_FOR_CLUSTERING = 3;
 const CLUSTER_NAMING_THRESHOLD = 0.3;
+
+// Human-readable short labels for cluster names (all 19 Schwartz values).
+// These are intentionally different from VALUE_LABELS on the web side so that
+// cluster names ("Caring/Personal Safety-first") are visually distinct from
+// fault-line value labels ("Benevolence", "Security").
+const CLUSTER_VALUE_LABELS: Record<string, string> = {
+  Self_Direction_Thought: 'Open Thinking',
+  Self_Direction_Action: 'Independence',
+  Stimulation: 'Novelty',
+  Hedonism: 'Pleasure',
+  Achievement: 'Achievement',
+  Power_Dominance: 'Control',
+  Power_Resources: 'Resources',
+  Face: 'Status',
+  Security_Personal: 'Personal Safety',
+  Security_Societal: 'Social Order',
+  Tradition: 'Tradition',
+  Conformity_Rules: 'Rule-following',
+  Conformity_Interpersonal: 'Harmony',
+  Humility: 'Humility',
+  Benevolence_Dependability: 'Reliability',
+  Benevolence_Caring: 'Caring',
+  Universalism_Concern: 'Global Concern',
+  Universalism_Nature: 'Nature',
+  Universalism_Tolerance: 'Tolerance',
+};
 
 /**
  * Compute cosine similarity between two numeric vectors.
@@ -172,10 +198,16 @@ export function upgma(distMatrix: number[][], n: number): UpgmaResult {
 }
 
 /**
- * Cut dendrogram at the largest merge-height gap.
- * Returns cluster assignments (arrays of original model indices).
- * Returns single cluster when no gap > MIN_CLUSTER_GAP.
- * Caps result at MAX_CLUSTERS by re-cutting if needed.
+ * Cut dendrogram to find the most clusters supported by the data.
+ *
+ * Strategy: find the EARLIEST significant gap in the valid range rather than
+ * the largest. The largest gap is usually the outlier merge (e.g. one very
+ * different model joining last), which produces only 2 clusters and hides
+ * meaningful sub-structure in the rest. By taking the earliest significant gap
+ * we surface as many real groups as possible, capped at MAX_CLUSTERS.
+ *
+ * Valid range: snapshot indices that produce between 2 and MAX_CLUSTERS clusters.
+ * Returns single cluster when no meaningful structure exists.
  */
 export function cutAtLargestGap(
   mergeHeights: number[],
@@ -184,36 +216,42 @@ export function cutAtLargestGap(
 ): number[][] {
   const fallback = snapshots[snapshots.length - 1] ?? [Array.from({ length: n }, (_, i) => i)];
 
-  // Need at least 2 merge heights to find a gap
-  if (mergeHeights.length < 2) {
-    return fallback;
-  }
+  if (mergeHeights.length < 2) return fallback;
 
-  let maxGap = 0;
-  let maxGapIdx = 0;
+  // snapshots[k] has N-k clusters.
+  // Valid range: 2 ≤ (N-k) ≤ MAX_CLUSTERS  →  N-MAX_CLUSTERS ≤ k ≤ N-2
+  const minCutIdx = Math.max(1, n - MAX_CLUSTERS);
+  const maxCutIdx = n - 2;
+
+  if (minCutIdx > maxCutIdx) return fallback;
+
+  let hasAnySignificantGap = false;
+  const validCuts: number[] = [];
+
   for (let j = 0; j < mergeHeights.length - 1; j++) {
     const gap = (mergeHeights[j + 1] ?? 0) - (mergeHeights[j] ?? 0);
-    if (gap > maxGap) {
-      maxGap = gap;
-      maxGapIdx = j;
+    if (gap > MIN_CLUSTER_GAP) {
+      hasAnySignificantGap = true;
+      const cutIdx = j + 1;
+      if (cutIdx >= minCutIdx && cutIdx <= maxCutIdx) {
+        validCuts.push(cutIdx);
+      }
     }
   }
 
-  if (maxGap <= MIN_CLUSTER_GAP) {
-    // No meaningful gap — treat as single cluster
+  if (!hasAnySignificantGap) {
+    // No meaningful structure — all models are similar
     return fallback;
   }
 
-  // Cut after step maxGapIdx → snapshots[maxGapIdx + 1] has N-(maxGapIdx+1) clusters
-  let cutSnapshotIdx = maxGapIdx + 1;
-  const numClusters = n - cutSnapshotIdx;
-
-  // Cap at MAX_CLUSTERS by re-cutting (include more merges)
-  if (numClusters > MAX_CLUSTERS) {
-    cutSnapshotIdx = n - MAX_CLUSTERS;
+  if (validCuts.length === 0) {
+    // Gaps exist but all produce too many clusters — cap at MAX_CLUSTERS
+    return snapshots[minCutIdx] ?? fallback;
   }
 
-  return snapshots[cutSnapshotIdx] ?? fallback;
+  // Earliest valid cut = most clusters within the limit
+  validCuts.sort((a, b) => a - b);
+  return snapshots[validCuts[0]!] ?? fallback;
 }
 
 type SilhouetteEntry = {
@@ -289,17 +327,19 @@ export function nameCluster(
   );
   qualifying.sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0));
 
+  const label = (vk: string) => CLUSTER_VALUE_LABELS[vk] ?? vk.replace(/_/g, ' ');
+
   if (qualifying.length >= 2) {
-    return { name: `${qualifying[0]}/${qualifying[1]}`, definingValues: [qualifying[0]!, qualifying[1]!] };
+    return { name: `${label(qualifying[0]!)}/${label(qualifying[1]!)}-first`, definingValues: [qualifying[0]!, qualifying[1]!] };
   }
   if (qualifying.length === 1) {
-    return { name: `${qualifying[0]}-first`, definingValues: [qualifying[0]!] };
+    return { name: `${label(qualifying[0]!)}-first`, definingValues: [qualifying[0]!] };
   }
 
   // Fallback: top 2 by centroid score
   const sorted = [...valueKeys].sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0));
   const top2 = sorted.slice(0, 2).filter((v): v is string => v != null);
-  return { name: `${top2[0] ?? ''}/${top2[1] ?? ''} (mixed)`, definingValues: top2 };
+  return { name: `${label(top2[0] ?? '')}/${label(top2[1] ?? '')} (mixed)`, definingValues: top2 };
 }
 
 /**
