@@ -1,6 +1,7 @@
-import { useMemo, useRef } from 'react';
-import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
+import { useMemo, useRef, useState } from 'react';
+import { VALUES, VALUE_LABELS, type ModelEntry, type ValueKey } from '../../data/domainAnalysisData';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
+import type { ClusterAnalysis, DomainCluster, ClusterPairFaultLines } from '../../api/operations/domainAnalysis';
 
 type PairMetric = {
   a: string;
@@ -52,13 +53,213 @@ function getSimilarityColor(value: number): string {
   return `rgba(${r}, ${g}, ${b}, 0.35)`;
 }
 
-type SimilaritySectionProps = {
-  models: ModelEntry[];
+// Up to 4 distinct cluster colors
+const CLUSTER_COLORS = [
+  { bg: 'bg-blue-500', border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50', hex: '#3b82f6' },
+  { bg: 'bg-amber-500', border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50', hex: '#f59e0b' },
+  { bg: 'bg-emerald-500', border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50', hex: '#10b981' },
+  { bg: 'bg-rose-500', border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50', hex: '#f43f5e' },
+] as const;
+
+function getClusterColor(index: number) {
+  return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
+}
+
+function getShortValueLabel(valueKey: string): string {
+  return VALUE_LABELS[valueKey as ValueKey] ?? valueKey.replace(/_/g, ' ');
+}
+
+type ClusterMapProps = {
+  clusters: DomainCluster[];
+  clusterIndexById: Map<string, number>;
 };
 
-export function SimilaritySection({ models }: SimilaritySectionProps) {
+function ClusterMap({ clusters, clusterIndexById }: ClusterMapProps) {
+  return (
+    <div className="flex flex-wrap gap-4">
+      {clusters.map((cluster) => {
+        const idx = clusterIndexById.get(cluster.id) ?? 0;
+        const color = getClusterColor(idx);
+        return (
+          <div key={cluster.id} className={`rounded-lg border ${color.border} ${color.light} p-3`}>
+            <p className={`mb-2 text-xs font-semibold ${color.text}`}>{cluster.name}</p>
+            <div className="flex flex-wrap gap-1">
+              {cluster.members.map((member) => (
+                <span
+                  key={member.model}
+                  title={member.isOutlier ? `Outlier (silhouette: ${member.silhouetteScore.toFixed(2)})` : undefined}
+                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-white ${color.bg} ${
+                    member.isOutlier ? 'outline outline-2 outline-offset-1 outline-dashed outline-gray-400' : ''
+                  }`}
+                >
+                  {member.label}
+                  {member.isOutlier && <span className="ml-1 opacity-80">⚠</span>}
+                </span>
+              ))}
+            </div>
+            {cluster.definingValues.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {cluster.definingValues.map((vk) => (
+                  <span key={vk} className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] text-gray-600">
+                    {getShortValueLabel(vk)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type FaultLineBarProps = {
+  pair: ClusterPairFaultLines;
+  clusterIndexById: Map<string, number>;
+  clusters: DomainCluster[];
+};
+
+function FaultLinesPanel({ pair, clusterIndexById, clusters }: FaultLineBarProps) {
+  const clusterA = clusters.find((c) => c.id === pair.clusterAId);
+  const clusterB = clusters.find((c) => c.id === pair.clusterBId);
+  const idxA = clusterIndexById.get(pair.clusterAId) ?? 0;
+  const idxB = clusterIndexById.get(pair.clusterBId) ?? 0;
+  const colorA = getClusterColor(idxA);
+  const colorB = getClusterColor(idxB);
+
+  if (pair.faultLines.length === 0) return null;
+
+  // Find scale: max abs score across all fault line values
+  const allScores = pair.faultLines.flatMap((fl) => [Math.abs(fl.clusterAScore), Math.abs(fl.clusterBScore)]);
+  const maxScore = Math.max(...allScores, 0.01);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-3 text-xs text-gray-600">
+        <span className="flex items-center gap-1">
+          <span className={`inline-block h-3 w-3 rounded-sm ${colorA.bg}`} />
+          {clusterA?.name ?? pair.clusterAId}
+        </span>
+        <span className="text-gray-400">vs</span>
+        <span className="flex items-center gap-1">
+          <span className={`inline-block h-3 w-3 rounded-sm ${colorB.bg}`} />
+          {clusterB?.name ?? pair.clusterBId}
+        </span>
+        <span className="ml-auto text-gray-400">distance: {pair.distance.toFixed(3)}</span>
+      </div>
+      <div className="space-y-2">
+        {pair.faultLines.map((fl) => {
+          const barA = (Math.abs(fl.clusterAScore) / maxScore) * 100;
+          const barB = (Math.abs(fl.clusterBScore) / maxScore) * 100;
+          return (
+            <div key={fl.valueKey} className="rounded border border-gray-100 bg-gray-50 p-2">
+              <p className="mb-1 text-xs font-medium text-gray-700">{getShortValueLabel(fl.valueKey)}</p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={`w-20 truncate text-right text-[10px] ${colorA.text}`}>{clusterA?.name ?? pair.clusterAId}</span>
+                  <div className="flex flex-1 items-center gap-1">
+                    <div className={`h-4 rounded-sm ${colorA.bg}`} style={{ width: `${barA}%` }} />
+                    <span className="text-[10px] text-gray-500">{fl.clusterAScore.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-20 truncate text-right text-[10px] ${colorB.text}`}>{clusterB?.name ?? pair.clusterBId}</span>
+                  <div className="flex flex-1 items-center gap-1">
+                    <div className={`h-4 rounded-sm ${colorB.bg}`} style={{ width: `${barB}%` }} />
+                    <span className="text-[10px] text-gray-500">{fl.clusterBScore.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type ClusterSectionProps = {
+  clusterAnalysis: ClusterAnalysis;
+};
+
+function ClusterSection({ clusterAnalysis }: ClusterSectionProps) {
+  const { clusters, faultLinesByPair, defaultPair, skipped, skipReason } = clusterAnalysis;
+
+  const clusterIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    clusters.forEach((c, i) => map.set(c.id, i));
+    return map;
+  }, [clusters]);
+
+  const pairKeys = useMemo(() => Object.keys(faultLinesByPair), [faultLinesByPair]);
+
+  const defaultPairKey = useMemo(() => {
+    if (defaultPair == null || defaultPair.length < 2) return pairKeys[0] ?? null;
+    return `${defaultPair[0]}:${defaultPair[1]}`;
+  }, [defaultPair, pairKeys]);
+
+  const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null);
+  const activePairKey = selectedPairKey ?? defaultPairKey;
+  const activePair = activePairKey != null ? faultLinesByPair[activePairKey] : null;
+
+  if (skipped) {
+    return (
+      <p className="text-sm text-gray-500 italic">
+        {skipReason ?? 'Cluster analysis not available.'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="mb-2 text-sm font-medium text-gray-800">Model Clusters</h3>
+        <ClusterMap
+          clusters={clusters}
+          clusterIndexById={clusterIndexById}
+        />
+      </div>
+
+      {activePair != null && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-gray-800">Fault Lines</h3>
+            {pairKeys.length > 1 && (
+              <select
+                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700"
+                value={activePairKey ?? ''}
+                onChange={(e) => setSelectedPairKey(e.target.value)}
+              >
+                {pairKeys.map((key) => {
+                  const p = faultLinesByPair[key];
+                  if (p == null) return null;
+                  const idxA = clusterIndexById.get(p.clusterAId) ?? 0;
+                  const idxB = clusterIndexById.get(p.clusterBId) ?? 0;
+                  const nameA = clusters[idxA]?.name ?? p.clusterAId;
+                  const nameB = clusters[idxB]?.name ?? p.clusterBId;
+                  return <option key={key} value={key}>{nameA} vs {nameB}</option>;
+                })}
+              </select>
+            )}
+          </div>
+          <FaultLinesPanel
+            pair={activePair}
+            clusterIndexById={clusterIndexById}
+            clusters={clusters}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+type SimilaritySectionProps = {
+  models: ModelEntry[];
+  clusterAnalysis?: ClusterAnalysis;
+};
+
+export function SimilaritySection({ models, clusterAnalysis }: SimilaritySectionProps) {
   const matrixRef = useRef<HTMLDivElement>(null);
-  const summaryRef = useRef<HTMLDivElement>(null);
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
@@ -80,7 +281,6 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
             a: a.label,
             b: b.label,
             similarity,
-            // Normalize cosine-distance-like score into [0, 1].
             distance: (1 - similarity) / 2,
           });
         }
@@ -88,10 +288,20 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
       similarities.set(a.model, row);
     }
 
-    const mostSimilar = [...pairs].sort((left, right) => right.similarity - left.similarity).slice(0, 5);
-    const mostDifferent = [...pairs].sort((left, right) => right.distance - left.distance).slice(0, 5);
-    return { similarities, mostSimilar, mostDifferent };
+    return { similarities, pairs };
   }, [models]);
+
+  // Build a model → cluster index map for matrix header coloring
+  const modelClusterIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    if (clusterAnalysis == null || clusterAnalysis.skipped) return map;
+    clusterAnalysis.clusters.forEach((cluster, ci) => {
+      for (const member of cluster.members) {
+        map.set(member.model, ci);
+      }
+    });
+    return map;
+  }, [clusterAnalysis]);
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -99,6 +309,12 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
         <h2 className="text-base font-medium text-gray-900">3. Similarity and Differences</h2>
         <p className="text-sm text-gray-600">Pairwise similarity of model value profiles (cosine similarity).</p>
       </div>
+
+      {clusterAnalysis != null && (
+        <div className="mb-4 rounded border border-gray-100 bg-white p-3">
+          <ClusterSection clusterAnalysis={clusterAnalysis} />
+        </div>
+      )}
 
       <div className="mb-3 flex items-center gap-2">
         {[-1, -0.5, 0, 0.5, 1].map((tick) => (
@@ -125,64 +341,44 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
               <th scope="col" className="px-2 py-2 text-left font-medium">
                 Model
               </th>
-              {models.map((model) => (
-                <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium">
-                  {model.label}
-                </th>
-              ))}
+              {models.map((model) => {
+                const ci = modelClusterIndex.get(model.model);
+                const colStyle = ci != null ? { backgroundColor: `${CLUSTER_COLORS[ci % CLUSTER_COLORS.length]!.hex}22` } : undefined;
+                return (
+                  <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium" style={colStyle}>
+                    {model.label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {models.map((row) => (
-              <tr key={row.model} className="border-b border-gray-100">
-                <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">
-                  {row.label}
-                </th>
-                {models.map((col) => {
-                  const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
-                  return (
-                    <td
-                      key={col.model}
-                      className="px-2 py-2 text-right text-gray-800"
-                      style={{ background: getSimilarityColor(similarity) }}
-                    >
-                      {similarity.toFixed(2)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {models.map((row) => {
+              const rowCi = modelClusterIndex.get(row.model);
+              const rowStyle = rowCi != null ? { backgroundColor: `${CLUSTER_COLORS[rowCi % CLUSTER_COLORS.length]!.hex}11` } : undefined;
+              return (
+                <tr key={row.model} className="border-b border-gray-100" style={rowStyle}>
+                  <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">
+                    {row.label}
+                  </th>
+                  {models.map((col) => {
+                    const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
+                    return (
+                      <td
+                        key={col.model}
+                        className="px-2 py-2 text-right text-gray-800"
+                        style={{ background: getSimilarityColor(similarity) }}
+                      >
+                        {similarity.toFixed(2)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
           </table>
         </div>
-      </div>
-
-      <div ref={summaryRef} className="rounded border border-gray-100 bg-white p-2">
-        <div className="mb-2 flex items-center justify-end">
-          <CopyVisualButton targetRef={summaryRef} label="similarity summary tables" />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Most Similar Pairs</h3>
-          <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {matrix.mostSimilar.map((pair, index) => (
-              <li key={`${pair.a}-${pair.b}-sim`}>
-                {index + 1}. {pair.a} + {pair.b} ({pair.similarity.toFixed(2)})
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Most Different Pairs</h3>
-          <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {matrix.mostDifferent.map((pair, index) => (
-              <li key={`${pair.a}-${pair.b}-diff`}>
-                {index + 1}. {pair.a} + {pair.b} (distance {pair.distance.toFixed(2)})
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
       </div>
     </section>
   );

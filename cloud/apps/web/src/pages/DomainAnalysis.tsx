@@ -335,7 +335,7 @@ export function DomainAnalysis() {
             rankingShapes={rankingShapes}
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
-          <SimilaritySection models={models} />
+          <SimilaritySection models={models} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
         </>
       )}
 

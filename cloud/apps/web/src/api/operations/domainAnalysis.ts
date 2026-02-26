@@ -51,6 +51,26 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
         domainStdTopGap
         medianSpread
       }
+      clusterAnalysis {
+        skipped
+        skipReason
+        defaultPair
+        clusters {
+          id
+          name
+          definingValues
+          centroid
+          members {
+            model
+            label
+            silhouetteScore
+            isOutlier
+            nearestClusterIds
+            distancesToNearestClusters
+          }
+        }
+        faultLinesByPair
+      }
     }
   }
 `;
@@ -256,6 +276,48 @@ export type DomainAnalysisUnavailableModel = {
   reason: string;
 };
 
+export type ClusterMember = {
+  model: string;
+  label: string;
+  silhouetteScore: number;
+  isOutlier: boolean;
+  nearestClusterIds: string[] | null;
+  distancesToNearestClusters: number[] | null;
+};
+
+export type DomainCluster = {
+  id: string;
+  name: string;
+  definingValues: string[];
+  centroid: Record<string, number>;
+  members: ClusterMember[];
+};
+
+export type ValueFaultLine = {
+  valueKey: string;
+  clusterAId: string;
+  clusterBId: string;
+  clusterAScore: number;
+  clusterBScore: number;
+  delta: number;
+  absDelta: number;
+};
+
+export type ClusterPairFaultLines = {
+  clusterAId: string;
+  clusterBId: string;
+  distance: number;
+  faultLines: ValueFaultLine[];
+};
+
+export type ClusterAnalysis = {
+  skipped: boolean;
+  skipReason: string | null;
+  defaultPair: string[] | null;
+  clusters: DomainCluster[];
+  faultLinesByPair: Record<string, ClusterPairFaultLines>;
+};
+
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
@@ -277,6 +339,7 @@ export type DomainAnalysisResult = {
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
   rankingShapeBenchmarks?: RankingShapeBenchmarks;
+  clusterAnalysis?: ClusterAnalysis;
 };
 
 export type DomainAnalysisQueryResult = {
