@@ -48,6 +48,19 @@ export const VALUE_LABELS: Record<ValueKey, string> = {
   Conformity_Interpersonal: 'Conformity',
 };
 
+export const VALUE_DESCRIPTIONS: Record<ValueKey, string> = {
+  Self_Direction_Action: 'Freedom to determine one\'s own actions. Valuing personal agency, self-authorship, and opposition to coercion or unnecessary restriction.',
+  Universalism_Nature: 'Preservation of the natural environment. Concern for ecosystems, biodiversity, and sustainability — willingness to limit human activity to protect nature.',
+  Benevolence_Dependability: 'Being reliable and trustworthy. Valuing loyalty, fulfilling obligations, and being someone others can count on.',
+  Security_Personal: 'Safety in one\'s immediate environment. Valuing personal safety, health, and stability — preference for predictability and protection from harm.',
+  Power_Dominance: 'Power through exercising control over people. Valuing authority, command, and acceptance of social hierarchies.',
+  Achievement: 'Success according to social standards. Valuing competence, performance, and demonstrating ability — emphasis on results and excellence.',
+  Tradition: 'Maintaining cultural, family, or religious traditions. Respect for inherited customs and continuity — viewing change as potential loss of identity.',
+  Stimulation: 'Excitement, novelty, and change. Seeking challenge and new experiences — comfort with risk and preference for change over routine.',
+  Hedonism: 'Pleasure and sensuous gratification. Valuing enjoyment, comfort, and immediate well-being — often conflicts with restraint or duty.',
+  Conformity_Interpersonal: 'Avoidance of upsetting or harming others. Valuing harmony, restraint of behavior to keep peace, and smooth social interactions.',
+};
+
 // Static snapshot from validated analysis export (jobs domain, snapshot date: 2026-02-21).
 // TODO: Replace with domain-scoped API-backed data.
 export const DOMAIN_ANALYSIS_MODELS: ModelEntry[] = [

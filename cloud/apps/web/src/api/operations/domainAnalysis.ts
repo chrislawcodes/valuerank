@@ -31,11 +31,25 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
           neutral
           totalComparisons
         }
+        rankingShape {
+          topStructure
+          bottomStructure
+          topGap
+          bottomGap
+          spread
+          steepness
+          dominanceZScore
+        }
       }
       unavailableModels {
         model
         label
         reason
+      }
+      rankingShapeBenchmarks {
+        domainMeanTopGap
+        domainStdTopGap
+        medianSpread
       }
     }
   }
@@ -210,10 +224,30 @@ export type DomainAnalysisValueScore = {
   totalComparisons: number;
 };
 
+export type TopStructureLabel = 'strong_leader' | 'tied_leaders' | 'even_spread';
+export type BottomStructureLabel = 'hard_no' | 'mild_avoidance' | 'no_hard_no';
+
+export type RankingShape = {
+  topStructure: TopStructureLabel;
+  bottomStructure: BottomStructureLabel;
+  topGap: number;
+  bottomGap: number;
+  spread: number;
+  steepness: number;
+  dominanceZScore: number | null;
+};
+
+export type RankingShapeBenchmarks = {
+  domainMeanTopGap: number;
+  domainStdTopGap: number | null;
+  medianSpread: number;
+};
+
 export type DomainAnalysisModel = {
   model: string;
   label: string;
   values: DomainAnalysisValueScore[];
+  rankingShape?: RankingShape;
 };
 
 export type DomainAnalysisUnavailableModel = {
@@ -242,6 +276,7 @@ export type DomainAnalysisResult = {
   generatedAt: string;
   models: DomainAnalysisModel[];
   unavailableModels: DomainAnalysisUnavailableModel[];
+  rankingShapeBenchmarks?: RankingShapeBenchmarks;
 };
 
 export type DomainAnalysisQueryResult = {

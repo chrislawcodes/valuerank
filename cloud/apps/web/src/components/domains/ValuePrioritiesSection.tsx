@@ -5,10 +5,12 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   VALUES,
   VALUE_LABELS,
+  VALUE_DESCRIPTIONS,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
+import { type RankingShape, type TopStructureLabel, type BottomStructureLabel } from '../../api/operations/domainAnalysis';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -51,6 +53,50 @@ function hasGroupEndBorder(value: ValueKey): boolean {
   return value === 'Benevolence_Dependability' || value === 'Security_Personal' || value === 'Self_Direction_Action';
 }
 
+function getTopStructureChipStyle(label: TopStructureLabel): string {
+  switch (label) {
+    case 'strong_leader': return 'bg-teal-100 text-teal-800';
+    case 'tied_leaders': return 'bg-sky-100 text-sky-800';
+    case 'even_spread': return 'bg-gray-100 text-gray-600';
+  }
+}
+
+function getTopStructureLabel(label: TopStructureLabel): string {
+  switch (label) {
+    case 'strong_leader': return 'Strong leader';
+    case 'tied_leaders': return 'Tied leaders';
+    case 'even_spread': return 'Even spread';
+  }
+}
+
+function getBottomStructureChipStyle(label: BottomStructureLabel): string {
+  switch (label) {
+    case 'hard_no': return 'bg-rose-100 text-rose-800';
+    case 'mild_avoidance': return 'bg-amber-100 text-amber-800';
+    case 'no_hard_no': return 'bg-green-100 text-green-700';
+  }
+}
+
+function getBottomStructureLabel(label: BottomStructureLabel): string {
+  switch (label) {
+    case 'hard_no': return 'Hard no';
+    case 'mild_avoidance': return 'Mild avoidance';
+    case 'no_hard_no': return 'No hard no';
+  }
+}
+
+const TOP_STRUCTURE_DESCRIPTIONS: Record<TopStructureLabel, string> = {
+  strong_leader: 'One value stands clearly apart from the rest',
+  tied_leaders: 'A small group of values leads together',
+  even_spread: 'No single value dominates — preferences are broadly distributed',
+};
+
+const BOTTOM_STRUCTURE_DESCRIPTIONS: Record<BottomStructureLabel, string> = {
+  hard_no: 'One or more values strongly rejected (score < −1.0)',
+  mild_avoidance: 'Some values are moderately disfavored but nothing extreme',
+  no_hard_no: 'All values score above −0.5 — nothing is strongly rejected',
+};
+
 function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
   const sorted = [...VALUES].sort((a, b) => model.values[b] - model.values[a]);
   return {
@@ -63,12 +109,14 @@ type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
   selectedSignature: string | null;
+  rankingShapes: Map<string, RankingShape>;
 };
 
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
   selectedSignature,
+  rankingShapes,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
@@ -197,6 +245,7 @@ export function ValuePrioritiesSection({
               {COLUMN_VALUES.map((value) => (
                 <th
                   key={value}
+                  title={VALUE_DESCRIPTIONS[value]}
                   className={`relative px-2 py-2 text-right font-medium ${
                     hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
                   } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
@@ -218,6 +267,7 @@ export function ValuePrioritiesSection({
                       value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
                     }`}
                     onClick={() => updateSort(value)}
+                    title={VALUE_DESCRIPTIONS[value]}
                   >
                     {value === HEDONISM_SPLIT_VALUE ? (
                       <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
@@ -247,9 +297,28 @@ export function ValuePrioritiesSection({
           </thead>
           <tbody>
             {ordered.map((model) => {
+              const shape = rankingShapes.get(model.model);
               return (
                 <tr key={model.model} className="border-b border-gray-100">
-                  <td className="border-r-2 border-gray-300 px-2 py-2 font-medium text-gray-900">{model.label}</td>
+                  <td className="border-r-2 border-gray-300 px-2 py-2">
+                    <div className="font-medium text-gray-900">{model.label}</div>
+                    {shape != null && (
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getTopStructureChipStyle(shape.topStructure)}`}
+                          title={TOP_STRUCTURE_DESCRIPTIONS[shape.topStructure]}
+                        >
+                          {getTopStructureLabel(shape.topStructure)}
+                        </span>
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getBottomStructureChipStyle(shape.bottomStructure)}`}
+                          title={BOTTOM_STRUCTURE_DESCRIPTIONS[shape.bottomStructure]}
+                        >
+                          {getBottomStructureLabel(shape.bottomStructure)}
+                        </span>
+                      </div>
+                    )}
+                  </td>
                   {COLUMN_VALUES.map((value) => (
                     <td
                       key={value}
@@ -279,6 +348,26 @@ export function ValuePrioritiesSection({
             })}
           </tbody>
           </table>
+        </div>
+        <div className="mt-2 space-y-1.5 border-t border-gray-100 pt-2">
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            <span className="w-full text-[10px] font-semibold uppercase tracking-wide text-gray-400">Top structure</span>
+            {(['strong_leader', 'tied_leaders', 'even_spread'] as const).map((label) => (
+              <span key={label} className="flex items-center gap-1.5 text-xs">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${getTopStructureChipStyle(label)}`}>{getTopStructureLabel(label)}</span>
+                <span className="text-gray-500">{TOP_STRUCTURE_DESCRIPTIONS[label]}</span>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            <span className="w-full text-[10px] font-semibold uppercase tracking-wide text-gray-400">Bottom structure</span>
+            {(['hard_no', 'mild_avoidance', 'no_hard_no'] as const).map((label) => (
+              <span key={label} className="flex items-center gap-1.5 text-xs">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${getBottomStructureChipStyle(label)}`}>{getBottomStructureLabel(label)}</span>
+                <span className="text-gray-500">{BOTTOM_STRUCTURE_DESCRIPTIONS[label]}</span>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
