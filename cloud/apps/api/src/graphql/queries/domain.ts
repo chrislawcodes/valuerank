@@ -21,6 +21,14 @@ import {
   type ValueFaultLine,
   type ClusterPairFaultLines,
 } from './domain-clustering.js';
+import {
+  computeIntensityStability,
+  extractDimensions,
+  type IntensityStabilityAnalysis,
+  type ModelIntensityStability,
+  type StratumBTResult,
+  type ValueStabilityResult,
+} from './domain-intensity.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -111,6 +119,7 @@ type DomainAnalysisResult = {
   generatedAt: Date;
   rankingShapeBenchmarks: RankingShapeBenchmarks;
   clusterAnalysis: ClusterAnalysis;
+  intensityStability: IntensityStabilityAnalysis;
 };
 
 type DomainAnalysisConditionDetail = {
@@ -246,6 +255,10 @@ const DomainClusterRef = builder.objectRef<DomainCluster>('DomainCluster');
 const ValueFaultLineRef = builder.objectRef<ValueFaultLine>('ValueFaultLine');
 const ClusterPairFaultLinesRef = builder.objectRef<ClusterPairFaultLines>('ClusterPairFaultLines');
 const ClusterAnalysisRef = builder.objectRef<ClusterAnalysis>('ClusterAnalysis');
+const StratumBTResultRef = builder.objectRef<StratumBTResult>('StratumBTResult');
+const ValueStabilityResultRef = builder.objectRef<ValueStabilityResult>('ValueStabilityResult');
+const ModelIntensityStabilityRef = builder.objectRef<ModelIntensityStability>('ModelIntensityStability');
+const IntensityStabilityAnalysisRef = builder.objectRef<IntensityStabilityAnalysis>('IntensityStabilityAnalysis');
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
@@ -344,6 +357,61 @@ builder.objectType(ClusterAnalysisRef, {
   }),
 });
 
+builder.objectType(StratumBTResultRef, {
+  fields: (t) => ({
+    stratum: t.exposeString('stratum'),
+    scores: t.expose('scores', { type: 'JSON' }),
+    comparisonCount: t.exposeInt('comparisonCount'),
+    sufficient: t.exposeBoolean('sufficient'),
+    insufficientReason: t.exposeString('insufficientReason', { nullable: true }),
+  }),
+});
+
+builder.objectType(ValueStabilityResultRef, {
+  fields: (t) => ({
+    valueKey: t.exposeString('valueKey'),
+    lowRank: t.exposeInt('lowRank', { nullable: true }),
+    highRank: t.exposeInt('highRank', { nullable: true }),
+    lowScore: t.exposeFloat('lowScore', { nullable: true }),
+    highScore: t.exposeFloat('highScore', { nullable: true }),
+    rankDelta: t.exposeInt('rankDelta', { nullable: true }),
+    scoreDelta: t.exposeFloat('scoreDelta', { nullable: true }),
+    isUnstable: t.exposeBoolean('isUnstable'),
+    direction: t.exposeString('direction'),
+  }),
+});
+
+builder.objectType(ModelIntensityStabilityRef, {
+  fields: (t) => ({
+    model: t.exposeString('model'),
+    label: t.exposeString('label'),
+    strata: t.field({
+      type: [StratumBTResultRef],
+      resolve: (parent) => parent.strata,
+    }),
+    valueStability: t.field({
+      type: [ValueStabilityResultRef],
+      resolve: (parent) => parent.valueStability,
+    }),
+    valuesWithSufficientData: t.exposeInt('valuesWithSufficientData'),
+    sensitivityScore: t.exposeFloat('sensitivityScore', { nullable: true }),
+    sensitivityLabel: t.exposeString('sensitivityLabel'),
+    dataWarning: t.exposeString('dataWarning', { nullable: true }),
+  }),
+});
+
+builder.objectType(IntensityStabilityAnalysisRef, {
+  fields: (t) => ({
+    models: t.field({
+      type: [ModelIntensityStabilityRef],
+      resolve: (parent) => parent.models,
+    }),
+    mostUnstableValues: t.exposeStringList('mostUnstableValues'),
+    skipped: t.exposeBoolean('skipped'),
+    skipReason: t.exposeString('skipReason', { nullable: true }),
+  }),
+});
+
 builder.objectType(DomainAnalysisValueScoreRef, {
   fields: (t) => ({
     valueKey: t.exposeString('valueKey'),
@@ -422,6 +490,10 @@ builder.objectType(DomainAnalysisResultRef, {
     clusterAnalysis: t.field({
       type: ClusterAnalysisRef,
       resolve: (parent) => parent.clusterAnalysis,
+    }),
+    intensityStability: t.field({
+      type: IntensityStabilityAnalysisRef,
+      resolve: (parent) => parent.intensityStability,
     }),
   }),
 });
@@ -1518,6 +1590,7 @@ builder.queryField('domainAnalysis', (t) =>
           generatedAt: new Date(),
           rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
           clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this domain.' },
+          intensityStability: { models: [], mostUnstableValues: [], skipped: true, skipReason: 'insufficient_dimension_coverage' as const },
         };
       }
 
@@ -1539,6 +1612,12 @@ builder.queryField('domainAnalysis', (t) =>
       let aggregatedByModel = new Map<string, Map<DomainAnalysisValueKey, DomainAnalysisValueCounts>>();
       let pairwiseWinsByModel = new Map<string, Map<DomainAnalysisValueKey, Map<DomainAnalysisValueKey, number>>>();
       let analyzedDefinitionIds = new Set<string>();
+      let rawTranscripts: Array<{
+        runId: string;
+        modelId: string;
+        decisionCode: string | null;
+        scenario: { content: unknown } | null;
+      }> = [];
       if (filteredSourceRunIds.length > 0) {
         const transcripts = await db.transcript.findMany({
           where: {
@@ -1550,8 +1629,12 @@ builder.queryField('domainAnalysis', (t) =>
             runId: true,
             modelId: true,
             decisionCode: true,
+            scenario: {
+              select: { content: true },
+            },
           },
         });
+        rawTranscripts = transcripts;
         const aggregated = aggregateValueCountsFromTranscripts(
           transcripts,
           filteredSourceRunDefinitionById,
@@ -1637,6 +1720,28 @@ builder.queryField('domainAnalysis', (t) =>
       }));
       const clusterAnalysis = computeClusterAnalysis(clusterModels);
 
+      // Pass 4: compute intensity stability
+      // Build pre-processed inputs: resolve valueA/valueB and extract scenario dimensions
+      const intensityInputs = rawTranscripts.map((t) => {
+        const definitionId = filteredSourceRunDefinitionById.get(t.runId);
+        const pair = definitionId != null ? valuePairByDefinition.get(definitionId) : null;
+        const dimensions = t.scenario != null ? extractDimensions(t.scenario.content) : null;
+        return {
+          modelId: t.modelId,
+          valueA: pair?.valueA ?? '',
+          valueB: pair?.valueB ?? '',
+          decisionCode: t.decisionCode,
+          dimensions,
+        };
+      }).filter((input) => input.valueA !== '' && input.valueB !== '');
+
+      const intensityModelInputs = modelsBase.map((m) => ({ modelId: m.model, label: m.label }));
+      const intensityStability = computeIntensityStability(
+        intensityModelInputs,
+        intensityInputs,
+        [...DOMAIN_ANALYSIS_VALUE_KEYS],
+      );
+
       const unavailableModels = activeModels
         .filter((model) => !aggregatedByModel.has(model.modelId))
         .map((model) => ({
@@ -1675,6 +1780,7 @@ builder.queryField('domainAnalysis', (t) =>
         generatedAt: new Date(),
         rankingShapeBenchmarks,
         clusterAnalysis,
+        intensityStability,
       };
     },
   }),

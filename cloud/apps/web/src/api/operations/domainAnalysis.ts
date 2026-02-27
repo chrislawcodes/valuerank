@@ -71,6 +71,36 @@ export const DOMAIN_ANALYSIS_QUERY = gql`
         }
         faultLinesByPair
       }
+      intensityStability {
+        skipped
+        skipReason
+        mostUnstableValues
+        models {
+          model
+          label
+          sensitivityLabel
+          sensitivityScore
+          valuesWithSufficientData
+          dataWarning
+          valueStability {
+            valueKey
+            lowRank
+            highRank
+            lowScore
+            highScore
+            rankDelta
+            scoreDelta
+            isUnstable
+            direction
+          }
+          strata {
+            stratum
+            comparisonCount
+            sufficient
+            insufficientReason
+          }
+        }
+      }
     }
   }
 `;
@@ -318,6 +348,43 @@ export type ClusterAnalysis = {
   faultLinesByPair: Record<string, ClusterPairFaultLines>;
 };
 
+export type ValueStabilityResult = {
+  valueKey: string;
+  lowRank: number | null;
+  highRank: number | null;
+  lowScore: number | null;
+  highScore: number | null;
+  rankDelta: number | null;
+  scoreDelta: number | null;
+  isUnstable: boolean;
+  direction: 'strengthens' | 'weakens' | 'stable' | 'insufficient_data';
+};
+
+export type StratumResult = {
+  stratum: 'low' | 'medium' | 'high';
+  comparisonCount: number;
+  sufficient: boolean;
+  insufficientReason: 'low_count' | 'disconnected_graph' | null;
+};
+
+export type ModelIntensityStability = {
+  model: string;
+  label: string;
+  sensitivityLabel: 'highly_stable' | 'moderately_sensitive' | 'highly_sensitive' | 'insufficient_data';
+  sensitivityScore: number | null;
+  valuesWithSufficientData: number;
+  dataWarning: string | null;
+  valueStability: ValueStabilityResult[];
+  strata: StratumResult[];
+};
+
+export type IntensityStabilityAnalysis = {
+  skipped: boolean;
+  skipReason: 'insufficient_dimension_coverage' | 'no_intensity_variation' | 'all_models_insufficient' | null;
+  mostUnstableValues: string[];
+  models: ModelIntensityStability[];
+};
+
 export type DomainAnalysisResult = {
   domainId: string;
   domainName: string;
@@ -340,6 +407,7 @@ export type DomainAnalysisResult = {
   unavailableModels: DomainAnalysisUnavailableModel[];
   rankingShapeBenchmarks?: RankingShapeBenchmarks;
   clusterAnalysis?: ClusterAnalysis;
+  intensityStability?: IntensityStabilityAnalysis;
 };
 
 export type DomainAnalysisQueryResult = {

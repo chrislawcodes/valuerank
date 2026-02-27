@@ -17,6 +17,7 @@ import {
 import { DominanceSection } from '../components/domains/DominanceSection';
 import { SimilaritySection } from '../components/domains/SimilaritySection';
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
+import { IntensityStabilitySection } from '../components/domains/IntensityStabilitySection';
 import {
   VALUES,
   type DomainAnalysisModelAvailability,
@@ -331,6 +332,7 @@ export function DomainAnalysis() {
           />
           <DominanceSection models={models} unavailableModels={unavailableModels} />
           <SimilaritySection models={models} clusterAnalysis={data?.domainAnalysis.clusterAnalysis} />
+          <IntensityStabilitySection intensityStability={data?.domainAnalysis.intensityStability} />
         </>
       )}
 
