@@ -160,30 +160,30 @@ describe('cutAtLargestGap', () => {
     expect(result).toHaveLength(1);
   });
 
-  it('returns single cluster when max gap <= 0.05', () => {
-    // All gaps small
+  it('returns single cluster when all gaps are below MIN_CLUSTER_GAP', () => {
+    // All gaps ~0.009, below the 0.015 threshold → no meaningful structure
     const snapshots = [
       [[0], [1], [2], [3]],
       [[0, 1], [2], [3]],
       [[0, 1], [2, 3]],
       [[0, 1, 2, 3]],
     ];
-    const result = cutAtLargestGap([0.1, 0.12, 0.14], snapshots, 4);
+    const result = cutAtLargestGap([0.1, 0.109, 0.118], snapshots, 4);
     expect(result).toHaveLength(1);
   });
 
-  it('cuts at largest gap', () => {
+  it('takes earliest valid cut to maximise clusters within cap', () => {
     // N=4: mergeHeights = [0.1, 0.2, 0.8]
-    // gaps = [0.1, 0.6] → max gap at index 1 (between step 1 and step 2)
-    // cut after step 1 → snapshots[2] has 2 clusters
+    // gaps = [0.1, 0.6] → both > 0.015, valid cuts = [1, 2]
+    // earliest valid cut = 1 → snapshots[1] has 3 clusters
     const snapshots = [
       [[0], [1], [2], [3]],
-      [[0, 1], [2], [3]],
-      [[0, 1], [2, 3]],    // 2 clusters
+      [[0, 1], [2], [3]],   // 3 clusters — earliest valid cut
+      [[0, 1], [2, 3]],
       [[0, 1, 2, 3]],
     ];
     const result = cutAtLargestGap([0.1, 0.2, 0.8], snapshots, 4);
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
   });
 
   it('caps at 4 clusters when natural cut produces more', () => {
@@ -311,49 +311,26 @@ describe('computeSilhouettes', () => {
 describe('nameCluster', () => {
   const valueKeys = ['Benevolence', 'Achievement', 'Hedonism', 'Security'];
 
-  it('names cluster with 2+ qualifying values as "V1/V2"', () => {
-    const domainMean = { Benevolence: 0.0, Achievement: 0.0, Hedonism: 0.0, Security: 0.0 };
+  it('uses top 3 centroid values for cluster name and definingValues', () => {
     const centroid = { Benevolence: 0.5, Achievement: 0.4, Hedonism: 0.1, Security: 0.0 };
-    // Benevolence: 0.5 > 0.3, Achievement: 0.4 > 0.3 → qualify
-    const { name, definingValues } = nameCluster(centroid, domainMean, valueKeys);
-    expect(name).toBe('Benevolence/Achievement');
-    expect(definingValues).toContain('Benevolence');
-    expect(definingValues).toContain('Achievement');
+    const { name, definingValues } = nameCluster(centroid, valueKeys);
+    expect(name).toBe('Benevolence / Achievement / Hedonism');
+    expect(definingValues).toEqual(['Benevolence', 'Achievement', 'Hedonism']);
   });
 
-  it('names cluster with 1 qualifying value as "V1-first"', () => {
-    const domainMean = { Benevolence: 0.0, Achievement: 0.0, Hedonism: 0.0, Security: 0.0 };
-    const centroid = { Benevolence: 0.5, Achievement: 0.1, Hedonism: 0.0, Security: 0.0 };
-    const { name, definingValues } = nameCluster(centroid, domainMean, valueKeys);
-    expect(name).toBe('Benevolence-first');
-    expect(definingValues).toEqual(['Benevolence']);
-  });
-
-  it('uses fallback "(mixed)" label when no value exceeds threshold', () => {
-    const domainMean = { Benevolence: 0.1, Achievement: 0.1, Hedonism: 0.1, Security: 0.1 };
-    const centroid = { Benevolence: 0.2, Achievement: 0.15, Hedonism: 0.1, Security: 0.05 };
-    // None exceed domainMean + 0.3
-    const { name } = nameCluster(centroid, domainMean, valueKeys);
-    expect(name).toContain('(mixed)');
-  });
-
-  it('sorts qualifying values by centroid score descending', () => {
-    const domainMean = { Benevolence: 0.0, Achievement: 0.0, Hedonism: 0.0, Security: 0.0 };
+  it('sorts values by centroid score descending before taking top 3', () => {
     const centroid = { Benevolence: 0.4, Achievement: 0.6, Hedonism: 0.35, Security: 0.0 };
-    const { name } = nameCluster(centroid, domainMean, valueKeys);
-    // Achievement > Benevolence > Hedonism
-    expect(name).toBe('Achievement/Benevolence');
+    const { name, definingValues } = nameCluster(centroid, valueKeys);
+    expect(name).toBe('Achievement / Benevolence / Hedonism');
+    expect(definingValues).toEqual(['Achievement', 'Benevolence', 'Hedonism']);
   });
 
-  it('uses top 2 by centroid for fallback label', () => {
-    const domainMean = { Benevolence: 0.4, Achievement: 0.5, Hedonism: 0.6, Security: 0.3 };
-    const centroid = { Benevolence: 0.5, Achievement: 0.6, Hedonism: 0.65, Security: 0.3 };
-    // centroid - domainMean: all below 0.3
-    const { name, definingValues } = nameCluster(centroid, domainMean, valueKeys);
-    // Top 2 by centroid: Hedonism (0.65) then Achievement (0.6)
-    expect(name).toBe('Hedonism/Achievement (mixed)');
-    expect(definingValues).toContain('Hedonism');
-    expect(definingValues).toContain('Achievement');
+  it('uses all available values when fewer than 3 are provided', () => {
+    const smallValueKeys = ['A', 'B'];
+    const centroid = { A: 1.0, B: 0.5 };
+    const { name, definingValues } = nameCluster(centroid, smallValueKeys);
+    expect(name).toBe('A / B');
+    expect(definingValues).toEqual(['A', 'B']);
   });
 });
 

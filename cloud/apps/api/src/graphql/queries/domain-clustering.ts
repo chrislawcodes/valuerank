@@ -40,10 +40,10 @@ export type ClusterPairFaultLines = {
 
 export type DomainCluster = {
   id: string;                      // e.g., "cluster-1"
-  name: string;                    // e.g., "Benevolence_Dependability-first"
+  name: string;                    // e.g., "Universalism_Nature / Benevolence_Dependability / Tradition"
   members: ClusterMember[];
   centroid: Record<string, number>;
-  definingValues: string[];        // valueKeys that drove naming
+  definingValues: string[];        // top 3 centroid valueKeys
 };
 
 export type ClusterAnalysis = {
@@ -65,33 +65,6 @@ const OUTLIER_SILHOUETTE_THRESHOLD = 0.2;
 const MIN_CLUSTER_GAP = 0.015;
 const MAX_CLUSTERS = 4;
 const MIN_MODELS_FOR_CLUSTERING = 3;
-const CLUSTER_NAMING_THRESHOLD = 0.3;
-
-// Human-readable short labels for cluster names (all 19 Schwartz values).
-// These are intentionally different from VALUE_LABELS on the web side so that
-// cluster names ("Caring/Personal Safety-first") are visually distinct from
-// fault-line value labels ("Benevolence", "Security").
-const CLUSTER_VALUE_LABELS: Record<string, string> = {
-  Self_Direction_Thought: 'Open Thinking',
-  Self_Direction_Action: 'Independence',
-  Stimulation: 'Novelty',
-  Hedonism: 'Pleasure',
-  Achievement: 'Achievement',
-  Power_Dominance: 'Control',
-  Power_Resources: 'Resources',
-  Face: 'Status',
-  Security_Personal: 'Personal Safety',
-  Security_Societal: 'Social Order',
-  Tradition: 'Tradition',
-  Conformity_Rules: 'Rule-following',
-  Conformity_Interpersonal: 'Harmony',
-  Humility: 'Humility',
-  Benevolence_Dependability: 'Reliability',
-  Benevolence_Caring: 'Caring',
-  Universalism_Concern: 'Global Concern',
-  Universalism_Nature: 'Nature',
-  Universalism_Tolerance: 'Tolerance',
-};
 
 /**
  * Compute cosine similarity between two numeric vectors.
@@ -107,6 +80,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
     aNorm += av * av;
     bNorm += bv * bv;
   }
+  if (aNorm === 0 && bNorm === 0) return 1; // two zero vectors are identical
   if (aNorm === 0 || bNorm === 0) return 0;
   return dot / (Math.sqrt(aNorm) * Math.sqrt(bNorm));
 }
@@ -249,7 +223,7 @@ export function cutAtLargestGap(
     return snapshots[minCutIdx] ?? fallback;
   }
 
-  // Earliest valid cut = most clusters within the limit
+  // Earliest valid cut = most clusters within the cap
   validCuts.sort((a, b) => a - b);
   return snapshots[validCuts[0]!] ?? fallback;
 }
@@ -315,31 +289,18 @@ export function computeSilhouettes(
 }
 
 /**
- * Derive a human-readable cluster name from its centroid vs domain mean.
+ * Name cluster from the top 3 centroid values.
  */
 export function nameCluster(
   centroid: Record<string, number>,
-  domainMean: Record<string, number>,
   valueKeys: string[],
 ): { name: string; definingValues: string[] } {
-  const qualifying = valueKeys.filter(
-    (v) => (centroid[v] ?? 0) > (domainMean[v] ?? 0) + CLUSTER_NAMING_THRESHOLD,
-  );
-  qualifying.sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0));
+  const top3 = [...valueKeys]
+    .sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0))
+    .slice(0, 3)
+    .filter((v): v is string => v != null);
 
-  const label = (vk: string) => CLUSTER_VALUE_LABELS[vk] ?? vk.replace(/_/g, ' ');
-
-  if (qualifying.length >= 2) {
-    return { name: `${label(qualifying[0]!)}/${label(qualifying[1]!)}-first`, definingValues: [qualifying[0]!, qualifying[1]!] };
-  }
-  if (qualifying.length === 1) {
-    return { name: `${label(qualifying[0]!)}-first`, definingValues: [qualifying[0]!] };
-  }
-
-  // Fallback: top 2 by centroid score
-  const sorted = [...valueKeys].sort((a, b) => (centroid[b] ?? 0) - (centroid[a] ?? 0));
-  const top2 = sorted.slice(0, 2).filter((v): v is string => v != null);
-  return { name: `${label(top2[0] ?? '')}/${label(top2[1] ?? '')} (mixed)`, definingValues: top2 };
+  return { name: top3.join(' / '), definingValues: top3 };
 }
 
 /**
@@ -376,12 +337,6 @@ export function computeClusterAnalysis(models: ClusterModelInput[]): ClusterAnal
     };
   }
 
-  // Domain mean per value across all models
-  const domainMean: Record<string, number> = {};
-  for (const vk of valueKeys) {
-    domainMean[vk] = models.reduce((acc, m) => acc + (m.scores[vk] ?? 0), 0) / n;
-  }
-
   const silhouettes = computeSilhouettes(rawClusters, distMatrix);
 
   // Build DomainCluster objects
@@ -393,7 +348,7 @@ export function computeClusterAnalysis(models: ClusterModelInput[]): ClusterAnal
       centroid[vk] = memberIndices.reduce((acc, mi) => acc + (models[mi]!.scores[vk] ?? 0), 0) / memberIndices.length;
     }
 
-    const { name, definingValues } = nameCluster(centroid, domainMean, valueKeys);
+    const { name, definingValues } = nameCluster(centroid, valueKeys);
 
     const members: ClusterMember[] = memberIndices.map((mi) => {
       const entry = silhouettes.get(mi);
