@@ -1,16 +1,20 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { HelpCircle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { Tooltip } from '../ui/Tooltip';
 import {
-  VALUES,
   VALUE_LABELS,
   VALUE_DESCRIPTIONS,
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
 import { getPriorityColor } from './domainAnalysisColors';
-import { type RankingShape, type TopStructureLabel, type BottomStructureLabel } from '../../api/operations/domainAnalysis';
+import {
+  type ClusterAnalysis,
+  type DomainCluster,
+} from '../../api/operations/domainAnalysis';
 
 type SortState = {
   key: 'model' | ValueKey;
@@ -53,55 +57,61 @@ function hasGroupEndBorder(value: ValueKey): boolean {
   return value === 'Benevolence_Dependability' || value === 'Security_Personal' || value === 'Self_Direction_Action';
 }
 
-function getTopStructureChipStyle(label: TopStructureLabel): string {
-  switch (label) {
-    case 'strong_leader': return 'bg-teal-100 text-teal-800';
-    case 'tied_leaders': return 'bg-sky-100 text-sky-800';
-    case 'even_spread': return 'bg-gray-100 text-gray-600';
-  }
+const CLUSTER_COLORS = [
+  { border: 'border-blue-500', text: 'text-blue-700', light: 'bg-blue-50' },
+  { border: 'border-amber-500', text: 'text-amber-700', light: 'bg-amber-50' },
+  { border: 'border-emerald-500', text: 'text-emerald-700', light: 'bg-emerald-50' },
+  { border: 'border-rose-500', text: 'text-rose-700', light: 'bg-rose-50' },
+] as const;
+
+function getClusterColor(index: number) {
+  return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
 }
 
-function getTopStructureLabel(label: TopStructureLabel): string {
-  switch (label) {
-    case 'strong_leader': return 'Strong leader';
-    case 'tied_leaders': return 'Tied leaders';
-    case 'even_spread': return 'Even spread';
-  }
-}
-
-function getBottomStructureChipStyle(label: BottomStructureLabel): string {
-  switch (label) {
-    case 'hard_no': return 'bg-rose-100 text-rose-800';
-    case 'mild_avoidance': return 'bg-amber-100 text-amber-800';
-    case 'no_hard_no': return 'bg-green-100 text-green-700';
-  }
-}
-
-function getBottomStructureLabel(label: BottomStructureLabel): string {
-  switch (label) {
-    case 'hard_no': return 'Hard no';
-    case 'mild_avoidance': return 'Mild avoidance';
-    case 'no_hard_no': return 'No hard no';
-  }
-}
-
-const TOP_STRUCTURE_DESCRIPTIONS: Record<TopStructureLabel, string> = {
-  strong_leader: 'One value stands clearly apart from the rest',
-  tied_leaders: 'A small group of values leads together',
-  even_spread: 'No single value dominates — preferences are broadly distributed',
+type ClusterPersonality = {
+  title: string;
+  tendency: string;
+  topValues: string[];
+  bottomValues: string[];
 };
 
-const BOTTOM_STRUCTURE_DESCRIPTIONS: Record<BottomStructureLabel, string> = {
-  hard_no: 'One or more values strongly rejected (score < −1.0)',
-  mild_avoidance: 'Some values are moderately disfavored but nothing extreme',
-  no_hard_no: 'All values score above −0.5 — nothing is strongly rejected',
-};
+function getClusterPersonality(cluster: DomainCluster): ClusterPersonality {
+  const sortedKeys = Object.entries(cluster.centroid)
+    .sort((a, b) => b[1] - a[1])
+    .map(([valueKey]) => valueKey);
+  const topKeys = sortedKeys.slice(0, 3);
+  const bottomKeys = sortedKeys.slice(-3);
 
-function getTopBottomValues(model: ModelEntry): { top: ValueKey[]; bottom: ValueKey[] } {
-  const sorted = [...VALUES].sort((a, b) => model.values[b] - model.values[a]);
+  const hasTop = (valueKey: string) => topKeys.includes(valueKey);
+  const hasBottom = (valueKey: string) => bottomKeys.includes(valueKey);
+
+  let title = 'Values-Driven Advisors';
+  let tendency = 'Recommend paths that align with core priorities over generic prestige paths.';
+
+  if (hasTop('Universalism_Nature') && hasTop('Achievement')) {
+    title = 'Ambition-and-Impact';
+    tendency = 'Recommend high-upside roles where visible outcomes and momentum matter more than comfort.';
+  } else if (hasTop('Self_Direction_Action') && hasTop('Power_Dominance')) {
+    title = 'Practical Independence';
+    tendency = 'Recommend autonomous roles with decision latitude and execution authority over comfort or conformity.';
+  } else if (hasTop('Self_Direction_Action') && hasTop('Tradition') && hasTop('Universalism_Nature')) {
+    if (hasBottom('Conformity_Interpersonal') && hasBottom('Power_Dominance')) {
+      title = 'Purpose-and-Values';
+      tendency = 'Recommend principled work that feels meaningful and socially positive, not status-first ladder climbing.';
+    } else if (hasBottom('Achievement') || hasBottom('Hedonism') || hasBottom('Security_Personal')) {
+      title = 'Stability-with-Principles';
+      tendency = 'Recommend steady, values-aligned paths that preserve long-term fit over short-term rewards.';
+    }
+  } else if (hasTop('Universalism_Nature') && hasTop('Self_Direction_Action')) {
+    title = 'Purpose-and-Values';
+    tendency = 'Recommend values-aligned, self-directed paths with strong emphasis on meaning and contribution.';
+  }
+
   return {
-    top: sorted.slice(0, 3),
-    bottom: sorted.slice(-3),
+    title,
+    tendency,
+    topValues: topKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? key.replace(/_/g, ' ')),
+    bottomValues: bottomKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? key.replace(/_/g, ' ')),
   };
 }
 
@@ -109,19 +119,21 @@ type ValuePrioritiesSectionProps = {
   models: ModelEntry[];
   selectedDomainId: string;
   selectedSignature: string | null;
-  rankingShapes: Map<string, RankingShape>;
+  clusterAnalysis?: ClusterAnalysis;
 };
 
 export function ValuePrioritiesSection({
   models,
   selectedDomainId,
   selectedSignature,
-  rankingShapes,
+  clusterAnalysis,
 }: ValuePrioritiesSectionProps) {
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const summaryTableRef = useRef<HTMLDivElement>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
+  const [showSectionHelp, setShowSectionHelp] = useState(false);
+  const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
 
   const updateSort = (key: 'model' | ValueKey) => {
     setSortState((prev) => {
@@ -153,6 +165,18 @@ export function ValuePrioritiesSection({
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [models]);
 
+  const modelGroupByModel = useMemo(() => {
+    const map = new Map<string, string>();
+    if (clusterAnalysis == null || clusterAnalysis.skipped) return map;
+    for (const cluster of clusterAnalysis.clusters) {
+      const personality = getClusterPersonality(cluster);
+      for (const member of cluster.members) {
+        map.set(member.model, personality.title);
+      }
+    }
+    return map;
+  }, [clusterAnalysis]);
+
   const handleValueCellClick = (modelId: string, valueKey: ValueKey) => {
     if (selectedDomainId === '') return;
     const params = new URLSearchParams({
@@ -171,8 +195,38 @@ export function ValuePrioritiesSection({
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-base font-medium text-gray-900">1. Value Priorities by AI</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-base font-medium text-gray-900">1. Value Priorities by AI</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSectionHelp((v) => !v)}
+              className="h-8 w-8 text-gray-500 hover:text-gray-700"
+              aria-label={showSectionHelp ? 'Hide explanation' : 'Show explanation'}
+            >
+              {showSectionHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
+            </Button>
+          </div>
           <p className="text-sm text-gray-600">Which values each model favors most and least.</p>
+          {showSectionHelp && (
+            <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
+              <p className="font-medium text-gray-800">Score Method (Full Bradley-Terry)</p>
+              <p className="mt-1">
+                We fit a full Bradley-Terry model over pairwise value matchups for this AI. The model estimates
+                a latent strength for each value that best explains observed wins and losses.
+              </p>
+              <p className="mt-2 font-medium text-gray-800">Formula</p>
+              <p className="mt-0.5 font-mono text-[11px] text-sky-900">
+                Score = logarithm(estimated BT strength for this value)
+              </p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-4">
+                <li>Bradley-Terry score is used for pairwise ranking problems where many items compete head-to-head.</li>
+                <li>Better than simple ratios when comparisons form a connected network across values.</li>
+                <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
+                <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
+              </ul>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">Click a column heading to sort.</p>
@@ -181,8 +235,7 @@ export function ValuePrioritiesSection({
       </div>
 
       <div ref={detailedTableRef} className="rounded border border-gray-100 bg-white p-2">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs text-gray-600">Detailed BT scores by value.</p>
+        <div className="mb-2 flex items-center justify-end">
           <CopyVisualButton targetRef={detailedTableRef} label="value priorities table" />
         </div>
         <div className="overflow-x-auto">
@@ -245,7 +298,6 @@ export function ValuePrioritiesSection({
               {COLUMN_VALUES.map((value) => (
                 <th
                   key={value}
-                  title={VALUE_DESCRIPTIONS[value]}
                   className={`relative px-2 py-2 text-right font-medium ${
                     hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
                   } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
@@ -259,26 +311,27 @@ export function ValuePrioritiesSection({
                       : 'none'
                   }
                 >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900 ${
-                      value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
-                    }`}
-                    onClick={() => updateSort(value)}
-                    title={VALUE_DESCRIPTIONS[value]}
-                  >
-                    {value === HEDONISM_SPLIT_VALUE ? (
-                      <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
-                        <span className="px-1 text-center">Hedonism</span>
-                        <span className="whitespace-nowrap px-1 text-center">(50/50 split)</span>
-                      </span>
-                    ) : (
-                      <>{VALUE_LABELS[value]}</>
-                    )}{' '}
-                    {sortState.key === value ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                  </Button>
+                  <Tooltip content={VALUE_DESCRIPTIONS[value]} delay={25}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={`h-auto min-h-0 !p-0 text-xs font-medium text-gray-600 hover:text-gray-900 ${
+                        value === HEDONISM_SPLIT_VALUE ? 'block w-full' : ''
+                      }`}
+                      onClick={() => updateSort(value)}
+                    >
+                      {value === HEDONISM_SPLIT_VALUE ? (
+                        <span className="grid min-h-[32px] w-full grid-cols-2 items-center text-xs">
+                          <span className="px-1 text-center">Hedonism</span>
+                          <span className="whitespace-nowrap px-1 text-center">(50/50 split)</span>
+                        </span>
+                      ) : (
+                        <>{VALUE_LABELS[value]}</>
+                      )}{' '}
+                      {sortState.key === value ? (sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                    </Button>
+                  </Tooltip>
                   {value === HEDONISM_SPLIT_VALUE && (
                     <>
                       <span
@@ -297,27 +350,14 @@ export function ValuePrioritiesSection({
           </thead>
           <tbody>
             {ordered.map((model) => {
-              const shape = rankingShapes.get(model.model);
+              const modelGroupName = modelGroupByModel.get(model.model);
               return (
                 <tr key={model.model} className="border-b border-gray-100">
                   <td className="border-r-2 border-gray-300 px-2 py-2">
                     <div className="font-medium text-gray-900">{model.label}</div>
-                    {shape != null && (
-                      <div className="mt-0.5 flex flex-wrap gap-1">
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getTopStructureChipStyle(shape.topStructure)}`}
-                          title={TOP_STRUCTURE_DESCRIPTIONS[shape.topStructure]}
-                        >
-                          {getTopStructureLabel(shape.topStructure)}
-                        </span>
-                        <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${getBottomStructureChipStyle(shape.bottomStructure)}`}
-                          title={BOTTOM_STRUCTURE_DESCRIPTIONS[shape.bottomStructure]}
-                        >
-                          {getBottomStructureLabel(shape.bottomStructure)}
-                        </span>
-                      </div>
-                    )}
+                    <div className="mt-0.5 text-[11px] text-gray-600">
+                      Model Group: {modelGroupName ?? 'Unassigned'}
+                    </div>
                   </td>
                   {COLUMN_VALUES.map((value) => (
                     <td
@@ -336,7 +376,6 @@ export function ValuePrioritiesSection({
                         className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
                         onClick={() => handleValueCellClick(model.model, value)}
                         disabled={selectedDomainId === ''}
-                        title={`View score calculation and vignette condition details for ${model.label} · ${VALUE_LABELS[value]}`}
                       >
                         {model.values[value] > 0 ? '+' : ''}
                         {model.values[value].toFixed(2)}
@@ -349,72 +388,59 @@ export function ValuePrioritiesSection({
           </tbody>
           </table>
         </div>
-        <div className="mt-2 space-y-1.5 border-t border-gray-100 pt-2">
-          <div className="flex flex-wrap gap-x-5 gap-y-1">
-            <span className="w-full text-[10px] font-semibold uppercase tracking-wide text-gray-400">Top structure</span>
-            {(['strong_leader', 'tied_leaders', 'even_spread'] as const).map((label) => (
-              <span key={label} className="flex items-center gap-1.5 text-xs">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] ${getTopStructureChipStyle(label)}`}>{getTopStructureLabel(label)}</span>
-                <span className="text-gray-500">{TOP_STRUCTURE_DESCRIPTIONS[label]}</span>
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1">
-            <span className="w-full text-[10px] font-semibold uppercase tracking-wide text-gray-400">Bottom structure</span>
-            {(['hard_no', 'mild_avoidance', 'no_hard_no'] as const).map((label) => (
-              <span key={label} className="flex items-center gap-1.5 text-xs">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] ${getBottomStructureChipStyle(label)}`}>{getBottomStructureLabel(label)}</span>
-                <span className="text-gray-500">{BOTTOM_STRUCTURE_DESCRIPTIONS[label]}</span>
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
 
       <div ref={summaryTableRef} className="mt-3 rounded border border-gray-100 bg-white p-2">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs text-gray-600">Top 3 and Bottom 3 values by model.</p>
-          <CopyVisualButton targetRef={summaryTableRef} label="top and bottom values table" />
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="text-sm font-medium text-gray-800">Model Groups</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowModelGroupsHelp((v) => !v)}
+              className="h-8 w-8 text-gray-500 hover:text-gray-700"
+              aria-label={showModelGroupsHelp ? 'Hide model groups explanation' : 'Show model groups explanation'}
+            >
+              {showModelGroupsHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
+            </Button>
+          </div>
+          <CopyVisualButton targetRef={summaryTableRef} label="model group personalities" />
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600">
-                <th className="px-2 py-2 text-left font-medium">Model</th>
-                <th className="px-2 py-2 text-left font-medium">Top 3</th>
-                <th className="px-2 py-2 text-left font-medium">Bottom 3</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((model) => {
-                const summary = getTopBottomValues(model);
-                return (
-                  <tr key={`${model.model}-summary`} className="border-b border-gray-100">
-                    <td className="px-2 py-2 font-medium text-gray-900">{model.label}</td>
-                    <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {summary.top.map((value) => (
-                          <span key={`${model.model}-${value}-top`} className="rounded bg-teal-100 px-1.5 py-0.5 text-[11px] text-teal-800">
-                            {VALUE_LABELS[value]}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {summary.bottom.map((value) => (
-                          <span key={`${model.model}-${value}-bottom`} className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] text-rose-800">
-                            {VALUE_LABELS[value]}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {showModelGroupsHelp && (
+          <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
+            Models are grouped by overall similarity in full value profiles. Each card name is a shorthand persona,
+            then the lines below show what that group prioritizes and de-prioritizes based on cluster centroid scores.
+          </div>
+        )}
+        {clusterAnalysis == null || clusterAnalysis.skipped ? (
+          <p className="text-xs text-gray-500 italic">{clusterAnalysis?.skipReason ?? 'Cluster analysis not available.'}</p>
+        ) : (
+          <div className="flex flex-wrap gap-4">
+            {clusterAnalysis.clusters.map((cluster, index) => {
+              const style = getClusterColor(index);
+              const personality = getClusterPersonality(cluster);
+              return (
+                <div key={cluster.id} className={`min-w-[280px] max-w-[520px] rounded-lg border ${style.border} ${style.light} p-3`}>
+                  <p className={`text-sm font-semibold ${style.text}`}>
+                    <span className="font-medium">Model Group:</span> {personality.title}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-700">
+                    <span className="font-medium">Members:</span> {cluster.members.map((member) => member.label).join(', ')}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-700">
+                    <span className="font-medium">Prioritizes:</span> {personality.topValues.join(', ')}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-700">
+                    <span className="font-medium">De-prioritizes:</span> {personality.bottomValues.join(', ')}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-700 italic">
+                    <span className="font-medium not-italic">Advising tendency:</span> &ldquo;{personality.tendency}&rdquo;
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );

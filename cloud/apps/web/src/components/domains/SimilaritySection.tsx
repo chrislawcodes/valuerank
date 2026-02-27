@@ -1,6 +1,9 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { HelpCircle, X } from 'lucide-react';
 import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
+import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
+import type { ClusterAnalysis } from '../../api/operations/domainAnalysis';
 
 type PairMetric = {
   a: string;
@@ -52,13 +55,22 @@ function getSimilarityColor(value: number): string {
   return `rgba(${r}, ${g}, ${b}, 0.35)`;
 }
 
+const CLUSTER_COLORS = [
+  { hex: '#3b82f6' },
+  { hex: '#f59e0b' },
+  { hex: '#10b981' },
+  { hex: '#f43f5e' },
+] as const;
+
 type SimilaritySectionProps = {
   models: ModelEntry[];
+  clusterAnalysis?: ClusterAnalysis;
 };
 
-export function SimilaritySection({ models }: SimilaritySectionProps) {
+export function SimilaritySection({ models, clusterAnalysis }: SimilaritySectionProps) {
   const matrixRef = useRef<HTMLDivElement>(null);
-  const summaryRef = useRef<HTMLDivElement>(null);
+  const [showMatrixHelp, setShowMatrixHelp] = useState(false);
+
   const matrix = useMemo(() => {
     const vectors = new Map<string, number[]>();
     for (const model of models) {
@@ -80,7 +92,6 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
             a: a.label,
             b: b.label,
             similarity,
-            // Normalize cosine-distance-like score into [0, 1].
             distance: (1 - similarity) / 2,
           });
         }
@@ -88,10 +99,19 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
       similarities.set(a.model, row);
     }
 
-    const mostSimilar = [...pairs].sort((left, right) => right.similarity - left.similarity).slice(0, 5);
-    const mostDifferent = [...pairs].sort((left, right) => right.distance - left.distance).slice(0, 5);
-    return { similarities, mostSimilar, mostDifferent };
+    return { similarities, pairs };
   }, [models]);
+
+  const modelClusterIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    if (clusterAnalysis == null || clusterAnalysis.skipped) return map;
+    clusterAnalysis.clusters.forEach((cluster, ci) => {
+      for (const member of cluster.members) {
+        map.set(member.model, ci);
+      }
+    });
+    return map;
+  }, [clusterAnalysis]);
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -100,89 +120,79 @@ export function SimilaritySection({ models }: SimilaritySectionProps) {
         <p className="text-sm text-gray-600">Pairwise similarity of model value profiles (cosine similarity).</p>
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
-        {[-1, -0.5, 0, 0.5, 1].map((tick) => (
-          <div
-            key={tick}
-            className="flex h-6 w-14 items-center justify-center rounded text-[10px] font-medium text-gray-900"
-            style={{ background: getSimilarityColor(tick) }}
-          >
-            {tick}
-          </div>
-        ))}
-        <span className="ml-1 text-xs text-gray-600">Red = less similar, Yellow = mid, Green = more similar</span>
-      </div>
-
       <div ref={matrixRef} className="rounded border border-gray-100 bg-white p-2">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs text-gray-600">Pairwise similarity matrix.</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="text-sm font-medium text-gray-800">Pairwise Similarity Matrix</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowMatrixHelp((v) => !v)}
+              className="h-8 w-8 text-gray-500 hover:text-gray-700"
+              aria-label={showMatrixHelp ? 'Hide explanation' : 'Show explanation'}
+            >
+              {showMatrixHelp ? <X className="h-8 w-8" /> : <HelpCircle className="h-8 w-8" />}
+            </Button>
+            {showMatrixHelp && (
+              <div className="mt-2 basis-full rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
+                Each cell shows how similar two models&apos; value profiles are — how much they agree on
+                which values matter most. 1.0 = identical priorities, 0 = unrelated.
+                Green = think alike, yellow = partial overlap, red = consistently prioritize different things.
+                The diagonal is always 1.0 (a model compared to itself).
+              </div>
+            )}
+          </div>
           <CopyVisualButton targetRef={matrixRef} label="similarity matrix table" />
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
-          <thead>
-            <tr className="border-b border-gray-200 text-gray-600">
-              <th scope="col" className="px-2 py-2 text-left font-medium">
-                Model
-              </th>
-              {models.map((model) => (
-                <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium">
-                  {model.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {models.map((row) => (
-              <tr key={row.model} className="border-b border-gray-100">
-                <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">
-                  {row.label}
-                </th>
-                {models.map((col) => {
-                  const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-600">
+                <th scope="col" className="px-2 py-2 text-left font-medium">Model</th>
+                {models.map((model) => {
+                  const ci = modelClusterIndex.get(model.model);
+                  const colStyle = ci != null ? { backgroundColor: `${CLUSTER_COLORS[ci % CLUSTER_COLORS.length]!.hex}22` } : undefined;
                   return (
-                    <td
-                      key={col.model}
-                      className="px-2 py-2 text-right text-gray-800"
-                      style={{ background: getSimilarityColor(similarity) }}
-                    >
-                      {similarity.toFixed(2)}
-                    </td>
+                    <th key={model.model} scope="col" className="px-2 py-2 text-right font-medium" style={colStyle}>
+                      {model.label}
+                    </th>
                   );
                 })}
               </tr>
-            ))}
-          </tbody>
+            </thead>
+            <tbody>
+              {models.map((row) => {
+                const rowCi = modelClusterIndex.get(row.model);
+                const rowStyle = rowCi != null ? { backgroundColor: `${CLUSTER_COLORS[rowCi % CLUSTER_COLORS.length]!.hex}11` } : undefined;
+                return (
+                  <tr key={row.model} className="border-b border-gray-100" style={rowStyle}>
+                    <th scope="row" className="px-2 py-2 text-left font-medium text-gray-900">{row.label}</th>
+                    {models.map((col) => {
+                      const similarity = row.model === col.model ? 1 : (matrix.similarities.get(row.model)?.get(col.model) ?? 0);
+                      return (
+                        <td key={col.model} className="px-2 py-2 text-right text-gray-800" style={{ background: getSimilarityColor(similarity) }}>
+                          {similarity.toFixed(2)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
         </div>
-      </div>
-
-      <div ref={summaryRef} className="rounded border border-gray-100 bg-white p-2">
-        <div className="mb-2 flex items-center justify-end">
-          <CopyVisualButton targetRef={summaryRef} label="similarity summary tables" />
+        <div className="mt-3 flex items-center gap-2">
+          {[-1, -0.5, 0, 0.5, 1].map((tick) => (
+            <div
+              key={tick}
+              className="flex h-6 w-14 items-center justify-center rounded text-[10px] font-medium text-gray-900"
+              style={{ background: getSimilarityColor(tick) }}
+            >
+              {tick}
+            </div>
+          ))}
+          <span className="ml-1 text-xs text-gray-600">Red = less similar, Yellow = mid, Green = more similar</span>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Most Similar Pairs</h3>
-          <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {matrix.mostSimilar.map((pair, index) => (
-              <li key={`${pair.a}-${pair.b}-sim`}>
-                {index + 1}. {pair.a} + {pair.b} ({pair.similarity.toFixed(2)})
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="rounded border border-gray-200 bg-gray-50 p-3">
-          <h3 className="text-sm font-medium text-gray-900">Most Different Pairs</h3>
-          <ol className="mt-2 space-y-1 text-sm text-gray-700">
-            {matrix.mostDifferent.map((pair, index) => (
-              <li key={`${pair.a}-${pair.b}-diff`}>
-                {index + 1}. {pair.a} + {pair.b} (distance {pair.distance.toFixed(2)})
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
       </div>
     </section>
   );

@@ -13,6 +13,14 @@ import {
   type RankingShape,
   type RankingShapeBenchmarks,
 } from './domain-shape.js';
+import {
+  computeClusterAnalysis,
+  type ClusterAnalysis,
+  type DomainCluster,
+  type ClusterMember,
+  type ValueFaultLine,
+  type ClusterPairFaultLines,
+} from './domain-clustering.js';
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
@@ -102,6 +110,7 @@ type DomainAnalysisResult = {
   unavailableModels: DomainAnalysisUnavailableModel[];
   generatedAt: Date;
   rankingShapeBenchmarks: RankingShapeBenchmarks;
+  clusterAnalysis: ClusterAnalysis;
 };
 
 type DomainAnalysisConditionDetail = {
@@ -232,6 +241,11 @@ type SignatureResolutionResult = {
 
 const RankingShapeRef = builder.objectRef<RankingShape>('RankingShape');
 const RankingShapeBenchmarksRef = builder.objectRef<RankingShapeBenchmarks>('RankingShapeBenchmarks');
+const ClusterMemberRef = builder.objectRef<ClusterMember>('ClusterMember');
+const DomainClusterRef = builder.objectRef<DomainCluster>('DomainCluster');
+const ValueFaultLineRef = builder.objectRef<ValueFaultLine>('ValueFaultLine');
+const ClusterPairFaultLinesRef = builder.objectRef<ClusterPairFaultLines>('ClusterPairFaultLines');
+const ClusterAnalysisRef = builder.objectRef<ClusterAnalysis>('ClusterAnalysis');
 const DomainAnalysisValueScoreRef = builder.objectRef<DomainAnalysisValueScore>('DomainAnalysisValueScore');
 const DomainAnalysisModelRef = builder.objectRef<DomainAnalysisModel>('DomainAnalysisModel');
 const DomainAnalysisUnavailableModelRef = builder.objectRef<DomainAnalysisUnavailableModel>('DomainAnalysisUnavailableModel');
@@ -266,6 +280,67 @@ builder.objectType(RankingShapeBenchmarksRef, {
     domainMeanTopGap: t.exposeFloat('domainMeanTopGap'),
     domainStdTopGap: t.exposeFloat('domainStdTopGap', { nullable: true }),
     medianSpread: t.exposeFloat('medianSpread'),
+  }),
+});
+
+builder.objectType(ClusterMemberRef, {
+  fields: (t) => ({
+    model: t.exposeString('model'),
+    label: t.exposeString('label'),
+    silhouetteScore: t.exposeFloat('silhouetteScore'),
+    isOutlier: t.exposeBoolean('isOutlier'),
+    nearestClusterIds: t.exposeStringList('nearestClusterIds', { nullable: true }),
+    distancesToNearestClusters: t.exposeFloatList('distancesToNearestClusters', { nullable: true }),
+  }),
+});
+
+builder.objectType(DomainClusterRef, {
+  fields: (t) => ({
+    id: t.exposeString('id'),
+    name: t.exposeString('name'),
+    members: t.field({
+      type: [ClusterMemberRef],
+      resolve: (parent) => parent.members,
+    }),
+    centroid: t.expose('centroid', { type: 'JSON' }),
+    definingValues: t.exposeStringList('definingValues'),
+  }),
+});
+
+builder.objectType(ValueFaultLineRef, {
+  fields: (t) => ({
+    valueKey: t.exposeString('valueKey'),
+    clusterAId: t.exposeString('clusterAId'),
+    clusterBId: t.exposeString('clusterBId'),
+    clusterAScore: t.exposeFloat('clusterAScore'),
+    clusterBScore: t.exposeFloat('clusterBScore'),
+    delta: t.exposeFloat('delta'),
+    absDelta: t.exposeFloat('absDelta'),
+  }),
+});
+
+builder.objectType(ClusterPairFaultLinesRef, {
+  fields: (t) => ({
+    clusterAId: t.exposeString('clusterAId'),
+    clusterBId: t.exposeString('clusterBId'),
+    distance: t.exposeFloat('distance'),
+    faultLines: t.field({
+      type: [ValueFaultLineRef],
+      resolve: (parent) => parent.faultLines,
+    }),
+  }),
+});
+
+builder.objectType(ClusterAnalysisRef, {
+  fields: (t) => ({
+    clusters: t.field({
+      type: [DomainClusterRef],
+      resolve: (parent) => parent.clusters,
+    }),
+    faultLinesByPair: t.expose('faultLinesByPair', { type: 'JSON' }),
+    defaultPair: t.exposeStringList('defaultPair', { nullable: true }),
+    skipped: t.exposeBoolean('skipped'),
+    skipReason: t.exposeString('skipReason', { nullable: true }),
   }),
 });
 
@@ -343,6 +418,10 @@ builder.objectType(DomainAnalysisResultRef, {
     rankingShapeBenchmarks: t.field({
       type: RankingShapeBenchmarksRef,
       resolve: (parent) => parent.rankingShapeBenchmarks,
+    }),
+    clusterAnalysis: t.field({
+      type: ClusterAnalysisRef,
+      resolve: (parent) => parent.clusterAnalysis,
     }),
   }),
 });
@@ -1438,6 +1517,7 @@ builder.queryField('domainAnalysis', (t) =>
           })),
           generatedAt: new Date(),
           rankingShapeBenchmarks: { domainMeanTopGap: 0, domainStdTopGap: null, medianSpread: 0 },
+          clusterAnalysis: { clusters: [], faultLinesByPair: {}, defaultPair: null, skipped: true, skipReason: 'No vignettes found in this domain.' },
         };
       }
 
@@ -1549,6 +1629,14 @@ builder.queryField('domainAnalysis', (t) =>
         },
       }));
 
+      // Pass 3: compute cluster analysis
+      const clusterModels = modelsBase.map((m) => ({
+        model: m.model,
+        label: m.label,
+        scores: Object.fromEntries(m.values.map((v) => [v.valueKey, v.score])),
+      }));
+      const clusterAnalysis = computeClusterAnalysis(clusterModels);
+
       const unavailableModels = activeModels
         .filter((model) => !aggregatedByModel.has(model.modelId))
         .map((model) => ({
@@ -1586,6 +1674,7 @@ builder.queryField('domainAnalysis', (t) =>
         unavailableModels,
         generatedAt: new Date(),
         rankingShapeBenchmarks,
+        clusterAnalysis,
       };
     },
   }),
