@@ -5,7 +5,6 @@ import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Tooltip } from '../ui/Tooltip';
 import {
-  VALUES,
   VALUE_LABELS,
   VALUE_DESCRIPTIONS,
   type ModelEntry,
