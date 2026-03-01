@@ -135,6 +135,37 @@ function groupRowsByModel(rows: TempZeroRow[]): Array<{ modelId: string; modelLa
     .sort((left, right) => left.modelLabel.localeCompare(right.modelLabel, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
+function getMismatchSummary(rows: TempZeroRow[], matchedLabel: string): { text: string; toneClass: string } {
+  const mismatchCount = rows.filter((row) => row.mismatchType === 'decision_flip').length;
+  const missingTrialCount = rows.filter((row) => row.mismatchType === 'missing_trial').length;
+
+  if (mismatchCount > 0) {
+    return {
+      text: `${mismatchCount} mismatch${mismatchCount === 1 ? '' : 'es'}`,
+      toneClass: 'text-red-700',
+    };
+  }
+
+  if (missingTrialCount === rows.length && rows.length > 0) {
+    return {
+      text: 'All pending',
+      toneClass: 'text-amber-700',
+    };
+  }
+
+  if (missingTrialCount > 0) {
+    return {
+      text: `${missingTrialCount} trial${missingTrialCount === 1 ? '' : 's'} missing`,
+      toneClass: 'text-amber-700',
+    };
+  }
+
+  return {
+    text: matchedLabel,
+    toneClass: 'text-gray-500',
+  };
+}
+
 type SelectedTranscriptRow = {
   modelLabel: string;
   vignetteTitle: string;
@@ -374,7 +405,7 @@ export function DomainAssumptions() {
               {vignetteGroups.map((group) => {
                 const { attributeA, attributeB } = parseAttributes(group.vignetteTitle);
                 const modelGroups = groupRowsByModel(group.rows);
-                const mismatchCount = group.rows.filter((row) => row.mismatchType === 'decision_flip').length;
+                const groupMismatchSummary = getMismatchSummary(group.rows, 'No mismatches');
 
                 return (
                   <details key={group.vignetteId} className="rounded-lg border border-gray-200">
@@ -385,20 +416,20 @@ export function DomainAssumptions() {
                           {modelGroups.length} model{modelGroups.length === 1 ? '' : 's'} · {group.rows.length} condition row{group.rows.length === 1 ? '' : 's'}
                         </div>
                       </div>
-                      <div className={`text-xs font-medium ${mismatchCount > 0 ? 'text-red-700' : 'text-gray-500'}`}>
-                        {mismatchCount > 0 ? `${mismatchCount} mismatch${mismatchCount === 1 ? '' : 'es'}` : 'No mismatches'}
+                      <div className={`text-xs font-medium ${groupMismatchSummary.toneClass}`}>
+                        {groupMismatchSummary.text}
                       </div>
                     </summary>
                     <div className="space-y-3 border-t border-gray-200 bg-white p-4">
                       {modelGroups.map((modelGroup) => {
-                        const modelMismatchCount = modelGroup.rows.filter((row) => row.mismatchType === 'decision_flip').length;
+                        const modelMismatchSummary = getMismatchSummary(modelGroup.rows, 'All matched');
 
                         return (
                           <details key={modelGroup.modelId} className="rounded-lg border border-gray-200">
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-white px-4 py-3">
                               <div className="text-sm font-medium text-gray-900">{modelGroup.modelLabel}</div>
-                              <div className={`text-xs font-medium ${modelMismatchCount > 0 ? 'text-red-700' : 'text-gray-500'}`}>
-                                {modelMismatchCount > 0 ? `${modelMismatchCount} mismatch${modelMismatchCount === 1 ? '' : 'es'}` : 'All matched'}
+                              <div className={`text-xs font-medium ${modelMismatchSummary.toneClass}`}>
+                                {modelMismatchSummary.text}
                               </div>
                             </summary>
                             <div className="overflow-x-auto border-t border-gray-200">
