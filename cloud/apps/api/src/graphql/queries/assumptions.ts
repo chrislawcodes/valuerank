@@ -103,6 +103,10 @@ function buildConditionKey(scenario: ScenarioRecord): string {
   return `${match[1] ?? '?'}x${match[2] ?? '?'}`;
 }
 
+function normalizeEstimatedTokens(value: number): number {
+  return Math.round(value);
+}
+
 const TempZeroPreflightVignetteRef = builder.objectRef<TempZeroPreflightVignette>('TempZeroPreflightVignette');
 const TempZeroPreflightRef = builder.objectRef<TempZeroPreflight>('TempZeroPreflight');
 const TempZeroSummaryRef = builder.objectRef<TempZeroSummary>('TempZeroSummary');
@@ -440,8 +444,8 @@ builder.queryField('assumptionsTempZero', (t) =>
           title: 'Temp=0 Determinism Preflight',
           projectedPromptCount: expectedComparisons * 3,
           projectedComparisons: expectedComparisons,
-          estimatedInputTokens: estimatedInputTokens > 0 ? estimatedInputTokens : null,
-          estimatedOutputTokens: estimatedOutputTokens > 0 ? estimatedOutputTokens : null,
+          estimatedInputTokens: estimatedInputTokens > 0 ? normalizeEstimatedTokens(estimatedInputTokens) : null,
+          estimatedOutputTokens: estimatedOutputTokens > 0 ? normalizeEstimatedTokens(estimatedOutputTokens) : null,
           estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
           selectedSignature,
           vignettes: availableVignettes.map((vignette) => ({
