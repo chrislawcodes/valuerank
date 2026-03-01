@@ -367,11 +367,10 @@ builder.queryField('assumptionsTempZero', (t) =>
         const sortedScenarios = [...scenarios].sort((left, right) => (
           buildConditionKey(left).localeCompare(buildConditionKey(right), undefined, { numeric: true })
         ));
-        let existingBatchFloor = 3;
+        let batchesToRun = 0;
 
-        if (sortedScenarios.length === 0 || models.length === 0) {
-          existingBatchFloor = 0;
-        } else {
+        if (sortedScenarios.length > 0 && models.length > 0) {
+          let existingBatchFloor = 3;
           for (const scenario of sortedScenarios) {
             for (const model of models) {
               const count = (transcriptGroups.get(`${model.modelId}::${scenario.id}`) ?? []).length;
@@ -382,11 +381,13 @@ builder.queryField('assumptionsTempZero', (t) =>
             }
             if (existingBatchFloor === 0) break;
           }
+
+          batchesToRun = Math.max(0, 3 - Math.min(existingBatchFloor, 3));
         }
 
         vignetteLaunchPlan.set(vignette.id, {
           conditionCount: sortedScenarios.length,
-          batchesToRun: Math.max(0, 3 - Math.min(existingBatchFloor, 3)),
+          batchesToRun,
         });
 
         for (const model of models) {
