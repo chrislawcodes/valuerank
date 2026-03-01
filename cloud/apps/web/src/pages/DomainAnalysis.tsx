@@ -4,7 +4,6 @@ import { useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
-import { DomainAnalysisTabs } from '../components/domains/DomainAnalysisTabs';
 import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
@@ -221,8 +220,6 @@ export function DomainAnalysis() {
           Structured model-value analysis across priorities, ranking behavior, and similarity for the selected domain.
         </p>
       </div>
-
-      <DomainAnalysisTabs activeTab="analysis" />
 
       {(domainsError || signaturesError || error) && (
         <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
