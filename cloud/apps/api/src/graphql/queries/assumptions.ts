@@ -91,11 +91,43 @@ type TranscriptRecord = {
 
 const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
+function normalizeModelSet(models: unknown): string[] {
+  if (!Array.isArray(models)) return [];
+  return models
+    .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    .slice()
+    .sort((left, right) => left.localeCompare(right));
+}
+
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
   const runTemperature = parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature);
   const signatureTemperature = parseVnewTemperature(signature);
   return runTemperature === signatureTemperature;
+}
+
+function matchesAssumptionsTempZeroPackage(runConfig: unknown, signature: string | null, modelIds: string[]): boolean {
+  const config = runConfig as { assumptionKey?: unknown; models?: unknown; samplePercentage?: unknown; runMode?: unknown } | null;
+  const configModels = normalizeModelSet(config?.models);
+  const normalizedModelIds = [...modelIds].sort((left, right) => left.localeCompare(right));
+
+  if (config?.assumptionKey === 'temp_zero_determinism') {
+    return signatureMatches(runConfig, signature)
+      && configModels.length === normalizedModelIds.length
+      && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
+  }
+
+  const samplePercentage = typeof config?.samplePercentage === 'number'
+    ? config.samplePercentage
+    : typeof config?.samplePercentage === 'string'
+      ? Number(config.samplePercentage)
+      : null;
+
+  return signatureMatches(runConfig, signature)
+    && config?.runMode === 'PERCENTAGE'
+    && samplePercentage === 100
+    && configModels.length === normalizedModelIds.length
+    && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
 }
 
 function buildConditionKey(scenario: ScenarioRecord): string {
@@ -297,11 +329,7 @@ builder.queryField('assumptionsTempZero', (t) =>
       });
       const selectedSignature = formatVnewSignature(0);
       const matchingRunIds = completedRuns
-        .filter((run) => {
-          const runConfig = run.config as { assumptionKey?: unknown } | null;
-          return runConfig?.assumptionKey === 'temp_zero_determinism'
-            && signatureMatches(run.config, selectedSignature);
-        })
+        .filter((run) => matchesAssumptionsTempZeroPackage(run.config, selectedSignature, models.map((model) => model.modelId)))
         .map((run) => run.id);
 
       let transcriptGroups = new Map<string, TranscriptRecord[]>();
@@ -434,9 +462,9 @@ builder.queryField('assumptionsTempZero', (t) =>
         );
       }
       if (matchingRunIds.length === 0) {
-        noteParts.push('No dedicated temp=0 assumptions runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
+        noteParts.push('No completed temp=0 runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
       } else if (comparableRows.length === 0) {
-        noteParts.push('Dedicated temp=0 assumptions runs were found, but the three-batch matrix is not complete yet.');
+        noteParts.push('Matching temp=0 runs were found, but the three-batch matrix is not complete yet.');
       }
 
       return {

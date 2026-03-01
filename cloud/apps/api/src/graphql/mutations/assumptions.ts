@@ -22,6 +22,36 @@ function normalizeModelSet(models: unknown): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function matchesAssumptionsTempZeroPackage(runConfig: unknown, modelIds: string[]): boolean {
+  const config = runConfig as {
+    assumptionKey?: unknown;
+    models?: unknown;
+    temperature?: unknown;
+    samplePercentage?: unknown;
+    runMode?: unknown;
+  } | null;
+  const configModels = normalizeModelSet(config?.models);
+  const normalizedModelIds = [...modelIds].sort((left, right) => left.localeCompare(right));
+
+  if (config?.assumptionKey === 'temp_zero_determinism') {
+    return parseTemperature(config.temperature) === 0
+      && configModels.length === normalizedModelIds.length
+      && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
+  }
+
+  const samplePercentage = typeof config?.samplePercentage === 'number'
+    ? config.samplePercentage
+    : typeof config?.samplePercentage === 'string'
+      ? Number(config.samplePercentage)
+      : null;
+
+  return parseTemperature(config?.temperature) === 0
+    && config?.runMode === 'PERCENTAGE'
+    && samplePercentage === 100
+    && configModels.length === normalizedModelIds.length
+    && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
+}
+
 type ScenarioRecord = {
   id: string;
   definitionId: string;
@@ -107,12 +137,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
       });
 
       const hasActiveEquivalentRun = activeRuns.some((run) => {
-        const config = run.config as { assumptionKey?: unknown; models?: unknown; temperature?: unknown } | null;
-        const configModels = normalizeModelSet(config?.models);
-        return config?.assumptionKey === 'temp_zero_determinism'
-          && parseTemperature(config?.temperature) === 0
-          && configModels.length === models.length
-          && configModels.every((modelId, index) => modelId === models[index]);
+        return matchesAssumptionsTempZeroPackage(run.config, models);
       });
       if (hasActiveEquivalentRun) {
         throw new Error('Temp=0 confirmation launch blocked: matching dedicated runs are already active.');
@@ -131,11 +156,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
         },
       });
       const qualifyingCompletedRunIds = completedRuns
-        .filter((run) => {
-          const config = run.config as { assumptionKey?: unknown; temperature?: unknown } | null;
-          return config?.assumptionKey === 'temp_zero_determinism'
-            && parseTemperature(config.temperature) === 0;
-        })
+        .filter((run) => matchesAssumptionsTempZeroPackage(run.config, models))
         .map((run) => run.id);
 
       const transcripts = qualifyingCompletedRunIds.length > 0 ? await db.transcript.findMany({
