@@ -208,8 +208,12 @@ export function DomainAssumptions() {
     const failedSuffix = payload.failedVignetteIds.length > 0
       ? ` ${payload.failedVignetteIds.length} vignette${payload.failedVignetteIds.length === 1 ? '' : 's'} failed to launch.`
       : '';
+    const alreadyCoveredCount = Math.max(0, payload.totalVignettes - payload.startedRuns - payload.failedVignetteIds.length);
+    const coveredSuffix = alreadyCoveredCount > 0
+      ? ` ${alreadyCoveredCount} vignette${alreadyCoveredCount === 1 ? '' : 's'} already had enough completed temp=0 batches and were skipped.`
+      : '';
     setLaunchFeedback(
-      `Started ${payload.startedRuns} dedicated temp=0 run${payload.startedRuns === 1 ? '' : 's'} across ${payload.totalVignettes} locked vignette${payload.totalVignettes === 1 ? '' : 's'} using ${payload.modelCount} model${payload.modelCount === 1 ? '' : 's'}.${failedSuffix}`,
+      `Started ${payload.startedRuns} dedicated temp=0 run${payload.startedRuns === 1 ? '' : 's'} across ${payload.totalVignettes} locked vignette${payload.totalVignettes === 1 ? '' : 's'} using ${payload.modelCount} model${payload.modelCount === 1 ? '' : 's'}.${coveredSuffix}${failedSuffix}`,
     );
     void reexecuteTempZeroQuery({ requestPolicy: 'network-only' });
   };
@@ -249,7 +253,7 @@ export function DomainAssumptions() {
             )}
 
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              This phase reads only dedicated runs tagged for <code>temp_zero_determinism</code>. If none have completed yet, the table below will stay empty until you launch the locked package and those runs finish.
+              This phase counts all completed temp=0 runs that match the locked package, including earlier runs that already match the signature. New launches top up only the remaining batches needed to reach three completed samples per condition.
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -294,13 +298,41 @@ export function DomainAssumptions() {
               </div>
             </div>
 
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Models Covered</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {result.preflight.models.length > 0 ? (
+                    result.preflight.models.map((model) => (
+                      <span
+                        key={model}
+                        className="inline-flex rounded-full border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700"
+                      >
+                        {model}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-gray-500">No models selected</span>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Coverage Scope</div>
+                <div className="mt-1 text-sm text-gray-700">
+                  {result.preflight.vignettes.length} locked vignette{result.preflight.vignettes.length === 1 ? '' : 's'} with all listed conditions.
+                </div>
+                <div className="mt-2 text-sm text-gray-700">
+                  {result.preflight.models.length} model{result.preflight.models.length === 1 ? '' : 's'} will be included in this temp=0 confirmation run.
+                </div>
+              </div>
+            </div>
+
             <div className="mt-5 overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Vignette</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Conditions</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">Rationale</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -308,7 +340,6 @@ export function DomainAssumptions() {
                     <tr key={vignette.vignetteId}>
                       <td className="px-3 py-3 font-medium text-gray-900">{vignette.title}</td>
                       <td className="px-3 py-3 text-gray-700">{vignette.conditionCount}</td>
-                      <td className="px-3 py-3 text-gray-600">{vignette.rationale}</td>
                     </tr>
                   ))}
                 </tbody>
