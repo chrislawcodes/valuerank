@@ -28,6 +28,7 @@ export type StartRunInput = {
   userId?: string | null;
   finalTrial?: boolean;
   scenarioIds?: string[];
+  configExtras?: Record<string, unknown>;
 };
 
 export type StartRunResult = {
@@ -350,6 +351,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     userId,
     finalTrial = false,
     scenarioIds,
+    configExtras,
   } = input;
 
   log.info(
@@ -568,6 +570,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     priority,
     definitionSnapshot,
     estimatedCosts: costEstimate,
+    ...(configExtras ?? {}),
   };
 
   const initialProgress = {

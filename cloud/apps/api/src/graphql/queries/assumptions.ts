@@ -4,15 +4,10 @@ import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
+import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
-
-type LockedVignette = {
-  id: string;
-  title: string;
-  rationale: string;
-};
 
 type TempZeroPreflightVignette = {
   vignetteId: string;
@@ -92,34 +87,6 @@ type TranscriptRecord = {
   content: unknown;
   createdAt: Date;
 };
-
-const LOCKED_VIGNETTES: readonly LockedVignette[] = [
-  {
-    id: 'cmlsmyn9l0j3rxeiricruouia',
-    title: 'Jobs (Self Direction Action vs Power Dominance)',
-    rationale: 'Covers autonomy vs hierarchy in a clean professional tradeoff.',
-  },
-  {
-    id: 'cmlsn0pnr0jg1xeir147758pr',
-    title: 'Jobs (Security Personal vs Conformity Interpersonal)',
-    rationale: 'Covers stability vs social-pressure alignment without overlapping values.',
-  },
-  {
-    id: 'cmlsn216u0jpfxeirpdbrm9so',
-    title: 'Jobs (Tradition vs Stimulation)',
-    rationale: 'Covers heritage vs novelty with highly legible role framing.',
-  },
-  {
-    id: 'cmlsn2tca0jvxxeir5r0i5civ',
-    title: 'Jobs (Benevolence Dependability vs Universalism Nature)',
-    rationale: 'Covers responsibility to others vs nature protection with distinct moral texture.',
-  },
-  {
-    id: 'cmlsn384i0jzjxeir9or2w35z',
-    title: 'Jobs (Achievement vs Hedonism)',
-    rationale: 'Covers achievement vs enjoyment and rounds out the 10-value package.',
-  },
-] as const;
 
 const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
@@ -268,7 +235,7 @@ builder.queryField('assumptionsTempZero', (t) =>
 
       const definitions = await db.definition.findMany({
         where: {
-          id: { in: LOCKED_VIGNETTES.map((vignette) => vignette.id) },
+          id: { in: LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id) },
           domainId: domain.id,
           deletedAt: null,
         },
@@ -287,7 +254,7 @@ builder.queryField('assumptionsTempZero', (t) =>
         },
       });
       const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
-      const availableVignettes = LOCKED_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
+      const availableVignettes = LOCKED_ASSUMPTION_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
 
       let estimatedInputTokens = 0;
       let estimatedOutputTokens = 0;
@@ -455,9 +422,9 @@ builder.queryField('assumptionsTempZero', (t) =>
       );
       const expectedComparisons = totalScenarios * models.length;
       const noteParts: string[] = [];
-      if (availableVignettes.length !== LOCKED_VIGNETTES.length) {
+      if (availableVignettes.length !== LOCKED_ASSUMPTION_VIGNETTES.length) {
         noteParts.push(
-          `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`,
+          `${LOCKED_ASSUMPTION_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_ASSUMPTION_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`,
         );
       }
       if (matchingRunIds.length === 0) {

@@ -4,14 +4,7 @@ import { builder } from '../builder.js';
 import { startRun as startRunService } from '../../services/run/index.js';
 import { createAuditLog } from '../../services/audit/index.js';
 import { parseTemperature } from '../../utils/temperature.js';
-
-const LOCKED_VIGNETTE_IDS = [
-  'cmlsmyn9l0j3rxeiricruouia',
-  'cmlsn0pnr0jg1xeir147758pr',
-  'cmlsn216u0jpfxeirpdbrm9so',
-  'cmlsn2tca0jvxxeir5r0i5civ',
-  'cmlsn384i0jzjxeir9or2w35z',
-] as const;
+import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 
 type LaunchAssumptionsTempZeroPayload = {
   startedRuns: number;
@@ -60,7 +53,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
 
       const definitions = await db.definition.findMany({
         where: {
-          id: { in: Array.from(LOCKED_VIGNETTE_IDS) },
+          id: { in: LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id) },
           domainId: domain.id,
           deletedAt: null,
         },
@@ -117,15 +110,8 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
             priority: 'NORMAL',
             userId,
             finalTrial: false,
-          });
-
-          await db.run.update({
-            where: { id: result.run.id },
-            data: {
-              config: {
-                ...(((result.run.config as Record<string, unknown> | null) ?? {})),
-                assumptionKey: 'temp_zero_determinism',
-              },
+            configExtras: {
+              assumptionKey: 'temp_zero_determinism',
             },
           });
 

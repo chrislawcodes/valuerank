@@ -218,7 +218,7 @@ export function DomainAssumptions() {
             )}
 
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              This phase reads only dedicated runs tagged for `temp_zero_determinism`. If none have completed yet, the table below will stay empty until you launch the locked package and those runs finish.
+              This phase reads only dedicated runs tagged for <code>temp_zero_determinism</code>. If none have completed yet, the table below will stay empty until you launch the locked package and those runs finish.
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
