@@ -297,7 +297,11 @@ builder.queryField('assumptionsTempZero', (t) =>
       });
       const selectedSignature = formatVnewSignature(0);
       const matchingRunIds = completedRuns
-        .filter((run) => signatureMatches(run.config, selectedSignature))
+        .filter((run) => {
+          const runConfig = run.config as { assumptionKey?: unknown } | null;
+          return runConfig?.assumptionKey === 'temp_zero_determinism'
+            && signatureMatches(run.config, selectedSignature);
+        })
         .map((run) => run.id);
 
       let transcriptGroups = new Map<string, TranscriptRecord[]>();
@@ -430,9 +434,9 @@ builder.queryField('assumptionsTempZero', (t) =>
         );
       }
       if (matchingRunIds.length === 0) {
-        noteParts.push('No completed temp=0 runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
+        noteParts.push('No dedicated temp=0 assumptions runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
       } else if (comparableRows.length === 0) {
-        noteParts.push('Temp=0 runs were found, but the three-batch matrix is not complete yet.');
+        noteParts.push('Dedicated temp=0 assumptions runs were found, but the three-batch matrix is not complete yet.');
       }
 
       return {

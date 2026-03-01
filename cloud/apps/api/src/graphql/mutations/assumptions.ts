@@ -107,9 +107,10 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
       });
 
       const hasActiveEquivalentRun = activeRuns.some((run) => {
-        const config = run.config as { models?: unknown; temperature?: unknown } | null;
+        const config = run.config as { assumptionKey?: unknown; models?: unknown; temperature?: unknown } | null;
         const configModels = normalizeModelSet(config?.models);
-        return parseTemperature(config?.temperature) === 0
+        return config?.assumptionKey === 'temp_zero_determinism'
+          && parseTemperature(config?.temperature) === 0
           && configModels.length === models.length
           && configModels.every((modelId, index) => modelId === models[index]);
       });
@@ -130,7 +131,11 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
         },
       });
       const qualifyingCompletedRunIds = completedRuns
-        .filter((run) => parseTemperature((run.config as { temperature?: unknown } | null)?.temperature) === 0)
+        .filter((run) => {
+          const config = run.config as { assumptionKey?: unknown; temperature?: unknown } | null;
+          return config?.assumptionKey === 'temp_zero_determinism'
+            && parseTemperature(config.temperature) === 0;
+        })
         .map((run) => run.id);
 
       const transcripts = qualifyingCompletedRunIds.length > 0 ? await db.transcript.findMany({
