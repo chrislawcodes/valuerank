@@ -14,10 +14,13 @@ type TempZeroPreflightVignette = {
   title: string;
   conditionCount: number;
   rationale: string;
+  batchesToRun: number;
 };
 
 type TempZeroPreflight = {
   title: string;
+  runsToLaunch: number;
+  totalBatchesToRun: number;
   projectedPromptCount: number;
   projectedComparisons: number;
   estimatedInputTokens: number | null;
@@ -153,12 +156,15 @@ builder.objectType(TempZeroPreflightVignetteRef, {
     title: t.exposeString('title'),
     conditionCount: t.exposeInt('conditionCount'),
     rationale: t.exposeString('rationale'),
+    batchesToRun: t.exposeInt('batchesToRun'),
   }),
 });
 
 builder.objectType(TempZeroPreflightRef, {
   fields: (t) => ({
     title: t.exposeString('title'),
+    runsToLaunch: t.exposeInt('runsToLaunch'),
+    totalBatchesToRun: t.exposeInt('totalBatchesToRun'),
     projectedPromptCount: t.exposeInt('projectedPromptCount'),
     projectedComparisons: t.exposeInt('projectedComparisons'),
     estimatedInputTokens: t.exposeInt('estimatedInputTokens', { nullable: true }),
@@ -294,25 +300,6 @@ builder.queryField('assumptionsTempZero', (t) =>
       const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
       const availableVignettes = LOCKED_ASSUMPTION_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
 
-      let estimatedInputTokens = 0;
-      let estimatedOutputTokens = 0;
-      let estimatedCostUsd = 0;
-      if (models.length > 0) {
-        for (const vignette of availableVignettes) {
-          const estimate = await estimateCostService({
-            definitionId: vignette.id,
-            modelIds: models.map((model) => model.modelId),
-            samplePercentage: 100,
-            samplesPerScenario: 3,
-          });
-          for (const perModel of estimate.perModel) {
-            estimatedInputTokens += perModel.inputTokens;
-            estimatedOutputTokens += perModel.outputTokens;
-            estimatedCostUsd += perModel.totalCost;
-          }
-        }
-      }
-
       const allDefinitionIds = availableVignettes.map((vignette) => vignette.id);
       const completedRuns = await db.run.findMany({
         where: {
@@ -373,12 +360,34 @@ builder.queryField('assumptionsTempZero', (t) =>
 
       const rows: TempZeroRow[] = [];
       const comparableByModel = new Map<string, { comparable: number; matched: number }>();
+      const vignetteLaunchPlan = new Map<string, { conditionCount: number; batchesToRun: number }>();
 
       for (const vignette of availableVignettes) {
         const scenarios = (definitionById.get(vignette.id)?.scenarios ?? []) as ScenarioRecord[];
         const sortedScenarios = [...scenarios].sort((left, right) => (
           buildConditionKey(left).localeCompare(buildConditionKey(right), undefined, { numeric: true })
         ));
+        let existingBatchFloor = 3;
+
+        if (sortedScenarios.length === 0 || models.length === 0) {
+          existingBatchFloor = 0;
+        } else {
+          for (const scenario of sortedScenarios) {
+            for (const model of models) {
+              const count = (transcriptGroups.get(`${model.modelId}::${scenario.id}`) ?? []).length;
+              if (count < existingBatchFloor) {
+                existingBatchFloor = count;
+              }
+              if (existingBatchFloor === 0) break;
+            }
+            if (existingBatchFloor === 0) break;
+          }
+        }
+
+        vignetteLaunchPlan.set(vignette.id, {
+          conditionCount: sortedScenarios.length,
+          batchesToRun: Math.max(0, 3 - Math.min(existingBatchFloor, 3)),
+        });
 
         for (const model of models) {
           for (const scenario of sortedScenarios) {
@@ -435,6 +444,28 @@ builder.queryField('assumptionsTempZero', (t) =>
         }
       }
 
+      let estimatedInputTokens = 0;
+      let estimatedOutputTokens = 0;
+      let estimatedCostUsd = 0;
+      if (models.length > 0) {
+        for (const vignette of availableVignettes) {
+          const launchPlan = vignetteLaunchPlan.get(vignette.id);
+          if (!launchPlan || launchPlan.batchesToRun === 0) continue;
+
+          const estimate = await estimateCostService({
+            definitionId: vignette.id,
+            modelIds: models.map((model) => model.modelId),
+            samplePercentage: 100,
+            samplesPerScenario: launchPlan.batchesToRun,
+          });
+          for (const perModel of estimate.perModel) {
+            estimatedInputTokens += perModel.inputTokens;
+            estimatedOutputTokens += perModel.outputTokens;
+            estimatedCostUsd += perModel.totalCost;
+          }
+        }
+      }
+
       const comparableRows = rows.filter((row) => row.mismatchType !== 'missing_trial');
       const matchedRows = comparableRows.filter((row) => row.isMatch);
       let worstModelId: string | null = null;
@@ -455,6 +486,16 @@ builder.queryField('assumptionsTempZero', (t) =>
         0,
       );
       const expectedComparisons = totalScenarios * models.length;
+      const runsToLaunch = availableVignettes.filter((vignette) => (vignetteLaunchPlan.get(vignette.id)?.batchesToRun ?? 0) > 0).length;
+      const totalBatchesToRun = availableVignettes.reduce(
+        (sum, vignette) => sum + (vignetteLaunchPlan.get(vignette.id)?.batchesToRun ?? 0),
+        0,
+      );
+      const projectedPromptCount = availableVignettes.reduce((sum, vignette) => {
+        const launchPlan = vignetteLaunchPlan.get(vignette.id);
+        if (!launchPlan) return sum;
+        return sum + (launchPlan.conditionCount * models.length * launchPlan.batchesToRun);
+      }, 0);
       const noteParts: string[] = [];
       if (availableVignettes.length !== LOCKED_ASSUMPTION_VIGNETTES.length) {
         noteParts.push(
@@ -472,7 +513,9 @@ builder.queryField('assumptionsTempZero', (t) =>
         note: noteParts.length > 0 ? noteParts.join(' ') : null,
         preflight: {
           title: 'Temp=0 Determinism Preflight',
-          projectedPromptCount: expectedComparisons * 3,
+          runsToLaunch,
+          totalBatchesToRun,
+          projectedPromptCount,
           projectedComparisons: expectedComparisons,
           estimatedInputTokens: estimatedInputTokens > 0 ? roundToGraphQLInt(estimatedInputTokens) : null,
           estimatedOutputTokens: estimatedOutputTokens > 0 ? roundToGraphQLInt(estimatedOutputTokens) : null,
@@ -484,6 +527,7 @@ builder.queryField('assumptionsTempZero', (t) =>
             title: vignette.title,
             conditionCount: definitionById.get(vignette.id)?.scenarios.length ?? 0,
             rationale: vignette.rationale,
+            batchesToRun: vignetteLaunchPlan.get(vignette.id)?.batchesToRun ?? 0,
           })),
         },
         summary: {
