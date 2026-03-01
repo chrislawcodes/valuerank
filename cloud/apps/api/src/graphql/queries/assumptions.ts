@@ -123,36 +123,6 @@ const LOCKED_VIGNETTES: readonly LockedVignette[] = [
 
 const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
-function selectDefaultSignature(completedRuns: Array<{ config: unknown }>): string | null {
-  if (completedRuns.length === 0) return null;
-
-  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
-  for (const run of completedRuns) {
-    const runConfig = run.config as { temperature?: unknown } | null;
-    const temperature = parseTemperature(runConfig?.temperature);
-    const key = temperature === null ? 'd' : String(temperature);
-    const current = temperatureCounts.get(key);
-    if (current) {
-      current.count += 1;
-    } else {
-      temperatureCounts.set(key, { temperature, count: 1 });
-    }
-  }
-
-  const winner = Array.from(temperatureCounts.values())
-    .sort((left, right) => {
-      const leftIsZero = left.temperature === 0;
-      const rightIsZero = right.temperature === 0;
-      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
-      if (left.count !== right.count) return right.count - left.count;
-      if (left.temperature === null) return 1;
-      if (right.temperature === null) return -1;
-      return left.temperature - right.temperature;
-    })[0];
-
-  return winner ? formatVnewSignature(winner.temperature) : null;
-}
-
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
   const runTemperature = parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature);
@@ -352,9 +322,13 @@ builder.queryField('assumptionsTempZero', (t) =>
           config: true,
         },
       });
-      const selectedSignature = selectDefaultSignature(completedRuns);
+      const selectedSignature = formatVnewSignature(0);
       const matchingRunIds = completedRuns
-        .filter((run) => signatureMatches(run.config, selectedSignature))
+        .filter((run) => {
+          const runConfig = run.config as { assumptionKey?: unknown } | null;
+          return runConfig?.assumptionKey === 'temp_zero_determinism'
+            && signatureMatches(run.config, selectedSignature);
+        })
         .map((run) => run.id);
 
       let transcriptGroups = new Map<string, TranscriptRecord[]>();
@@ -480,13 +454,21 @@ builder.queryField('assumptionsTempZero', (t) =>
         0,
       );
       const expectedComparisons = totalScenarios * models.length;
-      const note = availableVignettes.length !== LOCKED_VIGNETTES.length
-        ? `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`
-        : null;
+      const noteParts: string[] = [];
+      if (availableVignettes.length !== LOCKED_VIGNETTES.length) {
+        noteParts.push(
+          `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`,
+        );
+      }
+      if (matchingRunIds.length === 0) {
+        noteParts.push('No dedicated temp=0 confirmation runs have completed yet. Launch the locked package below to populate this section.');
+      } else if (comparableRows.length === 0) {
+        noteParts.push('Dedicated temp=0 runs were found, but the three-batch matrix is not complete yet.');
+      }
 
       return {
         domainName: domain.name,
-        note,
+        note: noteParts.length > 0 ? noteParts.join(' ') : null,
         preflight: {
           title: 'Temp=0 Determinism Preflight',
           projectedPromptCount: expectedComparisons * 3,

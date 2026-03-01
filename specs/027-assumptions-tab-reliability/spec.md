@@ -54,6 +54,36 @@ Use one umbrella spec because all three checks:
 
 Implementation may ship in separate PRs, but the product contract should remain unified.
 
+## Delivery Sequencing
+
+Implementation should be sequenced to finish `#285` end-to-end before `#286` and `#287`.
+
+Required order:
+
+1. Build the Assumptions tab shell and shared result display.
+2. Deliver `#285` readback from existing qualifying runs.
+3. Complete `#285` execution end-to-end:
+   - preflight review
+   - explicit confirmation
+   - approval gate
+   - locked-package dispatch
+   - run tagging
+   - scoped readback of dedicated confirmation runs
+4. Reuse that execution pipeline for `#286`.
+5. Reuse the same pipeline again for `#287`.
+
+Rationale:
+
+- `#285` is the simplest assumption technically.
+- It establishes the real run lifecycle once.
+- `#286` and `#287` should not invent separate launch mechanics; they should extend the temp=0 execution path with variant-specific pairing rules.
+
+Continuity note:
+
+- The current shipped `#285` readback uses any qualifying temp=0 runs for the locked vignette package.
+- The `#285` execution phase changes readback to only runs tagged `assumptionKey = 'temp_zero_determinism'`.
+- Immediately after that execution phase ships, the tab will show `INSUFFICIENT DATA` until the first dedicated confirmation run is dispatched and completes.
+
 ---
 
 ## User Stories
@@ -320,6 +350,7 @@ interface AssumptionSummary {
   key: AssumptionKey;
   title: string;
   status: AssumptionStatus;
+  // Deferred until the execution-path phases. The current shipped GQL schema exposes status only.
   statusReason:
     | 'computed_successfully'
     | 'insufficient_pairs';
@@ -330,6 +361,7 @@ interface AssumptionSummary {
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
+  worstModelLabel: string | null;
   worstModelMatchRate: number | null;
 }
 

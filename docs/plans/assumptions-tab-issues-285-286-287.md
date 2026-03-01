@@ -370,6 +370,7 @@ interface AssumptionSummary {
   key: AssumptionKey;
   title: string;
   status: AssumptionStatus;
+  // Deferred until Phase 3. The current shipped GQL schema exposes status only.
   statusReason:
     | 'computed_successfully'
     | 'insufficient_pairs';
@@ -380,6 +381,7 @@ interface AssumptionSummary {
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
+  worstModelLabel: string | null;
   worstModelMatchRate: number | null;
 }
 
@@ -598,14 +600,19 @@ Canonical anchor:
 
 ## 4.1 Phase plan
 
-1. Phase 1: shared schema + status engine (DB tables, API scaffolding, preflight review panel)
-2. Phase 2: #285 end-to-end — batch matrix, summary card, detail table, `AssumptionTranscriptModal` for batch rows
-3. Phase 3: #286 end-to-end — orientation-flip variant generator, normalization engine, summary card, detail table, `AssumptionTranscriptModal` for baseline/flipped rows
-4. Phase 4: #287 end-to-end — generic rewrite storage, pairing logic, summary card, detail table, `AssumptionTranscriptModal` for titled/generic rows
-5. Phase 5: Assumptions tab UI polish (`?` methods disclosure, copy/export consistency across all three tables)
-6. Phase 6: QA signoff and release
+1. Phase 1: Assumptions tab shell + shared schema scaffolding (route, page shell, shared result types, preflight UI container)
+2. Phase 2: #285 read-only results — batch matrix, summary card, detail table, `AssumptionTranscriptModal` for batch rows using existing qualifying runs
+3. Phase 3: #285 end-to-end execution — preflight confirmation, approval gate wiring, locked-package launch action, run tagging, and query scoping to dedicated temp=0 confirmation runs
+4. Phase 4: #286 end-to-end — orientation-flip variant generator, normalization engine, summary card, detail table, `AssumptionTranscriptModal` for baseline/flipped rows, built on the #285 execution pipeline
+5. Phase 5: #287 end-to-end — generic rewrite storage, pairing logic, summary card, detail table, `AssumptionTranscriptModal` for titled/generic rows, built on the same execution pipeline
+6. Phase 6: Assumptions tab UI polish (`?` methods disclosure, copy/export consistency across all three tables)
+7. Phase 7: QA signoff and release
 
-Note: The `AssumptionTranscriptModal` is implemented per-issue in the phase that delivers that issue's table (Phases 2–4), not deferred to a separate drill-down phase.
+Note: The `AssumptionTranscriptModal` is implemented per-issue in the phase that delivers that issue's table (Phases 2, 4, and 5), not deferred to a separate drill-down phase.
+
+Phase 3 continuity note: Phase 2 reads any qualifying temp=0 runs for the locked vignette package. Phase 3 changes the data source to only runs tagged `assumptionKey = 'temp_zero_determinism'`. Immediately after Phase 3 ships, the tab will show `INSUFFICIENT DATA` until the first dedicated confirmation run is dispatched and completes.
+
+Sequencing note: do not continue expanding #286 or #287 beyond read-only placeholders until #285 has a true launch path. The temp=0 check is the simplest assumption and must establish the actual execution lifecycle (preflight -> approval -> dispatch -> tagged runs -> scoped readback) before the framing-variant checks reuse that infrastructure.
 
 ## 4.2 Backend checklist
 

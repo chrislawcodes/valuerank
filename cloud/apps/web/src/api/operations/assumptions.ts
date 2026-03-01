@@ -69,6 +69,16 @@ export type AssumptionsTempZeroQueryResult = {
   assumptionsTempZero: AssumptionsTempZeroResult;
 };
 
+export type LaunchAssumptionsTempZeroResult = {
+  launchAssumptionsTempZero: {
+    startedRuns: number;
+    totalVignettes: number;
+    modelCount: number;
+    runIds: string[];
+    failedVignetteIds: string[];
+  };
+};
+
 export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
   query AssumptionsTempZero {
     assumptionsTempZero {
@@ -121,6 +131,18 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
           content
         }
       }
+    }
+  }
+`;
+
+export const LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION = gql`
+  mutation LaunchAssumptionsTempZero {
+    launchAssumptionsTempZero {
+      startedRuns
+      totalVignettes
+      modelCount
+      runIds
+      failedVignetteIds
     }
   }
 `;
