@@ -42,6 +42,7 @@ type TempZeroSummary = {
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
+  worstModelLabel: string | null;
   worstModelMatchRate: number | null;
 };
 
@@ -49,7 +50,7 @@ type TempZeroDecision = {
   label: string;
   transcriptId: string | null;
   decision: string | null;
-  content: unknown | null;
+  content: unknown;
 };
 
 type TempZeroRow = {
@@ -208,6 +209,7 @@ builder.objectType(TempZeroSummaryRef, {
     modelsTested: t.exposeInt('modelsTested'),
     vignettesTested: t.exposeInt('vignettesTested'),
     worstModelId: t.exposeString('worstModelId', { nullable: true }),
+    worstModelLabel: t.exposeString('worstModelLabel', { nullable: true }),
     worstModelMatchRate: t.exposeFloat('worstModelMatchRate', { nullable: true }),
   }),
 });
@@ -379,7 +381,7 @@ builder.queryField('assumptionsTempZero', (t) =>
 
         transcriptGroups = new Map<string, TranscriptRecord[]>();
         for (const transcript of transcripts) {
-          if (!transcript.scenarioId) continue;
+          if (transcript.scenarioId === null) continue;
           const key = `${transcript.modelId}::${transcript.scenarioId}`;
           const current = transcriptGroups.get(key) ?? [];
           current.push(transcript);
@@ -461,17 +463,23 @@ builder.queryField('assumptionsTempZero', (t) =>
       const comparableRows = rows.filter((row) => row.mismatchType !== 'missing_trial');
       const matchedRows = comparableRows.filter((row) => row.isMatch);
       let worstModelId: string | null = null;
+      let worstModelLabel: string | null = null;
       let worstModelMatchRate: number | null = null;
       for (const [modelId, stats] of comparableByModel.entries()) {
         if (stats.comparable === 0) continue;
         const rate = stats.matched / stats.comparable;
         if (worstModelMatchRate === null || rate < worstModelMatchRate) {
           worstModelId = modelId;
+          worstModelLabel = models.find((model) => model.modelId === modelId)?.label ?? modelId;
           worstModelMatchRate = rate;
         }
       }
 
-      const expectedComparisons = availableVignettes.length * 25 * models.length;
+      const totalScenarios = availableVignettes.reduce(
+        (sum, vignette) => sum + ((definitionById.get(vignette.id)?.scenarios.length) ?? 0),
+        0,
+      );
+      const expectedComparisons = totalScenarios * models.length;
       const note = availableVignettes.length !== LOCKED_VIGNETTES.length
         ? `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`
         : null;
@@ -506,6 +514,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           modelsTested: models.length,
           vignettesTested: availableVignettes.length,
           worstModelId,
+          worstModelLabel,
           worstModelMatchRate,
         },
         rows,

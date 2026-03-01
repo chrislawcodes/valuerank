@@ -31,6 +31,7 @@ export type TempZeroSummary = {
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
+  worstModelLabel: string | null;
   worstModelMatchRate: number | null;
 };
 
@@ -38,7 +39,7 @@ export type TempZeroDecision = {
   label: string;
   transcriptId: string | null;
   decision: string | null;
-  content: unknown | null;
+  content: unknown;
 };
 
 export type TempZeroRow = {
@@ -99,6 +100,7 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
         modelsTested
         vignettesTested
         worstModelId
+        worstModelLabel
         worstModelMatchRate
       }
       rows {

@@ -3,6 +3,7 @@ import { useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Modal } from '../components/ui/Modal';
+import { Button } from '../components/ui/Button';
 import {
   ASSUMPTIONS_TEMP_ZERO_QUERY,
   type AssumptionsTempZeroQueryResult,
@@ -179,6 +180,7 @@ type SelectedTranscriptRow = {
   modelLabel: string;
   vignetteTitle: string;
   conditionKey: string;
+  mismatchType: TempZeroRow['mismatchType'];
   decisions: TempZeroDecision[];
 };
 
@@ -191,8 +193,10 @@ export function DomainAssumptions() {
   const [sortStateByVignette, setSortStateByVignette] = useState<Record<string, TempZeroSortState>>({});
 
   const result = data?.assumptionsTempZero;
-  const rows = result?.rows ?? [];
-  const vignetteGroups = useMemo(() => groupRowsByVignette(rows), [rows]);
+  const vignetteGroups = useMemo(
+    () => groupRowsByVignette(result?.rows ?? []),
+    [result?.rows],
+  );
 
   const handleSort = (vignetteId: string, nextKey: TempZeroSortKey) => {
     setSortStateByVignette((current) => {
@@ -355,7 +359,7 @@ export function DomainAssumptions() {
 
             {(result.summary.worstModelId || result.summary.worstModelMatchRate !== null) && (
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Worst model: {result.summary.worstModelId ?? 'n/a'}
+                Worst model: {result.summary.worstModelLabel ?? result.summary.worstModelId ?? 'n/a'}
                 {result.summary.worstModelMatchRate !== null && (
                   <span> ({formatPercent(result.summary.worstModelMatchRate)} match)</span>
                 )}
@@ -378,78 +382,90 @@ export function DomainAssumptions() {
                         <thead className="bg-white">
                           <tr>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'model')}
                               >
                                 <span>Model</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'model', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                             </th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'attributeA')}
                               >
                                 <span>{attributeA}</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'attributeA', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                             </th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'attributeB')}
                               >
                                 <span>{attributeB}</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'attributeB', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                             </th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'batch1')}
                               >
                                 <span>Batch 1</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'batch1', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
                             </th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'batch2')}
                               >
                                 <span>Batch 2</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'batch2', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
                             </th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center gap-1"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
                                 onClick={() => handleSort(group.vignetteId, 'batch3')}
                               >
                                 <span>Batch 3</span>
                                 <span className="text-xs text-gray-400">
                                   {renderSortIndicator(sortState.key === 'batch3', sortState.direction)}
                                 </span>
-                              </button>
+                              </Button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
                             </th>
                           </tr>
@@ -468,6 +484,7 @@ export function DomainAssumptions() {
                                   modelLabel: row.modelLabel,
                                   vignetteTitle: row.vignetteTitle,
                                   conditionKey: row.conditionKey,
+                                  mismatchType: row.mismatchType,
                                   decisions: row.decisions,
                                 })}
                               >
@@ -516,6 +533,11 @@ export function DomainAssumptions() {
             <div className="text-sm text-gray-600">
               Condition: {selectedRow.conditionKey}
             </div>
+            {selectedRow.mismatchType === 'missing_trial' && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This condition needs more runs before all three batches are available. Existing transcript data is shown below.
+              </div>
+            )}
             {selectedRow.decisions.map((decision) => (
               <div key={decision.label} className="rounded-lg border border-gray-200">
                 <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
