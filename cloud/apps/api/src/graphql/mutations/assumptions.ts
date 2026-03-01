@@ -23,13 +23,20 @@ function normalizeModelSet(models: unknown): string[] {
 }
 
 function matchesAssumptionsTempZeroPackage(runConfig: unknown, modelIds: string[]): boolean {
-  const config = runConfig as { assumptionKey?: unknown; models?: unknown; temperature?: unknown; samplePercentage?: unknown } | null;
+  const config = runConfig as {
+    assumptionKey?: unknown;
+    models?: unknown;
+    temperature?: unknown;
+    samplePercentage?: unknown;
+    runMode?: unknown;
+  } | null;
   const configModels = normalizeModelSet(config?.models);
+  const normalizedModelIds = [...modelIds].sort((left, right) => left.localeCompare(right));
 
   if (config?.assumptionKey === 'temp_zero_determinism') {
     return parseTemperature(config.temperature) === 0
-      && configModels.length === modelIds.length
-      && configModels.every((modelId, index) => modelId === modelIds[index]);
+      && configModels.length === normalizedModelIds.length
+      && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
   }
 
   const samplePercentage = typeof config?.samplePercentage === 'number'
@@ -39,9 +46,10 @@ function matchesAssumptionsTempZeroPackage(runConfig: unknown, modelIds: string[
       : null;
 
   return parseTemperature(config?.temperature) === 0
+    && config?.runMode === 'PERCENTAGE'
     && samplePercentage === 100
-    && configModels.length === modelIds.length
-    && configModels.every((modelId, index) => modelId === modelIds[index]);
+    && configModels.length === normalizedModelIds.length
+    && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
 }
 
 type ScenarioRecord = {

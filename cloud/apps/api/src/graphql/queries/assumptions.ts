@@ -107,13 +107,14 @@ function signatureMatches(runConfig: unknown, signature: string | null): boolean
 }
 
 function matchesAssumptionsTempZeroPackage(runConfig: unknown, signature: string | null, modelIds: string[]): boolean {
-  const config = runConfig as { assumptionKey?: unknown; models?: unknown; samplePercentage?: unknown } | null;
+  const config = runConfig as { assumptionKey?: unknown; models?: unknown; samplePercentage?: unknown; runMode?: unknown } | null;
   const configModels = normalizeModelSet(config?.models);
+  const normalizedModelIds = [...modelIds].sort((left, right) => left.localeCompare(right));
 
   if (config?.assumptionKey === 'temp_zero_determinism') {
     return signatureMatches(runConfig, signature)
-      && configModels.length === modelIds.length
-      && configModels.every((modelId, index) => modelId === modelIds[index]);
+      && configModels.length === normalizedModelIds.length
+      && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
   }
 
   const samplePercentage = typeof config?.samplePercentage === 'number'
@@ -123,9 +124,10 @@ function matchesAssumptionsTempZeroPackage(runConfig: unknown, signature: string
       : null;
 
   return signatureMatches(runConfig, signature)
+    && config?.runMode === 'PERCENTAGE'
     && samplePercentage === 100
-    && configModels.length === modelIds.length
-    && configModels.every((modelId, index) => modelId === modelIds[index]);
+    && configModels.length === normalizedModelIds.length
+    && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
 }
 
 function buildConditionKey(scenario: ScenarioRecord): string {
