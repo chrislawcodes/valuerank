@@ -103,7 +103,7 @@ function buildConditionKey(scenario: ScenarioRecord): string {
   return `${match[1] ?? '?'}x${match[2] ?? '?'}`;
 }
 
-function normalizeEstimatedTokens(value: number): number {
+function roundToGraphQLInt(value: number): number {
   return Math.round(value);
 }
 
@@ -444,8 +444,8 @@ builder.queryField('assumptionsTempZero', (t) =>
           title: 'Temp=0 Determinism Preflight',
           projectedPromptCount: expectedComparisons * 3,
           projectedComparisons: expectedComparisons,
-          estimatedInputTokens: estimatedInputTokens > 0 ? normalizeEstimatedTokens(estimatedInputTokens) : null,
-          estimatedOutputTokens: estimatedOutputTokens > 0 ? normalizeEstimatedTokens(estimatedOutputTokens) : null,
+          estimatedInputTokens: estimatedInputTokens > 0 ? roundToGraphQLInt(estimatedInputTokens) : null,
+          estimatedOutputTokens: estimatedOutputTokens > 0 ? roundToGraphQLInt(estimatedOutputTokens) : null,
           estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
           selectedSignature,
           vignettes: availableVignettes.map((vignette) => ({
