@@ -86,6 +86,7 @@ type TranscriptRecord = {
   id: string;
   scenarioId: string | null;
   modelId: string;
+  modelVersion: string | null;
   decisionCode: string | null;
   content: unknown;
   createdAt: Date;
@@ -369,6 +370,7 @@ builder.queryField('assumptionsTempZero', (t) =>
             id: true,
             scenarioId: true,
             modelId: true,
+            modelVersion: true,
             decisionCode: true,
             content: true,
             createdAt: true,
@@ -386,7 +388,9 @@ builder.queryField('assumptionsTempZero', (t) =>
 
         for (const [key, group] of transcriptGroups.entries()) {
           group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-          transcriptGroups.set(key, group.slice(0, 3));
+          const latestModelVersion = group[0]?.modelVersion ?? null;
+          const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
+          transcriptGroups.set(key, sameVersionGroup.slice(0, 3));
         }
       }
 

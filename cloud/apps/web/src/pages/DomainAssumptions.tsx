@@ -12,6 +12,10 @@ import {
 
 type TempZeroSortKey = 'model' | 'attributeA' | 'attributeB' | 'batch1' | 'batch2' | 'batch3';
 type SortDirection = 'asc' | 'desc';
+type TempZeroSortState = {
+  key: TempZeroSortKey;
+  direction: SortDirection;
+};
 
 function formatPercent(value: number | null): string {
   if (value === null) return 'n/a';
@@ -184,20 +188,33 @@ export function DomainAssumptions() {
     requestPolicy: 'cache-and-network',
   });
   const [selectedRow, setSelectedRow] = useState<SelectedTranscriptRow | null>(null);
-  const [sortKey, setSortKey] = useState<TempZeroSortKey>('model');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortStateByVignette, setSortStateByVignette] = useState<Record<string, TempZeroSortState>>({});
 
   const result = data?.assumptionsTempZero;
   const rows = result?.rows ?? [];
   const vignetteGroups = useMemo(() => groupRowsByVignette(rows), [rows]);
 
-  const handleSort = (nextKey: TempZeroSortKey) => {
-    if (sortKey === nextKey) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortKey(nextKey);
-    setSortDirection('asc');
+  const handleSort = (vignetteId: string, nextKey: TempZeroSortKey) => {
+    setSortStateByVignette((current) => {
+      const existing = current[vignetteId];
+      if (existing && existing.key === nextKey) {
+        return {
+          ...current,
+          [vignetteId]: {
+            key: nextKey,
+            direction: existing.direction === 'asc' ? 'desc' : 'asc',
+          },
+        };
+      }
+
+      return {
+        ...current,
+        [vignetteId]: {
+          key: nextKey,
+          direction: 'asc',
+        },
+      };
+    });
   };
 
   return (
@@ -348,7 +365,8 @@ export function DomainAssumptions() {
             <div className="mt-5 space-y-6">
               {vignetteGroups.map((group) => {
                 const { attributeA, attributeB } = parseAttributes(group.vignetteTitle);
-                const sortedGroupRows = sortGroupRows(group.rows, sortKey, sortDirection);
+                const sortState = sortStateByVignette[group.vignetteId] ?? { key: 'model', direction: 'asc' };
+                const sortedGroupRows = sortGroupRows(group.rows, sortState.key, sortState.direction);
 
                 return (
                   <div key={group.vignetteId} className="rounded-lg border border-gray-200">
@@ -363,11 +381,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('model')}
+                                onClick={() => handleSort(group.vignetteId, 'model')}
                               >
                                 <span>Model</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'model', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'model', sortState.direction)}
                                 </span>
                               </button>
                             </th>
@@ -375,11 +393,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('attributeA')}
+                                onClick={() => handleSort(group.vignetteId, 'attributeA')}
                               >
                                 <span>{attributeA}</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'attributeA', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'attributeA', sortState.direction)}
                                 </span>
                               </button>
                             </th>
@@ -387,11 +405,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('attributeB')}
+                                onClick={() => handleSort(group.vignetteId, 'attributeB')}
                               >
                                 <span>{attributeB}</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'attributeB', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'attributeB', sortState.direction)}
                                 </span>
                               </button>
                             </th>
@@ -399,11 +417,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('batch1')}
+                                onClick={() => handleSort(group.vignetteId, 'batch1')}
                               >
                                 <span>Batch 1</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'batch1', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'batch1', sortState.direction)}
                                 </span>
                               </button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
@@ -412,11 +430,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('batch2')}
+                                onClick={() => handleSort(group.vignetteId, 'batch2')}
                               >
                                 <span>Batch 2</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'batch2', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'batch2', sortState.direction)}
                                 </span>
                               </button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
@@ -425,11 +443,11 @@ export function DomainAssumptions() {
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1"
-                                onClick={() => handleSort('batch3')}
+                                onClick={() => handleSort(group.vignetteId, 'batch3')}
                               >
                                 <span>Batch 3</span>
                                 <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortKey === 'batch3', sortDirection)}
+                                  {renderSortIndicator(sortState.key === 'batch3', sortState.direction)}
                                 </span>
                               </button>
                               <div className="text-xs font-normal text-gray-500">Decision code</div>
