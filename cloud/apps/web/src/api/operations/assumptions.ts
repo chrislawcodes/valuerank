@@ -8,10 +8,13 @@ export type TempZeroPreflightVignette = {
   title: string;
   conditionCount: number;
   rationale: string;
+  batchesToRun: number;
 };
 
 export type TempZeroPreflight = {
   title: string;
+  runsToLaunch: number;
+  totalBatchesToRun: number;
   projectedPromptCount: number;
   projectedComparisons: number;
   estimatedInputTokens: number | null;
@@ -88,6 +91,8 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
       generatedAt
       preflight {
         title
+        runsToLaunch
+        totalBatchesToRun
         projectedPromptCount
         projectedComparisons
         estimatedInputTokens
@@ -100,6 +105,7 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
           title
           conditionCount
           rationale
+          batchesToRun
         }
       }
       summary {

@@ -256,7 +256,19 @@ export function DomainAssumptions() {
               This phase counts dedicated temp=0 assumptions runs plus earlier completed temp=0 runs that match the same locked package configuration. New launches top up only the remaining batches needed within that matching run set to reach three completed samples per condition.
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Runs To Launch</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">
+                  {formatInteger(result.preflight.runsToLaunch)}
+                </div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Batches To Run</div>
+                <div className="mt-1 text-lg font-semibold text-gray-900">
+                  {formatInteger(result.preflight.totalBatchesToRun)}
+                </div>
+              </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Projected Prompts</div>
                 <div className="mt-1 text-lg font-semibold text-gray-900">
@@ -333,6 +345,7 @@ export function DomainAssumptions() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Vignette</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Conditions</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-600">Batches To Run</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -340,6 +353,7 @@ export function DomainAssumptions() {
                     <tr key={vignette.vignetteId}>
                       <td className="px-3 py-3 font-medium text-gray-900">{vignette.title}</td>
                       <td className="px-3 py-3 text-gray-700">{vignette.conditionCount}</td>
+                      <td className="px-3 py-3 text-gray-700">{vignette.batchesToRun}</td>
                     </tr>
                   ))}
                 </tbody>
