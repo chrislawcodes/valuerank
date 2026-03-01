@@ -140,6 +140,8 @@ Rows outside valid constraints are excluded and counted in `excludedComparisons`
 - #286: at least `5 vignettes x all models x all conditions x 1 batch`
 - #287: at least `5 vignettes x all models x all conditions x 1 batch`
 
+Note: #286 and #287 use 5 vignettes (previously drafted as 10). The reduction is intentional — the locked 5-vignette package provides full coverage of the 10-value space with disjoint pairs (same rationale as #285). A larger set would add content-creation cost without adding value-space coverage.
+
 ## 2.2a Workstream B2 — Vignette identification and creation
 
 This workstream is a prerequisite to all three issues. It must complete before any probe runs are scheduled.
@@ -221,6 +223,10 @@ Each selected definition contributes its full `5 x 5` condition grid (`25` produ
 
 #286 requires selecting vignettes and generating an order-flipped variant for each. The value tradeoff does not change — only which value appears as the "first" option in the prompt.
 
+**What "flipping the order" means in the 5×5 condition grid:**
+
+Each condition (e.g. `3x4`) represents value A at intensity 3 and value B at intensity 4. Flipping the order is a **purely presentational swap** — the scenario body text is not rewritten. The same scenario is rendered with the two value slots exchanged in the prompt template, and the decision scale is inverted accordingly (`orientationFlipped = true`). No new scenario content is authored for #286; only a rendering flag and pair link are stored. The condition key structure is preserved.
+
 For methodological consistency, `#286` should reuse the exact same 5 vignette families selected for `#285`. This keeps the content package fixed across the two checks so that `#286` isolates order effects only.
 
 **Locked #286 production set (same as #285):**
@@ -246,6 +252,8 @@ For methodological consistency, `#286` should reuse the exact same 5 vignette fa
 ### 2.2a.5 Issue #287 — Selection and rewrite procedure
 
 #287 requires selecting professionally-framed vignettes and writing a semantically equivalent generic version for each. This is the most labor-intensive step and requires editorial judgment.
+
+**Content creation scope:** 5 vignettes × 25 conditions = **125 individual scenario rewrites**. Each condition in the 5×5 grid has distinct generated scenario text (different intensity levels produce different narrative content), so each must be rewritten independently. This is the largest single labor item in the project and must be staffed and scheduled before Phase 4 can begin.
 
 For comparability across the Assumptions tab, `#287` should also reuse the same 5 vignette families selected for `#285`. The only intended change is removal of role-title framing, not a change to the underlying content package.
 
@@ -302,6 +310,47 @@ Before any assumption run is scheduled, the full vignette set for that assumptio
 6. No probe run is dispatched until all required review fields are complete and the preflight review has been explicitly confirmed.
 
 This gate applies to all three issues. Partial sets (some pairs reviewed, some not) are not acceptable — a partial run produces a biased SUFFICIENT DATA result.
+
+---
+
+## 2.2b Workstream B3 — Database schema
+
+The assumption metadata defined in 2.2a.2 requires two new tables. These must be designed and migrated before any backend computation work begins.
+
+### `assumption_vignette_selection`
+
+One row per vignette family approved for an assumption test.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | `cuid` | Primary key |
+| `assumptionKey` | `varchar` | `temp_zero_determinism`, `order_invariance`, `job_title_invariance` |
+| `definitionId` | `varchar` FK → `definitions.id` | The selected vignette family |
+| `rationale` | `text` | Stored explanation for inclusion |
+| `selectionReviewedBy` | `varchar` FK → `users.id` | Reviewer who approved the family |
+| `selectionReviewedAt` | `timestamp` | Approval timestamp |
+| `createdAt` | `timestamp` | |
+
+### `assumption_scenario_pair`
+
+One row per scenario condition within a selected vignette family. For #285, `variantScenarioId` is null. For #286/#287, both scenario IDs are required and equivalence review fields must be populated before runs are dispatched.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | `cuid` | Primary key |
+| `selectionId` | `varchar` FK → `assumption_vignette_selection.id` | Parent vignette family record |
+| `assumptionKey` | `varchar` | Denormalized from parent for query convenience |
+| `conditionKey` | `varchar` | e.g. `3x4` — stable condition identifier |
+| `sourceScenarioId` | `varchar` FK → `scenarios.id` | Baseline/production scenario |
+| `variantScenarioId` | `varchar` FK → `scenarios.id`, nullable | Flipped/generic variant (null for #285) |
+| `variantType` | `varchar` | `none`, `flipped_order`, `generic_framing` |
+| `equivalenceReviewedBy` | `varchar` FK → `users.id`, nullable | Required for #286/#287 before runs |
+| `equivalenceReviewedAt` | `timestamp`, nullable | |
+| `createdAt` | `timestamp` | |
+
+### Run tagging
+
+Probe runs dispatched for assumption tests are tagged using the existing `run.config` JSON field with an additional `assumptionKey` property. No new run table is required — the assumption pairing logic joins on `run.config->>'assumptionKey'` when building the comparison matrix.
 
 ---
 
@@ -403,14 +452,14 @@ For all three tests, users need the ability to inspect the exact prompt and resp
 
 ## 3.2 Issue #285 — Temp=0 determinism
 
-### 3.1.1 Test design
+### 3.2.1 Test design
 
 - Inputs: 5 fixed vignettes
 - Conditions: all conditions
 - Batches: 3 repeated runs
 - Scope: all production models in the selected domain/signature
 
-### 3.1.2 Task breakdown
+### 3.2.2 Task breakdown
 
 1. Add `assumption_runs` metadata marker: `assumptionKey='temp_zero_determinism'`.
 2. Generate/run 3 batches with identical config.
@@ -418,22 +467,22 @@ For all three tests, users need the ability to inspect the exact prompt and resp
 4. Flag mismatch if any batch differs.
 5. Group display rows by vignette so each vignette renders as its own table.
 
-### 3.1.3 Table design
+### 3.2.3 Table design
 
 - Render one table per vignette (not one global table).
 - Columns: `Model`, dynamic `Attribute A` name, dynamic `Attribute B` name, `Batch 1`, `Batch 2`, `Batch 3`
 - `Attribute A` / `Attribute B` column titles come from the actual vignette pair names.
 - Cells under `Attribute A` / `Attribute B` show the condition levels for that row (for example `3` and `4` from `3x4`).
 - Batch columns show only the decision code for that batch.
-- Each row is clickable and opens the batch transcript modal.
+- Each row is clickable and opens the batch transcript modal (implemented in Phase 2 alongside the table — see 3.1).
 - Include copy icon at title upper-right
 
-### 3.1.4 Expected signals
+### 3.2.4 Expected signals
 
 - We expect exact determinism (`matchRate = 1.00`, no mismatches).
 - UI displays exact `matchRate` regardless and lets users interpret.
 
-### 3.1.5 Test matrix
+### 3.2.5 Test matrix
 
 - Unit:
   - trial-pair comparator catches 1-of-3 mismatch
@@ -442,19 +491,19 @@ For all three tests, users need the ability to inspect the exact prompt and resp
   - API returns sorted trial columns consistently
   - UI highlights mismatch rows correctly
 
-## 3.2 Issue #286 — Order invariance
+## 3.3 Issue #286 — Order invariance
 
-### 3.2.1 Test design
+### 3.3.1 Test design
 
 - Inputs: 5 existing vignettes
 - Condition A: baseline order
-- Condition B: attributes/options reversed
+- Condition B: attributes/options reversed (presentational swap only — same scenario content)
 - Additional mapping check: reverse A/B orientation in option labels
 - Scope: all models, temp=0
 
-### 3.2.2 Task breakdown
+### 3.3.2 Task breakdown
 
-1. Create variant generator for “flipped order.”
+1. Create variant generator for “flipped order” (rendering flag only — no scenario rewrite required).
 2. Create orientation-mapping metadata:
    - `semanticLeft`, `semanticRight`, `renderedLeft`, `renderedRight`
    - `orientationFlipped: boolean`
@@ -479,20 +528,21 @@ Canonical anchor:
 - Baseline semantic orientation is authoritative and stored on the scenario pair.
 - All variant responses are transformed into baseline semantic orientation before comparison.
 
-### 3.2.3 Table design
+### 3.3.3 Table design
 
 - Columns: `Model`, `Vignette`, `Condition`, `Baseline`, `Flipped`, `Normalized Match`, `Reason`
+- Each row is clickable and opens the batch transcript modal (implemented in Phase 3 alongside this table).
 - Summary chips:
   - `% unchanged`
   - `# sensitive models`
   - `# sensitive vignettes`
 
-### 3.2.4 Expected signals
+### 3.3.4 Expected signals
 
 - We expect normalized match >=98% generally.
 - UI displays exact normalized match rate.
 
-### 3.2.5 Test matrix
+### 3.3.5 Test matrix
 
 - Unit:
   - mapping normalization works for reversed labels
@@ -501,16 +551,16 @@ Canonical anchor:
   - baseline/flipped pairs are correctly matched by key
   - summary percentages equal raw counts
 
-## 3.3 Issue #287 — Job-title invariance
+## 3.4 Issue #287 — Job-title invariance
 
-### 3.3.1 Test design
+### 3.4.1 Test design
 
 - Inputs: 5 professional-domain vignettes
 - Condition A: titled version (original)
 - Condition B: generic job wording
 - Scope: all models, temp=0
 
-### 3.3.2 Task breakdown
+### 3.4.2 Task breakdown
 
 1. Create no-title rewrite templates with same value tradeoff.
 2. Store pair-link metadata: `sourceScenarioId`, `genericScenarioId`.
@@ -520,20 +570,21 @@ Canonical anchor:
    - model
    - vignette template
 
-### 3.3.3 Table design
+### 3.4.3 Table design
 
 - Columns: `Model`, `Vignette`, `Condition`, `Titled`, `Generic`, `Changed?`
+- Each row is clickable and opens the batch transcript modal (implemented in Phase 4 alongside this table — see 3.1).
 - Summary metrics:
   - `% changed`
   - most title-sensitive model
   - most title-sensitive vignette family
 
-### 3.3.4 Expected signals
+### 3.4.4 Expected signals
 
 - We expect change rate <=5% generally.
 - UI displays exact change rate.
 
-### 3.3.5 Test matrix
+### 3.4.5 Test matrix
 
 - Unit:
   - pairing logic rejects non-equivalent scenario links
@@ -547,13 +598,14 @@ Canonical anchor:
 
 ## 4.1 Phase plan
 
-1. Phase 1: shared schema + status engine
-2. Phase 2: #285 end-to-end
-3. Phase 3: #286 end-to-end
-4. Phase 4: #287 end-to-end
-5. Phase 5: Drill-down UI (`AssumptionTranscriptModal` + wiring up the `TranscriptList`)
-6. Phase 6: Assumptions tab UI polish (`?`, copy/export consistency)
-7. Phase 7: QA signoff and release
+1. Phase 1: shared schema + status engine (DB tables, API scaffolding, preflight review panel)
+2. Phase 2: #285 end-to-end — batch matrix, summary card, detail table, `AssumptionTranscriptModal` for batch rows
+3. Phase 3: #286 end-to-end — orientation-flip variant generator, normalization engine, summary card, detail table, `AssumptionTranscriptModal` for baseline/flipped rows
+4. Phase 4: #287 end-to-end — generic rewrite storage, pairing logic, summary card, detail table, `AssumptionTranscriptModal` for titled/generic rows
+5. Phase 5: Assumptions tab UI polish (`?` methods disclosure, copy/export consistency across all three tables)
+6. Phase 6: QA signoff and release
+
+Note: The `AssumptionTranscriptModal` is implemented per-issue in the phase that delivers that issue's table (Phases 2–4), not deferred to a separate drill-down phase.
 
 ## 4.2 Backend checklist
 
@@ -562,6 +614,7 @@ Canonical anchor:
 - Add strict pairing validation and exclusion counts
 - Add deterministic ordering for tables and summaries
 - Add telemetry (`assumptionKey`, run counts, mismatch rate)
+- Implement server-side prompt template rendering for preflight cost estimation: render the exact prompts that will be sent, count input tokens from those rendered strings (not averages), apply the current model price snapshot, and add expected output-token allowance using the standard assumptions-run response budget. This is required by 2.2a.6 and is non-trivial — it requires the template renderer to be callable from the cost-estimation path before any probe jobs are dispatched.
 
 ## 4.3 Frontend checklist
 

@@ -3,7 +3,7 @@ import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { formatVnewSignature } from '../../utils/vnew-signature.js';
+import { formatVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
@@ -154,7 +154,7 @@ function selectDefaultSignature(completedRuns: Array<{ config: unknown }>): stri
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
   const runTemperature = parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature);
-  const signatureTemperature = signature === 'vnewtd' ? null : parseTemperature(signature.replace(/^vnewt/, ''));
+  const signatureTemperature = parseVnewTemperature(signature);
   return runTemperature === signatureTemperature;
 }
 

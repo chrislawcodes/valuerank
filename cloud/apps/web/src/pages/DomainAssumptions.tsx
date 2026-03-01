@@ -63,6 +63,8 @@ function extractTranscriptText(content: unknown): string {
   }
 
   const turns = (content as { turns?: unknown }).turns;
+  // Current assumptions transcripts are expected to use the turns array shape.
+  // If that changes later, returning empty keeps the modal safe and makes the fallback explicit.
   if (!Array.isArray(turns)) {
     return '';
   }
@@ -297,12 +299,29 @@ export function DomainAssumptions() {
           </section>
 
           <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-900">{result.summary.title}</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Exact repeat agreement for each `(model, vignette, condition)` group using the latest three matching temp=0 trials.
-            </p>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">{result.summary.title}</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Exact repeat agreement for each `(model, vignette, condition)` group using the latest three matching temp=0 trials.
+                </p>
+              </div>
+              <div
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                  result.summary.status === 'INSUFFICIENT_DATA'
+                    ? 'bg-gray-100 text-gray-700'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {result.summary.status === 'INSUFFICIENT_DATA' ? 'Insufficient Data' : 'Computed'}
+              </div>
+            </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Match Rate</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(result.summary.matchRate)}</div>
+              </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Difference Rate</div>
                 <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(result.summary.differenceRate)}</div>
@@ -316,6 +335,15 @@ export function DomainAssumptions() {
                 <div className="mt-1 text-base font-semibold text-gray-900">{formatInteger(result.summary.vignettesTested)}</div>
               </div>
             </div>
+
+            {(result.summary.worstModelId || result.summary.worstModelMatchRate !== null) && (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Worst model: {result.summary.worstModelId ?? 'n/a'}
+                {result.summary.worstModelMatchRate !== null && (
+                  <span> ({formatPercent(result.summary.worstModelMatchRate)} match)</span>
+                )}
+              </div>
+            )}
 
             <div className="mt-5 space-y-6">
               {vignetteGroups.map((group) => {
@@ -416,7 +444,7 @@ export function DomainAssumptions() {
                               <tr
                                 key={`${row.modelId}-${row.vignetteId}-${row.conditionKey}`}
                                 className={`cursor-pointer transition-colors ${
-                                  row.isMatch ? 'hover:bg-teal-50' : 'bg-red-50 hover:bg-red-100'
+                                  row.mismatchType === 'decision_flip' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-teal-50'
                                 }`}
                                 onClick={() => setSelectedRow({
                                   modelLabel: row.modelLabel,
