@@ -1,22 +1,17 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from 'urql';
+import { useMutation, useQuery } from 'urql';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import {
   ASSUMPTIONS_TEMP_ZERO_QUERY,
+  LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   type AssumptionsTempZeroQueryResult,
+  type LaunchAssumptionsTempZeroResult,
   type TempZeroDecision,
   type TempZeroRow,
 } from '../api/operations/assumptions';
-
-type TempZeroSortKey = 'model' | 'attributeA' | 'attributeB' | 'batch1' | 'batch2' | 'batch3';
-type SortDirection = 'asc' | 'desc';
-type TempZeroSortState = {
-  key: TempZeroSortKey;
-  direction: SortDirection;
-};
 
 function formatPercent(value: number | null): string {
   if (value === null) return 'n/a';
@@ -114,66 +109,61 @@ function groupRowsByVignette(rows: TempZeroRow[]): Array<{ vignetteId: string; v
   ));
 }
 
-function compareValues(left: string | null, right: string | null): number {
-  if (left === right) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
+function groupRowsByModel(rows: TempZeroRow[]): Array<{ modelId: string; modelLabel: string; rows: TempZeroRow[] }> {
+  const groups = new Map<string, { modelId: string; modelLabel: string; rows: TempZeroRow[] }>();
 
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-  const leftIsNumber = Number.isFinite(leftNumber);
-  const rightIsNumber = Number.isFinite(rightNumber);
-
-  if (leftIsNumber && rightIsNumber) {
-    return leftNumber - rightNumber;
+  for (const row of rows) {
+    const existing = groups.get(row.modelId);
+    if (existing) {
+      existing.rows.push(row);
+      continue;
+    }
+    groups.set(row.modelId, {
+      modelId: row.modelId,
+      modelLabel: row.modelLabel,
+      rows: [row],
+    });
   }
 
-  return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      rows: [...group.rows].sort((left, right) => (
+        left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' })
+      )),
+    }))
+    .sort((left, right) => left.modelLabel.localeCompare(right.modelLabel, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
-function sortGroupRows(rows: TempZeroRow[], sortKey: TempZeroSortKey, direction: SortDirection): TempZeroRow[] {
-  const multiplier = direction === 'asc' ? 1 : -1;
+function getMismatchSummary(rows: TempZeroRow[], matchedLabel: string): { text: string; toneClass: string } {
+  const mismatchCount = rows.filter((row) => row.mismatchType === 'decision_flip').length;
+  const missingTrialCount = rows.filter((row) => row.mismatchType === 'missing_trial').length;
 
-  return [...rows].sort((left, right) => {
-    const leftLevels = parseConditionLevels(left.conditionKey);
-    const rightLevels = parseConditionLevels(right.conditionKey);
+  if (mismatchCount > 0) {
+    return {
+      text: `${mismatchCount} mismatch${mismatchCount === 1 ? '' : 'es'}`,
+      toneClass: 'text-red-700',
+    };
+  }
 
-    let comparison = 0;
-    switch (sortKey) {
-      case 'model':
-        comparison = left.modelLabel.localeCompare(right.modelLabel, undefined, { numeric: true, sensitivity: 'base' });
-        break;
-      case 'attributeA':
-        comparison = compareValues(leftLevels.levelA, rightLevels.levelA);
-        break;
-      case 'attributeB':
-        comparison = compareValues(leftLevels.levelB, rightLevels.levelB);
-        break;
-      case 'batch1':
-        comparison = compareValues(left.batch1, right.batch1);
-        break;
-      case 'batch2':
-        comparison = compareValues(left.batch2, right.batch2);
-        break;
-      case 'batch3':
-        comparison = compareValues(left.batch3, right.batch3);
-        break;
-      default:
-        comparison = 0;
-    }
+  if (missingTrialCount === rows.length && rows.length > 0) {
+    return {
+      text: 'All pending',
+      toneClass: 'text-amber-700',
+    };
+  }
 
-    if (comparison !== 0) return comparison * multiplier;
+  if (missingTrialCount > 0) {
+    return {
+      text: `${missingTrialCount} trial${missingTrialCount === 1 ? '' : 's'} missing`,
+      toneClass: 'text-amber-700',
+    };
+  }
 
-    const fallbackModel = left.modelLabel.localeCompare(right.modelLabel, undefined, { numeric: true, sensitivity: 'base' });
-    if (fallbackModel !== 0) return fallbackModel;
-
-    return left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' });
-  });
-}
-
-function renderSortIndicator(active: boolean, direction: SortDirection): string {
-  if (!active) return '↕';
-  return direction === 'asc' ? '↑' : '↓';
+  return {
+    text: matchedLabel,
+    toneClass: 'text-gray-500',
+  };
 }
 
 type SelectedTranscriptRow = {
@@ -185,40 +175,43 @@ type SelectedTranscriptRow = {
 };
 
 export function DomainAssumptions() {
-  const [{ data, fetching, error }] = useQuery<AssumptionsTempZeroQueryResult>({
+  const [{ data, fetching, error }, reexecuteTempZeroQuery] = useQuery<AssumptionsTempZeroQueryResult>({
     query: ASSUMPTIONS_TEMP_ZERO_QUERY,
     requestPolicy: 'cache-and-network',
   });
+  const [launchResult, executeLaunchTempZero] = useMutation<LaunchAssumptionsTempZeroResult>(
+    LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
+  );
   const [selectedRow, setSelectedRow] = useState<SelectedTranscriptRow | null>(null);
-  const [sortStateByVignette, setSortStateByVignette] = useState<Record<string, TempZeroSortState>>({});
+  const [isLaunchConfirmed, setIsLaunchConfirmed] = useState(false);
+  const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
 
   const result = data?.assumptionsTempZero;
   const vignetteGroups = useMemo(
     () => groupRowsByVignette(result?.rows ?? []),
     [result?.rows],
   );
+  const launchError = launchResult.error?.message ?? null;
 
-  const handleSort = (vignetteId: string, nextKey: TempZeroSortKey) => {
-    setSortStateByVignette((current) => {
-      const existing = current[vignetteId];
-      if (existing && existing.key === nextKey) {
-        return {
-          ...current,
-          [vignetteId]: {
-            key: nextKey,
-            direction: existing.direction === 'asc' ? 'desc' : 'asc',
-          },
-        };
-      }
+  const handleLaunchTempZero = async () => {
+    setLaunchFeedback(null);
+    const response = await executeLaunchTempZero({});
+    if (response.error) {
+      return;
+    }
+    const payload = response.data?.launchAssumptionsTempZero;
+    if (!payload) {
+      setLaunchFeedback('Temp=0 confirmation launch returned no data.');
+      return;
+    }
 
-      return {
-        ...current,
-        [vignetteId]: {
-          key: nextKey,
-          direction: 'asc',
-        },
-      };
-    });
+    const failedSuffix = payload.failedVignetteIds.length > 0
+      ? ` ${payload.failedVignetteIds.length} vignette${payload.failedVignetteIds.length === 1 ? '' : 's'} failed to launch.`
+      : '';
+    setLaunchFeedback(
+      `Started ${payload.startedRuns} dedicated temp=0 run${payload.startedRuns === 1 ? '' : 's'} across ${payload.totalVignettes} locked vignette${payload.totalVignettes === 1 ? '' : 's'} using ${payload.modelCount} model${payload.modelCount === 1 ? '' : 's'}.${failedSuffix}`,
+    );
+    void reexecuteTempZeroQuery({ requestPolicy: 'network-only' });
   };
 
   return (
@@ -254,6 +247,10 @@ export function DomainAssumptions() {
                 {result.note}
               </div>
             )}
+
+            <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+              This phase reads only dedicated runs tagged for <code>temp_zero_determinism</code>. If none have completed yet, the table below will stay empty until you launch the locked package and those runs finish.
+            </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
@@ -317,6 +314,44 @@ export function DomainAssumptions() {
                 </tbody>
               </table>
             </div>
+
+            <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <label className="flex items-start gap-3 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-700 focus:ring-teal-500"
+                  checked={isLaunchConfirmed}
+                  onChange={(event) => setIsLaunchConfirmed(event.target.checked)}
+                />
+                <span>
+                  I reviewed the locked temp=0 vignette package above and want to launch the dedicated confirmation run for this exact set.
+                </span>
+              </label>
+              <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+                <Button
+                  type="button"
+                  onClick={() => { void handleLaunchTempZero(); }}
+                  disabled={!isLaunchConfirmed || launchResult.fetching}
+                >
+                  {launchResult.fetching ? 'Launching Temp=0 Runs...' : 'Launch Temp=0 Confirmation Run'}
+                </Button>
+                {!isLaunchConfirmed && (
+                  <span className="text-xs text-gray-500">
+                    Confirm the preflight review before launching.
+                  </span>
+                )}
+              </div>
+              {launchError && (
+                <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {launchError}
+                </div>
+              )}
+              {launchFeedback && !launchError && (
+                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  {launchFeedback}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="rounded-lg border border-gray-200 bg-white p-5">
@@ -366,141 +401,84 @@ export function DomainAssumptions() {
               </div>
             )}
 
-            <div className="mt-5 space-y-6">
+            <div className="mt-5 space-y-4">
               {vignetteGroups.map((group) => {
                 const { attributeA, attributeB } = parseAttributes(group.vignetteTitle);
-                const sortState = sortStateByVignette[group.vignetteId] ?? { key: 'model', direction: 'asc' };
-                const sortedGroupRows = sortGroupRows(group.rows, sortState.key, sortState.direction);
+                const modelGroups = groupRowsByModel(group.rows);
+                const groupMismatchSummary = getMismatchSummary(group.rows, 'No mismatches');
 
                 return (
-                  <div key={group.vignetteId} className="rounded-lg border border-gray-200">
-                    <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
-                      <h3 className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</h3>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead className="bg-white">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'model')}
-                              >
-                                <span>Model</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'model', sortState.direction)}
-                                </span>
-                              </Button>
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'attributeA')}
-                              >
-                                <span>{attributeA}</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'attributeA', sortState.direction)}
-                                </span>
-                              </Button>
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'attributeB')}
-                              >
-                                <span>{attributeB}</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'attributeB', sortState.direction)}
-                                </span>
-                              </Button>
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'batch1')}
-                              >
-                                <span>Batch 1</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'batch1', sortState.direction)}
-                                </span>
-                              </Button>
-                              <div className="text-xs font-normal text-gray-500">Decision code</div>
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'batch2')}
-                              >
-                                <span>Batch 2</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'batch2', sortState.direction)}
-                                </span>
-                              </Button>
-                              <div className="text-xs font-normal text-gray-500">Decision code</div>
-                            </th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto min-h-0 gap-1 px-0 py-0 text-gray-600 hover:bg-transparent hover:text-gray-900"
-                                onClick={() => handleSort(group.vignetteId, 'batch3')}
-                              >
-                                <span>Batch 3</span>
-                                <span className="text-xs text-gray-400">
-                                  {renderSortIndicator(sortState.key === 'batch3', sortState.direction)}
-                                </span>
-                              </Button>
-                              <div className="text-xs font-normal text-gray-500">Decision code</div>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                          {sortedGroupRows.map((row) => {
-                            const { levelA, levelB } = parseConditionLevels(row.conditionKey);
+                  <details key={group.vignetteId} className="rounded-lg border border-gray-200">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {modelGroups.length} model{modelGroups.length === 1 ? '' : 's'} · {group.rows.length} condition row{group.rows.length === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      <div className={`text-xs font-medium ${groupMismatchSummary.toneClass}`}>
+                        {groupMismatchSummary.text}
+                      </div>
+                    </summary>
+                    <div className="space-y-3 border-t border-gray-200 bg-white p-4">
+                      {modelGroups.map((modelGroup) => {
+                        const modelMismatchSummary = getMismatchSummary(modelGroup.rows, 'All matched');
 
-                            return (
-                              <tr
-                                key={`${row.modelId}-${row.vignetteId}-${row.conditionKey}`}
-                                className={`cursor-pointer transition-colors ${
-                                  row.mismatchType === 'decision_flip' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-teal-50'
-                                }`}
-                                onClick={() => setSelectedRow({
-                                  modelLabel: row.modelLabel,
-                                  vignetteTitle: row.vignetteTitle,
-                                  conditionKey: row.conditionKey,
-                                  mismatchType: row.mismatchType,
-                                  decisions: row.decisions,
-                                })}
-                              >
-                                <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
-                                <td className="px-3 py-2 text-gray-700">{levelA}</td>
-                                <td className="px-3 py-2 text-gray-700">{levelB}</td>
-                                <td className="px-3 py-2 text-gray-700">{row.batch1 ?? 'n/a'}</td>
-                                <td className="px-3 py-2 text-gray-700">{row.batch2 ?? 'n/a'}</td>
-                                <td className="px-3 py-2 text-gray-700">{row.batch3 ?? 'n/a'}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                        return (
+                          <details key={modelGroup.modelId} className="rounded-lg border border-gray-200">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-white px-4 py-3">
+                              <div className="text-sm font-medium text-gray-900">{modelGroup.modelLabel}</div>
+                              <div className={`text-xs font-medium ${modelMismatchSummary.toneClass}`}>
+                                {modelMismatchSummary.text}
+                              </div>
+                            </summary>
+                            <div className="overflow-x-auto border-t border-gray-200">
+                              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Condition</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeA}</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeB}</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Batch 1</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Batch 2</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-600">Batch 3</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                  {modelGroup.rows.map((row) => {
+                                    const { levelA, levelB } = parseConditionLevels(row.conditionKey);
+
+                                    return (
+                                      <tr
+                                        key={`${row.modelId}-${row.vignetteId}-${row.conditionKey}`}
+                                        className={`cursor-pointer transition-colors ${
+                                          row.mismatchType === 'decision_flip' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-teal-50'
+                                        }`}
+                                        onClick={() => setSelectedRow({
+                                          modelLabel: row.modelLabel,
+                                          vignetteTitle: row.vignetteTitle,
+                                          conditionKey: row.conditionKey,
+                                          mismatchType: row.mismatchType,
+                                          decisions: row.decisions,
+                                        })}
+                                      >
+                                        <td className="px-3 py-2 text-gray-900">{row.conditionKey}</td>
+                                        <td className="px-3 py-2 text-gray-700">{levelA}</td>
+                                        <td className="px-3 py-2 text-gray-700">{levelB}</td>
+                                        <td className="px-3 py-2 text-gray-700">{row.batch1 ?? 'n/a'}</td>
+                                        <td className="px-3 py-2 text-gray-700">{row.batch2 ?? 'n/a'}</td>
+                                        <td className="px-3 py-2 text-gray-700">{row.batch3 ?? 'n/a'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        );
+                      })}
                     </div>
-                  </div>
+                  </details>
                 );
               })}
             </div>

@@ -4,15 +4,10 @@ import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import { formatVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
+import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
-
-type LockedVignette = {
-  id: string;
-  title: string;
-  rationale: string;
-};
 
 type TempZeroPreflightVignette = {
   vignetteId: string;
@@ -93,65 +88,7 @@ type TranscriptRecord = {
   createdAt: Date;
 };
 
-const LOCKED_VIGNETTES: readonly LockedVignette[] = [
-  {
-    id: 'cmlsmyn9l0j3rxeiricruouia',
-    title: 'Jobs (Self Direction Action vs Power Dominance)',
-    rationale: 'Covers autonomy vs hierarchy in a clean professional tradeoff.',
-  },
-  {
-    id: 'cmlsn0pnr0jg1xeir147758pr',
-    title: 'Jobs (Security Personal vs Conformity Interpersonal)',
-    rationale: 'Covers stability vs social-pressure alignment without overlapping values.',
-  },
-  {
-    id: 'cmlsn216u0jpfxeirpdbrm9so',
-    title: 'Jobs (Tradition vs Stimulation)',
-    rationale: 'Covers heritage vs novelty with highly legible role framing.',
-  },
-  {
-    id: 'cmlsn2tca0jvxxeir5r0i5civ',
-    title: 'Jobs (Benevolence Dependability vs Universalism Nature)',
-    rationale: 'Covers responsibility to others vs nature protection with distinct moral texture.',
-  },
-  {
-    id: 'cmlsn384i0jzjxeir9or2w35z',
-    title: 'Jobs (Achievement vs Hedonism)',
-    rationale: 'Covers achievement vs enjoyment and rounds out the 10-value package.',
-  },
-] as const;
-
 const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
-
-function selectDefaultSignature(completedRuns: Array<{ config: unknown }>): string | null {
-  if (completedRuns.length === 0) return null;
-
-  const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
-  for (const run of completedRuns) {
-    const runConfig = run.config as { temperature?: unknown } | null;
-    const temperature = parseTemperature(runConfig?.temperature);
-    const key = temperature === null ? 'd' : String(temperature);
-    const current = temperatureCounts.get(key);
-    if (current) {
-      current.count += 1;
-    } else {
-      temperatureCounts.set(key, { temperature, count: 1 });
-    }
-  }
-
-  const winner = Array.from(temperatureCounts.values())
-    .sort((left, right) => {
-      const leftIsZero = left.temperature === 0;
-      const rightIsZero = right.temperature === 0;
-      if (leftIsZero !== rightIsZero) return leftIsZero ? -1 : 1;
-      if (left.count !== right.count) return right.count - left.count;
-      if (left.temperature === null) return 1;
-      if (right.temperature === null) return -1;
-      return left.temperature - right.temperature;
-    })[0];
-
-  return winner ? formatVnewSignature(winner.temperature) : null;
-}
 
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
@@ -298,7 +235,7 @@ builder.queryField('assumptionsTempZero', (t) =>
 
       const definitions = await db.definition.findMany({
         where: {
-          id: { in: LOCKED_VIGNETTES.map((vignette) => vignette.id) },
+          id: { in: LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id) },
           domainId: domain.id,
           deletedAt: null,
         },
@@ -317,7 +254,7 @@ builder.queryField('assumptionsTempZero', (t) =>
         },
       });
       const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
-      const availableVignettes = LOCKED_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
+      const availableVignettes = LOCKED_ASSUMPTION_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
 
       let estimatedInputTokens = 0;
       let estimatedOutputTokens = 0;
@@ -352,9 +289,13 @@ builder.queryField('assumptionsTempZero', (t) =>
           config: true,
         },
       });
-      const selectedSignature = selectDefaultSignature(completedRuns);
+      const selectedSignature = formatVnewSignature(0);
       const matchingRunIds = completedRuns
-        .filter((run) => signatureMatches(run.config, selectedSignature))
+        .filter((run) => {
+          const runConfig = run.config as { assumptionKey?: unknown } | null;
+          return runConfig?.assumptionKey === 'temp_zero_determinism'
+            && signatureMatches(run.config, selectedSignature);
+        })
         .map((run) => run.id);
 
       let transcriptGroups = new Map<string, TranscriptRecord[]>();
@@ -480,13 +421,21 @@ builder.queryField('assumptionsTempZero', (t) =>
         0,
       );
       const expectedComparisons = totalScenarios * models.length;
-      const note = availableVignettes.length !== LOCKED_VIGNETTES.length
-        ? `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`
-        : null;
+      const noteParts: string[] = [];
+      if (availableVignettes.length !== LOCKED_ASSUMPTION_VIGNETTES.length) {
+        noteParts.push(
+          `${LOCKED_ASSUMPTION_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_ASSUMPTION_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`,
+        );
+      }
+      if (matchingRunIds.length === 0) {
+        noteParts.push('No dedicated temp=0 confirmation runs have completed yet. Launch the locked package below to populate this section.');
+      } else if (comparableRows.length === 0) {
+        noteParts.push('Dedicated temp=0 runs were found, but the three-batch matrix is not complete yet.');
+      }
 
       return {
         domainName: domain.name,
-        note,
+        note: noteParts.length > 0 ? noteParts.join(' ') : null,
         preflight: {
           title: 'Temp=0 Determinism Preflight',
           projectedPromptCount: expectedComparisons * 3,
