@@ -11,6 +11,7 @@ import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
 import { DomainAnalysis } from './pages/DomainAnalysis';
+import { DomainAssumptions } from './pages/DomainAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
 import { Runs } from './pages/Runs';
@@ -81,6 +82,14 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <DomainAnalysis />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/assumptions"
+              element={
+                <ProtectedLayout fullWidth>
+                  <DomainAssumptions />
                 </ProtectedLayout>
               }
             />
