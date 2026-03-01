@@ -253,7 +253,7 @@ export function DomainAssumptions() {
             )}
 
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              This phase counts only dedicated temp=0 assumptions runs tagged for this workflow. New launches top up only the remaining batches needed within that tagged run set to reach three completed samples per condition.
+              This phase counts dedicated temp=0 assumptions runs plus earlier completed temp=0 runs that match the same locked package configuration. New launches top up only the remaining batches needed within that matching run set to reach three completed samples per condition.
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-4">
