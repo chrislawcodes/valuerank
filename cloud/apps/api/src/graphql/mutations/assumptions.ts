@@ -22,6 +22,18 @@ function normalizeModelSet(models: unknown): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+type ScenarioRecord = {
+  id: string;
+  definitionId: string;
+};
+
+type TranscriptRecord = {
+  scenarioId: string | null;
+  modelId: string;
+  modelVersion: string | null;
+  createdAt: Date;
+};
+
 const LaunchAssumptionsTempZeroPayloadRef = builder.objectRef<LaunchAssumptionsTempZeroPayload>('LaunchAssumptionsTempZeroPayload');
 
 builder.objectType(LaunchAssumptionsTempZeroPayloadRef, {
@@ -57,7 +69,16 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
           domainId: domain.id,
           deletedAt: null,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          scenarios: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              definitionId: true,
+            },
+          },
+        },
       });
       if (definitions.length === 0) {
         throw new Error('No locked professional-domain vignettes are available for temp=0 confirmation.');
@@ -87,25 +108,112 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
 
       const hasActiveEquivalentRun = activeRuns.some((run) => {
         const config = run.config as { assumptionKey?: unknown; models?: unknown; temperature?: unknown } | null;
+        const configModels = normalizeModelSet(config?.models);
         return config?.assumptionKey === 'temp_zero_determinism'
-          && parseTemperature(config.temperature) === 0
-          && normalizeModelSet(config.models).length === models.length
-          && normalizeModelSet(config.models).every((modelId, index) => modelId === models[index]);
+          && parseTemperature(config?.temperature) === 0
+          && configModels.length === models.length
+          && configModels.every((modelId, index) => modelId === models[index]);
       });
       if (hasActiveEquivalentRun) {
         throw new Error('Temp=0 confirmation launch blocked: matching dedicated runs are already active.');
       }
 
+      const completedRuns = await db.run.findMany({
+        where: {
+          definitionId: { in: definitions.map((definition) => definition.id) },
+          status: 'COMPLETED',
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          definitionId: true,
+          config: true,
+        },
+      });
+      const qualifyingCompletedRunIds = completedRuns
+        .filter((run) => {
+          const config = run.config as { assumptionKey?: unknown; temperature?: unknown } | null;
+          return config?.assumptionKey === 'temp_zero_determinism'
+            && parseTemperature(config.temperature) === 0;
+        })
+        .map((run) => run.id);
+
+      const transcripts = qualifyingCompletedRunIds.length > 0 ? await db.transcript.findMany({
+        where: {
+          runId: { in: qualifyingCompletedRunIds },
+          modelId: { in: models },
+          scenarioId: { not: null },
+          deletedAt: null,
+          decisionCode: { in: ['1', '2', '3', '4', '5'] },
+        },
+        select: {
+          scenarioId: true,
+          modelId: true,
+          modelVersion: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }) : [];
+
+      const transcriptGroups = new Map<string, TranscriptRecord[]>();
+      for (const transcript of transcripts) {
+        if (transcript.scenarioId === null) continue;
+        const key = `${transcript.modelId}::${transcript.scenarioId}`;
+        const existing = transcriptGroups.get(key) ?? [];
+        existing.push(transcript);
+        transcriptGroups.set(key, existing);
+      }
+      for (const [key, group] of transcriptGroups.entries()) {
+        group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+        const latestModelVersion = group[0]?.modelVersion ?? null;
+        const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
+        transcriptGroups.set(key, sameVersionGroup.slice(0, 3));
+      }
+
+      const definitionsWithTopUp = definitions.map((definition) => {
+        const scenarios = definition.scenarios as ScenarioRecord[];
+        let existingBatchFloor = 3;
+
+        if (scenarios.length === 0 || models.length === 0) {
+          existingBatchFloor = 0;
+        } else {
+          for (const scenario of scenarios) {
+            for (const modelId of models) {
+              const count = (transcriptGroups.get(`${modelId}::${scenario.id}`) ?? []).length;
+              if (count < existingBatchFloor) {
+                existingBatchFloor = count;
+              }
+              if (existingBatchFloor === 0) break;
+            }
+            if (existingBatchFloor === 0) break;
+          }
+        }
+
+        return {
+          definitionId: definition.id,
+          samplesPerScenario: Math.max(0, 3 - Math.min(existingBatchFloor, 3)),
+        };
+      });
+
       const runIds: string[] = [];
       const failedVignetteIds: string[] = [];
+      const skippedVignetteIds: string[] = [];
 
       const results = await Promise.allSettled(
-        definitions.map(async (definition) => {
+        definitionsWithTopUp
+          .filter((definition) => {
+            if (definition.samplesPerScenario === 0) {
+              skippedVignetteIds.push(definition.definitionId);
+              return false;
+            }
+            return true;
+          })
+          .map(async (definition) => {
           const result = await startRunService({
-            definitionId: definition.id,
+            definitionId: definition.definitionId,
             models,
             samplePercentage: 100,
-            samplesPerScenario: 3,
+            samplesPerScenario: definition.samplesPerScenario,
             temperature: 0,
             priority: 'NORMAL',
             userId,
@@ -124,10 +232,11 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
           runIds.push(result.value);
           return;
         }
-        failedVignetteIds.push(definitions[index]!.id);
+        const launchedDefinitions = definitionsWithTopUp.filter((definition) => definition.samplesPerScenario > 0);
+        failedVignetteIds.push(launchedDefinitions[index]!.definitionId);
         ctx.log.error(
           {
-            definitionId: definitions[index]!.id,
+            definitionId: launchedDefinitions[index]!.definitionId,
             error: result.reason instanceof Error ? result.reason.message : String(result.reason),
           },
           'Failed to launch temp=0 confirmation run',
@@ -145,9 +254,15 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
           definitionIds: definitions.map((definition) => definition.id),
           startedRuns: runIds.length,
           failedVignetteIds,
+          skippedVignetteIds,
           models,
           temperature: 0,
-          samplesPerScenario: 3,
+          launchedSamplesPerScenario: definitionsWithTopUp
+            .filter((definition) => definition.samplesPerScenario > 0)
+            .map((definition) => ({
+              definitionId: definition.definitionId,
+              samplesPerScenario: definition.samplesPerScenario,
+            })),
         },
       });
 

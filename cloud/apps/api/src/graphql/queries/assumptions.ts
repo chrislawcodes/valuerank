@@ -24,6 +24,7 @@ type TempZeroPreflight = {
   estimatedOutputTokens: number | null;
   estimatedCostUsd: number | null;
   selectedSignature: string | null;
+  models: string[];
   vignettes: TempZeroPreflightVignette[];
 };
 
@@ -132,6 +133,7 @@ builder.objectType(TempZeroPreflightRef, {
     estimatedOutputTokens: t.exposeInt('estimatedOutputTokens', { nullable: true }),
     estimatedCostUsd: t.exposeFloat('estimatedCostUsd', { nullable: true }),
     selectedSignature: t.exposeString('selectedSignature', { nullable: true }),
+    models: t.exposeStringList('models'),
     vignettes: t.field({
       type: [TempZeroPreflightVignetteRef],
       resolve: (parent) => parent.vignettes,
@@ -432,9 +434,9 @@ builder.queryField('assumptionsTempZero', (t) =>
         );
       }
       if (matchingRunIds.length === 0) {
-        noteParts.push('No dedicated temp=0 confirmation runs have completed yet. Launch the locked package below to populate this section.');
+        noteParts.push('No dedicated temp=0 assumptions runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
       } else if (comparableRows.length === 0) {
-        noteParts.push('Dedicated temp=0 runs were found, but the three-batch matrix is not complete yet.');
+        noteParts.push('Dedicated temp=0 assumptions runs were found, but the three-batch matrix is not complete yet.');
       }
 
       return {
@@ -448,6 +450,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           estimatedOutputTokens: estimatedOutputTokens > 0 ? roundToGraphQLInt(estimatedOutputTokens) : null,
           estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
           selectedSignature,
+          models: models.map((model) => model.label),
           vignettes: availableVignettes.map((vignette) => ({
             vignetteId: vignette.id,
             title: vignette.title,
