@@ -5,7 +5,9 @@ import { Loading } from '../components/ui/Loading';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import {
+  ASSUMPTIONS_ORDER_INVARIANCE_QUERY,
   ASSUMPTIONS_TEMP_ZERO_QUERY,
+  type AssumptionsOrderInvarianceQueryResult,
   type AssumptionsTempZeroQueryResult,
   type TempZeroDecision,
   type TempZeroRow,
@@ -93,8 +95,10 @@ function extractTranscriptText(content: unknown): string {
   return messages.join('\n\n');
 }
 
-function groupRowsByVignette(rows: TempZeroRow[]): Array<{ vignetteId: string; vignetteTitle: string; rows: TempZeroRow[] }> {
-  const groups = new Map<string, { vignetteId: string; vignetteTitle: string; rows: TempZeroRow[] }>();
+function groupRowsByVignette<Row extends { vignetteId: string; vignetteTitle: string }>(
+  rows: Row[],
+): Array<{ vignetteId: string; vignetteTitle: string; rows: Row[] }> {
+  const groups = new Map<string, { vignetteId: string; vignetteTitle: string; rows: Row[] }>();
 
   for (const row of rows) {
     const existing = groups.get(row.vignetteId);
@@ -180,7 +184,7 @@ type SelectedTranscriptRow = {
   modelLabel: string;
   vignetteTitle: string;
   conditionKey: string;
-  mismatchType: TempZeroRow['mismatchType'];
+  mismatchType: string | null;
   decisions: TempZeroDecision[];
 };
 
@@ -189,13 +193,22 @@ export function DomainAssumptions() {
     query: ASSUMPTIONS_TEMP_ZERO_QUERY,
     requestPolicy: 'cache-and-network',
   });
+  const [{ data: orderData, fetching: orderFetching, error: orderError }] = useQuery<AssumptionsOrderInvarianceQueryResult>({
+    query: ASSUMPTIONS_ORDER_INVARIANCE_QUERY,
+    requestPolicy: 'cache-and-network',
+  });
   const [selectedRow, setSelectedRow] = useState<SelectedTranscriptRow | null>(null);
   const [sortStateByVignette, setSortStateByVignette] = useState<Record<string, TempZeroSortState>>({});
 
   const result = data?.assumptionsTempZero;
+  const orderResult = orderData?.assumptionsOrderInvariance;
   const vignetteGroups = useMemo(
     () => groupRowsByVignette(result?.rows ?? []),
     [result?.rows],
+  );
+  const orderVignetteGroups = useMemo(
+    () => groupRowsByVignette(orderResult?.rows ?? []),
+    [orderResult?.rows],
   );
 
   const handleSort = (vignetteId: string, nextKey: TempZeroSortKey) => {
@@ -506,11 +519,193 @@ export function DomainAssumptions() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-dashed border-gray-300 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-900">`#286` Order invariance</h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Placeholder for the flipped-order comparison. This chunk only implements `#285`.
-            </p>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            {orderError && <ErrorMessage message={`Failed to load order invariance: ${orderError.message}`} />}
+            {orderFetching && !orderResult && <Loading text="Loading order invariance..." />}
+
+            {orderResult && (
+              <>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-900">{orderResult.summary.title}</h2>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Compare baseline vs flipped-order runs after normalizing the flipped decision back into baseline semantic orientation.
+                    </p>
+                  </div>
+                  <div
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                      orderResult.summary.status === 'INSUFFICIENT_DATA'
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {orderResult.summary.status === 'INSUFFICIENT_DATA' ? 'Insufficient Data' : 'Computed'}
+                  </div>
+                </div>
+
+                {orderResult.note && (
+                  <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    {orderResult.note}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Match Rate</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(orderResult.summary.matchRate)}</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Difference Rate</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(orderResult.summary.differenceRate)}</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Models Tested</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">{formatInteger(orderResult.summary.modelsTested)}</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Vignettes Tested</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">{formatInteger(orderResult.summary.vignettesTested)}</div>
+                  </div>
+                </div>
+
+                {(orderResult.summary.worstModelId || orderResult.summary.worstModelMatchRate !== null) && (
+                  <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    Worst model: {orderResult.summary.worstModelLabel ?? orderResult.summary.worstModelId ?? 'n/a'}
+                    {orderResult.summary.worstModelMatchRate !== null && (
+                      <span> ({formatPercent(orderResult.summary.worstModelMatchRate)} match)</span>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Projected Prompts</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {formatInteger(orderResult.preflight.projectedPromptCount)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Projected Comparisons</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {formatInteger(orderResult.preflight.projectedComparisons)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Selected Signature</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {orderResult.preflight.selectedSignature ?? 'n/a'}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Estimated Cost</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {formatCurrency(orderResult.preflight.estimatedCostUsd)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Estimated Input Tokens</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {formatInteger(orderResult.preflight.estimatedInputTokens)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Estimated Output Tokens</div>
+                    <div className="mt-1 text-base font-semibold text-gray-900">
+                      {formatInteger(orderResult.preflight.estimatedOutputTokens)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Vignette</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Conditions</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">Rationale</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {orderResult.preflight.vignettes.map((vignette) => (
+                        <tr key={vignette.vignetteId}>
+                          <td className="px-3 py-3 font-medium text-gray-900">{vignette.title}</td>
+                          <td className="px-3 py-3 text-gray-700">{vignette.conditionCount}</td>
+                          <td className="px-3 py-3 text-gray-600">{vignette.rationale}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {orderVignetteGroups.some((group) => group.rows.some((row) => row.baselineDecision !== null || row.flippedDecision !== null)) ? (
+                  <div className="mt-5 space-y-6">
+                    {orderVignetteGroups.map((group) => {
+                      const rowsWithData = group.rows.filter((row) => row.baselineDecision !== null || row.flippedDecision !== null);
+                      if (rowsWithData.length === 0) return null;
+
+                      return (
+                        <div key={group.vignetteId} className="rounded-lg border border-gray-200">
+                          <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                            <h3 className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</h3>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200 text-sm">
+                              <thead className="bg-white">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Condition</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Baseline</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Flipped</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Normalized Match</th>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-600">Reason</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 bg-white">
+                                {rowsWithData.map((row) => (
+                                  <tr
+                                    key={`${row.modelId}-${row.vignetteId}-${row.conditionKey}`}
+                                    className={`cursor-pointer transition-colors ${
+                                      row.mismatchType === 'decision_flip'
+                                        ? 'bg-red-50 hover:bg-red-100'
+                                        : row.mismatchType === 'missing_pair'
+                                          ? 'bg-amber-50 hover:bg-amber-100'
+                                          : 'hover:bg-teal-50'
+                                    }`}
+                                    onClick={() => setSelectedRow({
+                                      modelLabel: row.modelLabel,
+                                      vignetteTitle: row.vignetteTitle,
+                                      conditionKey: row.conditionKey,
+                                      mismatchType: row.mismatchType,
+                                      decisions: row.decisions,
+                                    })}
+                                  >
+                                    <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
+                                    <td className="px-3 py-2 text-gray-700">{row.conditionKey}</td>
+                                    <td className="px-3 py-2 text-gray-700">{row.baselineDecision ?? 'n/a'}</td>
+                                    <td className="px-3 py-2 text-gray-700">{row.flippedDecision ?? 'n/a'}</td>
+                                    <td className="px-3 py-2 text-gray-700">{row.isMatch ? 'Yes' : 'No'}</td>
+                                    <td className="px-3 py-2 text-gray-700">
+                                      {row.mismatchType === null ? 'Matched' : row.mismatchType === 'decision_flip' ? 'Decision changed after normalization' : 'Missing pair'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+                    No baseline/flipped comparison rows are available yet. Once tagged order-invariance runs are recorded, the pair-level table will appear here.
+                  </div>
+                )}
+              </>
+            )}
           </section>
 
           <section className="rounded-lg border border-dashed border-gray-300 bg-white p-5">
@@ -536,6 +731,11 @@ export function DomainAssumptions() {
             {selectedRow.mismatchType === 'missing_trial' && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 This condition needs more runs before all three batches are available. Existing transcript data is shown below.
+              </div>
+            )}
+            {selectedRow.mismatchType === 'missing_pair' && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This condition does not have both baseline and flipped runs yet. Any available transcript data is shown below.
               </div>
             )}
             {selectedRow.decisions.map((decision) => (

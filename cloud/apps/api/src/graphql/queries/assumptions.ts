@@ -7,6 +7,8 @@ import { formatVnewSignature, parseVnewTemperature } from '../../utils/vnew-sign
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type TempZeroMismatchType = 'decision_flip' | 'missing_trial' | null;
+type OrderInvarianceMismatchType = 'decision_flip' | 'missing_pair' | null;
+type OrderInvarianceVariant = 'baseline' | 'flipped';
 
 type LockedVignette = {
   id: string;
@@ -76,6 +78,29 @@ type AssumptionsTempZeroResult = {
   generatedAt: Date;
 };
 
+type OrderInvarianceRow = {
+  modelId: string;
+  modelLabel: string;
+  vignetteId: string;
+  vignetteTitle: string;
+  conditionKey: string;
+  baselineDecision: string | null;
+  flippedDecision: string | null;
+  normalizedFlippedDecision: string | null;
+  isMatch: boolean;
+  mismatchType: OrderInvarianceMismatchType;
+  decisions: TempZeroDecision[];
+};
+
+type AssumptionsOrderInvarianceResult = {
+  domainName: string;
+  note: string | null;
+  preflight: TempZeroPreflight;
+  summary: TempZeroSummary;
+  rows: OrderInvarianceRow[];
+  generatedAt: Date;
+};
+
 type ScenarioRecord = {
   id: string;
   definitionId: string;
@@ -85,6 +110,7 @@ type ScenarioRecord = {
 
 type TranscriptRecord = {
   id: string;
+  runId: string;
   scenarioId: string | null;
   modelId: string;
   modelVersion: string | null;
@@ -166,12 +192,41 @@ function buildConditionKey(scenario: ScenarioRecord): string {
   return `${match[1] ?? '?'}x${match[2] ?? '?'}`;
 }
 
+function parseOrderInvarianceVariant(runConfig: unknown): OrderInvarianceVariant | null {
+  const config = runConfig as {
+    assumptionKey?: unknown;
+    assumptionVariant?: unknown;
+    orientationFlipped?: unknown;
+  } | null;
+  const assumptionKey = typeof config?.assumptionKey === 'string' ? config.assumptionKey : null;
+  if (assumptionKey !== null && assumptionKey !== 'order_invariance') {
+    return null;
+  }
+
+  if (config?.assumptionVariant === 'baseline') return 'baseline';
+  if (config?.assumptionVariant === 'flipped') return 'flipped';
+  if (config?.orientationFlipped === true) return 'flipped';
+  if (config?.orientationFlipped === false) return 'baseline';
+
+  return null;
+}
+
+function normalizeFlippedDecision(decision: string | null): string | null {
+  if (decision === null) return null;
+  const numericDecision = Number.parseInt(decision, 10);
+  if (!Number.isFinite(numericDecision)) return null;
+  if (numericDecision < 1 || numericDecision > 5) return null;
+  return String(6 - numericDecision);
+}
+
 const TempZeroPreflightVignetteRef = builder.objectRef<TempZeroPreflightVignette>('TempZeroPreflightVignette');
 const TempZeroPreflightRef = builder.objectRef<TempZeroPreflight>('TempZeroPreflight');
 const TempZeroSummaryRef = builder.objectRef<TempZeroSummary>('TempZeroSummary');
 const TempZeroDecisionRef = builder.objectRef<TempZeroDecision>('TempZeroDecision');
 const TempZeroRowRef = builder.objectRef<TempZeroRow>('TempZeroRow');
 const AssumptionsTempZeroResultRef = builder.objectRef<AssumptionsTempZeroResult>('AssumptionsTempZeroResult');
+const OrderInvarianceRowRef = builder.objectRef<OrderInvarianceRow>('OrderInvarianceRow');
+const AssumptionsOrderInvarianceResultRef = builder.objectRef<AssumptionsOrderInvarianceResult>('AssumptionsOrderInvarianceResult');
 
 builder.objectType(TempZeroPreflightVignetteRef, {
   fields: (t) => ({
@@ -256,6 +311,48 @@ builder.objectType(AssumptionsTempZeroResultRef, {
     }),
     rows: t.field({
       type: [TempZeroRowRef],
+      resolve: (parent) => parent.rows,
+    }),
+    generatedAt: t.field({
+      type: 'DateTime',
+      resolve: (parent) => parent.generatedAt,
+    }),
+  }),
+});
+
+builder.objectType(OrderInvarianceRowRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    modelLabel: t.exposeString('modelLabel'),
+    vignetteId: t.exposeID('vignetteId'),
+    vignetteTitle: t.exposeString('vignetteTitle'),
+    conditionKey: t.exposeString('conditionKey'),
+    baselineDecision: t.exposeString('baselineDecision', { nullable: true }),
+    flippedDecision: t.exposeString('flippedDecision', { nullable: true }),
+    normalizedFlippedDecision: t.exposeString('normalizedFlippedDecision', { nullable: true }),
+    isMatch: t.exposeBoolean('isMatch'),
+    mismatchType: t.exposeString('mismatchType', { nullable: true }),
+    decisions: t.field({
+      type: [TempZeroDecisionRef],
+      resolve: (parent) => parent.decisions,
+    }),
+  }),
+});
+
+builder.objectType(AssumptionsOrderInvarianceResultRef, {
+  fields: (t) => ({
+    domainName: t.exposeString('domainName'),
+    note: t.exposeString('note', { nullable: true }),
+    preflight: t.field({
+      type: TempZeroPreflightRef,
+      resolve: (parent) => parent.preflight,
+    }),
+    summary: t.field({
+      type: TempZeroSummaryRef,
+      resolve: (parent) => parent.summary,
+    }),
+    rows: t.field({
+      type: [OrderInvarianceRowRef],
       resolve: (parent) => parent.rows,
     }),
     generatedAt: t.field({
@@ -370,6 +467,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           orderBy: { createdAt: 'desc' },
           select: {
             id: true,
+            runId: true,
             scenarioId: true,
             modelId: true,
             modelVersion: true,
@@ -504,6 +602,282 @@ builder.queryField('assumptionsTempZero', (t) =>
         },
         summary: {
           title: 'Temp=0 Determinism',
+          status: comparableRows.length >= expectedComparisons
+            ? ('COMPUTED' as AssumptionStatus)
+            : ('INSUFFICIENT_DATA' as AssumptionStatus),
+          matchRate: comparableRows.length > 0 ? matchedRows.length / comparableRows.length : null,
+          differenceRate: comparableRows.length > 0 ? 1 - (matchedRows.length / comparableRows.length) : null,
+          comparisons: comparableRows.length,
+          excludedComparisons: Math.max(0, expectedComparisons - comparableRows.length),
+          modelsTested: models.length,
+          vignettesTested: availableVignettes.length,
+          worstModelId,
+          worstModelLabel,
+          worstModelMatchRate,
+        },
+        rows,
+        generatedAt: new Date(),
+      };
+    },
+  })
+);
+
+builder.queryField('assumptionsOrderInvariance', (t) =>
+  t.field({
+    type: AssumptionsOrderInvarianceResultRef,
+    resolve: async (_root, _args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const domain = await db.domain.findFirst({
+        where: { normalizedName: 'professional' },
+        select: { id: true, name: true },
+      });
+      if (!domain) {
+        throw new Error('Professional domain not found');
+      }
+
+      const selectedModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          modelId: true,
+          displayName: true,
+          isDefault: true,
+        },
+        orderBy: { displayName: 'asc' },
+      });
+      const defaultModels = selectedModels.filter((model) => model.isDefault);
+      const models = (defaultModels.length > 0 ? defaultModels : selectedModels).map((model) => ({
+        modelId: model.modelId,
+        label: model.displayName,
+      }));
+
+      const definitions = await db.definition.findMany({
+        where: {
+          id: { in: LOCKED_VIGNETTES.map((vignette) => vignette.id) },
+          domainId: domain.id,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          scenarios: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              definitionId: true,
+              name: true,
+              content: true,
+            },
+            orderBy: { name: 'asc' },
+          },
+        },
+      });
+      const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
+      const availableVignettes = LOCKED_VIGNETTES.filter((vignette) => definitionById.has(vignette.id));
+
+      let estimatedInputTokens = 0;
+      let estimatedOutputTokens = 0;
+      let estimatedCostUsd = 0;
+      if (models.length > 0) {
+        for (const vignette of availableVignettes) {
+          const estimate = await estimateCostService({
+            definitionId: vignette.id,
+            modelIds: models.map((model) => model.modelId),
+            samplePercentage: 100,
+            samplesPerScenario: 2,
+          });
+          for (const perModel of estimate.perModel) {
+            estimatedInputTokens += perModel.inputTokens;
+            estimatedOutputTokens += perModel.outputTokens;
+            estimatedCostUsd += perModel.totalCost;
+          }
+        }
+      }
+
+      const allDefinitionIds = availableVignettes.map((vignette) => vignette.id);
+      const completedRuns = await db.run.findMany({
+        where: {
+          definitionId: { in: allDefinitionIds },
+          status: 'COMPLETED',
+          deletedAt: null,
+        },
+        orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+        select: {
+          id: true,
+          definitionId: true,
+          config: true,
+        },
+      });
+
+      const selectedSignature = selectDefaultSignature(completedRuns);
+      const matchingOrderRuns = completedRuns
+        .map((run) => ({
+          id: run.id,
+          variant: parseOrderInvarianceVariant(run.config),
+          config: run.config,
+        }))
+        .filter((run) => run.variant !== null && signatureMatches(run.config, selectedSignature)) as Array<{
+          id: string;
+          variant: OrderInvarianceVariant;
+          config: unknown;
+        }>;
+
+      const orderRunIds = matchingOrderRuns.map((run) => run.id);
+      const orderVariantByRunId = new Map(matchingOrderRuns.map((run) => [run.id, run.variant]));
+
+      const transcriptGroups = new Map<string, TranscriptRecord[]>();
+      if (orderRunIds.length > 0 && models.length > 0) {
+        const transcripts = await db.transcript.findMany({
+          where: {
+            runId: { in: orderRunIds },
+            modelId: { in: models.map((model) => model.modelId) },
+            scenarioId: { not: null },
+            deletedAt: null,
+            decisionCode: { in: VALID_DECISIONS as unknown as string[] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            runId: true,
+            scenarioId: true,
+            modelId: true,
+            modelVersion: true,
+            decisionCode: true,
+            content: true,
+            createdAt: true,
+          },
+        });
+
+        for (const transcript of transcripts) {
+          if (transcript.scenarioId === null) continue;
+          const variant = orderVariantByRunId.get(transcript.runId);
+          if (!variant) continue;
+          const key = `${transcript.modelId}::${transcript.scenarioId}::${variant}`;
+          const current = transcriptGroups.get(key) ?? [];
+          current.push(transcript);
+          transcriptGroups.set(key, current);
+        }
+
+        for (const [key, group] of transcriptGroups.entries()) {
+          group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+          const latestModelVersion = group[0]?.modelVersion ?? null;
+          const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
+          transcriptGroups.set(key, sameVersionGroup.slice(0, 1));
+        }
+      }
+
+      const rows: OrderInvarianceRow[] = [];
+      const comparableByModel = new Map<string, { comparable: number; matched: number }>();
+
+      for (const vignette of availableVignettes) {
+        const scenarios = (definitionById.get(vignette.id)?.scenarios ?? []) as ScenarioRecord[];
+        const sortedScenarios = [...scenarios].sort((left, right) => (
+          buildConditionKey(left).localeCompare(buildConditionKey(right), undefined, { numeric: true })
+        ));
+
+        for (const model of models) {
+          for (const scenario of sortedScenarios) {
+            const baseline = transcriptGroups.get(`${model.modelId}::${scenario.id}::baseline`)?.[0] ?? null;
+            const flipped = transcriptGroups.get(`${model.modelId}::${scenario.id}::flipped`)?.[0] ?? null;
+            const baselineDecision = baseline?.decisionCode ?? null;
+            const flippedDecision = flipped?.decisionCode ?? null;
+            const normalizedFlippedDecision = normalizeFlippedDecision(flippedDecision);
+            const comparable = baselineDecision !== null && normalizedFlippedDecision !== null;
+            const isMatch = comparable ? baselineDecision === normalizedFlippedDecision : false;
+            const mismatchType: OrderInvarianceMismatchType = comparable
+              ? (isMatch ? null : 'decision_flip')
+              : 'missing_pair';
+
+            if (comparable) {
+              const stats = comparableByModel.get(model.modelId) ?? { comparable: 0, matched: 0 };
+              stats.comparable += 1;
+              if (isMatch) stats.matched += 1;
+              comparableByModel.set(model.modelId, stats);
+            }
+
+            rows.push({
+              modelId: model.modelId,
+              modelLabel: model.label,
+              vignetteId: vignette.id,
+              vignetteTitle: vignette.title,
+              conditionKey: buildConditionKey(scenario),
+              baselineDecision,
+              flippedDecision,
+              normalizedFlippedDecision,
+              isMatch,
+              mismatchType,
+              decisions: [
+                {
+                  label: 'Baseline',
+                  transcriptId: baseline?.id ?? null,
+                  decision: baselineDecision,
+                  content: baseline?.content ?? null,
+                },
+                {
+                  label: 'Flipped',
+                  transcriptId: flipped?.id ?? null,
+                  decision: flippedDecision,
+                  content: flipped?.content ?? null,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      const comparableRows = rows.filter((row) => row.mismatchType !== 'missing_pair');
+      const matchedRows = comparableRows.filter((row) => row.isMatch);
+      let worstModelId: string | null = null;
+      let worstModelLabel: string | null = null;
+      let worstModelMatchRate: number | null = null;
+      for (const [modelId, stats] of comparableByModel.entries()) {
+        if (stats.comparable === 0) continue;
+        const rate = stats.matched / stats.comparable;
+        if (worstModelMatchRate === null || rate < worstModelMatchRate) {
+          worstModelId = modelId;
+          worstModelLabel = models.find((model) => model.modelId === modelId)?.label ?? modelId;
+          worstModelMatchRate = rate;
+        }
+      }
+
+      const totalScenarios = availableVignettes.reduce(
+        (sum, vignette) => sum + ((definitionById.get(vignette.id)?.scenarios.length) ?? 0),
+        0,
+      );
+      const expectedComparisons = totalScenarios * models.length;
+      const noteParts: string[] = [];
+      if (availableVignettes.length !== LOCKED_VIGNETTES.length) {
+        noteParts.push(
+          `${LOCKED_VIGNETTES.length - availableVignettes.length} locked vignette${LOCKED_VIGNETTES.length - availableVignettes.length === 1 ? '' : 's'} are missing from the professional domain.`,
+        );
+      }
+      if (matchingOrderRuns.length === 0) {
+        noteParts.push('No tagged order-invariance runs found yet. This section will populate after baseline and flipped runs are recorded for the locked vignette set.');
+      } else if (comparableRows.length === 0) {
+        noteParts.push('Tagged order-invariance runs were found, but no complete baseline/flipped pairs are available yet.');
+      }
+
+      return {
+        domainName: domain.name,
+        note: noteParts.length > 0 ? noteParts.join(' ') : null,
+        preflight: {
+          title: 'Order Invariance Preflight',
+          projectedPromptCount: expectedComparisons * 2,
+          projectedComparisons: expectedComparisons,
+          estimatedInputTokens: estimatedInputTokens > 0 ? estimatedInputTokens : null,
+          estimatedOutputTokens: estimatedOutputTokens > 0 ? estimatedOutputTokens : null,
+          estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
+          selectedSignature,
+          vignettes: availableVignettes.map((vignette) => ({
+            vignetteId: vignette.id,
+            title: vignette.title,
+            conditionCount: definitionById.get(vignette.id)?.scenarios.length ?? 0,
+            rationale: vignette.rationale,
+          })),
+        },
+        summary: {
+          title: 'Order Invariance',
           status: comparableRows.length >= expectedComparisons
             ? ('COMPUTED' as AssumptionStatus)
             : ('INSUFFICIENT_DATA' as AssumptionStatus),

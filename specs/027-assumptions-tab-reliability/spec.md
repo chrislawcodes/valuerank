@@ -2,7 +2,7 @@
 
 > **Feature #027**
 > **Created**: 2026-02-27
-> **Last Updated**: 2026-02-28
+> **Last Updated**: 2026-03-01
 > **Status**: Draft
 > **Dependencies**: Domain analysis pipeline (existing), transcript viewer components (existing), temp=0 signature support (existing), scenario variant generation workflow for #286/#287 (new implementation work).
 
@@ -53,6 +53,30 @@ Use one umbrella spec because all three checks:
 - share drill-down and audit UX.
 
 Implementation may ship in separate PRs, but the product contract should remain unified.
+
+## Delivery Sequencing
+
+Implementation should be sequenced to finish `#285` end-to-end before `#286` and `#287`.
+
+Required order:
+
+1. Build the Assumptions tab shell and shared result display.
+2. Deliver `#285` readback from existing qualifying runs.
+3. Complete `#285` execution end-to-end:
+   - preflight review
+   - explicit confirmation
+   - approval gate
+   - locked-package dispatch
+   - run tagging
+   - scoped readback of dedicated confirmation runs
+4. Reuse that execution pipeline for `#286`.
+5. Reuse the same pipeline again for `#287`.
+
+Rationale:
+
+- `#285` is the simplest assumption technically.
+- It establishes the real run lifecycle once.
+- `#286` and `#287` should not invent separate launch mechanics; they should extend the temp=0 execution path with variant-specific pairing rules.
 
 ---
 

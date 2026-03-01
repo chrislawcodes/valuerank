@@ -69,6 +69,35 @@ export type AssumptionsTempZeroQueryResult = {
   assumptionsTempZero: AssumptionsTempZeroResult;
 };
 
+export type OrderInvarianceMismatchType = 'decision_flip' | 'missing_pair' | null;
+
+export type OrderInvarianceRow = {
+  modelId: string;
+  modelLabel: string;
+  vignetteId: string;
+  vignetteTitle: string;
+  conditionKey: string;
+  baselineDecision: string | null;
+  flippedDecision: string | null;
+  normalizedFlippedDecision: string | null;
+  isMatch: boolean;
+  mismatchType: OrderInvarianceMismatchType;
+  decisions: TempZeroDecision[];
+};
+
+export type AssumptionsOrderInvarianceResult = {
+  domainName: string;
+  note: string | null;
+  preflight: TempZeroPreflight;
+  summary: TempZeroSummary;
+  rows: OrderInvarianceRow[];
+  generatedAt: string;
+};
+
+export type AssumptionsOrderInvarianceQueryResult = {
+  assumptionsOrderInvariance: AssumptionsOrderInvarianceResult;
+};
+
 export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
   query AssumptionsTempZero {
     assumptionsTempZero {
@@ -112,6 +141,62 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
         batch1
         batch2
         batch3
+        isMatch
+        mismatchType
+        decisions {
+          label
+          transcriptId
+          decision
+          content
+        }
+      }
+    }
+  }
+`;
+
+export const ASSUMPTIONS_ORDER_INVARIANCE_QUERY = gql`
+  query AssumptionsOrderInvariance {
+    assumptionsOrderInvariance {
+      domainName
+      note
+      generatedAt
+      preflight {
+        title
+        projectedPromptCount
+        projectedComparisons
+        estimatedInputTokens
+        estimatedOutputTokens
+        estimatedCostUsd
+        selectedSignature
+        vignettes {
+          vignetteId
+          title
+          conditionCount
+          rationale
+        }
+      }
+      summary {
+        title
+        status
+        matchRate
+        differenceRate
+        comparisons
+        excludedComparisons
+        modelsTested
+        vignettesTested
+        worstModelId
+        worstModelLabel
+        worstModelMatchRate
+      }
+      rows {
+        modelId
+        modelLabel
+        vignetteId
+        vignetteTitle
+        conditionKey
+        baselineDecision
+        flippedDecision
+        normalizedFlippedDecision
         isMatch
         mismatchType
         decisions {
