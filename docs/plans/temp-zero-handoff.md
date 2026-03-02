@@ -6,73 +6,138 @@ Last updated: 2026-03-02. Full plan: `docs/plans/temp-zero-verification-plan.md`
 
 ## Current State
 
-Phases 1, 2, 3, 4, 8, 9 are merged to `main` (PRs #297 and #298).
-Phases 5, 6, 7, 11 are pending — blocked on running the verification scripts with live credentials.
+| PR | What | Status |
+|----|------|--------|
+| #297 | Direction-only mode + model filter | Merged to main |
+| #298 | Instrumentation (Phases 1–4, 8–9) | Merged to main |
+| #299 | Phase 11 — adapter mode badges per model | **Open, not merged** |
 
-**What's implemented:**
+**What's implemented and merged:**
 - LLM adapters emit `promptHash`, `adapterMode`, `temperatureSent`, `seedSent` per request
-- `seed: 42` is injected automatically for all temp=0 runs in the probe job handler
-- `canary_runner.py` — standalone determinism tester (runs from `cloud/workers/`)
+- `seed: 42` injected automatically for temp=0 runs
+- `canary_runner.py` — standalone determinism tester
 - `temp_zero_report.py` — production DB report script
-- `debugAssumptionsMismatches` GraphQL query for per-transcript diagnostic
+- `debugAssumptionsMismatches` GraphQL diagnostic query
+
+**What's in-flight (worktrees exist, not started):**
+
+The next task is to wire the verification report into the UI as a GraphQL query + React component, replacing the separate `temp_zero_report.py` script.
+
+Two worktrees are already set up with specs ready to execute:
+
+| Worktree | Branch | Spec file | Task |
+|----------|--------|-----------|------|
+| `/tmp/wt-temp0-verify-api` | `feat/temp0-verify-api` | `/tmp/codex-spec-api.txt` | New GraphQL query `tempZeroVerificationReport` |
+| `/tmp/wt-temp0-verify-web` | `feat/temp0-verify-web` | `/tmp/codex-spec-web.txt` | New React component + GQL operations |
 
 ---
 
 ## Next Actions
 
-### 1. Run canary_runner.py (needs API keys)
+### Step 1 — Implement API query (Task A)
+
+The spec is already written at `/tmp/codex-spec-api.txt`. Run in the existing worktree:
 
 ```bash
-cd cloud/workers
-python canary_runner.py --models gpt-4o,claude-sonnet-4-6 --runs 20
+cd /tmp/wt-temp0-verify-api
+codex exec --full-auto "$(cat /tmp/codex-spec-api.txt)"
 ```
 
-Add any other active models comma-separated. You want to see `exact_match_rate: 1.0` and `all_prompt_hashes_identical: true`.
+Then check `git status` — Codex may not commit. If uncommitted, commit manually:
+```bash
+git add cloud/apps/api/src/graphql/queries/temp-zero-verification.ts \
+        cloud/apps/api/src/graphql/queries/index.ts
+git commit -m "Add tempZeroVerificationReport GraphQL query"
+```
 
-### 2. Run temp_zero_report.py (needs DATABASE_URL)
+Verify: `cd cloud && npm run typecheck --workspace @valuerank/api` must pass.
+
+**What the query does:** Fetches temp=0 transcripts from the last N days, groups by model, computes prompt hash stability %, fingerprint drift %, and decision match rate % per model. Same logic as `temp_zero_report.py` but as a live GQL query.
+
+**New file:** `cloud/apps/api/src/graphql/queries/temp-zero-verification.ts`
+**Modified:** `cloud/apps/api/src/graphql/queries/index.ts` (adds one import line)
+
+### Step 2 — Implement web component (Task B, parallel with A)
+
+The spec is at `/tmp/codex-spec-web.txt`. Run in the existing worktree:
 
 ```bash
-cd cloud/workers
-DATABASE_URL="..." python temp_zero_report.py --days 30
+cd /tmp/wt-temp0-verify-web
+codex exec --full-auto "$(cat /tmp/codex-spec-web.txt)"
 ```
 
-Note: transcripts created before PR #298 was deployed will have null `promptHash` — that's expected. The report will start filling in as new temp=0 runs complete.
+Then commit if needed:
+```bash
+git add cloud/apps/web/src/api/operations/temp-zero-verification.ts \
+        cloud/apps/web/src/components/assumptions/TempZeroVerification.tsx \
+        cloud/apps/web/src/pages/DomainAssumptions.tsx
+git commit -m "Add TempZeroVerification UI component and operations"
+```
 
-### 3. Decide Phase 11 strategy
+Verify: `cd cloud && npm run typecheck --workspace @valuerank/web` must pass.
 
-Once verification data exists, choose one of:
-- **Strict** — only show models with `adapterMode = explicit_temp_zero` in Assumptions
-- **Split labels** — show all models but distinguish `Explicit temp=0` vs `Deterministic-mode fallback`
-- **Exclude unsupported** — remove models that can't confirm temp=0
+**What the component does:** Adds a "Temp=0 Verification Report" section at the bottom of the Assumptions tab. User picks days (7/14/30/90) and clicks "Generate". Shows a table of per-model metrics matching the `temp_zero_report.py` output.
 
-This is a product decision. Bring data to the human before implementing.
+**New files:**
+- `cloud/apps/web/src/api/operations/temp-zero-verification.ts`
+- `cloud/apps/web/src/components/assumptions/TempZeroVerification.tsx`
+
+**Modified:** `cloud/apps/web/src/pages/DomainAssumptions.tsx` (adds `<TempZeroVerification />` before the modal)
+
+### Step 3 — Pre-PR review and merge
+
+After both worktrees are done:
+
+1. Review full diff for API branch: `git diff main...feat/temp0-verify-api`
+2. Review full diff for web branch: `git diff main...feat/temp0-verify-web`
+3. Run full preflight from `cloud/`:
+   ```bash
+   npm run lint --workspace @valuerank/shared
+   npm run lint --workspace @valuerank/db
+   npm run lint --workspace @valuerank/api
+   npm run test --workspace @valuerank/api  # needs DATABASE_URL + JWT_SECRET
+   npm run build --workspace @valuerank/api
+   npm run lint --workspace @valuerank/web
+   npm run test --workspace @valuerank/web
+   npm run build --workspace @valuerank/web
+   ```
+4. Create two PRs: `gh pr create --repo chrislawcodes/valuerank --head feat/temp0-verify-api` and same for web branch.
+
+Note: PR #299 (badges) should also be merged before or alongside these. The web branch modifies `DomainAssumptions.tsx` — if #299 merges first, rebase to pick up its changes.
 
 ---
 
-## What Good Output Looks Like
+## Schema Contract (for both tasks)
 
-**canary_runner.py:**
-- `exact_match_rate: 1.0` for the control prompt ("respond with A")
-- `exact_match_rate: 1.0` ideally for the decision prompt (some variance acceptable)
-- `all_prompt_hashes_identical: true`
+The API query and web component must agree on these exact field names:
 
-**temp_zero_report.py:**
-- Prompt Hash Stable: ~100%
-- Fingerprint Stable: varies by provider (OpenAI changes fingerprint on deployments — OK)
-- Decision Match: 3 most recent runs agree — this is the primary goal
+```graphql
+query TempZeroVerificationReport($days: Int) {
+  tempZeroVerificationReport(days: $days) {
+    generatedAt
+    transcriptCount
+    daysLookedBack
+    models {
+      modelId
+      transcriptCount
+      adapterModes
+      promptHashStabilityPct
+      fingerprintDriftPct
+      decisionMatchRatePct
+    }
+  }
+}
+```
 
 ---
 
-## Primary Coordination
+## Coordination
 
-**Use Gemini for planning/Phase 11 strategy. Use Codex for implementation.**
+Read `~/.claude/GEMINI-CODEX-GUIDE.md` before starting.
 
-Starting doc for Gemini: `~/.claude/GEMINI-CODEX-GUIDE.md`
-
-Invocation:
-```bash
-gemini --prompt "Read ~/.claude/GEMINI-CODEX-GUIDE.md and docs/plans/temp-zero-handoff.md. [describe task]." --yolo
-```
+Codex is the right agent for both implementation tasks — it edits existing files conservatively.
+Codex does not always commit — always run `git status` after each task.
+Run verification from the **main repo** (`/Users/chrislaw/valuerank/cloud`), not from the worktree.
 
 ---
 

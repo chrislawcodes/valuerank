@@ -16,9 +16,9 @@
 | 8 | `debugAssumptionsMismatches` diagnostic endpoint | ✅ Done | #298 |
 | 9 | Verification report (`temp_zero_report.py`) | ✅ Done | #298 |
 | 10 | Acceptance criteria (definition only) | ✅ Done — defined below, no code needed | — |
-| 11 | Assumptions tab labeling/filtering strategy | ⏳ Pending — blocked on Phase 5/9 data | — |
+| 11 | Assumptions tab labeling/filtering strategy | ✅ Done — split-label badges (Explicit temp=0 / Best-effort) | #299 |
 
-**Next human action:** Run `canary_runner.py` and `temp_zero_report.py` with live credentials. See `docs/plans/temp-zero-handoff.md` for exact commands.
+**Next human action:** Run `canary_runner.py` and `temp_zero_report.py` with live credentials to populate phases 5–7 data. See `docs/plans/temp-zero-handoff.md` for exact commands. All implementation phases are complete.
 
 ---
 
