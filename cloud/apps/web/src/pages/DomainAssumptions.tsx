@@ -138,8 +138,6 @@ function groupRowsByModel(rows: TempZeroRow[]): Array<{ modelId: string; modelLa
 type DisplaySummary = {
   matchRate: number | null;
   differenceRate: number | null;
-  comparisons: number;
-  excludedComparisons: number;
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
@@ -148,7 +146,7 @@ type DisplaySummary = {
 };
 
 function getMismatchSummary(rows: TempZeroRow[], matchedLabel: string): { text: string; toneClass: string } {
-  const mismatchCount = rows.filter((row) => row.mismatchType === 'decision_flip').length;
+  const mismatchCount = rows.filter((row) => row.mismatchType !== 'missing_trial' && !row.isMatch).length;
   const missingTrialCount = rows.filter((row) => row.mismatchType === 'missing_trial').length;
   const comparableCount = rows.length - missingTrialCount;
   const differenceRate = comparableCount > 0 ? mismatchCount / comparableCount : null;
@@ -204,8 +202,6 @@ function computeDisplaySummary(rows: TempZeroRow[]): DisplaySummary {
   return {
     matchRate: comparableRows.length > 0 ? matchedRows.length / comparableRows.length : null,
     differenceRate: comparableRows.length > 0 ? 1 - (matchedRows.length / comparableRows.length) : null,
-    comparisons: comparableRows.length,
-    excludedComparisons: rows.length - comparableRows.length,
     modelsTested: modelGroups.length,
     vignettesTested: groupRowsByVignette(rows).length,
     worstModelId,
@@ -233,16 +229,19 @@ export function DomainAssumptions() {
   const [selectedRow, setSelectedRow] = useState<SelectedTranscriptRow | null>(null);
   const [isLaunchConfirmed, setIsLaunchConfirmed] = useState(false);
   const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedModelIds, setSelectedModelIds] = useState<string[] | null>(null);
 
   const result = data?.assumptionsTempZero;
-  const availableModels = result?.preflight.models ?? [];
+  const availableModels = useMemo(
+    () => result?.preflight.models ?? [],
+    [result?.preflight.models],
+  );
   const effectiveSelectedModelIds = useMemo(() => {
     const availableModelIds = availableModels.map((model) => model.modelId);
     if (availableModelIds.length === 0) return [] as string[];
+    if (selectedModelIds === null) return availableModelIds;
 
-    const filtered = selectedModelIds.filter((modelId) => availableModelIds.includes(modelId));
-    return filtered.length > 0 ? filtered : availableModelIds;
+    return selectedModelIds.filter((modelId) => availableModelIds.includes(modelId));
   }, [availableModels, selectedModelIds]);
   const filteredRows = useMemo(() => (
     (result?.rows ?? []).filter((row) => effectiveSelectedModelIds.includes(row.modelId))
@@ -258,11 +257,12 @@ export function DomainAssumptions() {
   const launchError = launchResult.error?.message ?? null;
 
   const toggleModel = (modelId: string) => {
-    setSelectedModelIds((current) => (
-      current.includes(modelId)
-        ? current.filter((id) => id !== modelId)
-        : [...current, modelId]
-    ));
+    setSelectedModelIds((current) => {
+      const baseSelection = current ?? availableModels.map((model) => model.modelId);
+      return baseSelection.includes(modelId)
+        ? baseSelection.filter((id) => id !== modelId)
+        : [...baseSelection, modelId];
+    });
   };
 
   const handleLaunchTempZero = async () => {
@@ -388,18 +388,20 @@ export function DomainAssumptions() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {result.preflight.models.length > 0 ? (
                     result.preflight.models.map((model) => (
-                      <button
+                      <Button
                         key={model.modelId}
                         type="button"
                         onClick={() => toggleModel(model.modelId)}
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${
+                        variant="secondary"
+                        size="sm"
+                        className={`rounded-full px-2.5 py-1 text-xs ${
                           effectiveSelectedModelIds.includes(model.modelId)
-                            ? 'border-teal-600 bg-teal-50 text-teal-800'
+                            ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
                             : 'border-gray-300 bg-white text-gray-700'
                         }`}
                       >
                         {model.label}
-                      </button>
+                      </Button>
                     ))
                   ) : (
                     <span className="text-sm text-gray-500">No models selected</span>
@@ -575,7 +577,9 @@ export function DomainAssumptions() {
                                       <tr
                                         key={`${row.modelId}-${row.vignetteId}-${row.conditionKey}`}
                                         className={`cursor-pointer transition-colors ${
-                                          row.mismatchType === 'decision_flip' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-teal-50'
+                                          row.mismatchType !== 'missing_trial' && !row.isMatch
+                                            ? 'bg-red-50 hover:bg-red-100'
+                                            : 'hover:bg-teal-50'
                                         }`}
                                         onClick={() => setSelectedRow({
                                           modelLabel: row.modelLabel,
