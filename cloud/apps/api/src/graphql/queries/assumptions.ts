@@ -176,9 +176,10 @@ function getNestedString(value: unknown, path: string[]): string | null {
 function computeMatch(values: Array<string | null>, transcriptCount: number): boolean | null {
   if (transcriptCount < 2) return null;
 
-  const nonNullValues = values.filter((value): value is string => value !== null);
-  if (nonNullValues.length === 0) return null;
+  // Any null means instrumentation is missing for that transcript — can't compare
+  if (values.some((value) => value === null)) return null;
 
+  const nonNullValues = values as string[];
   return nonNullValues.every((value) => value === nonNullValues[0]);
 }
 

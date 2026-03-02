@@ -150,7 +150,7 @@ def generate(
         "model_config": model_config,
         "timeout": timeout,
     }
-    if seed is not None and isinstance(adapter, (OpenAIAdapter, XAIAdapter, DeepSeekAdapter)):
+    if seed is not None and isinstance(adapter, (OpenAIAdapter, XAIAdapter, DeepSeekAdapter, GeminiAdapter)):
         generate_kwargs["seed"] = seed
 
     return adapter.generate(

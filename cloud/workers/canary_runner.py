@@ -1,4 +1,13 @@
-"""Standalone canary runner for temperature=0 determinism checks."""
+"""Standalone canary runner for temperature=0 determinism checks.
+
+Must be run from the cloud/workers/ directory so that common.* imports resolve:
+
+    cd cloud/workers
+    python canary_runner.py --models gpt-4o,claude-sonnet-4-6 --runs 20
+    python canary_runner.py --models gpt-4o --runs 5 --output results.json
+
+Running from any other directory will fail with a ModuleNotFoundError.
+"""
 
 from __future__ import annotations
 
