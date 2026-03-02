@@ -136,7 +136,7 @@ builder.queryField('tempZeroVerificationReport', (t) =>
 
             for (const transcript of scenarioTranscripts) {
               const adapterMode = getNestedString(transcript.content, ['turns', '0', 'providerMetadata', 'adapterMode']);
-              if (adapterMode) {
+              if (adapterMode != null) {
                 adapterModes.add(adapterMode);
               }
             }
