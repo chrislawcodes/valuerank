@@ -19,9 +19,24 @@ function formatFingerprintStablePercent(driftPct: number | null): string {
   return `${(100 - driftPct).toFixed(1)}%`;
 }
 
+function copyReportToClipboard(report: NonNullable<TempZeroVerificationReportQueryResult['tempZeroVerificationReport']>) {
+  const headers = ['Model', 'Transcripts', 'Adapter Mode', 'Prompt Hash Stable', 'Fingerprint Stable', 'Decision Match'];
+  const rows = report.models.map((m) => [
+    m.modelId,
+    String(m.transcriptCount),
+    m.adapterModes.length > 0 ? m.adapterModes.join(', ') : 'n/a',
+    formatPercent(m.promptHashStabilityPct),
+    formatFingerprintStablePercent(m.fingerprintDriftPct),
+    formatPercent(m.decisionMatchRatePct),
+  ]);
+  const text = [headers, ...rows].map((row) => row.join('\t')).join('\n');
+  void navigator.clipboard.writeText(text);
+}
+
 export function TempZeroVerification() {
   const [fetchCount, setFetchCount] = useState(0);
   const [days, setDays] = useState(30);
+  const [copied, setCopied] = useState(false);
   const [{ data, fetching, error }] = useQuery<
     TempZeroVerificationReportQueryResult,
     TempZeroVerificationReportQueryVariables
@@ -85,6 +100,18 @@ export function TempZeroVerification() {
 
       {report && !fetching && !error && (
         <div className="mt-5 overflow-x-auto">
+          <div className="mb-2 flex justify-end">
+            <Button
+              type="button"
+              onClick={() => {
+                copyReportToClipboard(report);
+                setCopied(true);
+                setTimeout(() => { setCopied(false); }, 2000);
+              }}
+            >
+              {copied ? 'Copied!' : 'Copy to Clipboard'}
+            </Button>
+          </div>
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
