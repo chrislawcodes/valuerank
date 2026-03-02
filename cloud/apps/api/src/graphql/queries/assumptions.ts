@@ -1,5 +1,5 @@
 import { db } from '@valuerank/db';
-import { AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError, decisionsMatch } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
@@ -265,10 +265,12 @@ builder.objectType(AssumptionsTempZeroResultRef, {
 builder.queryField('assumptionsTempZero', (t) =>
   t.field({
     type: AssumptionsTempZeroResultRef,
-    resolve: async (_root, _args, ctx) => {
+    args: { directionOnly: t.arg.boolean({ required: false }) },
+    resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
+      const directionOnly = args.directionOnly ?? false;
 
       const domain = await db.domain.findFirst({
         where: { normalizedName: 'professional' },
@@ -414,7 +416,7 @@ builder.queryField('assumptionsTempZero', (t) =>
             const batch3 = group[2]?.decisionCode ?? null;
             const comparable = group.length >= 3;
             const isMatch = comparable
-              ? batch1 === batch2 && batch2 === batch3
+              ? decisionsMatch(batch1, batch2, batch3, directionOnly)
               : false;
             const mismatchType: TempZeroMismatchType = comparable ? (isMatch ? null : 'decision_flip') : 'missing_trial';
 
