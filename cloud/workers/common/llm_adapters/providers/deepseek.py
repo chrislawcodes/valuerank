@@ -76,6 +76,9 @@ class DeepSeekAdapter(BaseLLMAdapter):
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
 
+        if seed is not None:
+            payload["seed"] = seed
+
         # Add optional config values (DeepSeek supports all OpenAI-compatible options)
         top_p = get_config_value(model_config, "topP", float, 0, 1)
         if top_p is not None:

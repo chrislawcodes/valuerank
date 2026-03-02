@@ -119,10 +119,10 @@ def fetch_transcripts(conn: Any, run_ids: Sequence[Any]) -> List[Dict[str, Any]]
     if "content" in columns:
         select_parts.extend(
             [
-                "t.content->'providerMetadata'->>'promptHash' AS prompt_hash",
-                "t.content->'providerMetadata'->>'adapterMode' AS adapter_mode",
+                "t.content->'turns'->0->'providerMetadata'->>'promptHash' AS prompt_hash",
+                "t.content->'turns'->0->'providerMetadata'->>'adapterMode' AS adapter_mode",
                 (
-                    "t.content->'providerMetadata'->'raw'->>'system_fingerprint' "
+                    "t.content->'turns'->0->'providerMetadata'->'raw'->>'system_fingerprint' "
                     "AS system_fingerprint"
                 ),
             ]

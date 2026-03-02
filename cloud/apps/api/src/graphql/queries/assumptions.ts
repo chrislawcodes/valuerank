@@ -364,6 +364,9 @@ builder.queryField('debugAssumptionsMismatches', (t) =>
           scenarioId: args.scenarioId,
           modelId: args.modelId,
           deletedAt: null,
+          run: {
+            config: { path: ['temperature'], equals: 0 },
+          },
         },
         orderBy: { createdAt: 'desc' },
         take: 3,
