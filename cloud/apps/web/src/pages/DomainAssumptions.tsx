@@ -4,6 +4,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
+import { TempZeroVerification } from '../components/assumptions/TempZeroVerification';
 import {
   ASSUMPTIONS_TEMP_ZERO_QUERY,
   LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
@@ -716,6 +717,8 @@ export function DomainAssumptions() {
               Placeholder for the generic-title rewrite comparison. This chunk only implements `#285`.
             </p>
           </section>
+
+          <TempZeroVerification />
         </>
       )}
 
