@@ -20,6 +20,7 @@ type TempZeroPreflightVignette = {
 type TempZeroPreflightModel = {
   modelId: string;
   label: string;
+  adapterMode: string | null;
 };
 
 type TempZeroPreflight = {
@@ -229,6 +230,7 @@ builder.objectType(TempZeroPreflightModelRef, {
   fields: (t) => ({
     modelId: t.exposeString('modelId'),
     label: t.exposeString('label'),
+    adapterMode: t.exposeString('adapterMode', { nullable: true }),
   }),
 });
 
@@ -514,6 +516,18 @@ builder.queryField('assumptionsTempZero', (t) =>
         }
       }
 
+      // Build per-model adapterMode from the most recent transcript for each model
+      const modelAdapterModeMap = new Map<string, string | null>();
+      for (const [key, group] of transcriptGroups.entries()) {
+        const modelId = key.split('::')[0];
+        if (modelId !== undefined && !modelAdapterModeMap.has(modelId) && group.length > 0) {
+          modelAdapterModeMap.set(
+            modelId,
+            getNestedString(group[0]!.content, ['turns', '0', 'providerMetadata', 'adapterMode']),
+          );
+        }
+      }
+
       const rows: TempZeroRow[] = [];
       const comparableByModel = new Map<string, { comparable: number; matched: number }>();
       const vignetteLaunchPlan = new Map<string, { conditionCount: number; batchesToRun: number }>();
@@ -681,6 +695,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           models: models.map((model) => ({
             modelId: model.modelId,
             label: model.label,
+            adapterMode: modelAdapterModeMap.get(model.modelId) ?? null,
           })),
           vignettes: availableVignettes.map((vignette) => ({
             vignetteId: vignette.id,

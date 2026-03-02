@@ -14,6 +14,7 @@ export type TempZeroPreflightVignette = {
 export type TempZeroPreflightModel = {
   modelId: string;
   label: string;
+  adapterMode: string | null;
 };
 
 export type TempZeroPreflight = {
@@ -111,6 +112,7 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
         models {
           modelId
           label
+          adapterMode
         }
         vignettes {
           vignetteId
