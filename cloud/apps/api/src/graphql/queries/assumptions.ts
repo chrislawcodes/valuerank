@@ -373,10 +373,10 @@ builder.queryField('debugAssumptionsMismatches', (t) =>
       });
 
       const promptHashes = transcripts.map((transcript) => (
-        getNestedString(transcript.content, ['providerMetadata', 'promptHash'])
+        getNestedString(transcript.content, ['turns', '0', 'providerMetadata', 'promptHash'])
       ));
       const systemFingerprints = transcripts.map((transcript) => (
-        getNestedString(transcript.content, ['providerMetadata', 'raw', 'system_fingerprint'])
+        getNestedString(transcript.content, ['turns', '0', 'providerMetadata', 'raw', 'system_fingerprint'])
       ));
       const decisionCodes = transcripts.map((transcript) => transcript.decisionCode);
       const transcriptCount = transcripts.length;

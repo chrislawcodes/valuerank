@@ -36,6 +36,7 @@ class GeminiAdapter(BaseLLMAdapter):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
