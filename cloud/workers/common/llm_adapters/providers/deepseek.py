@@ -39,6 +39,7 @@ class DeepSeekAdapter(BaseLLMAdapter):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
@@ -74,6 +75,9 @@ class DeepSeekAdapter(BaseLLMAdapter):
         # Only add max_tokens if not unlimited (None)
         if resolved_max_tokens is not None:
             payload["max_tokens"] = resolved_max_tokens
+
+        if seed is not None:
+            payload["seed"] = seed
 
         # Add optional config values (DeepSeek supports all OpenAI-compatible options)
         top_p = get_config_value(model_config, "topP", float, 0, 1)

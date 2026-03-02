@@ -3,8 +3,11 @@ Base adapter class and HTTP utilities for LLM providers.
 """
 
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
+import hashlib
+import json
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -66,6 +69,22 @@ BILLING_EXHAUSTION_PATTERNS = [
     for pattern in patterns
 ]
 
+UNSUPPORTED_TEMPERATURE_PATTERNS = [
+    "temperature",
+    "unsupported parameter",
+    "unknown parameter",
+    "unknown field",
+    "not supported",
+    "unrecognized",
+    "invalid parameter",
+    "extra inputs are not permitted",
+]
+
+_REQUEST_METADATA: ContextVar[Optional[dict[str, Any]]] = ContextVar(
+    "llm_request_metadata",
+    default=None,
+)
+
 
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM providers."""
@@ -79,6 +98,7 @@ class BaseLLMAdapter(ABC):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         """Generate a completion from the LLM.
@@ -89,9 +109,89 @@ class BaseLLMAdapter(ABC):
             temperature: Sampling temperature (None omits provider parameter)
             max_tokens: Maximum tokens to generate
             model_config: Optional provider-specific configuration (e.g., API parameter names)
+            seed: Optional deterministic seed for providers that support it
             timeout: HTTP request timeout in seconds (defaults to adapter's timeout)
         """
         pass
+
+
+def _build_payload_for_hash(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove obvious secret-bearing keys before hashing/logging."""
+    return {
+        key: value
+        for key, value in payload.items()
+        if key.lower() not in ("api_key", "authorization", "x-api-key")
+    }
+
+
+def _classify_adapter_mode(
+    payload: dict[str, Any],
+    *,
+    request_succeeded: bool,
+    retried_without_temperature: bool = False,
+) -> str:
+    """Classify how temperature was handled for this request."""
+    if retried_without_temperature:
+        return "unsupported_param_retry"
+
+    if "temperature" not in payload:
+        return "temp_omitted_by_adapter" if request_succeeded else "unknown"
+
+    value = payload.get("temperature")
+    if value in (0, 0.0):
+        return "explicit_temp_zero" if request_succeeded else "unknown"
+    if isinstance(value, (int, float)):
+        return "explicit_nonzero"
+    return "unknown"
+
+
+def _set_request_metadata(
+    payload: dict[str, Any],
+    *,
+    adapter_mode: str,
+) -> None:
+    """Store request metadata for the next LLMResponse construction."""
+    payload_for_hash = _build_payload_for_hash(payload)
+    payload_json = json.dumps(payload_for_hash, sort_keys=True)
+    temperature_sent = "temperature" in payload
+    seed_sent = "seed" in payload
+    seed_value_raw = payload.get("seed") if seed_sent else None
+    seed_value = seed_value_raw if isinstance(seed_value_raw, int) else None
+
+    _REQUEST_METADATA.set(
+        {
+            "prompt_hash": hashlib.sha256(payload_json.encode()).hexdigest(),
+            "temperature_sent": temperature_sent,
+            "temperature_value": payload.get("temperature") if temperature_sent else None,
+            "seed_sent": seed_sent,
+            "seed_value": seed_value,
+            "adapter_mode": adapter_mode,
+        }
+    )
+
+
+def get_current_request_metadata() -> Optional[dict[str, Any]]:
+    """Return the latest request metadata captured by post_json."""
+    metadata = _REQUEST_METADATA.get()
+    if metadata is None:
+        return None
+    return dict(metadata)
+
+
+def _is_unsupported_temperature_response(
+    status_code: int,
+    response_text: str,
+    payload: dict[str, Any],
+) -> bool:
+    """Detect providers rejecting the temperature parameter."""
+    if "temperature" not in payload or status_code < 400:
+        return False
+
+    text_lower = response_text.lower()
+    if "temperature" not in text_lower:
+        return False
+
+    return any(pattern in text_lower for pattern in UNSUPPORTED_TEMPERATURE_PATTERNS)
 
 
 def is_rate_limit_response(status_code: int, response_text: str) -> bool:
@@ -143,16 +243,42 @@ def post_json(
     last_exc: Optional[Exception] = None
     rate_limit_attempts = 0
     network_attempts = 0
+    retried_without_temperature = False
 
     # Total max attempts: MAX_HTTP_RETRIES for network issues + MAX_RATE_LIMIT_RETRIES for rate limits
     max_total_attempts = MAX_HTTP_RETRIES + MAX_RATE_LIMIT_RETRIES
 
     while network_attempts < MAX_HTTP_RETRIES and rate_limit_attempts <= MAX_RATE_LIMIT_RETRIES:
         try:
+            payload_for_hash = _build_payload_for_hash(payload)
+            log.debug("Raw API Request", url=url, payload=json.dumps(payload_for_hash, sort_keys=True))
+
+            _set_request_metadata(
+                payload,
+                adapter_mode=_classify_adapter_mode(
+                    payload,
+                    request_succeeded=False,
+                    retried_without_temperature=retried_without_temperature,
+                ),
+            )
             response = requests.post(url, headers=headers, json=payload, timeout=timeout)
 
             if response.status_code >= 400:
                 snippet = response.text[:500]
+
+                if (
+                    not retried_without_temperature
+                    and _is_unsupported_temperature_response(response.status_code, snippet, payload)
+                ):
+                    retried_without_temperature = True
+                    payload = {key: value for key, value in payload.items() if key != "temperature"}
+                    log.warn(
+                        "Provider rejected temperature, retrying without it",
+                        status_code=response.status_code,
+                        url=url,
+                    )
+                    _set_request_metadata(payload, adapter_mode="unsupported_param_retry")
+                    continue
 
                 # Billing/quota exhaustion should fail fast (non-retryable).
                 if is_billing_exhaustion_response(response.status_code, snippet):
@@ -194,6 +320,14 @@ def post_json(
                 )
 
             try:
+                _set_request_metadata(
+                    payload,
+                    adapter_mode=_classify_adapter_mode(
+                        payload,
+                        request_succeeded=True,
+                        retried_without_temperature=retried_without_temperature,
+                    ),
+                )
                 return response.json()
             except ValueError as exc:
                 raise LLMError(

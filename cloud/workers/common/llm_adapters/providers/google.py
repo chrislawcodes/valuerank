@@ -36,6 +36,7 @@ class GeminiAdapter(BaseLLMAdapter):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
@@ -69,6 +70,9 @@ class GeminiAdapter(BaseLLMAdapter):
 
         if resolved_temperature is not None:
             generation_config["temperature"] = resolved_temperature
+
+        if seed is not None:
+            generation_config["seed"] = seed
 
         # Only add maxOutputTokens if not unlimited (None)
         # For Gemini 2.5 thinking models, omitting this allows full thinking + output

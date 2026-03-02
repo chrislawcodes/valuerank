@@ -89,6 +89,25 @@ from common.logging import get_logger
 log = get_logger("probe")
 
 
+def build_provider_metadata(response: LLMResponse) -> Optional[dict[str, Any]]:
+    """Merge provider metadata with adapter instrumentation fields."""
+    metadata = dict(response.provider_metadata) if response.provider_metadata else {}
+
+    instrumentation = {
+        "promptHash": response.prompt_hash,
+        "temperatureSent": response.temperature_sent,
+        "temperatureValue": response.temperature_value,
+        "seedSent": response.seed_sent,
+        "seedValue": response.seed_value,
+        "adapterMode": response.adapter_mode,
+    }
+    for key, value in instrumentation.items():
+        if value is not None:
+            metadata[key] = value
+
+    return metadata or None
+
+
 @dataclass
 class Turn:
     """A single turn in the conversation."""
@@ -208,6 +227,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     model_config = data.get("modelConfig")  # Optional API configuration
 
     temperature = config.get("temperature")
+    seed = config.get("seed")
     max_tokens = config.get("maxTokens", 8192)
     max_turns = config.get("maxTurns", 10)
 
@@ -242,6 +262,8 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
         }
         if isinstance(temperature, (int, float)):
             generate_kwargs["temperature"] = float(temperature)
+        if isinstance(seed, int):
+            generate_kwargs["seed"] = seed
 
         response = generate(
             model_id,
@@ -256,7 +278,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
             target_response=response.content,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
-            provider_metadata=response.provider_metadata,
+            provider_metadata=build_provider_metadata(response),
         )
         transcript.turns.append(turn)
 
@@ -298,7 +320,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
                 target_response=response.content,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
-                provider_metadata=response.provider_metadata,
+                provider_metadata=build_provider_metadata(response),
             )
             transcript.turns.append(turn)
 

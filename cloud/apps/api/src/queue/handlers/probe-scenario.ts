@@ -135,6 +135,7 @@ type ProbeWorkerInput = {
   };
   config: {
     temperature?: number;
+    seed?: number;
     maxTokens: number;
     maxTurns: number;
   };
@@ -414,7 +415,7 @@ async function buildWorkerInput(
   scenarioContent: unknown,
   definitionContent: unknown,
   definitionPreamble: string | undefined, // New argument for fallback
-  config: { temperature?: number; maxTurns: number; maxTokens?: number }
+  config: { temperature?: number; seed?: number; maxTurns: number; maxTokens?: number }
 ): Promise<ProbeWorkerInput> {
   // Extract scenario fields (content is JSON in database)
   const content = scenarioContent as Record<string, unknown>;
@@ -448,6 +449,7 @@ async function buildWorkerInput(
       maxTokens: config.maxTokens ?? 8192, // Default to 8192 to support reasoning models
       maxTurns: config.maxTurns,
       ...(typeof config.temperature === 'number' ? { temperature: config.temperature } : {}),
+      ...(config.temperature === 0 ? { seed: 42 } : {}),
     },
   };
 

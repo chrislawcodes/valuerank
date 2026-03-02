@@ -80,6 +80,18 @@ type AssumptionsTempZeroResult = {
   generatedAt: Date;
 };
 
+type DebugMismatchResult = {
+  scenarioId: string;
+  modelId: string;
+  transcriptCount: number;
+  promptHashesMatch: boolean | null;
+  promptHashes: (string | null)[];
+  systemFingerprintsMatch: boolean | null;
+  systemFingerprints: (string | null)[];
+  decisionCodes: (string | null)[];
+  rawResponseSummary: string;
+};
+
 type ScenarioRecord = {
   id: string;
   definitionId: string;
@@ -148,6 +160,52 @@ function roundToGraphQLInt(value: number): number {
   return Math.round(value);
 }
 
+function getNestedString(value: unknown, path: string[]): string | null {
+  let current: unknown = value;
+
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || !(key in current)) {
+      return null;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+
+  return typeof current === 'string' && current.trim() !== '' ? current : null;
+}
+
+function computeMatch(values: Array<string | null>, transcriptCount: number): boolean | null {
+  if (transcriptCount < 2) return null;
+
+  // Any null means instrumentation is missing for that transcript — can't compare
+  if (values.some((value) => value === null)) return null;
+
+  const nonNullValues = values as string[];
+  return nonNullValues.every((value) => value === nonNullValues[0]);
+}
+
+function summarizeDecisionCodes(decisionCodes: Array<string | null>, transcriptCount: number): string {
+  if (transcriptCount === 0) return 'No transcripts found';
+
+  const counts = new Map<string, number>();
+  for (const decisionCode of decisionCodes) {
+    const key = decisionCode ?? '__NULL__';
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const largestGroup = Math.max(...counts.values());
+  const nullCount = decisionCodes.filter((decisionCode) => decisionCode === null).length;
+
+  if (largestGroup === transcriptCount && nullCount === 0) {
+    return `All ${transcriptCount} decisions match`;
+  }
+
+  if (largestGroup === 1) {
+    return `${transcriptCount} transcripts: all decisions differ`;
+  }
+
+  return `${transcriptCount} transcripts: ${largestGroup} identical decisions, ${transcriptCount - largestGroup} differ`;
+}
+
 const TempZeroPreflightVignetteRef = builder.objectRef<TempZeroPreflightVignette>('TempZeroPreflightVignette');
 const TempZeroPreflightModelRef = builder.objectRef<TempZeroPreflightModel>('TempZeroPreflightModel');
 const TempZeroPreflightRef = builder.objectRef<TempZeroPreflight>('TempZeroPreflight');
@@ -155,6 +213,7 @@ const TempZeroSummaryRef = builder.objectRef<TempZeroSummary>('TempZeroSummary')
 const TempZeroDecisionRef = builder.objectRef<TempZeroDecision>('TempZeroDecision');
 const TempZeroRowRef = builder.objectRef<TempZeroRow>('TempZeroRow');
 const AssumptionsTempZeroResultRef = builder.objectRef<AssumptionsTempZeroResult>('AssumptionsTempZeroResult');
+const DebugMismatchResultRef = builder.objectRef<DebugMismatchResult>('DebugMismatchResult');
 
 builder.objectType(TempZeroPreflightVignetteRef, {
   fields: (t) => ({
@@ -261,6 +320,85 @@ builder.objectType(AssumptionsTempZeroResultRef, {
     }),
   }),
 });
+
+builder.objectType(DebugMismatchResultRef, {
+  fields: (t) => ({
+    scenarioId: t.exposeString('scenarioId'),
+    modelId: t.exposeString('modelId'),
+    transcriptCount: t.exposeInt('transcriptCount'),
+    promptHashesMatch: t.exposeBoolean('promptHashesMatch', { nullable: true }),
+    promptHashes: t.field({
+      type: ['String'],
+      nullable: { list: false, items: true },
+      resolve: (parent) => parent.promptHashes,
+    }),
+    systemFingerprintsMatch: t.exposeBoolean('systemFingerprintsMatch', { nullable: true }),
+    systemFingerprints: t.field({
+      type: ['String'],
+      nullable: { list: false, items: true },
+      resolve: (parent) => parent.systemFingerprints,
+    }),
+    decisionCodes: t.field({
+      type: ['String'],
+      nullable: { list: false, items: true },
+      resolve: (parent) => parent.decisionCodes,
+    }),
+    rawResponseSummary: t.exposeString('rawResponseSummary'),
+  }),
+});
+
+builder.queryField('debugAssumptionsMismatches', (t) =>
+  t.field({
+    type: DebugMismatchResultRef,
+    args: {
+      scenarioId: t.arg.string({ required: true }),
+      modelId: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const transcripts = await db.transcript.findMany({
+        where: {
+          scenarioId: args.scenarioId,
+          modelId: args.modelId,
+          deletedAt: null,
+          run: {
+            config: { path: ['temperature'], equals: 0 },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: {
+          decisionCode: true,
+          content: true,
+        },
+      });
+
+      const promptHashes = transcripts.map((transcript) => (
+        getNestedString(transcript.content, ['turns', '0', 'providerMetadata', 'promptHash'])
+      ));
+      const systemFingerprints = transcripts.map((transcript) => (
+        getNestedString(transcript.content, ['turns', '0', 'providerMetadata', 'raw', 'system_fingerprint'])
+      ));
+      const decisionCodes = transcripts.map((transcript) => transcript.decisionCode);
+      const transcriptCount = transcripts.length;
+
+      return {
+        scenarioId: args.scenarioId,
+        modelId: args.modelId,
+        transcriptCount,
+        promptHashesMatch: computeMatch(promptHashes, transcriptCount),
+        promptHashes,
+        systemFingerprintsMatch: computeMatch(systemFingerprints, transcriptCount),
+        systemFingerprints,
+        decisionCodes,
+        rawResponseSummary: summarizeDecisionCodes(decisionCodes, transcriptCount),
+      };
+    },
+  }),
+);
 
 builder.queryField('assumptionsTempZero', (t) =>
   t.field({
