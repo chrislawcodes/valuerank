@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import { useQuery } from 'urql';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
@@ -19,24 +20,22 @@ function formatFingerprintStablePercent(driftPct: number | null): string {
   return `${(100 - driftPct).toFixed(1)}%`;
 }
 
-function copyReportToClipboard(report: NonNullable<TempZeroVerificationReportQueryResult['tempZeroVerificationReport']>) {
-  const headers = ['Model', 'Transcripts', 'Adapter Mode', 'Prompt Hash Stable', 'Fingerprint Stable', 'Decision Match'];
-  const rows = report.models.map((m) => [
-    m.modelId,
-    String(m.transcriptCount),
-    m.adapterModes.length > 0 ? m.adapterModes.join(', ') : 'n/a',
-    formatPercent(m.promptHashStabilityPct),
-    formatFingerprintStablePercent(m.fingerprintDriftPct),
-    formatPercent(m.decisionMatchRatePct),
-  ]);
-  const text = [headers, ...rows].map((row) => row.join('\t')).join('\n');
-  void navigator.clipboard.writeText(text);
-}
-
 export function TempZeroVerification() {
   const [fetchCount, setFetchCount] = useState(0);
   const [days, setDays] = useState(30);
   const [copied, setCopied] = useState(false);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const copyAsImage = async () => {
+    if (tableRef.current == null) return;
+    const canvas = await html2canvas(tableRef.current, { scale: 2 });
+    canvas.toBlob((blob) => {
+      if (blob == null) return;
+      void navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    });
+    setCopied(true);
+    setTimeout(() => { setCopied(false); }, 2000);
+  };
   const [{ data, fetching, error }] = useQuery<
     TempZeroVerificationReportQueryResult,
     TempZeroVerificationReportQueryVariables
@@ -101,17 +100,11 @@ export function TempZeroVerification() {
       {report && !fetching && !error && (
         <div className="mt-5 overflow-x-auto">
           <div className="mb-2 flex justify-end">
-            <Button
-              type="button"
-              onClick={() => {
-                copyReportToClipboard(report);
-                setCopied(true);
-                setTimeout(() => { setCopied(false); }, 2000);
-              }}
-            >
-              {copied ? 'Copied!' : 'Copy to Clipboard'}
+            <Button type="button" onClick={() => { void copyAsImage(); }}>
+              {copied ? 'Copied!' : 'Copy as Image'}
             </Button>
           </div>
+          <div ref={tableRef} className="inline-block bg-white p-3">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -138,6 +131,7 @@ export function TempZeroVerification() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </section>
