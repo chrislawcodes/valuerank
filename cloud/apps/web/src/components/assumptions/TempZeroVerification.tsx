@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { useQuery } from 'urql';
+import { useQuery, useMutation } from 'urql';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -9,6 +9,10 @@ import {
   type TempZeroVerificationReportQueryResult,
   type TempZeroVerificationReportQueryVariables,
 } from '../../api/operations/temp-zero-verification';
+import {
+  LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
+  type LaunchAssumptionsTempZeroResult,
+} from '../../api/operations/assumptions';
 
 function formatPercent(value: number | null): string {
   if (value === null) return 'n/a';
@@ -24,7 +28,28 @@ export function TempZeroVerification() {
   const [fetchCount, setFetchCount] = useState(0);
   const [days, setDays] = useState(30);
   const [copied, setCopied] = useState(false);
+  const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
+  const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult>(
+    LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
+  );
+
+  const handleRerun = async () => {
+    setLaunchFeedback(null);
+    const response = await executeLaunch({});
+    if (response.error != null) {
+      setLaunchFeedback(`Launch failed: ${response.error.message}`);
+      return;
+    }
+    const payload = response.data?.launchAssumptionsTempZero;
+    if (payload == null) {
+      setLaunchFeedback('Launch returned no data.');
+      return;
+    }
+    setLaunchFeedback(
+      `Started ${payload.startedRuns} run(s) across ${payload.totalVignettes} vignettes using ${payload.modelCount} model(s). Refresh the report once runs complete.`,
+    );
+  };
 
   const copyAsImage = async () => {
     if (tableRef.current == null) return;
@@ -64,6 +89,9 @@ export function TempZeroVerification() {
           )}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Button type="button" onClick={() => { void handleRerun(); }} disabled={launchResult.fetching}>
+            {launchResult.fetching ? 'Re-running...' : 'Re-run Vignettes'}
+          </Button>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <span>Days</span>
             <select
@@ -84,6 +112,10 @@ export function TempZeroVerification() {
           </Button>
         </div>
       </div>
+
+      {launchFeedback != null && (
+        <p className="mt-3 text-sm text-gray-600">{launchFeedback}</p>
+      )}
 
       {fetching && (
         <div className="mt-4">
