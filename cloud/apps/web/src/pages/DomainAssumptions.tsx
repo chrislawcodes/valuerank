@@ -520,6 +520,30 @@ export function DomainAssumptions() {
               </div>
             </div>
 
+            {availableModels.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Filter Models</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {availableModels.map((model) => (
+                    <Button
+                      key={model.modelId}
+                      type="button"
+                      onClick={() => toggleModel(model.modelId)}
+                      variant="secondary"
+                      size="sm"
+                      className={`rounded-full px-2.5 py-1 text-xs ${
+                        effectiveSelectedModelIds.includes(model.modelId)
+                          ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
+                          : 'border-gray-300 bg-white text-gray-700'
+                      }`}
+                    >
+                      {model.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {(displaySummary.worstModelId || displaySummary.worstModelMatchRate !== null) && (
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 Worst model: {displaySummary.worstModelLabel ?? displaySummary.worstModelId ?? 'n/a'}
@@ -552,9 +576,6 @@ export function DomainAssumptions() {
                 >
                   Direction Only
                 </Button>
-                <p className="mt-2 max-w-md text-xs text-gray-500">
-                  Treat 4/5 as picked A, 1/2 as picked B, 3 as neutral
-                </p>
               </div>
             </div>
 

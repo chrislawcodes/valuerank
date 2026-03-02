@@ -15,8 +15,9 @@ export function decisionsMatch(
 ): boolean {
   if (batch1 == null || batch2 == null || batch3 == null) return false;
   if (!directionOnly) return batch1 === batch2 && batch2 === batch3;
-  return (
-    bucketDecisionDirection(batch1) === bucketDecisionDirection(batch2) &&
-    bucketDecisionDirection(batch2) === bucketDecisionDirection(batch3)
-  );
+  const b1 = bucketDecisionDirection(batch1);
+  const b2 = bucketDecisionDirection(batch2);
+  const b3 = bucketDecisionDirection(batch3);
+  if (b1 == null || b2 == null || b3 == null) return false;
+  return b1 === b2 && b2 === b3;
 }
