@@ -4,6 +4,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
+import { TempZeroVerification } from '../components/assumptions/TempZeroVerification';
 import {
   ASSUMPTIONS_TEMP_ZERO_QUERY,
   LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
@@ -87,6 +88,22 @@ function extractTranscriptText(content: unknown): string {
   }
 
   return messages.join('\n\n');
+}
+
+function adapterModeBadge(adapterMode: string | null): { label: string; className: string } | null {
+  if (adapterMode === 'explicit_temp_zero') {
+    return {
+      label: 'Explicit temp=0',
+      className: 'rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700 border border-teal-200',
+    };
+  }
+  if (adapterMode != null) {
+    return {
+      label: 'Best-effort',
+      className: 'rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200',
+    };
+  }
+  return null;
 }
 
 function groupRowsByVignette(rows: TempZeroRow[]): Array<{ vignetteId: string; vignetteTitle: string; rows: TempZeroRow[] }> {
@@ -246,6 +263,10 @@ export function DomainAssumptions() {
 
     return selectedModelIds.filter((modelId) => availableModelIds.includes(modelId));
   }, [availableModels, selectedModelIds]);
+  const modelAdapterModeMap = useMemo(
+    () => new Map(availableModels.map((model) => [model.modelId, model.adapterMode])),
+    [availableModels],
+  );
   const filteredRows = useMemo(() => (
     (result?.rows ?? []).filter((row) => effectiveSelectedModelIds.includes(row.modelId))
   ), [result?.rows, effectiveSelectedModelIds]);
@@ -390,22 +411,28 @@ export function DomainAssumptions() {
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Models Covered</div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {result.preflight.models.length > 0 ? (
-                    result.preflight.models.map((model) => (
-                      <Button
-                        key={model.modelId}
-                        type="button"
-                        onClick={() => toggleModel(model.modelId)}
-                        variant="secondary"
-                        size="sm"
-                        className={`rounded-full px-2.5 py-1 text-xs ${
-                          effectiveSelectedModelIds.includes(model.modelId)
-                            ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
-                            : 'border-gray-300 bg-white text-gray-700'
-                        }`}
-                      >
-                        {model.label}
-                      </Button>
-                    ))
+                    result.preflight.models.map((model) => {
+                      const badge = adapterModeBadge(model.adapterMode);
+                      return (
+                        <Button
+                          key={model.modelId}
+                          type="button"
+                          onClick={() => toggleModel(model.modelId)}
+                          variant="secondary"
+                          size="sm"
+                          className={`rounded-full px-2.5 py-1 text-xs ${
+                            effectiveSelectedModelIds.includes(model.modelId)
+                              ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
+                              : 'border-gray-300 bg-white text-gray-700'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {model.label}
+                            {badge && <span className={badge.className}>{badge.label}</span>}
+                          </span>
+                        </Button>
+                      );
+                    })
                   ) : (
                     <span className="text-sm text-gray-500">No models selected</span>
                   )}
@@ -524,22 +551,28 @@ export function DomainAssumptions() {
               <div className="mt-4">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Filter Models</div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {availableModels.map((model) => (
-                    <Button
-                      key={model.modelId}
-                      type="button"
-                      onClick={() => toggleModel(model.modelId)}
-                      variant="secondary"
-                      size="sm"
-                      className={`rounded-full px-2.5 py-1 text-xs ${
-                        effectiveSelectedModelIds.includes(model.modelId)
-                          ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
-                          : 'border-gray-300 bg-white text-gray-700'
-                      }`}
-                    >
-                      {model.label}
-                    </Button>
-                  ))}
+                  {availableModels.map((model) => {
+                    const badge = adapterModeBadge(model.adapterMode);
+                    return (
+                      <Button
+                        key={model.modelId}
+                        type="button"
+                        onClick={() => toggleModel(model.modelId)}
+                        variant="secondary"
+                        size="sm"
+                        className={`rounded-full px-2.5 py-1 text-xs ${
+                          effectiveSelectedModelIds.includes(model.modelId)
+                            ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
+                            : 'border-gray-300 bg-white text-gray-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          {model.label}
+                          {badge && <span className={badge.className}>{badge.label}</span>}
+                        </span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -606,7 +639,13 @@ export function DomainAssumptions() {
                         return (
                           <details key={modelGroup.modelId} className="rounded-lg border border-gray-200">
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-white px-4 py-3">
-                              <div className="text-sm font-medium text-gray-900">{modelGroup.modelLabel}</div>
+                              <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                                {modelGroup.modelLabel}
+                                {(() => {
+                                  const badge = adapterModeBadge(modelAdapterModeMap.get(modelGroup.modelId) ?? null);
+                                  return badge ? <span className={badge.className}>{badge.label}</span> : null;
+                                })()}
+                              </div>
                               <div className={`text-xs font-medium ${modelMismatchSummary.toneClass}`}>
                                 {modelMismatchSummary.text}
                               </div>
@@ -678,6 +717,8 @@ export function DomainAssumptions() {
               Placeholder for the generic-title rewrite comparison. This chunk only implements `#285`.
             </p>
           </section>
+
+          <TempZeroVerification />
         </>
       )}
 
