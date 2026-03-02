@@ -8,6 +8,7 @@ import {
   ASSUMPTIONS_TEMP_ZERO_QUERY,
   LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   type AssumptionsTempZeroQueryResult,
+  type AssumptionsTempZeroQueryVariables,
   type LaunchAssumptionsTempZeroResult,
   type TempZeroDecision,
   type TempZeroRow,
@@ -219,8 +220,10 @@ type SelectedTranscriptRow = {
 };
 
 export function DomainAssumptions() {
-  const [{ data, fetching, error }, reexecuteTempZeroQuery] = useQuery<AssumptionsTempZeroQueryResult>({
+  const [directionOnly, setDirectionOnly] = useState(false);
+  const [{ data, fetching, error }, reexecuteTempZeroQuery] = useQuery<AssumptionsTempZeroQueryResult, AssumptionsTempZeroQueryVariables>({
     query: ASSUMPTIONS_TEMP_ZERO_QUERY,
+    variables: { directionOnly },
     requestPolicy: 'cache-and-network',
   });
   const [launchResult, executeLaunchTempZero] = useMutation<LaunchAssumptionsTempZeroResult>(
@@ -525,6 +528,35 @@ export function DomainAssumptions() {
                 )}
               </div>
             )}
+
+            <div className="mt-5 flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Results Filters</div>
+                <p className="mt-1 text-sm text-gray-600">
+                  {directionOnly
+                    ? 'Direction-only agreement treats 4/5 as picked A, 1/2 as picked B, and 3 as neutral.'
+                    : 'Exact repeat agreement requires all three matching temp=0 trials to return the same decision code.'}
+                </p>
+              </div>
+              <div className="md:text-right">
+                <Button
+                  type="button"
+                  onClick={() => setDirectionOnly((current) => !current)}
+                  variant="secondary"
+                  size="sm"
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    directionOnly
+                      ? 'border-teal-600 bg-teal-50 text-teal-800 hover:bg-teal-100'
+                      : 'border-gray-300 bg-white text-gray-700'
+                  }`}
+                >
+                  Direction Only
+                </Button>
+                <p className="mt-2 max-w-md text-xs text-gray-500">
+                  Treat 4/5 as picked A, 1/2 as picked B, 3 as neutral
+                </p>
+              </div>
+            </div>
 
             <div className="mt-5 space-y-4">
               {vignetteGroups.map((group) => {

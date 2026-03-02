@@ -78,6 +78,10 @@ export type AssumptionsTempZeroQueryResult = {
   assumptionsTempZero: AssumptionsTempZeroResult;
 };
 
+export type AssumptionsTempZeroQueryVariables = {
+  directionOnly?: boolean;
+};
+
 export type LaunchAssumptionsTempZeroResult = {
   launchAssumptionsTempZero: {
     startedRuns: number;
@@ -89,8 +93,8 @@ export type LaunchAssumptionsTempZeroResult = {
 };
 
 export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
-  query AssumptionsTempZero {
-    assumptionsTempZero {
+  query AssumptionsTempZero($directionOnly: Boolean) {
+    assumptionsTempZero(directionOnly: $directionOnly) {
       domainName
       note
       generatedAt
