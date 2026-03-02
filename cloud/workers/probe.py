@@ -94,12 +94,12 @@ def build_provider_metadata(response: LLMResponse) -> Optional[dict[str, Any]]:
     metadata = dict(response.provider_metadata) if response.provider_metadata else {}
 
     instrumentation = {
-        "prompt_hash": response.prompt_hash,
-        "temperature_sent": response.temperature_sent,
-        "temperature_value": response.temperature_value,
-        "seed_sent": response.seed_sent,
-        "seed_value": response.seed_value,
-        "adapter_mode": response.adapter_mode,
+        "promptHash": response.prompt_hash,
+        "temperatureSent": response.temperature_sent,
+        "temperatureValue": response.temperature_value,
+        "seedSent": response.seed_sent,
+        "seedValue": response.seed_value,
+        "adapterMode": response.adapter_mode,
     }
     for key, value in instrumentation.items():
         if value is not None:
