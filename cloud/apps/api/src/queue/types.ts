@@ -16,6 +16,7 @@ export type ProbeScenarioJobData = {
   sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
   config: {
     temperature?: number;
+    seed?: number;
     maxTurns: number;
   };
 };

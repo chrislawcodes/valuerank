@@ -36,6 +36,7 @@ class XAIAdapter(BaseLLMAdapter):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         if not self.api_key:
@@ -69,6 +70,9 @@ class XAIAdapter(BaseLLMAdapter):
         top_p = get_config_value(model_config, "topP", float, 0, 1)
         if top_p is not None:
             payload["top_p"] = top_p
+
+        if seed is not None:
+            payload["seed"] = seed
 
         freq_penalty = get_config_value(model_config, "frequencyPenalty", float, -2, 2)
         if freq_penalty is not None:

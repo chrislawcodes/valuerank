@@ -120,6 +120,7 @@ def generate(
     temperature: Optional[float] = None,
     max_tokens: int = 1024,
     model_config: Optional[dict] = None,
+    seed: Optional[int] = None,
     timeout: Optional[int] = None,
 ) -> LLMResponse:
     """
@@ -133,6 +134,7 @@ def generate(
         temperature: Sampling temperature (None omits provider parameter)
         max_tokens: Maximum tokens to generate
         model_config: Optional provider-specific configuration from database
+        seed: Optional deterministic seed for providers that support it
         timeout: HTTP request timeout in seconds (defaults to adapter's default)
 
     Returns:
@@ -142,13 +144,19 @@ def generate(
     clean_model = model.split(":", 1)[-1] if ":" in model else model
 
     adapter = get_registry().resolve_for_model(model)
+    generate_kwargs = {
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "model_config": model_config,
+        "timeout": timeout,
+    }
+    if seed is not None and isinstance(adapter, (OpenAIAdapter, XAIAdapter)):
+        generate_kwargs["seed"] = seed
+
     return adapter.generate(
         clean_model,
         messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        model_config=model_config,
-        timeout=timeout,
+        **generate_kwargs,
     )
 
 

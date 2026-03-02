@@ -98,6 +98,7 @@ class BaseLLMAdapter(ABC):
         temperature: Optional[float] = None,
         max_tokens: int = 1024,
         model_config: Optional[dict] = None,
+        seed: Optional[int] = None,
         timeout: Optional[int] = None,
     ) -> LLMResponse:
         """Generate a completion from the LLM.
@@ -108,6 +109,7 @@ class BaseLLMAdapter(ABC):
             temperature: Sampling temperature (None omits provider parameter)
             max_tokens: Maximum tokens to generate
             model_config: Optional provider-specific configuration (e.g., API parameter names)
+            seed: Optional deterministic seed for providers that support it
             timeout: HTTP request timeout in seconds (defaults to adapter's timeout)
         """
         pass

@@ -227,6 +227,7 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
     model_config = data.get("modelConfig")  # Optional API configuration
 
     temperature = config.get("temperature")
+    seed = config.get("seed")
     max_tokens = config.get("maxTokens", 8192)
     max_turns = config.get("maxTurns", 10)
 
@@ -261,6 +262,8 @@ def run_probe(data: dict[str, Any]) -> dict[str, Any]:
         }
         if isinstance(temperature, (int, float)):
             generate_kwargs["temperature"] = float(temperature)
+        if isinstance(seed, int):
+            generate_kwargs["seed"] = seed
 
         response = generate(
             model_id,
