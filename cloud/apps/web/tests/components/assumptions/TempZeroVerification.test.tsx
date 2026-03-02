@@ -21,8 +21,8 @@ function createMockClient(result: MockQueryResult) {
         delay(0)
       )
     ),
-    executeMutation: vi.fn(),
-    executeSubscription: vi.fn(),
+    executeMutation: vi.fn(() => makeSubject<never>().source),
+    executeSubscription: vi.fn(() => makeSubject<never>().source),
   };
 }
 
