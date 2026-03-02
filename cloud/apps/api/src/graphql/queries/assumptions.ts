@@ -17,6 +17,11 @@ type TempZeroPreflightVignette = {
   batchesToRun: number;
 };
 
+type TempZeroPreflightModel = {
+  modelId: string;
+  label: string;
+};
+
 type TempZeroPreflight = {
   title: string;
   runsToLaunch: number;
@@ -27,7 +32,7 @@ type TempZeroPreflight = {
   estimatedOutputTokens: number | null;
   estimatedCostUsd: number | null;
   selectedSignature: string | null;
-  models: string[];
+  models: TempZeroPreflightModel[];
   vignettes: TempZeroPreflightVignette[];
 };
 
@@ -144,6 +149,7 @@ function roundToGraphQLInt(value: number): number {
 }
 
 const TempZeroPreflightVignetteRef = builder.objectRef<TempZeroPreflightVignette>('TempZeroPreflightVignette');
+const TempZeroPreflightModelRef = builder.objectRef<TempZeroPreflightModel>('TempZeroPreflightModel');
 const TempZeroPreflightRef = builder.objectRef<TempZeroPreflight>('TempZeroPreflight');
 const TempZeroSummaryRef = builder.objectRef<TempZeroSummary>('TempZeroSummary');
 const TempZeroDecisionRef = builder.objectRef<TempZeroDecision>('TempZeroDecision');
@@ -160,6 +166,13 @@ builder.objectType(TempZeroPreflightVignetteRef, {
   }),
 });
 
+builder.objectType(TempZeroPreflightModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+  }),
+});
+
 builder.objectType(TempZeroPreflightRef, {
   fields: (t) => ({
     title: t.exposeString('title'),
@@ -171,7 +184,10 @@ builder.objectType(TempZeroPreflightRef, {
     estimatedOutputTokens: t.exposeInt('estimatedOutputTokens', { nullable: true }),
     estimatedCostUsd: t.exposeFloat('estimatedCostUsd', { nullable: true }),
     selectedSignature: t.exposeString('selectedSignature', { nullable: true }),
-    models: t.exposeStringList('models'),
+    models: t.field({
+      type: [TempZeroPreflightModelRef],
+      resolve: (parent) => parent.models,
+    }),
     vignettes: t.field({
       type: [TempZeroPreflightVignetteRef],
       resolve: (parent) => parent.vignettes,
@@ -522,7 +538,10 @@ builder.queryField('assumptionsTempZero', (t) =>
           estimatedOutputTokens: estimatedOutputTokens > 0 ? roundToGraphQLInt(estimatedOutputTokens) : null,
           estimatedCostUsd: estimatedCostUsd > 0 ? estimatedCostUsd : null,
           selectedSignature,
-          models: models.map((model) => model.label),
+          models: models.map((model) => ({
+            modelId: model.modelId,
+            label: model.label,
+          })),
           vignettes: availableVignettes.map((vignette) => ({
             vignetteId: vignette.id,
             title: vignette.title,

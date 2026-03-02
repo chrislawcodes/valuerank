@@ -11,6 +11,11 @@ export type TempZeroPreflightVignette = {
   batchesToRun: number;
 };
 
+export type TempZeroPreflightModel = {
+  modelId: string;
+  label: string;
+};
+
 export type TempZeroPreflight = {
   title: string;
   runsToLaunch: number;
@@ -21,7 +26,7 @@ export type TempZeroPreflight = {
   estimatedOutputTokens: number | null;
   estimatedCostUsd: number | null;
   selectedSignature: string | null;
-  models: string[];
+  models: TempZeroPreflightModel[];
   vignettes: TempZeroPreflightVignette[];
 };
 
@@ -99,7 +104,10 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
         estimatedOutputTokens
         estimatedCostUsd
         selectedSignature
-        models
+        models {
+          modelId
+          label
+        }
         vignettes {
           vignetteId
           title
