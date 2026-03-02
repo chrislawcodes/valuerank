@@ -82,7 +82,7 @@ builder.queryField('tempZeroVerificationReport', (t) =>
         throw new AuthenticationError('Authentication required');
       }
 
-      const daysLookedBack = args.days ?? 30;
+      const daysLookedBack = Math.min(args.days ?? 30, 365);
       const runs = await db.run.findMany({
         where: {
           config: { path: ['temperature'], equals: 0 },

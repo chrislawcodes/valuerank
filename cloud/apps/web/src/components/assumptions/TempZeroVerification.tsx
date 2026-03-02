@@ -56,10 +56,15 @@ export function TempZeroVerification() {
     const canvas = await html2canvas(tableRef.current, { scale: 2 });
     canvas.toBlob((blob) => {
       if (blob == null) return;
-      void navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => { setCopied(false); }, 2000);
+        })
+        .catch(() => {
+          setLaunchFeedback('Failed to copy image — clipboard access may be blocked.');
+        });
     });
-    setCopied(true);
-    setTimeout(() => { setCopied(false); }, 2000);
   };
   const [{ data, fetching, error }] = useQuery<
     TempZeroVerificationReportQueryResult,

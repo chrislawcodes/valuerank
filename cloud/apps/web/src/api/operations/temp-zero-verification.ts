@@ -17,7 +17,7 @@ export type TempZeroVerificationReport = {
 };
 
 export type TempZeroVerificationReportQueryResult = {
-  tempZeroVerificationReport: TempZeroVerificationReport;
+  tempZeroVerificationReport: TempZeroVerificationReport | null;
 };
 
 export type TempZeroVerificationReportQueryVariables = {

@@ -251,7 +251,8 @@ describe('tempZeroVerificationReport query', () => {
 
     const report = response.body.data.tempZeroVerificationReport;
 
-    const modelA = report.models.find((model: any) => model.modelId === 'model-a');
+    type ReportModel = { modelId: string; fingerprintDriftPct: number | null };
+    const modelA = (report.models as ReportModel[]).find((model) => model.modelId === 'model-a');
     expect(modelA).toBeDefined();
     expect(modelA?.fingerprintDriftPct).toBeCloseTo(33.3333333333, 5);
   });
