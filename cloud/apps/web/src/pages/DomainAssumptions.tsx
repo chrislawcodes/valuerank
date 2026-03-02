@@ -544,6 +544,7 @@ export function DomainAssumptions() {
               </div>
             )}
 
+
             {(displaySummary.worstModelId || displaySummary.worstModelMatchRate !== null) && (
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 Worst model: {displaySummary.worstModelLabel ?? displaySummary.worstModelId ?? 'n/a'}
