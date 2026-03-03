@@ -93,6 +93,10 @@ export type LaunchAssumptionsTempZeroResult = {
   };
 };
 
+export type LaunchAssumptionsTempZeroVariables = {
+  force?: boolean | null;
+};
+
 export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
   query AssumptionsTempZero($directionOnly: Boolean) {
     assumptionsTempZero(directionOnly: $directionOnly) {
@@ -158,8 +162,8 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
 `;
 
 export const LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION = gql`
-  mutation LaunchAssumptionsTempZero {
-    launchAssumptionsTempZero {
+  mutation LaunchAssumptionsTempZero($force: Boolean) {
+    launchAssumptionsTempZero(force: $force) {
       startedRuns
       totalVignettes
       modelCount

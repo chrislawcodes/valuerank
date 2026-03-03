@@ -156,14 +156,24 @@ export function DomainAnalysis() {
     const sourceModels = data?.domainAnalysis.models ?? [];
     return sourceModels.map((model) => {
       const valueMap = new Map(model.values.map((entry) => [entry.valueKey, entry.score]));
+      const winRateMap = new Map(model.values.map((entry) => {
+        const denom = entry.prioritized + entry.deprioritized;
+        const rate = denom > 0 ? (entry.prioritized / denom) * 100 : null;
+        return [entry.valueKey, rate] as const;
+      }));
       const values = VALUES.reduce<Record<ValueKey, number>>((acc, valueKey) => {
         acc[valueKey] = valueMap.get(valueKey) ?? 0;
         return acc;
       }, {} as Record<ValueKey, number>);
+      const winRates = VALUES.reduce<Record<ValueKey, number | null>>((acc, valueKey) => {
+        acc[valueKey] = winRateMap.get(valueKey) ?? null;
+        return acc;
+      }, {} as Record<ValueKey, number | null>);
       return {
         model: model.model,
         label: model.label,
         values,
+        winRates,
       };
     });
   }, [data]);

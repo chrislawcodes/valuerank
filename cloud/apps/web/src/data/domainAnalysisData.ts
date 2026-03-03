@@ -14,6 +14,7 @@ export type ModelEntry = {
   model: string;
   label: string;
   values: Record<ValueKey, number>;
+  winRates?: Record<ValueKey, number | null>;
 };
 
 export type DomainAnalysisModelAvailability = {

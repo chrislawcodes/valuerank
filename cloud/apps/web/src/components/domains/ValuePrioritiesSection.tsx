@@ -131,6 +131,7 @@ export function ValuePrioritiesSection({
   const navigate = useNavigate();
   const detailedTableRef = useRef<HTMLDivElement>(null);
   const summaryTableRef = useRef<HTMLDivElement>(null);
+  const [scoreMode, setScoreMode] = useState<'WIN_RATE' | 'FULL_BT'>('WIN_RATE');
   const [sortState, setSortState] = useState<SortState>({ key: 'model', direction: 'asc' });
   const [showSectionHelp, setShowSectionHelp] = useState(false);
   const [showModelGroupsHelp, setShowModelGroupsHelp] = useState(false);
@@ -152,18 +153,23 @@ export function ValuePrioritiesSection({
         sortState.direction === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label),
       );
     } else {
-      nextModels.sort((a, b) =>
-        sortState.direction === 'asc' ? a.values[key] - b.values[key] : b.values[key] - a.values[key],
-      );
+      nextModels.sort((a, b) => {
+        const aVal = scoreMode === 'WIN_RATE' ? (a.winRates?.[key] ?? -Infinity) : a.values[key];
+        const bVal = scoreMode === 'WIN_RATE' ? (b.winRates?.[key] ?? -Infinity) : b.values[key];
+        return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
+      });
     }
     return nextModels;
-  }, [models, sortState]);
+  }, [models, sortState, scoreMode]);
 
   const valueRange = useMemo(() => {
-    const all = models.flatMap((model) => COLUMN_VALUES.map((value) => model.values[value]));
+    if (scoreMode === 'WIN_RATE') {
+      return { min: 0, max: 100 };
+    }
+    const all = models.flatMap((model) => COLUMN_VALUES.map((v) => model.values[v]));
     if (all.length === 0) return { min: -1, max: 1 };
     return { min: Math.min(...all), max: Math.max(...all) };
-  }, [models]);
+  }, [models, scoreMode]);
 
   const modelGroupByModel = useMemo(() => {
     const map = new Map<string, string>();
@@ -191,6 +197,11 @@ export function ValuePrioritiesSection({
     navigate(`/domains/analysis/value-detail?${params.toString()}`);
   };
 
+  function getCellValue(model: ModelEntry, valueKey: ValueKey): number | null {
+    if (scoreMode === 'FULL_BT') return model.values[valueKey];
+    return model.winRates?.[valueKey] ?? null;
+  }
+
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -210,27 +221,65 @@ export function ValuePrioritiesSection({
           <p className="text-sm text-gray-600">Which values each model favors most and least.</p>
           {showSectionHelp && (
             <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-gray-700">
-              <p className="font-medium text-gray-800">Score Method (Full Bradley-Terry)</p>
-              <p className="mt-1">
-                We fit a full Bradley-Terry model over pairwise value matchups for this AI. The model estimates
-                a latent strength for each value that best explains observed wins and losses.
-              </p>
-              <p className="mt-2 font-medium text-gray-800">Formula</p>
-              <p className="mt-0.5 font-mono text-[11px] text-sky-900">
-                Score = logarithm(estimated BT strength for this value)
-              </p>
-              <ul className="mt-2 list-disc space-y-0.5 pl-4">
-                <li>Bradley-Terry score is used for pairwise ranking problems where many items compete head-to-head.</li>
-                <li>Better than simple ratios when comparisons form a connected network across values.</li>
-                <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
-                <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
-              </ul>
+              {scoreMode === 'FULL_BT' ? (
+                <>
+                  <p className="font-medium text-gray-800">Score Method: Full Bradley-Terry</p>
+                  <p className="mt-1">
+                    We fit a full Bradley-Terry model over pairwise value matchups for this AI. The model estimates
+                    a latent strength for each value that best explains observed wins and losses.
+                  </p>
+                  <p className="mt-2 font-medium text-gray-800">Formula</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-sky-900">
+                    Score = logarithm(estimated BT strength for this value)
+                  </p>
+                  <ul className="mt-2 list-disc space-y-0.5 pl-4">
+                    <li>Better than simple ratios when comparisons form a connected network across values.</li>
+                    <li>Strengths are estimated jointly, so each value is calibrated against all others.</li>
+                    <li>Positive values indicate above-average latent strength; negative values indicate below-average.</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-gray-800">Score Method: Win Rate</p>
+                  <p className="mt-1">
+                    The percentage of pairwise comparisons in which the AI chose this value over another.
+                  </p>
+                  <p className="mt-2 font-medium text-gray-800">Formula</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-sky-900">
+                    Win Rate = prioritized / (prioritized + deprioritized) × 100%
+                  </p>
+                  <ul className="mt-2 list-disc space-y-0.5 pl-4">
+                    <li>50% means the AI chose this value in half of all head-to-head comparisons.</li>
+                    <li>Easy to interpret: higher % = model prioritizes this value more often.</li>
+                    <li>Shows &ldquo;n/a&rdquo; when no comparison data exists for a value.</li>
+                  </ul>
+                </>
+              )}
             </div>
           )}
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">Click a column heading to sort.</p>
-          <span className="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-700">Scoring: Full BT</span>
+          <div className="flex rounded border border-gray-200 text-xs">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setScoreMode('WIN_RATE')}
+              className={`h-auto rounded-none px-3 py-1 text-xs ${scoreMode === 'WIN_RATE' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+            >
+              Win Rate
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setScoreMode('FULL_BT')}
+              className={`h-auto rounded-none border-l border-gray-200 px-3 py-1 text-xs ${scoreMode === 'FULL_BT' ? 'bg-sky-600 text-white hover:bg-sky-600 hover:text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+            >
+              Full BT
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -359,29 +408,39 @@ export function ValuePrioritiesSection({
                       Model Group: {modelGroupName ?? 'Unassigned'}
                     </div>
                   </td>
-                  {COLUMN_VALUES.map((value) => (
-                    <td
-                      key={value}
-                      className={`p-0 text-right text-gray-800 transition-all hover:brightness-105 ${
-                        hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
-                      } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
-                        value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
-                      }`}
-                      style={{ background: getPriorityColor(model.values[value], valueRange.min, valueRange.max) }}
-                    >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
-                        onClick={() => handleValueCellClick(model.model, value)}
-                        disabled={selectedDomainId === ''}
+                  {COLUMN_VALUES.map((value) => {
+                    const cellValue = getCellValue(model, value);
+                    const background = cellValue === null
+                      ? '#F9FAFB'
+                      : getPriorityColor(cellValue, valueRange.min, valueRange.max);
+
+                    return (
+                      <td
+                        key={value}
+                        className={`p-0 text-right text-gray-800 transition-all hover:brightness-105 ${
+                          hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
+                        } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
+                          value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
+                        }`}
+                        style={{ background }}
                       >
-                        {model.values[value] > 0 ? '+' : ''}
-                        {model.values[value].toFixed(2)}
-                      </Button>
-                    </td>
-                  ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
+                          onClick={() => handleValueCellClick(model.model, value)}
+                          disabled={selectedDomainId === ''}
+                        >
+                          {(() => {
+                            if (cellValue === null) return 'n/a';
+                            if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
+                            return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
+                          })()}
+                        </Button>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

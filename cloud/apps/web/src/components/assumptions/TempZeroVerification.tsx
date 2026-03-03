@@ -12,6 +12,7 @@ import {
 import {
   LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   type LaunchAssumptionsTempZeroResult,
+  type LaunchAssumptionsTempZeroVariables,
 } from '../../api/operations/assumptions';
 
 function formatPercent(value: number | null): string {
@@ -30,13 +31,13 @@ export function TempZeroVerification() {
   const [copied, setCopied] = useState(false);
   const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
-  const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult>(
+  const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult, LaunchAssumptionsTempZeroVariables>(
     LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   );
 
   const handleRerun = async () => {
     setLaunchFeedback(null);
-    const response = await executeLaunch({});
+    const response = await executeLaunch({ force: true });
     if (response.error != null) {
       setLaunchFeedback(`Launch failed: ${response.error.message}`);
       return;
@@ -53,6 +54,16 @@ export function TempZeroVerification() {
 
   const copyAsImage = async () => {
     if (tableRef.current == null) return;
+    if (
+      typeof navigator === 'undefined'
+      || navigator.clipboard == null
+      || typeof navigator.clipboard.write !== 'function'
+      || typeof ClipboardItem === 'undefined'
+    ) {
+      setLaunchFeedback('Copy as image is not supported in this browser.');
+      return;
+    }
+
     const canvas = await html2canvas(tableRef.current, { scale: 2 });
     canvas.toBlob((blob) => {
       if (blob == null) return;

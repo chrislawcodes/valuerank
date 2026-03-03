@@ -11,6 +11,7 @@ import {
   type AssumptionsTempZeroQueryResult,
   type AssumptionsTempZeroQueryVariables,
   type LaunchAssumptionsTempZeroResult,
+  type LaunchAssumptionsTempZeroVariables,
   type TempZeroDecision,
   type TempZeroRow,
 } from '../api/operations/assumptions';
@@ -243,7 +244,7 @@ export function DomainAssumptions() {
     variables: { directionOnly },
     requestPolicy: 'cache-and-network',
   });
-  const [launchResult, executeLaunchTempZero] = useMutation<LaunchAssumptionsTempZeroResult>(
+  const [launchResult, executeLaunchTempZero] = useMutation<LaunchAssumptionsTempZeroResult, LaunchAssumptionsTempZeroVariables>(
     LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   );
   const [selectedRow, setSelectedRow] = useState<SelectedTranscriptRow | null>(null);
