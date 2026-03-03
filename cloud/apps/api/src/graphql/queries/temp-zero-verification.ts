@@ -41,13 +41,6 @@ function calculatePct(numerator: number, denominator: number): number | null {
   return (numerator / denominator) * 100;
 }
 
-function hasCompleteVerificationData(model: TempZeroModelVerification): boolean {
-  return model.adapterModes.length > 0
-    && model.promptHashStabilityPct !== null
-    && model.fingerprintDriftPct !== null
-    && model.decisionMatchRatePct !== null;
-}
-
 const TempZeroModelVerificationRef = builder.objectRef<TempZeroModelVerification>('TempZeroModelVerification');
 const TempZeroVerificationReportRef = builder.objectRef<TempZeroVerificationReport>('TempZeroVerificationReport');
 
@@ -217,8 +210,7 @@ builder.queryField('tempZeroVerificationReport', (t) =>
             fingerprintDriftPct: calculatePct(fingerprintDriftedGroups, fingerprintEligibleGroups),
             decisionMatchRatePct: calculatePct(decisionMatchedGroups, decisionEligibleGroups),
           };
-        })
-        .filter(hasCompleteVerificationData);
+        });
 
       return {
         generatedAt: new Date(),
