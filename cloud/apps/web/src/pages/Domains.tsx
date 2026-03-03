@@ -48,6 +48,10 @@ function formatTemperature(value: number | null | undefined): string {
   return String(Number(value.toFixed(2)));
 }
 
+function getDisplaySignature(signature: string): string {
+  return signature !== 'v?td' ? signature : 'Unknown Signature';
+}
+
 export function Domains() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
@@ -540,7 +544,7 @@ export function Domains() {
                           />
                         </td>
                         <td className="py-2 pr-3 text-gray-900">{row.definitionName}</td>
-                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">{row.signature}</td>
+                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">{getDisplaySignature(row.signature)}</td>
                         <td className="py-2 pr-3 text-gray-600">
                           {row.definitionVersion ?? '?'}
                         </td>

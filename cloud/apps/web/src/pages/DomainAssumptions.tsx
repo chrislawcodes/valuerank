@@ -36,6 +36,10 @@ function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
+function getDisplaySignature(signature: string | null | undefined): string {
+  return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
+}
+
 function parseAttributes(vignetteTitle: string): { attributeA: string; attributeB: string } {
   const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
   if (!match) {
@@ -342,6 +346,9 @@ export function DomainAssumptions() {
                 <p className="mt-1 text-sm text-gray-600">
                   Locked professional-domain vignette package for `#285`. This run always uses the same 5 vignettes with all 25 conditions each.
                 </p>
+                <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-mono text-gray-700">
+                  Trial Signature: {getDisplaySignature(result.preflight.selectedSignature)}
+                </div>
               </div>
               <div className="text-xs text-gray-500">
                 Generated {new Date(result.generatedAt).toLocaleString()}
@@ -522,6 +529,9 @@ export function DomainAssumptions() {
                 <p className="mt-1 text-sm text-gray-600">
                   Exact repeat agreement for each `(model, vignette, condition)` group using all matching temp=0 trials available for the shared batch count per condition.
                 </p>
+                <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-mono text-gray-700">
+                  Trial Signature: {getDisplaySignature(result.preflight.selectedSignature)}
+                </div>
               </div>
               <div
                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${

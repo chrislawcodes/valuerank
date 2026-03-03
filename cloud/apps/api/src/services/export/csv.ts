@@ -10,8 +10,14 @@ import type { Transcript, Scenario } from '@prisma/client';
 
 export type TranscriptWithScenario = Transcript & {
   scenario: Scenario | null;
-  // Optional run name for Batch column
-  run?: { name?: string | null } | null;
+  // Optional run configuration and name
+  run?: {
+    name?: string | null;
+    config?: unknown;
+    definition?: {
+      version?: number | null;
+    } | null;
+  } | null;
 };
 
 export type CSVRow = {
@@ -20,6 +26,7 @@ export type CSVRow = {
   modelName: string;
   sampleIndex: number;
   decisionCode: string;
+  trialSignature: string;
   probePrompt: string;
   targetResponse: string;
   variables: Record<string, number>;
@@ -29,7 +36,7 @@ export type CSVRow = {
  * CSV column headers before variable columns.
  * Order: AI Model Name, Batch, Sample Index, then variable columns are inserted dynamically.
  */
-export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Batch', 'Sample Index'] as const;
+export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Trial Signature', 'Batch', 'Sample Index'] as const;
 
 /**
  * CSV column headers after variable columns.
@@ -141,6 +148,41 @@ function getScenarioDimensions(transcript: TranscriptWithScenario): Record<strin
 }
 
 /**
+ * Format the trial signature from definition version and temperature.
+ * Re-implemented cleanly here to avoid circular imports.
+ */
+function extractTrialSignature(
+  definitionVersion: number | null | undefined,
+  config: unknown
+): string {
+  if (!config || typeof config !== 'object') {
+    return 'v?td';
+  }
+
+  const typedConfig = config as {
+    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+    temperature?: unknown;
+  };
+
+  const version = typeof definitionVersion === 'number'
+    ? definitionVersion
+    : typeof typedConfig.definitionSnapshot?._meta?.definitionVersion === 'number'
+      ? typedConfig.definitionSnapshot._meta.definitionVersion
+      : typeof typedConfig.definitionSnapshot?.version === 'number'
+        ? typedConfig.definitionSnapshot.version
+        : null;
+
+  const temperature = typeof typedConfig.temperature === 'number' ? typedConfig.temperature : null;
+
+  const versionToken = version === null ? '?' : String(version);
+  const tempToken = temperature === null || !Number.isFinite(temperature)
+    ? 'd'
+    : temperature.toFixed(3).replace(/\.?0+$/, '');
+
+  return `v${versionToken}t${tempToken}`;
+}
+
+/**
  * Convert a transcript to a CSV row.
  * @param transcript - The transcript with scenario data
  */
@@ -151,6 +193,7 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
     modelName: getModelName(transcript.modelId),
     sampleIndex: transcript.sampleIndex,
     decisionCode: transcript.decisionCode ?? 'pending',
+    trialSignature: extractTrialSignature(transcript.run?.definition?.version, transcript.run?.config),
     probePrompt: getProbePrompt(transcript),
     targetResponse: getTargetResponse(transcript),
     variables: getScenarioDimensions(transcript),
@@ -159,14 +202,15 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
 
 /**
  * Format a CSV row as a string with variable columns.
- * Column order: Model Name, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
+ * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
 export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
-  // Pre-variable columns (Model Name, Batch, Sample Index)
+  // Pre-variable columns (Model Name, Trial Signature, Batch, Sample Index)
   const preVariableValues = [
     escapeCSV(row.modelName),
+    escapeCSV(row.trialSignature),
     escapeCSV(row.batchName),
     escapeCSV(row.sampleIndex),
   ];
@@ -190,7 +234,7 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
 
 /**
  * Get CSV header line with variable columns.
- * Column order: Model Name, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
+ * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
 export function getCSVHeader(variableNames: string[]): string {

@@ -9,6 +9,7 @@ import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-re
 import type { Run } from '../../api/operations/runs';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
+import { formatTrialSignature } from '../../utils/trial-signature';
 
 type AnalysisCardProps = {
   run: Run;
@@ -61,6 +62,13 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
     && latestDefinitionVersion !== undefined
     && definitionVersion !== latestDefinitionVersion
   );
+
+  // Extract trial signature
+  const temperature =
+    run.config && typeof run.config === 'object' && 'temperature' in run.config && typeof run.config.temperature === 'number'
+      ? run.config.temperature
+      : null;
+  const trialSignature = formatTrialSignature(definitionVersion ?? null, temperature);
   const effectiveStatusConfig: AnalysisStatusConfig = (
     analysisStatus === 'completed' && isOldVersion
       ? { ...statusConfig, label: '' }
@@ -107,9 +115,18 @@ export function AnalysisCard({ run, onClick }: AnalysisCardProps) {
                 </Badge>
               )}
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {hasCustomRunName ? `${run.name} · ` : ''}
-              {formatDate(displayDate)}
+            <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-center gap-1.5 line-clamp-1 break-all">
+              {hasCustomRunName && <span>{run.name}</span>}
+              {hasCustomRunName && <span>&middot;</span>}
+
+              {trialSignature !== 'v?td' && (
+                <>
+                  <span className="font-mono">{trialSignature}</span>
+                  <span>&middot;</span>
+                </>
+              )}
+
+              <span>{formatDate(displayDate)}</span>
             </p>
             {/* Tags */}
             {run.definition?.tags && run.definition.tags.length > 0 && (

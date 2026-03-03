@@ -11,6 +11,8 @@ import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useRun } from '../hooks/useRun';
+import { useRuns } from '../hooks/useRuns';
+import { formatTrialSignature } from '../utils/trial-signature';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
 
@@ -19,6 +21,10 @@ function parseAnalysisTab(value: string | null): AnalysisTab {
     return value;
   }
   return 'overview';
+}
+
+function getDisplaySignature(signature: string | null | undefined): string {
+  return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
 }
 
 export function AnalysisDetail() {
@@ -80,7 +86,23 @@ export function AnalysisDetail() {
 
   // Determine if this is an Aggregate Run based on tags
   const isAggregate = run.tags?.some(t => t.name === 'Aggregate') ?? false;
-  const runDefinitionVersion = run.definitionVersion;
+
+  const config = run.config as {
+    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+    temperature?: unknown;
+  } | null;
+
+  const runDefinitionVersion = typeof config?.definitionSnapshot?._meta?.definitionVersion === 'number'
+    ? config.definitionSnapshot._meta.definitionVersion
+    : typeof config?.definitionSnapshot?.version === 'number'
+      ? config.definitionSnapshot.version
+      : typeof run.definitionVersion === 'number'
+        ? run.definitionVersion
+        : null;
+
+  const runTemperature = typeof config?.temperature === 'number' ? config.temperature : null;
+  const trialSignature = formatTrialSignature(runDefinitionVersion, runTemperature);
+
   const latestDefinitionVersion = run.definition?.version;
   const isOldVersion = (
     runDefinitionVersion !== null
@@ -95,8 +117,10 @@ export function AnalysisDetail() {
       <div className="flex items-center justify-between">
         <Header
           runId={run.id}
+          definitionId={run.definition?.id}
           definitionName={run.definition?.name}
           isAggregate={isAggregate}
+          currentSignature={trialSignature}
         />
       </div>
 
@@ -129,14 +153,54 @@ export function AnalysisDetail() {
  */
 function Header({
   runId,
+  definitionId,
   definitionName,
   isAggregate,
+  currentSignature,
 }: {
   runId: string;
+  definitionId?: string | null;
   definitionName?: string | null;
   isAggregate?: boolean;
+  currentSignature?: string | null;
 }) {
   const navigate = useNavigate();
+
+  const { runs } = useRuns({
+    definitionId: isAggregate ? (definitionId || undefined) : undefined,
+    status: 'COMPLETED',
+    limit: 1000,
+    pause: !isAggregate || !definitionId,
+  });
+
+  const aggregateRuns = runs.filter(r => r.tags.some(t => t.name === 'Aggregate')).map(r => {
+    const config = r.config as {
+      definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+      temperature?: unknown;
+    } | null;
+    const defVersion = typeof config?.definitionSnapshot?._meta?.definitionVersion === 'number'
+      ? config.definitionSnapshot._meta.definitionVersion
+      : typeof config?.definitionSnapshot?.version === 'number'
+        ? config.definitionSnapshot.version
+        : typeof r.definitionVersion === 'number'
+          ? r.definitionVersion
+          : null;
+    const temp = typeof config?.temperature === 'number' ? config.temperature : null;
+    return { id: r.id, signature: formatTrialSignature(defVersion, temp) };
+  }).reduce<Array<{ id: string; signature: string; count: number }>>((acc, run) => {
+    const existing = acc.find((item) => item.signature === run.signature);
+    if (existing) {
+      existing.count += 1;
+      if (run.id === runId) {
+        existing.id = run.id;
+      }
+      return acc;
+    }
+    acc.push({ ...run, count: 1 });
+    return acc;
+  }, []);
+
+  const selectedAggregateSignature = aggregateRuns.find((run) => run.id === runId)?.signature ?? currentSignature ?? 'v?td';
 
   return (
     <div className="flex items-center justify-between flex-1 mr-4">
@@ -150,11 +214,40 @@ function Header({
           {definitionName || 'Unnamed Definition'}
           <span className="mx-1">•</span>
           {isAggregate ? (
-            <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full font-medium flex items-center">
-              Aggregate View
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full font-medium flex items-center">
+                Aggregate View
+              </span>
+              <span className="font-mono bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded border border-gray-200">
+                {aggregateRuns.length > 1 ? (
+                  <select
+                    className="bg-transparent border-none p-0 pr-4 text-xs font-mono cursor-pointer focus:ring-0 focus:outline-none focus:bg-gray-200"
+                    value={selectedAggregateSignature}
+                    onChange={(e) => {
+                      const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
+                      if (nextRun) {
+                        navigate(`/analysis/${nextRun.id}`);
+                      }
+                    }}
+                  >
+                    {aggregateRuns.map(r => (
+                      <option key={r.signature} value={r.signature}>
+                        {getDisplaySignature(r.signature)}{r.count > 1 ? ` (${r.count} runs)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  getDisplaySignature(currentSignature)
+                )}
+              </span>
+            </div>
           ) : (
-            <span className="font-mono">Trial {runId.slice(0, 8)}...</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono">Trial {runId.slice(0, 8)}...</span>
+              <span className="font-mono bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded border border-gray-200">
+                {getDisplaySignature(currentSignature)}
+              </span>
+            </div>
           )}
         </div>
       </div>

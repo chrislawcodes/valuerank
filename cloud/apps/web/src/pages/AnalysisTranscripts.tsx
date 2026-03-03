@@ -13,10 +13,12 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { TranscriptList } from '../components/runs/TranscriptList';
 import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useRun } from '../hooks/useRun';
+import { useRuns } from '../hooks/useRuns';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRunMutations } from '../hooks/useRunMutations';
 import type { Transcript } from '../api/operations/runs';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
+import { formatTrialSignature } from '../utils/trial-signature';
 import {
   deriveScenarioAttributesFromDefinition,
   deriveDecisionDimensionLabels,
@@ -26,6 +28,10 @@ import {
   resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
+
+function getDisplaySignature(signature: string | null | undefined): string {
+  return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
+}
 
 export function AnalysisTranscripts() {
   const navigate = useNavigate();
@@ -56,6 +62,72 @@ export function AnalysisTranscripts() {
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
   });
+
+  const isAggregate = run?.tags?.some((tag) => tag.name === 'Aggregate') ?? false;
+
+  const config = run?.config as {
+    definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+    temperature?: unknown;
+  } | null;
+
+  const runDefinitionVersion = typeof config?.definitionSnapshot?._meta?.definitionVersion === 'number'
+    ? config.definitionSnapshot._meta.definitionVersion
+    : typeof config?.definitionSnapshot?.version === 'number'
+      ? config.definitionSnapshot.version
+      : typeof run?.definitionVersion === 'number'
+        ? run.definitionVersion
+        : null;
+
+  const runTemperature = typeof config?.temperature === 'number' ? config.temperature : null;
+  const trialSignature = formatTrialSignature(runDefinitionVersion, runTemperature);
+
+  const { runs } = useRuns({
+    definitionId: isAggregate ? (run?.definition?.id || undefined) : undefined,
+    status: 'COMPLETED',
+    limit: 1000,
+    pause: !isAggregate || !run?.definition?.id,
+  });
+
+  const aggregateRuns = useMemo(() => {
+    return runs
+      .filter((candidate) => candidate.tags.some((tag) => tag.name === 'Aggregate'))
+      .map((candidate) => {
+        const candidateConfig = candidate.config as {
+          definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
+          temperature?: unknown;
+        } | null;
+        const candidateVersion = typeof candidateConfig?.definitionSnapshot?._meta?.definitionVersion === 'number'
+          ? candidateConfig.definitionSnapshot._meta.definitionVersion
+          : typeof candidateConfig?.definitionSnapshot?.version === 'number'
+            ? candidateConfig.definitionSnapshot.version
+            : typeof candidate.definitionVersion === 'number'
+              ? candidate.definitionVersion
+              : null;
+        const candidateTemp = typeof candidateConfig?.temperature === 'number'
+          ? candidateConfig.temperature
+          : null;
+
+        return {
+          id: candidate.id,
+          signature: formatTrialSignature(candidateVersion, candidateTemp),
+        };
+      })
+      .reduce<Array<{ id: string; signature: string; count: number }>>((acc, candidate) => {
+        const existing = acc.find((item) => item.signature === candidate.signature);
+        if (existing) {
+          existing.count += 1;
+          if (candidate.id === run?.id) {
+            existing.id = candidate.id;
+          }
+          return acc;
+        }
+        acc.push({ ...candidate, count: 1 });
+        return acc;
+      }, []);
+  }, [run?.id, runs]);
+
+  const selectedAggregateSignature = aggregateRuns.find((candidate) => candidate.id === run?.id)?.signature
+    ?? trialSignature;
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
@@ -271,7 +343,47 @@ export function AnalysisTranscripts() {
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back
         </Button>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-gray-500 flex flex-wrap items-center gap-2">
+          <span className="text-gray-700">{run.definition?.name || 'Unnamed Definition'}</span>
+          <span className="text-gray-300">•</span>
+          {isAggregate ? (
+            <>
+              <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full font-medium">
+                Aggregate View
+              </span>
+              <span className="font-mono bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded border border-gray-200">
+                {aggregateRuns.length > 1 ? (
+                  <select
+                    className="bg-transparent border-none p-0 pr-4 text-xs font-mono cursor-pointer focus:ring-0 focus:outline-none focus:bg-gray-200"
+                    value={selectedAggregateSignature}
+                    onChange={(e) => {
+                      const nextRun = aggregateRuns.find((candidate) => candidate.signature === e.target.value);
+                      if (nextRun) {
+                        navigate(`/analysis/${nextRun.id}/transcripts?${searchParams.toString()}`);
+                      }
+                    }}
+                  >
+                    {aggregateRuns.map((candidate) => (
+                      <option key={candidate.signature} value={candidate.signature}>
+                        {getDisplaySignature(candidate.signature)}{candidate.count > 1 ? ` (${candidate.count} runs)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  getDisplaySignature(selectedAggregateSignature)
+                )}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-mono">Trial {run.id.slice(0, 8)}...</span>
+              <span className="font-mono bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded border border-gray-200">
+                {getDisplaySignature(trialSignature)}
+              </span>
+            </>
+          )}
+          <span className="text-gray-300">•</span>
+          <div className="contents">
               {(activeRowDim && activeColDim) ? (
                 <>
                   {hasCellFilterParams ? (
@@ -303,6 +415,7 @@ export function AnalysisTranscripts() {
           ) : (
             'Transcript Filter'
           )}
+          </div>
         </div>
       </div>
 

@@ -121,9 +121,9 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
-    // Headers: Model, Batch, Sample Index, Variables (alphabetical), Decision Code, Transcript ID, Probe Prompt, Target Response
+    // Headers: Model, Trial Signature, Batch, Sample Index, Variables (alphabetical), Decision Code, Transcript ID, Probe Prompt, Target Response
     expect(headerLine).toBe(
-      'AI Model Name,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Probe Prompt,Target Response'
+      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Probe Prompt,Target Response'
     );
   });
 
@@ -145,11 +145,11 @@ describe('CSV Export Endpoint', () => {
     // Check for decision codes
     expect(dataLines.some((l) => l.includes(',1,'))).toBe(true);
     expect(dataLines.some((l) => l.includes(',2,'))).toBe(true);
-    // Model name should be first column followed by Batch (empty) then sample index
-    expect(dataLines.some((l) => l.startsWith('gpt-4o,,0,'))).toBe(true);
-    expect(dataLines.some((l) => l.startsWith('claude-3-5-sonnet,,0,'))).toBe(true);
-    // Variable values come after model name, batch, and sample index: Certainty=2, Stakes=1
-    expect(dataLines.some((l) => l.includes('gpt-4o,,0,2,1,'))).toBe(true);
+    // Model name should be first column followed by Trial Signature (v?td) then Batch (empty) then sample index
+    expect(dataLines.some((l) => l.startsWith('gpt-4o,v1td,,0,'))).toBe(true);
+    expect(dataLines.some((l) => l.startsWith('claude-3-5-sonnet,v1td,,0,'))).toBe(true);
+    // Variable values come after model name, trial signature, batch, and sample index: Certainty=2, Stakes=1
+    expect(dataLines.some((l) => l.includes('gpt-4o,v1td,,0,2,1,'))).toBe(true);
   });
 
   it('sets correct Content-Disposition header', async () => {
@@ -280,6 +280,10 @@ describe('CSV Serialization Helper', () => {
       createdAt: new Date('2024-01-01T12:00:00Z'),
       lastAccessedAt: null,
       contentExpiresAt: null,
+      run: {
+        definition: { version: 1 },
+        config: { temperature: 0.5 }
+      },
       decisionCode: '1',
       decisionText: 'AI chose safety',
       summarizedAt: new Date('2024-01-01T12:05:00Z'),
@@ -299,8 +303,8 @@ describe('CSV Serialization Helper', () => {
     expect(formatted).toContain('gpt-4o');
     // Scores read directly from content.dimensions
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
-    // Format: Model, Batch, SampleIndex, Certainty, Stakes, DecisionCode, TranscriptId, TargetResponse
-    expect(formatted).toContain('gpt-4o,,0,2,1,1,test-id');
+    // Format: Model, TrialSignature, Batch, SampleIndex, Certainty, Stakes, DecisionCode, TranscriptId, TargetResponse
+    expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,1,test-id');
     expect(row.targetResponse).toBe('I choose option A');
   });
 
@@ -422,9 +426,9 @@ describe('CSV Serialization Helper', () => {
     const formatted = formatCSVRow(row, ['Stakes', 'Certainty']);
 
     // Variable values should be empty when no dimensions
-    // Format: Model,Batch,SampleIndex,Stakes,Certainty,DecisionCode,...
-    // With empty Stakes and Certainty, we get: model,,0,,,DecisionCode,...
-    expect(formatted).toContain('gpt-4o,,0,,');
+    // Format: Model,TrialSignature,Batch,SampleIndex,Stakes,Certainty,DecisionCode,...
+    // With empty Stakes and Certainty, we get: model,v?td,,0,,,DecisionCode,...
+    expect(formatted).toContain('gpt-4o,v?td,,0,,');
     expect(row.variables).toEqual({});
   });
 
@@ -525,8 +529,8 @@ describe('CSV Serialization Helper', () => {
     const formatted = formatCSVRow(row, ['Stakes']);
 
     expect(row.sampleIndex).toBe(3);
-    // Format: Model,Batch,SampleIndex,Stakes,DecisionCode,...
-    expect(formatted).toContain('gpt-4o,,3,2,1');
+    // Format: Model,TrialSignature,Batch,SampleIndex,Stakes,DecisionCode,...
+    expect(formatted).toContain('gpt-4o,v?td,,3,2,1');
   });
 });
 

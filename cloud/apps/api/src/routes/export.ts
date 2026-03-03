@@ -80,7 +80,7 @@ exportRouter.get(
         include: {
           scenario: true,
           run: {
-            select: { name: true },
+            select: { name: true, config: true, definition: { select: { version: true } } },
           },
         },
         orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
@@ -283,7 +283,7 @@ exportRouter.get(
           },
           include: {
             scenario: true,
-            run: { select: { name: true } },
+            run: { select: { name: true, config: true, definition: { select: { version: true } } } },
           },
           orderBy: [{ modelId: 'asc' }, { scenarioId: 'asc' }],
         })
