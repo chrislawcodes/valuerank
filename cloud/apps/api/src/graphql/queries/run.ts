@@ -96,6 +96,10 @@ builder.queryField('runs', (t) =>
         required: false,
         description: 'Filter by definition ID',
       }),
+      definitionTagIds: t.arg.idList({
+        required: false,
+        description: 'Filter by definition tag IDs',
+      }),
       experimentId: t.arg.string({
         required: false,
         description: 'Filter by experiment ID',
@@ -133,6 +137,7 @@ builder.queryField('runs', (t) =>
       ctx.log.debug(
         {
           definitionId: args.definitionId,
+          definitionTagIds: args.definitionTagIds,
           experimentId: args.experimentId,
           status: args.status,
           hasAnalysis: args.hasAnalysis,
@@ -146,6 +151,7 @@ builder.queryField('runs', (t) =>
 
       const { where, noMatches } = await buildRunWhere({
         definitionId: args.definitionId,
+        definitionTagIds: args.definitionTagIds?.map(String),
         experimentId: args.experimentId,
         status: parseRunStatus(args.status),
         hasAnalysis: args.hasAnalysis,
@@ -233,6 +239,10 @@ builder.queryField('runCount', (t) =>
         required: false,
         description: 'Filter by definition ID',
       }),
+      definitionTagIds: t.arg.idList({
+        required: false,
+        description: 'Filter by definition tag IDs',
+      }),
       experimentId: t.arg.string({
         required: false,
         description: 'Filter by experiment ID',
@@ -298,6 +308,10 @@ builder.queryField('analysisFolderCounts', (t) =>
         required: false,
         description: 'Filter by definition ID',
       }),
+      definitionTagIds: t.arg.idList({
+        required: false,
+        description: 'Filter by definition tag IDs',
+      }),
       experimentId: t.arg.string({
         required: false,
         description: 'Filter by experiment ID',
@@ -319,6 +333,7 @@ builder.queryField('analysisFolderCounts', (t) =>
       ctx.log.debug(
         {
           definitionId: args.definitionId,
+          definitionTagIds: args.definitionTagIds,
           experimentId: args.experimentId,
           status: args.status,
           analysisStatus: args.analysisStatus,
@@ -329,6 +344,7 @@ builder.queryField('analysisFolderCounts', (t) =>
 
       const { where, noMatches } = await buildRunWhere({
         definitionId: args.definitionId,
+        definitionTagIds: args.definitionTagIds?.map(String),
         experimentId: args.experimentId,
         status: parseRunStatus(args.status),
         hasAnalysis: true,

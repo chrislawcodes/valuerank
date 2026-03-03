@@ -12,7 +12,7 @@ import { ChevronRight, Folder, FolderOpen, Tag as TagIcon, Loader2 } from 'lucid
 import { Button } from '../ui/Button';
 import { AnalysisCard } from './AnalysisCard';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
-import type { Run, RunDefinitionTag } from '../../api/operations/runs';
+import type { AnalysisFolderCountOverrides, Run, RunDefinitionTag } from '../../api/operations/runs';
 
 type VirtualizedAnalysisFolderViewProps = {
   runs: Run[];
@@ -21,13 +21,7 @@ type VirtualizedAnalysisFolderViewProps = {
   loadingMore: boolean;
   totalCount: number | null;
   onLoadMore: () => void;
-  folderCounts?: {
-    aggregateCount: number;
-    untaggedCount: number;
-    aggregateUntaggedCount: number;
-    tagCounts: Record<string, number>;
-    aggregateTagCounts: Record<string, number>;
-  };
+  folderCounts?: AnalysisFolderCountOverrides;
 };
 
 type TagFolder = {

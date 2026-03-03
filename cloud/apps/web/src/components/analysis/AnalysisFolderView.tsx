@@ -8,16 +8,12 @@ import { useState, useMemo } from 'react';
 import { ChevronRight, Folder, FolderOpen, Tag as TagIcon } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { AnalysisCard } from './AnalysisCard';
-import type { Run, RunDefinitionTag } from '../../api/operations/runs';
+import type { AnalysisFolderCountOverrides, Run, RunDefinitionTag } from '../../api/operations/runs';
 
 type AnalysisFolderViewProps = {
   runs: Run[];
   onRunClick: (runId: string) => void;
-  folderCounts?: {
-    aggregateCount: number;
-    untaggedCount: number;
-    tagCounts: Record<string, number>;
-  };
+  folderCounts?: AnalysisFolderCountOverrides;
 };
 
 type TagFolder = {

@@ -22,6 +22,7 @@ import {
 import { useInfiniteRunsWithAnalysis } from '../hooks/useInfiniteRunsWithAnalysis';
 import {
   ANALYSIS_FOLDER_COUNTS_QUERY,
+  type AnalysisFolderCountOverrides,
   type AnalysisFolderCountsQueryResult,
   type AnalysisFolderCountsQueryVariables,
 } from '../api/operations/runs';
@@ -38,8 +39,9 @@ export function Analysis() {
   const folderCountVariables = useMemo<AnalysisFolderCountsQueryVariables>(
     () => ({
       analysisStatus: filters.analysisStatus || undefined,
+      definitionTagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
     }),
-    [filters.analysisStatus]
+    [filters.analysisStatus, filters.tagIds]
   );
 
   // Use infinite scroll hook for efficient data loading
@@ -63,7 +65,7 @@ export function Analysis() {
     requestPolicy: 'cache-and-network',
   });
 
-  const folderCounts = useMemo(() => {
+  const folderCounts = useMemo<AnalysisFolderCountOverrides | undefined>(() => {
     const data = folderCountsResult.data?.analysisFolderCounts;
     if (!data) {
       return undefined;

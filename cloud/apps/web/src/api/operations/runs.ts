@@ -90,6 +90,14 @@ export type AnalysisFolderCounts = {
   aggregateTagCounts: AnalysisFolderTagCount[];
 };
 
+export type AnalysisFolderCountOverrides = {
+  aggregateCount: number;
+  untaggedCount: number;
+  aggregateUntaggedCount: number;
+  tagCounts: Record<string, number>;
+  aggregateTagCounts: Record<string, number>;
+};
+
 export type ActualModelCost = {
   modelId: string;
   inputTokens: number;
@@ -317,6 +325,7 @@ export const RUN_COUNT_QUERY = gql`
 export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
   query AnalysisFolderCounts(
     $definitionId: String
+    $definitionTagIds: [ID!]
     $experimentId: String
     $status: String
     $analysisStatus: String
@@ -324,6 +333,7 @@ export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
   ) {
     analysisFolderCounts(
       definitionId: $definitionId
+      definitionTagIds: $definitionTagIds
       experimentId: $experimentId
       status: $status
       analysisStatus: $analysisStatus
@@ -357,6 +367,7 @@ export const RUN_QUERY = gql`
 
 export type AnalysisFolderCountsQueryVariables = {
   definitionId?: string;
+  definitionTagIds?: string[];
   experimentId?: string;
   status?: string;
   analysisStatus?: string;
