@@ -12,7 +12,7 @@ export type TempZeroModelVerification = {
 export type TempZeroVerificationReport = {
   generatedAt: string;
   transcriptCount: number;
-  daysLookedBack: number;
+  batchTimestamp: string | null;
   models: TempZeroModelVerification[];
 };
 
@@ -20,16 +20,14 @@ export type TempZeroVerificationReportQueryResult = {
   tempZeroVerificationReport: TempZeroVerificationReport | null;
 };
 
-export type TempZeroVerificationReportQueryVariables = {
-  days?: number;
-};
+export type TempZeroVerificationReportQueryVariables = Record<string, never>;
 
 export const TEMP_ZERO_VERIFICATION_REPORT_QUERY = gql`
-  query TempZeroVerificationReport($days: Int) {
-    tempZeroVerificationReport(days: $days) {
+  query TempZeroVerificationReport {
+    tempZeroVerificationReport {
       generatedAt
       transcriptCount
-      daysLookedBack
+      batchTimestamp
       models {
         modelId
         transcriptCount

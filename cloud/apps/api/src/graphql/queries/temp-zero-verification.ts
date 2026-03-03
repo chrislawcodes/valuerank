@@ -14,7 +14,7 @@ type TempZeroModelVerification = {
 type TempZeroVerificationReport = {
   generatedAt: Date;
   transcriptCount: number;
-  daysLookedBack: number;
+  batchTimestamp: Date | null;
   models: TempZeroModelVerification[];
 };
 
@@ -41,6 +41,13 @@ function calculatePct(numerator: number, denominator: number): number | null {
   return (numerator / denominator) * 100;
 }
 
+function hasCompleteVerificationData(model: TempZeroModelVerification): boolean {
+  return model.adapterModes.length > 0
+    && model.promptHashStabilityPct !== null
+    && model.fingerprintDriftPct !== null
+    && model.decisionMatchRatePct !== null;
+}
+
 const TempZeroModelVerificationRef = builder.objectRef<TempZeroModelVerification>('TempZeroModelVerification');
 const TempZeroVerificationReportRef = builder.objectRef<TempZeroVerificationReport>('TempZeroVerificationReport');
 
@@ -62,7 +69,11 @@ builder.objectType(TempZeroVerificationReportRef, {
       resolve: (parent) => parent.generatedAt,
     }),
     transcriptCount: t.exposeInt('transcriptCount'),
-    daysLookedBack: t.exposeInt('daysLookedBack'),
+    batchTimestamp: t.field({
+      type: 'DateTime',
+      nullable: true,
+      resolve: (parent) => parent.batchTimestamp,
+    }),
     models: t.field({
       type: [TempZeroModelVerificationRef],
       resolve: (parent) => parent.models,
@@ -74,19 +85,42 @@ builder.queryField('tempZeroVerificationReport', (t) =>
   t.field({
     type: TempZeroVerificationReportRef,
     nullable: true,
-    args: {
-      days: t.arg.int({ required: false }),
-    },
-    resolve: async (_root, args, ctx) => {
+    resolve: async (_root, _args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
 
-      const daysLookedBack = Math.min(args.days ?? 30, 365);
+      // 1. Find the timestamp of the absolute most recent temp=0 run
+      const latestRun = await db.run.findFirst({
+        where: {
+          config: { path: ['temperature'], equals: 0 },
+          deletedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+
+      if (!latestRun) {
+        return {
+          generatedAt: new Date(),
+          transcriptCount: 0,
+          batchTimestamp: null,
+          models: [],
+        };
+      }
+
+      // 2. Query all runs created within 60 seconds (1 minute) of that latest run
+      // This groups together all simultaneous runs dispatched during a single "Re-run Vignettes" click
+      const batchStartTime = new Date(latestRun.createdAt.getTime() - 60 * 1000);
+      const batchEndTime = new Date(latestRun.createdAt.getTime() + 60 * 1000);
+
       const runs = await db.run.findMany({
         where: {
           config: { path: ['temperature'], equals: 0 },
-          createdAt: { gte: new Date(Date.now() - daysLookedBack * 24 * 60 * 60 * 1000) },
+          createdAt: {
+            gte: batchStartTime,
+            lte: batchEndTime,
+          },
           deletedAt: null,
         },
         select: { id: true },
@@ -183,12 +217,13 @@ builder.queryField('tempZeroVerificationReport', (t) =>
             fingerprintDriftPct: calculatePct(fingerprintDriftedGroups, fingerprintEligibleGroups),
             decisionMatchRatePct: calculatePct(decisionMatchedGroups, decisionEligibleGroups),
           };
-        });
+        })
+        .filter(hasCompleteVerificationData);
 
       return {
         generatedAt: new Date(),
         transcriptCount: transcripts.length,
-        daysLookedBack,
+        batchTimestamp: latestRun.createdAt,
         models,
       };
     },

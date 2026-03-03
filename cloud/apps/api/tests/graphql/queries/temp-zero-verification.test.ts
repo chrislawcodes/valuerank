@@ -23,6 +23,7 @@ vi.mock('../../../src/queue/boss.js', () => ({
 vi.mock('@valuerank/db', () => ({
   db: {
     run: {
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     transcript: {
@@ -39,21 +40,21 @@ import { db } from '@valuerank/db';
 const app = createServer();
 
 const query = `
-  query TempZeroVerificationReport($days: Int) {
-    tempZeroVerificationReport(days: $days) {
-      generatedAt
-      transcriptCount
-      daysLookedBack
+  query TempZeroVerificationReport {
+    tempZeroVerificationReport {
+    generatedAt
+    transcriptCount
+    batchTimestamp
       models {
-        modelId
-        transcriptCount
-        adapterModes
-        promptHashStabilityPct
-        fingerprintDriftPct
-        decisionMatchRatePct
-      }
+      modelId
+      transcriptCount
+      adapterModes
+      promptHashStabilityPct
+      fingerprintDriftPct
+      decisionMatchRatePct
     }
   }
+}
 `;
 
 function buildContent(values: {
@@ -103,6 +104,7 @@ describe('tempZeroVerificationReport query', () => {
   });
 
   it('returns an empty report shape when no temp=0 runs or transcripts exist', async () => {
+    vi.mocked(db.run.findFirst).mockResolvedValue(null as never);
     vi.mocked(db.run.findMany).mockResolvedValue([] as never);
     vi.mocked(db.transcript.findMany).mockResolvedValue([] as never);
     vi.mocked(db.user.findUnique).mockResolvedValue({ passwordChangedAt: null } as never);
@@ -110,37 +112,25 @@ describe('tempZeroVerificationReport query', () => {
     const response = await request(app)
       .post('/graphql')
       .set('Authorization', getAuthHeader())
-      .send({ query, variables: { days: 7 } });
+      .send({ query });
 
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
     expect(response.body.data).toMatchObject({
       tempZeroVerificationReport: {
         transcriptCount: 0,
-        daysLookedBack: 7,
+        batchTimestamp: null,
         models: [],
       },
     });
     expect(response.body.data.tempZeroVerificationReport.generatedAt).toBeTruthy();
-    expect(db.run.findMany).toHaveBeenCalledTimes(1);
-    expect(db.transcript.findMany).toHaveBeenCalledWith({
-      where: {
-        runId: { in: [] },
-        deletedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        modelId: true,
-        scenarioId: true,
-        decisionCode: true,
-        content: true,
-        createdAt: true,
-      },
-    });
+    expect(db.run.findMany).not.toHaveBeenCalled();
+    expect(db.transcript.findMany).not.toHaveBeenCalled();
   });
 
-  it('groups transcripts by scenario and applies the 2-vs-3 transcript thresholds correctly', async () => {
+  it('groups transcripts by scenario, applies thresholds, and excludes incomplete model rows', async () => {
+    const mockBatchTime = new Date('2026-03-02T10:00:00.000Z');
+    vi.mocked(db.run.findFirst).mockResolvedValue({ createdAt: mockBatchTime } as never);
     vi.mocked(db.run.findMany).mockResolvedValue([{ id: 'run-1' }] as never);
     vi.mocked(db.user.findUnique).mockResolvedValue({ passwordChangedAt: null } as never);
     vi.mocked(db.transcript.findMany).mockResolvedValue([
@@ -228,7 +218,7 @@ describe('tempZeroVerificationReport query', () => {
     expect(response.body.data).toMatchObject({
       tempZeroVerificationReport: {
         transcriptCount: 9,
-        daysLookedBack: 30,
+        batchTimestamp: mockBatchTime.toISOString(),
         models: [
           {
             modelId: 'model-a',
@@ -236,14 +226,6 @@ describe('tempZeroVerificationReport query', () => {
             adapterModes: ['batch', 'chat', 'legacy'],
             promptHashStabilityPct: 50,
             decisionMatchRatePct: 50,
-          },
-          {
-            modelId: 'model-b',
-            transcriptCount: 1,
-            adapterModes: ['solo'],
-            promptHashStabilityPct: null,
-            fingerprintDriftPct: null,
-            decisionMatchRatePct: null,
           },
         ],
       },
