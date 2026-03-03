@@ -53,6 +53,16 @@ export function TempZeroVerification() {
 
   const copyAsImage = async () => {
     if (tableRef.current == null) return;
+    if (
+      typeof navigator === 'undefined'
+      || navigator.clipboard == null
+      || typeof navigator.clipboard.write !== 'function'
+      || typeof ClipboardItem === 'undefined'
+    ) {
+      setLaunchFeedback('Copy as image is not supported in this browser.');
+      return;
+    }
+
     const canvas = await html2canvas(tableRef.current, { scale: 2 });
     canvas.toBlob((blob) => {
       if (blob == null) return;

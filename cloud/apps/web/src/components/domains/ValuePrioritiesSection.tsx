@@ -408,33 +408,39 @@ export function ValuePrioritiesSection({
                       Model Group: {modelGroupName ?? 'Unassigned'}
                     </div>
                   </td>
-                  {COLUMN_VALUES.map((value) => (
-                    <td
-                      key={value}
-                      className={`p-0 text-right text-gray-800 transition-all hover:brightness-105 ${
-                        hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
-                      } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
-                        value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
-                      }`}
-                      style={{ background: getPriorityColor(getCellValue(model, value) ?? valueRange.min, valueRange.min, valueRange.max) }}
-                    >
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
-                        onClick={() => handleValueCellClick(model.model, value)}
-                        disabled={selectedDomainId === ''}
+                  {COLUMN_VALUES.map((value) => {
+                    const cellValue = getCellValue(model, value);
+                    const background = cellValue === null
+                      ? '#F9FAFB'
+                      : getPriorityColor(cellValue, valueRange.min, valueRange.max);
+
+                    return (
+                      <td
+                        key={value}
+                        className={`p-0 text-right text-gray-800 transition-all hover:brightness-105 ${
+                          hasGroupStartBorder(value) ? 'border-l-2 border-gray-300' : ''
+                        } ${hasGroupEndBorder(value) ? 'border-r-2 border-gray-300' : ''} ${
+                          value === HEDONISM_SPLIT_VALUE ? 'border-x border-dashed border-gray-400' : ''
+                        }`}
+                        style={{ background }}
                       >
-                        {(() => {
-                          const v = getCellValue(model, value);
-                          if (v === null) return 'n/a';
-                          if (scoreMode === 'WIN_RATE') return `${v.toFixed(1)}%`;
-                          return `${v > 0 ? '+' : ''}${v.toFixed(2)}`;
-                        })()}
-                      </Button>
-                    </td>
-                  ))}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="relative block h-full min-h-[34px] w-full rounded-none border border-transparent px-2 py-2 text-right text-xs text-gray-800 hover:border-sky-300 hover:bg-white/25 hover:underline focus-visible:!ring-1 focus-visible:!ring-sky-400"
+                          onClick={() => handleValueCellClick(model.model, value)}
+                          disabled={selectedDomainId === ''}
+                        >
+                          {(() => {
+                            if (cellValue === null) return 'n/a';
+                            if (scoreMode === 'WIN_RATE') return `${cellValue.toFixed(1)}%`;
+                            return `${cellValue > 0 ? '+' : ''}${cellValue.toFixed(2)}`;
+                          })()}
+                        </Button>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
