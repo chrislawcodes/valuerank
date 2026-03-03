@@ -12,6 +12,7 @@ import {
 import {
   LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   type LaunchAssumptionsTempZeroResult,
+  type LaunchAssumptionsTempZeroVariables,
 } from '../../api/operations/assumptions';
 
 function formatPercent(value: number | null): string {
@@ -30,13 +31,13 @@ export function TempZeroVerification() {
   const [copied, setCopied] = useState(false);
   const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
-  const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult>(
+  const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult, LaunchAssumptionsTempZeroVariables>(
     LAUNCH_ASSUMPTIONS_TEMP_ZERO_MUTATION,
   );
 
   const handleRerun = async () => {
     setLaunchFeedback(null);
-    const response = await executeLaunch({});
+    const response = await executeLaunch({ force: true });
     if (response.error != null) {
       setLaunchFeedback(`Launch failed: ${response.error.message}`);
       return;

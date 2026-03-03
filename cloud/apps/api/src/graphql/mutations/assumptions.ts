@@ -79,7 +79,10 @@ builder.objectType(LaunchAssumptionsTempZeroPayloadRef, {
 builder.mutationField('launchAssumptionsTempZero', (t) =>
   t.field({
     type: LaunchAssumptionsTempZeroPayloadRef,
-    resolve: async (_root, _args, ctx) => {
+    args: {
+      force: t.arg.boolean({ required: false, defaultValue: false }),
+    },
+    resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
@@ -143,85 +146,94 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
         throw new Error('Temp=0 confirmation launch blocked: matching dedicated runs are already active.');
       }
 
-      const completedRuns = await db.run.findMany({
-        where: {
-          definitionId: { in: definitions.map((definition) => definition.id) },
-          status: 'COMPLETED',
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          definitionId: true,
-          config: true,
-        },
-      });
-      const qualifyingCompletedRunIds = completedRuns
-        .filter((run) => matchesAssumptionsTempZeroPackage(run.config, models))
-        .map((run) => run.id);
-
-      const transcripts = qualifyingCompletedRunIds.length > 0 ? await db.transcript.findMany({
-        where: {
-          runId: { in: qualifyingCompletedRunIds },
-          modelId: { in: models },
-          scenarioId: { not: null },
-          deletedAt: null,
-          decisionCode: { in: ['1', '2', '3', '4', '5'] },
-        },
-        select: {
-          scenarioId: true,
-          modelId: true,
-          modelVersion: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      }) : [];
-
-      const transcriptGroups = new Map<string, TranscriptRecord[]>();
-      for (const transcript of transcripts) {
-        if (transcript.scenarioId === null) continue;
-        const key = `${transcript.modelId}::${transcript.scenarioId}`;
-        const existing = transcriptGroups.get(key) ?? [];
-        existing.push(transcript);
-        transcriptGroups.set(key, existing);
-      }
-      for (const [key, group] of transcriptGroups.entries()) {
-        group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-        const latestModelVersion = group[0]?.modelVersion ?? null;
-        const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
-        transcriptGroups.set(key, sameVersionGroup.slice(0, 3));
-      }
-
-      const definitionsWithTopUp = definitions.map((definition) => {
-        const scenarios = definition.scenarios as ScenarioRecord[];
-        let existingBatchFloor = 3;
-
-        if (scenarios.length === 0 || models.length === 0) {
-          existingBatchFloor = 0;
-        } else {
-          for (const scenario of scenarios) {
-            for (const modelId of models) {
-              const count = (transcriptGroups.get(`${modelId}::${scenario.id}`) ?? []).length;
-              if (count < existingBatchFloor) {
-                existingBatchFloor = count;
-              }
-              if (existingBatchFloor === 0) break;
-            }
-            if (existingBatchFloor === 0) break;
-          }
-        }
-
-        return {
-          definitionId: definition.id,
-          samplesPerScenario: Math.max(0, 3 - Math.min(existingBatchFloor, 3)),
-        };
-      });
-
       const runIds: string[] = [];
       const failedVignetteIds: string[] = [];
       const skippedVignetteIds: string[] = [];
 
+      let definitionsToLaunch: Array<{ definitionId: string; samplesPerScenario: number }>;
+
+      if (args.force !== true) {
+        const completedRuns = await db.run.findMany({
+          where: {
+            definitionId: { in: definitions.map((definition) => definition.id) },
+            status: 'COMPLETED',
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            definitionId: true,
+            config: true,
+          },
+        });
+        const qualifyingCompletedRunIds = completedRuns
+          .filter((run) => matchesAssumptionsTempZeroPackage(run.config, models))
+          .map((run) => run.id);
+
+        const transcripts = qualifyingCompletedRunIds.length > 0 ? await db.transcript.findMany({
+          where: {
+            runId: { in: qualifyingCompletedRunIds },
+            modelId: { in: models },
+            scenarioId: { not: null },
+            deletedAt: null,
+            decisionCode: { in: ['1', '2', '3', '4', '5'] },
+          },
+          select: {
+            scenarioId: true,
+            modelId: true,
+            modelVersion: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        }) : [];
+
+        const transcriptGroups = new Map<string, TranscriptRecord[]>();
+        for (const transcript of transcripts) {
+          if (transcript.scenarioId === null) continue;
+          const key = `${transcript.modelId}::${transcript.scenarioId}`;
+          const existing = transcriptGroups.get(key) ?? [];
+          existing.push(transcript);
+          transcriptGroups.set(key, existing);
+        }
+        for (const [key, group] of transcriptGroups.entries()) {
+          group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+          const latestModelVersion = group[0]?.modelVersion ?? null;
+          const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
+          transcriptGroups.set(key, sameVersionGroup.slice(0, 3));
+        }
+
+        definitionsToLaunch = definitions.map((definition) => {
+          const scenarios = definition.scenarios as ScenarioRecord[];
+          let existingBatchFloor = 3;
+
+          if (scenarios.length === 0 || models.length === 0) {
+            existingBatchFloor = 0;
+          } else {
+            for (const scenario of scenarios) {
+              for (const modelId of models) {
+                const count = (transcriptGroups.get(`${modelId}::${scenario.id}`) ?? []).length;
+                if (count < existingBatchFloor) {
+                  existingBatchFloor = count;
+                }
+                if (existingBatchFloor === 0) break;
+              }
+              if (existingBatchFloor === 0) break;
+            }
+          }
+
+          return {
+            definitionId: definition.id,
+            samplesPerScenario: Math.max(0, 3 - Math.min(existingBatchFloor, 3)),
+          };
+        });
+      } else {
+        definitionsToLaunch = definitions.map((definition) => ({
+          definitionId: definition.id,
+          samplesPerScenario: 3,
+        }));
+      }
+
       const results = await Promise.allSettled(
-        definitionsWithTopUp
+        definitionsToLaunch
           .filter((definition) => {
             if (definition.samplesPerScenario === 0) {
               skippedVignetteIds.push(definition.definitionId);
@@ -253,7 +265,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
           runIds.push(result.value);
           return;
         }
-        const launchedDefinitions = definitionsWithTopUp.filter((definition) => definition.samplesPerScenario > 0);
+        const launchedDefinitions = definitionsToLaunch.filter((definition) => definition.samplesPerScenario > 0);
         failedVignetteIds.push(launchedDefinitions[index]!.definitionId);
         ctx.log.error(
           {
@@ -278,7 +290,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
           skippedVignetteIds,
           models,
           temperature: 0,
-          launchedSamplesPerScenario: definitionsWithTopUp
+          launchedSamplesPerScenario: definitionsToLaunch
             .filter((definition) => definition.samplesPerScenario > 0)
             .map((definition) => ({
               definitionId: definition.definitionId,
