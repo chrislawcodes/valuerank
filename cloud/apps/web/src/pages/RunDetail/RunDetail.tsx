@@ -26,6 +26,7 @@ import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { formatTemperatureSetting } from '../../lib/temperature';
+import { formatTrialSignature } from '../../utils/trial-signature';
 
 function formatDate(dateString: string | Date): string {
   const date = new Date(dateString);
@@ -35,6 +36,10 @@ function formatDate(dateString: string | Date): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function getDisplaySignature(signature: string): string {
+  return signature !== 'v?td' ? signature : 'Unknown Signature';
 }
 
 function inferProviderFromModelId(modelId: string): string | null {
@@ -318,6 +323,10 @@ export function RunDetail() {
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
   const budgetFailureBanner = getBudgetFailureBanner(run);
   const systemFailureBanner = budgetFailureBanner === null ? getSystemFailureBanner(run) : null;
+  const trialSignature = formatTrialSignature(
+    run.definitionVersion ?? run.definition?.version ?? null,
+    run.config?.temperature ?? null
+  );
 
   return (
     <div className="space-y-6">
@@ -403,7 +412,9 @@ export function RunDetail() {
                     onSave={handleSaveName}
                     variant="subtitle"
                   />
-                  <span className="text-sm text-gray-500">· {run.definition?.name || 'Vignette'} · {formatDate(run.createdAt)}</span>
+                  <span className="text-sm text-gray-500">
+                    · <span className="font-mono">{getDisplaySignature(trialSignature)}</span> · {run.definition?.name || 'Vignette'} · {formatDate(run.createdAt)}
+                  </span>
                 </div>
               </div>
             </div>

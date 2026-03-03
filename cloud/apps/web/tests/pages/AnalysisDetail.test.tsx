@@ -7,13 +7,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Provider, createClient } from 'urql';
 import { AnalysisDetail } from '../../src/pages/AnalysisDetail';
+
+// Create a dummy urql client for testing
+const mockClient = createClient({
+  url: 'http://localhost:3000/graphql',
+  exchanges: [],
+});
 
 // Mock useRun hook
 const mockUseRun = vi.fn();
+const mockUseRuns = vi.fn();
 
 vi.mock('../../src/hooks/useRun', () => ({
   useRun: () => mockUseRun(),
+}));
+
+vi.mock('../../src/hooks/useRuns', () => ({
+  useRuns: () => mockUseRuns(),
 }));
 
 // Mock AnalysisPanel to avoid complex setup
@@ -25,19 +37,28 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
 
 function renderWithRouter(runId: string) {
   return render(
-    <MemoryRouter initialEntries={[`/analysis/${runId}`]}>
-      <Routes>
-        <Route path="/analysis/:id" element={<AnalysisDetail />} />
-        <Route path="/analysis" element={<div>Analysis List</div>} />
-        <Route path="/runs/:id" element={<div>Run Detail</div>} />
-      </Routes>
-    </MemoryRouter>
+    <Provider value={mockClient}>
+      <MemoryRouter initialEntries={[`/analysis/${runId}`]}>
+        <Routes>
+          <Route path="/analysis/:id" element={<AnalysisDetail />} />
+          <Route path="/analysis" element={<div>Analysis List</div>} />
+          <Route path="/runs/:id" element={<div>Run Detail</div>} />
+        </Routes>
+      </MemoryRouter>
+    </Provider>
   );
 }
 
 describe('AnalysisDetail', () => {
   beforeEach(() => {
     mockUseRun.mockReset();
+    mockUseRuns.mockReset();
+    mockUseRuns.mockReturnValue({
+      runs: [],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
   });
 
   describe('Loading State', () => {
@@ -217,6 +238,69 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-12345678-abcd');
 
       expect(screen.getByText(/Trial run-1234/)).toBeInTheDocument();
+    });
+
+    it('shows a user-facing unknown signature label when signature data is missing', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-12345678-abcd',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+          definitionVersion: null,
+          config: null,
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('run-12345678-abcd');
+
+      expect(screen.getByText('Unknown Signature')).toBeInTheDocument();
+    });
+
+    it('deduplicates aggregate signature options and shows the embedded run count', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'agg-run-2',
+          analysisStatus: 'completed',
+          definition: { id: 'def-1', name: 'Aggregate Definition' },
+          definitionVersion: 2,
+          config: { temperature: 0 },
+          tags: [{ id: 'tag-agg', name: 'Aggregate' }],
+        },
+        loading: false,
+        error: null,
+      });
+      mockUseRuns.mockReturnValue({
+        runs: [
+          {
+            id: 'agg-run-1',
+            definitionVersion: 2,
+            config: { temperature: 0 },
+            tags: [{ id: 'tag-agg', name: 'Aggregate' }],
+          },
+          {
+            id: 'agg-run-2',
+            definitionVersion: 2,
+            config: { temperature: 0 },
+            tags: [{ id: 'tag-agg', name: 'Aggregate' }],
+          },
+          {
+            id: 'agg-run-3',
+            definitionVersion: 2,
+            config: { temperature: 0.7 },
+            tags: [{ id: 'tag-agg', name: 'Aggregate' }],
+          },
+        ],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      renderWithRouter('agg-run-2');
+
+      expect(screen.getByRole('option', { name: 'v2t0 (2 runs)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'v2t0.7' })).toBeInTheDocument();
     });
 
     it('shows unnamed definition when definition is missing', () => {
