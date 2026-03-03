@@ -1,5 +1,5 @@
 import { db } from '@valuerank/db';
-import { AuthenticationError, decisionsMatch } from '@valuerank/shared';
+import { AuthenticationError, bucketDecisionDirection, decisionsMatch } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
@@ -44,6 +44,7 @@ type TempZeroSummary = {
   differenceRate: number | null;
   comparisons: number;
   excludedComparisons: number;
+  batchesRun: number;
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
@@ -112,43 +113,11 @@ type TranscriptRecord = {
 
 const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
-function normalizeModelSet(models: unknown): string[] {
-  if (!Array.isArray(models)) return [];
-  return models
-    .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
-    .slice()
-    .sort((left, right) => left.localeCompare(right));
-}
-
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
   const runTemperature = parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature);
   const signatureTemperature = parseVnewTemperature(signature);
   return runTemperature === signatureTemperature;
-}
-
-function matchesAssumptionsTempZeroPackage(runConfig: unknown, signature: string | null, modelIds: string[]): boolean {
-  const config = runConfig as { assumptionKey?: unknown; models?: unknown; samplePercentage?: unknown; runMode?: unknown } | null;
-  const configModels = normalizeModelSet(config?.models);
-  const normalizedModelIds = [...modelIds].sort((left, right) => left.localeCompare(right));
-
-  if (config?.assumptionKey === 'temp_zero_determinism') {
-    return signatureMatches(runConfig, signature)
-      && configModels.length === normalizedModelIds.length
-      && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
-  }
-
-  const samplePercentage = typeof config?.samplePercentage === 'number'
-    ? config.samplePercentage
-    : typeof config?.samplePercentage === 'string'
-      ? Number(config.samplePercentage)
-      : null;
-
-  return signatureMatches(runConfig, signature)
-    && config?.runMode === 'PERCENTAGE'
-    && samplePercentage === 100
-    && configModels.length === normalizedModelIds.length
-    && configModels.every((modelId, index) => modelId === normalizedModelIds[index]);
 }
 
 function buildConditionKey(scenario: ScenarioRecord): string {
@@ -182,6 +151,25 @@ function computeMatch(values: Array<string | null>, transcriptCount: number): bo
 
   const nonNullValues = values as string[];
   return nonNullValues.every((value) => value === nonNullValues[0]);
+}
+
+function decisionSeriesMatches(decisions: Array<string | null>, directionOnly: boolean): boolean {
+  if (decisions.length < 2 || decisions.some((decision) => decision == null)) {
+    return false;
+  }
+
+  if (!directionOnly) {
+    const firstDecision = decisions[0];
+    return decisions.every((decision) => decision === firstDecision);
+  }
+
+  const directions = decisions.map((decision) => bucketDecisionDirection(decision));
+  if (directions.some((direction) => direction == null)) {
+    return false;
+  }
+
+  const firstDirection = directions[0];
+  return directions.every((direction) => direction === firstDirection);
 }
 
 function summarizeDecisionCodes(decisionCodes: Array<string | null>, transcriptCount: number): string {
@@ -264,6 +252,7 @@ builder.objectType(TempZeroSummaryRef, {
     differenceRate: t.exposeFloat('differenceRate', { nullable: true }),
     comparisons: t.exposeInt('comparisons'),
     excludedComparisons: t.exposeInt('excludedComparisons'),
+    batchesRun: t.exposeInt('batchesRun'),
     modelsTested: t.exposeInt('modelsTested'),
     vignettesTested: t.exposeInt('vignettesTested'),
     worstModelId: t.exposeString('worstModelId', { nullable: true }),
@@ -474,7 +463,7 @@ builder.queryField('assumptionsTempZero', (t) =>
       });
       const selectedSignature = formatVnewSignature(0);
       const matchingRunIds = completedRuns
-        .filter((run) => matchesAssumptionsTempZeroPackage(run.config, selectedSignature, models.map((model) => model.modelId)))
+        .filter((run) => signatureMatches(run.config, selectedSignature))
         .map((run) => run.id);
 
       let transcriptGroups = new Map<string, TranscriptRecord[]>();
@@ -512,7 +501,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           group.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
           const latestModelVersion = group[0]?.modelVersion ?? null;
           const sameVersionGroup = group.filter((transcript) => transcript.modelVersion === latestModelVersion);
-          transcriptGroups.set(key, sameVersionGroup.slice(0, 3));
+          transcriptGroups.set(key, sameVersionGroup);
         }
       }
 
@@ -531,6 +520,27 @@ builder.queryField('assumptionsTempZero', (t) =>
       const rows: TempZeroRow[] = [];
       const comparableByModel = new Map<string, { comparable: number; matched: number }>();
       const vignetteLaunchPlan = new Map<string, { conditionCount: number; batchesToRun: number }>();
+      let batchesRun = 0;
+
+      if (models.length > 0) {
+        let initialized = false;
+        for (const vignette of availableVignettes) {
+          const scenarios = (definitionById.get(vignette.id)?.scenarios ?? []) as ScenarioRecord[];
+          for (const scenario of scenarios) {
+            for (const model of models) {
+              const count = (transcriptGroups.get(`${model.modelId}::${scenario.id}`) ?? []).length;
+              if (!initialized) {
+                batchesRun = count;
+                initialized = true;
+                continue;
+              }
+              if (count < batchesRun) {
+                batchesRun = count;
+              }
+            }
+          }
+        }
+      }
 
       for (const vignette of availableVignettes) {
         const scenarios = (definitionById.get(vignette.id)?.scenarios ?? []) as ScenarioRecord[];
@@ -563,12 +573,17 @@ builder.queryField('assumptionsTempZero', (t) =>
         for (const model of models) {
           for (const scenario of sortedScenarios) {
             const group = transcriptGroups.get(`${model.modelId}::${scenario.id}`) ?? [];
-            const batch1 = group[0]?.decisionCode ?? null;
-            const batch2 = group[1]?.decisionCode ?? null;
-            const batch3 = group[2]?.decisionCode ?? null;
-            const comparable = group.length >= 3;
+            const usedGroup = batchesRun > 0 ? group.slice(0, batchesRun) : [];
+            const batch1 = usedGroup[0]?.decisionCode ?? null;
+            const batch2 = usedGroup[1]?.decisionCode ?? null;
+            const batch3 = usedGroup[2]?.decisionCode ?? null;
+            const comparable = batchesRun >= 2 && usedGroup.length === batchesRun;
             const isMatch = comparable
-              ? decisionsMatch(batch1, batch2, batch3, directionOnly)
+              ? (
+                batchesRun === 3
+                  ? decisionsMatch(batch1, batch2, batch3, directionOnly)
+                  : decisionSeriesMatches(usedGroup.map((transcript) => transcript.decisionCode), directionOnly)
+              )
               : false;
             const mismatchType: TempZeroMismatchType = comparable ? (isMatch ? null : 'decision_flip') : 'missing_trial';
 
@@ -590,26 +605,12 @@ builder.queryField('assumptionsTempZero', (t) =>
               batch3,
               isMatch,
               mismatchType,
-              decisions: [
-                {
-                  label: 'Batch 1',
-                  transcriptId: group[0]?.id ?? null,
-                  decision: batch1,
-                  content: group[0]?.content ?? null,
-                },
-                {
-                  label: 'Batch 2',
-                  transcriptId: group[1]?.id ?? null,
-                  decision: batch2,
-                  content: group[1]?.content ?? null,
-                },
-                {
-                  label: 'Batch 3',
-                  transcriptId: group[2]?.id ?? null,
-                  decision: batch3,
-                  content: group[2]?.content ?? null,
-                },
-              ],
+              decisions: usedGroup.map((transcript, index) => ({
+                label: `Batch ${index + 1}`,
+                transcriptId: transcript.id,
+                decision: transcript.decisionCode,
+                content: transcript.content,
+              })),
             });
           }
         }
@@ -674,9 +675,9 @@ builder.queryField('assumptionsTempZero', (t) =>
         );
       }
       if (matchingRunIds.length === 0) {
-        noteParts.push('No completed temp=0 runs matching the locked package have completed yet. Launch the locked package below to populate this section.');
+        noteParts.push('No completed temp=0 runs matching the locked vignette signature have completed yet. Launch the locked package below to populate this section.');
       } else if (comparableRows.length === 0) {
-        noteParts.push('Matching temp=0 runs were found, but the three-batch matrix is not complete yet.');
+        noteParts.push('Matching temp=0 runs were found, but there are not enough repeated trials yet to compare each condition.');
       }
 
       return {
@@ -714,6 +715,7 @@ builder.queryField('assumptionsTempZero', (t) =>
           differenceRate: comparableRows.length > 0 ? 1 - (matchedRows.length / comparableRows.length) : null,
           comparisons: comparableRows.length,
           excludedComparisons: Math.max(0, expectedComparisons - comparableRows.length),
+          batchesRun: batchesRun,
           modelsTested: models.length,
           vignettesTested: availableVignettes.length,
           worstModelId,

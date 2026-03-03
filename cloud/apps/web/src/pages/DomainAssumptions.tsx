@@ -157,6 +157,7 @@ function groupRowsByModel(rows: TempZeroRow[]): Array<{ modelId: string; modelLa
 type DisplaySummary = {
   matchRate: number | null;
   differenceRate: number | null;
+  batchesRun: number;
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
@@ -221,6 +222,10 @@ function computeDisplaySummary(rows: TempZeroRow[]): DisplaySummary {
   return {
     matchRate: comparableRows.length > 0 ? matchedRows.length / comparableRows.length : null,
     differenceRate: comparableRows.length > 0 ? 1 - (matchedRows.length / comparableRows.length) : null,
+    batchesRun: rows.reduce((minimum, row) => {
+      if (minimum === null) return row.decisions.length;
+      return Math.min(minimum, row.decisions.length);
+    }, null as number | null) ?? 0,
     modelsTested: modelGroups.length,
     vignettesTested: groupRowsByVignette(rows).length,
     worstModelId,
@@ -350,7 +355,7 @@ export function DomainAssumptions() {
             )}
 
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              This phase counts dedicated temp=0 assumptions runs plus earlier completed temp=0 runs that match the same locked package configuration. New launches top up only the remaining batches needed within that matching run set to reach three completed samples per condition.
+              This phase uses all completed temp=0 runs that match the locked vignette signature. New launches still top up only the remaining batches needed within that matching run set to reach three completed samples per condition.
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -515,7 +520,7 @@ export function DomainAssumptions() {
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">{result.summary.title}</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Exact repeat agreement for each `(model, vignette, condition)` group using the latest three matching temp=0 trials.
+                  Exact repeat agreement for each `(model, vignette, condition)` group using all matching temp=0 trials available for the shared batch count per condition.
                 </p>
               </div>
               <div
@@ -529,7 +534,7 @@ export function DomainAssumptions() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="mt-4 grid gap-3 md:grid-cols-5">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Match Rate</div>
                 <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(displaySummary.matchRate)}</div>
@@ -537,6 +542,10 @@ export function DomainAssumptions() {
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Difference Rate</div>
                 <div className="mt-1 text-base font-semibold text-gray-900">{formatPercent(displaySummary.differenceRate)}</div>
+              </div>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Batches Run (Trials per Condition)</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">{formatInteger(displaySummary.batchesRun)}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Models Tested</div>
@@ -736,7 +745,7 @@ export function DomainAssumptions() {
             </div>
             {selectedRow.mismatchType === 'missing_trial' && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                This condition needs more runs before all three batches are available. Existing transcript data is shown below.
+                This condition needs more runs before the shared batch count is available for comparison. Existing transcript data is shown below.
               </div>
             )}
             {selectedRow.decisions.map((decision) => (
