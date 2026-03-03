@@ -76,6 +76,20 @@ export type RunDefinitionTag = {
   name: string;
 };
 
+export type AnalysisFolderTagCount = {
+  tagId: string;
+  name: string;
+  count: number;
+};
+
+export type AnalysisFolderCounts = {
+  aggregateCount: number;
+  untaggedCount: number;
+  aggregateUntaggedCount: number;
+  tagCounts: AnalysisFolderTagCount[];
+  aggregateTagCounts: AnalysisFolderTagCount[];
+};
+
 export type ActualModelCost = {
   modelId: string;
   inputTokens: number;
@@ -300,6 +314,38 @@ export const RUN_COUNT_QUERY = gql`
   }
 `;
 
+export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
+  query AnalysisFolderCounts(
+    $definitionId: String
+    $experimentId: String
+    $status: String
+    $analysisStatus: String
+    $runType: String
+  ) {
+    analysisFolderCounts(
+      definitionId: $definitionId
+      experimentId: $experimentId
+      status: $status
+      analysisStatus: $analysisStatus
+      runType: $runType
+    ) {
+      aggregateCount
+      untaggedCount
+      aggregateUntaggedCount
+      tagCounts {
+        tagId
+        name
+        count
+      }
+      aggregateTagCounts {
+        tagId
+        name
+        count
+      }
+    }
+  }
+`;
+
 export const RUN_QUERY = gql`
   query Run($id: ID!) {
     run(id: $id) {
@@ -308,6 +354,18 @@ export const RUN_QUERY = gql`
   }
   ${RUN_WITH_TRANSCRIPTS_FRAGMENT}
 `;
+
+export type AnalysisFolderCountsQueryVariables = {
+  definitionId?: string;
+  experimentId?: string;
+  status?: string;
+  analysisStatus?: string;
+  runType?: string;
+};
+
+export type AnalysisFolderCountsQueryResult = {
+  analysisFolderCounts: AnalysisFolderCounts;
+};
 
 // ============================================================================
 // MUTATIONS

@@ -13,6 +13,11 @@ import type { Run, RunDefinitionTag } from '../../api/operations/runs';
 type AnalysisFolderViewProps = {
   runs: Run[];
   onRunClick: (runId: string) => void;
+  folderCounts?: {
+    aggregateCount: number;
+    untaggedCount: number;
+    tagCounts: Record<string, number>;
+  };
 };
 
 type TagFolder = {
@@ -43,7 +48,7 @@ function groupRunsByTag(runs: Run[]): Map<string, TagFolder> {
   return tagMap;
 }
 
-export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps) {
+export function AnalysisFolderView({ runs, onRunClick, folderCounts }: AnalysisFolderViewProps) {
   // Track which folders are expanded (default: all collapsed)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
@@ -154,10 +159,10 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
             ) : (
               <Folder className="w-4 h-4 text-indigo-500" />
             )}
-            <TagIcon className="w-3.5 h-3.5 text-indigo-600" />
+              <TagIcon className="w-3.5 h-3.5 text-indigo-600" />
             <span className="font-medium text-gray-900">Aggregated Runs</span>
             <span className="text-sm text-gray-500">
-              ({aggregateRuns.length})
+              ({folderCounts?.aggregateCount ?? aggregateRuns.length})
             </span>
           </button>
 
@@ -200,7 +205,7 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
               <TagIcon className="w-3.5 h-3.5 text-teal-600" />
               <span className="font-medium text-gray-900">{tag.name}</span>
               <span className="text-sm text-gray-500">
-                ({tagRuns.length})
+                ({folderCounts?.tagCounts[tag.id] ?? tagRuns.length})
               </span>
             </button>
 
@@ -240,7 +245,7 @@ export function AnalysisFolderView({ runs, onRunClick }: AnalysisFolderViewProps
             )}
             <span className="font-medium text-gray-500">Untagged</span>
             <span className="text-sm text-gray-500">
-              ({untaggedRuns.length})
+              ({folderCounts?.untaggedCount ?? untaggedRuns.length})
             </span>
           </button>
 

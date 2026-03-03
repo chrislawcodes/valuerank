@@ -21,6 +21,13 @@ type VirtualizedAnalysisFolderViewProps = {
   loadingMore: boolean;
   totalCount: number | null;
   onLoadMore: () => void;
+  folderCounts?: {
+    aggregateCount: number;
+    untaggedCount: number;
+    aggregateUntaggedCount: number;
+    tagCounts: Record<string, number>;
+    aggregateTagCounts: Record<string, number>;
+  };
 };
 
 type TagFolder = {
@@ -137,6 +144,7 @@ export function VirtualizedAnalysisFolderView({
   loadingMore,
   totalCount,
   onLoadMore,
+  folderCounts,
 }: VirtualizedAnalysisFolderViewProps) {
   // Use throttled infinite scroll hook
   const parentRef = useInfiniteScroll({
@@ -205,7 +213,7 @@ export function VirtualizedAnalysisFolderView({
         type: 'folder-header',
         id: '__aggregate__',
         tag: { id: '__aggregate__', name: 'Aggregated Trials' }, // Mock tag for display
-        runCount: aggregateRuns.length,
+        runCount: folderCounts?.aggregateCount ?? aggregateRuns.length,
       });
 
       if (expandedFolders.has('__aggregate__')) {
@@ -216,7 +224,7 @@ export function VirtualizedAnalysisFolderView({
             id: subfolderId,
             parentId: '__aggregate__',
             tag,
-            runCount: taggedRuns.length,
+            runCount: folderCounts?.aggregateTagCounts[tag.id] ?? taggedRuns.length,
           });
 
           if (expandedFolders.has(subfolderId)) {
@@ -239,7 +247,7 @@ export function VirtualizedAnalysisFolderView({
             id: subfolderId,
             parentId: '__aggregate__',
             tag: null,
-            runCount: aggregateUntaggedRuns.length,
+            runCount: folderCounts?.aggregateUntaggedCount ?? aggregateUntaggedRuns.length,
           });
 
           if (expandedFolders.has(subfolderId)) {
@@ -264,7 +272,7 @@ export function VirtualizedAnalysisFolderView({
         type: 'folder-header',
         id: tag.id,
         tag,
-        runCount: tagRuns.length,
+        runCount: folderCounts?.tagCounts[tag.id] ?? tagRuns.length,
       });
 
       // Add runs if folder is expanded
@@ -287,7 +295,7 @@ export function VirtualizedAnalysisFolderView({
         type: 'folder-header',
         id: '__untagged__',
         tag: null,
-        runCount: untaggedRuns.length,
+        runCount: folderCounts?.untaggedCount ?? untaggedRuns.length,
       });
 
       if (expandedFolders.has('__untagged__')) {
@@ -304,7 +312,7 @@ export function VirtualizedAnalysisFolderView({
     }
 
     return items;
-  }, [tagGroups, untaggedRuns, aggregateRuns, aggregateTagGroups, aggregateUntaggedRuns, expandedFolders]);
+  }, [tagGroups, untaggedRuns, aggregateRuns, aggregateTagGroups, aggregateUntaggedRuns, expandedFolders, folderCounts]);
 
   // Estimate size based on item type
   const getItemSize = useCallback((index: number) => {
