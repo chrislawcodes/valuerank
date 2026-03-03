@@ -136,6 +136,9 @@ export function TempZeroVerification() {
               </tbody>
             </table>
           </div>
+          <p className="mt-3 text-xs text-gray-500">
+            All models in the latest batch are shown. <span className="font-medium">n/a</span> means that provider metadata was not available for that metric.
+          </p>
         </div>
       )}
     </section>

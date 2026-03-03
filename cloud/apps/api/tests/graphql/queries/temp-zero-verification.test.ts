@@ -128,7 +128,7 @@ describe('tempZeroVerificationReport query', () => {
     expect(db.transcript.findMany).not.toHaveBeenCalled();
   });
 
-  it('groups transcripts by scenario, applies thresholds, and excludes incomplete model rows', async () => {
+  it('groups transcripts by scenario, applies thresholds, and keeps incomplete model rows', async () => {
     const mockBatchTime = new Date('2026-03-02T10:00:00.000Z');
     vi.mocked(db.run.findFirst).mockResolvedValue({ createdAt: mockBatchTime } as never);
     vi.mocked(db.run.findMany).mockResolvedValue([{ id: 'run-1' }] as never);
@@ -226,6 +226,14 @@ describe('tempZeroVerificationReport query', () => {
             adapterModes: ['batch', 'chat', 'legacy'],
             promptHashStabilityPct: 50,
             decisionMatchRatePct: 50,
+          },
+          {
+            modelId: 'model-b',
+            transcriptCount: 1,
+            adapterModes: ['solo'],
+            promptHashStabilityPct: null,
+            fingerprintDriftPct: null,
+            decisionMatchRatePct: null,
           },
         ],
       },

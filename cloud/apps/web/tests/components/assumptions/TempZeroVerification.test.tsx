@@ -56,6 +56,14 @@ const mockReport: TempZeroVerificationReportQueryResult = {
         fingerprintDriftPct: 12.35,
         decisionMatchRatePct: 99.94,
       },
+      {
+        modelId: 'anthropic:claude-sonnet-4',
+        transcriptCount: 3,
+        adapterModes: [],
+        promptHashStabilityPct: null,
+        fingerprintDriftPct: null,
+        decisionMatchRatePct: null,
+      },
     ],
   },
 };
@@ -108,7 +116,7 @@ describe('TempZeroVerification', () => {
     expect(await screen.findByText('Failed to load verification report')).toBeInTheDocument();
   });
 
-  it('renders only complete model rows and inverts fingerprint stability immediately', async () => {
+  it('renders all model rows and shows n/a for missing verification metadata', async () => {
     renderComponent({
       data: mockReport,
       fetching: false,
@@ -123,7 +131,10 @@ describe('TempZeroVerification', () => {
     expect(screen.getByText('88.8%')).toBeInTheDocument();
     expect(screen.getByText('87.7%')).toBeInTheDocument();
     expect(screen.getByText('99.9%')).toBeInTheDocument();
-    expect(screen.queryByText('anthropic:claude-sonnet-4')).not.toBeInTheDocument();
-    expect(screen.queryByText('n/a')).not.toBeInTheDocument();
+    expect(screen.getByText('anthropic:claude-sonnet-4')).toBeInTheDocument();
+    expect(screen.getAllByText('n/a').length).toBeGreaterThanOrEqual(4);
+    expect(
+      screen.getByText(/All models in the latest batch are shown\./)
+    ).toBeInTheDocument();
   });
 });
