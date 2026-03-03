@@ -38,6 +38,7 @@ export type TempZeroSummary = {
   differenceRate: number | null;
   comparisons: number;
   excludedComparisons: number;
+  batchesRun: number;
   modelsTested: number;
   vignettesTested: number;
   worstModelId: string | null;
@@ -133,6 +134,7 @@ export const ASSUMPTIONS_TEMP_ZERO_QUERY = gql`
         differenceRate
         comparisons
         excludedComparisons
+        batchesRun
         modelsTested
         vignettesTested
         worstModelId
