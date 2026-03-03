@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'urql';
@@ -45,7 +46,7 @@ const mockReport: TempZeroVerificationReportQueryResult = {
   tempZeroVerificationReport: {
     generatedAt: '2026-03-02T18:00:00Z',
     transcriptCount: 8,
-    daysLookedBack: 30,
+    batchTimestamp: '2026-03-02T18:00:00Z',
     models: [
       {
         modelId: 'openai:gpt-4o',
@@ -55,20 +56,12 @@ const mockReport: TempZeroVerificationReportQueryResult = {
         fingerprintDriftPct: 12.35,
         decisionMatchRatePct: 99.94,
       },
-      {
-        modelId: 'anthropic:claude-sonnet-4',
-        transcriptCount: 3,
-        adapterModes: [],
-        promptHashStabilityPct: null,
-        fingerprintDriftPct: null,
-        decisionMatchRatePct: null,
-      },
     ],
   },
 };
 
 describe('TempZeroVerification', () => {
-  it('renders the initial paused state without fetching data', () => {
+  it('automatically fetches and renders the report on mount', async () => {
     const { client } = renderComponent({
       data: mockReport,
       fetching: false,
@@ -76,32 +69,14 @@ describe('TempZeroVerification', () => {
     });
 
     expect(screen.getByRole('heading', { name: 'Temp=0 Verification Report' })).toBeInTheDocument();
-    expect(screen.getByText('Generate a per-model stability report from recent temp=0 transcripts.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Generate Verification Report' })).toBeInTheDocument();
-    expect(screen.queryByText('openai:gpt-4o')).not.toBeInTheDocument();
-    expect(client.executeQuery).not.toHaveBeenCalled();
-  });
-
-  it('fetches when the button is clicked and switches to refresh mode', async () => {
-    const { client, user } = renderComponent({
-      data: mockReport,
-      fetching: false,
-      error: null,
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Generate Verification Report' }));
 
     await waitFor(() => {
       expect(client.executeQuery).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
-
-    const operation = client.executeQuery.mock.calls[0]?.[0] as {
-      variables: { days: number };
-    };
-
-    expect(operation.variables).toEqual({ days: 30 });
+    // Verify no arguments are passed to the query
+    const operation = client.executeQuery.mock.calls[0]?.[0] as unknown as { variables: Record<string, never> };
+    expect(operation.variables).toEqual({});
   });
 
   it('renders the loading state while the report is fetching', async () => {
@@ -121,40 +96,34 @@ describe('TempZeroVerification', () => {
       </Provider>
     );
 
-    await user.click(screen.getByRole('button', { name: 'Generate Verification Report' }));
-
     expect(await screen.findByText('Loading...')).toBeInTheDocument();
   });
 
   it('renders an error message when the query fails', async () => {
-    const { user } = renderComponent({
+    renderComponent({
       fetching: false,
       error: { message: 'Failed to load verification report' },
     });
 
-    await user.click(screen.getByRole('button', { name: 'Generate Verification Report' }));
-
     expect(await screen.findByText('Failed to load verification report')).toBeInTheDocument();
   });
 
-  it('renders rounded percentages, n/a fallbacks, and inverted fingerprint stability', async () => {
-    const { user } = renderComponent({
+  it('renders only complete model rows and inverts fingerprint stability immediately', async () => {
+    renderComponent({
       data: mockReport,
       fetching: false,
       error: null,
     });
 
-    await user.click(screen.getByRole('button', { name: 'Generate Verification Report' }));
-
     expect(await screen.findByText('openai:gpt-4o')).toBeInTheDocument();
     expect(
-      screen.getByText('Per-model stability metrics from the last 30 days of temp=0 transcripts. 8 transcripts analyzed.')
+      screen.getByText('Per-model stability metrics from the most recent temp=0 execution batch. 8 transcripts analyzed.')
     ).toBeInTheDocument();
     expect(screen.getByText('chat, responses')).toBeInTheDocument();
     expect(screen.getByText('88.8%')).toBeInTheDocument();
     expect(screen.getByText('87.7%')).toBeInTheDocument();
     expect(screen.getByText('99.9%')).toBeInTheDocument();
-    expect(screen.getByText('anthropic:claude-sonnet-4')).toBeInTheDocument();
-    expect(screen.getAllByText('n/a')).toHaveLength(4);
+    expect(screen.queryByText('anthropic:claude-sonnet-4')).not.toBeInTheDocument();
+    expect(screen.queryByText('n/a')).not.toBeInTheDocument();
   });
 });

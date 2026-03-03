@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
-import html2canvas from 'html2canvas';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation } from 'urql';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import {
   TEMP_ZERO_VERIFICATION_REPORT_QUERY,
   type TempZeroVerificationReportQueryResult,
@@ -26,9 +26,6 @@ function formatFingerprintStablePercent(driftPct: number | null): string {
 }
 
 export function TempZeroVerification() {
-  const [fetchCount, setFetchCount] = useState(0);
-  const [days, setDays] = useState(30);
-  const [copied, setCopied] = useState(false);
   const [launchFeedback, setLaunchFeedback] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const [launchResult, executeLaunch] = useMutation<LaunchAssumptionsTempZeroResult, LaunchAssumptionsTempZeroVariables>(
@@ -47,44 +44,23 @@ export function TempZeroVerification() {
       setLaunchFeedback('Launch returned no data.');
       return;
     }
-    setLaunchFeedback(
-      `Started ${payload.startedRuns} run(s) across ${payload.totalVignettes} vignettes using ${payload.modelCount} model(s). Refresh the report once runs complete.`,
-    );
-  };
-
-  const copyAsImage = async () => {
-    if (tableRef.current == null) return;
-    if (
-      typeof navigator === 'undefined'
-      || navigator.clipboard == null
-      || typeof navigator.clipboard.write !== 'function'
-      || typeof ClipboardItem === 'undefined'
-    ) {
-      setLaunchFeedback('Copy as image is not supported in this browser.');
+    if (payload.startedRuns === 0) {
+      setLaunchFeedback(
+        `No new runs were started. The current batch already covers ${payload.totalVignettes} vignettes across ${payload.modelCount} models.`,
+      );
       return;
     }
 
-    const canvas = await html2canvas(tableRef.current, { scale: 2 });
-    canvas.toBlob((blob) => {
-      if (blob == null) return;
-      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => { setCopied(false); }, 2000);
-        })
-        .catch(() => {
-          setLaunchFeedback('Failed to copy image — clipboard access may be blocked.');
-        });
-    });
+    setLaunchFeedback(
+      `Started ${payload.startedRuns} temp=0 verification runs. These runs cover ${payload.totalVignettes} vignettes across ${payload.modelCount} models. Refresh the report after the runs finish.`,
+    );
   };
   const [{ data, fetching, error }] = useQuery<
     TempZeroVerificationReportQueryResult,
     TempZeroVerificationReportQueryVariables
   >({
     query: TEMP_ZERO_VERIFICATION_REPORT_QUERY,
-    variables: { days },
-    pause: fetchCount === 0,
-    requestPolicy: 'network-only',
+    requestPolicy: 'cache-and-network',
   });
 
   const report = data?.tempZeroVerificationReport;
@@ -96,7 +72,7 @@ export function TempZeroVerification() {
           <h2 className="text-sm font-semibold text-gray-900">Temp=0 Verification Report</h2>
           {report ? (
             <p className="mt-1 text-sm text-gray-600">
-              Per-model stability metrics from the last {report.daysLookedBack} days of temp=0 transcripts. {report.transcriptCount} transcripts analyzed.
+              Per-model stability metrics from the most recent temp=0 execution batch. {report.transcriptCount} transcripts analyzed.
             </p>
           ) : (
             <p className="mt-1 text-sm text-gray-600">
@@ -107,24 +83,6 @@ export function TempZeroVerification() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Button type="button" onClick={() => { void handleRerun(); }} disabled={launchResult.fetching}>
             {launchResult.fetching ? 'Re-running...' : 'Re-run Vignettes'}
-          </Button>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <span>Days</span>
-            <select
-              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-              value={days}
-              onChange={(event) => setDays(Number(event.target.value))}
-              disabled={fetching}
-            >
-              {[7, 14, 30, 90].map((option) => (
-                <option key={option} value={option}>
-                  {option} days
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button type="button" onClick={() => setFetchCount((c) => c + 1)} disabled={fetching}>
-            {fetchCount === 0 ? 'Generate Verification Report' : 'Refresh'}
           </Button>
         </div>
       </div>
@@ -145,40 +103,38 @@ export function TempZeroVerification() {
         </div>
       )}
 
-      {report && !fetching && !error && (
-        <div className="mt-5 overflow-x-auto">
+      {report && !error && (
+        <div className="mt-5 overflow-x-auto relative">
           <div className="mb-2 flex justify-end">
-            <Button type="button" onClick={() => { void copyAsImage(); }}>
-              {copied ? 'Copied!' : 'Copy as Image'}
-            </Button>
+            <CopyVisualButton targetRef={tableRef} label="Temp=0 Report" />
           </div>
           <div ref={tableRef} className="inline-block bg-white p-3">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Transcripts</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Adapter Mode</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Prompt Hash Stable</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Fingerprint Stable</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">Decision Match</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {report.models.map((model) => (
-                <tr key={model.modelId}>
-                  <td className="px-3 py-3 font-medium text-gray-900">{model.modelId}</td>
-                  <td className="px-3 py-3 text-gray-700">{model.transcriptCount}</td>
-                  <td className="px-3 py-3 text-gray-700">
-                    {model.adapterModes.length > 0 ? model.adapterModes.join(', ') : 'n/a'}
-                  </td>
-                  <td className="px-3 py-3 text-gray-700">{formatPercent(model.promptHashStabilityPct)}</td>
-                  <td className="px-3 py-3 text-gray-700">{formatFingerprintStablePercent(model.fingerprintDriftPct)}</td>
-                  <td className="px-3 py-3 text-gray-700">{formatPercent(model.decisionMatchRatePct)}</td>
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Transcripts</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Adapter Mode</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Prompt Hash Stable</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Fingerprint Stable</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-600">Decision Match</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {report.models.map((model) => (
+                  <tr key={model.modelId}>
+                    <td className="px-3 py-3 font-medium text-gray-900">{model.modelId}</td>
+                    <td className="px-3 py-3 text-gray-700">{model.transcriptCount}</td>
+                    <td className="px-3 py-3 text-gray-700">
+                      {model.adapterModes.length > 0 ? model.adapterModes.join(', ') : 'n/a'}
+                    </td>
+                    <td className="px-3 py-3 text-gray-700">{formatPercent(model.promptHashStabilityPct)}</td>
+                    <td className="px-3 py-3 text-gray-700">{formatFingerprintStablePercent(model.fingerprintDriftPct)}</td>
+                    <td className="px-3 py-3 text-gray-700">{formatPercent(model.decisionMatchRatePct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
