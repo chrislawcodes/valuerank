@@ -44,11 +44,17 @@ export function TempZeroVerification() {
       setLaunchFeedback('Launch returned no data.');
       return;
     }
+    if (payload.startedRuns === 0) {
+      setLaunchFeedback(
+        `No new runs were started. The current batch already covers ${payload.totalVignettes} vignettes across ${payload.modelCount} models.`,
+      );
+      return;
+    }
+
     setLaunchFeedback(
-      `Started ${payload.startedRuns} run(s) across ${payload.totalVignettes} vignettes using ${payload.modelCount} model(s). Refresh the report once runs complete.`,
+      `Started ${payload.startedRuns} temp=0 verification runs. These runs cover ${payload.totalVignettes} vignettes across ${payload.modelCount} models. Refresh the report after the runs finish.`,
     );
   };
-
   const [{ data, fetching, error }] = useQuery<
     TempZeroVerificationReportQueryResult,
     TempZeroVerificationReportQueryVariables
