@@ -8,6 +8,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from 'urql';
 import { BarChart2, RefreshCw, Clock3 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
@@ -19,6 +20,12 @@ import {
   type AnalysisFilterState,
 } from '../components/analysis';
 import { useInfiniteRunsWithAnalysis } from '../hooks/useInfiniteRunsWithAnalysis';
+import {
+  ANALYSIS_FOLDER_COUNTS_QUERY,
+  type AnalysisFolderCountOverrides,
+  type AnalysisFolderCountsQueryResult,
+  type AnalysisFolderCountsQueryVariables,
+} from '../api/operations/runs';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -29,6 +36,13 @@ const defaultFilters: AnalysisFilterState = {
 export function Analysis() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<AnalysisFilterState>(defaultFilters);
+  const folderCountVariables = useMemo<AnalysisFolderCountsQueryVariables>(
+    () => ({
+      analysisStatus: filters.analysisStatus || undefined,
+      definitionTagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
+    }),
+    [filters.analysisStatus, filters.tagIds]
+  );
 
   // Use infinite scroll hook for efficient data loading
   const {
@@ -44,6 +58,27 @@ export function Analysis() {
   } = useInfiniteRunsWithAnalysis({
     analysisStatus: filters.analysisStatus || undefined,
   });
+
+  const [folderCountsResult] = useQuery<AnalysisFolderCountsQueryResult, AnalysisFolderCountsQueryVariables>({
+    query: ANALYSIS_FOLDER_COUNTS_QUERY,
+    variables: folderCountVariables,
+    requestPolicy: 'cache-and-network',
+  });
+
+  const folderCounts = useMemo<AnalysisFolderCountOverrides | undefined>(() => {
+    const data = folderCountsResult.data?.analysisFolderCounts;
+    if (!data) {
+      return undefined;
+    }
+
+    return {
+      aggregateCount: data.aggregateCount,
+      untaggedCount: data.untaggedCount,
+      aggregateUntaggedCount: data.aggregateUntaggedCount,
+      tagCounts: Object.fromEntries(data.tagCounts.map((tag) => [tag.tagId, tag.count])),
+      aggregateTagCounts: Object.fromEntries(data.aggregateTagCounts.map((tag) => [tag.tagId, tag.count])),
+    };
+  }, [folderCountsResult.data]);
 
   const inProgressAnalysisRuns = useMemo(
     () => runs
@@ -62,6 +97,17 @@ export function Analysis() {
 
     return () => window.clearInterval(interval);
   }, [softRefetch, inProgressAnalysisRuns.length]);
+
+  useEffect(() => {
+    if (filters.viewMode !== 'folder') {
+      return;
+    }
+    if (loading || loadingMore || !hasNextPage) {
+      return;
+    }
+
+    loadMore();
+  }, [filters.viewMode, hasNextPage, loadMore, loading, loadingMore]);
 
   // Filter runs by selected tags (client-side filtering)
   const filteredRuns = useMemo(() => {
@@ -145,6 +191,7 @@ export function Analysis() {
         ) : filters.viewMode === 'folder' ? (
           <VirtualizedAnalysisFolderView
             runs={filteredRuns}
+            folderCounts={folderCounts}
             onRunClick={handleAnalysisClick}
             hasNextPage={hasNextPage}
             loadingMore={loadingMore}

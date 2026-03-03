@@ -4,6 +4,7 @@ export type RunTypeFilter = 'ALL' | 'SURVEY' | 'NON_SURVEY';
 
 export type RunQueryFilters = {
   definitionId?: string | null;
+  definitionTagIds?: string[] | null;
   experimentId?: string | null;
   status?: RunStatus;
   hasAnalysis?: boolean | null;
@@ -68,9 +69,24 @@ export async function buildRunWhere(filters: RunQueryFilters): Promise<ResolvedR
   const where: Prisma.RunWhereInput = {
     deletedAt: null,
   };
+  const definitionWhere: Prisma.DefinitionWhereInput = {};
+  let hasDefinitionFilter = false;
 
   if (filters.definitionId !== undefined && filters.definitionId !== null && filters.definitionId !== '') {
     where.definitionId = filters.definitionId;
+  }
+
+  const definitionTagIds = filters.definitionTagIds ?? undefined;
+  if ((definitionTagIds?.length ?? 0) > 0) {
+    definitionWhere.tags = {
+      some: {
+        deletedAt: null,
+        tagId: {
+          in: definitionTagIds,
+        },
+      },
+    };
+    hasDefinitionFilter = true;
   }
 
   if (filters.experimentId !== undefined && filters.experimentId !== null && filters.experimentId !== '') {
@@ -83,22 +99,22 @@ export async function buildRunWhere(filters: RunQueryFilters): Promise<ResolvedR
 
   const runType = filters.runType ?? 'ALL';
   if (runType === 'SURVEY') {
-    where.definition = {
-      is: {
-        name: {
-          startsWith: '[Survey]',
-        },
+    definitionWhere.name = {
+      startsWith: '[Survey]',
+    };
+    hasDefinitionFilter = true;
+  } else if (runType === 'NON_SURVEY') {
+    definitionWhere.name = {
+      not: {
+        startsWith: '[Survey]',
       },
     };
-  } else if (runType === 'NON_SURVEY') {
+    hasDefinitionFilter = true;
+  }
+
+  if (hasDefinitionFilter) {
     where.definition = {
-      is: {
-        name: {
-          not: {
-            startsWith: '[Survey]',
-          },
-        },
-      },
+      is: definitionWhere,
     };
   }
 
