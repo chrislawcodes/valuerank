@@ -108,7 +108,7 @@ describe('list_runs tool', () => {
 
     expect(db.run.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { deletedAt: null },
+        where: { deletedAt: null, tags: { none: { tag: { name: 'assumption-run' } } } },
         orderBy: { createdAt: 'desc' },
         take: 20,
         skip: 0,
@@ -132,6 +132,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           definitionId: 'def-123',
         },
       })
@@ -147,6 +148,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           status: 'COMPLETED',
         },
       })
@@ -162,6 +164,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           status: 'RUNNING',
         },
       })
@@ -177,6 +180,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           status: 'PENDING',
         },
       })
@@ -192,6 +196,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           status: 'FAILED',
         },
       })
@@ -239,6 +244,7 @@ describe('list_runs tool', () => {
       expect.objectContaining({
         where: {
           deletedAt: null,
+          tags: { none: { tag: { name: 'assumption-run' } } },
           definitionId: 'def-123',
           status: 'COMPLETED',
         },

@@ -245,7 +245,7 @@ type SelectedTranscriptRow = {
   decisions: TempZeroDecision[];
 };
 
-export function DomainAssumptions() {
+export function TempZeroEffectAssumptions() {
   const [directionOnly, setDirectionOnly] = useState(false);
   const [{ data, fetching, error }, reexecuteTempZeroQuery] = useQuery<AssumptionsTempZeroQueryResult, AssumptionsTempZeroQueryVariables>({
     query: ASSUMPTIONS_TEMP_ZERO_QUERY,
@@ -326,9 +326,9 @@ export function DomainAssumptions() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Assumptions</h1>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Temp=0 Effect</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Validate whether the current value-prioritization outputs are reliable enough to trust.
+          Check how much repeat drift remains when the same value-prioritization prompt is run again at temperature zero.
         </p>
       </div>
 
@@ -343,7 +343,7 @@ export function DomainAssumptions() {
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">{result.preflight.title}</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Locked professional-domain vignette package for `#285`. This run always uses the same 5 vignettes with all 25 conditions each.
+                  Locked professional-domain vignette package. This run always uses the same 5 vignettes with all 25 conditions each.
                 </p>
                 <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-mono text-gray-700">
                   Trial Signature: {getDisplaySignature(result.preflight.selectedSignature)}
@@ -723,19 +723,6 @@ export function DomainAssumptions() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-dashed border-gray-300 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-900">`#286` Order invariance</h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Placeholder for the flipped-order comparison. This chunk only implements `#285`.
-            </p>
-          </section>
-
-          <section className="rounded-lg border border-dashed border-gray-300 bg-white p-5">
-            <h2 className="text-sm font-semibold text-gray-900">`#287` Job-title invariance</h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Placeholder for the generic-title rewrite comparison. This chunk only implements `#285`.
-            </p>
-          </section>
           {/* Hidden intentionally: temp=0 has been verified as inconsistent, so this report is no longer surfaced. */}
         </>
       )}
