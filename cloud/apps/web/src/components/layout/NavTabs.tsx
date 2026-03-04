@@ -19,6 +19,7 @@ const vignetteMenuItems = [
 const domainMenuItems = [
   { name: 'List', path: '/domains' },
   { name: 'Analysis', path: '/domains/analysis' },
+  { name: 'Coverage', path: '/domains/coverage' },
 ];
 
 const assumptionsMenuItems = [
@@ -77,13 +78,13 @@ export function NavTabs() {
 
   const handleMenuBlur =
     (menuRef: RefObject<HTMLDivElement>, setOpen: (value: boolean) => void) =>
-    (event: FocusEvent<HTMLDivElement>) => {
-      const nextFocused = event.relatedTarget as Node | null;
-      if (menuRef.current && nextFocused && menuRef.current.contains(nextFocused)) {
-        return;
-      }
-      setOpen(false);
-    };
+      (event: FocusEvent<HTMLDivElement>) => {
+        const nextFocused = event.relatedTarget as Node | null;
+        if (menuRef.current && nextFocused && menuRef.current.contains(nextFocused)) {
+          return;
+        }
+        setOpen(false);
+      };
 
   return (
     // Hidden on mobile (< 640px), visible on tablet/desktop

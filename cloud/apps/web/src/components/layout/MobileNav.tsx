@@ -14,6 +14,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Domains', path: '/domains', icon: FolderTree },
+  { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
   { name: 'Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
   { name: 'Trials', path: '/runs', icon: Play },
   { name: 'Analysis', path: '/analysis', icon: BarChart2 },
@@ -77,8 +78,15 @@ export function MobileNav({ className }: MobileNavProps) {
   }, [isOpen]);
 
   // Check if the current path matches or is a child of the nav path
-  const isNavActive = (navPath: string) => {
-    return location.pathname === navPath || location.pathname.startsWith(`${navPath}/`);
+  const isNavActive = (item: NavItem) => {
+    const hasNestedChildren = !item.isNested
+      && navItems.some((candidate) => candidate.isNested && candidate.path.startsWith(`${item.path}/`));
+
+    if (hasNestedChildren) {
+      return location.pathname === item.path;
+    }
+
+    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
   };
 
   return (
@@ -133,7 +141,7 @@ export function MobileNav({ className }: MobileNavProps) {
         <div className="py-4">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = isNavActive(item.path);
+            const isActive = isNavActive(item);
             return (
               <NavLink
                 key={item.path}
