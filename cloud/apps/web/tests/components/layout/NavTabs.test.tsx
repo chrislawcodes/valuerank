@@ -16,7 +16,7 @@ describe('NavTabs Component', () => {
     renderNavTabs();
     expect(screen.getByRole('link', { name: /vignettes/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /trials/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^survey$/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^survey$/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /survey results/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
   });
@@ -25,7 +25,9 @@ describe('NavTabs Component', () => {
     renderNavTabs();
     expect(screen.getByRole('link', { name: /vignettes/i })).toHaveAttribute('href', '/definitions');
     expect(screen.getByRole('link', { name: /trials/i })).toHaveAttribute('href', '/runs');
-    expect(screen.getByRole('link', { name: /^survey$/i })).toHaveAttribute('href', '/survey');
+    expect(
+      screen.getAllByRole('link', { name: /^survey$/i }).every((link) => link.getAttribute('href') === '/survey')
+    ).toBe(true);
     expect(screen.getByRole('link', { name: /survey results/i })).toHaveAttribute('href', '/survey-results');
     expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
   });

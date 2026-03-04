@@ -6,9 +6,6 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 
 const tabs = [
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Survey', path: '/survey', icon: ClipboardList },
-  { name: 'Survey Results', path: '/survey-results', icon: ClipboardList },
-  { name: 'Assumptions', path: '/assumptions', icon: ShieldCheck },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -24,12 +21,26 @@ const domainMenuItems = [
   { name: 'Analysis', path: '/domains/analysis' },
 ];
 
+const assumptionsMenuItems = [
+  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
+  { name: 'Order Effect', path: '/assumptions/order-effect' },
+];
+
+const surveyMenuItems = [
+  { name: 'Survey', path: '/survey' },
+  { name: 'Survey Results', path: '/survey-results' },
+];
+
 export function NavTabs() {
   const location = useLocation();
   const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+  const [isAssumptionsMenuOpen, setIsAssumptionsMenuOpen] = useState(false);
+  const [isSurveyMenuOpen, setIsSurveyMenuOpen] = useState(false);
   const vignetteMenuRef = useRef<HTMLDivElement>(null);
   const domainMenuRef = useRef<HTMLDivElement>(null);
+  const assumptionsMenuRef = useRef<HTMLDivElement>(null);
+  const surveyMenuRef = useRef<HTMLDivElement>(null);
 
   // Check if the current path matches or is a child of the tab path
   const isTabActive = (tabPath: string) => {
@@ -37,10 +48,14 @@ export function NavTabs() {
   };
   const isVignettesActive = vignetteMenuItems.some((item) => isTabActive(item.path));
   const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path));
+  const isAssumptionsActive = assumptionsMenuItems.some((item) => isTabActive(item.path));
+  const isSurveyActive = surveyMenuItems.some((item) => isTabActive(item.path));
 
   useEffect(() => {
     setIsVignettesMenuOpen(false);
     setIsDomainsMenuOpen(false);
+    setIsAssumptionsMenuOpen(false);
+    setIsSurveyMenuOpen(false);
   }, [location.pathname]);
 
   useClickOutside(domainMenuRef, () => {
@@ -49,6 +64,12 @@ export function NavTabs() {
   useClickOutside(vignetteMenuRef, () => {
     if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
   }, isVignettesMenuOpen);
+  useClickOutside(assumptionsMenuRef, () => {
+    if (isAssumptionsMenuOpen) setIsAssumptionsMenuOpen(false);
+  }, isAssumptionsMenuOpen);
+  useClickOutside(surveyMenuRef, () => {
+    if (isSurveyMenuOpen) setIsSurveyMenuOpen(false);
+  }, isSurveyMenuOpen);
 
   const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
     setOpen(true);
@@ -69,6 +90,56 @@ export function NavTabs() {
     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex gap-1">
+          <div
+            ref={vignetteMenuRef}
+            className="relative group"
+            onMouseEnter={() => setIsVignettesMenuOpen(true)}
+            onMouseLeave={() => setIsVignettesMenuOpen(false)}
+            onFocus={handleMenuFocus(setIsVignettesMenuOpen)}
+            onBlur={handleMenuBlur(vignetteMenuRef, setIsVignettesMenuOpen)}
+          >
+            <div
+              className={
+                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isVignettesActive
+                  ? 'text-white border-teal-500'
+                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+                }`
+              }
+            >
+              <NavLink to="/definitions" className="flex items-center gap-2 px-3 py-3">
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Vignettes</span>
+              </NavLink>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Toggle Vignettes menu"
+                aria-haspopup="menu"
+                aria-expanded={isVignettesMenuOpen}
+                onClick={() => setIsVignettesMenuOpen((prev) => !prev)}
+                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isVignettesMenuOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
+            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isVignettesMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+                {vignetteMenuItems.map((item) => {
+                  const isActive = isTabActive(item.path);
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+                    >
+                      {item.name}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           <div
             ref={domainMenuRef}
             className="relative group"
@@ -120,41 +191,91 @@ export function NavTabs() {
             </div>
           </div>
           <div
-            ref={vignetteMenuRef}
+            ref={assumptionsMenuRef}
             className="relative group"
-            onMouseEnter={() => setIsVignettesMenuOpen(true)}
-            onMouseLeave={() => setIsVignettesMenuOpen(false)}
-            onFocus={handleMenuFocus(setIsVignettesMenuOpen)}
-            onBlur={handleMenuBlur(vignetteMenuRef, setIsVignettesMenuOpen)}
+            onMouseEnter={() => setIsAssumptionsMenuOpen(true)}
+            onMouseLeave={() => setIsAssumptionsMenuOpen(false)}
+            onFocus={handleMenuFocus(setIsAssumptionsMenuOpen)}
+            onBlur={handleMenuBlur(assumptionsMenuRef, setIsAssumptionsMenuOpen)}
           >
             <div
               className={
-                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isVignettesActive
+                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isAssumptionsActive
                   ? 'text-white border-teal-500'
                   : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
                 }`
               }
             >
-              <NavLink to="/definitions" className="flex items-center gap-2 px-3 py-3">
-                <FileText className="w-4 h-4" />
-                <span className="hidden sm:inline">Vignettes</span>
+              <NavLink to="/assumptions/temp-zero-effect" className="flex items-center gap-2 px-3 py-3">
+                <ShieldCheck className="w-4 h-4" />
+                <span className="hidden sm:inline">Assumptions</span>
               </NavLink>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label="Toggle Vignettes menu"
+                aria-label="Toggle Assumptions menu"
                 aria-haspopup="menu"
-                aria-expanded={isVignettesMenuOpen}
-                onClick={() => setIsVignettesMenuOpen((prev) => !prev)}
+                aria-expanded={isAssumptionsMenuOpen}
+                onClick={() => setIsAssumptionsMenuOpen((prev) => !prev)}
                 className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
               >
-                <ChevronDown className={`w-4 h-4 transition-transform ${isVignettesMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${isAssumptionsMenuOpen ? 'rotate-180' : ''}`} />
               </Button>
             </div>
-            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isVignettesMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isAssumptionsMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
               <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
-                {vignetteMenuItems.map((item) => {
+                {assumptionsMenuItems.map((item) => {
+                  const isActive = isTabActive(item.path);
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+                    >
+                      {item.name}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div
+            ref={surveyMenuRef}
+            className="relative group"
+            onMouseEnter={() => setIsSurveyMenuOpen(true)}
+            onMouseLeave={() => setIsSurveyMenuOpen(false)}
+            onFocus={handleMenuFocus(setIsSurveyMenuOpen)}
+            onBlur={handleMenuBlur(surveyMenuRef, setIsSurveyMenuOpen)}
+          >
+            <div
+              className={
+                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isSurveyActive
+                  ? 'text-white border-teal-500'
+                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+                }`
+              }
+            >
+              <NavLink to="/survey" className="flex items-center gap-2 px-3 py-3">
+                <ClipboardList className="w-4 h-4" />
+                <span className="hidden sm:inline">Survey</span>
+              </NavLink>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="Toggle Survey menu"
+                aria-haspopup="menu"
+                aria-expanded={isSurveyMenuOpen}
+                onClick={() => setIsSurveyMenuOpen((prev) => !prev)}
+                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${isSurveyMenuOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
+            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isSurveyMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+                {surveyMenuItems.map((item) => {
                   const isActive = isTabActive(item.path);
                   return (
                     <NavLink

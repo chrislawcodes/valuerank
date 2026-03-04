@@ -10,6 +10,12 @@ export type RunQueryFilters = {
   hasAnalysis?: boolean | null;
   analysisStatus?: AnalysisStatus;
   runType?: RunTypeFilter;
+  /**
+   * When true (the default), runs tagged with an `assumptionKey` in their
+   * config JSON are excluded from results. Set to false only when querying
+   * from assumption-specific resolvers that explicitly need these runs.
+   */
+  excludeAssumptionRuns?: boolean;
 };
 
 type ResolvedRunWhere = {
@@ -66,8 +72,27 @@ async function getRunIdsWithAnalysis(analysisStatus?: AnalysisStatus): Promise<s
 }
 
 export async function buildRunWhere(filters: RunQueryFilters): Promise<ResolvedRunWhere> {
+  // Exclude assumption runs by default — they are set up differently and
+  // must not appear in general analysis, domain analysis, transcript views,
+  // or folder counts unless explicitly opted in.
+  const excludeAssumptionRuns = filters.excludeAssumptionRuns !== false;
+
   const where: Prisma.RunWhereInput = {
     deletedAt: null,
+    // Exclude runs tagged with the reserved 'assumption-run' system tag by default.
+    // These runs use different scenario setups and must not appear in general
+    // analysis, domain analysis, transcript views, or folder counts.
+    ...(excludeAssumptionRuns
+      ? {
+        tags: {
+          none: {
+            tag: {
+              name: 'assumption-run',
+            },
+          },
+        },
+      }
+      : {}),
   };
   const definitionWhere: Prisma.DefinitionWhereInput = {};
   let hasDefinitionFilter = false;

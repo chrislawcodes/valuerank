@@ -12,6 +12,8 @@ export type {
   RunStatus,
   Transcript,
   Scenario,
+  AssumptionVignetteSelection,
+  AssumptionScenarioPair,
   RunScenarioSelection,
   Experiment,
   RunComparison,

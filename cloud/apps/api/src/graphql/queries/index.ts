@@ -17,4 +17,5 @@ import './final-trial-plan.js';
 import './survey.js';
 import './domain.js';
 import './assumptions.js';
+import './order-invariance.js';
 import './temp-zero-verification.js';

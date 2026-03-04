@@ -122,6 +122,7 @@ model Definition {
   runs      Run[]
   scenarios Scenario[]
   tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
 
   // Audit relations
   createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
@@ -326,16 +327,54 @@ model Scenario {
   definitionId String    @map("definition_id")
   name         String
   content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
   createdAt    DateTime  @default(now()) @map("created_at")
   deletedAt    DateTime? @map("deleted_at")
 
-  definition  Definition   @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
   transcripts Transcript[]
   runSelections RunScenarioSelection[]
-  probeResults  ProbeResult[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
 
   @@index([definitionId])
   @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
 }
 
 // Join table to track which scenarios were sampled for a run
