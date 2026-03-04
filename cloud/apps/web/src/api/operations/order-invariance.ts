@@ -46,19 +46,20 @@ export type OrderInvarianceResult = {
 };
 
 export type OrderInvarianceReviewSummary = {
-  totalPairs: number;
-  reviewedPairs: number;
-  approvedPairs: number;
-  rejectedPairs: number;
-  pendingPairs: number;
+  totalVignettes: number;
+  reviewedVignettes: number;
+  approvedVignettes: number;
+  rejectedVignettes: number;
+  pendingVignettes: number;
   launchReady: boolean;
 };
 
-export type OrderInvarianceReviewPair = {
+export type OrderInvarianceReviewVignette = {
   pairId: string;
   vignetteId: string;
   vignetteTitle: string;
   conditionKey: string;
+  conditionPairCount: number;
   sourceScenarioId: string;
   variantScenarioId: string;
   baselineName: string;
@@ -74,7 +75,7 @@ export type OrderInvarianceReviewPair = {
 export type OrderInvarianceReviewResult = {
   generatedAt: string;
   summary: OrderInvarianceReviewSummary;
-  pairs: OrderInvarianceReviewPair[];
+  vignettes: OrderInvarianceReviewVignette[];
 };
 
 export type OrderInvarianceQueryResult = {
@@ -160,18 +161,19 @@ export const ORDER_INVARIANCE_REVIEW_QUERY = gql`
     assumptionsOrderInvarianceReview {
       generatedAt
       summary {
-        totalPairs
-        reviewedPairs
-        approvedPairs
-        rejectedPairs
-        pendingPairs
+        totalVignettes
+        reviewedVignettes
+        approvedVignettes
+        rejectedVignettes
+        pendingVignettes
         launchReady
       }
-      pairs {
+      vignettes {
         pairId
         vignetteId
         vignetteTitle
         conditionKey
+        conditionPairCount
         sourceScenarioId
         variantScenarioId
         baselineName
