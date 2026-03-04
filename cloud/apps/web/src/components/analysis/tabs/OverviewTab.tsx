@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
-import type { VisualizationData } from '../../../api/operations/analysis';
+import type { VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
 import {
@@ -20,6 +20,7 @@ type OverviewTabProps = {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
+  varianceAnalysis?: VarianceAnalysis | null;
   dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
 };
@@ -55,16 +56,73 @@ function getScoreTextColor(value: number): string {
   return 'text-gray-700';
 }
 
+function calculateMeanAndSem(values: number[]): ConditionStats | null {
+  if (values.length === 0) return null;
+
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (values.length < 2) return { mean, sem: null };
+
+  const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
+  const stdDev = Math.sqrt(variance);
+  const sem = stdDev / Math.sqrt(values.length);
+  return { mean, sem };
+}
+
+function calculateConditionStatsFromVariance(
+  modelId: string,
+  scenarioIds: string[],
+  varianceAnalysis?: VarianceAnalysis | null
+): ConditionStats | null {
+  if (!varianceAnalysis) return null;
+
+  const modelStats = varianceAnalysis.perModel[modelId];
+  if (!modelStats?.perScenario) return null;
+
+  let weightedMeanSum = 0;
+  let totalCount = 0;
+
+  scenarioIds.forEach((scenarioId) => {
+    const scenarioStats = modelStats.perScenario[scenarioId];
+    if (!scenarioStats || scenarioStats.sampleCount < 1) return;
+
+    weightedMeanSum += scenarioStats.mean * scenarioStats.sampleCount;
+    totalCount += scenarioStats.sampleCount;
+  });
+
+  if (totalCount === 0) return null;
+
+  const mean = weightedMeanSum / totalCount;
+  if (totalCount < 2) return { mean, sem: null };
+
+  let sumOfSquares = 0;
+  scenarioIds.forEach((scenarioId) => {
+    const scenarioStats = modelStats.perScenario[scenarioId];
+    if (!scenarioStats || scenarioStats.sampleCount < 1) return;
+
+    if (scenarioStats.sampleCount > 1) {
+      sumOfSquares += (scenarioStats.sampleCount - 1) * scenarioStats.variance;
+    }
+
+    sumOfSquares += scenarioStats.sampleCount * ((scenarioStats.mean - mean) ** 2);
+  });
+
+  const totalVariance = sumOfSquares / (totalCount - 1);
+  const sem = Math.sqrt(totalVariance / totalCount);
+  return { mean, sem };
+}
+
 function ConditionDecisionMatrix({
   runId,
   perModel,
   visualizationData,
+  varianceAnalysis,
   dimensionLabels,
   expectedAttributes = [],
 }: {
   runId: string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
+  varianceAnalysis?: VarianceAnalysis | null;
   dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
 }) {
@@ -135,6 +193,9 @@ function ConditionDecisionMatrix({
 
   const getMeanDecision = useCallback(
     (modelId: string, scenarioIds: string[]): ConditionStats | null => {
+      const varianceStats = calculateConditionStatsFromVariance(modelId, scenarioIds, varianceAnalysis);
+      if (varianceStats) return varianceStats;
+
       const byScenario = modelScenarioMatrix?.[modelId];
       if (!byScenario) return null;
 
@@ -146,17 +207,9 @@ function ConditionDecisionMatrix({
         }
       });
 
-      if (values.length === 0) return null;
-
-      const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-      if (values.length < 2) return { mean, sem: 0 };
-
-      const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
-      const stdDev = Math.sqrt(variance);
-      const sem = stdDev / Math.sqrt(values.length);
-      return { mean, sem };
+      return calculateMeanAndSem(values);
     },
-    [modelScenarioMatrix]
+    [modelScenarioMatrix, varianceAnalysis]
   );
 
   const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
@@ -534,6 +587,7 @@ export function OverviewTab({
   runId,
   perModel,
   visualizationData,
+  varianceAnalysis,
   dimensionLabels,
   expectedAttributes = [],
 }: OverviewTabProps) {
@@ -542,6 +596,7 @@ export function OverviewTab({
       runId={runId}
       perModel={perModel}
       visualizationData={visualizationData}
+      varianceAnalysis={varianceAnalysis}
       dimensionLabels={dimensionLabels}
       expectedAttributes={expectedAttributes}
     />
