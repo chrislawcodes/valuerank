@@ -63,6 +63,7 @@ function CoverageCell({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
+        {/* eslint-disable-next-line react/forbid-elements */}
         <button
           type="button"
           disabled={isDiagonal}
@@ -72,7 +73,7 @@ function CoverageCell({
               : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: ${batchCount} domain trials`
           }
           className={cn(
-            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100',
+            'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-300 cursor-pointer hover:bg-gray-100',
