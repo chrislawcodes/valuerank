@@ -480,6 +480,7 @@ export function AnalysisPanel({
             runId={runId}
             perModel={perModel}
             visualizationData={analysis.visualizationData}
+            varianceAnalysis={analysis.varianceAnalysis}
             dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
           />

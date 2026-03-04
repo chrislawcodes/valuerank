@@ -62,4 +62,73 @@ describe('OverviewTab', () => {
     const aCell = screen.getByText('2').closest('td');
     expect(aCell).toHaveClass('bg-blue-50');
   });
+
+  it('uses variance analysis for SEM when a condition has one scenario with multiple samples', () => {
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          perModel={{
+            model1: {
+              sampleSize: 5,
+              values: {},
+              overall: { mean: 4.2, stdDev: 0.5, min: 4, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+            },
+            modelScenarioMatrix: {
+              model1: {
+                s1: 4.2,
+                s2: 3.4,
+              },
+            },
+          }}
+          varianceAnalysis={{
+            isMultiSample: true,
+            samplesPerScenario: 5,
+            perModel: {
+              model1: {
+                totalSamples: 10,
+                uniqueScenarios: 2,
+                samplesPerScenario: 5,
+                avgWithinScenarioVariance: 0.205,
+                maxWithinScenarioVariance: 0.25,
+                consistencyScore: 0.8,
+                perScenario: {
+                  s1: {
+                    sampleCount: 5,
+                    mean: 4.2,
+                    stdDev: 0.5,
+                    variance: 0.25,
+                    min: 4,
+                    max: 5,
+                    range: 1,
+                  },
+                  s2: {
+                    sampleCount: 5,
+                    mean: 3.4,
+                    stdDev: 0.4,
+                    variance: 0.16,
+                    min: 3,
+                    max: 4,
+                    range: 1,
+                  },
+                },
+              },
+            },
+            mostVariableScenarios: [],
+            leastVariableScenarios: [],
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('SEM 0.22')).toBeInTheDocument();
+    expect(screen.getByText('SEM 0.18')).toBeInTheDocument();
+  });
 });
