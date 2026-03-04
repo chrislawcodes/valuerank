@@ -448,6 +448,20 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
         },
       }) as PairRecord[];
 
+      const expectedSourceScenarios = await db.scenario.findMany({
+        where: {
+          definitionId: { in: Array.from(lockedById.keys()) },
+          deletedAt: null,
+          orientationFlipped: false,
+        },
+        select: {
+          id: true,
+          definitionId: true,
+        },
+      });
+      const expectedPairCount = expectedSourceScenarios.length;
+      const expectedDefinitionIds = new Set(expectedSourceScenarios.map((scenario) => scenario.definitionId));
+
       const groupedPairs = new Map<string, PairRecord[]>();
 
       for (const pair of pairRows) {
@@ -505,6 +519,12 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
       const rejectedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'REJECTED').length;
       const reviewedVignettes = vignettes.filter((vignette) => vignette.reviewedAt != null).length;
       const totalVignettes = vignettes.length;
+      const hasCompleteGeneratedSet = pairRows.length === expectedPairCount
+        && totalVignettes === expectedDefinitionIds.size
+        && expectedDefinitionIds.size === lockedById.size
+        && Array.from(groupedPairs.entries()).every(([definitionId, definitionPairs]) => (
+          definitionPairs.length === expectedSourceScenarios.filter((scenario) => scenario.definitionId === definitionId).length
+        ));
 
       return {
         generatedAt: new Date(),
@@ -514,7 +534,9 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
           approvedVignettes,
           rejectedVignettes,
           pendingVignettes: totalVignettes - reviewedVignettes,
-          launchReady: totalVignettes > 0 && approvedVignettes === totalVignettes,
+          launchReady: hasCompleteGeneratedSet
+            && totalVignettes > 0
+            && approvedVignettes === totalVignettes,
         },
         vignettes,
       };

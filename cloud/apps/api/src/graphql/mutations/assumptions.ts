@@ -422,13 +422,34 @@ builder.mutationField('launchOrderInvariance', (t) =>
       }
 
       const userId = ctx.user.id;
+      const lockedDefinitionIds = LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id);
+      const expectedSourceScenarios = await db.scenario.findMany({
+        where: {
+          definitionId: { in: lockedDefinitionIds },
+          deletedAt: null,
+          orientationFlipped: false,
+        },
+        select: {
+          id: true,
+          definitionId: true,
+        },
+      });
+      const expectedPairCount = expectedSourceScenarios.length;
+      const expectedByDefinition = new Map<string, number>();
+      for (const scenario of expectedSourceScenarios) {
+        expectedByDefinition.set(
+          scenario.definitionId,
+          (expectedByDefinition.get(scenario.definitionId) ?? 0) + 1,
+        );
+      }
+
       const approvedPairs = await db.assumptionScenarioPair.findMany({
         where: {
           assumptionKey: 'order_invariance',
           equivalenceReviewStatus: 'APPROVED',
           equivalenceReviewedAt: { not: null },
           sourceScenario: {
-            definitionId: { in: LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id) },
+            definitionId: { in: lockedDefinitionIds },
             deletedAt: null,
           },
           variantScenario: {
@@ -465,6 +486,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
 
       const approvedPairCount = approvedPairs.length;
       const approvedByDefinition = new Map<string, { sourceScenarioIds: Set<string>; variantScenarioIds: Set<string> }>();
+      const approvedCountsByDefinition = new Map<string, number>();
       for (const pair of approvedPairs) {
         const definitionId = pair.sourceScenario.definitionId;
         const existing = approvedByDefinition.get(definitionId) ?? {
@@ -474,11 +496,20 @@ builder.mutationField('launchOrderInvariance', (t) =>
         existing.sourceScenarioIds.add(pair.sourceScenario.id);
         existing.variantScenarioIds.add(pair.variantScenario.id);
         approvedByDefinition.set(definitionId, existing);
+        approvedCountsByDefinition.set(
+          definitionId,
+          (approvedCountsByDefinition.get(definitionId) ?? 0) + 1,
+        );
       }
 
-      const allLockedDefinitionIds = LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => vignette.id);
-      if (approvedByDefinition.size !== allLockedDefinitionIds.length && args.force !== true) {
-        throw new Error('Launch blocked: not all locked vignette definitions have approved order-invariance pairs yet.');
+      const hasCompleteApprovedSet = approvedPairCount === expectedPairCount
+        && approvedByDefinition.size === lockedDefinitionIds.length
+        && expectedByDefinition.size === lockedDefinitionIds.length
+        && lockedDefinitionIds.every((definitionId) => (
+          (approvedCountsByDefinition.get(definitionId) ?? 0) === (expectedByDefinition.get(definitionId) ?? 0)
+        ));
+      if (!hasCompleteApprovedSet && args.force !== true) {
+        throw new Error('Launch blocked: all generated order-invariance condition pairs must be approved across the full locked vignette set.');
       }
 
       const activeModels = await db.llmModel.findMany({
