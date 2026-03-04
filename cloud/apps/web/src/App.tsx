@@ -11,6 +11,7 @@ import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
 import { DomainAnalysis } from './pages/DomainAnalysis';
+import { DomainCoverage } from './pages/DomainCoverage';
 import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
 import { OrderEffectAssumptions } from './pages/OrderEffectAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
@@ -83,6 +84,14 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <DomainAnalysis />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domains/coverage"
+              element={
+                <ProtectedLayout fullWidth>
+                  <DomainCoverage />
                 </ProtectedLayout>
               }
             />
