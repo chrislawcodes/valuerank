@@ -763,6 +763,23 @@ builder.mutationField('reviewOrderInvariancePair', (t) =>
         throw new Error('Order-invariance review is limited to the locked vignette package.');
       }
 
+      const siblingPairs = await db.assumptionScenarioPair.findMany({
+        where: {
+          assumptionKey: 'order_invariance',
+          sourceScenario: {
+            definitionId: sourceScenario.definitionId,
+            deletedAt: null,
+          },
+          variantScenario: {
+            deletedAt: null,
+          },
+        },
+        select: { id: true },
+      });
+      if (siblingPairs.length === 0) {
+        throw new Error('No reviewable order-invariance pairs were found for this vignette.');
+      }
+
       const reviewedAt = new Date();
       const trimmedNotes = args.reviewNotes?.trim() ?? '';
       const reviewer = await db.user.findUnique({
@@ -770,8 +787,10 @@ builder.mutationField('reviewOrderInvariancePair', (t) =>
         select: { id: true, name: true, email: true },
       });
 
-      await db.assumptionScenarioPair.update({
-        where: { id: pairId },
+      await db.assumptionScenarioPair.updateMany({
+        where: {
+          id: { in: siblingPairs.map((pair) => pair.id) },
+        },
         data: {
           equivalenceReviewStatus: reviewStatus,
           equivalenceReviewedBy: reviewer?.name?.trim() || reviewer?.email || ctx.user.id,

@@ -47,19 +47,20 @@ type OrderInvarianceResult = {
 type OrderInvarianceReviewStatus = 'APPROVED' | 'REJECTED' | 'PENDING';
 
 type OrderInvarianceReviewSummary = {
-  totalPairs: number;
-  reviewedPairs: number;
-  approvedPairs: number;
-  rejectedPairs: number;
-  pendingPairs: number;
+  totalVignettes: number;
+  reviewedVignettes: number;
+  approvedVignettes: number;
+  rejectedVignettes: number;
+  pendingVignettes: number;
   launchReady: boolean;
 };
 
-type OrderInvarianceReviewPair = {
+type OrderInvarianceReviewVignette = {
   pairId: string;
   vignetteId: string;
   vignetteTitle: string;
   conditionKey: string;
+  conditionPairCount: number;
   sourceScenarioId: string;
   variantScenarioId: string;
   baselineName: string;
@@ -75,7 +76,7 @@ type OrderInvarianceReviewPair = {
 type OrderInvarianceReviewResult = {
   generatedAt: Date;
   summary: OrderInvarianceReviewSummary;
-  pairs: OrderInvarianceReviewPair[];
+  vignettes: OrderInvarianceReviewVignette[];
 };
 
 type PairScenario = {
@@ -361,23 +362,24 @@ const OrderInvarianceReviewSummaryRef = builder
   .objectRef<OrderInvarianceReviewSummary>('OrderInvarianceReviewSummary')
   .implement({
     fields: (t) => ({
-      totalPairs: t.exposeInt('totalPairs'),
-      reviewedPairs: t.exposeInt('reviewedPairs'),
-      approvedPairs: t.exposeInt('approvedPairs'),
-      rejectedPairs: t.exposeInt('rejectedPairs'),
-      pendingPairs: t.exposeInt('pendingPairs'),
+      totalVignettes: t.exposeInt('totalVignettes'),
+      reviewedVignettes: t.exposeInt('reviewedVignettes'),
+      approvedVignettes: t.exposeInt('approvedVignettes'),
+      rejectedVignettes: t.exposeInt('rejectedVignettes'),
+      pendingVignettes: t.exposeInt('pendingVignettes'),
       launchReady: t.exposeBoolean('launchReady'),
     }),
   });
 
-const OrderInvarianceReviewPairRef = builder
-  .objectRef<OrderInvarianceReviewPair>('OrderInvarianceReviewPair')
+const OrderInvarianceReviewVignetteRef = builder
+  .objectRef<OrderInvarianceReviewVignette>('OrderInvarianceReviewVignette')
   .implement({
     fields: (t) => ({
       pairId: t.exposeID('pairId'),
       vignetteId: t.exposeID('vignetteId'),
       vignetteTitle: t.exposeString('vignetteTitle'),
       conditionKey: t.exposeString('conditionKey'),
+      conditionPairCount: t.exposeInt('conditionPairCount'),
       sourceScenarioId: t.exposeID('sourceScenarioId'),
       variantScenarioId: t.exposeID('variantScenarioId'),
       baselineName: t.exposeString('baselineName'),
@@ -397,7 +399,7 @@ const OrderInvarianceReviewResultRef = builder
     fields: (t) => ({
       generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
       summary: t.expose('summary', { type: OrderInvarianceReviewSummaryRef }),
-      pairs: t.expose('pairs', { type: [OrderInvarianceReviewPairRef] }),
+      vignettes: t.expose('vignettes', { type: [OrderInvarianceReviewVignetteRef] }),
     }),
   });
 
@@ -446,47 +448,75 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
         },
       }) as PairRecord[];
 
-      const pairs = pairRows.map((pair) => {
-        const vignette = lockedById.get(pair.sourceScenario.definitionId);
-        const reviewStatus = normalizeReviewStatus(pair.equivalenceReviewStatus);
+      const groupedPairs = new Map<string, PairRecord[]>();
+
+      for (const pair of pairRows) {
+        const key = pair.sourceScenario.definitionId;
+        const existing = groupedPairs.get(key) ?? [];
+        existing.push(pair);
+        groupedPairs.set(key, existing);
+      }
+
+      const vignettes = Array.from(groupedPairs.entries()).map(([definitionId, definitionPairs]) => {
+        const sortedPairs = [...definitionPairs].sort((left, right) => (
+          buildConditionKey(left.sourceScenario.name).localeCompare(
+            buildConditionKey(right.sourceScenario.name),
+            undefined,
+            { numeric: true, sensitivity: 'base' }
+          )
+          || left.sourceScenario.name.localeCompare(right.sourceScenario.name)
+        ));
+        const representativePair = sortedPairs[0];
+        const vignette = lockedById.get(definitionId);
+        const pairStatuses = sortedPairs.map((pair) => normalizeReviewStatus(pair.equivalenceReviewStatus));
+        const reviewStatus: OrderInvarianceReviewStatus = pairStatuses.some((status) => status === 'REJECTED')
+          ? 'REJECTED'
+          : pairStatuses.every((status) => status === 'APPROVED')
+            ? 'APPROVED'
+            : 'PENDING';
+        const reviewedPair = [...sortedPairs]
+          .filter((pair) => pair.equivalenceReviewedAt != null)
+          .sort((left, right) => (
+            (right.equivalenceReviewedAt?.getTime() ?? 0) - (left.equivalenceReviewedAt?.getTime() ?? 0)
+          ))[0] ?? null;
 
         return {
-          pairId: pair.id ?? `${pair.sourceScenario.id}:${pair.variantScenario.id}`,
-          vignetteId: pair.sourceScenario.definitionId,
-          vignetteTitle: vignette?.title ?? pair.sourceScenario.definitionId,
-          conditionKey: buildConditionKey(pair.sourceScenario.name),
-          sourceScenarioId: pair.sourceScenario.id,
-          variantScenarioId: pair.variantScenario.id,
-          baselineName: pair.sourceScenario.name,
-          flippedName: pair.variantScenario.name,
-          baselineText: extractScenarioText(pair.sourceScenario.content),
-          flippedText: extractScenarioText(pair.variantScenario.content),
+          pairId: representativePair?.id ?? `${representativePair?.sourceScenario.id}:${representativePair?.variantScenario.id}`,
+          vignetteId: definitionId,
+          vignetteTitle: vignette?.title ?? definitionId,
+          conditionKey: representativePair ? buildConditionKey(representativePair.sourceScenario.name) : 'n/a',
+          conditionPairCount: sortedPairs.length,
+          sourceScenarioId: representativePair?.sourceScenario.id ?? '',
+          variantScenarioId: representativePair?.variantScenario.id ?? '',
+          baselineName: representativePair?.sourceScenario.name ?? '',
+          flippedName: representativePair?.variantScenario.name ?? '',
+          baselineText: representativePair ? extractScenarioText(representativePair.sourceScenario.content) : '',
+          flippedText: representativePair ? extractScenarioText(representativePair.variantScenario.content) : '',
           reviewStatus,
-          reviewedBy: pair.equivalenceReviewedBy ?? null,
-          reviewedAt: pair.equivalenceReviewedAt ?? null,
-          reviewNotes: pair.equivalenceReviewNotes ?? null,
+          reviewedBy: reviewedPair?.equivalenceReviewedBy ?? null,
+          reviewedAt: reviewedPair?.equivalenceReviewedAt ?? null,
+          reviewNotes: reviewedPair?.equivalenceReviewNotes ?? null,
         };
       }).sort((left, right) => (
         left.vignetteTitle.localeCompare(right.vignetteTitle)
-        || left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' })
       ));
 
-      const approvedPairs = pairs.filter((pair) => pair.reviewStatus === 'APPROVED').length;
-      const rejectedPairs = pairs.filter((pair) => pair.reviewStatus === 'REJECTED').length;
-      const reviewedPairs = pairs.filter((pair) => pair.reviewedAt != null).length;
-      const totalPairs = pairs.length;
+      const approvedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'APPROVED').length;
+      const rejectedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'REJECTED').length;
+      const reviewedVignettes = vignettes.filter((vignette) => vignette.reviewedAt != null).length;
+      const totalVignettes = vignettes.length;
 
       return {
         generatedAt: new Date(),
         summary: {
-          totalPairs,
-          reviewedPairs,
-          approvedPairs,
-          rejectedPairs,
-          pendingPairs: totalPairs - reviewedPairs,
-          launchReady: totalPairs > 0 && approvedPairs === totalPairs,
+          totalVignettes,
+          reviewedVignettes,
+          approvedVignettes,
+          rejectedVignettes,
+          pendingVignettes: totalVignettes - reviewedVignettes,
+          launchReady: totalVignettes > 0 && approvedVignettes === totalVignettes,
         },
-        pairs,
+        vignettes,
       };
     },
   })
