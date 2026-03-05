@@ -6,13 +6,14 @@ import { DomainCoverage } from '../../src/pages/DomainCoverage';
 
 const useQueryMock = vi.fn();
 const setSearchParamsMock = vi.fn();
+let initialSearchParams = 'domainId=domain-a&modelIds=model-a';
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
     useSearchParams: () => [
-      new URLSearchParams('domainId=domain-a&modelIds=model-a'),
+      new URLSearchParams(initialSearchParams),
       setSearchParamsMock,
     ],
   };
@@ -77,6 +78,7 @@ const coverageByDomain = {
     ],
     availableModels: [
       { modelId: 'model-a', label: 'Model A' },
+      { modelId: 'model-b', label: 'Model B' },
     ],
   },
   'domain-b': {
@@ -160,6 +162,7 @@ function renderCoveragePage() {
 
 describe('DomainCoverage Page', () => {
   beforeEach(() => {
+    initialSearchParams = 'domainId=domain-a&modelIds=model-a';
     useQueryMock.mockReset();
     setSearchParamsMock.mockReset();
     useQueryMock.mockImplementation((args: UseQueryArgs) => {
@@ -187,14 +190,14 @@ describe('DomainCoverage Page', () => {
       renderCoveragePage();
     });
 
-    expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /select all models/i })).toBeInTheDocument();
 
     await act(async () => {
       await user.selectOptions(screen.getByRole('combobox', { name: 'Domain Selection' }), 'domain-b');
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /select all models/i })).not.toBeInTheDocument();
     });
 
     await waitFor(() => {
@@ -231,6 +234,47 @@ describe('DomainCoverage Page', () => {
     });
 
     expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+  });
+
+  it('defaults signature to temp 0 when no signature query param is provided', async () => {
+    initialSearchParams = 'domainId=domain-a';
+    await act(async () => {
+      renderCoveragePage();
+    });
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            domainId: 'domain-a',
+            signature: 'vnewt0',
+          }),
+        }),
+      );
+    });
+  });
+
+  it('defaults to all models selected when no modelIds query param is provided', async () => {
+    initialSearchParams = 'domainId=domain-a';
+    const user = userEvent.setup();
+    await act(async () => {
+      renderCoveragePage();
+    });
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Model A' }));
+    });
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            domainId: 'domain-a',
+            modelIds: ['model-b'],
+          }),
+        }),
+      );
+    });
   });
 
   it('falls back to legacy query when API rejects signature argument', async () => {

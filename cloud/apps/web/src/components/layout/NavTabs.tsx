@@ -93,7 +93,7 @@ export function NavTabs() {
         <div className="flex gap-1">
           <div
             ref={vignetteMenuRef}
-            className="relative group"
+            className="relative group order-2"
             onMouseEnter={() => setIsVignettesMenuOpen(true)}
             onMouseLeave={() => setIsVignettesMenuOpen(false)}
             onFocus={handleMenuFocus(setIsVignettesMenuOpen)}
@@ -143,7 +143,7 @@ export function NavTabs() {
           </div>
           <div
             ref={domainMenuRef}
-            className="relative group"
+            className="relative group order-1"
             onMouseEnter={() => setIsDomainsMenuOpen(true)}
             onMouseLeave={() => setIsDomainsMenuOpen(false)}
             onFocus={handleMenuFocus(setIsDomainsMenuOpen)}
