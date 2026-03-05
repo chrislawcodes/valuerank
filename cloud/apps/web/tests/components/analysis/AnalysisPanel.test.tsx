@@ -247,7 +247,7 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
   });
 
-  it('renders total samples stat', () => {
+  it('renders total trials stat', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -264,8 +264,39 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Total Samples')).toBeInTheDocument();
+    expect(screen.getByText('Total Trials')).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
+  });
+
+  it('renders batches stat from full sets over all conditions', () => {
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {},
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+        },
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Batches')).toBeInTheDocument();
+    expect(screen.getByText('25')).toBeInTheDocument();
+    expect(screen.getByText('2 conditions per batch')).toBeInTheDocument();
   });
 
   it('renders overview table titles', () => {
