@@ -9,6 +9,7 @@ import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { useDomains } from '../hooks/useDomains';
 import {
   DOMAIN_VALUE_COVERAGE_QUERY,
+  DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
   type DomainValueCoverageQueryResult,
   type DomainValueCoverageQueryVariables,
 } from '../api/operations/domainCoverage';
@@ -206,6 +207,7 @@ export function DomainCoverage() {
   const [selectedSignature, setSelectedSignature] = useState<string>(
     searchParams.get('signature') ?? ''
   );
+  const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>(() => {
     const raw = searchParams.get('modelIds');
     return raw ? raw.split(',') : [];
@@ -280,7 +282,7 @@ export function DomainCoverage() {
     }
   }, [searchParams, selectedDomainId, selectedModelIds, selectedSignature, setSearchParams]);
 
-  const [{ data, fetching, error }] = useQuery<
+  const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainValueCoverageQueryResult,
     DomainValueCoverageQueryVariables
   >({
@@ -290,9 +292,35 @@ export function DomainCoverage() {
       modelIds: selectedModelIds.length > 0 ? selectedModelIds : undefined,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '' || !signatureSelectionReady,
+    pause: selectedDomainId === '' || !signatureSelectionReady || useLegacyQuery,
     requestPolicy: 'cache-and-network',
   });
+
+  const [{ data: legacyData, fetching: legacyFetching, error: legacyError }] = useQuery<
+    DomainValueCoverageQueryResult,
+    Omit<DomainValueCoverageQueryVariables, 'signature'>
+  >({
+    query: DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
+    variables: {
+      domainId: selectedDomainId,
+      modelIds: selectedModelIds.length > 0 ? selectedModelIds : undefined,
+    },
+    pause: selectedDomainId === '' || !signatureSelectionReady || !useLegacyQuery,
+    requestPolicy: 'cache-and-network',
+  });
+
+  useEffect(() => {
+    const message = scoredError?.message ?? '';
+    const isUnknownArgumentError = message.includes('Unknown argument "signature"');
+    const isUnknownFieldError = message.includes('Cannot query field') || message.includes('Unknown field');
+    if ((isUnknownArgumentError || isUnknownFieldError) && !useLegacyQuery) {
+      setUseLegacyQuery(true);
+    }
+  }, [scoredError, useLegacyQuery]);
+
+  const data = useLegacyQuery ? legacyData : scoredData;
+  const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+  const error = useLegacyQuery ? legacyError : scoredError;
 
   const availableModels = data?.domainValueCoverage?.availableModels ?? [];
   const canonicalValues = data?.domainValueCoverage?.values ?? [];
@@ -396,6 +424,9 @@ export function DomainCoverage() {
         <ErrorMessage
           message={`Failed to load coverage data: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`}
         />
+      )}
+      {useLegacyQuery && selectedSignature !== '' && (
+        <ErrorMessage message="Coverage API does not yet support signature filtering in this environment. Showing all signatures." />
       )}
 
       {/* Controls Area */}

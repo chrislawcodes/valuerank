@@ -163,6 +163,10 @@ describe('DomainCoverage Page', () => {
           error: undefined,
         }];
       }
+      if (operationName === 'DomainValueCoverageLegacy') {
+        const legacyCoverage = coverageByDomain[args.variables.domainId];
+        return [{ data: { domainValueCoverage: legacyCoverage }, fetching: false, error: undefined }];
+      }
 
       const coverage = coverageByDomain[args.variables.domainId];
       return [{ data: { domainValueCoverage: coverage }, fetching: false, error: undefined }];
@@ -219,5 +223,52 @@ describe('DomainCoverage Page', () => {
     });
 
     expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
+  });
+
+  it('falls back to legacy query when API rejects signature argument', async () => {
+    const user = userEvent.setup();
+    useQueryMock.mockImplementation((args: UseQueryArgs) => {
+      const operationName = getOperationName(args);
+      if (operationName === 'DomainAvailableSignatures') {
+        return [{
+          data: { domainAvailableSignatures: signaturesByDomain[args.variables.domainId] },
+          fetching: false,
+          error: undefined,
+        }];
+      }
+      if (operationName === 'DomainValueCoverage') {
+        return [{ data: undefined, fetching: false, error: new Error('Unknown argument "signature"') }];
+      }
+      if (operationName === 'DomainValueCoverageLegacy') {
+        const legacyCoverage = coverageByDomain[args.variables.domainId];
+        return [{ data: { domainValueCoverage: legacyCoverage }, fetching: false, error: undefined }];
+      }
+      return [{ data: undefined, fetching: false, error: undefined }];
+    });
+
+    await act(async () => {
+      renderCoveragePage();
+    });
+
+    await act(async () => {
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Trial Signature' }), 'vnewt0.7');
+    });
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: expect.objectContaining({
+            definitions: expect.arrayContaining([
+              expect.objectContaining({
+                kind: 'OperationDefinition',
+                name: expect.objectContaining({ value: 'DomainValueCoverageLegacy' }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    expect(screen.getByText(/does not yet support signature filtering/i)).toBeInTheDocument();
   });
 });
