@@ -31,6 +31,7 @@ function CoverageCell({
   batchCount,
   definitionId,
   definitionName,
+  aggregateRunId,
   domainId,
   maxBatchCount,
 }: {
@@ -39,6 +40,7 @@ function CoverageCell({
   batchCount: number;
   definitionId: string | null;
   definitionName: string | null;
+  aggregateRunId: string | null;
   domainId: string;
   maxBatchCount: number;
 }) {
@@ -137,15 +139,15 @@ function CoverageCell({
           </div>
 
           <div className="p-1 flex flex-col">
-            {hasVignette && batchCount > 0 && (
+            {hasVignette && aggregateRunId !== null && (
               <Link
-                to={`/domains/analysis?domainId=${domainId}`}
+                to={`/analysis/${aggregateRunId}`}
                 className="flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-sm w-full text-left"
                 onClick={() => setIsOpen(false)}
               >
                 <span className="flex items-center">
                   <FileSearch className="w-4 h-4 mr-2 text-gray-400" />
-                  View Domain Analysis
+                  View Vignette Analysis
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </Link>
@@ -614,6 +616,7 @@ export function DomainCoverage() {
                             batchCount={cell?.batchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
                             definitionName={cell?.definitionName ?? null}
+                            aggregateRunId={cell?.aggregateRunId ?? null}
                             maxBatchCount={maxBatchCount}
                           />
                         </td>
