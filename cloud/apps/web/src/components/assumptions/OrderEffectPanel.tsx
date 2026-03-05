@@ -12,7 +12,7 @@ import {
   type LaunchOrderInvarianceVariables,
   type OrderInvarianceQueryResult,
   type OrderInvarianceQueryVariables,
-  type OrderInvarianceReviewPair,
+  type OrderInvarianceReviewVignette,
   type OrderInvarianceReviewQueryResult,
   type OrderInvarianceReviewStatus,
   type OrderInvarianceRow,
@@ -68,29 +68,6 @@ function groupRowsByVignette(rows: OrderInvarianceRow[]): Array<{
   return Array.from(groups.values()).sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle));
 }
 
-function groupReviewPairsByVignette(pairs: OrderInvarianceReviewPair[]): Array<{
-  vignetteId: string;
-  vignetteTitle: string;
-  pairs: OrderInvarianceReviewPair[];
-}> {
-  const groups = new Map<string, { vignetteId: string; vignetteTitle: string; pairs: OrderInvarianceReviewPair[] }>();
-
-  for (const pair of pairs) {
-    const existing = groups.get(pair.vignetteId);
-    if (existing != null) {
-      existing.pairs.push(pair);
-      continue;
-    }
-    groups.set(pair.vignetteId, {
-      vignetteId: pair.vignetteId,
-      vignetteTitle: pair.vignetteTitle,
-      pairs: [pair],
-    });
-  }
-
-  return Array.from(groups.values()).sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle));
-}
-
 function getReviewStatusBadge(status: OrderInvarianceReviewStatus): string {
   if (status === 'APPROVED') {
     return 'rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700';
@@ -103,9 +80,9 @@ function getReviewStatusBadge(status: OrderInvarianceReviewStatus): string {
 
 function getDraftNote(
   noteDrafts: Record<string, string>,
-  pair: OrderInvarianceReviewPair
+  vignette: OrderInvarianceReviewVignette
 ): string {
-  return noteDrafts[pair.pairId] ?? pair.reviewNotes ?? '';
+  return noteDrafts[vignette.pairId] ?? vignette.reviewNotes ?? '';
 }
 
 export function OrderEffectPanel() {
@@ -141,9 +118,9 @@ export function OrderEffectPanel() {
 
   const result = data?.assumptionsOrderInvariance;
   const reviewResult = reviewData?.assumptionsOrderInvarianceReview;
-  const reviewGroups = useMemo(
-    () => groupReviewPairsByVignette(reviewResult?.pairs ?? []),
-    [reviewResult?.pairs],
+  const reviewVignettes = useMemo(
+    () => [...(reviewResult?.vignettes ?? [])].sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle)),
+    [reviewResult?.vignettes],
   );
 
   const modelOptions = useMemo(() => {
@@ -166,12 +143,12 @@ export function OrderEffectPanel() {
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
 
-  async function submitReview(pair: OrderInvarianceReviewPair, reviewStatus: 'APPROVED' | 'REJECTED') {
-    setActiveReviewPairId(pair.pairId);
+  async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
+    setActiveReviewPairId(vignette.pairId);
     const mutationResult = await executeReviewPair({
-      pairId: pair.pairId,
+      pairId: vignette.pairId,
       reviewStatus,
-      reviewNotes: getDraftNote(noteDrafts, pair).trim() || null,
+      reviewNotes: getDraftNote(noteDrafts, vignette).trim() || null,
     });
     setActiveReviewPairId(null);
 
@@ -194,8 +171,8 @@ export function OrderEffectPanel() {
   }
 
   const reviewGateMessage = reviewResult?.summary.launchReady
-    ? 'Review complete. Launch wiring lands in Phase 3.'
-    : 'Launch stays blocked until every pair is explicitly approved.';
+    ? 'Review complete. Launch is now enabled for the full vignette set.'
+    : 'Launch stays blocked until each vignette is explicitly approved.';
 
   return (
     <section className="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
@@ -223,7 +200,7 @@ export function OrderEffectPanel() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Preflight Review</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Every flipped pair needs a human approval before launch is allowed.
+              Review the narrative pair once per vignette. The decision applies to every generated condition pair in that vignette.
             </p>
           </div>
           {reviewResult && (
@@ -261,24 +238,24 @@ export function OrderEffectPanel() {
           <>
             <div className="mt-4 grid gap-3 md:grid-cols-5">
               <div className="rounded-md border border-gray-200 bg-white p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Pairs</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.totalPairs}</div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Vignettes</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.totalVignettes}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-white p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Reviewed</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.reviewedPairs}</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.reviewedVignettes}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-white p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Approved</div>
-                <div className="mt-1 text-base font-semibold text-teal-700">{reviewResult.summary.approvedPairs}</div>
+                <div className="mt-1 text-base font-semibold text-teal-700">{reviewResult.summary.approvedVignettes}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-white p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Rejected</div>
-                <div className="mt-1 text-base font-semibold text-orange-700">{reviewResult.summary.rejectedPairs}</div>
+                <div className="mt-1 text-base font-semibold text-orange-700">{reviewResult.summary.rejectedVignettes}</div>
               </div>
               <div className="rounded-md border border-gray-200 bg-white p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pending</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.pendingPairs}</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">{reviewResult.summary.pendingVignettes}</div>
               </div>
             </div>
 
@@ -294,92 +271,78 @@ export function OrderEffectPanel() {
             )}
 
             <div className="mt-4 space-y-4">
-              {reviewGroups.length === 0 ? (
+              {reviewVignettes.length === 0 ? (
                 <div className="rounded-md border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600">
                   No generated order-flip pairs are available yet.
                 </div>
-              ) : reviewGroups.map((group) => (
-                <details key={group.vignetteId} className="rounded-lg border border-gray-200 bg-white">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
+              ) : reviewVignettes.map((vignette) => (
+                <div key={vignette.vignetteId} className="rounded-lg border border-gray-200 bg-white">
+                  <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</div>
+                      <div className="text-sm font-semibold text-gray-900">{vignette.vignetteTitle}</div>
                       <div className="mt-1 text-xs text-gray-500">
-                        {group.pairs.length} condition pair{group.pairs.length === 1 ? '' : 's'}
+                        Showing representative condition {vignette.conditionKey}. Approval covers all {vignette.conditionPairCount} generated condition pair{vignette.conditionPairCount === 1 ? '' : 's'}.
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Reviewed {formatDateTime(vignette.reviewedAt)}
+                        {vignette.reviewedBy ? ` by ${vignette.reviewedBy}` : ''}
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {group.pairs.filter((pair) => pair.reviewStatus === 'APPROVED').length}/{group.pairs.length} approved
-                    </div>
-                  </summary>
-                  <div className="space-y-4 border-t border-gray-200 p-4">
-                    {group.pairs.map((pair) => (
-                      <div key={pair.pairId} className="rounded-lg border border-gray-200">
-                        <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-900">{pair.conditionKey}</div>
-                            <div className="mt-1 text-xs text-gray-500">
-                              Reviewed {formatDateTime(pair.reviewedAt)}
-                              {pair.reviewedBy ? ` by ${pair.reviewedBy}` : ''}
-                            </div>
-                          </div>
-                          <span className={getReviewStatusBadge(pair.reviewStatus)}>
-                            {pair.reviewStatus}
-                          </span>
-                        </div>
-
-                        <div className="grid gap-4 p-4 lg:grid-cols-2">
-                          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Baseline (A First)</div>
-                            <div className="mt-1 text-xs text-gray-500">{pair.baselineName}</div>
-                            <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{pair.baselineText}</pre>
-                          </div>
-                          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Flipped (B First)</div>
-                            <div className="mt-1 text-xs text-gray-500">{pair.flippedName}</div>
-                            <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{pair.flippedText}</pre>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-gray-200 p-4">
-                          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500" htmlFor={`review-note-${pair.pairId}`}>
-                            Reviewer Notes
-                          </label>
-                          <textarea
-                            id={`review-note-${pair.pairId}`}
-                            className="mt-2 min-h-[96px] w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-200"
-                            value={getDraftNote(noteDrafts, pair)}
-                            onChange={(event) => setNoteDrafts((current) => ({
-                              ...current,
-                              [pair.pairId]: event.target.value,
-                            }))}
-                            placeholder="Capture approval rationale or why the pair was rejected."
-                          />
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              isLoading={reviewMutation.fetching && activeReviewPairId === pair.pairId}
-                              onClick={() => void submitReview(pair, 'APPROVED')}
-                            >
-                              Approve Pair
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="danger"
-                              isLoading={reviewMutation.fetching && activeReviewPairId === pair.pairId}
-                              onClick={() => void submitReview(pair, 'REJECTED')}
-                            >
-                              Reject Pair
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                    <span className={getReviewStatusBadge(vignette.reviewStatus)}>
+                      {vignette.reviewStatus}
+                    </span>
                   </div>
-                </details>
+
+                  <div className="grid gap-4 p-4 lg:grid-cols-2">
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Baseline (A First)</div>
+                      <div className="mt-1 text-xs text-gray-500">{vignette.baselineName}</div>
+                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.baselineText}</pre>
+                    </div>
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Flipped (B First)</div>
+                      <div className="mt-1 text-xs text-gray-500">{vignette.flippedName}</div>
+                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.flippedText}</pre>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200 p-4">
+                    <label className="block text-xs font-medium uppercase tracking-wide text-gray-500" htmlFor={`review-note-${vignette.pairId}`}>
+                      Reviewer Notes
+                    </label>
+                    <textarea
+                      id={`review-note-${vignette.pairId}`}
+                      className="mt-2 min-h-[96px] w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-200"
+                      value={getDraftNote(noteDrafts, vignette)}
+                      onChange={(event) => setNoteDrafts((current) => ({
+                        ...current,
+                        [vignette.pairId]: event.target.value,
+                      }))}
+                      placeholder="Capture approval rationale or why the vignette was rejected."
+                    />
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
+                        onClick={() => void submitReview(vignette, 'APPROVED')}
+                      >
+                        Approve Vignette
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
+                        onClick={() => void submitReview(vignette, 'REJECTED')}
+                      >
+                        Reject Vignette
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </>
