@@ -24,6 +24,7 @@ type DomainValueCoverageCell = {
   batchCount: number;
   definitionId: string | null;
   definitionName: string | null;
+  aggregateRunId: string | null;
 };
 
 type CoverageModelOption = {
@@ -56,6 +57,7 @@ const DomainValueCoverageCellRef = builder
       batchCount: t.exposeInt('batchCount'),
       definitionId: t.exposeString('definitionId', { nullable: true }),
       definitionName: t.exposeString('definitionName', { nullable: true }),
+      aggregateRunId: t.exposeString('aggregateRunId', { nullable: true }),
     }),
   });
 
@@ -209,6 +211,7 @@ builder.queryField('domainValueCoverage', (t) =>
       // Count completed runs per definition, optionally filtered by signature and model
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
+      const latestMatchingRunIdByDefinitionId = new Map<string, string>();
       const signatureScopedRunsByDefinitionId = new Map<string, Array<{
         id: string;
         definitionId: string;
@@ -248,6 +251,9 @@ builder.queryField('domainValueCoverage', (t) =>
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
           if (!matchesModelFilter) continue;
 
+          if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
+            latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
+          }
           batchCountByDefinitionId.set(
             run.definitionId,
             (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
@@ -286,7 +292,14 @@ builder.queryField('domainValueCoverage', (t) =>
         for (const valueB of COVERAGE_VALUE_KEYS) {
           if (valueA === valueB) {
             // Diagonal — no vignette tests a value against itself
-            cells.push({ valueA, valueB, batchCount: 0, definitionId: null, definitionName: null });
+            cells.push({
+              valueA,
+              valueB,
+              batchCount: 0,
+              definitionId: null,
+              definitionName: null,
+              aggregateRunId: null,
+            });
             continue;
           }
 
@@ -294,7 +307,14 @@ builder.queryField('domainValueCoverage', (t) =>
           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
 
           if (defIdsForPair.length === 0) {
-            cells.push({ valueA, valueB, batchCount: 0, definitionId: null, definitionName: null });
+            cells.push({
+              valueA,
+              valueB,
+              batchCount: 0,
+              definitionId: null,
+              definitionName: null,
+              aggregateRunId: null,
+            });
           } else {
             // Aggregate batch counts across all definitions for this pair
             let totalBatches = 0;
@@ -308,12 +328,16 @@ builder.queryField('domainValueCoverage', (t) =>
               return thisCount > bestCount ? defId : best;
             }, defIdsForPair[0] ?? '');
             const primaryPair = pairByDefinitionId.get(primaryDefId);
+            const aggregateRunId = primaryDefId === ''
+              ? null
+              : (latestMatchingRunIdByDefinitionId.get(primaryDefId) ?? null);
             cells.push({
               valueA,
               valueB,
               batchCount: totalBatches,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
+              aggregateRunId,
             });
           }
         }

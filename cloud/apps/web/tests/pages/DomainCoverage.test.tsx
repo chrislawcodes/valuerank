@@ -48,6 +48,7 @@ const coverageByDomain = {
         batchCount: 0,
         definitionId: null,
         definitionName: null,
+        aggregateRunId: null,
       },
       {
         valueA: 'Self_Direction_Action',
@@ -55,6 +56,7 @@ const coverageByDomain = {
         batchCount: 3,
         definitionId: 'def-1',
         definitionName: 'A vs B',
+        aggregateRunId: 'run-1',
       },
       {
         valueA: 'Achievement',
@@ -62,6 +64,7 @@ const coverageByDomain = {
         batchCount: 3,
         definitionId: 'def-1',
         definitionName: 'A vs B',
+        aggregateRunId: 'run-1',
       },
       {
         valueA: 'Achievement',
@@ -69,6 +72,7 @@ const coverageByDomain = {
         batchCount: 0,
         definitionId: null,
         definitionName: null,
+        aggregateRunId: null,
       },
     ],
     availableModels: [
@@ -85,6 +89,7 @@ const coverageByDomain = {
         batchCount: 0,
         definitionId: null,
         definitionName: null,
+        aggregateRunId: null,
       },
       {
         valueA: 'Self_Direction_Action',
@@ -92,6 +97,7 @@ const coverageByDomain = {
         batchCount: 4,
         definitionId: 'def-2',
         definitionName: 'B vs A',
+        aggregateRunId: 'run-2',
       },
       {
         valueA: 'Achievement',
@@ -99,6 +105,7 @@ const coverageByDomain = {
         batchCount: 4,
         definitionId: 'def-2',
         definitionName: 'B vs A',
+        aggregateRunId: 'run-2',
       },
       {
         valueA: 'Achievement',
@@ -106,6 +113,7 @@ const coverageByDomain = {
         batchCount: 0,
         definitionId: null,
         definitionName: null,
+        aggregateRunId: null,
       },
     ],
     availableModels: [
@@ -270,5 +278,22 @@ describe('DomainCoverage Page', () => {
     });
 
     expect(screen.getByText(/does not yet support signature filtering/i)).toBeInTheDocument();
+  });
+
+  it('opens vignette analysis for the selected value-pair cell', async () => {
+    const user = userEvent.setup();
+    await act(async () => {
+      renderCoveragePage();
+    });
+
+    await act(async () => {
+      await user.click(
+        screen.getByRole('button', { name: /self-direction versus achievement: 3 domain trials/i })
+      );
+    });
+
+    const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
+    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
+    expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });
 });

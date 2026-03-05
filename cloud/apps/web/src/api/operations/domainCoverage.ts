@@ -11,6 +11,7 @@ export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
         batchCount
         definitionId
         definitionName
+        aggregateRunId
       }
       availableModels {
         modelId
@@ -31,6 +32,7 @@ export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
         batchCount
         definitionId
         definitionName
+        aggregateRunId
       }
       availableModels {
         modelId
@@ -46,6 +48,7 @@ export type DomainValueCoverageCell = {
   batchCount: number;
   definitionId: string | null;
   definitionName: string | null;
+  aggregateRunId: string | null;
 };
 
 export type CoverageModelOption = {
