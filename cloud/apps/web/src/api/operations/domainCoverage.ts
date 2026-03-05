@@ -1,8 +1,8 @@
 import { gql } from 'urql';
 
 export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
-  query DomainValueCoverage($domainId: ID!, $modelIds: [String!]) {
-    domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
+  query DomainValueCoverage($domainId: ID!, $modelIds: [String!], $signature: String) {
+    domainValueCoverage(domainId: $domainId, modelIds: $modelIds, signature: $signature) {
       domainId
       values
       cells {
@@ -47,4 +47,5 @@ export type DomainValueCoverageQueryResult = {
 export type DomainValueCoverageQueryVariables = {
   domainId: string;
   modelIds?: string[];
+  signature?: string;
 };

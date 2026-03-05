@@ -114,12 +114,33 @@ const coverageByDomain = {
   },
 } as const;
 
+const signaturesByDomain = {
+  'domain-a': [
+    { signature: 'vnewt0', label: 'Temp 0', isVirtual: true, temperature: 0 },
+    { signature: 'vnewt0.7', label: 'Temp 0.7', isVirtual: true, temperature: 0.7 },
+  ],
+  'domain-b': [
+    { signature: 'vnewt0.7', label: 'Temp 0.7', isVirtual: true, temperature: 0.7 },
+  ],
+} as const;
+
 type UseQueryArgs = {
+  query: {
+    definitions: Array<{
+      kind: string;
+      name?: { value: string };
+    }>;
+  };
   variables: {
     domainId: 'domain-a' | 'domain-b';
     modelIds?: string[];
+    signature?: string;
   };
 };
+
+function getOperationName(args: UseQueryArgs): string | undefined {
+  return args.query.definitions.find((definition) => definition.kind === 'OperationDefinition')?.name?.value;
+}
 
 function renderCoveragePage() {
   return render(
@@ -134,6 +155,15 @@ describe('DomainCoverage Page', () => {
     useQueryMock.mockReset();
     setSearchParamsMock.mockReset();
     useQueryMock.mockImplementation((args: UseQueryArgs) => {
+      const operationName = getOperationName(args);
+      if (operationName === 'DomainAvailableSignatures') {
+        return [{
+          data: { domainAvailableSignatures: signaturesByDomain[args.variables.domainId] },
+          fetching: false,
+          error: undefined,
+        }];
+      }
+
       const coverage = coverageByDomain[args.variables.domainId];
       return [{ data: { domainValueCoverage: coverage }, fetching: false, error: undefined }];
     });
@@ -148,7 +178,7 @@ describe('DomainCoverage Page', () => {
     expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
 
     await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox'), 'domain-b');
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Domain Selection' }), 'domain-b');
     });
 
     await waitFor(() => {
@@ -165,5 +195,29 @@ describe('DomainCoverage Page', () => {
         }),
       );
     });
+  });
+
+  it('passes the selected signature to the coverage query', async () => {
+    const user = userEvent.setup();
+    await act(async () => {
+      renderCoveragePage();
+    });
+
+    await act(async () => {
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Trial Signature' }), 'vnewt0.7');
+    });
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            domainId: 'domain-a',
+            signature: 'vnewt0.7',
+          }),
+        }),
+      );
+    });
+
+    expect(screen.getByRole('button', { name: /copy coverage table as image/i })).toBeInTheDocument();
   });
 });

@@ -8,6 +8,10 @@
 
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
+import { formatTrialSignature } from '../../utils/trial-signature.js';
+import { parseDefinitionVersion } from '../../utils/definition-version.js';
+import { parseTemperature } from '../../utils/temperature.js';
+import { isVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 
 import { DOMAIN_ANALYSIS_VALUE_KEYS } from './domain.js';
 
@@ -99,6 +103,28 @@ function extractValuePair(
   return { valueA: nameA, valueB: nameB };
 }
 
+function formatRunSignature(config: unknown): string {
+  const runConfig = config as {
+    definitionSnapshot?: {
+      _meta?: { definitionVersion?: unknown };
+      version?: unknown;
+    };
+    temperature?: unknown;
+  } | null;
+  const definitionVersion =
+    parseDefinitionVersion(runConfig?.definitionSnapshot?._meta?.definitionVersion) ??
+    parseDefinitionVersion(runConfig?.definitionSnapshot?.version);
+  const temperature = parseTemperature(runConfig?.temperature);
+  return formatTrialSignature(definitionVersion, temperature);
+}
+
+function runMatchesSignature(runConfig: unknown, signature: string): boolean {
+  if (isVnewSignature(signature)) {
+    return parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature) === parseVnewTemperature(signature);
+  }
+  return formatRunSignature(runConfig) === signature;
+}
+
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
 
 builder.queryField('domainValueCoverage', (t) =>
@@ -124,12 +150,19 @@ builder.queryField('domainValueCoverage', (t) =>
         required: false,
         description: 'If provided, only count runs that included at least one of these model IDs',
       }),
+      signature: t.arg.string({
+        required: false,
+        description: 'If provided, only count completed runs matching this trial signature',
+      }),
     },
     resolve: async (_root, args, ctx) => {
       const domainId = String(args.domainId);
       const filterModelIds = args.modelIds?.map(String) ?? [];
+      const selectedSignature = typeof args.signature === 'string' && args.signature.trim() !== ''
+        ? args.signature.trim()
+        : null;
 
-      ctx.log.debug({ domainId, filterModelIds }, 'Computing domain value coverage');
+      ctx.log.debug({ domainId, filterModelIds, selectedSignature }, 'Computing domain value coverage');
 
       const domain = await db.domain.findUnique({ where: { id: domainId }, select: { id: true } });
       if (!domain) return null;
@@ -173,66 +206,68 @@ builder.queryField('domainValueCoverage', (t) =>
         });
       }
 
-      // Count completed runs per definition, optionally filtered by model
+      // Count completed runs per definition, optionally filtered by signature and model
       const definitionIds = Array.from(pairByDefinitionId.keys());
       const batchCountByDefinitionId = new Map<string, number>();
+      const signatureScopedRunsByDefinitionId = new Map<string, Array<{
+        id: string;
+        definitionId: string;
+        config: unknown;
+        transcripts: Array<{ modelId: string }>;
+      }>>();
 
       if (definitionIds.length > 0) {
-        const runWhere =
-          filterModelIds.length > 0
-            ? {
-              definitionId: { in: definitionIds },
-              status: 'COMPLETED' as const,
-              deletedAt: null,
-              // Run must have at least one transcript for one of the filter models
-              transcripts: {
-                some: {
-                  deletedAt: null,
-                  modelId: { in: filterModelIds },
-                },
-              },
-            }
-            : {
-              definitionId: { in: definitionIds },
-              status: 'COMPLETED' as const,
-              deletedAt: null,
-            };
-
-        const runGroups = await db.run.groupBy({
-          by: ['definitionId'],
-          where: runWhere,
-          _count: { _all: true },
+        const completedRuns = await db.run.findMany({
+          where: {
+            definitionId: { in: definitionIds },
+            status: 'COMPLETED',
+            deletedAt: null,
+          },
+          orderBy: [{ definitionId: 'asc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            definitionId: true,
+            config: true,
+            transcripts: {
+              where: { deletedAt: null },
+              select: { modelId: true },
+            },
+          },
         });
 
-        for (const row of runGroups) {
-          if (row.definitionId != null) {
-            batchCountByDefinitionId.set(row.definitionId, row._count._all);
+        const signatureScopedRuns = selectedSignature === null
+          ? completedRuns
+          : completedRuns.filter((run) => runMatchesSignature(run.config, selectedSignature));
+
+        for (const run of signatureScopedRuns) {
+          const existingRuns = signatureScopedRunsByDefinitionId.get(run.definitionId) ?? [];
+          existingRuns.push(run);
+          signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
+
+          const matchesModelFilter = filterModelIds.length === 0
+            || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
+          if (!matchesModelFilter) continue;
+
+          batchCountByDefinitionId.set(
+            run.definitionId,
+            (batchCountByDefinitionId.get(run.definitionId) ?? 0) + 1,
+          );
+        }
+      }
+
+      const availableModelIds = new Set<string>();
+      for (const runs of signatureScopedRunsByDefinitionId.values()) {
+        for (const run of runs) {
+          for (const transcript of run.transcripts) {
+            availableModelIds.add(transcript.modelId);
           }
         }
       }
 
-      // Collect available models that have been used in this domain
-      const usedModelIds =
-        definitionIds.length > 0
-          ? await db.transcript.findMany({
-            where: {
-              deletedAt: null,
-              run: {
-                definitionId: { in: definitionIds },
-                deletedAt: null,
-                status: 'COMPLETED'
-              },
-            },
-            select: { modelId: true },
-            distinct: ['modelId'],
-            take: 100,
-          })
-          : [];
-
       const modelDetailRows =
-        usedModelIds.length > 0
+        availableModelIds.size > 0
           ? await db.llmModel.findMany({
-            where: { modelId: { in: usedModelIds.map((r) => r.modelId) } },
+            where: { modelId: { in: Array.from(availableModelIds) } },
             select: { modelId: true, displayName: true },
             orderBy: { displayName: 'asc' },
           })

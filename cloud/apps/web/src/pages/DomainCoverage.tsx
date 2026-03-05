@@ -1,16 +1,23 @@
-import { type SVGProps, useEffect, useMemo, useState } from 'react';
+import { type SVGProps, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/Popover';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
+import { CopyVisualButton } from '../components/ui/CopyVisualButton';
 import { useDomains } from '../hooks/useDomains';
 import {
   DOMAIN_VALUE_COVERAGE_QUERY,
   type DomainValueCoverageQueryResult,
   type DomainValueCoverageQueryVariables,
 } from '../api/operations/domainCoverage';
+import {
+  DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+  type DomainAvailableSignature,
+  type DomainAvailableSignaturesQueryResult,
+  type DomainAvailableSignaturesQueryVariables,
+} from '../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../data/domainAnalysisData';
 import { ChevronRight, FileSearch } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -37,6 +44,7 @@ function CoverageCell({
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
+  const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
 
   // Calculate intensity (0 to 1) relative to max batches in this matrix view
   const intensity = maxBatchCount > 0 ? batchCount / maxBatchCount : 0;
@@ -70,13 +78,15 @@ function CoverageCell({
           aria-label={
             isDiagonal
               ? 'Not applicable'
-              : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: ${batchCount} domain trials`
+              : !hasVignette
+                ? `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: no vignette`
+                : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: ${batchCount} domain trials`
           }
           className={cn(
             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
-            !isDiagonal && !hasVignette && 'text-gray-300 cursor-pointer hover:bg-gray-100',
+            !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
             hasVignette && batchCount === 0 && 'text-amber-700',
             hasVignette && batchCount > 0 && intensity < 0.8 && 'text-teal-900'
           )}
@@ -86,7 +96,7 @@ function CoverageCell({
               : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} vs ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}`
           }
         >
-          {isDiagonal ? '—' : batchCount.toLocaleString()}
+          {visibleLabel}
         </button>
       </PopoverTrigger>
       {!isDiagonal && (
@@ -110,15 +120,19 @@ function CoverageCell({
                 No vignette tests this pair
               </p>
             )}
-            <div className="mt-2 text-xs text-gray-600 flex items-center">
-              <span
-                className={cn(
-                  'inline-block w-2 h-2 rounded-full mr-1.5',
-                  batchCount > 0 ? 'bg-teal-500' : 'bg-amber-500'
-                )}
-              />
-              {batchCount} domain trials run
-            </div>
+            {hasVignette ? (
+              <div className="mt-2 text-xs text-gray-600 flex items-center">
+                <span
+                  className={cn(
+                    'inline-block w-2 h-2 rounded-full mr-1.5',
+                    batchCount > 0 ? 'bg-teal-500' : 'bg-amber-500'
+                  )}
+                />
+                {batchCount} domain trials run
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-gray-500">No vignette for this value pair</div>
+            )}
           </div>
 
           <div className="p-1 flex flex-col">
@@ -184,14 +198,38 @@ type CategoryGroup = {
 export function DomainCoverage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { domains, queryLoading: domainsLoading, error: domainsError } = useDomains();
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const [selectedDomainId, setSelectedDomainId] = useState<string>(
     searchParams.get('domainId') ?? ''
+  );
+  const [selectedSignature, setSelectedSignature] = useState<string>(
+    searchParams.get('signature') ?? ''
   );
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>(() => {
     const raw = searchParams.get('modelIds');
     return raw ? raw.split(',') : [];
   });
+
+  const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
+    DomainAvailableSignaturesQueryResult,
+    DomainAvailableSignaturesQueryVariables
+  >({
+    query: DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+    variables: { domainId: selectedDomainId },
+    pause: selectedDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
+
+  const signatureOptions = useMemo<DomainAvailableSignature[]>(
+    () => signatureData?.domainAvailableSignatures ?? [],
+    [signatureData],
+  );
+  const hasValidSelectedSignature = useMemo(
+    () => selectedSignature === '' || signatureOptions.some((option) => option.signature === selectedSignature),
+    [selectedSignature, signatureOptions],
+  );
+  const signatureSelectionReady = selectedDomainId !== '' && !signaturesLoading && hasValidSelectedSignature;
 
   // Ensure a domain is selected by default
   useEffect(() => {
@@ -202,11 +240,23 @@ export function DomainCoverage() {
     setSelectedDomainId(domains[0]?.id ?? '');
   }, [domains, selectedDomainId]);
 
+  useEffect(() => {
+    if (selectedSignature === '') return;
+    if (signatureOptions.some((option) => option.signature === selectedSignature)) return;
+    if (signaturesLoading) return;
+    setSelectedSignature('');
+  }, [selectedSignature, signatureOptions, signaturesLoading]);
+
   // Sync URL state
   useEffect(() => {
     if (selectedDomainId === '') return;
     const next = new URLSearchParams(searchParams);
     next.set('domainId', selectedDomainId);
+    if (selectedSignature === '') {
+      next.delete('signature');
+    } else {
+      next.set('signature', selectedSignature);
+    }
 
     if (selectedModelIds.length > 0) {
       next.set('modelIds', selectedModelIds.join(','));
@@ -216,13 +266,19 @@ export function DomainCoverage() {
 
     // Only update if changes actually occurred
     const currentDomain = searchParams.get('domainId');
+    const currentSignature = searchParams.get('signature') ?? '';
     const currentModels = searchParams.get('modelIds') ?? '';
+    const newSignature = selectedSignature;
     const newModels = selectedModelIds.length > 0 ? selectedModelIds.join(',') : '';
 
-    if (currentDomain !== selectedDomainId || currentModels !== newModels) {
+    if (
+      currentDomain !== selectedDomainId
+      || currentSignature !== newSignature
+      || currentModels !== newModels
+    ) {
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, selectedDomainId, selectedModelIds, setSearchParams]);
+  }, [searchParams, selectedDomainId, selectedModelIds, selectedSignature, setSearchParams]);
 
   const [{ data, fetching, error }] = useQuery<
     DomainValueCoverageQueryResult,
@@ -232,8 +288,9 @@ export function DomainCoverage() {
     variables: {
       domainId: selectedDomainId,
       modelIds: selectedModelIds.length > 0 ? selectedModelIds : undefined,
+      signature: selectedSignature === '' ? undefined : selectedSignature,
     },
-    pause: selectedDomainId === '',
+    pause: selectedDomainId === '' || !signatureSelectionReady,
     requestPolicy: 'cache-and-network',
   });
 
@@ -308,6 +365,10 @@ export function DomainCoverage() {
 
     return Object.values(categories).filter((c) => c.values.length > 0);
   }, [data?.domainValueCoverage?.values]);
+  const displayValues = useMemo(
+    () => valueGroups.flatMap((group) => group.values),
+    [valueGroups],
+  );
 
   const toggleModel = (modelId: string) => {
     setSelectedModelIds((prev) =>
@@ -318,15 +379,22 @@ export function DomainCoverage() {
   return (
     <div className="space-y-6 pb-12">
       <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Value Coverage</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Visualize trial density across the 10 canonical Schwartz value pairs for this domain.
-        </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Value Coverage</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Visualize trial density across the 10 canonical Schwartz value pairs for this domain.
+            </p>
+          </div>
+          {canonicalValues.length > 0 && (
+            <CopyVisualButton targetRef={tableRef} label="coverage table" />
+          )}
+        </div>
       </div>
 
-      {(domainsError || error) && (
+      {(domainsError || signaturesError || error) && (
         <ErrorMessage
-          message={`Failed to load coverage data: ${(domainsError ?? error)?.message ?? 'Unknown error'}`}
+          message={`Failed to load coverage data: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`}
         />
       )}
 
@@ -336,12 +404,14 @@ export function DomainCoverage() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Domain Selection</h2>
             <select
+              aria-label="Domain Selection"
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
               value={selectedDomainId}
               onChange={(event) => {
                 const newDomainId = event.target.value;
                 if (newDomainId !== selectedDomainId) {
                   setSelectedDomainId(newDomainId);
+                  setSelectedSignature('');
                   setSelectedModelIds([]);
                 }
               }}
@@ -351,6 +421,24 @@ export function DomainCoverage() {
               {domains.map((domain) => (
                 <option key={domain.id} value={domain.id}>
                   {domain.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2 md:flex-row md:items-center pt-3 border-t border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Trial Signature</h2>
+            <select
+              aria-label="Trial Signature"
+              className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
+              value={selectedSignature}
+              onChange={(event) => setSelectedSignature(event.target.value)}
+              disabled={signaturesLoading}
+            >
+              <option value="">All signatures</option>
+              {signatureOptions.map((signatureOption) => (
+                <option key={signatureOption.signature} value={signatureOption.signature}>
+                  {signatureOption.label}
                 </option>
               ))}
             </select>
@@ -403,11 +491,14 @@ export function DomainCoverage() {
       </section>
 
       {/* Matrix Area */}
-      {fetching && canonicalValues.length === 0 ? (
+      {(signaturesLoading || (fetching && canonicalValues.length === 0)) ? (
         <Loading size="lg" text="Loading coverage matrix..." />
       ) : canonicalValues.length > 0 ? (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg bg-white shadow-sm mt-8">
-          <table className="w-full border-collapse min-w-[800px]">
+        <div
+          ref={tableRef}
+          className="overflow-x-auto border border-gray-200 rounded-lg bg-white shadow-sm mt-8"
+        >
+          <table className="w-full min-w-full table-fixed border-collapse">
             <thead>
               {/* Higher-order categories row */}
               <tr>
@@ -434,12 +525,12 @@ export function DomainCoverage() {
                     <th
                       key={`col-${val}`}
                       className={cn(
-                        'p-2 text-xs font-medium text-gray-600 border-b border-gray-200 writing-vertical transform -rotate-180 h-32 align-bottom whitespace-nowrap',
+                        'w-[7.25rem] p-1.5 text-[11px] font-medium text-gray-600 border-b border-gray-200 align-top text-center leading-tight whitespace-normal break-words',
                         valIndex === 0 && 'border-l',
                         groupIndex % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
                       )}
                     >
-                      <div className="py-2 inline-block">
+                      <div className="mx-auto max-w-[6.5rem]">
                         {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? val.replace(/_/g, ' ')}
                       </div>
                     </th>
@@ -456,7 +547,7 @@ export function DomainCoverage() {
                       <th
                         rowSpan={rowGroup.values.length}
                         className={cn(
-                          'p-1.5 text-[11px] font-semibold text-center border-t border-r border-gray-200 tracking-wider uppercase writing-vertical transform -rotate-180 max-w-[30px]',
+                          'w-[4.5rem] p-1.5 text-[10px] font-semibold text-center border-t border-r border-gray-200 tracking-wider uppercase align-middle',
                           rowGroup.color
                         )}
                       >
@@ -466,7 +557,7 @@ export function DomainCoverage() {
                     {/* Value row header */}
                     <th
                       className={cn(
-                        'p-2 text-xs font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-nowrap min-w-[140px]',
+                        'w-[9rem] p-2 text-xs font-medium text-gray-600 text-right border-t border-r border-gray-200 whitespace-normal break-words',
                         rowGroupIdx % 2 === 0 ? 'bg-gray-50/30' : 'bg-white'
                       )}
                     >
@@ -475,7 +566,7 @@ export function DomainCoverage() {
                     </th>
 
                     {/* Data cells */}
-                    {canonicalValues.map((colVal) => {
+                    {displayValues.map((colVal) => {
                       // Lookup cell prioritizing alphabetical sorting to match backend key format
                       const keyA = [rowVal, colVal].sort().join('::');
                       const cell = cellLookup.get(keyA);
@@ -483,7 +574,7 @@ export function DomainCoverage() {
                       return (
                         <td
                           key={`cell-${rowVal}-${colVal}`}
-                          className="p-0 m-0 border border-gray-100 min-w-[48px] h-12"
+                          className="h-12 w-[4.5rem] border border-gray-100 p-0"
                         >
                           <CoverageCell
                             valueA={rowVal}
@@ -510,11 +601,12 @@ export function DomainCoverage() {
       )}
 
       {!fetching && canonicalValues.length > 0 && (
-        <div className="flex justify-between items-center text-xs text-gray-500 pt-2 px-1">
+        <div className="flex flex-col gap-2 px-1 pt-2 text-xs text-gray-500 lg:flex-row lg:items-center lg:justify-between">
           <p>
             Vignettes missing trial batches are highlighted in{' '}
             <span className="font-medium text-amber-700">amber</span>. Click any cell to add trials.
           </p>
+          <p>Use the copy button above to place this table in docs or slides.</p>
           {maxBatchCount > 0 && (
             <div className="flex items-center gap-1.5">
               <span>Fewer runs</span>
