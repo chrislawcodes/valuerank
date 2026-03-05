@@ -20,6 +20,26 @@ export const DOMAIN_VALUE_COVERAGE_QUERY = gql`
   }
 `;
 
+export const DOMAIN_VALUE_COVERAGE_QUERY_LEGACY = gql`
+  query DomainValueCoverageLegacy($domainId: ID!, $modelIds: [String!]) {
+    domainValueCoverage(domainId: $domainId, modelIds: $modelIds) {
+      domainId
+      values
+      cells {
+        valueA
+        valueB
+        batchCount
+        definitionId
+        definitionName
+      }
+      availableModels {
+        modelId
+        label
+      }
+    }
+  }
+`;
+
 export type DomainValueCoverageCell = {
   valueA: string;
   valueB: string;
