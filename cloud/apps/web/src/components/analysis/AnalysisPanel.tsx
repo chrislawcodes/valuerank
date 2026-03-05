@@ -71,10 +71,46 @@ function getModelCount(perModel: Record<string, PerModelStats>): number {
 }
 
 /**
- * Calculate total sample size across all models.
+ * Calculate total trial count across all models.
  */
-function getTotalSampleSize(perModel: Record<string, PerModelStats>): number {
+function getTotalTrialCount(perModel: Record<string, PerModelStats>): number {
   return Object.values(perModel).reduce((sum, model) => sum + model.sampleSize, 0);
+}
+
+/**
+ * Compute completed full batches across all models.
+ * A batch is one full set of trials over all analyzed conditions.
+ */
+function getBatchStats(
+  perModel: Record<string, PerModelStats>,
+  modelScenarioMatrix: Record<string, Record<string, number>> | null | undefined,
+): { batches: number | '-'; detail: string } {
+  const conditionCount = Object.values(modelScenarioMatrix ?? {}).reduce(
+    (max, scenarios) => Math.max(max, Object.keys(scenarios ?? {}).length),
+    0,
+  );
+
+  if (conditionCount === 0) {
+    return { batches: '-', detail: 'Condition coverage unavailable' };
+  }
+
+  const modelBatches = Object.values(perModel).map((model) => model.sampleSize / conditionCount);
+  if (modelBatches.length === 0) {
+    return { batches: '-', detail: `${conditionCount} conditions per batch` };
+  }
+
+  const minBatches = Math.min(...modelBatches);
+  const maxBatches = Math.max(...modelBatches);
+  const completedBatches = Math.max(0, Math.floor(minBatches));
+
+  if (Math.abs(maxBatches - minBatches) < 1e-9) {
+    return { batches: completedBatches, detail: `${conditionCount} conditions per batch` };
+  }
+
+  return {
+    batches: completedBatches,
+    detail: `${conditionCount} conditions per batch • uneven model coverage`,
+  };
 }
 
 /**
@@ -341,7 +377,11 @@ export function AnalysisPanel({
   }
 
   const modelCount = getModelCount(analysis.perModel);
-  const totalSamples = getTotalSampleSize(analysis.perModel);
+  const totalTrials = getTotalTrialCount(analysis.perModel);
+  const { batches, detail: batchDetail } = getBatchStats(
+    analysis.perModel,
+    analysis.visualizationData?.modelScenarioMatrix,
+  );
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -429,16 +469,21 @@ export function AnalysisPanel({
       )}
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard
           label="Models"
           value={modelCount}
           detail={`${modelCount} model${modelCount !== 1 ? 's' : ''} analyzed`}
         />
         <StatCard
-          label="Total Samples"
-          value={totalSamples}
-          detail={`${Math.round(totalSamples / modelCount)} per model avg`}
+          label="Batches"
+          value={batches}
+          detail={batchDetail}
+        />
+        <StatCard
+          label="Total Trials"
+          value={totalTrials}
+          detail={modelCount > 0 ? `${Math.round(totalTrials / modelCount)} per model avg` : 'No models'}
         />
         <StatCard label="Analysis Type" value={analysis.analysisType} detail={`v${analysis.codeVersion}`} />
         <StatCard
