@@ -33,7 +33,6 @@ function CoverageCell({
   definitionName,
   aggregateRunId,
   domainId,
-  maxBatchCount,
 }: {
   valueA: string;
   valueB: string;
@@ -42,15 +41,11 @@ function CoverageCell({
   definitionName: string | null;
   aggregateRunId: string | null;
   domainId: string;
-  maxBatchCount: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
   const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
-
-  // Calculate intensity (0 to 1) relative to max batches in this matrix view
-  const intensity = maxBatchCount > 0 ? batchCount / maxBatchCount : 0;
 
   // Base styling depending on cell state
   let bgColorClass = 'bg-gray-50'; // Diagonal or empty fallback
@@ -59,16 +54,12 @@ function CoverageCell({
       'bg-[url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwYXRoIGQ9Ik0wLDggTDgsMCBMMCw4IFoiIHN0cm9rZT0iI2U1ZTdlYiIHN0cm9rZS13aWR0aD0iMSIvPjwvc3ZnPg==")] bg-gray-100';
   } else if (!hasVignette) {
     bgColorClass = 'bg-gray-50';
-  } else if (batchCount === 0) {
-    bgColorClass = 'bg-amber-50 hover:bg-amber-100/80 transition-colors';
+  } else if (batchCount < 3) {
+    bgColorClass = 'bg-rose-100 hover:bg-rose-200 transition-colors text-rose-900';
+  } else if (batchCount < 10) {
+    bgColorClass = 'bg-amber-100 hover:bg-amber-200 transition-colors text-amber-900';
   } else {
-    // Determine background color based on intensity (from very light teal to dark/medium teal)
-    if (intensity < 0.2) bgColorClass = 'bg-teal-50 hover:bg-teal-100 transition-colors';
-    else if (intensity < 0.4) bgColorClass = 'bg-teal-100 hover:bg-teal-200 transition-colors';
-    else if (intensity < 0.6) bgColorClass = 'bg-teal-200 hover:bg-teal-300 transition-colors';
-    else if (intensity < 0.8)
-      bgColorClass = 'bg-teal-300 hover:bg-teal-400 transition-colors text-teal-900';
-    else bgColorClass = 'bg-teal-500 hover:bg-teal-600 transition-colors text-white';
+    bgColorClass = 'bg-emerald-500 hover:bg-emerald-600 transition-colors text-white';
   }
 
   return (
@@ -90,8 +81,8 @@ function CoverageCell({
             bgColorClass,
             isDiagonal && 'cursor-not-allowed text-transparent font-normal',
             !isDiagonal && !hasVignette && 'text-gray-500 cursor-pointer hover:bg-gray-100',
-            hasVignette && batchCount === 0 && 'text-amber-700',
-            hasVignette && batchCount > 0 && intensity < 0.8 && 'text-teal-900'
+            hasVignette && batchCount < 3 && 'text-rose-900',
+            hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
           )}
           title={
             isDiagonal
@@ -128,7 +119,11 @@ function CoverageCell({
                 <span
                   className={cn(
                     'inline-block w-2 h-2 rounded-full mr-1.5',
-                    batchCount > 0 ? 'bg-teal-500' : 'bg-amber-500'
+                    batchCount < 3
+                      ? 'bg-rose-500'
+                      : batchCount < 10
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500'
                   )}
                 />
                 {batchCount} domain trials run
@@ -191,6 +186,35 @@ function PlayIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function parseSignatureVersion(signature: string): number | null {
+  const match = signature.match(/^v(\d+)/i);
+  if (!match) return null;
+  const version = Number.parseInt(match[1] ?? '', 10);
+  return Number.isFinite(version) ? version : null;
+}
+
+function isTempZeroSignature(option: DomainAvailableSignature): boolean {
+  if (option.temperature === 0) return true;
+  const tokenMatch = option.signature.match(/t(.+)$/i);
+  if (!tokenMatch) return false;
+  const token = (tokenMatch[1] ?? '').trim().toLowerCase();
+  if (token === 'd') return false;
+  const parsed = Number.parseFloat(token);
+  return Number.isFinite(parsed) && parsed === 0;
+}
+
+function selectPreferredSignature(options: DomainAvailableSignature[]): string {
+  const t0Options = options.filter(isTempZeroSignature);
+  if (t0Options.length === 0) return options[0]?.signature ?? '';
+  const sorted = [...t0Options].sort((left, right) => {
+    const leftVersion = parseSignatureVersion(left.signature) ?? -1;
+    const rightVersion = parseSignatureVersion(right.signature) ?? -1;
+    if (leftVersion !== rightVersion) return rightVersion - leftVersion;
+    return right.signature.localeCompare(left.signature);
+  });
+  return sorted[0]?.signature ?? '';
+}
+
 // Group values by higher-order category for display
 type CategoryGroup = {
   name: string;
@@ -209,11 +233,25 @@ export function DomainCoverage() {
   const [selectedSignature, setSelectedSignature] = useState<string>(
     searchParams.get('signature') ?? ''
   );
+  const [allowAllSignatures, setAllowAllSignatures] = useState(false);
   const [useLegacyQuery, setUseLegacyQuery] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>(() => {
     const raw = searchParams.get('modelIds');
     return raw ? raw.split(',') : [];
   });
+  const [availableModelIds, setAvailableModelIds] = useState<string[]>([]);
+  const allModelsSelected = useMemo(
+    () =>
+      availableModelIds.length > 0
+      && selectedModelIds.length === availableModelIds.length
+      && availableModelIds.every((modelId) => selectedModelIds.includes(modelId)),
+    [availableModelIds, selectedModelIds],
+  );
+  const selectedModelIdsForQuery = useMemo(() => {
+    if (selectedModelIds.length === 0) return undefined;
+    if (allModelsSelected) return undefined;
+    return selectedModelIds;
+  }, [allModelsSelected, selectedModelIds]);
 
   const [{ data: signatureData, fetching: signaturesLoading, error: signaturesError }] = useQuery<
     DomainAvailableSignaturesQueryResult,
@@ -229,11 +267,18 @@ export function DomainCoverage() {
     () => signatureData?.domainAvailableSignatures ?? [],
     [signatureData],
   );
+  const preferredSignature = useMemo(
+    () => selectPreferredSignature(signatureOptions),
+    [signatureOptions],
+  );
   const hasValidSelectedSignature = useMemo(
     () => selectedSignature === '' || signatureOptions.some((option) => option.signature === selectedSignature),
     [selectedSignature, signatureOptions],
   );
-  const signatureSelectionReady = selectedDomainId !== '' && !signaturesLoading && hasValidSelectedSignature;
+  const signatureSelectionReady = selectedDomainId !== ''
+    && !signaturesLoading
+    && hasValidSelectedSignature
+    && (selectedSignature !== '' || allowAllSignatures || signatureOptions.length === 0);
 
   // Ensure a domain is selected by default
   useEffect(() => {
@@ -245,11 +290,15 @@ export function DomainCoverage() {
   }, [domains, selectedDomainId]);
 
   useEffect(() => {
-    if (selectedSignature === '') return;
-    if (signatureOptions.some((option) => option.signature === selectedSignature)) return;
     if (signaturesLoading) return;
-    setSelectedSignature('');
-  }, [selectedSignature, signatureOptions, signaturesLoading]);
+    if (signatureOptions.length === 0) {
+      if (selectedSignature !== '') setSelectedSignature('');
+      return;
+    }
+    if (selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature)) return;
+    if (selectedSignature === '' && allowAllSignatures) return;
+    setSelectedSignature(preferredSignature);
+  }, [allowAllSignatures, preferredSignature, selectedSignature, signatureOptions, signaturesLoading]);
 
   // Sync URL state
   useEffect(() => {
@@ -262,8 +311,10 @@ export function DomainCoverage() {
       next.set('signature', selectedSignature);
     }
 
-    if (selectedModelIds.length > 0) {
-      next.set('modelIds', selectedModelIds.join(','));
+    const modelIdsForUrl =
+      selectedModelIdsForQuery === undefined ? '' : selectedModelIdsForQuery.join(',');
+    if (modelIdsForUrl !== '') {
+      next.set('modelIds', modelIdsForUrl);
     } else {
       next.delete('modelIds');
     }
@@ -273,7 +324,7 @@ export function DomainCoverage() {
     const currentSignature = searchParams.get('signature') ?? '';
     const currentModels = searchParams.get('modelIds') ?? '';
     const newSignature = selectedSignature;
-    const newModels = selectedModelIds.length > 0 ? selectedModelIds.join(',') : '';
+    const newModels = modelIdsForUrl;
 
     if (
       currentDomain !== selectedDomainId
@@ -282,7 +333,7 @@ export function DomainCoverage() {
     ) {
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, selectedDomainId, selectedModelIds, selectedSignature, setSearchParams]);
+  }, [searchParams, selectedDomainId, selectedModelIdsForQuery, selectedSignature, setSearchParams]);
 
   const [{ data: scoredData, fetching: scoredFetching, error: scoredError }] = useQuery<
     DomainValueCoverageQueryResult,
@@ -291,7 +342,7 @@ export function DomainCoverage() {
     query: DOMAIN_VALUE_COVERAGE_QUERY,
     variables: {
       domainId: selectedDomainId,
-      modelIds: selectedModelIds.length > 0 ? selectedModelIds : undefined,
+      modelIds: selectedModelIdsForQuery,
       signature: selectedSignature === '' ? undefined : selectedSignature,
     },
     pause: selectedDomainId === '' || !signatureSelectionReady || useLegacyQuery,
@@ -305,7 +356,7 @@ export function DomainCoverage() {
     query: DOMAIN_VALUE_COVERAGE_QUERY_LEGACY,
     variables: {
       domainId: selectedDomainId,
-      modelIds: selectedModelIds.length > 0 ? selectedModelIds : undefined,
+      modelIds: selectedModelIdsForQuery,
     },
     pause: selectedDomainId === '' || !signatureSelectionReady || !useLegacyQuery,
     requestPolicy: 'cache-and-network',
@@ -331,22 +382,26 @@ export function DomainCoverage() {
     const coverage = data?.domainValueCoverage;
     if (!coverage || coverage.domainId !== selectedDomainId) return;
 
-    const allowedModelIds = new Set(coverage.availableModels.map((model) => model.modelId));
+    const modelIds = coverage.availableModels.map((model) => model.modelId);
+    setAvailableModelIds((prev) => {
+      if (prev.length === modelIds.length && prev.every((modelId, index) => modelId === modelIds[index])) {
+        return prev;
+      }
+      return modelIds;
+    });
+
+    const allowedModelIds = new Set(modelIds);
     setSelectedModelIds((prev) => {
       const next = prev.filter((modelId) => allowedModelIds.has(modelId));
+      if (modelIds.length > 0 && next.length === 0) {
+        return modelIds;
+      }
       if (next.length === prev.length && next.every((modelId, index) => modelId === prev[index])) {
         return prev;
       }
       return next;
     });
   }, [data?.domainValueCoverage, selectedDomainId]);
-
-  // Find highest batch count to scale the color intensities
-  const maxBatchCount = useMemo(() => {
-    const defaultCells = data?.domainValueCoverage?.cells ?? [];
-    if (defaultCells.length === 0) return 0;
-    return Math.max(...defaultCells.map((c) => c.batchCount));
-  }, [data?.domainValueCoverage?.cells]);
 
   // Fast cell lookup O(1)
   const cellLookup = useMemo(() => {
@@ -401,9 +456,15 @@ export function DomainCoverage() {
   );
 
   const toggleModel = (modelId: string) => {
-    setSelectedModelIds((prev) =>
-      prev.includes(modelId) ? prev.filter((id) => id !== modelId) : [...prev, modelId]
-    );
+    setSelectedModelIds((prev) => {
+      if (prev.includes(modelId)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== modelId);
+      }
+      const next = new Set(prev);
+      next.add(modelId);
+      return availableModelIds.filter((id) => next.has(id));
+    });
   };
 
   return (
@@ -444,8 +505,10 @@ export function DomainCoverage() {
                 const newDomainId = event.target.value;
                 if (newDomainId !== selectedDomainId) {
                   setSelectedDomainId(newDomainId);
+                  setAllowAllSignatures(false);
                   setSelectedSignature('');
                   setSelectedModelIds([]);
+                  setAvailableModelIds([]);
                 }
               }}
               disabled={domainsLoading || domains.length === 0}
@@ -465,7 +528,11 @@ export function DomainCoverage() {
               aria-label="Trial Signature"
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
               value={selectedSignature}
-              onChange={(event) => setSelectedSignature(event.target.value)}
+              onChange={(event) => {
+                const nextSignature = event.target.value;
+                setAllowAllSignatures(nextSignature === '');
+                setSelectedSignature(nextSignature);
+              }}
               disabled={signaturesLoading}
             >
               <option value="">All signatures</option>
@@ -506,15 +573,15 @@ export function DomainCoverage() {
                     </Button>
                   );
                 })}
-                {selectedModelIds.length > 0 && (
+                {!allModelsSelected && availableModelIds.length > 0 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelectedModelIds([])}
+                    onClick={() => setSelectedModelIds(availableModelIds)}
                     className="h-7 px-2.5 py-1 text-xs rounded-full text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline hover:bg-transparent"
                   >
-                    Clear filters
+                    Select all models
                   </Button>
                 )}
               </div>
@@ -617,7 +684,6 @@ export function DomainCoverage() {
                             definitionId={cell?.definitionId ?? null}
                             definitionName={cell?.definitionName ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
-                            maxBatchCount={maxBatchCount}
                           />
                         </td>
                       );
@@ -637,22 +703,25 @@ export function DomainCoverage() {
       {!fetching && canonicalValues.length > 0 && (
         <div className="flex flex-col gap-2 px-1 pt-2 text-xs text-gray-500 lg:flex-row lg:items-center lg:justify-between">
           <p>
-            Vignettes missing trial batches are highlighted in{' '}
-            <span className="font-medium text-amber-700">amber</span>. Click any cell to add trials.
+            Cells are <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
+            <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
+            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add trials.
           </p>
           <p>Use the copy button above to place this table in docs or slides.</p>
-          {maxBatchCount > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span>Fewer runs</span>
-              <div className="flex h-3 w-32 rounded-sm overflow-hidden border border-gray-200 mx-1">
-                <div className="flex-1 bg-teal-50" />
-                <div className="flex-1 bg-teal-200" />
-                <div className="flex-1 bg-teal-300" />
-                <div className="flex-1 bg-teal-500" />
-              </div>
-              <span>More runs ({maxBatchCount.toLocaleString()})</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-rose-500" />
+              <span>&lt;3</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-amber-500" />
+              <span>3-9</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
+              <span>10+</span>
+            </span>
+          </div>
         </div>
       )}
     </div>

@@ -31,4 +31,11 @@ describe('MobileNav Component', () => {
     expect(domainsLink.className).toContain('border-teal-500');
     expect(coverageLink.className).not.toContain('border-teal-500');
   });
+
+  it('renders Domains before Vignettes in the mobile nav list', () => {
+    renderMobileNav('/domains');
+    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
+    expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

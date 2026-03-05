@@ -12,8 +12,8 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Domains', path: '/domains', icon: FolderTree },
+  { name: 'Vignettes', path: '/definitions', icon: FileText },
   { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
   { name: 'Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
   { name: 'Trials', path: '/runs', icon: Play },
