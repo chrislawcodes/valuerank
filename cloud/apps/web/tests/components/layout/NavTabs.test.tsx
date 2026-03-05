@@ -40,4 +40,12 @@ describe('NavTabs Component', () => {
     expect(vignettesTrigger?.className).toContain('text-white');
     expect(vignettesTrigger?.className).toContain('border-teal-500');
   });
+
+  it('renders Domains before Vignettes in the top-level tab order', () => {
+    renderNavTabs();
+    const domainsLink = screen.getByRole('link', { name: /domains/i });
+    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+    expect(domainsLink.closest('.group')?.className).toContain('order-1');
+    expect(vignettesLink.closest('.group')?.className).toContain('order-2');
+  });
 });
