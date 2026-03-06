@@ -27,11 +27,43 @@ import {
   type ReviewOrderInvariancePairVariables,
 } from '../../api/operations/order-invariance';
 
+const ENABLE_2X2_ORDER_EFFECT_UI = true;
+
 function formatPercent(value: number | null): string {
   if (value == null) {
     return 'n/a';
   }
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatMAD(value: number | null | undefined): string {
+  if (value == null) return '—';
+  return value.toFixed(2);
+}
+
+function getScaleEffectColor(value: number | null | undefined): string {
+  if (value == null) return 'text-gray-900';
+  if (value > 1.00) return 'text-red-600 font-bold';
+  if (value > 0.50) return 'text-amber-600 font-semibold';
+  return 'text-green-700';
+}
+
+function getVariantHeaderLabel(variantType: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    fully_flipped: 'Fully Flipped',
+    scale_flipped: 'Scale Flipped (new)',
+    presentation_flipped: 'Presentation Flipped (new)',
+  };
+  return variantType ? (labels[variantType] ?? variantType) : 'Unknown';
+}
+
+function getVariantSideLabel(variantType: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    fully_flipped: 'Fully Flipped',
+    scale_flipped: 'Scale Flipped (scale only)',
+    presentation_flipped: 'Presentation Flipped (order only)',
+  };
+  return variantType ? (labels[variantType] ?? 'Flipped') : 'Flipped';
 }
 
 function formatDateTime(value: string | null): string {
@@ -241,8 +273,12 @@ export function OrderEffectPanel() {
 
   const result = data?.assumptionsOrderInvariance;
   const reviewResult = reviewData?.assumptionsOrderInvarianceReview;
-  const reviewVignettes = useMemo(
-    () => [...(reviewResult?.vignettes ?? [])].sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle)),
+  const sortedReviewVignettes = useMemo(
+    () => [...(reviewResult?.vignettes ?? [])].sort((a, b) => {
+      const titleCmp = a.vignetteTitle.localeCompare(b.vignetteTitle);
+      if (titleCmp !== 0) return titleCmp;
+      return (a.variantType ?? '').localeCompare(b.variantType ?? '');
+    }),
     [reviewResult?.vignettes],
   );
 
@@ -295,6 +331,33 @@ export function OrderEffectPanel() {
   }, [result?.rows, selectedModelIds]);
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
+  const modelLeaderboard = useMemo(() => {
+    if (!result?.rows) return [];
+    const byModel = new Map<string, typeof result.rows>();
+    for (const row of result.rows) {
+      const list = byModel.get(row.modelId) ?? [];
+      list.push(row);
+      byModel.set(row.modelId, list);
+    }
+    return Array.from(byModel.entries()).map(([modelId, rows]) => {
+      const modelLabel = rows[0]?.modelLabel ?? modelId;
+      const pRows = rows.filter(
+        (r) => r.variantType === 'presentation_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
+      );
+      const sRows = rows.filter(
+        (r) => r.variantType === 'scale_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
+      );
+      const pMAD = pRows.length > 0
+        ? pRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / pRows.length
+        : null;
+      const sMAD = sRows.length > 0
+        ? sRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / sRows.length
+        : null;
+      const matchRows = rows.filter((r) => r.variantType === 'fully_flipped' && r.isMatch != null);
+      const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
+      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length };
+    }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
+  }, [result?.rows]);
 
   async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
     setActiveReviewPairId(vignette.pairId);
@@ -424,15 +487,20 @@ export function OrderEffectPanel() {
             )}
 
             <div className="mt-4 space-y-4">
-              {reviewVignettes.length === 0 ? (
+              {sortedReviewVignettes.length === 0 ? (
                 <div className="rounded-md border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600">
                   No generated order-flip pairs are available yet.
                 </div>
-              ) : reviewVignettes.map((vignette) => (
-                <div key={vignette.vignetteId} className="rounded-lg border border-gray-200 bg-white">
+              ) : sortedReviewVignettes.map((vignette) => (
+                <div key={vignette.pairId} className="rounded-lg border border-gray-200 bg-white">
                   <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">{vignette.vignetteTitle}</div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {vignette.vignetteTitle}
+                        <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
+                          {getVariantHeaderLabel(vignette.variantType)}
+                        </span>
+                      </div>
                       <div className="mt-1 text-xs text-gray-500">
                         Showing representative condition {vignette.conditionKey}. Approval covers all {vignette.conditionPairCount} generated condition pair{vignette.conditionPairCount === 1 ? '' : 's'}.
                       </div>
@@ -453,7 +521,9 @@ export function OrderEffectPanel() {
                       <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.baselineText}</pre>
                     </div>
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Flipped (B First)</div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        {getVariantSideLabel(vignette.variantType)} (B First)
+                      </div>
                       <div className="mt-1 text-xs text-gray-500">{vignette.flippedName}</div>
                       <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.flippedText}</pre>
                     </div>
@@ -551,12 +621,71 @@ export function OrderEffectPanel() {
 
         {result && (
           <>
-            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
-              <div className="mt-1 text-base font-semibold text-gray-900">
-                {formatPercent(result.summary.matchRate)}
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
+                <div className="mt-1 text-base font-semibold text-gray-900">
+                  {formatPercent(result.summary.matchRate)}
+                </div>
               </div>
+              {ENABLE_2X2_ORDER_EFFECT_UI && result?.summary?.presentationEffectMAD !== undefined && (
+                <>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      Presentation Effect (Δ_P)
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900">
+                      {formatMAD(result.summary.presentationEffectMAD)}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-400">Mean Abs Diff — order bias</div>
+                  </div>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      Scale Effect (Δ_S)
+                    </div>
+                    <div className={`mt-1 text-lg font-semibold ${getScaleEffectColor(result.summary.scaleEffectMAD)}`}>
+                      {formatMAD(result.summary.scaleEffectMAD)}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-400">
+                      {(result.summary.scaleEffectMAD ?? 0) > 1.0 ? '⚠ Severe anchoring' :
+                       (result.summary.scaleEffectMAD ?? 0) > 0.5 ? '⚠ Possible anchoring' :
+                       'Mean Abs Diff — scale bias'}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+
+            {ENABLE_2X2_ORDER_EFFECT_UI && modelLeaderboard.length > 0 && (
+              <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match Rate</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Presentation (Δ_P)</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale (Δ_S)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {modelLeaderboard.map((ms) => (
+                      <tr key={ms.modelId} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
+                        <td className="px-4 py-2 text-right text-gray-600">{ms.n}</td>
+                        <td className="px-4 py-2 text-right text-gray-700">
+                          {ms.matchRate != null ? `${(ms.matchRate * 100).toFixed(0)}%` : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-right text-gray-700">{formatMAD(ms.pMAD)}</td>
+                        <td className={`px-4 py-2 text-right ${getScaleEffectColor(ms.sMAD)}`}>
+                          {formatMAD(ms.sMAD)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {modelOptions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
