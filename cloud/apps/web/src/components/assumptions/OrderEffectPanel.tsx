@@ -482,7 +482,7 @@ export function OrderEffectPanel() {
             {launchMutation.data?.launchOrderInvariance && (
               <div className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
                 Started {launchMutation.data.launchOrderInvariance.startedRuns} runs
-                {' '}({launchMutation.data.launchOrderInvariance.baselineRunsStarted} baseline, {launchMutation.data.launchOrderInvariance.flippedRunsStarted} flipped).
+                {' '}({Object.entries(launchMutation.data.launchOrderInvariance.runsByVariantType).map(([type, count]) => `${count} ${type}`).join(', ')}).
               </div>
             )}
 
