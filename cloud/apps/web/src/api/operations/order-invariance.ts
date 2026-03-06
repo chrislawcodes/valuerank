@@ -114,6 +114,31 @@ export type OrderInvarianceReviewResult = {
   vignettes: OrderInvarianceReviewVignette[];
 };
 
+export type OrderInvarianceLaunchRun = {
+  runId: string;
+  status: string;
+  targetedTrials: number;
+  completedTrials: number;
+  failedTrials: number;
+  percentComplete: number;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+export type OrderInvarianceLaunchStatus = {
+  generatedAt: string;
+  totalRuns: number;
+  activeRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  targetedTrials: number;
+  completedTrials: number;
+  failedTrials: number;
+  percentComplete: number;
+  isComplete: boolean;
+  runs: OrderInvarianceLaunchRun[];
+};
+
 export type OrderInvarianceQueryResult = {
   assumptionsOrderInvariance: OrderInvarianceResult;
 };
@@ -126,6 +151,10 @@ export type OrderInvarianceTranscriptsQueryResult = {
   assumptionsOrderInvarianceTranscripts: OrderInvarianceTranscriptResult;
 };
 
+export type OrderInvarianceLaunchStatusQueryResult = {
+  assumptionsOrderInvarianceLaunchStatus: OrderInvarianceLaunchStatus;
+};
+
 export type OrderInvarianceQueryVariables = {
   directionOnly?: boolean;
   trimOutliers?: boolean;
@@ -135,6 +164,10 @@ export type OrderInvarianceTranscriptsQueryVariables = {
   vignetteId: string;
   modelId: string;
   conditionKey: string;
+};
+
+export type OrderInvarianceLaunchStatusQueryVariables = {
+  runIds: string[];
 };
 
 export type ReviewOrderInvariancePairResult = {
@@ -275,6 +308,33 @@ export const ORDER_INVARIANCE_TRANSCRIPTS_QUERY = gql`
         orderLabel
         attributeALevel
         attributeBLevel
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_LAUNCH_STATUS_QUERY = gql`
+  query AssumptionsOrderInvarianceLaunchStatus($runIds: [ID!]!) {
+    assumptionsOrderInvarianceLaunchStatus(runIds: $runIds) {
+      generatedAt
+      totalRuns
+      activeRuns
+      completedRuns
+      failedRuns
+      targetedTrials
+      completedTrials
+      failedTrials
+      percentComplete
+      isComplete
+      runs {
+        runId
+        status
+        targetedTrials
+        completedTrials
+        failedTrials
+        percentComplete
+        startedAt
+        completedAt
       }
     }
   }

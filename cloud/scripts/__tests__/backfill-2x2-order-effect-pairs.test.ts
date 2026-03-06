@@ -42,22 +42,36 @@ describe('replaceScaleLine', () => {
 });
 
 describe('deriveScaleFlippedContent', () => {
-  it('uses source narrative, injects flipped scale lines', () => {
+  it('uses source narrative, injects all flipped scale lines', () => {
     const source = { prompt: MOCK_SOURCE_PROMPT, dimension_values: { x: 'A' } };
-    const result = deriveScaleFlippedContent(source, '1 = Attribute B is prioritized', '5 = Attribute A is prioritized');
+    const result = deriveScaleFlippedContent(source, {
+      1: '1 = Attribute B is prioritized',
+      2: '2 = Slightly B',
+      4: '4 = Slightly A',
+      5: '5 = Attribute A is prioritized',
+    });
     expect(result.prompt).toContain('Scenario: A vs B');
     expect(result.prompt).toContain('1 = Attribute B is prioritized');
+    expect(result.prompt).toContain('2 = Slightly B');
+    expect(result.prompt).toContain('4 = Slightly A');
     expect(result.prompt).toContain('5 = Attribute A is prioritized');
     expect(result.dimension_values.x).toBe('A');
   });
 });
 
 describe('derivePresentationFlippedContent', () => {
-  it('uses flipped narrative, injects source scale lines', () => {
+  it('uses flipped narrative, injects all source scale lines', () => {
     const flipped = { prompt: MOCK_FLIPPED_PROMPT, dimension_values: { x: 'B' } };
-    const result = derivePresentationFlippedContent(flipped, '1 = Attribute A is prioritized', '5 = Attribute B is prioritized');
+    const result = derivePresentationFlippedContent(flipped, {
+      1: '1 = Attribute A is prioritized',
+      2: '2 = Slightly A',
+      4: '4 = Slightly B',
+      5: '5 = Attribute B is prioritized',
+    });
     expect(result.prompt).toContain('Scenario: B vs A');
     expect(result.prompt).toContain('1 = Attribute A is prioritized');
+    expect(result.prompt).toContain('2 = Slightly A');
+    expect(result.prompt).toContain('4 = Slightly B');
     expect(result.prompt).toContain('5 = Attribute B is prioritized');
     expect(result.dimension_values.x).toBe('B');
   });
