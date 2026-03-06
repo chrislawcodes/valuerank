@@ -22,8 +22,7 @@ type ReviewOrderInvariancePairPayload = {
 
 type LaunchOrderInvariancePayload = {
   startedRuns: number;
-  baselineRunsStarted: number;
-  flippedRunsStarted: number;
+  runsByVariantType: Record<string, number>;
   approvedPairs: number;
   modelCount: number;
   runIds: string[];
@@ -116,8 +115,10 @@ builder.objectType(ReviewOrderInvariancePairPayloadRef, {
 builder.objectType(LaunchOrderInvariancePayloadRef, {
   fields: (t) => ({
     startedRuns: t.exposeInt('startedRuns'),
-    baselineRunsStarted: t.exposeInt('baselineRunsStarted'),
-    flippedRunsStarted: t.exposeInt('flippedRunsStarted'),
+    runsByVariantType: t.field({
+      type: 'JSON',
+      resolve: (parent) => parent.runsByVariantType,
+    }),
     approvedPairs: t.exposeInt('approvedPairs'),
     modelCount: t.exposeInt('modelCount'),
     runIds: t.exposeStringList('runIds'),
@@ -457,6 +458,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
           },
         },
         select: {
+          variantType: true,
           sourceScenario: {
             select: {
               id: true,
@@ -485,28 +487,38 @@ builder.mutationField('launchOrderInvariance', (t) =>
       }
 
       const approvedPairCount = approvedPairs.length;
-      const approvedByDefinition = new Map<string, { sourceScenarioIds: Set<string>; variantScenarioIds: Set<string> }>();
+      const variantsByDefinition = new Map<string, Map<string, Set<string>>>();
       const approvedCountsByDefinition = new Map<string, number>();
       for (const pair of approvedPairs) {
         const definitionId = pair.sourceScenario.definitionId;
-        const existing = approvedByDefinition.get(definitionId) ?? {
-          sourceScenarioIds: new Set<string>(),
-          variantScenarioIds: new Set<string>(),
-        };
-        existing.sourceScenarioIds.add(pair.sourceScenario.id);
-        existing.variantScenarioIds.add(pair.variantScenario.id);
-        approvedByDefinition.set(definitionId, existing);
+        const variantType = pair.variantType;
+
+        if (!variantsByDefinition.has(definitionId)) {
+          variantsByDefinition.set(definitionId, new Map());
+        }
+        const definitionVariants = variantsByDefinition.get(definitionId)!;
+
+        if (!definitionVariants.has('baseline')) {
+          definitionVariants.set('baseline', new Set());
+        }
+        definitionVariants.get('baseline')!.add(pair.sourceScenario.id);
+
+        if (!definitionVariants.has(variantType)) {
+          definitionVariants.set(variantType, new Set());
+        }
+        definitionVariants.get(variantType)!.add(pair.variantScenario.id);
+
         approvedCountsByDefinition.set(
           definitionId,
           (approvedCountsByDefinition.get(definitionId) ?? 0) + 1,
         );
       }
 
-      const hasCompleteApprovedSet = approvedPairCount === expectedPairCount
-        && approvedByDefinition.size === lockedDefinitionIds.length
+      const hasCompleteApprovedSet = approvedPairCount === expectedPairCount * 3
+        && variantsByDefinition.size === lockedDefinitionIds.length
         && expectedByDefinition.size === lockedDefinitionIds.length
         && lockedDefinitionIds.every((definitionId) => (
-          (approvedCountsByDefinition.get(definitionId) ?? 0) === (expectedByDefinition.get(definitionId) ?? 0)
+          (approvedCountsByDefinition.get(definitionId) ?? 0) === (expectedByDefinition.get(definitionId) ?? 0) * 3
         ));
       if (!hasCompleteApprovedSet && args.force !== true) {
         throw new Error('Launch blocked: all generated order-invariance condition pairs must be approved across the full locked vignette set.');
@@ -532,7 +544,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
 
       const activeRuns = await db.run.findMany({
         where: {
-          definitionId: { in: Array.from(approvedByDefinition.keys()) },
+          definitionId: { in: Array.from(variantsByDefinition.keys()) },
           status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
           deletedAt: null,
         },
@@ -565,7 +577,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
           run: {
             status: 'COMPLETED',
             deletedAt: null,
-            definitionId: { in: Array.from(approvedByDefinition.keys()) },
+            definitionId: { in: Array.from(variantsByDefinition.keys()) },
           },
         },
         select: {
@@ -586,80 +598,49 @@ builder.mutationField('launchOrderInvariance', (t) =>
         },
       });
 
-      const baselineRecords = (completedTranscripts as ExistingTranscriptRecord[]).filter((record) => {
+      const allRecords = (completedTranscripts as ExistingTranscriptRecord[]).filter((record) => {
         const assumptionKey = getAssumptionKey(record.run.config);
-        if (assumptionKey === 'temp_zero_determinism') {
-          return true;
-        }
+        if (assumptionKey === 'temp_zero_determinism') return true;
         return assumptionKey === 'order_invariance' && hasAssumptionRunTag(record.run.tags);
       });
-      const flippedRecords = (completedTranscripts as ExistingTranscriptRecord[]).filter((record) => (
-        getAssumptionKey(record.run.config) === 'order_invariance' && hasAssumptionRunTag(record.run.tags)
-      ));
-
-      const baselineGroups = createTranscriptGroupMap(baselineRecords);
-      const flippedGroups = createTranscriptGroupMap(flippedRecords);
+      const allTranscriptGroups = createTranscriptGroupMap(allRecords);
 
       const launches: Array<{
         definitionId: string;
         scenarioIds: string[];
         samplesPerScenario: number;
-        runType: 'baseline' | 'flipped';
+        runType: string;
       }> = [];
 
-      for (const [definitionId, definitionGroup] of approvedByDefinition.entries()) {
-        let baselineFloor = 5;
-        let flippedFloor = 5;
+      for (const [definitionId, definitionVariants] of variantsByDefinition.entries()) {
+        for (const [variantType, scenarioIds] of definitionVariants.entries()) {
+          let variantFloor = 5;
 
-        for (const scenarioId of definitionGroup.sourceScenarioIds) {
-          for (const modelId of models) {
-            const count = (baselineGroups.get(`${modelId}::${scenarioId}`) ?? []).length;
-            if (count < baselineFloor) {
-              baselineFloor = count;
+          for (const scenarioId of scenarioIds) {
+            for (const modelId of models) {
+              const count = (allTranscriptGroups.get(`${modelId}::${scenarioId}`) ?? []).length;
+              if (count < variantFloor) variantFloor = count;
+              if (variantFloor === 0) break;
             }
-            if (baselineFloor === 0) break;
+            if (variantFloor === 0) break;
           }
-          if (baselineFloor === 0) break;
-        }
 
-        for (const scenarioId of definitionGroup.variantScenarioIds) {
-          for (const modelId of models) {
-            const count = (flippedGroups.get(`${modelId}::${scenarioId}`) ?? []).length;
-            if (count < flippedFloor) {
-              flippedFloor = count;
-            }
-            if (flippedFloor === 0) break;
+          const needed = Math.max(0, 5 - Math.min(variantFloor, 5));
+          if (needed > 0) {
+            launches.push({
+              definitionId,
+              scenarioIds: Array.from(scenarioIds).sort(),
+              samplesPerScenario: needed,
+              runType: variantType,
+            });
           }
-          if (flippedFloor === 0) break;
-        }
-
-        const baselineNeeded = Math.max(0, 5 - Math.min(baselineFloor, 5));
-        const flippedNeeded = Math.max(0, 5 - Math.min(flippedFloor, 5));
-
-        if (baselineNeeded > 0) {
-          launches.push({
-            definitionId,
-            scenarioIds: Array.from(definitionGroup.sourceScenarioIds).sort(),
-            samplesPerScenario: baselineNeeded,
-            runType: 'baseline',
-          });
-        }
-
-        if (flippedNeeded > 0) {
-          launches.push({
-            definitionId,
-            scenarioIds: Array.from(definitionGroup.variantScenarioIds).sort(),
-            samplesPerScenario: flippedNeeded,
-            runType: 'flipped',
-          });
         }
       }
 
       if (launches.length === 0) {
         return {
           startedRuns: 0,
-          baselineRunsStarted: 0,
-          flippedRunsStarted: 0,
+          runsByVariantType: {},
           approvedPairs: approvedPairCount,
           modelCount: models.length,
           runIds: [],
@@ -669,8 +650,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
 
       const runIds: string[] = [];
       const failedDefinitionIds: string[] = [];
-      let baselineRunsStarted = 0;
-      let flippedRunsStarted = 0;
+      const runsByVariantType: Record<string, number> = {};
 
       const results = await Promise.allSettled(
         launches.map(async (launch) => {
@@ -704,11 +684,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
         const launch = launches[index]!;
         if (result.status === 'fulfilled') {
           runIds.push(result.value.runId);
-          if (result.value.runType === 'baseline') {
-            baselineRunsStarted += 1;
-          } else {
-            flippedRunsStarted += 1;
-          }
+          runsByVariantType[result.value.runType] = (runsByVariantType[result.value.runType] ?? 0) + 1;
           return;
         }
 
@@ -742,8 +718,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
 
       return {
         startedRuns: runIds.length,
-        baselineRunsStarted,
-        flippedRunsStarted,
+        runsByVariantType,
         approvedPairs: approvedPairCount,
         modelCount: models.length,
         runIds,
