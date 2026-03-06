@@ -551,36 +551,10 @@ export function OrderEffectPanel() {
 
         {result && (
           <>
-            <div className="mt-4 grid gap-3 md:grid-cols-5">
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {formatPercent(result.summary.matchRate)}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Comparable Pairs</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.comparablePairs}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Missing Pairs</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.missingPairs}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Sensitive Models</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.sensitiveModelCount}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Sensitive Vignettes</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.sensitiveVignetteCount}
-                </div>
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
+              <div className="mt-1 text-base font-semibold text-gray-900">
+                {formatPercent(result.summary.matchRate)}
               </div>
             </div>
 
