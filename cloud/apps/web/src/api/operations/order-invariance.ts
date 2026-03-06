@@ -39,6 +39,38 @@ export type OrderInvarianceRow = {
   isMatch: boolean | null;
 };
 
+export type OrderInvarianceTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource?: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: string;
+  lastAccessedAt: string | null;
+  orderLabel: string;
+  attributeALevel: number | null;
+  attributeBLevel: number | null;
+};
+
+export type OrderInvarianceTranscriptResult = {
+  generatedAt: string;
+  vignetteId: string;
+  vignetteTitle: string;
+  modelId: string;
+  modelLabel: string;
+  conditionKey: string;
+  attributeALabel: string | null;
+  attributeBLabel: string | null;
+  transcripts: OrderInvarianceTranscript[];
+};
+
 export type OrderInvarianceResult = {
   generatedAt: string;
   summary: OrderInvarianceSummary;
@@ -86,9 +118,19 @@ export type OrderInvarianceReviewQueryResult = {
   assumptionsOrderInvarianceReview: OrderInvarianceReviewResult;
 };
 
+export type OrderInvarianceTranscriptsQueryResult = {
+  assumptionsOrderInvarianceTranscripts: OrderInvarianceTranscriptResult;
+};
+
 export type OrderInvarianceQueryVariables = {
   directionOnly?: boolean;
   trimOutliers?: boolean;
+};
+
+export type OrderInvarianceTranscriptsQueryVariables = {
+  vignetteId: string;
+  modelId: string;
+  conditionKey: string;
 };
 
 export type ReviewOrderInvariancePairResult = {
@@ -184,6 +226,48 @@ export const ORDER_INVARIANCE_REVIEW_QUERY = gql`
         reviewedBy
         reviewedAt
         reviewNotes
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_TRANSCRIPTS_QUERY = gql`
+  query AssumptionsOrderInvarianceTranscripts(
+    $vignetteId: ID!
+    $modelId: String!
+    $conditionKey: String!
+  ) {
+    assumptionsOrderInvarianceTranscripts(
+      vignetteId: $vignetteId
+      modelId: $modelId
+      conditionKey: $conditionKey
+    ) {
+      generatedAt
+      vignetteId
+      vignetteTitle
+      modelId
+      modelLabel
+      conditionKey
+      attributeALabel
+      attributeBLabel
+      transcripts {
+        id
+        runId
+        scenarioId
+        modelId
+        modelVersion
+        content
+        decisionCode
+        decisionCodeSource
+        turnCount
+        tokenCount
+        durationMs
+        estimatedCost
+        createdAt
+        lastAccessedAt
+        orderLabel
+        attributeALevel
+        attributeBLevel
       }
     }
   }
