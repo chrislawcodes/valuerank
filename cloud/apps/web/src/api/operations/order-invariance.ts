@@ -23,6 +23,8 @@ export type OrderInvarianceSummary = {
   comparablePairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
+  presentationEffectMAD: number | null;
+  scaleEffectMAD: number | null;
   excludedPairs: OrderInvarianceExclusionCount[];
 };
 
@@ -37,6 +39,7 @@ export type OrderInvarianceRow = {
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
+  variantType: string | null;
 };
 
 export type OrderInvarianceTranscript = {
@@ -98,6 +101,7 @@ export type OrderInvarianceReviewVignette = {
   flippedName: string;
   baselineText: string;
   flippedText: string;
+  variantType: string | null;
   reviewStatus: OrderInvarianceReviewStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
@@ -144,8 +148,7 @@ export type ReviewOrderInvariancePairResult = {
 export type LaunchOrderInvarianceResult = {
   launchOrderInvariance: {
     startedRuns: number;
-    baselineRunsStarted: number;
-    flippedRunsStarted: number;
+    runsByVariantType: Record<string, number>;
     approvedPairs: number;
     modelCount: number;
     runIds: string[];
@@ -177,6 +180,8 @@ export const ORDER_INVARIANCE_QUERY = gql`
         comparablePairs
         sensitiveModelCount
         sensitiveVignetteCount
+        presentationEffectMAD
+        scaleEffectMAD
         excludedPairs {
           reason
           count
@@ -193,6 +198,7 @@ export const ORDER_INVARIANCE_QUERY = gql`
         mismatchType
         ordinalDistance
         isMatch
+        variantType
       }
     }
   }
@@ -222,6 +228,7 @@ export const ORDER_INVARIANCE_REVIEW_QUERY = gql`
         flippedName
         baselineText
         flippedText
+        variantType
         reviewStatus
         reviewedBy
         reviewedAt
@@ -295,8 +302,7 @@ export const LAUNCH_ORDER_INVARIANCE_MUTATION = gql`
   mutation LaunchOrderInvariance($force: Boolean) {
     launchOrderInvariance(force: $force) {
       startedRuns
-      baselineRunsStarted
-      flippedRunsStarted
+      runsByVariantType
       approvedPairs
       modelCount
       runIds
