@@ -148,7 +148,7 @@ async function main() {
       {
         type: 'presentation_flipped',
         name: `${sourceScenario.name} (Presentation Flipped)`,
-        orientationFlipped: false,
+        orientationFlipped: true,
         // Narrative from fully_flipped (Order B), Scale from source (S_A)
         deriveContent: () => derivePresentationFlippedContent(fullyFlippedContent, sourceScaleLines as Record<number, string>),
       },
