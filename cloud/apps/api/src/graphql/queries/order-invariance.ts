@@ -228,10 +228,42 @@ function parseDecision(decisionCode: string | null): number | null {
   return Number(decisionCode);
 }
 
-function normalizeDecision(decision: number, variantType: string | null): number {
+export function normalizeDecision(decision: number, variantType: string | null): number {
   return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
     ? 6 - decision
     : decision;
+}
+
+export function computeMADMetrics(scorePivot: Map<string, Record<string, number>>): {
+  presentationEffectMAD: number | null;
+  scaleEffectMAD: number | null;
+} {
+  let pMADSum = 0, pMADCount = 0, sMADSum = 0, sMADCount = 0;
+  for (const s of scorePivot.values()) {
+    if (s['baseline'] != null && s['presentation_flipped'] != null) {
+      pMADSum += Math.abs(s['baseline'] - s['presentation_flipped']); pMADCount++;
+    }
+    if (s['baseline'] != null && s['scale_flipped'] != null) {
+      sMADSum += Math.abs(s['baseline'] - s['scale_flipped']); sMADCount++;
+    }
+    if (s['scale_flipped'] != null && s['fully_flipped'] != null) {
+      pMADSum += Math.abs(s['scale_flipped'] - s['fully_flipped']); pMADCount++;
+    }
+    if (s['presentation_flipped'] != null && s['fully_flipped'] != null) {
+      sMADSum += Math.abs(s['presentation_flipped'] - s['fully_flipped']); sMADCount++;
+    }
+  }
+  return {
+    presentationEffectMAD: pMADCount > 0 ? pMADSum / pMADCount : null,
+    scaleEffectMAD: sMADCount > 0 ? sMADSum / sMADCount : null,
+  };
+}
+
+export function getScaleEffectStatus(deltaS: number | null): 'NORMAL' | 'WARNING' | 'SEVERE' | 'UNKNOWN' {
+  if (deltaS == null) return 'UNKNOWN';
+  if (deltaS > 1.00) return 'SEVERE';
+  if (deltaS > 0.50) return 'WARNING';
+  return 'NORMAL';
 }
 
 function pickStableTranscripts(
@@ -985,30 +1017,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           .filter((row) => (row.ordinalDistance ?? 0) >= 2)
           .map((row) => row.vignetteId)
       ).size;
-      let pMADSum = 0;
-      let pMADCount = 0;
-      let sMADSum = 0;
-      let sMADCount = 0;
-      for (const s of scorePivot.values()) {
-        if (s.baseline != null && s.presentation_flipped != null) {
-          pMADSum += Math.abs(s.baseline - s.presentation_flipped);
-          pMADCount++;
-        }
-        if (s.baseline != null && s.scale_flipped != null) {
-          sMADSum += Math.abs(s.baseline - s.scale_flipped);
-          sMADCount++;
-        }
-        if (s.scale_flipped != null && s.fully_flipped != null) {
-          pMADSum += Math.abs(s.scale_flipped - s.fully_flipped);
-          pMADCount++;
-        }
-        if (s.presentation_flipped != null && s.fully_flipped != null) {
-          sMADSum += Math.abs(s.presentation_flipped - s.fully_flipped);
-          sMADCount++;
-        }
-      }
-      const presentationEffectMAD = pMADCount > 0 ? pMADSum / pMADCount : null;
-      const scaleEffectMAD = sMADCount > 0 ? sMADSum / sMADCount : null;
+      const { presentationEffectMAD, scaleEffectMAD } = computeMADMetrics(scorePivot);
 
       const summary: OrderInvarianceSummary = {
         status: comparablePairs === 0 ? 'INSUFFICIENT_DATA' : 'COMPUTED',
