@@ -221,6 +221,13 @@ function buildConditionKey(name: string): string {
   return `${match[1] ?? '?'}x${match[2] ?? '?'}`;
 }
 
+function parseReviewGroupKey(groupKey: string): { definitionId: string; variantType: string | null } {
+  const parts = groupKey.split('::');
+  const definitionId = parts[0] ?? '';
+  const variantType = parts[1] === '' || parts[1] == null ? null : parts[1];
+  return { definitionId, variantType };
+}
+
 function parseDecision(decisionCode: string | null): number | null {
   if (decisionCode == null || !VALID_DECISIONS.has(decisionCode)) {
     return null;
@@ -641,8 +648,8 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
         groupedPairs.set(key, existing);
       }
 
-      const vignettes = Array.from(groupedPairs.entries()).map(([groupKey, definitionPairs]) => {
-        const [definitionId, variantType] = groupKey.split('::');
+      const vignettes: OrderInvarianceReviewVignette[] = Array.from(groupedPairs.entries()).map(([groupKey, definitionPairs]) => {
+        const { definitionId, variantType } = parseReviewGroupKey(groupKey);
         const sortedPairs = [...definitionPairs].sort((left, right) => (
           buildConditionKey(left.sourceScenario.name).localeCompare(
             buildConditionKey(right.sourceScenario.name),
@@ -696,7 +703,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
         && totalVignettes === expectedGroupCount
         && expectedDefinitionIds.size === lockedById.size
         && Array.from(groupedPairs.entries()).every(([groupKey, definitionPairs]) => {
-          const [definitionId] = groupKey.split('::');
+          const { definitionId } = parseReviewGroupKey(groupKey);
           return definitionPairs.length === expectedSourceScenarios.filter((scenario) => scenario.definitionId === definitionId).length;
         }
         );
