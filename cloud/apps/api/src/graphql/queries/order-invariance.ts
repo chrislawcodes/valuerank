@@ -38,6 +38,38 @@ type OrderInvarianceRow = {
   isMatch: boolean | null;
 };
 
+type OrderInvarianceTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: Date;
+  lastAccessedAt: Date | null;
+  orderLabel: string;
+  attributeALevel: number | null;
+  attributeBLevel: number | null;
+};
+
+type OrderInvarianceTranscriptResult = {
+  generatedAt: Date;
+  vignetteId: string;
+  vignetteTitle: string;
+  modelId: string;
+  modelLabel: string;
+  conditionKey: string;
+  attributeALabel: string | null;
+  attributeBLabel: string | null;
+  transcripts: OrderInvarianceTranscript[];
+};
+
 type OrderInvarianceResult = {
   generatedAt: Date;
   summary: OrderInvarianceSummary;
@@ -120,6 +152,28 @@ type CandidateTranscriptRecord = {
   };
 };
 
+type TranscriptDetailRecord = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: Date;
+  lastAccessedAt: Date | null;
+  run: {
+    deletedAt: Date | null;
+    config: unknown;
+    tags: Array<{ tag: { name: string } }>;
+  };
+};
+
 type PickResult =
   | {
     kind: 'selected';
@@ -138,7 +192,7 @@ const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIA
 const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 
 function getRunAssumptionKey(config: unknown): string | null {
-  if (!config || typeof config !== 'object') {
+  if (config == null || typeof config !== 'object') {
     return null;
   }
   const value = (config as Record<string, unknown>).assumptionKey;
@@ -261,7 +315,7 @@ function normalizeReviewStatus(status: string | null | undefined): OrderInvarian
 }
 
 function extractScenarioText(content: unknown): string {
-  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+  if (content == null || typeof content !== 'object' || Array.isArray(content)) {
     return '';
   }
 
@@ -282,7 +336,7 @@ function extractScenarioText(content: unknown): string {
   if (Array.isArray(scenarioContent.followups) && scenarioContent.followups.length > 0) {
     const followupParts = scenarioContent.followups
       .filter((followup): followup is { label?: unknown; prompt?: unknown } => (
-        !!followup && typeof followup === 'object'
+        followup != null && typeof followup === 'object'
       ))
       .map((followup, index) => {
         const label = typeof followup.label === 'string' && followup.label.trim() !== ''
@@ -303,6 +357,33 @@ function extractScenarioText(content: unknown): string {
   }
 
   return JSON.stringify(content, null, 2);
+}
+
+function parseAttributeLabels(vignetteTitle: string): { attributeALabel: string | null; attributeBLabel: string | null } {
+  const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
+  if (!match) {
+    return { attributeALabel: null, attributeBLabel: null };
+  }
+
+  return {
+    attributeALabel: match[1]?.trim() ?? null,
+    attributeBLabel: match[2]?.trim() ?? null,
+  };
+}
+
+function parseConditionLevels(conditionKey: string): { attributeALevel: number | null; attributeBLevel: number | null } {
+  const match = conditionKey.match(/^(\d+)x(\d+)$/);
+  if (!match) {
+    return { attributeALevel: null, attributeBLevel: null };
+  }
+
+  const attributeALevel = Number.parseInt(match[1] ?? '', 10);
+  const attributeBLevel = Number.parseInt(match[2] ?? '', 10);
+
+  return {
+    attributeALevel: Number.isFinite(attributeALevel) ? attributeALevel : null,
+    attributeBLevel: Number.isFinite(attributeBLevel) ? attributeBLevel : null,
+  };
 }
 
 const OrderInvarianceExclusionCountRef = builder
@@ -355,6 +436,46 @@ const OrderInvarianceResultRef = builder
       generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
       summary: t.expose('summary', { type: OrderInvarianceSummaryRef }),
       rows: t.expose('rows', { type: [OrderInvarianceRowRef] }),
+    }),
+  });
+
+const OrderInvarianceTranscriptRef = builder
+  .objectRef<OrderInvarianceTranscript>('OrderInvarianceTranscript')
+  .implement({
+    fields: (t) => ({
+      id: t.exposeID('id'),
+      runId: t.exposeID('runId'),
+      scenarioId: t.exposeID('scenarioId'),
+      modelId: t.exposeString('modelId'),
+      modelVersion: t.exposeString('modelVersion', { nullable: true }),
+      content: t.expose('content', { type: 'JSON', nullable: true }),
+      decisionCode: t.exposeString('decisionCode', { nullable: true }),
+      decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
+      turnCount: t.exposeInt('turnCount'),
+      tokenCount: t.exposeInt('tokenCount'),
+      durationMs: t.exposeInt('durationMs'),
+      estimatedCost: t.exposeFloat('estimatedCost', { nullable: true }),
+      createdAt: t.expose('createdAt', { type: 'DateTime' }),
+      lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
+      orderLabel: t.exposeString('orderLabel'),
+      attributeALevel: t.exposeInt('attributeALevel', { nullable: true }),
+      attributeBLevel: t.exposeInt('attributeBLevel', { nullable: true }),
+    }),
+  });
+
+const OrderInvarianceTranscriptResultRef = builder
+  .objectRef<OrderInvarianceTranscriptResult>('OrderInvarianceTranscriptResult')
+  .implement({
+    fields: (t) => ({
+      generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
+      vignetteId: t.exposeID('vignetteId'),
+      vignetteTitle: t.exposeString('vignetteTitle'),
+      modelId: t.exposeString('modelId'),
+      modelLabel: t.exposeString('modelLabel'),
+      conditionKey: t.exposeString('conditionKey'),
+      attributeALabel: t.exposeString('attributeALabel', { nullable: true }),
+      attributeBLabel: t.exposeString('attributeBLabel', { nullable: true }),
+      transcripts: t.expose('transcripts', { type: [OrderInvarianceTranscriptRef] }),
     }),
   });
 
@@ -590,12 +711,9 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         where: { status: 'ACTIVE' },
         select: { modelId: true, displayName: true },
       });
-      const modelEntries = activeModels.length > 0
-        ? activeModels.map((model) => ({
-          modelId: model.modelId,
-          modelLabel: model.displayName,
-        }))
-        : [];
+      const activeModelLabels = new Map(
+        activeModels.map((model) => [model.modelId, model.displayName])
+      );
 
       const allScenarioIds = Array.from(new Set(
         relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
@@ -683,9 +801,12 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         }
       }
 
-      const effectiveModels = modelEntries.length > 0
-        ? modelEntries
-        : Array.from(inferredModels.keys()).sort().map((modelId) => ({ modelId, modelLabel: modelId }));
+      const effectiveModels = Array.from(inferredModels.keys())
+        .sort()
+        .map((modelId) => ({
+          modelId,
+          modelLabel: activeModelLabels.get(modelId) ?? modelId,
+        }));
 
       const excludedCounts = new Map<string, number>();
       const rows: OrderInvarianceRow[] = [];
@@ -846,6 +967,182 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           || left.modelLabel.localeCompare(right.modelLabel)
           || left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' })
         )),
+      };
+    },
+  })
+);
+
+builder.queryField('assumptionsOrderInvarianceTranscripts', (t) =>
+  t.field({
+    type: OrderInvarianceTranscriptResultRef,
+    args: {
+      vignetteId: t.arg.id({ required: true }),
+      modelId: t.arg.string({ required: true }),
+      conditionKey: t.arg.string({ required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const vignetteId = String(args.vignetteId);
+      const activeModels = await db.llmModel.findMany({
+        where: { status: 'ACTIVE' },
+        select: { modelId: true, displayName: true },
+      });
+      const activeModelLabels = new Map(
+        activeModels.map((model) => [model.modelId, model.displayName])
+      );
+
+      const lockedById = new Map(
+        LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
+      );
+      const vignetteTitle = lockedById.get(vignetteId)?.title ?? vignetteId;
+      const labels = parseAttributeLabels(vignetteTitle);
+      const levels = parseConditionLevels(args.conditionKey);
+
+      const pairs = await db.assumptionScenarioPair.findMany({
+        where: {
+          assumptionKey: ORDER_INVARIANCE_KEY,
+          equivalenceReviewStatus: 'APPROVED',
+          equivalenceReviewedAt: { not: null },
+          sourceScenario: {
+            definitionId: vignetteId,
+            deletedAt: null,
+          },
+          variantScenario: {
+            deletedAt: null,
+          },
+        },
+        include: {
+          sourceScenario: {
+            select: {
+              id: true,
+              name: true,
+              definitionId: true,
+              orientationFlipped: true,
+            },
+          },
+          variantScenario: {
+            select: {
+              id: true,
+              name: true,
+              definitionId: true,
+              orientationFlipped: true,
+            },
+          },
+        },
+      }) as unknown as PairRecord[];
+
+      const matchingPair = pairs.find((candidate) => buildConditionKey(candidate.sourceScenario.name) === args.conditionKey) ?? null;
+
+      if (matchingPair == null) {
+        return {
+          generatedAt: new Date(),
+          vignetteId,
+          vignetteTitle,
+          modelId: args.modelId,
+          modelLabel: args.modelId,
+          conditionKey: args.conditionKey,
+          attributeALabel: labels.attributeALabel,
+          attributeBLabel: labels.attributeBLabel,
+          transcripts: [],
+        };
+      }
+
+      const scenarioIds = [matchingPair.sourceScenario.id, matchingPair.variantScenario.id];
+      const transcriptRecords = await db.transcript.findMany({
+        where: {
+          deletedAt: null,
+          scenarioId: { in: scenarioIds },
+          modelId: args.modelId,
+        },
+        select: {
+          id: true,
+          runId: true,
+          scenarioId: true,
+          modelId: true,
+          modelVersion: true,
+          content: true,
+          decisionCode: true,
+          decisionCodeSource: true,
+          turnCount: true,
+          tokenCount: true,
+          durationMs: true,
+          estimatedCost: true,
+          createdAt: true,
+          lastAccessedAt: true,
+          run: {
+            select: {
+              deletedAt: true,
+              config: true,
+              tags: {
+                select: {
+                  tag: {
+                    select: { name: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }) as TranscriptDetailRecord[];
+
+      const transcripts = transcriptRecords
+        .filter((transcript) => {
+          if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
+            return false;
+          }
+          if (!isTempZeroRun(transcript)) {
+            return false;
+          }
+
+          const assumptionKey = getRunAssumptionKey(transcript.run.config);
+          const isBaselineScenario = transcript.scenarioId === matchingPair.sourceScenario.id;
+          if (isBaselineScenario) {
+            if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
+              return false;
+            }
+            if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript)) {
+              return false;
+            }
+          } else if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript)) {
+            return false;
+          }
+
+          return true;
+        })
+        .map((transcript) => ({
+          id: transcript.id,
+          runId: transcript.runId,
+          scenarioId: transcript.scenarioId ?? '',
+          modelId: transcript.modelId,
+          modelVersion: transcript.modelVersion,
+          content: transcript.content,
+          decisionCode: transcript.decisionCode,
+          decisionCodeSource: transcript.decisionCodeSource,
+          turnCount: transcript.turnCount,
+          tokenCount: transcript.tokenCount,
+          durationMs: transcript.durationMs,
+          estimatedCost: transcript.estimatedCost,
+          createdAt: transcript.createdAt,
+          lastAccessedAt: transcript.lastAccessedAt,
+          orderLabel: transcript.scenarioId === matchingPair.sourceScenario.id ? 'A First' : 'B First',
+          attributeALevel: levels.attributeALevel,
+          attributeBLevel: levels.attributeBLevel,
+        }))
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+
+      return {
+        generatedAt: new Date(),
+        vignetteId,
+        vignetteTitle,
+        modelId: args.modelId,
+        modelLabel: activeModelLabels.get(args.modelId) ?? args.modelId,
+        conditionKey: args.conditionKey,
+        attributeALabel: labels.attributeALabel,
+        attributeBLabel: labels.attributeBLabel,
+        transcripts,
       };
     },
   })

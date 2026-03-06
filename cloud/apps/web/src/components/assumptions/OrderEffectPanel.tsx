@@ -1,21 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
+import { X } from 'lucide-react';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
 import { Button } from '../ui/Button';
+import { TranscriptList } from '../runs/TranscriptList';
+import { TranscriptViewer } from '../runs/TranscriptViewer';
+import type { Transcript } from '../../api/operations/runs';
 import {
   LAUNCH_ORDER_INVARIANCE_MUTATION,
   ORDER_INVARIANCE_QUERY,
   ORDER_INVARIANCE_REVIEW_QUERY,
+  ORDER_INVARIANCE_TRANSCRIPTS_QUERY,
   REVIEW_ORDER_INVARIANCE_PAIR_MUTATION,
   type LaunchOrderInvarianceResult,
   type LaunchOrderInvarianceVariables,
   type OrderInvarianceQueryResult,
   type OrderInvarianceQueryVariables,
+  type OrderInvarianceRow,
   type OrderInvarianceReviewVignette,
   type OrderInvarianceReviewQueryResult,
   type OrderInvarianceReviewStatus,
-  type OrderInvarianceRow,
+  type OrderInvarianceTranscriptsQueryResult,
+  type OrderInvarianceTranscriptsQueryVariables,
   type ReviewOrderInvariancePairResult,
   type ReviewOrderInvariancePairVariables,
 } from '../../api/operations/order-invariance';
@@ -42,6 +49,18 @@ function parseConditionLevels(conditionKey: string): { levelA: string; levelB: s
   return {
     levelA: match[1] ?? 'n/a',
     levelB: match[2] ?? 'n/a',
+  };
+}
+
+function parseAttributeLabels(vignetteTitle: string): { attributeA: string; attributeB: string } {
+  const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
+  if (!match) {
+    return { attributeA: 'A Level', attributeB: 'B Level' };
+  }
+
+  return {
+    attributeA: match[1]?.trim() ?? 'A Level',
+    attributeB: match[2]?.trim() ?? 'B Level',
   };
 }
 
@@ -85,12 +104,116 @@ function getDraftNote(
   return noteDrafts[vignette.pairId] ?? vignette.reviewNotes ?? '';
 }
 
+type TranscriptDrilldownModalProps = {
+  row: OrderInvarianceRow;
+  directionOnly: boolean;
+  trimOutliers: boolean;
+  onClose: () => void;
+};
+
+function TranscriptDrilldownModal({
+  row,
+  directionOnly,
+  trimOutliers,
+  onClose,
+}: TranscriptDrilldownModalProps) {
+  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+  const [{ data, fetching, error }] = useQuery<
+    OrderInvarianceTranscriptsQueryResult,
+    OrderInvarianceTranscriptsQueryVariables
+  >({
+    query: ORDER_INVARIANCE_TRANSCRIPTS_QUERY,
+    variables: {
+      vignetteId: row.vignetteId,
+      modelId: row.modelId,
+      conditionKey: row.conditionKey,
+    },
+    requestPolicy: 'network-only',
+  });
+
+  const transcriptResult = data?.assumptionsOrderInvarianceTranscripts;
+  const dimensionLabels = useMemo(() => ({
+    attributeALevel: transcriptResult?.attributeALabel ?? 'A Level',
+    attributeBLevel: transcriptResult?.attributeBLabel ?? 'B Level',
+    orderLabel: 'Prompt Order',
+  }), [transcriptResult?.attributeALabel, transcriptResult?.attributeBLabel]);
+  const scenarioDimensions = useMemo(() => {
+    if (!transcriptResult) {
+      return {};
+    }
+
+    return transcriptResult.transcripts.reduce<Record<string, Record<string, string | number>>>((acc, transcript) => {
+      acc[transcript.scenarioId] = {
+        attributeALevel: transcript.attributeALevel ?? 'n/a',
+        attributeBLevel: transcript.attributeBLevel ?? 'n/a',
+        orderLabel: transcript.orderLabel,
+      };
+      return acc;
+    }, {});
+  }, [transcriptResult]);
+  const attributeLabels = parseAttributeLabels(row.vignetteTitle);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">{row.vignetteTitle}</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              {row.modelLabel} · {attributeLabels.attributeA}: {parseConditionLevels(row.conditionKey).levelA} · {attributeLabels.attributeB}: {parseConditionLevels(row.conditionKey).levelB}
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              {directionOnly ? 'Direction match' : 'Exact match'}: {row.isMatch == null ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
+              {' '}· Baseline {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteBaseline ?? 'n/a'}
+              {' '}· Flipped {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteFlipped ?? 'n/a'}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close transcript list">
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {fetching && !transcriptResult && (
+            <Loading size="sm" text="Loading transcripts..." />
+          )}
+          {error && (
+            <ErrorMessage message={error.message} />
+          )}
+          {!fetching && !error && transcriptResult && transcriptResult.transcripts.length === 0 && (
+            <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+              No transcripts found for this condition and model.
+            </div>
+          )}
+          {!error && transcriptResult && transcriptResult.transcripts.length > 0 && (
+            <TranscriptList
+              transcripts={transcriptResult.transcripts}
+              onSelect={setSelectedTranscript}
+              groupByModel={false}
+              scenarioDimensions={scenarioDimensions}
+              dimensionLabels={dimensionLabels}
+            />
+          )}
+        </div>
+
+        {selectedTranscript && (
+          <TranscriptViewer
+            transcript={selectedTranscript}
+            onClose={() => setSelectedTranscript(null)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function OrderEffectPanel() {
   const [directionOnly, setDirectionOnly] = useState(true);
   const [trimOutliers, setTrimOutliers] = useState(true);
-  const [selectedModelId, setSelectedModelId] = useState<string>('ALL');
+  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [activeReviewPairId, setActiveReviewPairId] = useState<string | null>(null);
+  const [activeRow, setActiveRow] = useState<OrderInvarianceRow | null>(null);
 
   const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
     query: ORDER_INVARIANCE_QUERY,
@@ -133,13 +256,43 @@ export function OrderEffectPanel() {
       .map(([modelId, modelLabel]) => ({ modelId, modelLabel }));
   }, [result?.rows]);
 
+  useEffect(() => {
+    setSelectedModelIds((current) => {
+      const availableIds = new Set(modelOptions.map((model) => model.modelId));
+      if (availableIds.size === 0) {
+        return current.size === 0 ? current : new Set();
+      }
+
+      if (current.size === 0) {
+        return new Set(availableIds);
+      }
+
+      const next = new Set(Array.from(current).filter((modelId) => availableIds.has(modelId)));
+      if (next.size === 0) {
+        return new Set(availableIds);
+      }
+
+      let changed = next.size !== current.size;
+      for (const modelId of availableIds) {
+        if (!current.has(modelId)) {
+          continue;
+        }
+        if (!next.has(modelId)) {
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [modelOptions]);
+
   const filteredRows = useMemo(() => {
     const rows = result?.rows ?? [];
-    if (selectedModelId === 'ALL') {
+    if (selectedModelIds.size === 0) {
       return rows;
     }
-    return rows.filter((row) => row.modelId === selectedModelId);
-  }, [result?.rows, selectedModelId]);
+    return rows.filter((row) => selectedModelIds.has(row.modelId));
+  }, [result?.rows, selectedModelIds]);
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
 
@@ -398,72 +551,31 @@ export function OrderEffectPanel() {
 
         {result && (
           <>
-            <div className="mt-4 grid gap-3 md:grid-cols-5">
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {formatPercent(result.summary.matchRate)}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Comparable Pairs</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.comparablePairs}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Missing Pairs</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.missingPairs}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Sensitive Models</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.sensitiveModelCount}
-                </div>
-              </div>
-              <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Sensitive Vignettes</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
-                  {result.summary.sensitiveVignetteCount}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-              <div>
-                Candidate pairs: {result.summary.totalCandidatePairs} · Qualifying: {result.summary.qualifyingPairs} · Comparable: {result.summary.comparablePairs}
-              </div>
-              {result.summary.excludedPairs.length > 0 && (
-                <div className="mt-1">
-                  Excluded: {result.summary.excludedPairs.map((entry) => `${entry.reason} (${entry.count})`).join(', ')}
-                </div>
-              )}
-              <div className="mt-1">
-                Mode: {directionOnly ? 'Direction-only' : 'Exact'} · {trimOutliers ? 'Trimmed 3' : 'All 5'}
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
+              <div className="mt-1 text-base font-semibold text-gray-900">
+                {formatPercent(result.summary.matchRate)}
               </div>
             </div>
 
             {modelOptions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSelectedModelId('ALL')}
-                  className={selectedModelId === 'ALL' ? 'border-teal-600 bg-teal-50 text-teal-800' : ''}
-                >
-                  All Models
-                </Button>
                 {modelOptions.map((model) => (
                   <Button
                     key={model.modelId}
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => setSelectedModelId(model.modelId)}
-                    className={selectedModelId === model.modelId ? 'border-teal-600 bg-teal-50 text-teal-800' : ''}
+                    onClick={() => setSelectedModelIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(model.modelId)) {
+                        next.delete(model.modelId);
+                      } else {
+                        next.add(model.modelId);
+                      }
+                      return next;
+                    })}
+                    className={selectedModelIds.has(model.modelId) ? 'border-teal-600 bg-teal-50 text-teal-800' : ''}
                   >
                     {model.modelLabel}
                   </Button>
@@ -476,7 +588,9 @@ export function OrderEffectPanel() {
                 <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
                   No approved slot-order pairs are available yet.
                 </div>
-              ) : groupedRows.map((group) => (
+              ) : groupedRows.map((group) => {
+                const attributeLabels = parseAttributeLabels(group.vignetteTitle);
+                return (
                 <details key={group.vignetteId} className="rounded-lg border border-gray-200">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
                     <div>
@@ -491,8 +605,8 @@ export function OrderEffectPanel() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">A Level</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">B Level</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">
                             Baseline ({trimOutliers ? 'Trimmed 3' : 'All 5'})
                           </th>
@@ -510,7 +624,11 @@ export function OrderEffectPanel() {
                           const { levelA, levelB } = parseConditionLevels(row.conditionKey);
                           const isMissing = row.mismatchType === 'missing_pair';
                           return (
-                            <tr key={`${row.modelId}-${row.conditionKey}`} className={row.isMatch === false ? 'bg-amber-50' : ''}>
+                            <tr
+                              key={`${row.modelId}-${row.conditionKey}`}
+                              className={`cursor-pointer transition-colors hover:bg-gray-50 ${row.isMatch === false ? 'bg-amber-50' : ''}`}
+                              onClick={() => setActiveRow(row)}
+                            >
                               <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
                               <td className="px-3 py-2 text-gray-700">{levelA}</td>
                               <td className="px-3 py-2 text-gray-700">{levelB}</td>
@@ -527,11 +645,19 @@ export function OrderEffectPanel() {
                     </table>
                   </div>
                 </details>
-              ))}
+              )})}
             </div>
           </>
         )}
       </div>
+      {activeRow && (
+        <TranscriptDrilldownModal
+          row={activeRow}
+          directionOnly={directionOnly}
+          trimOutliers={trimOutliers}
+          onClose={() => setActiveRow(null)}
+        />
+      )}
     </section>
   );
 }
