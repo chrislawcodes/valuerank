@@ -34,35 +34,45 @@ interface ScenarioContent {
 }
 
 export function extractScaleLine(prompt: string, num: number): string | null {
-  const regex = new RegExp(`^${num}\\s*=\\s*.*$`, 'm');
+  const regex = new RegExp(`^${num}\\s*[-=]\\s*.*$`, 'm');
   const match = prompt.match(regex);
   return match ? match[0] : null;
 }
 
 export function replaceScaleLine(prompt: string, num: number, newLine: string): string {
-  const regex = new RegExp(`^${num}\\s*=\\s*.*$`, 'm');
+  const regex = new RegExp(`^${num}\\s*[-=]\\s*.*$`, 'm');
   return prompt.replace(regex, newLine);
+}
+
+function rewriteScaleLines(
+  prompt: string,
+  replacements: Record<number, string>,
+): string {
+  return Object.entries(replacements)
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .reduce(
+      (currentPrompt, [num, line]) => replaceScaleLine(currentPrompt, Number(num), line),
+      prompt,
+    );
 }
 
 export function deriveScaleFlippedContent(
   sourceContent: any,
-  flippedScale1: string,
-  flippedScale5: string,
+  flippedScaleLines: Record<number, string>,
 ): any {
   return {
     ...sourceContent,
-    prompt: replaceScaleLine(replaceScaleLine(sourceContent.prompt, 1, flippedScale1), 5, flippedScale5),
+    prompt: rewriteScaleLines(sourceContent.prompt, flippedScaleLines),
   };
 }
 
 export function derivePresentationFlippedContent(
   fullyFlippedContent: any,
-  sourceScale1: string,
-  sourceScale5: string,
+  sourceScaleLines: Record<number, string>,
 ): any {
   return {
     ...fullyFlippedContent,
-    prompt: replaceScaleLine(replaceScaleLine(fullyFlippedContent.prompt, 1, sourceScale1), 5, sourceScale5),
+    prompt: rewriteScaleLines(fullyFlippedContent.prompt, sourceScaleLines),
   };
 }
 
@@ -108,12 +118,20 @@ async function main() {
     const fullyFlippedContent = fullyFlippedScenario.content as unknown as ScenarioContent;
 
     // Extract scale lines from both
-    const sourceScale1 = extractScaleLine(sourceContent.prompt, 1);
-    const sourceScale5 = extractScaleLine(sourceContent.prompt, 5);
-    const flippedScale1 = extractScaleLine(fullyFlippedContent.prompt, 1);
-    const flippedScale5 = extractScaleLine(fullyFlippedContent.prompt, 5);
+    const sourceScaleLines = {
+      1: extractScaleLine(sourceContent.prompt, 1),
+      2: extractScaleLine(sourceContent.prompt, 2),
+      4: extractScaleLine(sourceContent.prompt, 4),
+      5: extractScaleLine(sourceContent.prompt, 5),
+    };
+    const flippedScaleLines = {
+      1: extractScaleLine(fullyFlippedContent.prompt, 1),
+      2: extractScaleLine(fullyFlippedContent.prompt, 2),
+      4: extractScaleLine(fullyFlippedContent.prompt, 4),
+      5: extractScaleLine(fullyFlippedContent.prompt, 5),
+    };
 
-    if (!sourceScale1 || !sourceScale5 || !flippedScale1 || !flippedScale5) {
+    if (Object.values(sourceScaleLines).some((line) => !line) || Object.values(flippedScaleLines).some((line) => !line)) {
       console.error(`❌ Failed to extract scale lines for pair ${pair.id}. Skipping.`);
       continue;
     }
@@ -125,14 +143,14 @@ async function main() {
         name: `${sourceScenario.name} (Scale Flipped)`,
         orientationFlipped: true,
         // Narrative from source (Order A), Scale from fully_flipped (S_B)
-        deriveContent: () => deriveScaleFlippedContent(sourceContent, flippedScale1, flippedScale5),
+        deriveContent: () => deriveScaleFlippedContent(sourceContent, flippedScaleLines as Record<number, string>),
       },
       {
         type: 'presentation_flipped',
         name: `${sourceScenario.name} (Presentation Flipped)`,
         orientationFlipped: false,
         // Narrative from fully_flipped (Order B), Scale from source (S_A)
-        deriveContent: () => derivePresentationFlippedContent(fullyFlippedContent, sourceScale1, sourceScale5),
+        deriveContent: () => derivePresentationFlippedContent(fullyFlippedContent, sourceScaleLines as Record<number, string>),
       },
     ];
 
