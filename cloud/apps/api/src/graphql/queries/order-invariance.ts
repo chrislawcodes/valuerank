@@ -16,6 +16,8 @@ type OrderInvarianceSummary = {
   status: OrderInvarianceStatus;
   matchRate: number | null;
   exactMatchRate: number | null;
+  presentationEffectMAD: number | null;
+  scaleEffectMAD: number | null;
   totalCandidatePairs: number;
   qualifyingPairs: number;
   missingPairs: number;
@@ -31,6 +33,7 @@ type OrderInvarianceRow = {
   vignetteId: string;
   vignetteTitle: string;
   conditionKey: string;
+  variantType: string | null;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
   mismatchType: OrderInvarianceMismatchType;
@@ -92,6 +95,7 @@ type OrderInvarianceReviewVignette = {
   vignetteId: string;
   vignetteTitle: string;
   conditionKey: string;
+  variantType: string | null;
   conditionPairCount: number;
   sourceScenarioId: string;
   variantScenarioId: string;
@@ -121,6 +125,7 @@ type PairScenario = {
 
 type PairRecord = {
   id?: string;
+  variantType: string | null;
   equivalenceReviewStatus?: string | null;
   equivalenceReviewedBy?: string | null;
   equivalenceReviewedAt?: Date | null;
@@ -223,8 +228,10 @@ function parseDecision(decisionCode: string | null): number | null {
   return Number(decisionCode);
 }
 
-function normalizeDecision(decision: number, orientationFlipped: boolean): number {
-  return orientationFlipped ? 6 - decision : decision;
+function normalizeDecision(decision: number, variantType: string | null): number {
+  return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
+    ? 6 - decision
+    : decision;
 }
 
 function pickStableTranscripts(
@@ -402,6 +409,8 @@ const OrderInvarianceSummaryRef = builder
       status: t.exposeString('status'),
       matchRate: t.exposeFloat('matchRate', { nullable: true }),
       exactMatchRate: t.exposeFloat('exactMatchRate', { nullable: true }),
+      presentationEffectMAD: t.exposeFloat('presentationEffectMAD', { nullable: true }),
+      scaleEffectMAD: t.exposeFloat('scaleEffectMAD', { nullable: true }),
       totalCandidatePairs: t.exposeInt('totalCandidatePairs'),
       qualifyingPairs: t.exposeInt('qualifyingPairs'),
       missingPairs: t.exposeInt('missingPairs'),
@@ -421,6 +430,7 @@ const OrderInvarianceRowRef = builder
       vignetteId: t.exposeID('vignetteId'),
       vignetteTitle: t.exposeString('vignetteTitle'),
       conditionKey: t.exposeString('conditionKey'),
+      variantType: t.exposeString('variantType', { nullable: true }),
       majorityVoteBaseline: t.exposeInt('majorityVoteBaseline', { nullable: true }),
       majorityVoteFlipped: t.exposeInt('majorityVoteFlipped', { nullable: true }),
       mismatchType: t.exposeString('mismatchType', { nullable: true }),
@@ -500,6 +510,7 @@ const OrderInvarianceReviewVignetteRef = builder
       vignetteId: t.exposeID('vignetteId'),
       vignetteTitle: t.exposeString('vignetteTitle'),
       conditionKey: t.exposeString('conditionKey'),
+      variantType: t.exposeString('variantType', { nullable: true }),
       conditionPairCount: t.exposeInt('conditionPairCount'),
       sourceScenarioId: t.exposeID('sourceScenarioId'),
       variantScenarioId: t.exposeID('variantScenarioId'),
@@ -547,7 +558,13 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
             deletedAt: null,
           },
         },
-        include: {
+        select: {
+          id: true,
+          variantType: true,
+          equivalenceReviewStatus: true,
+          equivalenceReviewedBy: true,
+          equivalenceReviewedAt: true,
+          equivalenceReviewNotes: true,
           sourceScenario: {
             select: {
               id: true,
@@ -580,19 +597,20 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
           definitionId: true,
         },
       });
-      const expectedPairCount = expectedSourceScenarios.length;
+      const expectedPairCount = expectedSourceScenarios.length * 3;
       const expectedDefinitionIds = new Set(expectedSourceScenarios.map((scenario) => scenario.definitionId));
 
       const groupedPairs = new Map<string, PairRecord[]>();
 
       for (const pair of pairRows) {
-        const key = pair.sourceScenario.definitionId;
+        const key = `${pair.sourceScenario.definitionId}::${pair.variantType ?? ''}`;
         const existing = groupedPairs.get(key) ?? [];
         existing.push(pair);
         groupedPairs.set(key, existing);
       }
 
-      const vignettes = Array.from(groupedPairs.entries()).map(([definitionId, definitionPairs]) => {
+      const vignettes = Array.from(groupedPairs.entries()).map(([groupKey, definitionPairs]) => {
+        const [definitionId, variantType] = groupKey.split('::');
         const sortedPairs = [...definitionPairs].sort((left, right) => (
           buildConditionKey(left.sourceScenario.name).localeCompare(
             buildConditionKey(right.sourceScenario.name),
@@ -620,6 +638,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
           vignetteId: definitionId,
           vignetteTitle: vignette?.title ?? definitionId,
           conditionKey: representativePair ? buildConditionKey(representativePair.sourceScenario.name) : 'n/a',
+          variantType: variantType === '' ? null : variantType,
           conditionPairCount: sortedPairs.length,
           sourceScenarioId: representativePair?.sourceScenario.id ?? '',
           variantScenarioId: representativePair?.variantScenario.id ?? '',
@@ -640,12 +659,15 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
       const rejectedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'REJECTED').length;
       const reviewedVignettes = vignettes.filter((vignette) => vignette.reviewedAt != null).length;
       const totalVignettes = vignettes.length;
+      const expectedGroupCount = lockedById.size * 3;
       const hasCompleteGeneratedSet = pairRows.length === expectedPairCount
-        && totalVignettes === expectedDefinitionIds.size
+        && totalVignettes === expectedGroupCount
         && expectedDefinitionIds.size === lockedById.size
-        && Array.from(groupedPairs.entries()).every(([definitionId, definitionPairs]) => (
-          definitionPairs.length === expectedSourceScenarios.filter((scenario) => scenario.definitionId === definitionId).length
-        ));
+        && Array.from(groupedPairs.entries()).every(([groupKey, definitionPairs]) => {
+          const [definitionId] = groupKey.split('::');
+          return definitionPairs.length === expectedSourceScenarios.filter((scenario) => scenario.definitionId === definitionId).length;
+        }
+        );
 
       return {
         generatedAt: new Date(),
@@ -682,7 +704,8 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           equivalenceReviewStatus: 'APPROVED',
           equivalenceReviewedAt: { not: null },
         },
-        include: {
+        select: {
+          variantType: true,
           sourceScenario: {
             select: {
               id: true,
@@ -718,6 +741,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
       const allScenarioIds = Array.from(new Set(
         relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
       ));
+      const scenarioIdToVariantType = new Map<string, string | null>();
+      for (const pair of pairRows) {
+        scenarioIdToVariantType.set(pair.sourceScenario.id, null);
+        scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
+      }
 
       const transcriptRecords = allScenarioIds.length > 0
         ? await db.transcript.findMany({
@@ -790,7 +818,10 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           scenarioId: transcript.scenarioId,
           modelId: transcript.modelId,
           modelVersion: transcript.modelVersion,
-          decision: normalizeDecision(decision, !isBaselineScenario),
+          decision: normalizeDecision(
+            decision,
+            scenarioIdToVariantType.get(transcript.scenarioId) ?? null
+          ),
           createdAt: transcript.createdAt,
         };
 
@@ -815,6 +846,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
       let comparablePairs = 0;
       let directionMatchCount = 0;
       let exactMatchCount = 0;
+      const scorePivot = new Map<string, Record<string, number>>();
 
       for (const pair of relevantPairs) {
         const vignette = lockedById.get(pair.sourceScenario.definitionId);
@@ -852,6 +884,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               vignetteId: pair.sourceScenario.definitionId,
               vignetteTitle,
               conditionKey,
+              variantType: pair.variantType,
               majorityVoteBaseline: null,
               majorityVoteFlipped: null,
               mismatchType: 'missing_pair',
@@ -891,6 +924,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               vignetteId: pair.sourceScenario.definitionId,
               vignetteTitle,
               conditionKey,
+              variantType: pair.variantType,
               majorityVoteBaseline: baselineValue,
               majorityVoteFlipped: flippedValue,
               mismatchType: 'missing_pair',
@@ -914,6 +948,15 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           const mismatchType: OrderInvarianceMismatchType = isMatch
             ? null
             : (directionOnly ? 'direction_flip' : 'exact_flip');
+          const pivotKey = `${pair.sourceScenario.definitionId}::${conditionKey}::${model.modelId}`;
+          const scores = scorePivot.get(pivotKey) ?? {};
+          if (baselineValue != null) {
+            scores.baseline = baselineValue;
+          }
+          if (flippedValue != null && pair.variantType) {
+            scores[pair.variantType] = flippedValue;
+          }
+          scorePivot.set(pivotKey, scores);
 
           rows.push({
             modelId: model.modelId,
@@ -921,6 +964,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             vignetteId: pair.sourceScenario.definitionId,
             vignetteTitle,
             conditionKey,
+            variantType: pair.variantType,
             majorityVoteBaseline: baselineValue,
             majorityVoteFlipped: flippedValue,
             mismatchType,
@@ -941,6 +985,30 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           .filter((row) => (row.ordinalDistance ?? 0) >= 2)
           .map((row) => row.vignetteId)
       ).size;
+      let pMADSum = 0;
+      let pMADCount = 0;
+      let sMADSum = 0;
+      let sMADCount = 0;
+      for (const s of scorePivot.values()) {
+        if (s.baseline != null && s.presentation_flipped != null) {
+          pMADSum += Math.abs(s.baseline - s.presentation_flipped);
+          pMADCount++;
+        }
+        if (s.baseline != null && s.scale_flipped != null) {
+          sMADSum += Math.abs(s.baseline - s.scale_flipped);
+          sMADCount++;
+        }
+        if (s.scale_flipped != null && s.fully_flipped != null) {
+          pMADSum += Math.abs(s.scale_flipped - s.fully_flipped);
+          pMADCount++;
+        }
+        if (s.presentation_flipped != null && s.fully_flipped != null) {
+          sMADSum += Math.abs(s.presentation_flipped - s.fully_flipped);
+          sMADCount++;
+        }
+      }
+      const presentationEffectMAD = pMADCount > 0 ? pMADSum / pMADCount : null;
+      const scaleEffectMAD = sMADCount > 0 ? sMADSum / sMADCount : null;
 
       const summary: OrderInvarianceSummary = {
         status: comparablePairs === 0 ? 'INSUFFICIENT_DATA' : 'COMPUTED',
@@ -948,6 +1016,8 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           ? (directionOnly ? directionMatchCount : exactMatchCount) / comparablePairs
           : null,
         exactMatchRate: comparablePairs > 0 ? exactMatchCount / comparablePairs : null,
+        presentationEffectMAD,
+        scaleEffectMAD,
         totalCandidatePairs: relevantPairs.length * effectiveModels.length,
         qualifyingPairs,
         missingPairs,
