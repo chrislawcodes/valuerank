@@ -558,20 +558,6 @@ export function OrderEffectPanel() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-              <div>
-                Candidate pairs: {result.summary.totalCandidatePairs} · Qualifying: {result.summary.qualifyingPairs} · Comparable: {result.summary.comparablePairs}
-              </div>
-              {result.summary.excludedPairs.length > 0 && (
-                <div className="mt-1">
-                  Excluded: {result.summary.excludedPairs.map((entry) => `${entry.reason} (${entry.count})`).join(', ')}
-                </div>
-              )}
-              <div className="mt-1">
-                Mode: {directionOnly ? 'Direction-only' : 'Exact'} · {trimOutliers ? 'Trimmed 3' : 'All 5'}
-              </div>
-            </div>
-
             {modelOptions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {modelOptions.map((model) => (
