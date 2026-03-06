@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
-import { X } from 'lucide-react';
+import { CheckCircle2, Loader2, X } from 'lucide-react';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
 import { Button } from '../ui/Button';
@@ -9,12 +9,15 @@ import { TranscriptViewer } from '../runs/TranscriptViewer';
 import type { Transcript } from '../../api/operations/runs';
 import {
   LAUNCH_ORDER_INVARIANCE_MUTATION,
+  ORDER_INVARIANCE_LAUNCH_STATUS_QUERY,
   ORDER_INVARIANCE_QUERY,
   ORDER_INVARIANCE_REVIEW_QUERY,
   ORDER_INVARIANCE_TRANSCRIPTS_QUERY,
   REVIEW_ORDER_INVARIANCE_PAIR_MUTATION,
   type LaunchOrderInvarianceResult,
   type LaunchOrderInvarianceVariables,
+  type OrderInvarianceLaunchStatusQueryResult,
+  type OrderInvarianceLaunchStatusQueryVariables,
   type OrderInvarianceQueryResult,
   type OrderInvarianceQueryVariables,
   type OrderInvarianceRow,
@@ -28,6 +31,8 @@ import {
 } from '../../api/operations/order-invariance';
 
 const ENABLE_2X2_ORDER_EFFECT_UI = true;
+const ORDER_INVARIANCE_LAUNCH_STORAGE_KEY = 'valuerank:order-invariance-launch-run-ids';
+const ORDER_INVARIANCE_LAUNCH_POLL_MS = 4000;
 
 function formatPercent(value: number | null): string {
   if (value == null) {
@@ -39,6 +44,10 @@ function formatPercent(value: number | null): string {
 function formatMAD(value: number | null | undefined): string {
   if (value == null) return '—';
   return value.toFixed(2);
+}
+
+function formatProgressCount(value: number): string {
+  return value.toLocaleString();
 }
 
 function getScaleEffectColor(value: number | null | undefined): string {
@@ -271,6 +280,8 @@ export function OrderEffectPanel() {
   const [activeReviewPairId, setActiveReviewPairId] = useState<string | null>(null);
   const [activeRow, setActiveRow] = useState<OrderInvarianceRow | null>(null);
   const [closedReviewPairIds, setClosedReviewPairIds] = useState<Set<string>>(new Set());
+  const [trackedLaunchRunIds, setTrackedLaunchRunIds] = useState<string[]>([]);
+  const [hasLoadedTrackedRuns, setHasLoadedTrackedRuns] = useState(false);
 
   const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
     query: ORDER_INVARIANCE_QUERY,
@@ -295,9 +306,20 @@ export function OrderEffectPanel() {
     LaunchOrderInvarianceResult,
     LaunchOrderInvarianceVariables
   >(LAUNCH_ORDER_INVARIANCE_MUTATION);
+  const [{ data: launchStatusData, fetching: launchStatusFetching, error: launchStatusError }, reexecuteLaunchStatusQuery] = useQuery<
+    OrderInvarianceLaunchStatusQueryResult,
+    OrderInvarianceLaunchStatusQueryVariables
+  >({
+    query: ORDER_INVARIANCE_LAUNCH_STATUS_QUERY,
+    variables: { runIds: trackedLaunchRunIds },
+    pause: !hasLoadedTrackedRuns || trackedLaunchRunIds.length === 0,
+    requestPolicy: 'network-only',
+  });
 
   const result = data?.assumptionsOrderInvariance;
   const reviewResult = reviewData?.assumptionsOrderInvarianceReview;
+  const launchStatus = launchStatusData?.assumptionsOrderInvarianceLaunchStatus;
+  const allRows = useMemo(() => result?.rows ?? [], [result?.rows]);
   const sortedReviewVignettes = useMemo(
     () => [...(reviewResult?.vignettes ?? [])].sort((a, b) => {
       const titleCmp = a.vignetteTitle.localeCompare(b.vignetteTitle);
@@ -306,6 +328,55 @@ export function OrderEffectPanel() {
     }),
     [reviewResult?.vignettes],
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setHasLoadedTrackedRuns(true);
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(ORDER_INVARIANCE_LAUNCH_STORAGE_KEY);
+      if (!stored) {
+        setHasLoadedTrackedRuns(true);
+        return;
+      }
+      const parsed: unknown = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        const nextRunIds = parsed.filter((runId): runId is string => typeof runId === 'string' && runId !== '');
+        setTrackedLaunchRunIds(Array.from(new Set(nextRunIds)));
+      }
+    } catch {
+      window.localStorage.removeItem(ORDER_INVARIANCE_LAUNCH_STORAGE_KEY);
+    }
+
+    setHasLoadedTrackedRuns(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedTrackedRuns || typeof window === 'undefined') {
+      return;
+    }
+
+    if (trackedLaunchRunIds.length === 0) {
+      window.localStorage.removeItem(ORDER_INVARIANCE_LAUNCH_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(ORDER_INVARIANCE_LAUNCH_STORAGE_KEY, JSON.stringify(trackedLaunchRunIds));
+  }, [hasLoadedTrackedRuns, trackedLaunchRunIds]);
+
+  useEffect(() => {
+    if (!hasLoadedTrackedRuns || trackedLaunchRunIds.length === 0 || launchStatus?.isComplete) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void reexecuteLaunchStatusQuery({ requestPolicy: 'network-only' });
+    }, ORDER_INVARIANCE_LAUNCH_POLL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasLoadedTrackedRuns, trackedLaunchRunIds, launchStatus?.isComplete, reexecuteLaunchStatusQuery]);
 
   useEffect(() => {
     setClosedReviewPairIds((current) => {
@@ -326,13 +397,13 @@ export function OrderEffectPanel() {
 
   const modelOptions = useMemo(() => {
     const unique = new Map<string, string>();
-    for (const row of result?.rows ?? []) {
+    for (const row of allRows) {
       unique.set(row.modelId, row.modelLabel);
     }
     return Array.from(unique.entries())
       .sort((left, right) => left[1].localeCompare(right[1]))
       .map(([modelId, modelLabel]) => ({ modelId, modelLabel }));
-  }, [result?.rows]);
+  }, [allRows]);
 
   useEffect(() => {
     setSelectedModelIds((current) => {
@@ -365,18 +436,17 @@ export function OrderEffectPanel() {
   }, [modelOptions]);
 
   const filteredRows = useMemo(() => {
-    const rows = result?.rows ?? [];
     if (selectedModelIds.size === 0) {
-      return rows;
+      return allRows;
     }
-    return rows.filter((row) => selectedModelIds.has(row.modelId));
-  }, [result?.rows, selectedModelIds]);
+    return allRows.filter((row) => selectedModelIds.has(row.modelId));
+  }, [allRows, selectedModelIds]);
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
   const modelLeaderboard = useMemo(() => {
-    if (!result?.rows) return [];
-    const byModel = new Map<string, typeof result.rows>();
-    for (const row of result.rows) {
+    if (allRows.length === 0) return [];
+    const byModel = new Map<string, OrderInvarianceRow[]>();
+    for (const row of allRows) {
       const list = byModel.get(row.modelId) ?? [];
       list.push(row);
       byModel.set(row.modelId, list);
@@ -399,7 +469,7 @@ export function OrderEffectPanel() {
       const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
       return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length };
     }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
-  }, [result?.rows]);
+  }, [allRows]);
 
   async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
     setActiveReviewPairId(vignette.pairId);
@@ -434,6 +504,12 @@ export function OrderEffectPanel() {
       return;
     }
 
+    const runIds = mutationResult.data?.launchOrderInvariance.runIds ?? [];
+    setTrackedLaunchRunIds(runIds);
+    if (runIds.length > 0) {
+      void reexecuteLaunchStatusQuery({ requestPolicy: 'network-only' });
+    }
+
     void reexecuteReviewQuery({ requestPolicy: 'network-only' });
     void reexecuteResultQuery({ requestPolicy: 'network-only' });
   }
@@ -441,6 +517,9 @@ export function OrderEffectPanel() {
   const reviewGateMessage = reviewResult?.summary.launchReady
     ? 'Review complete. Launch is now enabled for the full vignette set.'
     : 'Launch stays blocked until each vignette is explicitly approved.';
+  const showLaunchStatus = launchMutation.fetching || trackedLaunchRunIds.length > 0 || launchStatus != null;
+  const resolvedTrials = (launchStatus?.completedTrials ?? 0) + (launchStatus?.failedTrials ?? 0);
+  const progressPercent = Math.max(0, Math.min(100, launchStatus?.percentComplete ?? 0));
 
   return (
     <section className="space-y-5 rounded-lg border border-gray-200 bg-white p-5">
@@ -462,6 +541,79 @@ export function OrderEffectPanel() {
           Launch Order-Effect Runs
         </Button>
       </div>
+
+      {showLaunchStatus && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-sky-950">Launch Status</h3>
+                {launchStatus?.isComplete ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Complete
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                    <Loader2 className={`h-3.5 w-3.5 ${launchMutation.fetching || launchStatusFetching ? 'animate-spin' : ''}`} />
+                    {launchMutation.fetching ? 'Starting runs...' : 'Polling live progress'}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-sky-900">
+                {launchStatus
+                  ? `${formatProgressCount(launchStatus.completedTrials)} completed out of ${formatProgressCount(launchStatus.targetedTrials)} targeted trials.`
+                  : 'Preparing live run tracking...'}
+              </p>
+              {launchStatus && (
+                <p className="mt-1 text-xs text-sky-700">
+                  {formatProgressCount(launchStatus.totalRuns)} runs total, {formatProgressCount(launchStatus.activeRuns)} active, {formatProgressCount(launchStatus.failedTrials)} failed trials
+                  {launchStatus.generatedAt ? ` · Last refresh ${new Date(launchStatus.generatedAt).toLocaleTimeString()}` : ''}.
+                </p>
+              )}
+            </div>
+            {trackedLaunchRunIds.length > 0 && launchStatus?.isComplete && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setTrackedLaunchRunIds([])}
+              >
+                Clear Status
+              </Button>
+            )}
+          </div>
+
+          {launchStatus && (
+            <>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-sky-100">
+                <div className="flex h-full w-full">
+                  <div
+                    className="h-full bg-emerald-500 transition-all"
+                    style={{ width: `${launchStatus.targetedTrials > 0 ? (launchStatus.completedTrials / launchStatus.targetedTrials) * 100 : 0}%` }}
+                  />
+                  <div
+                    className="h-full bg-rose-500 transition-all"
+                    style={{ width: `${launchStatus.targetedTrials > 0 ? (launchStatus.failedTrials / launchStatus.targetedTrials) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-sky-800">
+                <span>
+                  Resolved {formatProgressCount(resolvedTrials)} / {formatProgressCount(launchStatus.targetedTrials)} trials
+                </span>
+                <span>{progressPercent.toFixed(0)}%</span>
+              </div>
+            </>
+          )}
+
+          {launchStatusError && (
+            <div className="mt-3">
+              <ErrorMessage message={launchStatusError.message} />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
