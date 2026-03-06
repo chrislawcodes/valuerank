@@ -13,6 +13,7 @@
  */
 
 import { db } from '@valuerank/db';
+import { pathToFileURL } from 'node:url';
 
 const LOCKED_VIGNETTE_IDS = [
   'cmlsmyn9l0j3rxeiricruouia', // Jobs (Self Direction Action vs Power Dominance)
@@ -32,15 +33,37 @@ interface ScenarioContent {
   [key: string]: any;
 }
 
-function extractScaleLine(prompt: string, num: number): string | null {
+export function extractScaleLine(prompt: string, num: number): string | null {
   const regex = new RegExp(`^${num}\\s*=\\s*.*$`, 'm');
   const match = prompt.match(regex);
   return match ? match[0] : null;
 }
 
-function replaceScaleLine(prompt: string, num: number, newLine: string): string {
+export function replaceScaleLine(prompt: string, num: number, newLine: string): string {
   const regex = new RegExp(`^${num}\\s*=\\s*.*$`, 'm');
   return prompt.replace(regex, newLine);
+}
+
+export function deriveScaleFlippedContent(
+  sourceContent: any,
+  flippedScale1: string,
+  flippedScale5: string,
+): any {
+  return {
+    ...sourceContent,
+    prompt: replaceScaleLine(replaceScaleLine(sourceContent.prompt, 1, flippedScale1), 5, flippedScale5),
+  };
+}
+
+export function derivePresentationFlippedContent(
+  fullyFlippedContent: any,
+  sourceScale1: string,
+  sourceScale5: string,
+): any {
+  return {
+    ...fullyFlippedContent,
+    prompt: replaceScaleLine(replaceScaleLine(fullyFlippedContent.prompt, 1, sourceScale1), 5, sourceScale5),
+  };
 }
 
 async function main() {
@@ -104,20 +127,14 @@ Processing vignette ${vignetteId}: "${sourceScenario.name}"`);
         name: `${sourceScenario.name} (Scale Flipped)`,
         orientationFlipped: true,
         // Narrative from source (Order A), Scale from fully_flipped (S_B)
-        deriveContent: () => ({
-          ...sourceContent,
-          prompt: replaceScaleLine(replaceScaleLine(sourceContent.prompt, 1, flippedScale1), 5, flippedScale5),
-        }),
+        deriveContent: () => deriveScaleFlippedContent(sourceContent, flippedScale1, flippedScale5),
       },
       {
         type: 'presentation_flipped',
         name: `${sourceScenario.name} (Presentation Flipped)`,
         orientationFlipped: false,
         // Narrative from fully_flipped (Order B), Scale from source (S_A)
-        deriveContent: () => ({
-          ...fullyFlippedContent,
-          prompt: replaceScaleLine(replaceScaleLine(fullyFlippedContent.prompt, 1, sourceScale1), 5, sourceScale5),
-        }),
+        deriveContent: () => derivePresentationFlippedContent(fullyFlippedContent, sourceScale1, sourceScale5),
       },
     ];
 
@@ -179,11 +196,13 @@ Finished!`);
   console.log(`Pairs skipped: ${skippedPairs}`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await db.$disconnect();
-  });
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await db.$disconnect();
+    });
+}

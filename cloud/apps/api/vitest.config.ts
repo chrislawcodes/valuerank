@@ -4,7 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: [
+      'tests/**/*.test.ts',
+      'src/**/*.test.ts',
+      '../../scripts/__tests__/**/*.test.ts',
+    ],
     setupFiles: ['tests/setup.ts'],
     // Run test files sequentially to avoid database conflicts
     // (multiple test files clean and create the same LLM tables)
