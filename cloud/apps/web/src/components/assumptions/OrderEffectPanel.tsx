@@ -48,22 +48,46 @@ function getScaleEffectColor(value: number | null | undefined): string {
   return 'text-green-700';
 }
 
-function getVariantHeaderLabel(variantType: string | null | undefined): string {
-  const labels: Record<string, string> = {
-    fully_flipped: 'Fully Flipped',
-    scale_flipped: 'Scale Flipped (new)',
-    presentation_flipped: 'Presentation Flipped (new)',
+function getVariantAxes(variantType: string | null | undefined): {
+  narrativeOrder: 'baseline' | 'flipped';
+  scaleOrder: 'baseline' | 'flipped';
+} {
+  if (variantType === 'fully_flipped') {
+    return {
+      narrativeOrder: 'flipped',
+      scaleOrder: 'flipped',
+    };
+  }
+  if (variantType === 'scale_flipped') {
+    return {
+      narrativeOrder: 'baseline',
+      scaleOrder: 'flipped',
+    };
+  }
+  if (variantType === 'presentation_flipped') {
+    return {
+      narrativeOrder: 'flipped',
+      scaleOrder: 'baseline',
+    };
+  }
+  return {
+    narrativeOrder: 'baseline',
+    scaleOrder: 'baseline',
   };
-  return variantType ? (labels[variantType] ?? variantType) : 'Unknown';
+}
+
+function getAxisBadgeClass(state: 'baseline' | 'flipped'): string {
+  if (state === 'baseline') {
+    return 'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100';
+  }
+  return 'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700 bg-indigo-100';
 }
 
 function getVariantSideLabel(variantType: string | null | undefined): string {
-  const labels: Record<string, string> = {
-    fully_flipped: 'Fully Flipped',
-    scale_flipped: 'Scale Flipped (scale only)',
-    presentation_flipped: 'Presentation Flipped (order only)',
-  };
-  return variantType ? (labels[variantType] ?? 'Flipped') : 'Flipped';
+  if (variantType === 'scale_flipped') return 'Scale Order Flipped';
+  if (variantType === 'presentation_flipped') return 'Narrative Order Flipped';
+  if (variantType === 'fully_flipped') return 'Narrative + Scale Flipped';
+  return 'Flipped';
 }
 
 function formatDateTime(value: string | null): string {
@@ -246,6 +270,7 @@ export function OrderEffectPanel() {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [activeReviewPairId, setActiveReviewPairId] = useState<string | null>(null);
   const [activeRow, setActiveRow] = useState<OrderInvarianceRow | null>(null);
+  const [closedReviewPairIds, setClosedReviewPairIds] = useState<Set<string>>(new Set());
 
   const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
     query: ORDER_INVARIANCE_QUERY,
@@ -281,6 +306,23 @@ export function OrderEffectPanel() {
     }),
     [reviewResult?.vignettes],
   );
+
+  useEffect(() => {
+    setClosedReviewPairIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const vignette of sortedReviewVignettes) {
+        if (vignette.reviewStatus === 'APPROVED' && !next.has(vignette.pairId)) {
+          next.add(vignette.pairId);
+          changed = true;
+        }
+        if (vignette.reviewStatus !== 'APPROVED' && next.delete(vignette.pairId)) {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [sortedReviewVignettes]);
 
   const modelOptions = useMemo(() => {
     const unique = new Map<string, string>();
@@ -370,6 +412,16 @@ export function OrderEffectPanel() {
 
     if (mutationResult.error) {
       return;
+    }
+
+    if (reviewStatus === 'APPROVED') {
+      setClosedReviewPairIds((current) => new Set(current).add(vignette.pairId));
+    } else {
+      setClosedReviewPairIds((current) => {
+        const next = new Set(current);
+        next.delete(vignette.pairId);
+        return next;
+      });
     }
 
     void reexecuteReviewQuery({ requestPolicy: 'network-only' });
@@ -491,82 +543,114 @@ export function OrderEffectPanel() {
                 <div className="rounded-md border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-600">
                   No generated order-flip pairs are available yet.
                 </div>
-              ) : sortedReviewVignettes.map((vignette) => (
-                <div key={vignette.pairId} className="rounded-lg border border-gray-200 bg-white">
-                  <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {vignette.vignetteTitle}
-                        <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
-                          {getVariantHeaderLabel(vignette.variantType)}
+              ) : sortedReviewVignettes.map((vignette) => {
+                const axes = getVariantAxes(vignette.variantType);
+                const isClosed = closedReviewPairIds.has(vignette.pairId);
+
+                return (
+                  <div key={vignette.pairId} className="rounded-lg border border-gray-200 bg-white">
+                    <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {vignette.vignetteTitle}
+                          <span className={`ml-2 ${getAxisBadgeClass(axes.narrativeOrder)}`}>
+                            Narrative Order {axes.narrativeOrder}
+                          </span>
+                          <span className={`ml-2 ${getAxisBadgeClass(axes.scaleOrder)}`}>
+                            Scale Order {axes.scaleOrder}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          Showing representative condition {vignette.conditionKey}. Approval covers all {vignette.conditionPairCount} generated condition pair{vignette.conditionPairCount === 1 ? '' : 's'}.
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          Reviewed {formatDateTime(vignette.reviewedAt)}
+                          {vignette.reviewedBy ? ` by ${vignette.reviewedBy}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={getReviewStatusBadge(vignette.reviewStatus)}>
+                          {isClosed ? 'CLOSED' : vignette.reviewStatus}
                         </span>
-                      </div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        Showing representative condition {vignette.conditionKey}. Approval covers all {vignette.conditionPairCount} generated condition pair{vignette.conditionPairCount === 1 ? '' : 's'}.
-                      </div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        Reviewed {formatDateTime(vignette.reviewedAt)}
-                        {vignette.reviewedBy ? ` by ${vignette.reviewedBy}` : ''}
+                        {vignette.reviewStatus === 'APPROVED' && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setClosedReviewPairIds((current) => {
+                              const next = new Set(current);
+                              if (next.has(vignette.pairId)) {
+                                next.delete(vignette.pairId);
+                              } else {
+                                next.add(vignette.pairId);
+                              }
+                              return next;
+                            })}
+                          >
+                            {isClosed ? 'Open Vignette' : 'Close Vignette'}
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <span className={getReviewStatusBadge(vignette.reviewStatus)}>
-                      {vignette.reviewStatus}
-                    </span>
-                  </div>
 
-                  <div className="grid gap-4 p-4 lg:grid-cols-2">
-                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Baseline (A First)</div>
-                      <div className="mt-1 text-xs text-gray-500">{vignette.baselineName}</div>
-                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.baselineText}</pre>
-                    </div>
-                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {getVariantSideLabel(vignette.variantType)} (B First)
-                      </div>
-                      <div className="mt-1 text-xs text-gray-500">{vignette.flippedName}</div>
-                      <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.flippedText}</pre>
-                    </div>
-                  </div>
+                    {!isClosed && (
+                      <>
+                        <div className="grid gap-4 p-4 lg:grid-cols-2">
+                          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Narrative Order Baseline</div>
+                            <div className="mt-1 text-xs text-gray-500">{vignette.baselineName}</div>
+                            <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.baselineText}</pre>
+                          </div>
+                          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                              {getVariantSideLabel(vignette.variantType)}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">{vignette.flippedName}</div>
+                            <pre className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{vignette.flippedText}</pre>
+                          </div>
+                        </div>
 
-                  <div className="border-t border-gray-200 p-4">
-                    <label className="block text-xs font-medium uppercase tracking-wide text-gray-500" htmlFor={`review-note-${vignette.pairId}`}>
-                      Reviewer Notes
-                    </label>
-                    <textarea
-                      id={`review-note-${vignette.pairId}`}
-                      className="mt-2 min-h-[96px] w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-200"
-                      value={getDraftNote(noteDrafts, vignette)}
-                      onChange={(event) => setNoteDrafts((current) => ({
-                        ...current,
-                        [vignette.pairId]: event.target.value,
-                      }))}
-                      placeholder="Capture approval rationale or why the vignette was rejected."
-                    />
+                        <div className="border-t border-gray-200 p-4">
+                          <label className="block text-xs font-medium uppercase tracking-wide text-gray-500" htmlFor={`review-note-${vignette.pairId}`}>
+                            Reviewer Notes
+                          </label>
+                          <textarea
+                            id={`review-note-${vignette.pairId}`}
+                            className="mt-2 min-h-[96px] w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-200"
+                            value={getDraftNote(noteDrafts, vignette)}
+                            onChange={(event) => setNoteDrafts((current) => ({
+                              ...current,
+                              [vignette.pairId]: event.target.value,
+                            }))}
+                            placeholder="Capture approval rationale or why the vignette was rejected."
+                          />
 
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
-                        onClick={() => void submitReview(vignette, 'APPROVED')}
-                      >
-                        Approve Vignette
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="danger"
-                        isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
-                        onClick={() => void submitReview(vignette, 'REJECTED')}
-                      >
-                        Reject Vignette
-                      </Button>
-                    </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
+                              onClick={() => void submitReview(vignette, 'APPROVED')}
+                            >
+                              Approve Vignette
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="danger"
+                              isLoading={reviewMutation.fetching && activeReviewPairId === vignette.pairId}
+                              onClick={() => void submitReview(vignette, 'REJECTED')}
+                            >
+                              Reject Vignette
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
