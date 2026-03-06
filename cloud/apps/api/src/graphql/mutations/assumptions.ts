@@ -604,7 +604,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
         definitionId: string;
         scenarioIds: string[];
         samplesPerScenario: number;
-        runType: 'baseline' | 'flipped';
+        runType: 'baseline' | 'fully_flipped';
       }> = [];
 
       for (const [definitionId, definitionGroup] of approvedByDefinition.entries()) {
@@ -650,7 +650,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
             definitionId,
             scenarioIds: Array.from(definitionGroup.variantScenarioIds).sort(),
             samplesPerScenario: flippedNeeded,
-            runType: 'flipped',
+            runType: 'fully_flipped',
           });
         }
       }
