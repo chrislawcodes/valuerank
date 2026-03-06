@@ -115,6 +115,31 @@ type OrderInvarianceReviewResult = {
   vignettes: OrderInvarianceReviewVignette[];
 };
 
+type OrderInvarianceLaunchRun = {
+  runId: string;
+  status: string;
+  targetedTrials: number;
+  completedTrials: number;
+  failedTrials: number;
+  percentComplete: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+};
+
+type OrderInvarianceLaunchStatus = {
+  generatedAt: Date;
+  totalRuns: number;
+  activeRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  targetedTrials: number;
+  completedTrials: number;
+  failedTrials: number;
+  percentComplete: number;
+  isComplete: boolean;
+  runs: OrderInvarianceLaunchRun[];
+};
+
 type PairScenario = {
   id: string;
   name: string;
@@ -195,6 +220,7 @@ type PickResult =
 const ORDER_INVARIANCE_KEY = 'order_invariance';
 const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIANCE_KEY]);
 const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
+const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
 
 function getRunAssumptionKey(config: unknown): string | null {
   if (config == null || typeof config !== 'object') {
@@ -235,6 +261,18 @@ function parseDecision(decisionCode: string | null): number | null {
   return Number(decisionCode);
 }
 
+function parseProgress(progress: unknown): { total: number; completed: number; failed: number } {
+  if (progress == null || typeof progress !== 'object' || Array.isArray(progress)) {
+    return { total: 0, completed: 0, failed: 0 };
+  }
+
+  const candidate = progress as Record<string, unknown>;
+  const total = typeof candidate.total === 'number' && Number.isFinite(candidate.total) ? candidate.total : 0;
+  const completed = typeof candidate.completed === 'number' && Number.isFinite(candidate.completed) ? candidate.completed : 0;
+  const failed = typeof candidate.failed === 'number' && Number.isFinite(candidate.failed) ? candidate.failed : 0;
+
+  return { total, completed, failed };
+}
 export function normalizeDecision(decision: number, variantType: string | null): number {
   return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
     ? 6 - decision
@@ -574,6 +612,39 @@ const OrderInvarianceReviewResultRef = builder
     }),
   });
 
+const OrderInvarianceLaunchRunRef = builder
+  .objectRef<OrderInvarianceLaunchRun>('OrderInvarianceLaunchRun')
+  .implement({
+    fields: (t) => ({
+      runId: t.exposeID('runId'),
+      status: t.exposeString('status'),
+      targetedTrials: t.exposeInt('targetedTrials'),
+      completedTrials: t.exposeInt('completedTrials'),
+      failedTrials: t.exposeInt('failedTrials'),
+      percentComplete: t.exposeFloat('percentComplete'),
+      startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
+      completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
+    }),
+  });
+
+const OrderInvarianceLaunchStatusRef = builder
+  .objectRef<OrderInvarianceLaunchStatus>('OrderInvarianceLaunchStatus')
+  .implement({
+    fields: (t) => ({
+      generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
+      totalRuns: t.exposeInt('totalRuns'),
+      activeRuns: t.exposeInt('activeRuns'),
+      completedRuns: t.exposeInt('completedRuns'),
+      failedRuns: t.exposeInt('failedRuns'),
+      targetedTrials: t.exposeInt('targetedTrials'),
+      completedTrials: t.exposeInt('completedTrials'),
+      failedTrials: t.exposeInt('failedTrials'),
+      percentComplete: t.exposeFloat('percentComplete'),
+      isComplete: t.exposeBoolean('isComplete'),
+      runs: t.expose('runs', { type: [OrderInvarianceLaunchRunRef] }),
+    }),
+  });
+
 builder.queryField('assumptionsOrderInvarianceReview', (t) =>
   t.field({
     type: OrderInvarianceReviewResultRef,
@@ -721,6 +792,92 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
             && approvedVignettes === totalVignettes,
         },
         vignettes,
+      };
+    },
+  })
+);
+
+builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
+  t.field({
+    type: OrderInvarianceLaunchStatusRef,
+    args: {
+      runIds: t.arg.idList({ required: true }),
+    },
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
+
+      const runIds = Array.from(new Set(args.runIds.filter((runId): runId is string => typeof runId === 'string' && runId !== '')));
+      if (runIds.length === 0) {
+        return {
+          generatedAt: new Date(),
+          totalRuns: 0,
+          activeRuns: 0,
+          completedRuns: 0,
+          failedRuns: 0,
+          targetedTrials: 0,
+          completedTrials: 0,
+          failedTrials: 0,
+          percentComplete: 0,
+          isComplete: true,
+          runs: [],
+        };
+      }
+
+      const runRows = await db.run.findMany({
+        where: {
+          id: { in: runIds },
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          progress: true,
+          startedAt: true,
+          completedAt: true,
+          config: true,
+        },
+      });
+
+      const filteredRuns = runRows
+        .filter((run) => getRunAssumptionKey(run.config) === ORDER_INVARIANCE_KEY)
+        .map<OrderInvarianceLaunchRun>((run) => {
+          const progress = parseProgress(run.progress);
+          const resolvedTrials = progress.completed + progress.failed;
+          return {
+            runId: run.id,
+            status: run.status,
+            targetedTrials: progress.total,
+            completedTrials: progress.completed,
+            failedTrials: progress.failed,
+            percentComplete: progress.total > 0 ? Math.min(100, (resolvedTrials / progress.total) * 100) : 0,
+            startedAt: run.startedAt,
+            completedAt: run.completedAt,
+          };
+        })
+        .sort((left, right) => runIds.indexOf(left.runId) - runIds.indexOf(right.runId));
+
+      const targetedTrials = filteredRuns.reduce((sum, run) => sum + run.targetedTrials, 0);
+      const completedTrials = filteredRuns.reduce((sum, run) => sum + run.completedTrials, 0);
+      const failedTrials = filteredRuns.reduce((sum, run) => sum + run.failedTrials, 0);
+      const activeRuns = filteredRuns.filter((run) => ACTIVE_RUN_STATUSES.has(run.status)).length;
+      const completedRuns = filteredRuns.filter((run) => run.status === 'COMPLETED').length;
+      const failedRuns = filteredRuns.filter((run) => run.status === 'FAILED').length;
+      const resolvedTrials = completedTrials + failedTrials;
+
+      return {
+        generatedAt: new Date(),
+        totalRuns: filteredRuns.length,
+        activeRuns,
+        completedRuns,
+        failedRuns,
+        targetedTrials,
+        completedTrials,
+        failedTrials,
+        percentComplete: targetedTrials > 0 ? Math.min(100, (resolvedTrials / targetedTrials) * 100) : 0,
+        isComplete: filteredRuns.length > 0 && activeRuns === 0,
+        runs: filteredRuns,
       };
     },
   })
