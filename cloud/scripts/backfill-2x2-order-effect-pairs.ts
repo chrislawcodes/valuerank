@@ -71,8 +71,7 @@ async function main() {
   const isDryRun = args.includes('--dry-run');
 
   if (isDryRun) {
-    console.log('🌵 DRY RUN - No changes will be persisted to the database.
-');
+    console.log('🌵 DRY RUN - No changes will be persisted to the database.\n');
   }
 
   console.log(`Starting backfill for ${LOCKED_VIGNETTE_IDS.length} locked vignettes...`);
@@ -103,8 +102,7 @@ async function main() {
     const { sourceScenario, variantScenario: fullyFlippedScenario } = pair;
     const vignetteId = sourceScenario.definitionId;
 
-    console.log(`
-Processing vignette ${vignetteId}: "${sourceScenario.name}"`);
+    console.log(`\nProcessing vignette ${vignetteId}: "${sourceScenario.name}"`);
 
     const sourceContent = sourceScenario.content as unknown as ScenarioContent;
     const fullyFlippedContent = fullyFlippedScenario.content as unknown as ScenarioContent;
@@ -189,8 +187,7 @@ Processing vignette ${vignetteId}: "${sourceScenario.name}"`);
     }
   }
 
-  console.log(`
-Finished!`);
+  console.log('\nFinished!');
   console.log(`Scenarios created: ${createdScenarios}`);
   console.log(`Pairs created: ${createdPairs}`);
   console.log(`Pairs skipped: ${skippedPairs}`);
