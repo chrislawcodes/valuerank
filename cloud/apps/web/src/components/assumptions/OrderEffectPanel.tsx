@@ -49,7 +49,6 @@ function formatMAD(value: number | null | undefined): string {
 function formatProgressCount(value: number): string {
   return value.toLocaleString();
 }
-
 function getScaleEffectColor(value: number | null | undefined): string {
   if (value == null) return 'text-gray-900';
   if (value > 1.00) return 'text-red-600 font-bold';

@@ -8,7 +8,6 @@
 import { db } from '../packages/db/src';
 
 const LEGACY_VARIANT_TYPES = ['flipped', 'flipped_order'] as const;
-
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
 

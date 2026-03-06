@@ -273,7 +273,6 @@ function parseProgress(progress: unknown): { total: number; completed: number; f
 
   return { total, completed, failed };
 }
-
 export function normalizeDecision(decision: number, variantType: string | null): number {
   return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
     ? 6 - decision
