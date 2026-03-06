@@ -124,6 +124,7 @@ type OrderInvarianceLaunchRun = {
   percentComplete: number;
   startedAt: Date | null;
   completedAt: Date | null;
+  isStalled: boolean;
 };
 
 type OrderInvarianceLaunchStatus = {
@@ -138,6 +139,8 @@ type OrderInvarianceLaunchStatus = {
   percentComplete: number;
   isComplete: boolean;
   runs: OrderInvarianceLaunchRun[];
+  stalledModels: string[];
+  failureSummaries: string[];
 };
 
 type PairScenario = {
@@ -624,6 +627,7 @@ const OrderInvarianceLaunchRunRef = builder
       percentComplete: t.exposeFloat('percentComplete'),
       startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
       completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
+      isStalled: t.exposeBoolean('isStalled'),
     }),
   });
 
@@ -642,6 +646,8 @@ const OrderInvarianceLaunchStatusRef = builder
       percentComplete: t.exposeFloat('percentComplete'),
       isComplete: t.exposeBoolean('isComplete'),
       runs: t.expose('runs', { type: [OrderInvarianceLaunchRunRef] }),
+      stalledModels: t.exposeStringList('stalledModels'),
+      failureSummaries: t.exposeStringList('failureSummaries'),
     }),
   });
 
@@ -822,6 +828,8 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
           percentComplete: 0,
           isComplete: true,
           runs: [],
+          stalledModels: [],
+          failureSummaries: [],
         };
       }
 
@@ -837,8 +845,12 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
           startedAt: true,
           completedAt: true,
           config: true,
+          updatedAt: true,
         },
       });
+
+      const STALL_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes, matches recovery.ts
+      const now = Date.now();
 
       const filteredRuns = runRows
         .filter((run) => getRunAssumptionKey(run.config) === ORDER_INVARIANCE_KEY)
@@ -854,6 +866,7 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
             percentComplete: progress.total > 0 ? Math.min(100, (resolvedTrials / progress.total) * 100) : 0,
             startedAt: run.startedAt,
             completedAt: run.completedAt,
+            isStalled: run.status === 'RUNNING' && (now - run.updatedAt.getTime()) > STALL_THRESHOLD_MS,
           };
         })
         .sort((left, right) => runIds.indexOf(left.runId) - runIds.indexOf(right.runId));
@@ -865,6 +878,39 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
       const completedRuns = filteredRuns.filter((run) => run.status === 'COMPLETED').length;
       const failedRuns = filteredRuns.filter((run) => run.status === 'FAILED').length;
       const resolvedTrials = completedTrials + failedTrials;
+
+      const stalledRunIds = filteredRuns.filter((run) => run.isStalled).map((run) => run.runId);
+      let stalledModels: string[] = [];
+      if (stalledRunIds.length > 0) {
+        const stalledProbeRows = await db.probeResult.findMany({
+          where: { runId: { in: stalledRunIds } },
+          select: { modelId: true },
+        });
+        const stalledModelIdSet = new Set(stalledProbeRows.map((probeRow) => probeRow.modelId));
+        if (stalledModelIdSet.size > 0) {
+          const modelRows = await db.llmModel.findMany({
+            where: { modelId: { in: Array.from(stalledModelIdSet) } },
+            select: { modelId: true, displayName: true },
+          });
+          const modelMap = new Map(modelRows.map((modelRow) => [modelRow.modelId, modelRow.displayName]));
+          stalledModels = Array.from(stalledModelIdSet).map((modelId) => modelMap.get(modelId) ?? modelId);
+        }
+      }
+
+      const filteredRunIds = filteredRuns.map((run) => run.runId);
+      const failedProbeRows = filteredRunIds.length > 0
+        ? await db.probeResult.findMany({
+            where: { runId: { in: filteredRunIds }, status: 'FAILED' },
+            select: { errorMessage: true },
+          })
+        : [];
+      const failureSummaries = Array.from(
+        new Set(
+          failedProbeRows
+            .map((probeRow) => probeRow.errorMessage)
+            .filter((message): message is string => message !== null && message !== '')
+        )
+      );
 
       return {
         generatedAt: new Date(),
@@ -878,6 +924,8 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
         percentComplete: targetedTrials > 0 ? Math.min(100, (resolvedTrials / targetedTrials) * 100) : 0,
         isComplete: filteredRuns.length > 0 && activeRuns === 0,
         runs: filteredRuns,
+        stalledModels,
+        failureSummaries,
       };
     },
   })
