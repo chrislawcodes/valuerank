@@ -390,8 +390,8 @@ export function RunForm({
             <p className="font-medium mb-1">Adaptive Trial Strategy</p>
             <ul className="list-disc pl-4 space-y-1 text-xs text-blue-700">
               <li>Target: 10 trials per condition per AI.</li>
-              <li>More Investigation: Adds 10 trials if stability is marginal (SEM 0.1-0.14).</li>
-              <li>Stops automatically if stable (SEM &lt; 0.1) or too chaotic.</li>
+              <li>More Investigation: Adds 10 trials if score variability is marginal.</li>
+              <li>Stops automatically if scores are stable or too chaotic.</li>
             </ul>
             {loadingFinalTrialPlan ? (
               <p className="mt-2 text-xs italic text-gray-500">Calculating plan...</p>
@@ -473,7 +473,7 @@ export function RunForm({
                                   <span className="mx-1">•</span>
                                   {item.key}
                                   <span className="ml-1 text-blue-500">
-                                    (SEM {item.sem?.toFixed(3)}) → +{item.needed}
+                                    (variability: {item.sem?.toFixed(3)}) → +{item.needed}
                                   </span>
                                 </li>
                               ))}

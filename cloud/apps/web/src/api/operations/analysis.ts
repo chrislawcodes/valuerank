@@ -101,6 +101,13 @@ export type ScenarioVarianceStats = {
   variance: number;
   range: number;
   sampleCount: number;
+  scoreCounts?: Record<string, number>;
+  direction?: 'A' | 'B' | 'NEUTRAL' | null;
+  directionalAgreement?: number | null;
+  medianSignedDistance?: number | null;
+  iqr?: number | null;
+  neutralShare?: number | null;
+  orientationCorrected?: boolean;
 };
 
 export type PerScenarioVarianceStats = {
@@ -111,6 +118,13 @@ export type PerScenarioVarianceStats = {
   min: number;
   max: number;
   range: number;
+  scoreCounts?: Record<string, number>;
+  direction?: 'A' | 'B' | 'NEUTRAL' | null;
+  directionalAgreement?: number | null;
+  medianSignedDistance?: number | null;
+  iqr?: number | null;
+  neutralShare?: number | null;
+  orientationCorrected?: boolean;
 };
 
 export type ModelVarianceStats = {
@@ -129,6 +143,7 @@ export type VarianceAnalysis = {
   perModel: Record<string, ModelVarianceStats>;
   mostVariableScenarios: ScenarioVarianceStats[];
   leastVariableScenarios: ScenarioVarianceStats[];
+  orientationCorrectedCount?: number;
 };
 
 export type AnalysisResult = {

@@ -1,7 +1,7 @@
 /**
  * Stability Tab
  *
- * Displays Condition x AI Standard Error of the Mean (SEM) report.
+ * Displays Condition x AI directional stability report.
  * Replaces the old Values tab.
  */
 
@@ -26,46 +26,132 @@ type ConditionRow = {
     scenarioIds: string[];
 };
 
+export type CellStabilityMetrics = {
+    direction: 'A' | 'B' | 'NEUTRAL' | null;
+    agreementCount: number;
+    totalCount: number;
+    directionalAgreement: number | null;
+    medianSignedDistance: number | null;
+    iqr: number | null;
+    neutralShare: number | null;
+};
+
 /**
- * Calculate Standard Error of the Mean (SEM).
- * SEM = StdDev / sqrt(N)
- * StdDev = sqrt(Variance)
- * Variance = sum((x - mean)^2) / (N - 1)
+ * Aggregate directional stability metrics across multiple scenarios in a condition cell.
+ * Returns null if varianceAnalysis is absent or no perScenario data exists for this model.
  */
-function calculateSEM(scores: number[]): number | null {
-    const n = scores.length;
-    if (n < 2) return null; // Need at least 2 samples for variance
+export function getModelStabilityMetrics(
+    modelId: string,
+    scenarioIds: string[],
+    varianceAnalysis: VarianceAnalysis | null | undefined
+): CellStabilityMetrics | null {
+    if (!varianceAnalysis) return null;
+    const modelStats = varianceAnalysis.perModel[modelId];
+    if (!modelStats?.perScenario) return null;
 
-    const mean = scores.reduce((sum, score) => sum + score, 0) / n;
-    const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / (n - 1);
-    const stdDev = Math.sqrt(variance);
-    const sem = stdDev / Math.sqrt(n);
+    const scenStats = scenarioIds
+        .map((id) => modelStats.perScenario[id])
+        .filter((s): s is NonNullable<typeof s> => s != null && s.sampleCount > 0);
 
-    return sem;
+    if (scenStats.length === 0) return null;
+
+    const totalCount = scenStats.reduce((sum, s) => sum + s.sampleCount, 0);
+    const directionWeights: Record<string, number> = { A: 0, B: 0, NEUTRAL: 0 };
+    for (const s of scenStats) {
+        if (s.direction != null) {
+            directionWeights[s.direction] = (directionWeights[s.direction] ?? 0) + s.sampleCount;
+        }
+    }
+
+    const hasDirectionalData = scenStats.some((s) => s.direction != null);
+    if (!hasDirectionalData) {
+        return {
+            direction: null,
+            agreementCount: 0,
+            totalCount,
+            directionalAgreement: null,
+            medianSignedDistance: null,
+            iqr: null,
+            neutralShare: null,
+        };
+    }
+
+    let cellDirection: 'A' | 'B' | 'NEUTRAL' | null = null;
+    for (const dir of ['A', 'B', 'NEUTRAL'] as const) {
+        if (cellDirection === null || (directionWeights[dir] ?? 0) > (directionWeights[cellDirection] ?? 0)) {
+            cellDirection = dir;
+        }
+    }
+
+    let agreementCount = 0;
+    for (const s of scenStats) {
+        if (s.direction != null && s.directionalAgreement != null && s.direction === cellDirection) {
+            agreementCount += Math.round(s.directionalAgreement * s.sampleCount);
+        }
+    }
+
+    const directionalAgreement = totalCount > 0 ? agreementCount / totalCount : null;
+    const scenWithMedian = scenStats.filter((s) => s.medianSignedDistance != null);
+    const weightedMedian = scenWithMedian.length > 0
+        ? scenWithMedian.reduce((sum, s) => sum + (s.medianSignedDistance! * s.sampleCount), 0) /
+          scenWithMedian.reduce((sum, s) => sum + s.sampleCount, 0)
+        : null;
+
+    const scenWithIQR = scenStats.filter((s) => s.iqr != null);
+    const weightedIQR = scenWithIQR.length > 0
+        ? scenWithIQR.reduce((sum, s) => sum + (s.iqr! * s.sampleCount), 0) /
+          scenWithIQR.reduce((sum, s) => sum + s.sampleCount, 0)
+        : null;
+
+    const scenWithNeutral = scenStats.filter((s) => s.neutralShare != null);
+    const weightedNeutral = scenWithNeutral.length > 0
+        ? scenWithNeutral.reduce((sum, s) => sum + (s.neutralShare! * s.sampleCount), 0) /
+          scenWithNeutral.reduce((sum, s) => sum + s.sampleCount, 0)
+        : null;
+
+    return {
+        direction: cellDirection,
+        agreementCount,
+        totalCount,
+        directionalAgreement,
+        medianSignedDistance: weightedMedian !== null ? parseFloat(weightedMedian.toFixed(2)) : null,
+        iqr: weightedIQR !== null ? parseFloat(weightedIQR.toFixed(2)) : null,
+        neutralShare: weightedNeutral !== null ? parseFloat(weightedNeutral.toFixed(2)) : null,
+    };
 }
 
-function getSEMColor(sem: number): string {
-    if (sem === -1) {
-        // Insufficient data (N < 2)
-        return 'rgba(243, 244, 246, 1)'; // bg-gray-100
-    }
-    if (sem >= 0.2) {
-        // Light Red for high instability
-        return 'rgba(254, 242, 242, 1)'; // bg-red-50
-    }
-    if (sem > 0.1) {
-        // Light Yellow for moderate instability
-        return 'rgba(255, 251, 235, 1)'; // bg-yellow-50
-    }
-    // Default (transparent/white) for low instability
-    return 'transparent';
+/**
+ * Returns stability label based on directional agreement and sample count.
+ * High: all replicates agree. Moderate: all but one. Low: less.
+ * Returns null when N < 2 (not enough samples to assess stability).
+ */
+export function getStabilityLabel(
+    agreementCount: number,
+    totalCount: number
+): 'High' | 'Moderate' | 'Low' | null {
+    if (totalCount < 2) return null;
+    if (agreementCount === totalCount) return 'High';
+    if (agreementCount === totalCount - 1) return 'Moderate';
+    return 'Low';
 }
 
-function getSEMTextColor(sem: number): string {
-    if (sem === -1) return 'text-gray-400 text-xs italic';
-    if (sem >= 0.2) return 'text-red-700 font-medium';
-    if (sem > 0.1) return 'text-amber-700 font-medium';
-    return 'text-gray-500';
+/**
+ * Returns Tailwind background color class for direction.
+ */
+export function getDirectionBgColor(direction: 'A' | 'B' | 'NEUTRAL' | null): string {
+    if (direction === 'A') return 'bg-blue-50';
+    if (direction === 'B') return 'bg-orange-50';
+    return '';
+}
+
+/**
+ * Returns Tailwind text color class for direction.
+ */
+export function getDirectionTextColor(direction: 'A' | 'B' | 'NEUTRAL' | null): string {
+    if (direction === 'A') return 'text-blue-700 font-medium';
+    if (direction === 'B') return 'text-orange-700 font-medium';
+    if (direction === 'NEUTRAL') return 'text-gray-600';
+    return 'text-gray-400';
 }
 
 function ConditionStabilityMatrix({
@@ -82,7 +168,6 @@ function ConditionStabilityMatrix({
     const tableRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const scenarioDimensions = visualizationData?.scenarioDimensions;
-    const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
     const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
 
     const availableAttributes = useMemo(() => {
@@ -160,77 +245,6 @@ function ConditionStabilityMatrix({
         });
     }, [scenarioDimensions, attributeA, attributeB]);
 
-    const getModelSEM = (modelId: string, scenarioIds: string[]): { sem: number | null, count: number } | null => {
-        // 1. Try Variance Analysis (Multi-sample / Aggregate)
-        if (varianceAnalysis) {
-            const modelStats = varianceAnalysis.perModel[modelId];
-            if (modelStats && modelStats.perScenario) {
-                // First pass: Calculate global mean for this condition
-                let sumWeightedMeans = 0;
-                let totalCount = 0;
-
-                scenarioIds.forEach(scenId => {
-                    const stats = modelStats.perScenario[scenId];
-                    if (stats && stats.sampleCount > 0) {
-                        sumWeightedMeans += stats.mean * stats.sampleCount;
-                        totalCount += stats.sampleCount;
-                    }
-                });
-
-                if (totalCount < 2) {
-                    // Not enough samples for variance
-                    return totalCount === 0 ? null : { sem: -1, count: totalCount };
-                }
-
-                const globalMean = sumWeightedMeans / totalCount;
-                let ssTotal = 0; // Sum of Squares Total
-
-                // Second pass: Accumulate Within-Scenario and Between-Scenario SS
-                // SS_total = Σ((n_i - 1)s_i^2 + n_i(μ_i - μ_total)^2)
-                scenarioIds.forEach(scenId => {
-                    const stats = modelStats.perScenario[scenId];
-                    if (stats && stats.sampleCount > 0) {
-                        // Within-scenario SS = (n-1) * variance
-                        if (stats.sampleCount > 1) {
-                            const variance = Math.pow(stats.stdDev, 2);
-                            ssTotal += (stats.sampleCount - 1) * variance;
-                        }
-
-                        // Between-scenario SS = n * (mean - globalMean)^2
-                        ssTotal += stats.sampleCount * Math.pow(stats.mean - globalMean, 2);
-                    }
-                });
-
-                // Total Variance = SS_total / (N - 1)
-                const totalVariance = ssTotal / (totalCount - 1);
-
-                // SEM = sqrt(TotalVariance / N)
-                const sem = Math.sqrt(totalVariance / totalCount);
-
-                return { sem, count: totalCount };
-            }
-        }
-
-        // 2. Fallback to existing logic
-        const byScenario = modelScenarioMatrix?.[modelId];
-        if (!byScenario) return null;
-
-        const scores: number[] = [];
-        scenarioIds.forEach((scenarioId) => {
-            const score = byScenario[scenarioId];
-            if (typeof score === 'number' && Number.isFinite(score)) {
-                scores.push(score);
-            }
-        });
-
-        if (scores.length === 0) return null;
-
-        return {
-            sem: calculateSEM(scores),
-            count: scores.length
-        };
-    };
-
     const handleCellClick = (modelId: string, row: ConditionRow) => {
         const params = new URLSearchParams({
             rowDim: attributeA,
@@ -242,7 +256,7 @@ function ConditionStabilityMatrix({
         navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
     };
 
-    if (!scenarioDimensions || !modelScenarioMatrix) {
+    if (!scenarioDimensions) {
         return (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
                 Condition-level matrix data is unavailable. Recompute analysis to regenerate scenario dimensions.
@@ -337,7 +351,7 @@ function ConditionStabilityMatrix({
             </div>
 
             <div className="flex items-center justify-between gap-3">
-                <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Stability (SEM)</h4>
+                <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Directional Stability</h4>
                 <CopyVisualButton targetRef={tableRef} label="condition by AI stability table" />
             </div>
 
@@ -366,34 +380,54 @@ function ConditionStabilityMatrix({
                                     {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
                                 </td>
                                 {visibleModels.map((modelId) => {
-                                    const result = getModelSEM(modelId, row.scenarioIds);
-                                    const canOpen = result !== null;
-                                    const sem = result?.sem ?? null;
-                                    const count = result?.count ?? 0;
+                                    const metrics = getModelStabilityMetrics(modelId, row.scenarioIds, varianceAnalysis);
+                                    const canOpen = metrics !== null;
+                                    const stabilityLabel = metrics != null
+                                        ? getStabilityLabel(metrics.agreementCount, metrics.totalCount)
+                                        : null;
 
                                     return (
                                         <td
                                             key={`${row.id}-${modelId}`}
-                                            className={`border border-gray-200 px-3 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''
-                                                }`}
-                                            style={{ backgroundColor: sem === null ? undefined : getSEMColor(sem) }}
+                                            className={`relative border border-gray-200 px-2 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''} ${metrics?.direction != null ? getDirectionBgColor(metrics.direction) : ''}`}
                                             title={
-                                                canOpen
-                                                    ? `View ${count} transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}`
+                                                metrics !== null
+                                                    ? `View ${metrics.totalCount} transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}`
                                                     : 'No score available'
                                             }
                                             onClick={canOpen ? () => handleCellClick(modelId, row) : undefined}
                                         >
-                                            {result === null ? (
+                                            {metrics === null ? (
                                                 <span className="text-gray-300">-</span>
                                             ) : (
-                                                <div className="flex flex-col items-center">
-                                                    {sem === -1 || sem === null ? (
-                                                        <span className={getSEMTextColor(-1)}>N&lt;2</span>
-                                                    ) : (
-                                                        <span className={getSEMTextColor(sem)}>{sem.toFixed(3)}</span>
+                                                <div className="flex flex-col items-center gap-0.5">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className={`text-xs ${getDirectionTextColor(metrics.direction)}`}>
+                                                            {metrics.direction === 'A' ? 'Favors A' :
+                                                                metrics.direction === 'B' ? 'Favors B' :
+                                                                    metrics.direction === 'NEUTRAL' ? 'Neutral' : '—'}
+                                                        </span>
+                                                        {metrics.totalCount > 1 && metrics.directionalAgreement != null && (
+                                                            <span className="text-[10px] text-gray-500">
+                                                                · {metrics.agreementCount}/{metrics.totalCount}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {metrics.totalCount >= 2 && metrics.medianSignedDistance != null && (
+                                                        <div className="text-[10px] text-gray-400">
+                                                            {metrics.medianSignedDistance >= 0 ? '+' : ''}
+                                                            {metrics.medianSignedDistance.toFixed(1)}
+                                                            {metrics.iqr != null && ` · IQR ${metrics.iqr.toFixed(1)}`}
+                                                        </div>
                                                     )}
-                                                    <span className="text-[10px] text-gray-400 mt-0.5">n={count}</span>
+                                                    {stabilityLabel != null && (
+                                                        <span className={`absolute top-0.5 right-0.5 text-[9px] px-1 rounded font-medium ${stabilityLabel === 'High' ? 'bg-green-100 text-green-700' :
+                                                            stabilityLabel === 'Moderate' ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-red-100 text-red-600'
+                                                            }`}>
+                                                            {stabilityLabel}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
@@ -412,13 +446,16 @@ function ConditionStabilityMatrix({
 }
 
 export function StabilityTab({ runId, perModel, visualizationData, varianceAnalysis }: StabilityTabProps) {
+    const orientationCorrectedCount = varianceAnalysis?.orientationCorrectedCount ?? 0;
+
     return (
         <div className="space-y-6">
             <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Condition x AI Standard Error of Mean (SEM)</h3>
+                <h3 className="text-sm font-medium text-gray-700">Condition x AI Directional Stability</h3>
                 <p className="text-xs text-gray-500">
                     Rows are condition combinations (attribute A level + attribute B level). Columns are target AIs.
-                    Each cell shows the Standard Error of the Mean (SEM) of decisions. Lower is more stable.
+                    Each cell shows the predominant direction (Favors A / Favors B / Neutral) and the fraction of
+                    replicates that agree. High stability means all replicates pointed the same direction.
                 </p>
                 <ConditionStabilityMatrix
                     runId={runId}
@@ -426,6 +463,12 @@ export function StabilityTab({ runId, perModel, visualizationData, varianceAnaly
                     visualizationData={visualizationData}
                     varianceAnalysis={varianceAnalysis}
                 />
+                {orientationCorrectedCount > 0 && (
+                    <p className="mt-1 text-xs text-gray-400">
+                        * Scores for {orientationCorrectedCount} scenario(s) with reversed presentation order were
+                        normalized before computing direction.
+                    </p>
+                )}
             </div>
         </div>
     );

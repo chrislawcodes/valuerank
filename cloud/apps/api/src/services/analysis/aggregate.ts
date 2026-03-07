@@ -73,6 +73,13 @@ const zVarianceStats = z.object({
     min: z.number(),
     max: z.number(),
     range: z.number(),
+    scoreCounts: z.record(z.string(), z.number()).optional(),
+    direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+    directionalAgreement: z.number().nullable().optional(),
+    medianSignedDistance: z.number().nullable().optional(),
+    iqr: z.number().nullable().optional(),
+    neutralShare: z.number().nullable().optional(),
+    orientationCorrected: z.boolean().optional(),
 });
 
 const zModelVarianceStats = z.object({
@@ -99,6 +106,13 @@ const zScenarioVarianceStats = z.object({
     variance: z.number(),
     range: z.number(),
     sampleCount: z.number(),
+    scoreCounts: z.record(z.string(), z.number()).optional(),
+    direction: z.enum(['A', 'B', 'NEUTRAL']).nullable().optional(),
+    directionalAgreement: z.number().nullable().optional(),
+    medianSignedDistance: z.number().nullable().optional(),
+    iqr: z.number().nullable().optional(),
+    neutralShare: z.number().nullable().optional(),
+    orientationCorrected: z.boolean().optional(),
 }).passthrough();
 
 const zRunVarianceAnalysis = z.object({
@@ -107,6 +121,7 @@ const zRunVarianceAnalysis = z.object({
     perModel: z.record(zModelVarianceStats),
     mostVariableScenarios: z.array(zScenarioVarianceStats).optional(),
     leastVariableScenarios: z.array(zScenarioVarianceStats).optional(),
+    orientationCorrectedCount: z.number().optional(),
 }).passthrough();
 
 type RunVarianceAnalysis = z.infer<typeof zRunVarianceAnalysis>;
@@ -359,7 +374,12 @@ export async function updateAggregateRun(
             select: {
                 modelId: true,
                 scenarioId: true,
-                decisionCode: true
+                decisionCode: true,
+                scenario: {
+                    select: {
+                        orientationFlipped: true
+                    }
+                }
             }
         });
 
@@ -503,7 +523,7 @@ export async function updateAggregateRun(
 
 function aggregateAnalysesLogic(
     analyses: AnalysisOutput[],
-    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null, scenario: { orientationFlipped: boolean } | null }[],
     scenarios: { id: string, name: string, content: Prisma.JsonValue }[]
 ): AggregatedResult {
 
@@ -837,8 +857,26 @@ function computeConsistencyScore(variances: number[], maxPossibleVariance = 4.0)
     return parseFloat(Math.max(0.0, Math.min(1.0, score)).toFixed(6));
 }
 
+function computeMedian(sorted: number[]): number {
+    if (sorted.length === 0) return 0;
+    const arr = [...sorted].sort((a, b) => a - b);
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 === 0
+        ? (arr[mid - 1]! + arr[mid]!) / 2
+        : arr[mid]!;
+}
+
+function computeIQR(values: number[]): number {
+    if (values.length < 2) return 0;
+    const arr = [...values].sort((a, b) => a - b);
+    const n = arr.length;
+    const q1 = arr[Math.floor(n * 0.25)]!;
+    const q3 = arr[Math.floor(n * 0.75)]!;
+    return q3 - q1;
+}
+
 function computeVarianceAnalysis(
-    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null }[],
+    transcripts: { modelId: string, scenarioId: string | null, decisionCode: string | null, scenario: { orientationFlipped: boolean } | null }[],
     scenarios: { id: string, content: Prisma.JsonValue }[]
 ): RunVarianceAnalysis {
     const scenarioNames = new Map<string, string>();
@@ -850,11 +888,18 @@ function computeVarianceAnalysis(
 
     // Group by (scenarioId, modelId) -> list of scores
     const grouped = new Map<string, number[]>();
+    const correctedScenarioIds = new Set<string>();
 
     transcripts.forEach(t => {
         if (t.scenarioId == null || t.scenarioId === '' || t.decisionCode == null || t.decisionCode === '' || t.modelId == null || t.modelId === '') return;
-        const score = parseFloat(t.decisionCode);
-        if (isNaN(score)) return;
+        const rawScore = parseFloat(t.decisionCode);
+        if (isNaN(rawScore)) return;
+
+        const orientationFlipped = t.scenario?.orientationFlipped ?? false;
+        const score = orientationFlipped ? 6 - rawScore : rawScore;
+        if (orientationFlipped) {
+            correctedScenarioIds.add(t.scenarioId);
+        }
 
         const key = `${t.scenarioId}||${t.modelId}`;
         const current = grouped.get(key) || [];
@@ -891,6 +936,40 @@ function computeVarianceAnalysis(
 
         scenarioMap.forEach((scores, scenarioId) => {
             const stats = computeVarianceStats(scores);
+
+            if (scores.length > 0) {
+                const signed = scores.map(s => s - 3);
+                const medianSd = computeMedian(signed);
+
+                const direction: 'A' | 'B' | 'NEUTRAL' = medianSd > 0 ? 'A' : medianSd < 0 ? 'B' : 'NEUTRAL';
+
+                const sameCount = signed.filter(s =>
+                    direction === 'A' ? s > 0 :
+                        direction === 'B' ? s < 0 :
+                            s === 0
+                ).length;
+
+                const n = scores.length;
+                const neutralCount = scores.filter(s => s === 3).length;
+
+                const scoreCounts: Record<string, number> = {};
+                for (const sv of [1, 2, 3, 4, 5]) {
+                    scoreCounts[String(sv)] = scores.filter(s => s === sv).length;
+                }
+
+                const iqrVal = n >= 2 ? computeIQR(signed) : undefined;
+
+                Object.assign(stats, {
+                    scoreCounts,
+                    direction,
+                    directionalAgreement: parseFloat((sameCount / n).toFixed(6)),
+                    medianSignedDistance: parseFloat(medianSd.toFixed(6)),
+                    iqr: iqrVal !== undefined ? parseFloat(iqrVal.toFixed(6)) : undefined,
+                    neutralShare: parseFloat((neutralCount / n).toFixed(6)),
+                    orientationCorrected: correctedScenarioIds.has(scenarioId),
+                });
+            }
+
             // PR Feedback: Key by scenarioId, NOT name. Frontend expects IDs.
             // const name = scenarioNames.get(scenarioId) || scenarioId;
             perScenario[scenarioId] = stats;
@@ -950,6 +1029,7 @@ function computeVarianceAnalysis(
         samplesPerScenario: maxSamples,
         perModel,
         mostVariableScenarios: mostVariable,
-        leastVariableScenarios: leastVariable
+        leastVariableScenarios: leastVariable,
+        orientationCorrectedCount: correctedScenarioIds.size,
     };
 }

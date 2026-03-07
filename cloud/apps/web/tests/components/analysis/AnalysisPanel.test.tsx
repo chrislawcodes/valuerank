@@ -471,7 +471,7 @@ describe('AnalysisPanel', () => {
     await userEvent.click(stabilityTab);
 
     // Check for stability content (SEM)
-    expect(screen.getByText(/Condition x AI Standard Error of Mean/i)).toBeInTheDocument();
+    expect(screen.getByText(/Condition x AI Directional Stability/i)).toBeInTheDocument();
   });
 
   it('handles N<2 samples without crashing', async () => {
@@ -534,8 +534,8 @@ describe('AnalysisPanel', () => {
     await userEvent.click(stabilityTab);
 
     // Should render without error and show N<2 or placeholder
-    expect(screen.getByText(/Condition x AI Standard Error of Mean/i)).toBeInTheDocument();
-    // We expect "N<2" to be displayed for the cell with insufficient data, 
+    expect(screen.getAllByText(/Condition x AI Directional Stability/i).length).toBeGreaterThan(0);
+    // We expect "N<2" to be displayed for the cell with insufficient data,
     // OR at least the component shouldn't crash.
     // In the current broken state, this test might fail with the error observed in production.
   });

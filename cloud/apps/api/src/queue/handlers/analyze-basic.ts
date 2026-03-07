@@ -33,6 +33,7 @@ type TranscriptData = {
   modelId: string;
   scenarioId: string;
   sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
+  orientationFlipped: boolean;
   summary: {
     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
@@ -236,6 +237,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               modelId: t.modelId,
               scenarioId: t.scenarioId as string,
               sampleIndex: t.sampleIndex,
+              orientationFlipped: t.scenario?.orientationFlipped ?? false,
               summary: values ? { score, values } : { score },
               scenario: {
                 name: t.scenario!.name,
