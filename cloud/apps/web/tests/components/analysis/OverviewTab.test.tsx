@@ -63,7 +63,7 @@ describe('OverviewTab', () => {
     expect(aCell).toHaveClass('bg-blue-50');
   });
 
-  it('uses variance analysis for SEM when a condition has one scenario with multiple samples', () => {
+  it('uses variance analysis for weighted mean when a condition has one scenario with multiple samples', () => {
     render(
       <MemoryRouter>
         <OverviewTab
@@ -128,7 +128,8 @@ describe('OverviewTab', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('SEM 0.22')).toBeInTheDocument();
-    expect(screen.getByText('SEM 0.18')).toBeInTheDocument();
+    // Each condition has one scenario: s1 mean=4.20, s2 mean=3.40
+    expect(screen.getByText('4.20')).toBeInTheDocument();
+    expect(screen.getByText('3.40')).toBeInTheDocument();
   });
 });

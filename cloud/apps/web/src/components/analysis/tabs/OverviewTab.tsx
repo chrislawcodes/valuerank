@@ -34,7 +34,6 @@ type ConditionRow = {
 
 type ConditionStats = {
   mean: number;
-  sem: number | null;
 };
 
 function getHeatmapColor(value: number): string {
@@ -54,18 +53,6 @@ function getScoreTextColor(value: number): string {
   if (value <= 2.5) return 'text-blue-700';
   if (value >= 3.5) return 'text-orange-700';
   return 'text-gray-700';
-}
-
-function calculateMeanAndSem(values: number[]): ConditionStats | null {
-  if (values.length === 0) return null;
-
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (values.length < 2) return { mean, sem: null };
-
-  const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
-  const stdDev = Math.sqrt(variance);
-  const sem = stdDev / Math.sqrt(values.length);
-  return { mean, sem };
 }
 
 function calculateConditionStatsFromVariance(
@@ -91,24 +78,7 @@ function calculateConditionStatsFromVariance(
 
   if (totalCount === 0) return null;
 
-  const mean = weightedMeanSum / totalCount;
-  if (totalCount < 2) return { mean, sem: null };
-
-  let sumOfSquares = 0;
-  scenarioIds.forEach((scenarioId) => {
-    const scenarioStats = modelStats.perScenario[scenarioId];
-    if (!scenarioStats || scenarioStats.sampleCount < 1) return;
-
-    if (scenarioStats.sampleCount > 1) {
-      sumOfSquares += (scenarioStats.sampleCount - 1) * scenarioStats.variance;
-    }
-
-    sumOfSquares += scenarioStats.sampleCount * ((scenarioStats.mean - mean) ** 2);
-  });
-
-  const totalVariance = sumOfSquares / (totalCount - 1);
-  const sem = Math.sqrt(totalVariance / totalCount);
-  return { mean, sem };
+  return { mean: weightedMeanSum / totalCount };
 }
 
 function ConditionDecisionMatrix({
@@ -207,7 +177,8 @@ function ConditionDecisionMatrix({
         }
       });
 
-      return calculateMeanAndSem(values);
+      if (values.length === 0) return null;
+      return { mean: values.reduce((sum, v) => sum + v, 0) / values.length };
     },
     [modelScenarioMatrix, varianceAnalysis]
   );
@@ -561,9 +532,6 @@ function ConditionDecisionMatrix({
                         ) : (
                           <span className={`inline-flex flex-col items-center ${getScoreTextColor(stats.mean)}`}>
                             <span className="font-semibold">{stats.mean.toFixed(2)}</span>
-                            <span className="text-[10px] text-gray-500">
-                              SEM {stats.sem == null ? '-' : stats.sem.toFixed(2)}
-                            </span>
                           </span>
                         )}
                       </Button>
