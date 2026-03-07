@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
-import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
 import { Button } from '../ui/Button';
@@ -278,6 +278,7 @@ export function OrderEffectPanel() {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [activeReviewPairId, setActiveReviewPairId] = useState<string | null>(null);
   const [activeRow, setActiveRow] = useState<OrderInvarianceRow | null>(null);
+  const [isPreflightReviewOpen, setIsPreflightReviewOpen] = useState(false);
   const [closedReviewPairIds, setClosedReviewPairIds] = useState<Set<string>>(new Set());
   const [trackedLaunchRunIds, setTrackedLaunchRunIds] = useState<string[]>([]);
   const [hasLoadedTrackedRuns, setHasLoadedTrackedRuns] = useState(false);
@@ -656,26 +657,53 @@ export function OrderEffectPanel() {
               Review the narrative pair once per vignette. The decision applies to every generated condition pair in that vignette.
             </p>
           </div>
-          {reviewResult && (
-            <div className="text-xs text-gray-500">
-              Refreshed {new Date(reviewResult.generatedAt).toLocaleString()}
-            </div>
-          )}
+          <div className="flex items-center gap-3 self-start">
+            {reviewResult && (
+              <div className="text-xs text-gray-500">
+                Refreshed {new Date(reviewResult.generatedAt).toLocaleString()}
+              </div>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setIsPreflightReviewOpen((current) => !current)}
+              aria-expanded={isPreflightReviewOpen}
+            >
+              {isPreflightReviewOpen ? (
+                <>
+                  <ChevronUp className="mr-1 h-4 w-4" />
+                  Hide Review
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="mr-1 h-4 w-4" />
+                  Show Review
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
-        {reviewFetching && !reviewResult && (
+        {!isPreflightReviewOpen && reviewResult && (
+          <div className="mt-4 rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700">
+            {reviewGateMessage}
+          </div>
+        )}
+
+        {isPreflightReviewOpen && reviewFetching && !reviewResult && (
           <div className="mt-4">
             <Loading size="sm" text="Loading review pairs..." />
           </div>
         )}
 
-        {reviewError && (
+        {isPreflightReviewOpen && reviewError && (
           <div className="mt-4">
             <ErrorMessage message={reviewError.message} />
           </div>
         )}
 
-        {reviewMutation.error && (
+        {isPreflightReviewOpen && reviewMutation.error && (
           <div className="mt-4">
             <ErrorMessage message={reviewMutation.error.message} />
           </div>
@@ -687,7 +715,7 @@ export function OrderEffectPanel() {
           </div>
         )}
 
-        {reviewResult && (
+        {isPreflightReviewOpen && reviewResult && (
           <>
             <div className="mt-4 grid gap-3 md:grid-cols-5">
               <div className="rounded-md border border-gray-200 bg-white p-3">
