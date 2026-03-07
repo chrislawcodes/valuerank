@@ -849,7 +849,7 @@ builder.queryField('assumptionsOrderInvarianceLaunchStatus', (t) =>
         },
       });
 
-      const STALL_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes, matches recovery.ts
+      const STALL_THRESHOLD_MS = 15 * 60 * 1000; // 15-min display heuristic (recovery.ts restarts at 5 min)
       const now = Date.now();
 
       const filteredRuns = runRows
