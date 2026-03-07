@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
 import { Button } from '../ui/Button';
@@ -604,6 +604,40 @@ export function OrderEffectPanel() {
                 </span>
                 <span>{progressPercent.toFixed(0)}%</span>
               </div>
+
+              {launchStatus.failureSummaries.length > 0 && (
+                <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-rose-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-rose-800">
+                        Probe failures detected — check xAI billing or API credentials
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {launchStatus.failureSummaries.map((summary, i) => (
+                          <li key={i} className="truncate text-xs text-rose-700">{summary}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {launchStatus.stalledModels.length > 0 && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-amber-800">
+                        Stalled runs — no progress for 15+ min
+                      </p>
+                      <p className="mt-0.5 text-xs text-amber-700">
+                        Models: {launchStatus.stalledModels.join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

@@ -70,8 +70,32 @@ class TestIsBillingExhaustionResponse:
 
     def test_does_not_confuse_rate_limits_as_billing(self) -> None:
         """Rate-limit markers should still route through rate-limit logic."""
+        # Pure rate-limit text contains no billing patterns, so correctly returns False
         assert _is_billing_exhaustion_response(429, "too many requests") is False
         assert _is_billing_exhaustion_response(400, "rate limit exceeded") is False
+
+    def test_prioritizes_billing_when_mixed_with_rate_limit_text(self) -> None:
+        """Billing patterns win even when rate-limit text is also present."""
+        # Simulates a 429 where the provider body contains both throttling and quota text
+        assert _is_billing_exhaustion_response(429, "too many requests: insufficient_quota") is True
+        assert _is_billing_exhaustion_response(429, "rate limit exceeded. out of funds.") is True
+        assert _is_billing_exhaustion_response(429, "too many requests: account is out of credits") is True
+
+    def test_detects_xai_billing_markers(self) -> None:
+        """xAI-specific billing exhaustion patterns are detected."""
+        assert _is_billing_exhaustion_response(429, "The account is out of credits.") is True
+        assert _is_billing_exhaustion_response(429, "out of credits") is True
+
+    def test_ambiguous_billing_patterns_yield_to_rate_limit_guard(self) -> None:
+        """Ambiguous billing patterns still yield to rate-limit text."""
+        assert _is_billing_exhaustion_response(
+            429,
+            "rate limit exceeded for your billing tier",
+        ) is False
+        assert _is_billing_exhaustion_response(
+            429,
+            "resource_exhausted: requests per minute exceeded",
+        ) is False
 
 
 class TestRateLimitRetry:

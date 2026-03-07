@@ -123,6 +123,7 @@ export type OrderInvarianceLaunchRun = {
   percentComplete: number;
   startedAt: string | null;
   completedAt: string | null;
+  isStalled: boolean;
 };
 
 export type OrderInvarianceLaunchStatus = {
@@ -137,6 +138,8 @@ export type OrderInvarianceLaunchStatus = {
   percentComplete: number;
   isComplete: boolean;
   runs: OrderInvarianceLaunchRun[];
+  stalledModels: string[];
+  failureSummaries: string[];
 };
 
 export type OrderInvarianceQueryResult = {
@@ -326,6 +329,8 @@ export const ORDER_INVARIANCE_LAUNCH_STATUS_QUERY = gql`
       failedTrials
       percentComplete
       isComplete
+      stalledModels
+      failureSummaries
       runs {
         runId
         status
@@ -335,6 +340,7 @@ export const ORDER_INVARIANCE_LAUNCH_STATUS_QUERY = gql`
         percentComplete
         startedAt
         completedAt
+        isStalled
       }
     }
   }

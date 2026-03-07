@@ -61,12 +61,36 @@ BILLING_EXHAUSTION_PATTERNS_BY_PROVIDER = {
         "payment required",
         "billing",
     ],
+    "xai_like": [
+        "out of credits",
+        "account is out of credits",
+    ],
 }
 
 BILLING_EXHAUSTION_PATTERNS = [
     pattern
     for patterns in BILLING_EXHAUSTION_PATTERNS_BY_PROVIDER.values()
     for pattern in patterns
+]
+
+# Subset of billing patterns specific enough to take priority over rate-limit text.
+# These will not appear in genuine per-minute throttling responses. The remaining
+# patterns in BILLING_EXHAUSTION_PATTERNS ("billing", "resource_exhausted",
+# "quota exceeded") are ambiguous and still yield to the rate-limit guard.
+UNAMBIGUOUS_BILLING_PATTERNS = [
+    "insufficient_quota",
+    "insufficient quota",
+    "exceeded your current quota",
+    "hard limit",
+    "credit balance is too low",
+    "insufficient credits",
+    "insufficient credit",
+    "out of credits",
+    "account is out of credits",
+    "out of funds",
+    "out of money",
+    "low balance",
+    "payment required",
 ]
 
 UNSUPPORTED_TEMPERATURE_PATTERNS = [
@@ -208,15 +232,22 @@ def is_billing_exhaustion_response(status_code: int, response_text: str) -> bool
 
     Decision rule:
     - Never treat non-errors (<400) as billing exhaustion.
-    - If explicit rate-limit markers are present, classify as rate limit.
-    - Otherwise match known billing/quota patterns.
+    - Unambiguous billing patterns (UNAMBIGUOUS_BILLING_PATTERNS) take priority even
+      when rate-limit text is also present, since these phrases do not appear in
+      genuine per-minute throttling responses.
+    - Ambiguous billing patterns ("billing", "quota exceeded", "resource_exhausted")
+      still yield to rate-limit classification when rate-limit markers are present.
     """
     if status_code < 400:
         return False
 
     text_lower = response_text.lower()
 
-    # If explicit rate-limit markers are present, treat as rate limiting instead.
+    # Unambiguous billing markers always win, even alongside rate-limit text.
+    if any(pattern in text_lower for pattern in UNAMBIGUOUS_BILLING_PATTERNS):
+        return True
+
+    # Ambiguous billing patterns: rate-limit text takes precedence.
     if any(pattern in text_lower for pattern in RATE_LIMIT_PATTERNS):
         return False
 
