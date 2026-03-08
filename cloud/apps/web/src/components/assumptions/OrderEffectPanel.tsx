@@ -1070,11 +1070,11 @@ export function OrderEffectPanel() {
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Legacy: Baseline vs Fully-Flipped</div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Legacy: All-Variant Match Rate</div>
                 <div className="mt-1 text-sm font-medium text-gray-700">
                   {formatPercent(result.summary.matchRate)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-gray-400">N={result.summary.matchComparablePairs}</div>
+                <div className="mt-0.5 text-[11px] text-gray-400">N={result.summary.comparablePairs}</div>
               </div>
               {ENABLE_2X2_ORDER_EFFECT_UI && result?.summary?.presentationEffectMAD !== undefined && (
                 <>
@@ -1218,6 +1218,21 @@ export function OrderEffectPanel() {
                                 <td className="px-3 py-2 text-gray-700">{levelA}</td>
                                 <td className="px-3 py-2 text-gray-700">{levelB}</td>
                                 {VARIANT_ORDER.map((vt) => {
+                                  if (vt === 'baseline') {
+                                    // Baseline score is embedded in every variant row; no dedicated baseline row exists
+                                    const anyRow = block.cells.get('presentation_flipped')
+                                      ?? block.cells.get('scale_flipped')
+                                      ?? block.cells.get('fully_flipped');
+                                    const baselineScore = anyRow?.majorityVoteBaseline;
+                                    return (
+                                      <td key={vt} className="bg-gray-50 px-3 py-2 text-center">
+                                        {baselineScore != null
+                                          ? <span className="text-sm font-semibold text-gray-900">{baselineScore}</span>
+                                          : <span className="text-[11px] italic text-gray-400">n/a</span>
+                                        }
+                                      </td>
+                                    );
+                                  }
                                   const cellRow = block.cells.get(vt);
                                   return (
                                     <td
