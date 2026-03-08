@@ -243,7 +243,13 @@ function TranscriptDrilldownModal({
                 {' '}· Baseline Score:{' '}
                 <span className="font-medium text-gray-900">{row.majorityVoteBaseline ?? 'n/a'}</span>
                 {' '}· Variant Score:{' '}
-                <span className="font-medium text-gray-900">{row.majorityVoteFlipped ?? 'n/a'}</span>
+                {row.rawScore != null && row.rawScore !== row.majorityVoteFlipped ? (
+                  <span className="font-medium text-gray-900">
+                    Raw {row.rawScore} → Canonical {row.majorityVoteFlipped ?? 'n/a'}
+                  </span>
+                ) : (
+                  <span className="font-medium text-gray-900">{row.majorityVoteFlipped ?? 'n/a'}</span>
+                )}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-bold uppercase text-gray-400">Variant:</span>
@@ -1109,7 +1115,16 @@ export function OrderEffectPanel() {
                               <td className="px-3 py-2 text-gray-700">{levelA}</td>
                               <td className="px-3 py-2 text-gray-700">{levelB}</td>
                               <td className="px-3 py-2 text-gray-700">{row.majorityVoteBaseline ?? 'n/a'}</td>
-                              <td className="px-3 py-2 text-gray-700">{row.majorityVoteFlipped ?? 'n/a'}</td>
+                              <td className="px-3 py-2 text-gray-700">
+                                {row.rawScore != null && row.rawScore !== row.majorityVoteFlipped ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] text-gray-400">Raw: {row.rawScore}</span>
+                                    <span className="font-medium text-gray-900">Canonical: {row.majorityVoteFlipped}</span>
+                                  </div>
+                                ) : (
+                                  row.majorityVoteFlipped ?? 'n/a'
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-gray-700">
                                 {isMissing ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
                               </td>

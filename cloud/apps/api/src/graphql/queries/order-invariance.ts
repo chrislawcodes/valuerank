@@ -36,6 +36,7 @@ type OrderInvarianceRow = {
   variantType: string | null;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -168,6 +169,7 @@ type CandidateTranscript = {
   modelId: string;
   modelVersion: string | null;
   decision: number;
+  rawDecision: number;
   createdAt: Date;
 };
 
@@ -513,6 +515,7 @@ const OrderInvarianceRowRef = builder
       variantType: t.exposeString('variantType', { nullable: true }),
       majorityVoteBaseline: t.exposeInt('majorityVoteBaseline', { nullable: true }),
       majorityVoteFlipped: t.exposeInt('majorityVoteFlipped', { nullable: true }),
+      rawScore: t.exposeInt('rawScore', { nullable: true }),
       mismatchType: t.exposeString('mismatchType', { nullable: true }),
       ordinalDistance: t.exposeInt('ordinalDistance', { nullable: true }),
       isMatch: t.exposeBoolean('isMatch', { nullable: true }),
@@ -1066,6 +1069,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             decision,
             scenarioIdToVariantType.get(transcript.scenarioId) ?? null
           ),
+          rawDecision: decision,
           createdAt: transcript.createdAt,
         };
 
@@ -1131,6 +1135,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               variantType: pair.variantType,
               majorityVoteBaseline: null,
               majorityVoteFlipped: null,
+              rawScore: null,
               mismatchType: 'missing_pair',
               ordinalDistance: null,
               isMatch: null,
@@ -1159,6 +1164,10 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             flippedPick.selected.map((transcript) => transcript.decision),
             trimOutliers
           );
+          const rawFlippedValue = computeMajorityVote(
+            flippedPick.selected.map((transcript) => transcript.rawDecision),
+            trimOutliers
+          );
 
           if (baselineValue == null || flippedValue == null) {
             missingPairs += 1;
@@ -1171,6 +1180,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               variantType: pair.variantType,
               majorityVoteBaseline: baselineValue,
               majorityVoteFlipped: flippedValue,
+              rawScore: rawFlippedValue ?? null,
               mismatchType: 'missing_pair',
               ordinalDistance: null,
               isMatch: null,
@@ -1211,6 +1221,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             variantType: pair.variantType,
             majorityVoteBaseline: baselineValue,
             majorityVoteFlipped: flippedValue,
+            rawScore: rawFlippedValue ?? null,
             mismatchType,
             ordinalDistance: Math.abs(baselineValue - flippedValue),
             isMatch,

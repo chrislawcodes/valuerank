@@ -36,6 +36,7 @@ export type OrderInvarianceRow = {
   conditionKey: string;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -231,6 +232,7 @@ export const ORDER_INVARIANCE_QUERY = gql`
         conditionKey
         majorityVoteBaseline
         majorityVoteFlipped
+        rawScore
         mismatchType
         ordinalDistance
         isMatch
