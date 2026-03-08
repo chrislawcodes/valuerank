@@ -851,6 +851,37 @@ export function OrderEffectPanel() {
               </div>
             </div>
 
+            <div className="mt-3 rounded-md border border-gray-100 bg-white p-3">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Approval by Variant Type</div>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                {(['presentation_flipped', 'scale_flipped', 'fully_flipped'] as const).map((vt) => {
+                  const vignettesByVariant = sortedReviewVignettes.filter((v) => v.variantType === vt);
+                  const approvedCount = vignettesByVariant.filter((v) => v.reviewStatus === 'APPROVED').length;
+                  const label = vt === 'presentation_flipped'
+                    ? 'Narrative Flipped'
+                    : vt === 'scale_flipped'
+                      ? 'Scale Flipped'
+                      : 'Fully Flipped';
+                  const notation = vt === 'presentation_flipped'
+                    ? 'P_B+S_A'
+                    : vt === 'scale_flipped'
+                      ? 'P_A+S_B'
+                      : 'P_B+S_B';
+                  const allApproved = vignettesByVariant.length > 0 && approvedCount === vignettesByVariant.length;
+                  return (
+                    <div key={vt} className={`rounded-md border p-2 ${allApproved ? 'border-teal-200 bg-teal-50' : 'border-gray-200'}`}>
+                      <div className="text-[10px] font-bold uppercase text-gray-400">{notation}</div>
+                      <div className="text-xs font-medium text-gray-700">{label}</div>
+                      <div className={`mt-1 text-base font-semibold ${allApproved ? 'text-teal-700' : 'text-gray-900'}`}>
+                        {approvedCount}/{vignettesByVariant.length}
+                      </div>
+                      <div className="text-[10px] text-gray-400">approved</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mt-4 rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700">
               {reviewGateMessage}
             </div>
