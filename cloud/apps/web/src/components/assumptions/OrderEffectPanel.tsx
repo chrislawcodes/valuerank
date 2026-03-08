@@ -255,14 +255,12 @@ function getDraftNote(
 type TranscriptDrilldownModalProps = {
   row: OrderInvarianceRow;
   directionOnly: boolean;
-  trimOutliers: boolean;
   onClose: () => void;
 };
 
 function TranscriptDrilldownModal({
   row,
   directionOnly,
-  trimOutliers,
   onClose,
 }: TranscriptDrilldownModalProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
@@ -1251,7 +1249,6 @@ export function OrderEffectPanel() {
         <TranscriptDrilldownModal
           row={activeRow}
           directionOnly={directionOnly}
-          trimOutliers={trimOutliers}
           onClose={() => setActiveRow(null)}
         />
       )}
