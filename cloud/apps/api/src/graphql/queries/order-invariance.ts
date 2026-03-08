@@ -22,6 +22,11 @@ type OrderInvarianceSummary = {
   qualifyingPairs: number;
   missingPairs: number;
   comparablePairs: number;
+  matchComparablePairs: number;
+  presentationComparablePairs: number;
+  scaleComparablePairs: number;
+  presentationMissingPairs: number;
+  scaleMissingPairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
   excludedPairs: OrderInvarianceExclusionCount[];
@@ -36,6 +41,7 @@ type OrderInvarianceRow = {
   variantType: string | null;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -168,6 +174,7 @@ type CandidateTranscript = {
   modelId: string;
   modelVersion: string | null;
   decision: number;
+  rawDecision: number;
   createdAt: Date;
 };
 
@@ -495,6 +502,11 @@ const OrderInvarianceSummaryRef = builder
       qualifyingPairs: t.exposeInt('qualifyingPairs'),
       missingPairs: t.exposeInt('missingPairs'),
       comparablePairs: t.exposeInt('comparablePairs'),
+      matchComparablePairs: t.exposeInt('matchComparablePairs'),
+      presentationComparablePairs: t.exposeInt('presentationComparablePairs'),
+      scaleComparablePairs: t.exposeInt('scaleComparablePairs'),
+      presentationMissingPairs: t.exposeInt('presentationMissingPairs'),
+      scaleMissingPairs: t.exposeInt('scaleMissingPairs'),
       sensitiveModelCount: t.exposeInt('sensitiveModelCount'),
       sensitiveVignetteCount: t.exposeInt('sensitiveVignetteCount'),
       excludedPairs: t.expose('excludedPairs', { type: [OrderInvarianceExclusionCountRef] }),
@@ -513,6 +525,7 @@ const OrderInvarianceRowRef = builder
       variantType: t.exposeString('variantType', { nullable: true }),
       majorityVoteBaseline: t.exposeInt('majorityVoteBaseline', { nullable: true }),
       majorityVoteFlipped: t.exposeInt('majorityVoteFlipped', { nullable: true }),
+      rawScore: t.exposeInt('rawScore', { nullable: true }),
       mismatchType: t.exposeString('mismatchType', { nullable: true }),
       ordinalDistance: t.exposeInt('ordinalDistance', { nullable: true }),
       isMatch: t.exposeBoolean('isMatch', { nullable: true }),
@@ -1066,6 +1079,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             decision,
             scenarioIdToVariantType.get(transcript.scenarioId) ?? null
           ),
+          rawDecision: decision,
           createdAt: transcript.createdAt,
         };
 
@@ -1090,6 +1104,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
       let comparablePairs = 0;
       let directionMatchCount = 0;
       let exactMatchCount = 0;
+      let matchComparablePairs = 0;
+      let presentationComparablePairs = 0;
+      let scaleComparablePairs = 0;
+      let presentationMissingPairs = 0;
+      let scaleMissingPairs = 0;
       const scorePivot = new Map<string, Record<string, number>>();
 
       for (const pair of relevantPairs) {
@@ -1122,6 +1141,13 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
 
           if (baselinePick.kind !== 'selected' || flippedPick.kind !== 'selected') {
             missingPairs += 1;
+            const vtMissing = pair.variantType;
+            if (vtMissing === 'presentation_flipped' || vtMissing === 'fully_flipped') {
+              presentationMissingPairs += 1;
+            }
+            if (vtMissing === 'scale_flipped' || vtMissing === 'fully_flipped') {
+              scaleMissingPairs += 1;
+            }
             rows.push({
               modelId: model.modelId,
               modelLabel: model.modelLabel,
@@ -1131,6 +1157,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               variantType: pair.variantType,
               majorityVoteBaseline: null,
               majorityVoteFlipped: null,
+              rawScore: null,
               mismatchType: 'missing_pair',
               ordinalDistance: null,
               isMatch: null,
@@ -1159,9 +1186,20 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             flippedPick.selected.map((transcript) => transcript.decision),
             trimOutliers
           );
+          const rawFlippedValue = computeMajorityVote(
+            flippedPick.selected.map((transcript) => transcript.rawDecision),
+            trimOutliers
+          );
 
           if (baselineValue == null || flippedValue == null) {
             missingPairs += 1;
+            const vtMissing = pair.variantType;
+            if (vtMissing === 'presentation_flipped' || vtMissing === 'fully_flipped') {
+              presentationMissingPairs += 1;
+            }
+            if (vtMissing === 'scale_flipped' || vtMissing === 'fully_flipped') {
+              scaleMissingPairs += 1;
+            }
             rows.push({
               modelId: model.modelId,
               modelLabel: model.modelLabel,
@@ -1171,6 +1209,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               variantType: pair.variantType,
               majorityVoteBaseline: baselineValue,
               majorityVoteFlipped: flippedValue,
+              rawScore: rawFlippedValue ?? null,
               mismatchType: 'missing_pair',
               ordinalDistance: null,
               isMatch: null,
@@ -1179,6 +1218,16 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           }
 
           comparablePairs += 1;
+          const vt = pair.variantType;
+          if (vt === 'presentation_flipped' || vt === 'fully_flipped') {
+            presentationComparablePairs += 1;
+          }
+          if (vt === 'scale_flipped' || vt === 'fully_flipped') {
+            scaleComparablePairs += 1;
+          }
+          if (vt === 'fully_flipped') {
+            matchComparablePairs += 1;
+          }
           const directionMatch = valuesMatch(baselineValue, flippedValue, true);
           const exactMatch = valuesMatch(baselineValue, flippedValue, false);
           const isMatch = directionOnly ? directionMatch : exactMatch;
@@ -1211,6 +1260,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             variantType: pair.variantType,
             majorityVoteBaseline: baselineValue,
             majorityVoteFlipped: flippedValue,
+            rawScore: rawFlippedValue ?? null,
             mismatchType,
             ordinalDistance: Math.abs(baselineValue - flippedValue),
             isMatch,
@@ -1243,6 +1293,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         qualifyingPairs,
         missingPairs,
         comparablePairs,
+        matchComparablePairs,
+        presentationComparablePairs,
+        scaleComparablePairs,
+        presentationMissingPairs,
+        scaleMissingPairs,
         sensitiveModelCount,
         sensitiveVignetteCount,
         excludedPairs: Array.from(excludedCounts.entries())

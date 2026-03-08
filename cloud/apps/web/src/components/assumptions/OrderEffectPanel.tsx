@@ -56,6 +56,19 @@ function getScaleEffectColor(value: number | null | undefined): string {
   return 'text-green-700';
 }
 
+const DIAGNOSTIC_MIN_N = 15;
+
+function getDiagnosticLabel(pMAD: number | null, sMAD: number | null, nP: number, nS: number): string {
+  const hasEnoughP = nP >= DIAGNOSTIC_MIN_N;
+  const hasEnoughS = nS >= DIAGNOSTIC_MIN_N;
+  if (!hasEnoughP && !hasEnoughS) return 'Insufficient Evidence';
+  if (hasEnoughS && (sMAD ?? 0) > 1.0) return 'Evidence consistent with Severe Anchoring';
+  if (hasEnoughS && (sMAD ?? 0) > 0.5) return 'Evidence consistent with Possible Anchoring';
+  if (hasEnoughP && (pMAD ?? 0) > 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Evidence consistent with Narrative-Order Sensitivity';
+  if ((pMAD ?? 0) <= 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Robust';
+  return 'Mixed Sensitivity';
+}
+
 function getVariantAxes(variantType: string | null | undefined): {
   narrativeOrder: 'baseline' | 'flipped';
   scaleOrder: 'baseline' | 'flipped';
@@ -98,6 +111,14 @@ function getVariantSideLabel(variantType: string | null | undefined): string {
   return 'Flipped';
 }
 
+function getVariantLabel(variantType: string | null | undefined): string {
+  if (variantType === 'baseline') return 'Baseline';
+  if (variantType === 'presentation_flipped') return 'Narrative Flipped';
+  if (variantType === 'scale_flipped') return 'Scale Flipped';
+  if (variantType === 'fully_flipped') return 'Fully Flipped';
+  return '—';
+}
+
 function formatDateTime(value: string | null): string {
   if (value == null) {
     return 'Not reviewed';
@@ -128,27 +149,90 @@ function parseAttributeLabels(vignetteTitle: string): { attributeA: string; attr
   };
 }
 
-function groupRowsByVignette(rows: OrderInvarianceRow[]): Array<{
+type MatrixBlock = {
+  modelId: string;
+  modelLabel: string;
+  conditionKey: string;
+  cells: Map<string, OrderInvarianceRow>;
+};
+
+type VignetteMatrix = {
   vignetteId: string;
   vignetteTitle: string;
-  rows: OrderInvarianceRow[];
-}> {
-  const groups = new Map<string, { vignetteId: string; vignetteTitle: string; rows: OrderInvarianceRow[] }>();
+  blocks: MatrixBlock[];
+};
+
+function groupRowsIntoMatrix(rows: OrderInvarianceRow[]): VignetteMatrix[] {
+  const vignetteMap = new Map<string, {
+    vignetteId: string;
+    vignetteTitle: string;
+    blockMap: Map<string, MatrixBlock>;
+  }>();
 
   for (const row of rows) {
-    const existing = groups.get(row.vignetteId);
-    if (existing != null) {
-      existing.rows.push(row);
-      continue;
+    let vignette = vignetteMap.get(row.vignetteId);
+    if (!vignette) {
+      vignette = {
+        vignetteId: row.vignetteId,
+        vignetteTitle: row.vignetteTitle,
+        blockMap: new Map(),
+      };
+      vignetteMap.set(row.vignetteId, vignette);
     }
-    groups.set(row.vignetteId, {
-      vignetteId: row.vignetteId,
-      vignetteTitle: row.vignetteTitle,
-      rows: [row],
-    });
+
+    const blockKey = `${row.modelId}::${row.conditionKey}`;
+    let block = vignette.blockMap.get(blockKey);
+    if (!block) {
+      block = {
+        modelId: row.modelId,
+        modelLabel: row.modelLabel,
+        conditionKey: row.conditionKey,
+        cells: new Map(),
+      };
+      vignette.blockMap.set(blockKey, block);
+    }
+
+    if (row.variantType != null) {
+      block.cells.set(row.variantType, row);
+    }
   }
 
-  return Array.from(groups.values()).sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle));
+  return Array.from(vignetteMap.values())
+    .sort((a, b) => a.vignetteTitle.localeCompare(b.vignetteTitle))
+    .map(({ vignetteId, vignetteTitle, blockMap }) => ({
+      vignetteId,
+      vignetteTitle,
+      blocks: Array.from(blockMap.values()).sort((a, b) => {
+        const modelCmp = a.modelLabel.localeCompare(b.modelLabel);
+        return modelCmp !== 0 ? modelCmp : a.conditionKey.localeCompare(b.conditionKey, undefined, { numeric: true });
+      }),
+    }));
+}
+
+const VARIANT_ORDER = ['baseline', 'presentation_flipped', 'scale_flipped', 'fully_flipped'] as const;
+const VARIANT_SHORT_LABELS: Record<string, string> = {
+  baseline: 'P_A+S_A',
+  presentation_flipped: 'P_B+S_A',
+  scale_flipped: 'P_A+S_B',
+  fully_flipped: 'P_B+S_B',
+};
+
+function renderMatrixCellScore(row: OrderInvarianceRow | undefined) {
+  if (!row) {
+    return <span className="text-[11px] italic text-gray-400">Missing</span>;
+  }
+  if (row.mismatchType === 'missing_pair' || row.majorityVoteFlipped == null) {
+    return <span className="text-[11px] italic text-amber-500">Insufficient</span>;
+  }
+  if (row.rawScore != null && row.rawScore !== row.majorityVoteFlipped) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] text-gray-400">Raw: {row.rawScore}</span>
+        <span className="text-sm font-semibold text-gray-900">→ {row.majorityVoteFlipped}</span>
+      </div>
+    );
+  }
+  return <span className="text-sm font-semibold text-gray-900">{row.majorityVoteFlipped}</span>;
 }
 
 function getReviewStatusBadge(status: OrderInvarianceReviewStatus): string {
@@ -171,14 +255,12 @@ function getDraftNote(
 type TranscriptDrilldownModalProps = {
   row: OrderInvarianceRow;
   directionOnly: boolean;
-  trimOutliers: boolean;
   onClose: () => void;
 };
 
 function TranscriptDrilldownModal({
   row,
   directionOnly,
-  trimOutliers,
   onClose,
 }: TranscriptDrilldownModalProps) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
@@ -226,11 +308,38 @@ function TranscriptDrilldownModal({
             <p className="mt-1 text-sm text-gray-600">
               {row.modelLabel} · {attributeLabels.attributeA}: {parseConditionLevels(row.conditionKey).levelA} · {attributeLabels.attributeB}: {parseConditionLevels(row.conditionKey).levelB}
             </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {directionOnly ? 'Direction match' : 'Exact match'}: {row.isMatch == null ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
-              {' '}· Baseline {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteBaseline ?? 'n/a'}
-              {' '}· Flipped {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteFlipped ?? 'n/a'}
-            </p>
+            <div className="mt-1 space-y-1">
+              <p className="text-xs text-gray-500">
+                {directionOnly ? 'Direction match' : 'Exact match'}:{' '}
+                <span className="font-medium text-gray-900">
+                  {row.isMatch == null ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
+                </span>
+                {' '}· Baseline Score:{' '}
+                <span className="font-medium text-gray-900">{row.majorityVoteBaseline ?? 'n/a'}</span>
+                {' '}· Variant Score:{' '}
+                {row.rawScore != null && row.rawScore !== row.majorityVoteFlipped ? (
+                  <span className="font-medium text-gray-900">
+                    Raw {row.rawScore} → Canonical {row.majorityVoteFlipped ?? 'n/a'}
+                  </span>
+                ) : (
+                  <span className="font-medium text-gray-900">{row.majorityVoteFlipped ?? 'n/a'}</span>
+                )}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase text-gray-400">Variant:</span>
+                <span className="text-xs font-medium text-gray-700">{getVariantLabel(row.variantType)}</span>
+                {row.variantType != null && (
+                  <>
+                    <span className={getAxisBadgeClass(getVariantAxes(row.variantType).narrativeOrder)}>
+                      Narrative: {getVariantAxes(row.variantType).narrativeOrder}
+                    </span>
+                    <span className={getAxisBadgeClass(getVariantAxes(row.variantType).scaleOrder)}>
+                      Scale: {getVariantAxes(row.variantType).scaleOrder}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close transcript list">
             <X className="h-5 w-5" />
@@ -442,7 +551,7 @@ export function OrderEffectPanel() {
     return allRows.filter((row) => selectedModelIds.has(row.modelId));
   }, [allRows, selectedModelIds]);
 
-  const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
+  const matrixGroups = useMemo(() => groupRowsIntoMatrix(filteredRows), [filteredRows]);
   const modelLeaderboard = useMemo(() => {
     if (allRows.length === 0) return [];
     const byModel = new Map<string, OrderInvarianceRow[]>();
@@ -467,7 +576,7 @@ export function OrderEffectPanel() {
         : null;
       const matchRows = rows.filter((r) => r.variantType === 'fully_flipped' && r.isMatch != null);
       const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
-      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length };
+      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length, nP: pRows.length, nS: sRows.length, nMatch: matchRows.length };
     }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
   }, [allRows]);
 
@@ -740,6 +849,37 @@ export function OrderEffectPanel() {
               </div>
             </div>
 
+            <div className="mt-3 rounded-md border border-gray-100 bg-white p-3">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Approval by Variant Type</div>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                {(['presentation_flipped', 'scale_flipped', 'fully_flipped'] as const).map((vt) => {
+                  const vignettesByVariant = sortedReviewVignettes.filter((v) => v.variantType === vt);
+                  const approvedCount = vignettesByVariant.filter((v) => v.reviewStatus === 'APPROVED').length;
+                  const label = vt === 'presentation_flipped'
+                    ? 'Narrative Flipped'
+                    : vt === 'scale_flipped'
+                      ? 'Scale Flipped'
+                      : 'Fully Flipped';
+                  const notation = vt === 'presentation_flipped'
+                    ? 'P_B+S_A'
+                    : vt === 'scale_flipped'
+                      ? 'P_A+S_B'
+                      : 'P_B+S_B';
+                  const allApproved = vignettesByVariant.length > 0 && approvedCount === vignettesByVariant.length;
+                  return (
+                    <div key={vt} className={`rounded-md border p-2 ${allApproved ? 'border-teal-200 bg-teal-50' : 'border-gray-200'}`}>
+                      <div className="text-[10px] font-bold uppercase text-gray-400">{notation}</div>
+                      <div className="text-xs font-medium text-gray-700">{label}</div>
+                      <div className={`mt-1 text-base font-semibold ${allApproved ? 'text-teal-700' : 'text-gray-900'}`}>
+                        {approvedCount}/{vignettesByVariant.length}
+                      </div>
+                      <div className="text-[10px] text-gray-400">approved</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mt-4 rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700">
               {reviewGateMessage}
             </div>
@@ -918,12 +1058,23 @@ export function OrderEffectPanel() {
 
         {result && (
           <>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] text-gray-400">
+              <span className="text-[10px] font-semibold uppercase text-gray-400">Variants:</span>
+              <span><span className="font-medium text-gray-600">Baseline</span> = P_A + S_A</span>
+              <span><span className="font-medium text-gray-600">Narrative Flipped</span> = P_B + S_A</span>
+              <span><span className="font-medium text-gray-600">Scale Flipped</span> = P_A + S_B</span>
+              <span><span className="font-medium text-gray-600">Fully Flipped</span> = P_B + S_B</span>
+            </div>
+            <div className="mt-2 text-[11px] text-gray-400">
+              Reporting context: Strictness={directionOnly ? 'Directional' : 'Exact'} · Trimming={trimOutliers ? 'Active (3 middle)' : 'Off (all 5)'} · Scale=5-pt (1–5)
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Legacy: All-Variant Match Rate</div>
+                <div className="mt-1 text-sm font-medium text-gray-700">
                   {formatPercent(result.summary.matchRate)}
                 </div>
+                <div className="mt-0.5 text-[11px] text-gray-400">N={result.summary.comparablePairs}</div>
               </div>
               {ENABLE_2X2_ORDER_EFFECT_UI && result?.summary?.presentationEffectMAD !== undefined && (
                 <>
@@ -934,7 +1085,9 @@ export function OrderEffectPanel() {
                     <div className="mt-1 text-lg font-semibold text-gray-900">
                       {formatMAD(result.summary.presentationEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">Mean Abs Diff — order bias</div>
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      N={result.summary.presentationComparablePairs} · Mean Abs Diff — narrative-order bias
+                    </div>
                   </div>
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -943,10 +1096,11 @@ export function OrderEffectPanel() {
                     <div className={`mt-1 text-lg font-semibold ${getScaleEffectColor(result.summary.scaleEffectMAD)}`}>
                       {formatMAD(result.summary.scaleEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      N={result.summary.scaleComparablePairs} ·{' '}
                       {(result.summary.scaleEffectMAD ?? 0) > 1.0 ? '⚠ Severe anchoring' :
                        (result.summary.scaleEffectMAD ?? 0) > 0.5 ? '⚠ Possible anchoring' :
-                       'Mean Abs Diff — scale bias'}
+                       'Mean Abs Diff — scale-endpoint bias'}
                     </div>
                   </div>
                 </>
@@ -959,23 +1113,31 @@ export function OrderEffectPanel() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match Rate</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Presentation (Δ_P)</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale (Δ_S)</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_match</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_P</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔP</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_S</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔS</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Diagnostic</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {modelLeaderboard.map((ms) => (
                       <tr key={ms.modelId} className="hover:bg-gray-50">
                         <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{ms.n}</td>
                         <td className="px-4 py-2 text-right text-gray-700">
                           {ms.matchRate != null ? `${(ms.matchRate * 100).toFixed(0)}%` : '—'}
                         </td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nMatch}</td>
                         <td className="px-4 py-2 text-right text-gray-700">{formatMAD(ms.pMAD)}</td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nP}</td>
                         <td className={`px-4 py-2 text-right ${getScaleEffectColor(ms.sMAD)}`}>
                           {formatMAD(ms.sMAD)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nS}</td>
+                        <td className="px-4 py-2 text-left text-gray-600 text-xs">
+                          {getDiagnosticLabel(ms.pMAD, ms.sMAD, ms.nP, ms.nS)}
                         </td>
                       </tr>
                     ))}
@@ -1010,68 +1172,90 @@ export function OrderEffectPanel() {
             )}
 
             <div className="mt-5 space-y-4">
-              {groupedRows.length === 0 ? (
+              {matrixGroups.length === 0 ? (
                 <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
                   No approved slot-order pairs are available yet.
                 </div>
-              ) : groupedRows.map((group) => {
-                const attributeLabels = parseAttributeLabels(group.vignetteTitle);
+              ) : matrixGroups.map((vignette) => {
+                const attributeLabels = parseAttributeLabels(vignette.vignetteTitle);
                 return (
-                <details key={group.vignetteId} className="rounded-lg border border-gray-200">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        {group.rows.length} condition row{group.rows.length === 1 ? '' : 's'}
+                  <details key={vignette.vignetteId} className="rounded-lg border border-gray-200">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{vignette.vignetteTitle}</div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {vignette.blocks.length} condition block{vignette.blocks.length === 1 ? '' : 's'}
+                        </div>
                       </div>
+                    </summary>
+                    <div className="overflow-x-auto border-t border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
+                            {VARIANT_ORDER.map((vt) => (
+                              <th key={vt} className="px-3 py-2 text-center font-medium text-gray-600">
+                                <div>{getVariantLabel(vt)}</div>
+                                <div className="text-[10px] font-normal text-gray-400">{VARIANT_SHORT_LABELS[vt]}</div>
+                              </th>
+                            ))}
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Match?</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {vignette.blocks.map((block) => {
+                            const { levelA, levelB } = parseConditionLevels(block.conditionKey);
+                            const matchRow = block.cells.get('fully_flipped');
+                            const isMatch = matchRow?.isMatch;
+                            return (
+                              <tr
+                                key={`${block.modelId}::${block.conditionKey}`}
+                                className={`hover:bg-gray-50 ${isMatch === false ? 'bg-amber-50' : ''}`}
+                              >
+                                <td className="px-3 py-2 font-medium text-gray-900">{block.modelLabel}</td>
+                                <td className="px-3 py-2 text-gray-700">{levelA}</td>
+                                <td className="px-3 py-2 text-gray-700">{levelB}</td>
+                                {VARIANT_ORDER.map((vt) => {
+                                  if (vt === 'baseline') {
+                                    // Baseline score is embedded in every variant row; no dedicated baseline row exists
+                                    const anyRow = block.cells.get('presentation_flipped')
+                                      ?? block.cells.get('scale_flipped')
+                                      ?? block.cells.get('fully_flipped');
+                                    const baselineScore = anyRow?.majorityVoteBaseline;
+                                    return (
+                                      <td key={vt} className="bg-gray-50 px-3 py-2 text-center">
+                                        {baselineScore != null
+                                          ? <span className="text-sm font-semibold text-gray-900">{baselineScore}</span>
+                                          : <span className="text-[11px] italic text-gray-400">n/a</span>
+                                        }
+                                      </td>
+                                    );
+                                  }
+                                  const cellRow = block.cells.get(vt);
+                                  return (
+                                    <td
+                                      key={vt}
+                                      className="cursor-pointer px-3 py-2 text-center"
+                                      onClick={() => cellRow && setActiveRow(cellRow)}
+                                    >
+                                      {renderMatrixCellScore(cellRow)}
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-3 py-2 text-xs text-gray-700">
+                                  {isMatch == null ? '—' : isMatch ? 'Yes' : 'No'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  </summary>
-                  <div className="overflow-x-auto border-t border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            Baseline ({trimOutliers ? 'Trimmed 3' : 'All 5'})
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            Flipped ({trimOutliers ? 'Trimmed 3' : 'All 5'})
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            {directionOnly ? 'Direction Match?' : 'Exact Match?'}
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Distance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
-                        {group.rows.map((row) => {
-                          const { levelA, levelB } = parseConditionLevels(row.conditionKey);
-                          const isMissing = row.mismatchType === 'missing_pair';
-                          return (
-                            <tr
-                              key={`${row.modelId}-${row.conditionKey}`}
-                              className={`cursor-pointer transition-colors hover:bg-gray-50 ${row.isMatch === false ? 'bg-amber-50' : ''}`}
-                              onClick={() => setActiveRow(row)}
-                            >
-                              <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
-                              <td className="px-3 py-2 text-gray-700">{levelA}</td>
-                              <td className="px-3 py-2 text-gray-700">{levelB}</td>
-                              <td className="px-3 py-2 text-gray-700">{row.majorityVoteBaseline ?? 'n/a'}</td>
-                              <td className="px-3 py-2 text-gray-700">{row.majorityVoteFlipped ?? 'n/a'}</td>
-                              <td className="px-3 py-2 text-gray-700">
-                                {isMissing ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
-                              </td>
-                              <td className="px-3 py-2 text-gray-700">{row.ordinalDistance ?? 'n/a'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              )})}
+                  </details>
+                );
+              })}
             </div>
           </>
         )}
@@ -1080,7 +1264,6 @@ export function OrderEffectPanel() {
         <TranscriptDrilldownModal
           row={activeRow}
           directionOnly={directionOnly}
-          trimOutliers={trimOutliers}
           onClose={() => setActiveRow(null)}
         />
       )}
