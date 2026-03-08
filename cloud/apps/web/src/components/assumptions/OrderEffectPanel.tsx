@@ -56,6 +56,19 @@ function getScaleEffectColor(value: number | null | undefined): string {
   return 'text-green-700';
 }
 
+const DIAGNOSTIC_MIN_N = 15;
+
+function getDiagnosticLabel(pMAD: number | null, sMAD: number | null, nP: number, nS: number): string {
+  const hasEnoughP = nP >= DIAGNOSTIC_MIN_N;
+  const hasEnoughS = nS >= DIAGNOSTIC_MIN_N;
+  if (!hasEnoughP && !hasEnoughS) return 'Insufficient Evidence';
+  if (hasEnoughS && (sMAD ?? 0) > 1.0) return 'Evidence consistent with Severe Anchoring';
+  if (hasEnoughS && (sMAD ?? 0) > 0.5) return 'Evidence consistent with Possible Anchoring';
+  if (hasEnoughP && (pMAD ?? 0) > 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Evidence consistent with Narrative-Order Sensitivity';
+  if ((pMAD ?? 0) <= 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Robust';
+  return 'Mixed Sensitivity';
+}
+
 function getVariantAxes(variantType: string | null | undefined): {
   narrativeOrder: 'baseline' | 'flipped';
   scaleOrder: 'baseline' | 'flipped';
@@ -502,7 +515,7 @@ export function OrderEffectPanel() {
         : null;
       const matchRows = rows.filter((r) => r.variantType === 'fully_flipped' && r.isMatch != null);
       const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
-      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length };
+      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length, nP: pRows.length, nS: sRows.length, nMatch: matchRows.length };
     }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
   }, [allRows]);
 
@@ -960,12 +973,16 @@ export function OrderEffectPanel() {
               <span><span className="font-medium text-gray-600">Scale Flipped</span> = P_A + S_B</span>
               <span><span className="font-medium text-gray-600">Fully Flipped</span> = P_B + S_B</span>
             </div>
+            <div className="mt-2 text-[11px] text-gray-400">
+              Reporting context: Strictness={directionOnly ? 'Directional' : 'Exact'} · Trimming={trimOutliers ? 'Active (3 middle)' : 'Off (all 5)'} · Scale=5-pt (1–5)
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
-                <div className="mt-1 text-base font-semibold text-gray-900">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Legacy: Baseline vs Fully-Flipped</div>
+                <div className="mt-1 text-sm font-medium text-gray-700">
                   {formatPercent(result.summary.matchRate)}
                 </div>
+                <div className="mt-0.5 text-[11px] text-gray-400">N={result.summary.matchComparablePairs}</div>
               </div>
               {ENABLE_2X2_ORDER_EFFECT_UI && result?.summary?.presentationEffectMAD !== undefined && (
                 <>
@@ -976,7 +993,9 @@ export function OrderEffectPanel() {
                     <div className="mt-1 text-lg font-semibold text-gray-900">
                       {formatMAD(result.summary.presentationEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">Mean Abs Diff — order bias</div>
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      N={result.summary.presentationComparablePairs} · Mean Abs Diff — narrative-order bias
+                    </div>
                   </div>
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -985,10 +1004,11 @@ export function OrderEffectPanel() {
                     <div className={`mt-1 text-lg font-semibold ${getScaleEffectColor(result.summary.scaleEffectMAD)}`}>
                       {formatMAD(result.summary.scaleEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">
+                    <div className="mt-0.5 text-[11px] text-gray-400">
+                      N={result.summary.scaleComparablePairs} ·{' '}
                       {(result.summary.scaleEffectMAD ?? 0) > 1.0 ? '⚠ Severe anchoring' :
                        (result.summary.scaleEffectMAD ?? 0) > 0.5 ? '⚠ Possible anchoring' :
-                       'Mean Abs Diff — scale bias'}
+                       'Mean Abs Diff — scale-endpoint bias'}
                     </div>
                   </div>
                 </>
@@ -1001,23 +1021,31 @@ export function OrderEffectPanel() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match Rate</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Presentation (Δ_P)</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale (Δ_S)</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_match</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_P</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔP</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_S</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔS</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Diagnostic</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {modelLeaderboard.map((ms) => (
                       <tr key={ms.modelId} className="hover:bg-gray-50">
                         <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{ms.n}</td>
                         <td className="px-4 py-2 text-right text-gray-700">
                           {ms.matchRate != null ? `${(ms.matchRate * 100).toFixed(0)}%` : '—'}
                         </td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nMatch}</td>
                         <td className="px-4 py-2 text-right text-gray-700">{formatMAD(ms.pMAD)}</td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nP}</td>
                         <td className={`px-4 py-2 text-right ${getScaleEffectColor(ms.sMAD)}`}>
                           {formatMAD(ms.sMAD)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nS}</td>
+                        <td className="px-4 py-2 text-left text-gray-600 text-xs">
+                          {getDiagnosticLabel(ms.pMAD, ms.sMAD, ms.nP, ms.nS)}
                         </td>
                       </tr>
                     ))}

@@ -21,6 +21,11 @@ export type OrderInvarianceSummary = {
   qualifyingPairs: number;
   missingPairs: number;
   comparablePairs: number;
+  matchComparablePairs: number;
+  presentationComparablePairs: number;
+  scaleComparablePairs: number;
+  presentationMissingPairs: number;
+  scaleMissingPairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
   presentationEffectMAD: number | null;
@@ -215,6 +220,11 @@ export const ORDER_INVARIANCE_QUERY = gql`
         qualifyingPairs
         missingPairs
         comparablePairs
+        matchComparablePairs
+        presentationComparablePairs
+        scaleComparablePairs
+        presentationMissingPairs
+        scaleMissingPairs
         sensitiveModelCount
         sensitiveVignetteCount
         presentationEffectMAD
