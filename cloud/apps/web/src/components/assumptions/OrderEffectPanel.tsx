@@ -98,6 +98,14 @@ function getVariantSideLabel(variantType: string | null | undefined): string {
   return 'Flipped';
 }
 
+function getVariantLabel(variantType: string | null | undefined): string {
+  if (variantType === 'baseline') return 'Baseline';
+  if (variantType === 'presentation_flipped') return 'Narrative Flipped';
+  if (variantType === 'scale_flipped') return 'Scale Flipped';
+  if (variantType === 'fully_flipped') return 'Fully Flipped';
+  return '—';
+}
+
 function formatDateTime(value: string | null): string {
   if (value == null) {
     return 'Not reviewed';
@@ -226,11 +234,32 @@ function TranscriptDrilldownModal({
             <p className="mt-1 text-sm text-gray-600">
               {row.modelLabel} · {attributeLabels.attributeA}: {parseConditionLevels(row.conditionKey).levelA} · {attributeLabels.attributeB}: {parseConditionLevels(row.conditionKey).levelB}
             </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {directionOnly ? 'Direction match' : 'Exact match'}: {row.isMatch == null ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
-              {' '}· Baseline {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteBaseline ?? 'n/a'}
-              {' '}· Flipped {trimOutliers ? 'Trimmed 3' : 'All 5'}: {row.majorityVoteFlipped ?? 'n/a'}
-            </p>
+            <div className="mt-1 space-y-1">
+              <p className="text-xs text-gray-500">
+                {directionOnly ? 'Direction match' : 'Exact match'}:{' '}
+                <span className="font-medium text-gray-900">
+                  {row.isMatch == null ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
+                </span>
+                {' '}· Baseline Score:{' '}
+                <span className="font-medium text-gray-900">{row.majorityVoteBaseline ?? 'n/a'}</span>
+                {' '}· Variant Score:{' '}
+                <span className="font-medium text-gray-900">{row.majorityVoteFlipped ?? 'n/a'}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase text-gray-400">Variant:</span>
+                <span className="text-xs font-medium text-gray-700">{getVariantLabel(row.variantType)}</span>
+                {row.variantType != null && (
+                  <>
+                    <span className={getAxisBadgeClass(getVariantAxes(row.variantType).narrativeOrder)}>
+                      Narrative: {getVariantAxes(row.variantType).narrativeOrder}
+                    </span>
+                    <span className={getAxisBadgeClass(getVariantAxes(row.variantType).scaleOrder)}>
+                      Scale: {getVariantAxes(row.variantType).scaleOrder}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close transcript list">
             <X className="h-5 w-5" />
@@ -918,6 +947,13 @@ export function OrderEffectPanel() {
 
         {result && (
           <>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] text-gray-400">
+              <span className="text-[10px] font-semibold uppercase text-gray-400">Variants:</span>
+              <span><span className="font-medium text-gray-600">Baseline</span> = P_A + S_A</span>
+              <span><span className="font-medium text-gray-600">Narrative Flipped</span> = P_B + S_A</span>
+              <span><span className="font-medium text-gray-600">Scale Flipped</span> = P_A + S_B</span>
+              <span><span className="font-medium text-gray-600">Fully Flipped</span> = P_B + S_B</span>
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-gray-500">% Unchanged</div>
@@ -1031,14 +1067,11 @@ export function OrderEffectPanel() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Variant</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            Baseline ({trimOutliers ? 'Trimmed 3' : 'All 5'})
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            Flipped ({trimOutliers ? 'Trimmed 3' : 'All 5'})
-                          </th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Baseline Score</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Variant Score</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">
                             {directionOnly ? 'Direction Match?' : 'Exact Match?'}
                           </th>
@@ -1051,11 +1084,28 @@ export function OrderEffectPanel() {
                           const isMissing = row.mismatchType === 'missing_pair';
                           return (
                             <tr
-                              key={`${row.modelId}-${row.conditionKey}`}
+                              key={`${row.modelId}-${row.conditionKey}-${row.variantType ?? 'unknown'}`}
                               className={`cursor-pointer transition-colors hover:bg-gray-50 ${row.isMatch === false ? 'bg-amber-50' : ''}`}
                               onClick={() => setActiveRow(row)}
                             >
                               <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[11px] font-medium text-gray-900">
+                                    {getVariantLabel(row.variantType)}
+                                  </span>
+                                  {row.variantType != null && (
+                                    <div className="flex gap-1">
+                                      <span className={getAxisBadgeClass(getVariantAxes(row.variantType).narrativeOrder)}>
+                                        P:{getVariantAxes(row.variantType).narrativeOrder === 'baseline' ? 'A' : 'B'}
+                                      </span>
+                                      <span className={getAxisBadgeClass(getVariantAxes(row.variantType).scaleOrder)}>
+                                        S:{getVariantAxes(row.variantType).scaleOrder === 'baseline' ? 'A' : 'B'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
                               <td className="px-3 py-2 text-gray-700">{levelA}</td>
                               <td className="px-3 py-2 text-gray-700">{levelB}</td>
                               <td className="px-3 py-2 text-gray-700">{row.majorityVoteBaseline ?? 'n/a'}</td>
