@@ -149,27 +149,90 @@ function parseAttributeLabels(vignetteTitle: string): { attributeA: string; attr
   };
 }
 
-function groupRowsByVignette(rows: OrderInvarianceRow[]): Array<{
+type MatrixBlock = {
+  modelId: string;
+  modelLabel: string;
+  conditionKey: string;
+  cells: Map<string, OrderInvarianceRow>;
+};
+
+type VignetteMatrix = {
   vignetteId: string;
   vignetteTitle: string;
-  rows: OrderInvarianceRow[];
-}> {
-  const groups = new Map<string, { vignetteId: string; vignetteTitle: string; rows: OrderInvarianceRow[] }>();
+  blocks: MatrixBlock[];
+};
+
+function groupRowsIntoMatrix(rows: OrderInvarianceRow[]): VignetteMatrix[] {
+  const vignetteMap = new Map<string, {
+    vignetteId: string;
+    vignetteTitle: string;
+    blockMap: Map<string, MatrixBlock>;
+  }>();
 
   for (const row of rows) {
-    const existing = groups.get(row.vignetteId);
-    if (existing != null) {
-      existing.rows.push(row);
-      continue;
+    let vignette = vignetteMap.get(row.vignetteId);
+    if (!vignette) {
+      vignette = {
+        vignetteId: row.vignetteId,
+        vignetteTitle: row.vignetteTitle,
+        blockMap: new Map(),
+      };
+      vignetteMap.set(row.vignetteId, vignette);
     }
-    groups.set(row.vignetteId, {
-      vignetteId: row.vignetteId,
-      vignetteTitle: row.vignetteTitle,
-      rows: [row],
-    });
+
+    const blockKey = `${row.modelId}::${row.conditionKey}`;
+    let block = vignette.blockMap.get(blockKey);
+    if (!block) {
+      block = {
+        modelId: row.modelId,
+        modelLabel: row.modelLabel,
+        conditionKey: row.conditionKey,
+        cells: new Map(),
+      };
+      vignette.blockMap.set(blockKey, block);
+    }
+
+    if (row.variantType != null) {
+      block.cells.set(row.variantType, row);
+    }
   }
 
-  return Array.from(groups.values()).sort((left, right) => left.vignetteTitle.localeCompare(right.vignetteTitle));
+  return Array.from(vignetteMap.values())
+    .sort((a, b) => a.vignetteTitle.localeCompare(b.vignetteTitle))
+    .map(({ vignetteId, vignetteTitle, blockMap }) => ({
+      vignetteId,
+      vignetteTitle,
+      blocks: Array.from(blockMap.values()).sort((a, b) => {
+        const modelCmp = a.modelLabel.localeCompare(b.modelLabel);
+        return modelCmp !== 0 ? modelCmp : a.conditionKey.localeCompare(b.conditionKey, undefined, { numeric: true });
+      }),
+    }));
+}
+
+const VARIANT_ORDER = ['baseline', 'presentation_flipped', 'scale_flipped', 'fully_flipped'] as const;
+const VARIANT_SHORT_LABELS: Record<string, string> = {
+  baseline: 'P_A+S_A',
+  presentation_flipped: 'P_B+S_A',
+  scale_flipped: 'P_A+S_B',
+  fully_flipped: 'P_B+S_B',
+};
+
+function renderMatrixCellScore(row: OrderInvarianceRow | undefined) {
+  if (!row) {
+    return <span className="text-[11px] italic text-gray-400">Missing</span>;
+  }
+  if (row.mismatchType === 'missing_pair' || row.majorityVoteFlipped == null) {
+    return <span className="text-[11px] italic text-amber-500">Insufficient</span>;
+  }
+  if (row.rawScore != null && row.rawScore !== row.majorityVoteFlipped) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] text-gray-400">Raw: {row.rawScore}</span>
+        <span className="text-sm font-semibold text-gray-900">→ {row.majorityVoteFlipped}</span>
+      </div>
+    );
+  }
+  return <span className="text-sm font-semibold text-gray-900">{row.majorityVoteFlipped}</span>;
 }
 
 function getReviewStatusBadge(status: OrderInvarianceReviewStatus): string {
@@ -490,7 +553,7 @@ export function OrderEffectPanel() {
     return allRows.filter((row) => selectedModelIds.has(row.modelId));
   }, [allRows, selectedModelIds]);
 
-  const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
+  const matrixGroups = useMemo(() => groupRowsIntoMatrix(filteredRows), [filteredRows]);
   const modelLeaderboard = useMemo(() => {
     if (allRows.length === 0) return [];
     const byModel = new Map<string, OrderInvarianceRow[]>();
@@ -1080,91 +1143,75 @@ export function OrderEffectPanel() {
             )}
 
             <div className="mt-5 space-y-4">
-              {groupedRows.length === 0 ? (
+              {matrixGroups.length === 0 ? (
                 <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
                   No approved slot-order pairs are available yet.
                 </div>
-              ) : groupedRows.map((group) => {
-                const attributeLabels = parseAttributeLabels(group.vignetteTitle);
+              ) : matrixGroups.map((vignette) => {
+                const attributeLabels = parseAttributeLabels(vignette.vignetteTitle);
                 return (
-                <details key={group.vignetteId} className="rounded-lg border border-gray-200">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">{group.vignetteTitle}</div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        {group.rows.length} condition row{group.rows.length === 1 ? '' : 's'}
+                  <details key={vignette.vignetteId} className="rounded-lg border border-gray-200">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gray-50 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-900">{vignette.vignetteTitle}</div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {vignette.blocks.length} condition block{vignette.blocks.length === 1 ? '' : 's'}
+                        </div>
                       </div>
+                    </summary>
+                    <div className="overflow-x-auto border-t border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
+                            {VARIANT_ORDER.map((vt) => (
+                              <th key={vt} className="px-3 py-2 text-center font-medium text-gray-600">
+                                <div>{getVariantLabel(vt)}</div>
+                                <div className="text-[10px] font-normal text-gray-400">{VARIANT_SHORT_LABELS[vt]}</div>
+                              </th>
+                            ))}
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">Match?</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {vignette.blocks.map((block) => {
+                            const { levelA, levelB } = parseConditionLevels(block.conditionKey);
+                            const matchRow = block.cells.get('fully_flipped');
+                            const isMatch = matchRow?.isMatch;
+                            return (
+                              <tr
+                                key={`${block.modelId}::${block.conditionKey}`}
+                                className={`hover:bg-gray-50 ${isMatch === false ? 'bg-amber-50' : ''}`}
+                              >
+                                <td className="px-3 py-2 font-medium text-gray-900">{block.modelLabel}</td>
+                                <td className="px-3 py-2 text-gray-700">{levelA}</td>
+                                <td className="px-3 py-2 text-gray-700">{levelB}</td>
+                                {VARIANT_ORDER.map((vt) => {
+                                  const cellRow = block.cells.get(vt);
+                                  return (
+                                    <td
+                                      key={vt}
+                                      className="cursor-pointer px-3 py-2 text-center"
+                                      onClick={() => cellRow && setActiveRow(cellRow)}
+                                    >
+                                      {renderMatrixCellScore(cellRow)}
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-3 py-2 text-xs text-gray-700">
+                                  {isMatch == null ? '—' : isMatch ? 'Yes' : 'No'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  </summary>
-                  <div className="overflow-x-auto border-t border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Model</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Variant</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeA}</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">{attributeLabels.attributeB}</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Baseline Score</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Variant Score</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">
-                            {directionOnly ? 'Direction Match?' : 'Exact Match?'}
-                          </th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Distance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
-                        {group.rows.map((row) => {
-                          const { levelA, levelB } = parseConditionLevels(row.conditionKey);
-                          const isMissing = row.mismatchType === 'missing_pair';
-                          return (
-                            <tr
-                              key={`${row.modelId}-${row.conditionKey}-${row.variantType ?? 'unknown'}`}
-                              className={`cursor-pointer transition-colors hover:bg-gray-50 ${row.isMatch === false ? 'bg-amber-50' : ''}`}
-                              onClick={() => setActiveRow(row)}
-                            >
-                              <td className="px-3 py-2 text-gray-900">{row.modelLabel}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-[11px] font-medium text-gray-900">
-                                    {getVariantLabel(row.variantType)}
-                                  </span>
-                                  {row.variantType != null && (
-                                    <div className="flex gap-1">
-                                      <span className={getAxisBadgeClass(getVariantAxes(row.variantType).narrativeOrder)}>
-                                        P:{getVariantAxes(row.variantType).narrativeOrder === 'baseline' ? 'A' : 'B'}
-                                      </span>
-                                      <span className={getAxisBadgeClass(getVariantAxes(row.variantType).scaleOrder)}>
-                                        S:{getVariantAxes(row.variantType).scaleOrder === 'baseline' ? 'A' : 'B'}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-gray-700">{levelA}</td>
-                              <td className="px-3 py-2 text-gray-700">{levelB}</td>
-                              <td className="px-3 py-2 text-gray-700">{row.majorityVoteBaseline ?? 'n/a'}</td>
-                              <td className="px-3 py-2 text-gray-700">
-                                {row.rawScore != null && row.rawScore !== row.majorityVoteFlipped ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] text-gray-400">Raw: {row.rawScore}</span>
-                                    <span className="font-medium text-gray-900">Canonical: {row.majorityVoteFlipped}</span>
-                                  </div>
-                                ) : (
-                                  row.majorityVoteFlipped ?? 'n/a'
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-gray-700">
-                                {isMissing ? 'Insufficient data' : row.isMatch ? 'Yes' : 'No'}
-                              </td>
-                              <td className="px-3 py-2 text-gray-700">{row.ordinalDistance ?? 'n/a'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              )})}
+                  </details>
+                );
+              })}
             </div>
           </>
         )}
