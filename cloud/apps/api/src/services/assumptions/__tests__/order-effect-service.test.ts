@@ -132,6 +132,36 @@ describe('order-effect service', () => {
     ]);
   });
 
+  it('skips unknown variant metadata without crashing the analysis result', async () => {
+    mockDb.assumptionScenarioPair.findMany.mockResolvedValue([
+      buildPair('pair-x', 'future_variant', 'scenario-baseline', 'scenario-future'),
+    ]);
+    mockDb.transcript.findMany.mockResolvedValue([
+      ...buildFullyFlippedDataset('2').filter((record) => record.scenarioId === 'scenario-baseline'),
+      ...buildFullyFlippedDataset('2')
+        .filter((record) => record.scenarioId === 'scenario-fully')
+        .map((record) => ({ ...record, scenarioId: 'scenario-future', id: record.id.replace(/^f/, 'x') })),
+    ]);
+    mockDb.assumptionAnalysisSnapshot.findMany.mockResolvedValue([]);
+    mockDb.assumptionAnalysisSnapshot.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.assumptionAnalysisSnapshot.create.mockImplementation((args?: { data?: Record<string, unknown> }) => Promise.resolve({
+      id: 'snapshot-1',
+      createdAt: new Date('2026-03-01T00:00:00Z'),
+      deletedAt: null,
+      ...(args?.data ?? {}),
+    }));
+
+    const result = await getOrderInvarianceAnalysisResult({
+      directionOnly: true,
+      trimOutliers: true,
+    });
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.variantType).toBe('future_variant');
+    expect(result.summary.matchRate).toBeNull();
+    expect(result.modelMetrics[0]?.matchEligibleCount).toBe(0);
+  });
+
   it('misses and supersedes the cache when selected transcript state changes in place', async () => {
     let transcriptRecords = buildFullyFlippedDataset('2');
     const snapshots: Array<Record<string, unknown>> = [];

@@ -144,7 +144,7 @@ type PairScenario = {
 
 type PairRecord = {
   id?: string;
-  variantType: OrderEffectVariantType | null;
+  variantType: string | null;
   sourceScenario: PairScenario;
   variantScenario: PairScenario;
 };
@@ -672,6 +672,7 @@ function computeOrderInvarianceFromSelections(params: {
     const vignette = params.lockedById.get(pair.sourceScenario.definitionId);
     const vignetteTitle = vignette?.title ?? pair.sourceScenario.definitionId;
     const conditionKey = buildConditionKey(pair.sourceScenario.name);
+    const variantMetadata = getVariantMetadata(pair.variantType);
 
     for (const model of params.effectiveModels) {
       const metrics = modelMetricsAccumulators.get(model.modelId)
@@ -780,7 +781,7 @@ function computeOrderInvarianceFromSelections(params: {
       const directionMatch = computeMatch(baselineValue, flippedValue, true) ?? false;
       const exactMatch = computeMatch(baselineValue, flippedValue, false) ?? false;
       const isMatch = params.directionOnly ? directionMatch : exactMatch;
-      if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'legacy_match') {
+      if (variantMetadata?.metricFamily === 'legacy_match') {
         legacyMatchEligibleCount += 1;
         if (directionMatch) {
           legacyDirectionMatchCount += 1;
@@ -796,8 +797,8 @@ function computeOrderInvarianceFromSelections(params: {
       const pivotKey = `${pair.sourceScenario.definitionId}::${conditionKey}::${model.modelId}`;
       const scores = scorePivot.get(pivotKey) ?? {};
       scores.baseline = baselineValue;
-      if (pair.variantType != null) {
-        scores[pair.variantType] = flippedValue;
+      if (variantMetadata != null) {
+        scores[pair.variantType as OrderEffectVariantType] = flippedValue;
       }
       scorePivot.set(pivotKey, scores);
 
@@ -815,8 +816,7 @@ function computeOrderInvarianceFromSelections(params: {
 
       if (comparisonRecord != null) {
         if (
-          pair.variantType != null
-          && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'legacy_match'
+          variantMetadata?.metricFamily === 'legacy_match'
           && comparisonRecord.matchesBaseline != null
         ) {
           metrics.matchEligibleCount += 1;
@@ -838,7 +838,7 @@ function computeOrderInvarianceFromSelections(params: {
           );
         }
 
-        if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'value_order') {
+        if (variantMetadata?.metricFamily === 'value_order') {
           if (comparisonRecord.reversed == null) {
             metrics.valueOrderExcludedCount += 1;
           } else {
@@ -858,7 +858,7 @@ function computeOrderInvarianceFromSelections(params: {
               metrics.limitingMargins.push(comparisonRecord.pairMargin.limiting);
             }
           }
-        } else if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'scale_order') {
+        } else if (variantMetadata?.metricFamily === 'scale_order') {
           if (comparisonRecord.reversed == null) {
             metrics.scaleOrderExcludedCount += 1;
           } else {
@@ -1053,6 +1053,13 @@ function computeMajorityVote(values: number[], trimOutliers: boolean): number | 
   return computeCanonicalCellScore(getConsideredTrials(values, trimOutliers));
 }
 
+function getVariantMetadata(variantType: string | null) {
+  if (!isOrderEffectVariantType(variantType)) {
+    return null;
+  }
+  return ORDER_EFFECT_VARIANT_METADATA[variantType];
+}
+
 function buildComparisonRecord(params: {
   pair: PairRecord;
   modelId: string;
@@ -1064,6 +1071,10 @@ function buildComparisonRecord(params: {
   trimOutliers: boolean;
   directionOnly: boolean;
 }): OrderEffectComparisonRecord | null {
+  if (!isOrderEffectVariantType(params.pair.variantType)) {
+    return null;
+  }
+
   const baselineNormalizedDecisions = params.baselinePick.selected.map((transcript) => transcript.decision);
   const variantNormalizedDecisions = params.flippedPick.selected.map((transcript) => transcript.decision);
   const baselineRawDecisions = params.baselinePick.selected.map((transcript) => transcript.rawDecision);
@@ -1113,7 +1124,7 @@ function buildComparisonRecord(params: {
     vignetteId: params.pair.sourceScenario.definitionId,
     vignetteTitle: params.vignetteTitle,
     conditionKey: params.conditionKey,
-    variantType: params.pair.variantType as OrderEffectVariantType,
+    variantType: params.pair.variantType,
     baselineRawDecisions,
     variantRawDecisions,
     baselineNormalizedDecisions,
