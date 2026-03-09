@@ -21,6 +21,11 @@ export type OrderInvarianceSummary = {
   qualifyingPairs: number;
   missingPairs: number;
   comparablePairs: number;
+  matchComparablePairs: number;
+  presentationComparablePairs: number;
+  scaleComparablePairs: number;
+  presentationMissingPairs: number;
+  scaleMissingPairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
   presentationEffectMAD: number | null;
@@ -36,6 +41,7 @@ export type OrderInvarianceRow = {
   conditionKey: string;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -272,6 +278,11 @@ export const ORDER_INVARIANCE_QUERY = gql`
         qualifyingPairs
         missingPairs
         comparablePairs
+        matchComparablePairs
+        presentationComparablePairs
+        scaleComparablePairs
+        presentationMissingPairs
+        scaleMissingPairs
         sensitiveModelCount
         sensitiveVignetteCount
         presentationEffectMAD
@@ -311,6 +322,7 @@ export const ORDER_INVARIANCE_QUERY = gql`
         conditionKey
         majorityVoteBaseline
         majorityVoteFlipped
+        rawScore
         mismatchType
         ordinalDistance
         isMatch

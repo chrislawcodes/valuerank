@@ -53,6 +53,11 @@ export type OrderInvarianceSummary = {
   qualifyingPairs: number;
   missingPairs: number;
   comparablePairs: number;
+  matchComparablePairs: number;
+  presentationComparablePairs: number;
+  scaleComparablePairs: number;
+  presentationMissingPairs: number;
+  scaleMissingPairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
   excludedPairs: OrderInvarianceExclusionCount[];
@@ -67,6 +72,7 @@ export type OrderInvarianceRow = {
   variantType: string | null;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -655,6 +661,11 @@ function computeOrderInvarianceFromSelections(params: {
   let legacyMatchEligibleCount = 0;
   let legacyDirectionMatchCount = 0;
   let legacyExactMatchCount = 0;
+  let matchComparablePairs = 0;
+  let presentationComparablePairs = 0;
+  let scaleComparablePairs = 0;
+  let presentationMissingPairs = 0;
+  let scaleMissingPairs = 0;
   const scorePivot = new Map<string, Record<string, number>>();
 
   for (const pair of params.relevantPairs) {
@@ -683,6 +694,12 @@ function computeOrderInvarianceFromSelections(params: {
 
       if (baselinePick.kind !== 'selected' || flippedPick.kind !== 'selected') {
         missingPairs += 1;
+        if (pair.variantType === 'presentation_flipped' || pair.variantType === 'fully_flipped') {
+          presentationMissingPairs += 1;
+        }
+        if (pair.variantType === 'scale_flipped' || pair.variantType === 'fully_flipped') {
+          scaleMissingPairs += 1;
+        }
         bumpVariantExcludedCount(metrics, pair.variantType);
         rows.push({
           modelId: model.modelId,
@@ -693,6 +710,7 @@ function computeOrderInvarianceFromSelections(params: {
           variantType: pair.variantType,
           majorityVoteBaseline: null,
           majorityVoteFlipped: null,
+          rawScore: null,
           mismatchType: 'missing_pair',
           ordinalDistance: null,
           isMatch: null,
@@ -725,6 +743,12 @@ function computeOrderInvarianceFromSelections(params: {
 
       if (baselineValue == null || flippedValue == null) {
         missingPairs += 1;
+        if (pair.variantType === 'presentation_flipped' || pair.variantType === 'fully_flipped') {
+          presentationMissingPairs += 1;
+        }
+        if (pair.variantType === 'scale_flipped' || pair.variantType === 'fully_flipped') {
+          scaleMissingPairs += 1;
+        }
         bumpVariantExcludedCount(metrics, pair.variantType);
         rows.push({
           modelId: model.modelId,
@@ -735,6 +759,7 @@ function computeOrderInvarianceFromSelections(params: {
           variantType: pair.variantType,
           majorityVoteBaseline: baselineValue,
           majorityVoteFlipped: flippedValue,
+          rawScore: null,
           mismatchType: 'missing_pair',
           ordinalDistance: null,
           isMatch: null,
@@ -743,6 +768,15 @@ function computeOrderInvarianceFromSelections(params: {
       }
 
       comparablePairs += 1;
+      if (pair.variantType === 'presentation_flipped' || pair.variantType === 'fully_flipped') {
+        presentationComparablePairs += 1;
+      }
+      if (pair.variantType === 'scale_flipped' || pair.variantType === 'fully_flipped') {
+        scaleComparablePairs += 1;
+      }
+      if (pair.variantType === 'fully_flipped') {
+        matchComparablePairs += 1;
+      }
       const directionMatch = computeMatch(baselineValue, flippedValue, true) ?? false;
       const exactMatch = computeMatch(baselineValue, flippedValue, false) ?? false;
       const isMatch = params.directionOnly ? directionMatch : exactMatch;
@@ -856,6 +890,7 @@ function computeOrderInvarianceFromSelections(params: {
         variantType: pair.variantType,
         majorityVoteBaseline: baselineValue,
         majorityVoteFlipped: flippedValue,
+        rawScore: comparisonRecord?.rawVariantCellScore ?? null,
         mismatchType,
         ordinalDistance: Math.abs(baselineValue - flippedValue),
         isMatch,
@@ -888,6 +923,11 @@ function computeOrderInvarianceFromSelections(params: {
     qualifyingPairs,
     missingPairs,
     comparablePairs,
+    matchComparablePairs,
+    presentationComparablePairs,
+    scaleComparablePairs,
+    presentationMissingPairs,
+    scaleMissingPairs,
     sensitiveModelCount,
     sensitiveVignetteCount,
     excludedPairs: Array.from(excludedCounts.entries())

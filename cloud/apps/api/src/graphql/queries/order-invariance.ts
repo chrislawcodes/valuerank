@@ -35,6 +35,11 @@ type OrderInvarianceSummary = {
   qualifyingPairs: number;
   missingPairs: number;
   comparablePairs: number;
+  matchComparablePairs: number;
+  presentationComparablePairs: number;
+  scaleComparablePairs: number;
+  presentationMissingPairs: number;
+  scaleMissingPairs: number;
   sensitiveModelCount: number;
   sensitiveVignetteCount: number;
   excludedPairs: OrderInvarianceExclusionCount[];
@@ -49,6 +54,7 @@ type OrderInvarianceRow = {
   variantType: string | null;
   majorityVoteBaseline: number | null;
   majorityVoteFlipped: number | null;
+  rawScore: number | null;
   mismatchType: OrderInvarianceMismatchType;
   ordinalDistance: number | null;
   isMatch: boolean | null;
@@ -193,7 +199,6 @@ type PairRecord = {
   sourceScenario: PairScenario;
   variantScenario: PairScenario;
 };
-
 const ORDER_INVARIANCE_KEY = 'order_invariance';
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
 
@@ -306,6 +311,11 @@ const OrderInvarianceSummaryRef = builder
       qualifyingPairs: t.exposeInt('qualifyingPairs'),
       missingPairs: t.exposeInt('missingPairs'),
       comparablePairs: t.exposeInt('comparablePairs'),
+      matchComparablePairs: t.exposeInt('matchComparablePairs'),
+      presentationComparablePairs: t.exposeInt('presentationComparablePairs'),
+      scaleComparablePairs: t.exposeInt('scaleComparablePairs'),
+      presentationMissingPairs: t.exposeInt('presentationMissingPairs'),
+      scaleMissingPairs: t.exposeInt('scaleMissingPairs'),
       sensitiveModelCount: t.exposeInt('sensitiveModelCount'),
       sensitiveVignetteCount: t.exposeInt('sensitiveVignetteCount'),
       excludedPairs: t.expose('excludedPairs', { type: [OrderInvarianceExclusionCountRef] }),
@@ -324,6 +334,7 @@ const OrderInvarianceRowRef = builder
       variantType: t.exposeString('variantType', { nullable: true }),
       majorityVoteBaseline: t.exposeInt('majorityVoteBaseline', { nullable: true }),
       majorityVoteFlipped: t.exposeInt('majorityVoteFlipped', { nullable: true }),
+      rawScore: t.exposeInt('rawScore', { nullable: true }),
       mismatchType: t.exposeString('mismatchType', { nullable: true }),
       ordinalDistance: t.exposeInt('ordinalDistance', { nullable: true }),
       isMatch: t.exposeBoolean('isMatch', { nullable: true }),
