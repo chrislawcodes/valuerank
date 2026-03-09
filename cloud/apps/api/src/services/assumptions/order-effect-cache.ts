@@ -126,7 +126,7 @@ export async function writeCurrentOrderEffectSnapshot(params: {
       analysisType: params.payload.analysisType,
       status: 'CURRENT',
       deletedAt: null,
-      config: config as object,
+      config: { equals: config as Prisma.InputJsonValue },
     },
     data: {
       status: 'SUPERSEDED',

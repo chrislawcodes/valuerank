@@ -58,6 +58,32 @@ export function getConsideredTrials(values: number[], trimOutliers: boolean): nu
   return sorted.slice(1, sorted.length - 1);
 }
 
+export function getPairedConsideredTrials(
+  rawValues: number[],
+  normalizedValues: number[],
+  trimOutliers: boolean
+): { raw: number[]; normalized: number[] } {
+  const paired = normalizedValues
+    .map((normalized, index) => ({
+      normalized,
+      raw: rawValues[index] ?? normalized,
+      index,
+    }))
+    .sort((left, right) => (
+      left.normalized - right.normalized
+      || left.index - right.index
+    ));
+
+  const considered = !trimOutliers || paired.length < 3
+    ? paired
+    : paired.slice(1, paired.length - 1);
+
+  return {
+    raw: considered.map((entry) => entry.raw),
+    normalized: considered.map((entry) => entry.normalized),
+  };
+}
+
 export function computeCanonicalCellScore(consideredTrials: number[]): number | null {
   if (consideredTrials.length === 0) {
     return null;
@@ -104,6 +130,10 @@ export function computeWithinCellDisagreementRate(consideredTrials: number[]): n
 
   const below = consideredTrials.filter((value) => value < MIDPOINT_SCORE).length;
   const above = consideredTrials.filter((value) => value > MIDPOINT_SCORE).length;
+
+  if (below === 0 && above === 0) {
+    return 0;
+  }
 
   if (below === above) {
     return 1;

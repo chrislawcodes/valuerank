@@ -8,6 +8,7 @@ import {
   computeScaleOrderPullLabel,
   computeValueOrderPullLabel,
   computeWithinCellDisagreementRate,
+  getPairedConsideredTrials,
   getConsideredTrials,
 } from '../order-effect-analysis.js';
 
@@ -25,6 +26,15 @@ describe('order-effect-analysis helpers', () => {
 
     it('returns the full sorted set when trimOutliers is false', () => {
       expect(getConsideredTrials([5, 1, 4], false)).toEqual([1, 4, 5]);
+    });
+
+    it('keeps raw and normalized considered trials aligned to the same inner-slice positions', () => {
+      expect(
+        getPairedConsideredTrials([4, 4, 4, 1, 5], [4, 4, 4, 1, 5], true)
+      ).toEqual({
+        raw: [4, 4, 4],
+        normalized: [4, 4, 4],
+      });
     });
   });
 
@@ -64,6 +74,10 @@ describe('order-effect-analysis helpers', () => {
 
     it('returns 1.0 when the <3 and >3 buckets are tied', () => {
       expect(computeWithinCellDisagreementRate([2, 2, 4, 4])).toBe(1);
+    });
+
+    it('treats all-midpoint cells as zero disagreement', () => {
+      expect(computeWithinCellDisagreementRate([3, 3, 3])).toBe(0);
     });
 
     it('aggregates model disagreement as a simple mean of per-cell rates', () => {

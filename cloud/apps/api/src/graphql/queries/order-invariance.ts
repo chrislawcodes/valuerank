@@ -11,7 +11,7 @@ import {
   computeScaleOrderPullLabel,
   computeValueOrderPullLabel,
   computeWithinCellDisagreementRate,
-  getConsideredTrials,
+  getPairedConsideredTrials,
   type OrderEffectComparisonRecord,
   type PairLevelMarginSummary,
 } from '../../services/assumptions/order-effect-analysis.js';
@@ -223,6 +223,18 @@ type CandidateTranscriptRecord = {
   };
 };
 
+type CandidateTranscriptCacheRecord = {
+  id: string;
+  scenarioId: string | null;
+  modelId: string;
+  decisionCode: string | null;
+  run: {
+    deletedAt: Date | null;
+    config: unknown;
+    tags: Array<{ tag: { name: string } }>;
+  };
+};
+
 type TranscriptDetailRecord = {
   id: string;
   runId: string;
@@ -273,11 +285,11 @@ function getRunAssumptionKey(config: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-function isAssumptionRun(record: CandidateTranscriptRecord): boolean {
+function isAssumptionRun(record: Pick<CandidateTranscriptRecord, 'run'>): boolean {
   return record.run.tags.some((tag) => tag.tag.name === 'assumption-run');
 }
 
-function isTempZeroRun(record: CandidateTranscriptRecord): boolean {
+function isTempZeroRun(record: Pick<CandidateTranscriptRecord, 'run'>): boolean {
   const config = record.run.config as { temperature?: unknown } | null;
   return parseTemperature(config?.temperature) === 0;
 }
@@ -485,11 +497,20 @@ function buildComparisonRecord(params: {
   const variantNormalizedDecisions = params.flippedPick.selected.map((transcript) => transcript.decision);
   const baselineRawDecisions = params.baselinePick.selected.map((transcript) => transcript.rawDecision);
   const variantRawDecisions = params.flippedPick.selected.map((transcript) => transcript.rawDecision);
-
-  const baselineConsideredTrials = getConsideredTrials(baselineNormalizedDecisions, params.trimOutliers);
-  const variantConsideredTrials = getConsideredTrials(variantNormalizedDecisions, params.trimOutliers);
-  const rawBaselineConsideredTrials = getConsideredTrials(baselineRawDecisions, params.trimOutliers);
-  const rawVariantConsideredTrials = getConsideredTrials(variantRawDecisions, params.trimOutliers);
+  const baselineConsidered = getPairedConsideredTrials(
+    baselineRawDecisions,
+    baselineNormalizedDecisions,
+    params.trimOutliers
+  );
+  const variantConsidered = getPairedConsideredTrials(
+    variantRawDecisions,
+    variantNormalizedDecisions,
+    params.trimOutliers
+  );
+  const baselineConsideredTrials = baselineConsidered.normalized;
+  const variantConsideredTrials = variantConsidered.normalized;
+  const rawBaselineConsideredTrials = baselineConsidered.raw;
+  const rawVariantConsideredTrials = variantConsidered.raw;
 
   const baselineCellScore = computeCanonicalCellScore(baselineConsideredTrials);
   const variantCellScore = computeCanonicalCellScore(variantConsideredTrials);
@@ -1247,7 +1268,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
       }
 
-      const transcriptRecords = allScenarioIds.length > 0
+      const transcriptCacheRecords = allScenarioIds.length > 0
         ? await db.transcript.findMany({
           where: {
             deletedAt: null,
@@ -1258,9 +1279,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
             id: true,
             scenarioId: true,
             modelId: true,
-            modelVersion: true,
             decisionCode: true,
-            createdAt: true,
             run: {
               select: {
                 deletedAt: true,
@@ -1279,10 +1298,10 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         : [];
 
       const sourceScenarioIds = new Set(relevantPairs.map((pair) => pair.sourceScenario.id));
-      const transcriptsByScenarioAndModel = new Map<string, CandidateTranscript[]>();
       const inferredModels = new Map<string, string>();
+      const candidateTranscriptIds: string[] = [];
 
-      for (const transcript of transcriptRecords as CandidateTranscriptRecord[]) {
+      for (const transcript of transcriptCacheRecords as CandidateTranscriptCacheRecord[]) {
         if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
           continue;
         }
@@ -1311,6 +1330,84 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         }
 
         inferredModels.set(transcript.modelId, transcript.modelId);
+        candidateTranscriptIds.push(transcript.id);
+      }
+
+      const effectiveModels = Array.from(inferredModels.keys())
+        .sort()
+        .map((modelId) => ({
+          modelId,
+          modelLabel: activeModelLabels.get(modelId) ?? modelId,
+        }));
+
+      const cachePayload = buildOrderEffectCachePayload({
+        trimOutliers,
+        directionOnly,
+        requiredTrialCount: ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
+        lockedVignetteIds: Array.from(new Set(relevantPairs.map((pair) => pair.sourceScenario.definitionId))),
+        approvedPairIds: relevantPairs
+          .map((pair) => pair.id)
+          .filter((pairId): pairId is string => typeof pairId === 'string' && pairId !== ''),
+        snapshotModelIds: effectiveModels.map((model) => model.modelId),
+        candidateTranscriptIds,
+      });
+      const inputHash = computeOrderEffectInputHash(cachePayload);
+
+      try {
+        const cachedSnapshot = await getCurrentOrderEffectSnapshot(inputHash);
+        if (cachedSnapshot != null) {
+          const cachedResult = deserializeOrderInvarianceSnapshotOutput(cachedSnapshot);
+          if (cachedResult != null) {
+            log.debug({ inputHash, snapshotId: cachedSnapshot.id }, 'Returning cached order-invariance snapshot');
+            return cachedResult;
+          }
+          log.warn({ inputHash, snapshotId: cachedSnapshot.id }, 'Order-invariance snapshot output was unreadable, recomputing');
+        }
+      } catch (error) {
+        log.error({ err: error, inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
+      }
+
+      const transcriptRecords = candidateTranscriptIds.length > 0
+        ? await db.transcript.findMany({
+          where: {
+            id: { in: candidateTranscriptIds },
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            scenarioId: true,
+            modelId: true,
+            modelVersion: true,
+            decisionCode: true,
+            createdAt: true,
+            run: {
+              select: {
+                deletedAt: true,
+                config: true,
+                tags: {
+                  select: {
+                    tag: {
+                      select: { name: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+        : [];
+
+      const transcriptsByScenarioAndModel = new Map<string, CandidateTranscript[]>();
+      for (const transcript of transcriptRecords as CandidateTranscriptRecord[]) {
+        if (transcript.scenarioId == null) {
+          continue;
+        }
+
+        const decision = parseDecision(transcript.decisionCode);
+        if (decision == null) {
+          continue;
+        }
+
         const key = `${transcript.scenarioId}::${transcript.modelId}`;
         const existing = transcriptsByScenarioAndModel.get(key);
         const candidate: CandidateTranscript = {
@@ -1331,41 +1428,6 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         } else {
           transcriptsByScenarioAndModel.set(key, [candidate]);
         }
-      }
-
-      const effectiveModels = Array.from(inferredModels.keys())
-        .sort()
-        .map((modelId) => ({
-          modelId,
-          modelLabel: activeModelLabels.get(modelId) ?? modelId,
-        }));
-
-      const cachePayload = buildOrderEffectCachePayload({
-        trimOutliers,
-        directionOnly,
-        requiredTrialCount: ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
-        lockedVignetteIds: Array.from(new Set(relevantPairs.map((pair) => pair.sourceScenario.definitionId))),
-        approvedPairIds: relevantPairs
-          .map((pair) => pair.id)
-          .filter((pairId): pairId is string => typeof pairId === 'string' && pairId !== ''),
-        snapshotModelIds: effectiveModels.map((model) => model.modelId),
-        candidateTranscriptIds: Array.from(transcriptsByScenarioAndModel.values())
-          .flatMap((candidates) => candidates.map((candidate) => candidate.id)),
-      });
-      const inputHash = computeOrderEffectInputHash(cachePayload);
-
-      try {
-        const cachedSnapshot = await getCurrentOrderEffectSnapshot(inputHash);
-        if (cachedSnapshot != null) {
-          const cachedResult = deserializeOrderInvarianceSnapshotOutput(cachedSnapshot);
-          if (cachedResult != null) {
-            log.debug({ inputHash, snapshotId: cachedSnapshot.id }, 'Returning cached order-invariance snapshot');
-            return cachedResult;
-          }
-          log.warn({ inputHash, snapshotId: cachedSnapshot.id }, 'Order-invariance snapshot output was unreadable, recomputing');
-        }
-      } catch (error) {
-        log.error({ err: error, inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
       }
 
       const excludedCounts = new Map<string, number>();
