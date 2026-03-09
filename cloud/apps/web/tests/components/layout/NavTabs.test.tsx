@@ -39,6 +39,7 @@ describe('NavTabs Component', () => {
       screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
     ).toBe(true);
     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+    expect(screen.getByRole('link', { name: /assumptions/i })).toHaveAttribute('href', '/assumptions');
   });
 
   it('should highlight active tab', () => {

@@ -42,6 +42,7 @@ describe('MobileNav Component', () => {
   it('includes the new analysis and analysis-v1 assumption routes', () => {
     renderMobileNav('/assumptions/analysis');
 
+    expect(screen.getByRole('link', { name: 'Assumptions' })).toHaveAttribute('href', '/assumptions');
     expect(
       screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
     ).toBe(true);

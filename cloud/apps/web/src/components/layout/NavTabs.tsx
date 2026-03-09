@@ -208,7 +208,7 @@ export function NavTabs() {
                 }`
               }
             >
-              <NavLink to="/assumptions/temp-zero-effect" className="flex items-center gap-2 px-3 py-3">
+              <NavLink to="/assumptions" className="flex items-center gap-2 px-3 py-3">
                 <ShieldCheck className="w-4 h-4" />
                 <span className="hidden sm:inline">Assumptions</span>
               </NavLink>

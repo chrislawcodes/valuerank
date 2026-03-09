@@ -36,6 +36,15 @@ describe('order-effect-analysis helpers', () => {
         normalized: [4, 4, 4],
       });
     });
+
+    it('selects raw considered trials by normalized ordering, not an independent raw sort', () => {
+      expect(
+        getPairedConsideredTrials([5, 1, 4, 2, 3], [1, 2, 3, 4, 5], true)
+      ).toEqual({
+        raw: [1, 4, 2],
+        normalized: [2, 3, 4],
+      });
+    });
   });
 
   describe('computeCanonicalCellScore', () => {
@@ -105,6 +114,7 @@ describe('order-effect-analysis helpers', () => {
       expect(computeMatch(4, 5, true)).toBe(true);
       expect(computeMatch(4, 2, true)).toBe(false);
       expect(computeMatch(3, 5, true)).toBe(false);
+      expect(computeMatch(3, 3, true)).toBe(false);
     });
 
     it('uses exact equality for directionOnly=false', () => {

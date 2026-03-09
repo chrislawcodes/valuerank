@@ -308,4 +308,52 @@ describe('assumptionsOrderInvariance query', () => {
     expect(db.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
     expect(db.assumptionAnalysisSnapshot.updateMany).not.toHaveBeenCalled();
   });
+
+  it('does not count midpoint-vs-midpoint as a directionOnly match', async () => {
+    vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
+      buildPair('pair-f', 'fully_flipped', 'scenario-baseline', 'scenario-f'),
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      buildTranscript({ id: 'b1', scenarioId: 'scenario-baseline', decisionCode: '3', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b2', scenarioId: 'scenario-baseline', decisionCode: '3', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b3', scenarioId: 'scenario-baseline', decisionCode: '3', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b4', scenarioId: 'scenario-baseline', decisionCode: '3', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b5', scenarioId: 'scenario-baseline', decisionCode: '3', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'f1', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'f2', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'f3', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'f4', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'f5', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
+    ] as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findFirst).mockResolvedValue(null as never);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({ query, variables: { directionOnly: true, trimOutliers: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.assumptionsOrderInvariance.summary).toMatchObject({
+      status: 'COMPUTED',
+      matchRate: 0,
+      comparablePairs: 1,
+    });
+    expect(response.body.data.assumptionsOrderInvariance.modelMetrics).toEqual([
+      expect.objectContaining({
+        modelId: 'model-a',
+        matchRate: 0,
+        matchCount: 0,
+        matchEligibleCount: 1,
+      }),
+    ]);
+    expect(response.body.data.assumptionsOrderInvariance.rows).toEqual([
+      expect.objectContaining({
+        modelId: 'model-a',
+        majorityVoteBaseline: 3,
+        majorityVoteFlipped: 3,
+        isMatch: false,
+      }),
+    ]);
+  });
 });

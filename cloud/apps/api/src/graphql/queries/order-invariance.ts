@@ -1,12 +1,13 @@
 import { builder } from '../builder.js';
 import { db, type Prisma } from '@valuerank/db';
-import { AuthenticationError, bucketDecisionDirection, createLogger } from '@valuerank/shared';
+import { AuthenticationError, createLogger } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import {
   aggregateWithinCellDisagreementRate,
   classifyStableSide,
   computeCanonicalCellScore,
+  computeMatch,
   computePairMarginSummary,
   computeScaleOrderPullLabel,
   computeValueOrderPullLabel,
@@ -440,10 +441,7 @@ function computeMajorityVote(values: number[], trimOutliers: boolean): number | 
 }
 
 function valuesMatch(left: number, right: number, directionOnly: boolean): boolean {
-  if (!directionOnly) {
-    return left === right;
-  }
-  return bucketDecisionDirection(String(left)) === bucketDecisionDirection(String(right));
+  return computeMatch(left, right, directionOnly) ?? false;
 }
 
 type ModelMetricsAccumulator = {

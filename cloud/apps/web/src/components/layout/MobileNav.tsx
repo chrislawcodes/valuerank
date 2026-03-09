@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
   { name: 'Compare', path: '/compare', icon: GitCompare },
   { name: 'Survey', path: '/survey', icon: ClipboardList },
   { name: 'Survey Results', path: '/survey-results', icon: BarChart2, isNested: true },
-  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ClipboardList },
+  { name: 'Assumptions', path: '/assumptions', icon: ClipboardList },
   { name: 'Analysis', path: '/assumptions/analysis', icon: ClipboardList, isNested: true },
   { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1', icon: ClipboardList, isNested: true },
   { name: 'Settings', path: '/settings', icon: Settings },
