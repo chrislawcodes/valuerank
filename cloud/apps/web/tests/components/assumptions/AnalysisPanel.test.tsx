@@ -98,6 +98,8 @@ describe('AnalysisPanel', () => {
     expect(await screen.findAllByText('Model A')).toHaveLength(3);
     expect(screen.getByText('toward first-listed')).toBeInTheDocument();
     expect(screen.getByText('Supporting Rows')).toBeInTheDocument();
+    expect(screen.getByText('Legacy Match')).toBeInTheDocument();
+    expect(screen.getByText('legacy non-match')).toBeInTheDocument();
     expect(screen.getByText('Jobs')).toBeInTheDocument();
   });
 });

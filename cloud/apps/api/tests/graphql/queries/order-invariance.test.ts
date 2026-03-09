@@ -52,6 +52,7 @@ const query = `
       summary {
         status
         matchRate
+        exactMatchRate
         comparablePairs
       }
       modelMetrics {
@@ -213,7 +214,8 @@ describe('assumptionsOrderInvariance query', () => {
     expect(response.body.errors).toBeUndefined();
     expect(response.body.data.assumptionsOrderInvariance.summary).toMatchObject({
       status: 'COMPUTED',
-      matchRate: 2 / 3,
+      matchRate: 1,
+      exactMatchRate: 0,
       comparablePairs: 3,
     });
     expect(response.body.data.assumptionsOrderInvariance.modelMetrics).toEqual([
@@ -240,7 +242,26 @@ describe('assumptionsOrderInvariance query', () => {
         },
       }),
     ]);
-    expect(response.body.data.assumptionsOrderInvariance.rows).toHaveLength(3);
+    expect(response.body.data.assumptionsOrderInvariance.rows).toEqual([
+      expect.objectContaining({
+        variantType: 'presentation_flipped',
+        majorityVoteBaseline: 4,
+        majorityVoteFlipped: 2,
+        isMatch: false,
+      }),
+      expect.objectContaining({
+        variantType: 'scale_flipped',
+        majorityVoteBaseline: 4,
+        majorityVoteFlipped: 4,
+        isMatch: true,
+      }),
+      expect.objectContaining({
+        variantType: 'fully_flipped',
+        majorityVoteBaseline: 4,
+        majorityVoteFlipped: 5,
+        isMatch: true,
+      }),
+    ]);
     expect(db.assumptionAnalysisSnapshot.create).toHaveBeenCalledTimes(1);
     expect(db.assumptionAnalysisSnapshot.updateMany).toHaveBeenCalledTimes(1);
   });

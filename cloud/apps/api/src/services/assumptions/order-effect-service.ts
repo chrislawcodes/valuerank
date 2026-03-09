@@ -645,8 +645,9 @@ function computeOrderInvarianceFromSelections(params: {
   let qualifyingPairs = 0;
   let missingPairs = 0;
   let comparablePairs = 0;
-  let directionMatchCount = 0;
-  let exactMatchCount = 0;
+  let legacyMatchEligibleCount = 0;
+  let legacyDirectionMatchCount = 0;
+  let legacyExactMatchCount = 0;
   const scorePivot = new Map<string, Record<string, number>>();
 
   for (const pair of params.relevantPairs) {
@@ -738,11 +739,14 @@ function computeOrderInvarianceFromSelections(params: {
       const directionMatch = computeMatch(baselineValue, flippedValue, true) ?? false;
       const exactMatch = computeMatch(baselineValue, flippedValue, false) ?? false;
       const isMatch = params.directionOnly ? directionMatch : exactMatch;
-      if (directionMatch) {
-        directionMatchCount += 1;
-      }
-      if (exactMatch) {
-        exactMatchCount += 1;
+      if (pair.variantType === 'fully_flipped') {
+        legacyMatchEligibleCount += 1;
+        if (directionMatch) {
+          legacyDirectionMatchCount += 1;
+        }
+        if (exactMatch) {
+          legacyExactMatchCount += 1;
+        }
       }
 
       const mismatchType: OrderInvarianceMismatchType = isMatch
@@ -863,10 +867,10 @@ function computeOrderInvarianceFromSelections(params: {
 
   const summary: OrderInvarianceSummary = {
     status: comparablePairs === 0 ? 'INSUFFICIENT_DATA' : 'COMPUTED',
-    matchRate: comparablePairs > 0
-      ? (params.directionOnly ? directionMatchCount : exactMatchCount) / comparablePairs
+    matchRate: legacyMatchEligibleCount > 0
+      ? (params.directionOnly ? legacyDirectionMatchCount : legacyExactMatchCount) / legacyMatchEligibleCount
       : null,
-    exactMatchRate: comparablePairs > 0 ? exactMatchCount / comparablePairs : null,
+    exactMatchRate: legacyMatchEligibleCount > 0 ? legacyExactMatchCount / legacyMatchEligibleCount : null,
     presentationEffectMAD,
     scaleEffectMAD,
     totalCandidatePairs: params.relevantPairs.length * params.effectiveModels.length,

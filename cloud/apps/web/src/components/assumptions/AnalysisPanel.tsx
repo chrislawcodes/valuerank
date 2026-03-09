@@ -196,7 +196,7 @@ export function AnalysisPanel() {
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Supporting Rows</h3>
               <p className="mt-1 text-xs text-gray-600">
-                `rows` remain available for drilldown compatibility. This table is display-only in the new page.
+                `rows` remain available for drilldown compatibility. `isMatch` here is the legacy row-level match flag, not a reversal signal.
               </p>
             </div>
             <div className="max-h-[28rem] overflow-auto">
@@ -210,7 +210,7 @@ export function AnalysisPanel() {
                     <th className="px-4 py-2 text-right font-medium text-gray-600">Baseline</th>
                     <th className="px-4 py-2 text-right font-medium text-gray-600">Flipped</th>
                     <th className="px-4 py-2 text-right font-medium text-gray-600">Distance</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">Match</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">Legacy Match</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -224,7 +224,7 @@ export function AnalysisPanel() {
                       <td className="px-4 py-2 text-right text-gray-700">{row.majorityVoteFlipped ?? '—'}</td>
                       <td className="px-4 py-2 text-right text-gray-700">{row.ordinalDistance ?? '—'}</td>
                       <td className="px-4 py-2 text-gray-700">
-                        {row.isMatch == null ? 'n/a' : row.isMatch ? 'match' : 'non-match'}
+                        {row.isMatch == null ? 'n/a' : row.isMatch ? 'legacy match' : 'legacy non-match'}
                       </td>
                     </tr>
                   ))}
