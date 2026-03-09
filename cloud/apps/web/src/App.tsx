@@ -98,7 +98,7 @@ function App() {
             />
             <Route
               path="/assumptions"
-              element={<Navigate to="/assumptions/analysis" replace />}
+              element={<Navigate to="/assumptions/analysis-v1" replace />}
             />
             <Route
               path="/assumptions/temp-zero"
@@ -130,7 +130,7 @@ function App() {
             />
             <Route
               path="/assumptions/order-effect"
-              element={<Navigate to="/assumptions/analysis" replace />}
+              element={<Navigate to="/assumptions/analysis-v1" replace />}
             />
             <Route
               path="/domains/analysis/value-detail"

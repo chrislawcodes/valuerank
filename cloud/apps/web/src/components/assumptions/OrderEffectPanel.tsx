@@ -10,7 +10,7 @@ import type { Transcript } from '../../api/operations/runs';
 import {
   LAUNCH_ORDER_INVARIANCE_MUTATION,
   ORDER_INVARIANCE_LAUNCH_STATUS_QUERY,
-  ORDER_INVARIANCE_QUERY,
+  ORDER_INVARIANCE_LEGACY_QUERY,
   ORDER_INVARIANCE_REVIEW_QUERY,
   ORDER_INVARIANCE_TRANSCRIPTS_QUERY,
   REVIEW_ORDER_INVARIANCE_PAIR_MUTATION,
@@ -18,7 +18,7 @@ import {
   type LaunchOrderInvarianceVariables,
   type OrderInvarianceLaunchStatusQueryResult,
   type OrderInvarianceLaunchStatusQueryVariables,
-  type OrderInvarianceQueryResult,
+  type OrderInvarianceLegacyQueryResult,
   type OrderInvarianceQueryVariables,
   type OrderInvarianceRow,
   type OrderInvarianceReviewVignette,
@@ -277,8 +277,8 @@ export function OrderEffectPanel() {
   const [trackedLaunchRunIds, setTrackedLaunchRunIds] = useState<string[]>([]);
   const [hasLoadedTrackedRuns, setHasLoadedTrackedRuns] = useState(false);
 
-  const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
-    query: ORDER_INVARIANCE_QUERY,
+  const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceLegacyQueryResult, OrderInvarianceQueryVariables>({
+    query: ORDER_INVARIANCE_LEGACY_QUERY,
     variables: {
       directionOnly,
       trimOutliers,
@@ -437,21 +437,6 @@ export function OrderEffectPanel() {
   }, [allRows, selectedModelIds]);
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
-  const modelLeaderboard = useMemo(() => {
-    const modelMetrics = result?.modelMetrics ?? [];
-    if (modelMetrics.length === 0) {
-      return [];
-    }
-
-    return modelMetrics
-      .filter((metric) => selectedModelIds.size === 0 || selectedModelIds.has(metric.modelId))
-      .map((metric) => ({
-        modelId: metric.modelId,
-        modelLabel: metric.modelLabel,
-        metric,
-      }))
-      .sort((left, right) => left.modelLabel.localeCompare(right.modelLabel));
-  }, [result?.modelMetrics, selectedModelIds]);
 
   async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
     setActiveReviewPairId(vignette.pairId);
@@ -930,39 +915,6 @@ export function OrderEffectPanel() {
                 </>
               )}
             </div>
-
-            {ENABLE_2X2_ORDER_EFFECT_UI && modelLeaderboard.length > 0 && (
-              <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match N</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match Rate</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Value Reversal</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale Reversal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {modelLeaderboard.map((ms) => (
-                      <tr key={ms.modelId} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{ms.metric.matchEligibleCount}</td>
-                        <td className="px-4 py-2 text-right text-gray-700">
-                          {ms.metric.matchRate != null ? `${(ms.metric.matchRate * 100).toFixed(0)}%` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-700">
-                          {formatPercent(ms.metric.valueOrderReversalRate)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-700">
-                          {formatPercent(ms.metric.scaleOrderReversalRate)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
 
             {modelOptions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">

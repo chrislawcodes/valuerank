@@ -99,6 +99,12 @@ export type OrderInvarianceAnalysisResult = {
   >[];
 };
 
+export type OrderInvarianceLegacyResult = {
+  generatedAt: string;
+  summary: OrderInvarianceSummary;
+  rows: OrderInvarianceRow[];
+};
+
 export type PairLevelMarginSummary = {
   mean: number | null;
   median: number | null;
@@ -192,6 +198,10 @@ export type OrderInvarianceQueryResult = {
 
 export type OrderInvarianceAnalysisQueryResult = {
   assumptionsOrderInvariance: OrderInvarianceAnalysisResult;
+};
+
+export type OrderInvarianceLegacyQueryResult = {
+  assumptionsOrderInvariance: OrderInvarianceLegacyResult;
 };
 
 export type OrderInvarianceReviewQueryResult = {
@@ -291,6 +301,44 @@ export const ORDER_INVARIANCE_QUERY = gql`
           median
           p25
           p75
+        }
+      }
+      rows {
+        modelId
+        modelLabel
+        vignetteId
+        vignetteTitle
+        conditionKey
+        majorityVoteBaseline
+        majorityVoteFlipped
+        mismatchType
+        ordinalDistance
+        isMatch
+        variantType
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_LEGACY_QUERY = gql`
+  query AssumptionsOrderInvarianceLegacy($directionOnly: Boolean, $trimOutliers: Boolean) {
+    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
+      generatedAt
+      summary {
+        status
+        matchRate
+        exactMatchRate
+        totalCandidatePairs
+        qualifyingPairs
+        missingPairs
+        comparablePairs
+        sensitiveModelCount
+        sensitiveVignetteCount
+        presentationEffectMAD
+        scaleEffectMAD
+        excludedPairs {
+          reason
+          count
         }
       }
       rows {
