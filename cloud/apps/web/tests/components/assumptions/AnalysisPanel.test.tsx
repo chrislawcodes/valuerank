@@ -88,4 +88,68 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('legacy non-match')).toBeInTheDocument();
     expect(screen.getByText('Jobs')).toBeInTheDocument();
   });
+
+  it('treats backend modelMetrics as authoritative even when rows disagree', async () => {
+    const contradictoryResult: OrderInvarianceAnalysisQueryResult = {
+      assumptionsOrderInvariance: {
+        generatedAt: '2026-03-09T08:00:00Z',
+        modelMetrics: [
+          {
+            modelId: 'model-a',
+            modelLabel: 'Model A',
+            matchRate: 0,
+            matchCount: 0,
+            matchEligibleCount: 1,
+            valueOrderReversalRate: 1,
+            valueOrderEligibleCount: 1,
+            valueOrderExcludedCount: 0,
+            valueOrderPull: 'toward second-listed',
+            scaleOrderReversalRate: 0,
+            scaleOrderEligibleCount: 1,
+            scaleOrderExcludedCount: 0,
+            scaleOrderPull: 'no clear pull',
+            withinCellDisagreementRate: 0,
+            pairLevelMarginSummary: {
+              mean: 1,
+              median: 1,
+              p25: 1,
+              p75: 1,
+            },
+          },
+        ],
+        rows: [
+          {
+            modelId: 'model-a',
+            modelLabel: 'Model A',
+            vignetteId: 'v1',
+            vignetteTitle: 'Jobs',
+            conditionKey: '4x2',
+            majorityVoteBaseline: 4,
+            majorityVoteFlipped: 4,
+            mismatchType: null,
+            ordinalDistance: 0,
+            isMatch: true,
+            variantType: 'presentation_flipped',
+          },
+        ],
+      },
+    };
+
+    const client = createMockClient({
+      data: contradictoryResult,
+      fetching: false,
+      error: null,
+    });
+
+    render(
+      <Provider value={client as never}>
+        <MemoryRouter>
+          <AnalysisPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText('toward second-listed')).toBeInTheDocument();
+    expect(screen.getByText('legacy match')).toBeInTheDocument();
+  });
 });

@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildOrderEffectCachePayload,
   buildOrderEffectSnapshotConfig,
+  DuplicateCurrentOrderEffectSnapshotError,
   computeOrderEffectConfigSignature,
   computeOrderEffectInputHash,
+  getCurrentOrderEffectSnapshot,
+  writeCurrentOrderEffectSnapshot,
 } from '../order-effect-cache.js';
 
 function buildPayload(overrides: Partial<Parameters<typeof buildOrderEffectCachePayload>[0]> = {}) {
@@ -95,5 +98,90 @@ describe('order-effect-cache helpers', () => {
     expect(computeOrderEffectConfigSignature(changed)).not.toBe(
       computeOrderEffectConfigSignature(config)
     );
+  });
+
+  it('queries CURRENT snapshots with the exact cache-hit predicate', async () => {
+    const findMany = vi.fn(async () => []);
+    const client = {
+      assumptionAnalysisSnapshot: {
+        findMany,
+      },
+    };
+
+    await getCurrentOrderEffectSnapshot(client as never, { inputHash: 'abc123' });
+
+    expect(client.assumptionAnalysisSnapshot.findMany).toHaveBeenCalledWith({
+      where: {
+        assumptionKey: 'order_invariance',
+        analysisType: 'reversal_metrics_v1',
+        inputHash: 'abc123',
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 2,
+    });
+  });
+
+  it('throws when duplicate CURRENT snapshots match one input hash', async () => {
+    const client = {
+      assumptionAnalysisSnapshot: {
+        findMany: vi.fn(async () => ([
+          { id: 'snapshot-1' },
+          { id: 'snapshot-2' },
+        ])),
+      },
+    };
+
+    await expect(
+      getCurrentOrderEffectSnapshot(client as never, { inputHash: 'dup-hash' })
+    ).rejects.toBeInstanceOf(DuplicateCurrentOrderEffectSnapshotError);
+  });
+
+  it('supersedes only CURRENT snapshots with the same config signature before creating a replacement', async () => {
+    const payload = buildPayload();
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'snapshot-new', ...data }));
+    const client = {
+      assumptionAnalysisSnapshot: {
+        findMany: vi.fn(async () => []),
+        updateMany,
+        create,
+      },
+    };
+
+    await writeCurrentOrderEffectSnapshot({
+      client: client as never,
+      payload,
+      output: { summary: {}, modelMetrics: [], rows: [] } as never,
+      allowReuseCurrent: false,
+    });
+
+    expect(client.assumptionAnalysisSnapshot.updateMany).toHaveBeenCalledWith({
+      where: {
+        assumptionKey: payload.assumptionKey,
+        analysisType: payload.analysisType,
+        configSignature: payload.configSignature,
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
+    expect(client.assumptionAnalysisSnapshot.create).toHaveBeenCalledWith({
+      data: {
+        assumptionKey: payload.assumptionKey,
+        analysisType: payload.analysisType,
+        inputHash: payload.inputHash,
+        codeVersion: payload.codeVersion,
+        configSignature: payload.configSignature,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: {}, modelMetrics: [], rows: [] },
+        status: 'CURRENT',
+      },
+    });
   });
 });

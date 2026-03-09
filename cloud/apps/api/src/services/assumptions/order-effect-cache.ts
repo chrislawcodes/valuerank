@@ -135,10 +135,11 @@ export async function writeCurrentOrderEffectSnapshot(params: {
   client: SnapshotClient;
   payload: OrderEffectCachePayload;
   output: Prisma.InputJsonValue;
+  allowReuseCurrent?: boolean;
 }) {
   const config = buildOrderEffectSnapshotConfig(params.payload);
   const current = await getCurrentOrderEffectSnapshot(params.client, params.payload);
-  if (current != null) {
+  if ((params.allowReuseCurrent ?? true) && current != null) {
     log.debug({
       snapshotId: current.id,
       inputHash: params.payload.inputHash,

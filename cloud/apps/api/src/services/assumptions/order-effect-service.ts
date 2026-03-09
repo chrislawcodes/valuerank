@@ -415,6 +415,7 @@ export async function getOrderInvarianceAnalysisResult(params: {
       selectionFingerprints: Array.from(selectionFingerprints),
     });
 
+    let shouldRepairUnreadableSnapshot = false;
     try {
       const cachedSnapshot = await getCurrentOrderEffectSnapshot(tx, cachePayload);
       if (cachedSnapshot != null) {
@@ -431,6 +432,7 @@ export async function getOrderInvarianceAnalysisResult(params: {
           inputHash: cachePayload.inputHash,
           snapshotId: cachedSnapshot.id,
         }, 'Order-invariance snapshot output was unreadable, recomputing');
+        shouldRepairUnreadableSnapshot = true;
       }
     } catch (error) {
       if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
@@ -453,6 +455,7 @@ export async function getOrderInvarianceAnalysisResult(params: {
         client: tx,
         payload: cachePayload,
         output: serializeOrderInvarianceSnapshotOutput(computedResult),
+        allowReuseCurrent: !shouldRepairUnreadableSnapshot,
       });
     } catch (error) {
       log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
