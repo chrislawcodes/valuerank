@@ -8,14 +8,18 @@ import {
   computeCanonicalCellScore,
   computeMADMetrics,
   computeMatch,
+  ORDER_EFFECT_SNAPSHOT_OUTPUT_SCHEMA_VERSION,
+  ORDER_EFFECT_VARIANT_METADATA,
   computePairMarginSummary,
   computeScaleOrderPullLabel,
   computeValueOrderPullLabel,
   computeWithinCellDisagreementRate,
   getConsideredTrials,
   getPairedConsideredTrials,
+  isOrderEffectVariantType,
   normalizeDecision,
   type OrderEffectComparisonRecord,
+  type OrderEffectVariantType,
   type PairLevelMarginSummary,
 } from './order-effect-analysis.js';
 import {
@@ -134,7 +138,7 @@ type PairScenario = {
 
 type PairRecord = {
   id?: string;
-  variantType: string | null;
+  variantType: OrderEffectVariantType | null;
   sourceScenario: PairScenario;
   variantScenario: PairScenario;
 };
@@ -742,7 +746,7 @@ function computeOrderInvarianceFromSelections(params: {
       const directionMatch = computeMatch(baselineValue, flippedValue, true) ?? false;
       const exactMatch = computeMatch(baselineValue, flippedValue, false) ?? false;
       const isMatch = params.directionOnly ? directionMatch : exactMatch;
-      if (pair.variantType === 'fully_flipped') {
+      if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'legacy_match') {
         legacyMatchEligibleCount += 1;
         if (directionMatch) {
           legacyDirectionMatchCount += 1;
@@ -776,7 +780,11 @@ function computeOrderInvarianceFromSelections(params: {
       });
 
       if (comparisonRecord != null) {
-        if (pair.variantType === 'fully_flipped' && comparisonRecord.matchesBaseline != null) {
+        if (
+          pair.variantType != null
+          && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'legacy_match'
+          && comparisonRecord.matchesBaseline != null
+        ) {
           metrics.matchEligibleCount += 1;
           if (comparisonRecord.matchesBaseline) {
             metrics.matchCount += 1;
@@ -796,7 +804,7 @@ function computeOrderInvarianceFromSelections(params: {
           );
         }
 
-        if (pair.variantType === 'presentation_flipped') {
+        if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'value_order') {
           if (comparisonRecord.reversed == null) {
             metrics.valueOrderExcludedCount += 1;
           } else {
@@ -816,7 +824,7 @@ function computeOrderInvarianceFromSelections(params: {
               metrics.limitingMargins.push(comparisonRecord.pairMargin.limiting);
             }
           }
-        } else if (pair.variantType === 'scale_flipped') {
+        } else if (pair.variantType != null && ORDER_EFFECT_VARIANT_METADATA[pair.variantType].metricFamily === 'scale_order') {
           if (comparisonRecord.reversed == null) {
             metrics.scaleOrderExcludedCount += 1;
           } else {
@@ -1065,7 +1073,7 @@ function buildComparisonRecord(params: {
     vignetteId: params.pair.sourceScenario.definitionId,
     vignetteTitle: params.vignetteTitle,
     conditionKey: params.conditionKey,
-    variantType: params.pair.variantType as 'presentation_flipped' | 'scale_flipped' | 'fully_flipped',
+    variantType: params.pair.variantType as OrderEffectVariantType,
     baselineRawDecisions,
     variantRawDecisions,
     baselineNormalizedDecisions,
@@ -1143,6 +1151,7 @@ function finalizeModelMetrics(accumulator: ModelMetricsAccumulator): OrderInvari
 
 function serializeOrderInvarianceSnapshotOutput(result: OrderInvarianceResult): Prisma.InputJsonValue {
   return {
+    schemaVersion: ORDER_EFFECT_SNAPSHOT_OUTPUT_SCHEMA_VERSION,
     summary: result.summary,
     modelMetrics: result.modelMetrics,
     rows: result.rows,
@@ -1158,12 +1167,20 @@ function deserializeOrderInvarianceSnapshotOutput(snapshot: {
   }
 
   const candidate = snapshot.output as {
+    schemaVersion?: unknown;
     summary?: OrderInvarianceSummary;
     modelMetrics?: OrderInvarianceModelMetrics[];
     rows?: OrderInvarianceRow[];
   };
 
-  if (candidate.summary == null || !Array.isArray(candidate.modelMetrics) || !Array.isArray(candidate.rows)) {
+  if (
+    candidate.schemaVersion !== ORDER_EFFECT_SNAPSHOT_OUTPUT_SCHEMA_VERSION
+    || !isOrderInvarianceSummary(candidate.summary)
+    || !Array.isArray(candidate.modelMetrics)
+    || !candidate.modelMetrics.every((entry) => isOrderInvarianceModelMetrics(entry))
+    || !Array.isArray(candidate.rows)
+    || !candidate.rows.every((entry) => isOrderInvarianceRow(entry))
+  ) {
     return null;
   }
 
@@ -1176,11 +1193,63 @@ function deserializeOrderInvarianceSnapshotOutput(snapshot: {
 }
 
 function bumpVariantExcludedCount(metrics: ModelMetricsAccumulator, variantType: string | null) {
-  if (variantType === 'presentation_flipped') {
+  if (!isOrderEffectVariantType(variantType)) {
+    return;
+  }
+
+  const metricFamily = ORDER_EFFECT_VARIANT_METADATA[variantType].metricFamily;
+  if (metricFamily === 'value_order') {
     metrics.valueOrderExcludedCount += 1;
-  } else if (variantType === 'scale_flipped') {
+  } else if (metricFamily === 'scale_order') {
     metrics.scaleOrderExcludedCount += 1;
   }
+}
+
+function isOrderInvarianceSummary(value: unknown): value is OrderInvarianceSummary {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.status === 'COMPUTED' || candidate.status === 'INSUFFICIENT_DATA')
+    && Array.isArray(candidate.excludedPairs)
+    && typeof candidate.totalCandidatePairs === 'number'
+    && typeof candidate.qualifyingPairs === 'number'
+    && typeof candidate.missingPairs === 'number'
+    && typeof candidate.comparablePairs === 'number'
+  );
+}
+
+function isOrderInvarianceModelMetrics(value: unknown): value is OrderInvarianceModelMetrics {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.modelId === 'string'
+    && typeof candidate.modelLabel === 'string'
+    && typeof candidate.matchCount === 'number'
+    && typeof candidate.matchEligibleCount === 'number'
+    && typeof candidate.valueOrderEligibleCount === 'number'
+    && typeof candidate.scaleOrderEligibleCount === 'number'
+  );
+}
+
+function isOrderInvarianceRow(value: unknown): value is OrderInvarianceRow {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.modelId === 'string'
+    && typeof candidate.modelLabel === 'string'
+    && typeof candidate.vignetteId === 'string'
+    && typeof candidate.vignetteTitle === 'string'
+    && typeof candidate.conditionKey === 'string'
+  );
 }
 
 function fingerprintPick(key: string, pick: PickResult): string {

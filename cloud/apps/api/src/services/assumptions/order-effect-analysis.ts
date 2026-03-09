@@ -1,13 +1,50 @@
 export const ORDER_INVARIANCE_ASSUMPTION_KEY = 'order_invariance';
 export const REVERSAL_METRICS_ANALYSIS_TYPE = 'reversal_metrics_v1';
 export const REVERSAL_METRICS_CODE_VERSION = 'reversal_metrics_v1';
+export const ORDER_EFFECT_SNAPSHOT_OUTPUT_SCHEMA_VERSION = 1;
 export const MIDPOINT_SCORE = 3;
 export const MIN_PULL_NON_ZERO_PAIRS = 3;
 export const MIN_PULL_DIRECTION_SHARE = 2 / 3;
 
+export const ORDER_EFFECT_VARIANT_TYPES = [
+  'presentation_flipped',
+  'scale_flipped',
+  'fully_flipped',
+] as const;
+
+export type OrderEffectVariantType = typeof ORDER_EFFECT_VARIANT_TYPES[number];
+
 export type OrderEffectStableSide = 'lean_low' | 'lean_high' | 'unstable';
 export type ValueOrderPullLabel = 'toward first-listed' | 'toward second-listed' | 'no clear pull';
 export type ScaleOrderPullLabel = 'toward higher numbers' | 'toward lower numbers' | 'no clear pull';
+
+export type OrderEffectVariantMetricFamily = 'legacy_match' | 'value_order' | 'scale_order';
+
+export const ORDER_EFFECT_VARIANT_METADATA: Record<OrderEffectVariantType, {
+  label: string;
+  flipsNarrativeOrder: boolean;
+  flipsScaleOrder: boolean;
+  metricFamily: OrderEffectVariantMetricFamily;
+}> = {
+  presentation_flipped: {
+    label: 'Narrative Order Flipped',
+    flipsNarrativeOrder: true,
+    flipsScaleOrder: false,
+    metricFamily: 'value_order',
+  },
+  scale_flipped: {
+    label: 'Scale Order Flipped',
+    flipsNarrativeOrder: false,
+    flipsScaleOrder: true,
+    metricFamily: 'scale_order',
+  },
+  fully_flipped: {
+    label: 'Narrative + Scale Flipped',
+    flipsNarrativeOrder: true,
+    flipsScaleOrder: true,
+    metricFamily: 'legacy_match',
+  },
+};
 
 export type PairLevelMarginSummary = {
   mean: number | null;
@@ -22,7 +59,7 @@ export type OrderEffectComparisonRecord = {
   vignetteId: string;
   vignetteTitle: string;
   conditionKey: string;
-  variantType: 'presentation_flipped' | 'scale_flipped' | 'fully_flipped';
+  variantType: OrderEffectVariantType;
   baselineRawDecisions: number[];
   variantRawDecisions: number[];
   baselineNormalizedDecisions: number[];
@@ -50,8 +87,12 @@ export type OrderEffectComparisonRecord = {
   };
 };
 
+export function isOrderEffectVariantType(value: string | null | undefined): value is OrderEffectVariantType {
+  return value != null && ORDER_EFFECT_VARIANT_TYPES.includes(value as OrderEffectVariantType);
+}
+
 export function normalizeDecision(decision: number, variantType: string | null): number {
-  return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
+  return isOrderEffectVariantType(variantType) && ORDER_EFFECT_VARIANT_METADATA[variantType].flipsScaleOrder
     ? 6 - decision
     : decision;
 }

@@ -3,6 +3,7 @@ import { db } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 import {
+  ORDER_EFFECT_VARIANT_TYPES,
   type PairLevelMarginSummary,
 } from '../../services/assumptions/order-effect-analysis.js';
 import {
@@ -560,7 +561,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
           definitionId: true,
         },
       });
-      const expectedPairCount = expectedSourceScenarios.length * 3;
+      const expectedPairCount = expectedSourceScenarios.length * ORDER_EFFECT_VARIANT_TYPES.length;
       const expectedDefinitionIds = new Set(expectedSourceScenarios.map((scenario) => scenario.definitionId));
 
       const groupedPairs = new Map<string, PairRecord[]>();
@@ -622,7 +623,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
       const rejectedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'REJECTED').length;
       const reviewedVignettes = vignettes.filter((vignette) => vignette.reviewedAt != null).length;
       const totalVignettes = vignettes.length;
-      const expectedGroupCount = lockedById.size * 3;
+      const expectedGroupCount = lockedById.size * ORDER_EFFECT_VARIANT_TYPES.length;
       const hasCompleteGeneratedSet = pairRows.length === expectedPairCount
         && totalVignettes === expectedGroupCount
         && expectedDefinitionIds.size === lockedById.size

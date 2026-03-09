@@ -286,6 +286,7 @@ describe('assumptionsOrderInvariance query', () => {
       id: 'snapshot-cached',
       createdAt: new Date('2026-03-09T08:00:00Z'),
       output: {
+        schemaVersion: 1,
         summary: {
           status: 'COMPUTED',
           matchRate: null,

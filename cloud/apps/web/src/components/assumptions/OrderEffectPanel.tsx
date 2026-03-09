@@ -33,6 +33,23 @@ import {
 const ENABLE_2X2_ORDER_EFFECT_UI = true;
 const ORDER_INVARIANCE_LAUNCH_STORAGE_KEY = 'valuerank:order-invariance-launch-run-ids';
 const ORDER_INVARIANCE_LAUNCH_POLL_MS = 4000;
+const VARIANT_UI_METADATA = {
+  presentation_flipped: {
+    label: 'Narrative Order Flipped',
+    narrativeOrder: 'flipped',
+    scaleOrder: 'baseline',
+  },
+  scale_flipped: {
+    label: 'Scale Order Flipped',
+    narrativeOrder: 'baseline',
+    scaleOrder: 'flipped',
+  },
+  fully_flipped: {
+    label: 'Narrative + Scale Flipped',
+    narrativeOrder: 'flipped',
+    scaleOrder: 'flipped',
+  },
+} as const;
 
 function formatPercent(value: number | null): string {
   if (value == null) {
@@ -54,23 +71,8 @@ function getVariantAxes(variantType: string | null | undefined): {
   narrativeOrder: 'baseline' | 'flipped';
   scaleOrder: 'baseline' | 'flipped';
 } {
-  if (variantType === 'fully_flipped') {
-    return {
-      narrativeOrder: 'flipped',
-      scaleOrder: 'flipped',
-    };
-  }
-  if (variantType === 'scale_flipped') {
-    return {
-      narrativeOrder: 'baseline',
-      scaleOrder: 'flipped',
-    };
-  }
-  if (variantType === 'presentation_flipped') {
-    return {
-      narrativeOrder: 'flipped',
-      scaleOrder: 'baseline',
-    };
+  if (variantType != null && variantType in VARIANT_UI_METADATA) {
+    return VARIANT_UI_METADATA[variantType as keyof typeof VARIANT_UI_METADATA];
   }
   return {
     narrativeOrder: 'baseline',
@@ -86,9 +88,9 @@ function getAxisBadgeClass(state: 'baseline' | 'flipped'): string {
 }
 
 function getVariantSideLabel(variantType: string | null | undefined): string {
-  if (variantType === 'scale_flipped') return 'Scale Order Flipped';
-  if (variantType === 'presentation_flipped') return 'Narrative Order Flipped';
-  if (variantType === 'fully_flipped') return 'Narrative + Scale Flipped';
+  if (variantType != null && variantType in VARIANT_UI_METADATA) {
+    return VARIANT_UI_METADATA[variantType as keyof typeof VARIANT_UI_METADATA].label;
+  }
   return 'Flipped';
 }
 
