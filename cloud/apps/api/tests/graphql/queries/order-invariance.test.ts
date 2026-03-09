@@ -20,6 +20,8 @@ vi.mock('../../../src/queue/boss.js', () => ({
 
 vi.mock('@valuerank/db', () => ({
   db: {
+    $transaction: vi.fn(),
+    $queryRawUnsafe: vi.fn(),
     assumptionScenarioPair: {
       findMany: vi.fn(),
     },
@@ -135,6 +137,10 @@ function buildTranscript(args: {
 describe('assumptionsOrderInvariance query', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(db.$queryRawUnsafe).mockResolvedValue([] as never);
+    vi.mocked(db.$transaction).mockImplementation(async (callback: (tx: typeof db) => unknown) => (
+      callback(db as typeof db)
+    ) as Promise<never>);
     vi.mocked(db.llmModel.findMany).mockResolvedValue([
       { modelId: 'model-a', displayName: 'Model A' },
     ] as never);

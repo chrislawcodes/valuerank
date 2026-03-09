@@ -30,6 +30,8 @@ Related docs:
   - recompute deterministic hash on query
   - reuse matching CURRENT snapshot
   - otherwise recompute and supersede old CURRENT snapshot
+- Cache hash is based on the selected transcript state that actually drives the analysis, not just transcript ids.
+- Snapshot writes use a per-config-signature transactional lock so one CURRENT row survives per config signature.
 - Cache hit requires exact match on:
   - `assumptionKey`
   - `analysisType`
@@ -90,6 +92,7 @@ Do not rename these casually once implementation starts:
 
 - Reversal metrics are always directional. `directionOnly` affects `matchRate`, not reversal-rate semantics.
 - Biggest architectural risk: synchronous cache freshness checking may become expensive before the metric math does.
+- The authoritative analytics pipeline now belongs in the assumption service layer, not the GraphQL resolver.
 - Biggest implementation bug risk: mixing normalized and raw score paths.
   - value-order metrics use normalized baseline-oriented scores
   - scale-order pull uses raw visible-number scores from the same `consideredTrials` indices

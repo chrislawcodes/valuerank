@@ -534,7 +534,7 @@ model AssumptionAnalysisSnapshot {
 
 Use a dedicated `AssumptionAnalysisStatus` enum for this table. Do not reuse `AnalysisStatus`.
 Use `deletedAt` only as a conventional soft-delete column; this feature does not implement snapshot deletion. Cache invalidation uses `SUPERSEDED`, not deletion.
-`config` stores the cache key payload object excluding `candidateTranscriptIds` and `codeVersion`, so config-signature supersede queries can run without decoding `inputHash`.
+`config` stores the cache key payload object excluding transcript-selection fingerprints and `codeVersion`, so config-signature supersede queries can run without decoding `inputHash`.
 
 ### 7.3 Cache Key
 
@@ -553,7 +553,7 @@ Use this payload shape before hashing:
   lockedVignetteIds: [...sorted],
   approvedPairIds: [...sorted],
   snapshotModelIds: [...sorted],
-  candidateTranscriptIds: [...sorted]
+  selectionFingerprints: [...sorted]
 }
 ```
 
@@ -565,13 +565,13 @@ const REVERSAL_METRICS_CODE_VERSION = 'reversal_metrics_v1';
 
 Where:
 
-- `candidateTranscriptIds` means every transcript id that survives the same initial filtering pass used by the analysis:
-  - relevant scenario ids only
-  - temp=0 only
-  - valid decision codes only
-  - correct assumption/run-tag filtering only
+- `selectionFingerprints` means the stable per-scenario-per-model selection state that actually drives the analysis result:
+  - selected transcript ids when a stable selection exists
+  - selected transcript decision / model-version / created-at state, so in-place transcript edits invalidate the snapshot
+  - explicit `insufficient` / `fragmented` markers when no stable selection exists
 - `snapshotModelIds` means all models with relevant data for this assumption snapshot, not the current UI filter state
 - `approvedPairIds` means the exact approved `AssumptionScenarioPair` ids included in the computation
+- `inputHash` should therefore be insensitive to older irrelevant transcript churn that does not change the selected set
 
 Hash rule:
 
@@ -615,6 +615,7 @@ Config signature means the cache dimensions other than transcript membership and
 
 Do not supersede CURRENT snapshots for a different config signature. Multiple CURRENT snapshots for different config signatures are valid.
 Do not copy the existing run-based `cache.ts` supersede pattern that updates all CURRENT rows for a broader key. This feature must supersede only rows whose config signature matches exactly.
+Use a transactional lock keyed by config signature when writing snapshots so concurrent recomputes do not leave zero CURRENT rows or nondeterministic duplicates.
 
 This should mirror the existing analysis cache pattern in [cache.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/cache.ts).
 
@@ -639,6 +640,8 @@ Responsibilities:
 - compute metrics
 - read/write cached assumption-analysis snapshots
 - expose cache hit / miss / recompute logging
+
+The GraphQL resolver should delegate to this service for the authoritative analytics pipeline rather than re-implementing transcript selection and aggregation inline.
 
 Error-handling rule:
 

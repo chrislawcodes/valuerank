@@ -12,6 +12,8 @@ const log = createLogger('assumptions:order-effect-cache');
 export type OrderEffectCachePayload = {
   assumptionKey: typeof ORDER_INVARIANCE_ASSUMPTION_KEY;
   analysisType: typeof REVERSAL_METRICS_ANALYSIS_TYPE;
+  inputHash: string;
+  configSignature: string;
   codeVersion: string;
   trimOutliers: boolean;
   directionOnly: boolean;
@@ -19,10 +21,10 @@ export type OrderEffectCachePayload = {
   lockedVignetteIds: string[];
   approvedPairIds: string[];
   snapshotModelIds: string[];
-  candidateTranscriptIds: string[];
+  selectionFingerprints: string[];
 };
 
-export type OrderEffectSnapshotConfig = Omit<OrderEffectCachePayload, 'candidateTranscriptIds' | 'codeVersion'>;
+export type OrderEffectSnapshotConfig = Omit<OrderEffectCachePayload, 'inputHash' | 'configSignature' | 'selectionFingerprints' | 'codeVersion'>;
 
 export type BuildOrderEffectCachePayloadInput = {
   codeVersion?: string;
@@ -32,23 +34,37 @@ export type BuildOrderEffectCachePayloadInput = {
   lockedVignetteIds: string[];
   approvedPairIds: string[];
   snapshotModelIds: string[];
-  candidateTranscriptIds: string[];
+  selectionFingerprints: string[];
 };
 
 export function buildOrderEffectCachePayload(
   input: BuildOrderEffectCachePayloadInput
 ): OrderEffectCachePayload {
-  return {
+  const config = {
     assumptionKey: ORDER_INVARIANCE_ASSUMPTION_KEY,
     analysisType: REVERSAL_METRICS_ANALYSIS_TYPE,
-    codeVersion: input.codeVersion ?? REVERSAL_METRICS_CODE_VERSION,
     trimOutliers: input.trimOutliers,
     directionOnly: input.directionOnly,
     requiredTrialCount: input.requiredTrialCount,
     lockedVignetteIds: sortStrings(input.lockedVignetteIds),
     approvedPairIds: sortStrings(input.approvedPairIds),
     snapshotModelIds: sortStrings(input.snapshotModelIds),
-    candidateTranscriptIds: sortStrings(input.candidateTranscriptIds),
+  } satisfies OrderEffectSnapshotConfig;
+  const codeVersion = input.codeVersion ?? REVERSAL_METRICS_CODE_VERSION;
+  const selectionFingerprints = sortStrings(input.selectionFingerprints);
+  const inputHash = computeHash({
+    ...config,
+    codeVersion,
+    selectionFingerprints,
+  }).slice(0, 16);
+  const configSignature = computeOrderEffectConfigSignature(config);
+
+  return {
+    ...config,
+    inputHash,
+    configSignature,
+    codeVersion,
+    selectionFingerprints,
   };
 }
 
@@ -66,23 +82,19 @@ export function buildOrderEffectSnapshotConfig(payload: OrderEffectCachePayload)
 }
 
 export function computeOrderEffectInputHash(payload: OrderEffectCachePayload): string {
-  return crypto
-    .createHash('sha256')
-    .update(stableStringify(payload))
-    .digest('hex')
-    .slice(0, 16);
+  return payload.inputHash;
 }
 
 export function computeOrderEffectConfigSignature(config: OrderEffectSnapshotConfig): string {
-  return stableStringify(config);
+  return computeHash(config);
 }
 
-export async function getCurrentOrderEffectSnapshot(inputHash: string) {
+export async function getCurrentOrderEffectSnapshot(payload: Pick<OrderEffectCachePayload, 'inputHash'>) {
   const snapshot = await db.assumptionAnalysisSnapshot.findFirst({
     where: {
       assumptionKey: ORDER_INVARIANCE_ASSUMPTION_KEY,
       analysisType: REVERSAL_METRICS_ANALYSIS_TYPE,
-      inputHash,
+      inputHash: payload.inputHash,
       status: 'CURRENT',
       deletedAt: null,
     },
@@ -92,9 +104,9 @@ export async function getCurrentOrderEffectSnapshot(inputHash: string) {
   });
 
   if (snapshot != null) {
-    log.debug({ snapshotId: snapshot.id, inputHash }, 'Order-effect cache hit');
+    log.debug({ snapshotId: snapshot.id, inputHash: payload.inputHash }, 'Order-effect cache hit');
   } else {
-    log.debug({ inputHash }, 'Order-effect cache miss');
+    log.debug({ inputHash: payload.inputHash }, 'Order-effect cache miss');
   }
 
   return snapshot;
@@ -105,41 +117,77 @@ export async function writeCurrentOrderEffectSnapshot(params: {
   output: Prisma.InputJsonValue;
 }) {
   const config = buildOrderEffectSnapshotConfig(params.payload);
-  const inputHash = computeOrderEffectInputHash(params.payload);
+  const lockKey = `${params.payload.assumptionKey}:${params.payload.analysisType}:${params.payload.configSignature}`;
 
-  const created = await db.assumptionAnalysisSnapshot.create({
-    data: {
-      assumptionKey: params.payload.assumptionKey,
-      analysisType: params.payload.analysisType,
-      inputHash,
-      codeVersion: params.payload.codeVersion,
-      config,
-      output: params.output,
-      status: 'CURRENT',
-    },
-  });
+  const persisted = await db.$transaction(async (tx) => {
+    await tx.$queryRawUnsafe(
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      lockKey
+    );
 
-  const superseded = await db.assumptionAnalysisSnapshot.updateMany({
-    where: {
-      id: { not: created.id },
-      assumptionKey: params.payload.assumptionKey,
-      analysisType: params.payload.analysisType,
-      status: 'CURRENT',
-      deletedAt: null,
-      config: { equals: config as Prisma.InputJsonValue },
-    },
-    data: {
-      status: 'SUPERSEDED',
-    },
+    const current = await tx.assumptionAnalysisSnapshot.findFirst({
+      where: {
+        assumptionKey: params.payload.assumptionKey,
+        analysisType: params.payload.analysisType,
+        inputHash: params.payload.inputHash,
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (current != null) {
+      return {
+        snapshot: current,
+        supersededCount: 0,
+        reusedExisting: true,
+      };
+    }
+
+    const superseded = await tx.assumptionAnalysisSnapshot.updateMany({
+      where: {
+        assumptionKey: params.payload.assumptionKey,
+        analysisType: params.payload.analysisType,
+        configSignature: params.payload.configSignature,
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
+
+    const created = await tx.assumptionAnalysisSnapshot.create({
+      data: {
+        assumptionKey: params.payload.assumptionKey,
+        analysisType: params.payload.analysisType,
+        inputHash: params.payload.inputHash,
+        codeVersion: params.payload.codeVersion,
+        configSignature: params.payload.configSignature,
+        config,
+        output: params.output,
+        status: 'CURRENT',
+      },
+    });
+
+    return {
+      snapshot: created,
+      supersededCount: superseded.count,
+      reusedExisting: false,
+    };
   });
 
   log.debug({
-    snapshotId: created.id,
-    inputHash,
-    supersededCount: superseded.count,
-  }, 'Persisted order-effect snapshot');
+    snapshotId: persisted.snapshot.id,
+    inputHash: params.payload.inputHash,
+    configSignature: params.payload.configSignature,
+    supersededCount: persisted.supersededCount,
+    reusedExisting: persisted.reusedExisting,
+  }, persisted.reusedExisting ? 'Reused existing order-effect snapshot during write' : 'Persisted order-effect snapshot');
 
-  return created;
+  return persisted.snapshot;
 }
 
 function sortStrings(values: string[]): string[] {
@@ -159,4 +207,11 @@ function stableStringify(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+function computeHash(value: unknown): string {
+  return crypto
+    .createHash('sha256')
+    .update(stableStringify(value))
+    .digest('hex');
 }

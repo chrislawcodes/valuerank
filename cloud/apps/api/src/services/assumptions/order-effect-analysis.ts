@@ -50,6 +50,12 @@ export type OrderEffectComparisonRecord = {
   };
 };
 
+export function normalizeDecision(decision: number, variantType: string | null): number {
+  return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
+    ? 6 - decision
+    : decision;
+}
+
 export function getConsideredTrials(values: number[], trimOutliers: boolean): number[] {
   const sorted = [...values].sort((left, right) => left - right);
   if (!trimOutliers || sorted.length < 3) {
@@ -184,6 +190,43 @@ export function computePairMarginSummary(limitingMargins: Array<number | null>):
     p25: percentileFromSorted(present, 0.25),
     p75: percentileFromSorted(present, 0.75),
   };
+}
+
+export function computeMADMetrics(scorePivot: Map<string, Record<string, number>>): {
+  presentationEffectMAD: number | null;
+  scaleEffectMAD: number | null;
+} {
+  let pMADSum = 0, pMADCount = 0, sMADSum = 0, sMADCount = 0;
+  for (const scores of scorePivot.values()) {
+    if (scores['baseline'] != null && scores['presentation_flipped'] != null) {
+      pMADSum += Math.abs(scores['baseline'] - scores['presentation_flipped']);
+      pMADCount += 1;
+    }
+    if (scores['baseline'] != null && scores['scale_flipped'] != null) {
+      sMADSum += Math.abs(scores['baseline'] - scores['scale_flipped']);
+      sMADCount += 1;
+    }
+    if (scores['scale_flipped'] != null && scores['fully_flipped'] != null) {
+      pMADSum += Math.abs(scores['scale_flipped'] - scores['fully_flipped']);
+      pMADCount += 1;
+    }
+    if (scores['presentation_flipped'] != null && scores['fully_flipped'] != null) {
+      sMADSum += Math.abs(scores['presentation_flipped'] - scores['fully_flipped']);
+      sMADCount += 1;
+    }
+  }
+
+  return {
+    presentationEffectMAD: pMADCount > 0 ? pMADSum / pMADCount : null,
+    scaleEffectMAD: sMADCount > 0 ? sMADSum / sMADCount : null,
+  };
+}
+
+export function getScaleEffectStatus(deltaS: number | null): 'NORMAL' | 'WARNING' | 'SEVERE' | 'UNKNOWN' {
+  if (deltaS == null) return 'UNKNOWN';
+  if (deltaS > 1.00) return 'SEVERE';
+  if (deltaS > 0.50) return 'WARNING';
+  return 'NORMAL';
 }
 
 export function computeValueOrderPullLabel(pairDrifts: number[]): ValueOrderPullLabel {

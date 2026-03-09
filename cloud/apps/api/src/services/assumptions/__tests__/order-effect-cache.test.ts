@@ -14,7 +14,7 @@ function buildPayload(overrides: Partial<Parameters<typeof buildOrderEffectCache
     lockedVignetteIds: ['v2', 'v1'],
     approvedPairIds: ['p2', 'p1'],
     snapshotModelIds: ['m2', 'm1'],
-    candidateTranscriptIds: ['t2', 't1'],
+    selectionFingerprints: ['t2:state', 't1:state'],
     ...overrides,
   });
 }
@@ -32,16 +32,25 @@ describe('order-effect-cache helpers', () => {
       lockedVignetteIds: ['v1', 'v2'],
       approvedPairIds: ['p1', 'p2'],
       snapshotModelIds: ['m1', 'm2'],
-      candidateTranscriptIds: ['t1', 't2'],
+      selectionFingerprints: ['t1:state', 't2:state'],
     }));
 
     expect(left).toBe(right);
   });
 
-  it('changes the hash when one transcript id changes', () => {
+  it('changes the hash when one selected transcript fingerprint changes', () => {
     const baseline = computeOrderEffectInputHash(buildPayload());
     const changed = computeOrderEffectInputHash(buildPayload({
-      candidateTranscriptIds: ['t1', 't3'],
+      selectionFingerprints: ['t1:state', 't3:changed'],
+    }));
+
+    expect(changed).not.toBe(baseline);
+  });
+
+  it('changes the hash when the config-significant transcript state changes in place', () => {
+    const baseline = computeOrderEffectInputHash(buildPayload());
+    const changed = computeOrderEffectInputHash(buildPayload({
+      selectionFingerprints: ['t1:decision-4', 't2:state'],
     }));
 
     expect(changed).not.toBe(baseline);
