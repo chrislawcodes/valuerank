@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
-import { ORDER_INVARIANCE_QUERY, type OrderInvarianceModelMetrics, type OrderInvarianceQueryResult, type OrderInvarianceQueryVariables } from '../../api/operations/order-invariance';
+import {
+  ORDER_INVARIANCE_ANALYSIS_QUERY,
+  type OrderInvarianceAnalysisQueryResult,
+  type OrderInvarianceModelMetrics,
+  type OrderInvarianceQueryVariables,
+} from '../../api/operations/order-invariance';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { Loading } from '../ui/Loading';
@@ -25,8 +30,8 @@ export function AnalysisPanel() {
   const [trimOutliers, setTrimOutliers] = useState(true);
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
-  const [{ data, fetching, error }] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
-    query: ORDER_INVARIANCE_QUERY,
+  const [{ data, fetching, error }] = useQuery<OrderInvarianceAnalysisQueryResult, OrderInvarianceQueryVariables>({
+    query: ORDER_INVARIANCE_ANALYSIS_QUERY,
     variables: {
       directionOnly,
       trimOutliers,

@@ -49,12 +49,6 @@ function formatMAD(value: number | null | undefined): string {
 function formatProgressCount(value: number): string {
   return value.toLocaleString();
 }
-function getScaleEffectColor(value: number | null | undefined): string {
-  if (value == null) return 'text-gray-900';
-  if (value > 1.00) return 'text-red-600 font-bold';
-  if (value > 0.50) return 'text-amber-600 font-semibold';
-  return 'text-green-700';
-}
 
 function getVariantAxes(variantType: string | null | undefined): {
   narrativeOrder: 'baseline' | 'flipped';
@@ -928,14 +922,10 @@ export function OrderEffectPanel() {
                     <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
                       Scale Effect (Δ_S)
                     </div>
-                    <div className={`mt-1 text-lg font-semibold ${getScaleEffectColor(result.summary.scaleEffectMAD)}`}>
+                    <div className="mt-1 text-lg font-semibold text-gray-900">
                       {formatMAD(result.summary.scaleEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">
-                      {(result.summary.scaleEffectMAD ?? 0) > 1.0 ? '⚠ Severe anchoring' :
-                       (result.summary.scaleEffectMAD ?? 0) > 0.5 ? '⚠ Possible anchoring' :
-                       'Mean Abs Diff — scale bias'}
-                    </div>
+                    <div className="mt-0.5 text-xs text-gray-400">Mean Abs Diff — scale bias</div>
                   </div>
                 </>
               )}

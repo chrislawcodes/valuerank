@@ -4,9 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { Provider } from 'urql';
 import { delay, fromValue, makeSubject, pipe } from 'wonka';
 import { AnalysisPanel } from '../../../src/components/assumptions/AnalysisPanel';
-import type { OrderInvarianceQueryResult } from '../../../src/api/operations/order-invariance';
+import type { OrderInvarianceAnalysisQueryResult } from '../../../src/api/operations/order-invariance';
 
-function createMockClient(result: { data?: OrderInvarianceQueryResult; fetching: boolean; error?: { message: string } | null }) {
+function createMockClient(result: { data?: OrderInvarianceAnalysisQueryResult; fetching: boolean; error?: { message: string } | null }) {
   return {
     executeQuery: vi.fn(() => pipe(fromValue(result as never), delay(0))),
     executeMutation: vi.fn(() => makeSubject<never>().source),
@@ -14,23 +14,9 @@ function createMockClient(result: { data?: OrderInvarianceQueryResult; fetching:
   };
 }
 
-const mockResult: OrderInvarianceQueryResult = {
+const mockResult: OrderInvarianceAnalysisQueryResult = {
   assumptionsOrderInvariance: {
     generatedAt: '2026-03-09T08:00:00Z',
-    summary: {
-      status: 'COMPUTED',
-      matchRate: 1,
-      exactMatchRate: 0,
-      totalCandidatePairs: 3,
-      qualifyingPairs: 3,
-      missingPairs: 0,
-      comparablePairs: 3,
-      sensitiveModelCount: 1,
-      sensitiveVignetteCount: 1,
-      presentationEffectMAD: 2,
-      scaleEffectMAD: 0,
-      excludedPairs: [],
-    },
     modelMetrics: [
       {
         modelId: 'model-a',

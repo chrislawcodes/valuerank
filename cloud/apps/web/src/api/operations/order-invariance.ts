@@ -81,6 +81,24 @@ export type OrderInvarianceResult = {
   rows: OrderInvarianceRow[];
 };
 
+export type OrderInvarianceAnalysisResult = {
+  generatedAt: string;
+  modelMetrics: OrderInvarianceModelMetrics[];
+  rows: Pick<
+    OrderInvarianceRow,
+    | 'modelId'
+    | 'modelLabel'
+    | 'vignetteId'
+    | 'vignetteTitle'
+    | 'conditionKey'
+    | 'variantType'
+    | 'majorityVoteBaseline'
+    | 'majorityVoteFlipped'
+    | 'ordinalDistance'
+    | 'isMatch'
+  >[];
+};
+
 export type PairLevelMarginSummary = {
   mean: number | null;
   median: number | null;
@@ -170,6 +188,10 @@ export type OrderInvarianceLaunchStatus = {
 
 export type OrderInvarianceQueryResult = {
   assumptionsOrderInvariance: OrderInvarianceResult;
+};
+
+export type OrderInvarianceAnalysisQueryResult = {
+  assumptionsOrderInvariance: OrderInvarianceAnalysisResult;
 };
 
 export type OrderInvarianceReviewQueryResult = {
@@ -280,6 +302,48 @@ export const ORDER_INVARIANCE_QUERY = gql`
         majorityVoteBaseline
         majorityVoteFlipped
         mismatchType
+        ordinalDistance
+        isMatch
+        variantType
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_ANALYSIS_QUERY = gql`
+  query AssumptionsOrderInvarianceAnalysis($directionOnly: Boolean, $trimOutliers: Boolean) {
+    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
+      generatedAt
+      modelMetrics {
+        modelId
+        modelLabel
+        matchRate
+        matchCount
+        matchEligibleCount
+        valueOrderReversalRate
+        valueOrderEligibleCount
+        valueOrderExcludedCount
+        valueOrderPull
+        scaleOrderReversalRate
+        scaleOrderEligibleCount
+        scaleOrderExcludedCount
+        scaleOrderPull
+        withinCellDisagreementRate
+        pairLevelMarginSummary {
+          mean
+          median
+          p25
+          p75
+        }
+      }
+      rows {
+        modelId
+        modelLabel
+        vignetteId
+        vignetteTitle
+        conditionKey
+        majorityVoteBaseline
+        majorityVoteFlipped
         ordinalDistance
         isMatch
         variantType
