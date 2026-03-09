@@ -13,6 +13,7 @@ import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
 import { DomainAnalysis } from './pages/DomainAnalysis';
 import { DomainCoverage } from './pages/DomainCoverage';
 import { TempZeroEffectAssumptions } from './pages/TempZeroEffectAssumptions';
+import { AnalysisAssumptions } from './pages/AnalysisAssumptions';
 import { OrderEffectAssumptions } from './pages/OrderEffectAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
@@ -97,7 +98,7 @@ function App() {
             />
             <Route
               path="/assumptions"
-              element={<Navigate to="/assumptions/temp-zero-effect" replace />}
+              element={<Navigate to="/assumptions/analysis" replace />}
             />
             <Route
               path="/assumptions/temp-zero"
@@ -112,12 +113,24 @@ function App() {
               }
             />
             <Route
-              path="/assumptions/order-effect"
+              path="/assumptions/analysis"
+              element={
+                <ProtectedLayout fullWidth>
+                  <AnalysisAssumptions />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/assumptions/analysis-v1"
               element={
                 <ProtectedLayout fullWidth>
                   <OrderEffectAssumptions />
                 </ProtectedLayout>
               }
+            />
+            <Route
+              path="/assumptions/order-effect"
+              element={<Navigate to="/assumptions/analysis" replace />}
             />
             <Route
               path="/domains/analysis/value-detail"

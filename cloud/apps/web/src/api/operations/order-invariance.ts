@@ -77,7 +77,33 @@ export type OrderInvarianceTranscriptResult = {
 export type OrderInvarianceResult = {
   generatedAt: string;
   summary: OrderInvarianceSummary;
+  modelMetrics: OrderInvarianceModelMetrics[];
   rows: OrderInvarianceRow[];
+};
+
+export type PairLevelMarginSummary = {
+  mean: number | null;
+  median: number | null;
+  p25: number | null;
+  p75: number | null;
+};
+
+export type OrderInvarianceModelMetrics = {
+  modelId: string;
+  modelLabel: string;
+  matchRate: number | null;
+  matchCount: number;
+  matchEligibleCount: number;
+  valueOrderReversalRate: number | null;
+  valueOrderEligibleCount: number;
+  valueOrderExcludedCount: number;
+  valueOrderPull: 'toward first-listed' | 'toward second-listed' | 'no clear pull';
+  scaleOrderReversalRate: number | null;
+  scaleOrderEligibleCount: number;
+  scaleOrderExcludedCount: number;
+  scaleOrderPull: 'toward higher numbers' | 'toward lower numbers' | 'no clear pull';
+  withinCellDisagreementRate: number | null;
+  pairLevelMarginSummary: PairLevelMarginSummary | null;
 };
 
 export type OrderInvarianceReviewSummary = {
@@ -221,6 +247,28 @@ export const ORDER_INVARIANCE_QUERY = gql`
         excludedPairs {
           reason
           count
+        }
+      }
+      modelMetrics {
+        modelId
+        modelLabel
+        matchRate
+        matchCount
+        matchEligibleCount
+        valueOrderReversalRate
+        valueOrderEligibleCount
+        valueOrderExcludedCount
+        valueOrderPull
+        scaleOrderReversalRate
+        scaleOrderEligibleCount
+        scaleOrderExcludedCount
+        scaleOrderPull
+        withinCellDisagreementRate
+        pairLevelMarginSummary {
+          mean
+          median
+          p25
+          p75
         }
       }
       rows {

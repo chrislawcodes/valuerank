@@ -24,7 +24,8 @@ const domainMenuItems = [
 
 const assumptionsMenuItems = [
   { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
-  { name: 'Order Effect', path: '/assumptions/order-effect' },
+  { name: 'Analysis', path: '/assumptions/analysis' },
+  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
 ];
 
 const surveyMenuItems = [

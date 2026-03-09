@@ -38,4 +38,13 @@ describe('MobileNav Component', () => {
     const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
     expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('includes the new analysis and analysis-v1 assumption routes', () => {
+    renderMobileNav('/assumptions/analysis');
+
+    expect(
+      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+    ).toBe(true);
+    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+  });
 });

@@ -22,7 +22,8 @@ const navItems: NavItem[] = [
   { name: 'Survey', path: '/survey', icon: ClipboardList },
   { name: 'Survey Results', path: '/survey-results', icon: BarChart2, isNested: true },
   { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ClipboardList },
-  { name: 'Order Effect', path: '/assumptions/order-effect', icon: ClipboardList, isNested: true },
+  { name: 'Analysis', path: '/assumptions/analysis', icon: ClipboardList, isNested: true },
+  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1', icon: ClipboardList, isNested: true },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 

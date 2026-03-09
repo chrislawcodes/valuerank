@@ -32,6 +32,15 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
   });
 
+  it('shows the new assumptions analysis routes in the menu', () => {
+    renderNavTabs('/assumptions/analysis');
+
+    expect(
+      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+    ).toBe(true);
+    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+  });
+
   it('should highlight active tab', () => {
     renderNavTabs('/definitions');
     const vignettesLink = screen.getByRole('link', { name: /vignettes/i });

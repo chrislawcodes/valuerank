@@ -1,8 +1,26 @@
 import { builder } from '../builder.js';
-import { db } from '@valuerank/db';
-import { AuthenticationError, bucketDecisionDirection } from '@valuerank/shared';
+import { db, type Prisma } from '@valuerank/db';
+import { AuthenticationError, bucketDecisionDirection, createLogger } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import {
+  aggregateWithinCellDisagreementRate,
+  classifyStableSide,
+  computeCanonicalCellScore,
+  computePairMarginSummary,
+  computeScaleOrderPullLabel,
+  computeValueOrderPullLabel,
+  computeWithinCellDisagreementRate,
+  getConsideredTrials,
+  type OrderEffectComparisonRecord,
+  type PairLevelMarginSummary,
+} from '../../services/assumptions/order-effect-analysis.js';
+import {
+  buildOrderEffectCachePayload,
+  computeOrderEffectInputHash,
+  getCurrentOrderEffectSnapshot,
+  writeCurrentOrderEffectSnapshot,
+} from '../../services/assumptions/order-effect-cache.js';
 
 type OrderInvarianceStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type OrderInvarianceMismatchType = 'direction_flip' | 'exact_flip' | 'missing_pair' | null;
@@ -76,7 +94,26 @@ type OrderInvarianceTranscriptResult = {
 type OrderInvarianceResult = {
   generatedAt: Date;
   summary: OrderInvarianceSummary;
+  modelMetrics: OrderInvarianceModelMetrics[];
   rows: OrderInvarianceRow[];
+};
+
+type OrderInvarianceModelMetrics = {
+  modelId: string;
+  modelLabel: string;
+  matchRate: number | null;
+  matchCount: number;
+  matchEligibleCount: number;
+  valueOrderReversalRate: number | null;
+  valueOrderEligibleCount: number;
+  valueOrderExcludedCount: number;
+  valueOrderPull: 'toward first-listed' | 'toward second-listed' | 'no clear pull';
+  scaleOrderReversalRate: number | null;
+  scaleOrderEligibleCount: number;
+  scaleOrderExcludedCount: number;
+  scaleOrderPull: 'toward higher numbers' | 'toward lower numbers' | 'no clear pull';
+  withinCellDisagreementRate: number | null;
+  pairLevelMarginSummary: PairLevelMarginSummary | null;
 };
 
 type OrderInvarianceReviewStatus = 'APPROVED' | 'REJECTED' | 'PENDING';
@@ -167,6 +204,7 @@ type CandidateTranscript = {
   scenarioId: string;
   modelId: string;
   modelVersion: string | null;
+  rawDecision: number;
   decision: number;
   createdAt: Date;
 };
@@ -224,6 +262,8 @@ const ORDER_INVARIANCE_KEY = 'order_invariance';
 const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIANCE_KEY]);
 const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
+const ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT = 5;
+const log = createLogger('graphql:order-invariance');
 
 function getRunAssumptionKey(config: unknown): string | null {
   if (config == null || typeof config !== 'object') {
@@ -394,6 +434,184 @@ function valuesMatch(left: number, right: number, directionOnly: boolean): boole
   return bucketDecisionDirection(String(left)) === bucketDecisionDirection(String(right));
 }
 
+type ModelMetricsAccumulator = {
+  modelId: string;
+  modelLabel: string;
+  matchCount: number;
+  matchEligibleCount: number;
+  valueOrderReversalCount: number;
+  valueOrderEligibleCount: number;
+  valueOrderExcludedCount: number;
+  valueOrderDrifts: number[];
+  scaleOrderReversalCount: number;
+  scaleOrderEligibleCount: number;
+  scaleOrderExcludedCount: number;
+  scaleOrderDrifts: number[];
+  cellDisagreementByScenario: Map<string, number>;
+  limitingMargins: number[];
+};
+
+function createModelMetricsAccumulator(modelId: string, modelLabel: string): ModelMetricsAccumulator {
+  return {
+    modelId,
+    modelLabel,
+    matchCount: 0,
+    matchEligibleCount: 0,
+    valueOrderReversalCount: 0,
+    valueOrderEligibleCount: 0,
+    valueOrderExcludedCount: 0,
+    valueOrderDrifts: [],
+    scaleOrderReversalCount: 0,
+    scaleOrderEligibleCount: 0,
+    scaleOrderExcludedCount: 0,
+    scaleOrderDrifts: [],
+    cellDisagreementByScenario: new Map<string, number>(),
+    limitingMargins: [],
+  };
+}
+
+function buildComparisonRecord(params: {
+  pair: PairRecord;
+  modelId: string;
+  modelLabel: string;
+  vignetteTitle: string;
+  conditionKey: string;
+  baselinePick: Extract<PickResult, { kind: 'selected' }>;
+  flippedPick: Extract<PickResult, { kind: 'selected' }>;
+  trimOutliers: boolean;
+  directionOnly: boolean;
+}): OrderEffectComparisonRecord | null {
+  const baselineNormalizedDecisions = params.baselinePick.selected.map((transcript) => transcript.decision);
+  const variantNormalizedDecisions = params.flippedPick.selected.map((transcript) => transcript.decision);
+  const baselineRawDecisions = params.baselinePick.selected.map((transcript) => transcript.rawDecision);
+  const variantRawDecisions = params.flippedPick.selected.map((transcript) => transcript.rawDecision);
+
+  const baselineConsideredTrials = getConsideredTrials(baselineNormalizedDecisions, params.trimOutliers);
+  const variantConsideredTrials = getConsideredTrials(variantNormalizedDecisions, params.trimOutliers);
+  const rawBaselineConsideredTrials = getConsideredTrials(baselineRawDecisions, params.trimOutliers);
+  const rawVariantConsideredTrials = getConsideredTrials(variantRawDecisions, params.trimOutliers);
+
+  const baselineCellScore = computeCanonicalCellScore(baselineConsideredTrials);
+  const variantCellScore = computeCanonicalCellScore(variantConsideredTrials);
+
+  if (baselineCellScore == null || variantCellScore == null) {
+    return null;
+  }
+
+  const rawBaselineCellScore = computeCanonicalCellScore(rawBaselineConsideredTrials);
+  const rawVariantCellScore = computeCanonicalCellScore(rawVariantConsideredTrials);
+  const baselineStableBase = classifyStableSide(baselineConsideredTrials);
+  const variantStableBase = classifyStableSide(variantConsideredTrials);
+  const baselineStableSide = baselineCellScore === 3 ? 'neutral' : baselineStableBase;
+  const variantStableSide = variantCellScore === 3 ? 'neutral' : variantStableBase;
+  const matchesBaseline = valuesMatch(baselineCellScore, variantCellScore, params.directionOnly);
+  const eligibleForReversal = (
+    (baselineStableSide === 'lean_low' || baselineStableSide === 'lean_high')
+    && (variantStableSide === 'lean_low' || variantStableSide === 'lean_high')
+  );
+  const reversed = eligibleForReversal
+    ? baselineStableSide !== variantStableSide
+    : null;
+  const baselineMargin = Math.abs(baselineCellScore - 3);
+  const variantMargin = Math.abs(variantCellScore - 3);
+
+  return {
+    modelId: params.modelId,
+    modelLabel: params.modelLabel,
+    vignetteId: params.pair.sourceScenario.definitionId,
+    vignetteTitle: params.vignetteTitle,
+    conditionKey: params.conditionKey,
+    variantType: params.pair.variantType as 'presentation_flipped' | 'scale_flipped' | 'fully_flipped',
+    baselineRawDecisions,
+    variantRawDecisions,
+    baselineNormalizedDecisions,
+    variantNormalizedDecisions,
+    baselineConsideredTrials,
+    variantConsideredTrials,
+    rawBaselineConsideredTrials,
+    rawVariantConsideredTrials,
+    baselineCellScore,
+    variantCellScore,
+    rawBaselineCellScore,
+    rawVariantCellScore,
+    baselineStableSide,
+    variantStableSide,
+    matchesBaseline,
+    reversed,
+    withinCellDisagreement: {
+      baseline: computeWithinCellDisagreementRate(baselineConsideredTrials),
+      variant: computeWithinCellDisagreementRate(variantConsideredTrials),
+    },
+    pairMargin: {
+      baseline: baselineMargin,
+      variant: variantMargin,
+      limiting: Math.min(baselineMargin, variantMargin),
+    },
+  };
+}
+
+function finalizeModelMetrics(accumulator: ModelMetricsAccumulator): OrderInvarianceModelMetrics {
+  return {
+    modelId: accumulator.modelId,
+    modelLabel: accumulator.modelLabel,
+    matchRate: accumulator.matchEligibleCount > 0
+      ? accumulator.matchCount / accumulator.matchEligibleCount
+      : null,
+    matchCount: accumulator.matchCount,
+    matchEligibleCount: accumulator.matchEligibleCount,
+    valueOrderReversalRate: accumulator.valueOrderEligibleCount > 0
+      ? accumulator.valueOrderReversalCount / accumulator.valueOrderEligibleCount
+      : null,
+    valueOrderEligibleCount: accumulator.valueOrderEligibleCount,
+    valueOrderExcludedCount: accumulator.valueOrderExcludedCount,
+    valueOrderPull: computeValueOrderPullLabel(accumulator.valueOrderDrifts),
+    scaleOrderReversalRate: accumulator.scaleOrderEligibleCount > 0
+      ? accumulator.scaleOrderReversalCount / accumulator.scaleOrderEligibleCount
+      : null,
+    scaleOrderEligibleCount: accumulator.scaleOrderEligibleCount,
+    scaleOrderExcludedCount: accumulator.scaleOrderExcludedCount,
+    scaleOrderPull: computeScaleOrderPullLabel(accumulator.scaleOrderDrifts),
+    withinCellDisagreementRate: aggregateWithinCellDisagreementRate(
+      Array.from(accumulator.cellDisagreementByScenario.values())
+    ),
+    pairLevelMarginSummary: computePairMarginSummary(accumulator.limitingMargins),
+  };
+}
+
+function serializeOrderInvarianceSnapshotOutput(result: OrderInvarianceResult): Prisma.InputJsonValue {
+  return {
+    summary: result.summary,
+    modelMetrics: result.modelMetrics,
+    rows: result.rows,
+  };
+}
+
+function deserializeOrderInvarianceSnapshotOutput(snapshot: {
+  createdAt: Date;
+  output: unknown;
+}): OrderInvarianceResult | null {
+  if (snapshot.output == null || typeof snapshot.output !== 'object' || Array.isArray(snapshot.output)) {
+    return null;
+  }
+
+  const candidate = snapshot.output as {
+    summary?: OrderInvarianceSummary;
+    modelMetrics?: OrderInvarianceModelMetrics[];
+    rows?: OrderInvarianceRow[];
+  };
+
+  if (candidate.summary == null || !Array.isArray(candidate.modelMetrics) || !Array.isArray(candidate.rows)) {
+    return null;
+  }
+
+  return {
+    generatedAt: snapshot.createdAt,
+    summary: candidate.summary,
+    modelMetrics: candidate.modelMetrics,
+    rows: candidate.rows,
+  };
+}
+
 function normalizeReviewStatus(status: string | null | undefined): OrderInvarianceReviewStatus {
   if (status === 'APPROVED' || status === 'REJECTED') {
     return status;
@@ -519,12 +737,49 @@ const OrderInvarianceRowRef = builder
     }),
   });
 
+const PairLevelMarginSummaryRef = builder
+  .objectRef<PairLevelMarginSummary>('PairLevelMarginSummary')
+  .implement({
+    fields: (t) => ({
+      mean: t.exposeFloat('mean', { nullable: true }),
+      median: t.exposeFloat('median', { nullable: true }),
+      p25: t.exposeFloat('p25', { nullable: true }),
+      p75: t.exposeFloat('p75', { nullable: true }),
+    }),
+  });
+
+const OrderInvarianceModelMetricsRef = builder
+  .objectRef<OrderInvarianceModelMetrics>('OrderInvarianceModelMetrics')
+  .implement({
+    fields: (t) => ({
+      modelId: t.exposeString('modelId'),
+      modelLabel: t.exposeString('modelLabel'),
+      matchRate: t.exposeFloat('matchRate', { nullable: true }),
+      matchCount: t.exposeInt('matchCount'),
+      matchEligibleCount: t.exposeInt('matchEligibleCount'),
+      valueOrderReversalRate: t.exposeFloat('valueOrderReversalRate', { nullable: true }),
+      valueOrderEligibleCount: t.exposeInt('valueOrderEligibleCount'),
+      valueOrderExcludedCount: t.exposeInt('valueOrderExcludedCount'),
+      valueOrderPull: t.exposeString('valueOrderPull'),
+      scaleOrderReversalRate: t.exposeFloat('scaleOrderReversalRate', { nullable: true }),
+      scaleOrderEligibleCount: t.exposeInt('scaleOrderEligibleCount'),
+      scaleOrderExcludedCount: t.exposeInt('scaleOrderExcludedCount'),
+      scaleOrderPull: t.exposeString('scaleOrderPull'),
+      withinCellDisagreementRate: t.exposeFloat('withinCellDisagreementRate', { nullable: true }),
+      pairLevelMarginSummary: t.expose('pairLevelMarginSummary', {
+        type: PairLevelMarginSummaryRef,
+        nullable: true,
+      }),
+    }),
+  });
+
 const OrderInvarianceResultRef = builder
   .objectRef<OrderInvarianceResult>('OrderInvarianceResult')
   .implement({
     fields: (t) => ({
       generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
       summary: t.expose('summary', { type: OrderInvarianceSummaryRef }),
+      modelMetrics: t.expose('modelMetrics', { type: [OrderInvarianceModelMetricsRef] }),
       rows: t.expose('rows', { type: [OrderInvarianceRowRef] }),
     }),
   });
@@ -949,6 +1204,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           equivalenceReviewedAt: { not: null },
         },
         select: {
+          id: true,
           variantType: true,
           sourceScenario: {
             select: {
@@ -1062,6 +1318,7 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           scenarioId: transcript.scenarioId,
           modelId: transcript.modelId,
           modelVersion: transcript.modelVersion,
+          rawDecision: decision,
           decision: normalizeDecision(
             decision,
             scenarioIdToVariantType.get(transcript.scenarioId) ?? null
@@ -1083,8 +1340,42 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           modelLabel: activeModelLabels.get(modelId) ?? modelId,
         }));
 
+      const cachePayload = buildOrderEffectCachePayload({
+        trimOutliers,
+        directionOnly,
+        requiredTrialCount: ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
+        lockedVignetteIds: Array.from(new Set(relevantPairs.map((pair) => pair.sourceScenario.definitionId))),
+        approvedPairIds: relevantPairs
+          .map((pair) => pair.id)
+          .filter((pairId): pairId is string => typeof pairId === 'string' && pairId !== ''),
+        snapshotModelIds: effectiveModels.map((model) => model.modelId),
+        candidateTranscriptIds: Array.from(transcriptsByScenarioAndModel.values())
+          .flatMap((candidates) => candidates.map((candidate) => candidate.id)),
+      });
+      const inputHash = computeOrderEffectInputHash(cachePayload);
+
+      try {
+        const cachedSnapshot = await getCurrentOrderEffectSnapshot(inputHash);
+        if (cachedSnapshot != null) {
+          const cachedResult = deserializeOrderInvarianceSnapshotOutput(cachedSnapshot);
+          if (cachedResult != null) {
+            log.debug({ inputHash, snapshotId: cachedSnapshot.id }, 'Returning cached order-invariance snapshot');
+            return cachedResult;
+          }
+          log.warn({ inputHash, snapshotId: cachedSnapshot.id }, 'Order-invariance snapshot output was unreadable, recomputing');
+        }
+      } catch (error) {
+        log.error({ err: error, inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
+      }
+
       const excludedCounts = new Map<string, number>();
       const rows: OrderInvarianceRow[] = [];
+      const modelMetricsAccumulators = new Map<string, ModelMetricsAccumulator>(
+        effectiveModels.map((model) => [
+          model.modelId,
+          createModelMetricsAccumulator(model.modelId, model.modelLabel),
+        ])
+      );
       let qualifyingPairs = 0;
       let missingPairs = 0;
       let comparablePairs = 0;
@@ -1098,16 +1389,19 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
         const conditionKey = buildConditionKey(pair.sourceScenario.name);
 
         for (const model of effectiveModels) {
+          const metrics = modelMetricsAccumulators.get(model.modelId)
+            ?? createModelMetricsAccumulator(model.modelId, model.modelLabel);
+          modelMetricsAccumulators.set(model.modelId, metrics);
           const baselineKey = `${pair.sourceScenario.id}::${model.modelId}`;
           const flippedKey = `${pair.variantScenario.id}::${model.modelId}`;
 
           const baselinePick = pickStableTranscripts(
             transcriptsByScenarioAndModel.get(baselineKey) ?? [],
-            5
+            ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT
           );
           const flippedPick = pickStableTranscripts(
             transcriptsByScenarioAndModel.get(flippedKey) ?? [],
-            5
+            ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT
           );
 
           if (baselinePick.kind === 'fragmented' || flippedPick.kind === 'fragmented') {
@@ -1115,6 +1409,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               'model_version_mismatch',
               (excludedCounts.get('model_version_mismatch') ?? 0) + 1
             );
+            if (pair.variantType === 'presentation_flipped') {
+              metrics.valueOrderExcludedCount += 1;
+            } else if (pair.variantType === 'scale_flipped') {
+              metrics.scaleOrderExcludedCount += 1;
+            }
             continue;
           }
 
@@ -1122,6 +1421,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
 
           if (baselinePick.kind !== 'selected' || flippedPick.kind !== 'selected') {
             missingPairs += 1;
+            if (pair.variantType === 'presentation_flipped') {
+              metrics.valueOrderExcludedCount += 1;
+            } else if (pair.variantType === 'scale_flipped') {
+              metrics.scaleOrderExcludedCount += 1;
+            }
             rows.push({
               modelId: model.modelId,
               modelLabel: model.modelLabel,
@@ -1148,6 +1452,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
               'model_version_mismatch',
               (excludedCounts.get('model_version_mismatch') ?? 0) + 1
             );
+            if (pair.variantType === 'presentation_flipped') {
+              metrics.valueOrderExcludedCount += 1;
+            } else if (pair.variantType === 'scale_flipped') {
+              metrics.scaleOrderExcludedCount += 1;
+            }
             continue;
           }
 
@@ -1162,6 +1471,11 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
 
           if (baselineValue == null || flippedValue == null) {
             missingPairs += 1;
+            if (pair.variantType === 'presentation_flipped') {
+              metrics.valueOrderExcludedCount += 1;
+            } else if (pair.variantType === 'scale_flipped') {
+              metrics.scaleOrderExcludedCount += 1;
+            }
             rows.push({
               modelId: model.modelId,
               modelLabel: model.modelLabel,
@@ -1197,10 +1511,86 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           if (baselineValue != null) {
             scores.baseline = baselineValue;
           }
-          if (flippedValue != null && pair.variantType) {
+          if (flippedValue != null && pair.variantType != null) {
             scores[pair.variantType] = flippedValue;
           }
           scorePivot.set(pivotKey, scores);
+
+          const comparisonRecord = buildComparisonRecord({
+            pair,
+            modelId: model.modelId,
+            modelLabel: model.modelLabel,
+            vignetteTitle,
+            conditionKey,
+            baselinePick,
+            flippedPick,
+            trimOutliers,
+            directionOnly,
+          });
+
+          if (comparisonRecord != null) {
+            if (pair.variantType === 'fully_flipped' && comparisonRecord.matchesBaseline != null) {
+              metrics.matchEligibleCount += 1;
+              if (comparisonRecord.matchesBaseline) {
+                metrics.matchCount += 1;
+              }
+            }
+
+            if (comparisonRecord.withinCellDisagreement.baseline != null) {
+              metrics.cellDisagreementByScenario.set(
+                pair.sourceScenario.id,
+                comparisonRecord.withinCellDisagreement.baseline
+              );
+            }
+            if (comparisonRecord.withinCellDisagreement.variant != null) {
+              metrics.cellDisagreementByScenario.set(
+                pair.variantScenario.id,
+                comparisonRecord.withinCellDisagreement.variant
+              );
+            }
+
+            if (pair.variantType === 'presentation_flipped') {
+              if (comparisonRecord.reversed == null) {
+                metrics.valueOrderExcludedCount += 1;
+              } else {
+                metrics.valueOrderEligibleCount += 1;
+                if (comparisonRecord.reversed) {
+                  metrics.valueOrderReversalCount += 1;
+                }
+                if (
+                  comparisonRecord.baselineCellScore != null
+                  && comparisonRecord.variantCellScore != null
+                ) {
+                  metrics.valueOrderDrifts.push(
+                    comparisonRecord.variantCellScore - comparisonRecord.baselineCellScore
+                  );
+                }
+                if (comparisonRecord.pairMargin.limiting != null) {
+                  metrics.limitingMargins.push(comparisonRecord.pairMargin.limiting);
+                }
+              }
+            } else if (pair.variantType === 'scale_flipped') {
+              if (comparisonRecord.reversed == null) {
+                metrics.scaleOrderExcludedCount += 1;
+              } else {
+                metrics.scaleOrderEligibleCount += 1;
+                if (comparisonRecord.reversed) {
+                  metrics.scaleOrderReversalCount += 1;
+                }
+                if (
+                  comparisonRecord.rawBaselineCellScore != null
+                  && comparisonRecord.rawVariantCellScore != null
+                ) {
+                  metrics.scaleOrderDrifts.push(
+                    comparisonRecord.rawVariantCellScore - comparisonRecord.rawBaselineCellScore
+                  );
+                }
+                if (comparisonRecord.pairMargin.limiting != null) {
+                  metrics.limitingMargins.push(comparisonRecord.pairMargin.limiting);
+                }
+              }
+            }
+          }
 
           rows.push({
             modelId: model.modelId,
@@ -1250,15 +1640,32 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
           .map(([reason, count]) => ({ reason, count })),
       };
 
-      return {
+      const computedResult: OrderInvarianceResult = {
         generatedAt: new Date(),
         summary,
+        modelMetrics: effectiveModels
+          .map((model) => finalizeModelMetrics(
+            modelMetricsAccumulators.get(model.modelId)
+              ?? createModelMetricsAccumulator(model.modelId, model.modelLabel)
+          ))
+          .sort((left, right) => left.modelLabel.localeCompare(right.modelLabel)),
         rows: rows.sort((left, right) => (
           left.vignetteTitle.localeCompare(right.vignetteTitle)
           || left.modelLabel.localeCompare(right.modelLabel)
           || left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' })
         )),
       };
+
+      try {
+        await writeCurrentOrderEffectSnapshot({
+          payload: cachePayload,
+          output: serializeOrderInvarianceSnapshotOutput(computedResult),
+        });
+      } catch (error) {
+        log.error({ err: error, inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
+      }
+
+      return computedResult;
     },
   })
 );
