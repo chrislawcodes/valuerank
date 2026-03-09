@@ -2,12 +2,12 @@ import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
-import { parseTemperature } from '../../utils/temperature.js';
 import {
   type PairLevelMarginSummary,
 } from '../../services/assumptions/order-effect-analysis.js';
 import {
   getOrderInvarianceAnalysisResult,
+  getOrderInvarianceTranscriptResult,
 } from '../../services/assumptions/order-effect-service.js';
 
 export {
@@ -193,30 +193,7 @@ type PairRecord = {
   variantScenario: PairScenario;
 };
 
-type TranscriptDetailRecord = {
-  id: string;
-  runId: string;
-  scenarioId: string | null;
-  modelId: string;
-  modelVersion: string | null;
-  content: unknown;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
-  turnCount: number;
-  tokenCount: number;
-  durationMs: number;
-  estimatedCost: number | null;
-  createdAt: Date;
-  lastAccessedAt: Date | null;
-  run: {
-    deletedAt: Date | null;
-    config: unknown;
-    tags: Array<{ tag: { name: string } }>;
-  };
-};
-
 const ORDER_INVARIANCE_KEY = 'order_invariance';
-const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIANCE_KEY]);
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
 
 function getRunAssumptionKey(config: unknown): string | null {
@@ -225,15 +202,6 @@ function getRunAssumptionKey(config: unknown): string | null {
   }
   const value = (config as Record<string, unknown>).assumptionKey;
   return typeof value === 'string' && value !== '' ? value : null;
-}
-
-function isAssumptionRun(record: { run: { tags: Array<{ tag: { name: string } }> } }): boolean {
-  return record.run.tags.some((tag) => tag.tag.name === 'assumption-run');
-}
-
-function isTempZeroRun(record: { run: { config: unknown } }): boolean {
-  const config = record.run.config as { temperature?: unknown } | null;
-  return parseTemperature(config?.temperature) === 0;
 }
 
 function buildConditionKey(name: string): string {
@@ -313,33 +281,6 @@ function extractScenarioText(content: unknown): string {
   }
 
   return JSON.stringify(content, null, 2);
-}
-
-function parseAttributeLabels(vignetteTitle: string): { attributeALabel: string | null; attributeBLabel: string | null } {
-  const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
-  if (!match) {
-    return { attributeALabel: null, attributeBLabel: null };
-  }
-
-  return {
-    attributeALabel: match[1]?.trim() ?? null,
-    attributeBLabel: match[2]?.trim() ?? null,
-  };
-}
-
-function parseConditionLevels(conditionKey: string): { attributeALevel: number | null; attributeBLevel: number | null } {
-  const match = conditionKey.match(/^(\d+)x(\d+)$/);
-  if (!match) {
-    return { attributeALevel: null, attributeBLevel: null };
-  }
-
-  const attributeALevel = Number.parseInt(match[1] ?? '', 10);
-  const attributeBLevel = Number.parseInt(match[2] ?? '', 10);
-
-  return {
-    attributeALevel: Number.isFinite(attributeALevel) ? attributeALevel : null,
-    attributeBLevel: Number.isFinite(attributeBLevel) ? attributeBLevel : null,
-  };
 }
 
 const OrderInvarianceExclusionCountRef = builder
@@ -864,166 +805,11 @@ builder.queryField('assumptionsOrderInvarianceTranscripts', (t) =>
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
-
-      const vignetteId = String(args.vignetteId);
-      const activeModels = await db.llmModel.findMany({
-        where: { status: 'ACTIVE' },
-        select: { modelId: true, displayName: true },
-      });
-      const activeModelLabels = new Map(
-        activeModels.map((model) => [model.modelId, model.displayName])
-      );
-
-      const lockedById = new Map(
-        LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
-      );
-      const vignetteTitle = lockedById.get(vignetteId)?.title ?? vignetteId;
-      const labels = parseAttributeLabels(vignetteTitle);
-      const levels = parseConditionLevels(args.conditionKey);
-
-      const pairs = await db.assumptionScenarioPair.findMany({
-        where: {
-          assumptionKey: ORDER_INVARIANCE_KEY,
-          equivalenceReviewStatus: 'APPROVED',
-          equivalenceReviewedAt: { not: null },
-          sourceScenario: {
-            definitionId: vignetteId,
-            deletedAt: null,
-          },
-          variantScenario: {
-            deletedAt: null,
-          },
-        },
-        include: {
-          sourceScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-          variantScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-        },
-      }) as unknown as PairRecord[];
-
-      const matchingPair = pairs.find((candidate) => buildConditionKey(candidate.sourceScenario.name) === args.conditionKey) ?? null;
-
-      if (matchingPair == null) {
-        return {
-          generatedAt: new Date(),
-          vignetteId,
-          vignetteTitle,
-          modelId: args.modelId,
-          modelLabel: args.modelId,
-          conditionKey: args.conditionKey,
-          attributeALabel: labels.attributeALabel,
-          attributeBLabel: labels.attributeBLabel,
-          transcripts: [],
-        };
-      }
-
-      const scenarioIds = [matchingPair.sourceScenario.id, matchingPair.variantScenario.id];
-      const transcriptRecords = await db.transcript.findMany({
-        where: {
-          deletedAt: null,
-          scenarioId: { in: scenarioIds },
-          modelId: args.modelId,
-        },
-        select: {
-          id: true,
-          runId: true,
-          scenarioId: true,
-          modelId: true,
-          modelVersion: true,
-          content: true,
-          decisionCode: true,
-          decisionCodeSource: true,
-          turnCount: true,
-          tokenCount: true,
-          durationMs: true,
-          estimatedCost: true,
-          createdAt: true,
-          lastAccessedAt: true,
-          run: {
-            select: {
-              deletedAt: true,
-              config: true,
-              tags: {
-                select: {
-                  tag: {
-                    select: { name: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }) as TranscriptDetailRecord[];
-
-      const transcripts = transcriptRecords
-        .filter((transcript) => {
-          if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
-            return false;
-          }
-          if (!isTempZeroRun(transcript)) {
-            return false;
-          }
-
-          const assumptionKey = getRunAssumptionKey(transcript.run.config);
-          const isBaselineScenario = transcript.scenarioId === matchingPair.sourceScenario.id;
-          if (isBaselineScenario) {
-            if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
-              return false;
-            }
-            if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript)) {
-              return false;
-            }
-          } else if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript)) {
-            return false;
-          }
-
-          return true;
-        })
-        .map((transcript) => ({
-          id: transcript.id,
-          runId: transcript.runId,
-          scenarioId: transcript.scenarioId ?? '',
-          modelId: transcript.modelId,
-          modelVersion: transcript.modelVersion,
-          content: transcript.content,
-          decisionCode: transcript.decisionCode,
-          decisionCodeSource: transcript.decisionCodeSource,
-          turnCount: transcript.turnCount,
-          tokenCount: transcript.tokenCount,
-          durationMs: transcript.durationMs,
-          estimatedCost: transcript.estimatedCost,
-          createdAt: transcript.createdAt,
-          lastAccessedAt: transcript.lastAccessedAt,
-          orderLabel: transcript.scenarioId === matchingPair.sourceScenario.id ? 'A First' : 'B First',
-          attributeALevel: levels.attributeALevel,
-          attributeBLevel: levels.attributeBLevel,
-        }))
-        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-
-      return {
-        generatedAt: new Date(),
-        vignetteId,
-        vignetteTitle,
+      return getOrderInvarianceTranscriptResult({
+        vignetteId: String(args.vignetteId),
         modelId: args.modelId,
-        modelLabel: activeModelLabels.get(args.modelId) ?? args.modelId,
         conditionKey: args.conditionKey,
-        attributeALabel: labels.attributeALabel,
-        attributeBLabel: labels.attributeBLabel,
-        transcripts,
-      };
+      });
     },
   })
 );

@@ -93,6 +93,38 @@ export type OrderInvarianceResult = {
   rows: OrderInvarianceRow[];
 };
 
+export type OrderInvarianceTranscript = {
+  id: string;
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: Date;
+  lastAccessedAt: Date | null;
+  orderLabel: string;
+  attributeALevel: number | null;
+  attributeBLevel: number | null;
+};
+
+export type OrderInvarianceTranscriptResult = {
+  generatedAt: Date;
+  vignetteId: string;
+  vignetteTitle: string;
+  modelId: string;
+  modelLabel: string;
+  conditionKey: string;
+  attributeALabel: string | null;
+  attributeBLabel: string | null;
+  transcripts: OrderInvarianceTranscript[];
+};
+
 type PairScenario = {
   id: string;
   name: string;
@@ -124,6 +156,28 @@ type CandidateTranscriptRecord = {
   modelVersion: string | null;
   decisionCode: string | null;
   createdAt: Date;
+  run: {
+    deletedAt: Date | null;
+    config: unknown;
+    tags: Array<{ tag: { name: string } }>;
+  };
+};
+
+type TranscriptDetailRecord = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource: string | null;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: Date;
+  lastAccessedAt: Date | null;
   run: {
     deletedAt: Date | null;
     config: unknown;
@@ -408,6 +462,170 @@ export async function getOrderInvarianceAnalysisResult(params: {
   });
 }
 
+export async function getOrderInvarianceTranscriptResult(params: {
+  vignetteId: string;
+  modelId: string;
+  conditionKey: string;
+}): Promise<OrderInvarianceTranscriptResult> {
+  const activeModels = await db.llmModel.findMany({
+    where: { status: 'ACTIVE' },
+    select: { modelId: true, displayName: true },
+  });
+  const activeModelLabels = new Map(
+    activeModels.map((model) => [model.modelId, model.displayName])
+  );
+
+  const lockedById = new Map(
+    LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
+  );
+  const vignetteTitle = lockedById.get(params.vignetteId)?.title ?? params.vignetteId;
+  const labels = parseAttributeLabels(vignetteTitle);
+  const levels = parseConditionLevels(params.conditionKey);
+
+  const pairs = await db.assumptionScenarioPair.findMany({
+    where: {
+      assumptionKey: ORDER_INVARIANCE_KEY,
+      equivalenceReviewStatus: 'APPROVED',
+      equivalenceReviewedAt: { not: null },
+      sourceScenario: {
+        definitionId: params.vignetteId,
+        deletedAt: null,
+      },
+      variantScenario: {
+        deletedAt: null,
+      },
+    },
+    include: {
+      sourceScenario: {
+        select: {
+          id: true,
+          name: true,
+          definitionId: true,
+          orientationFlipped: true,
+        },
+      },
+      variantScenario: {
+        select: {
+          id: true,
+          name: true,
+          definitionId: true,
+          orientationFlipped: true,
+        },
+      },
+    },
+  }) as unknown as PairRecord[];
+
+  const matchingPair = pairs.find((candidate) => buildConditionKey(candidate.sourceScenario.name) === params.conditionKey) ?? null;
+
+  if (matchingPair == null) {
+    return {
+      generatedAt: new Date(),
+      vignetteId: params.vignetteId,
+      vignetteTitle,
+      modelId: params.modelId,
+      modelLabel: activeModelLabels.get(params.modelId) ?? params.modelId,
+      conditionKey: params.conditionKey,
+      attributeALabel: labels.attributeALabel,
+      attributeBLabel: labels.attributeBLabel,
+      transcripts: [],
+    };
+  }
+
+  const transcriptRecords = await db.transcript.findMany({
+    where: {
+      deletedAt: null,
+      scenarioId: { in: [matchingPair.sourceScenario.id, matchingPair.variantScenario.id] },
+      modelId: params.modelId,
+    },
+    select: {
+      id: true,
+      runId: true,
+      scenarioId: true,
+      modelId: true,
+      modelVersion: true,
+      content: true,
+      decisionCode: true,
+      decisionCodeSource: true,
+      turnCount: true,
+      tokenCount: true,
+      durationMs: true,
+      estimatedCost: true,
+      createdAt: true,
+      lastAccessedAt: true,
+      run: {
+        select: {
+          deletedAt: true,
+          config: true,
+          tags: {
+            select: {
+              tag: {
+                select: { name: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  }) as TranscriptDetailRecord[];
+
+  const transcripts = transcriptRecords
+    .filter((transcript) => {
+      if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
+        return false;
+      }
+      if (!isTempZeroRun(transcript.run.config)) {
+        return false;
+      }
+
+      const assumptionKey = getRunAssumptionKey(transcript.run.config);
+      const isBaselineScenario = transcript.scenarioId === matchingPair.sourceScenario.id;
+      if (isBaselineScenario) {
+        if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
+          return false;
+        }
+        if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript.run.tags)) {
+          return false;
+        }
+      } else if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript.run.tags)) {
+        return false;
+      }
+
+      return true;
+    })
+    .map((transcript) => ({
+      id: transcript.id,
+      runId: transcript.runId,
+      scenarioId: transcript.scenarioId ?? '',
+      modelId: transcript.modelId,
+      modelVersion: transcript.modelVersion,
+      content: transcript.content,
+      decisionCode: transcript.decisionCode,
+      decisionCodeSource: transcript.decisionCodeSource,
+      turnCount: transcript.turnCount,
+      tokenCount: transcript.tokenCount,
+      durationMs: transcript.durationMs,
+      estimatedCost: transcript.estimatedCost,
+      createdAt: transcript.createdAt,
+      lastAccessedAt: transcript.lastAccessedAt,
+      orderLabel: transcript.scenarioId === matchingPair.sourceScenario.id ? 'A First' : 'B First',
+      attributeALevel: levels.attributeALevel,
+      attributeBLevel: levels.attributeBLevel,
+    }))
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+
+  return {
+    generatedAt: new Date(),
+    vignetteId: params.vignetteId,
+    vignetteTitle,
+    modelId: params.modelId,
+    modelLabel: activeModelLabels.get(params.modelId) ?? params.modelId,
+    conditionKey: params.conditionKey,
+    attributeALabel: labels.attributeALabel,
+    attributeBLabel: labels.attributeBLabel,
+    transcripts,
+  };
+}
+
 function computeOrderInvarianceFromSelections(params: {
   relevantPairs: PairRecord[];
   effectiveModels: EffectiveModel[];
@@ -685,6 +903,33 @@ function buildConditionKey(name: string): string {
     return name;
   }
   return `${match[1] ?? '?'}x${match[2] ?? '?'}`;
+}
+
+function parseAttributeLabels(vignetteTitle: string): { attributeALabel: string | null; attributeBLabel: string | null } {
+  const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
+  if (!match) {
+    return { attributeALabel: null, attributeBLabel: null };
+  }
+
+  return {
+    attributeALabel: match[1]?.trim() ?? null,
+    attributeBLabel: match[2]?.trim() ?? null,
+  };
+}
+
+function parseConditionLevels(conditionKey: string): { attributeALevel: number | null; attributeBLevel: number | null } {
+  const match = conditionKey.match(/^(\d+)x(\d+)$/);
+  if (!match) {
+    return { attributeALevel: null, attributeBLevel: null };
+  }
+
+  const attributeALevel = Number.parseInt(match[1] ?? '', 10);
+  const attributeBLevel = Number.parseInt(match[2] ?? '', 10);
+
+  return {
+    attributeALevel: Number.isFinite(attributeALevel) ? attributeALevel : null,
+    attributeBLevel: Number.isFinite(attributeBLevel) ? attributeBLevel : null,
+  };
 }
 
 function getRunAssumptionKey(config: unknown): string | null {

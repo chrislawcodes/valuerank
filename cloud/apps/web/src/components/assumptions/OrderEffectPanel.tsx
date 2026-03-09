@@ -444,32 +444,20 @@ export function OrderEffectPanel() {
 
   const groupedRows = useMemo(() => groupRowsByVignette(filteredRows), [filteredRows]);
   const modelLeaderboard = useMemo(() => {
-    if (allRows.length === 0) return [];
-    const byModel = new Map<string, OrderInvarianceRow[]>();
-    for (const row of allRows) {
-      const list = byModel.get(row.modelId) ?? [];
-      list.push(row);
-      byModel.set(row.modelId, list);
+    const modelMetrics = result?.modelMetrics ?? [];
+    if (modelMetrics.length === 0) {
+      return [];
     }
-    return Array.from(byModel.entries()).map(([modelId, rows]) => {
-      const modelLabel = rows[0]?.modelLabel ?? modelId;
-      const pRows = rows.filter(
-        (r) => r.variantType === 'presentation_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
-      );
-      const sRows = rows.filter(
-        (r) => r.variantType === 'scale_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
-      );
-      const pMAD = pRows.length > 0
-        ? pRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / pRows.length
-        : null;
-      const sMAD = sRows.length > 0
-        ? sRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / sRows.length
-        : null;
-      const matchRows = rows.filter((r) => r.variantType === 'fully_flipped' && r.isMatch != null);
-      const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
-      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length };
-    }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
-  }, [allRows]);
+
+    return modelMetrics
+      .filter((metric) => selectedModelIds.size === 0 || selectedModelIds.has(metric.modelId))
+      .map((metric) => ({
+        modelId: metric.modelId,
+        modelLabel: metric.modelLabel,
+        metric,
+      }))
+      .sort((left, right) => left.modelLabel.localeCompare(right.modelLabel));
+  }, [result?.modelMetrics, selectedModelIds]);
 
   async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
     setActiveReviewPairId(vignette.pairId);
@@ -959,23 +947,25 @@ export function OrderEffectPanel() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match N</th>
                       <th className="px-4 py-2 text-right font-medium text-gray-600">Match Rate</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Presentation (Δ_P)</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale (Δ_S)</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Value Reversal</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Scale Reversal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {modelLeaderboard.map((ms) => (
                       <tr key={ms.modelId} className="hover:bg-gray-50">
                         <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{ms.n}</td>
+                        <td className="px-4 py-2 text-right text-gray-600">{ms.metric.matchEligibleCount}</td>
                         <td className="px-4 py-2 text-right text-gray-700">
-                          {ms.matchRate != null ? `${(ms.matchRate * 100).toFixed(0)}%` : '—'}
+                          {ms.metric.matchRate != null ? `${(ms.metric.matchRate * 100).toFixed(0)}%` : '—'}
                         </td>
-                        <td className="px-4 py-2 text-right text-gray-700">{formatMAD(ms.pMAD)}</td>
-                        <td className={`px-4 py-2 text-right ${getScaleEffectColor(ms.sMAD)}`}>
-                          {formatMAD(ms.sMAD)}
+                        <td className="px-4 py-2 text-right text-gray-700">
+                          {formatPercent(ms.metric.valueOrderReversalRate)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-gray-700">
+                          {formatPercent(ms.metric.scaleOrderReversalRate)}
                         </td>
                       </tr>
                     ))}

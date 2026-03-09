@@ -87,6 +87,26 @@ const query = `
   }
 `;
 
+const transcriptsQuery = `
+  query AssumptionsOrderInvarianceTranscripts($vignetteId: ID!, $modelId: String!, $conditionKey: String!) {
+    assumptionsOrderInvarianceTranscripts(
+      vignetteId: $vignetteId
+      modelId: $modelId
+      conditionKey: $conditionKey
+    ) {
+      vignetteId
+      modelId
+      modelLabel
+      conditionKey
+      transcripts {
+        id
+        orderLabel
+        decisionCode
+      }
+    }
+  }
+`;
+
 const LOCKED_VIGNETTE_ID = 'cmlsmyn9l0j3rxeiricruouia';
 
 function buildPair(id: string, variantType: string | null, sourceScenarioId: string, variantScenarioId: string) {
@@ -392,5 +412,71 @@ describe('assumptionsOrderInvariance query', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.errors?.[0]?.message).toContain('Multiple CURRENT order-effect snapshots found');
+  });
+
+  it('uses the backend service transcript filtering rules for drilldown', async () => {
+    vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
+      buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      {
+        ...buildTranscript({ id: 'b1', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+        runId: 'run-b1',
+        content: { prompt: 'baseline' },
+        decisionCodeSource: 'manual',
+        turnCount: 1,
+        tokenCount: 10,
+        durationMs: 100,
+        estimatedCost: 0.01,
+        lastAccessedAt: null,
+      },
+      {
+        ...buildTranscript({ id: 'p1', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T11:00:00Z', assumptionKey: 'order_invariance' }),
+        runId: 'run-p1',
+        content: { prompt: 'variant' },
+        decisionCodeSource: 'manual',
+        turnCount: 1,
+        tokenCount: 10,
+        durationMs: 100,
+        estimatedCost: 0.01,
+        lastAccessedAt: null,
+      },
+      {
+        ...buildTranscript({ id: 'p2', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T12:00:00Z', assumptionKey: 'order_invariance', withAssumptionTag: false }),
+        runId: 'run-p2',
+        content: { prompt: 'should-filter' },
+        decisionCodeSource: 'manual',
+        turnCount: 1,
+        tokenCount: 10,
+        durationMs: 100,
+        estimatedCost: 0.01,
+        lastAccessedAt: null,
+      },
+    ] as never);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: transcriptsQuery,
+        variables: {
+          vignetteId: LOCKED_VIGNETTE_ID,
+          modelId: 'model-a',
+          conditionKey: '4x2',
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.assumptionsOrderInvarianceTranscripts).toMatchObject({
+      vignetteId: LOCKED_VIGNETTE_ID,
+      modelId: 'model-a',
+      modelLabel: 'Model A',
+      conditionKey: '4x2',
+    });
+    expect(response.body.data.assumptionsOrderInvarianceTranscripts.transcripts).toEqual([
+      expect.objectContaining({ id: 'b1', orderLabel: 'A First', decisionCode: '4' }),
+      expect.objectContaining({ id: 'p1', orderLabel: 'B First', decisionCode: '2' }),
+    ]);
   });
 });
