@@ -31,7 +31,8 @@ Related docs:
   - reuse matching CURRENT snapshot
   - otherwise recompute and supersede old CURRENT snapshot
 - Cache hash is based on the selected transcript state that actually drives the analysis, not just transcript ids.
-- Snapshot writes use a per-config-signature transactional lock so one CURRENT row survives per config signature.
+- The analysis service acquires a coarse per-config pipeline lock before reading mutable inputs, so older requests cannot supersede newer CURRENT snapshots for the same config.
+- DB also enforces one CURRENT row per `(assumptionKey, analysisType, configSignature)` via a partial unique index.
 - Cache hit requires exact match on:
   - `assumptionKey`
   - `analysisType`

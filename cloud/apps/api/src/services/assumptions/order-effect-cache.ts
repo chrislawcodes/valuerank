@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, type Prisma } from '@valuerank/db';
+import type { Prisma, db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import {
   ORDER_INVARIANCE_ASSUMPTION_KEY,
@@ -8,6 +8,14 @@ import {
 } from './order-effect-analysis.js';
 
 const log = createLogger('assumptions:order-effect-cache');
+type SnapshotClient = typeof db | Prisma.TransactionClient;
+
+export class DuplicateCurrentOrderEffectSnapshotError extends Error {
+  constructor(message = 'Multiple CURRENT order-effect snapshots found for one input hash') {
+    super(message);
+    this.name = 'DuplicateCurrentOrderEffectSnapshotError';
+  }
+}
 
 export type OrderEffectCachePayload = {
   assumptionKey: typeof ORDER_INVARIANCE_ASSUMPTION_KEY;
@@ -89,8 +97,11 @@ export function computeOrderEffectConfigSignature(config: OrderEffectSnapshotCon
   return computeHash(config);
 }
 
-export async function getCurrentOrderEffectSnapshot(payload: Pick<OrderEffectCachePayload, 'inputHash'>) {
-  const snapshot = await db.assumptionAnalysisSnapshot.findFirst({
+export async function getCurrentOrderEffectSnapshot(
+  client: SnapshotClient,
+  payload: Pick<OrderEffectCachePayload, 'inputHash'>
+) {
+  const snapshots = await client.assumptionAnalysisSnapshot.findMany({
     where: {
       assumptionKey: ORDER_INVARIANCE_ASSUMPTION_KEY,
       analysisType: REVERSAL_METRICS_ANALYSIS_TYPE,
@@ -101,7 +112,15 @@ export async function getCurrentOrderEffectSnapshot(payload: Pick<OrderEffectCac
     orderBy: {
       createdAt: 'desc',
     },
+    take: 2,
   });
+
+  if (snapshots.length > 1) {
+    log.error({ inputHash: payload.inputHash, snapshotIds: snapshots.map((snapshot) => snapshot.id) }, 'Order-effect cache invariant violated: multiple CURRENT snapshots matched one inputHash');
+    throw new DuplicateCurrentOrderEffectSnapshotError();
+  }
+
+  const snapshot = snapshots[0] ?? null;
 
   if (snapshot != null) {
     log.debug({ snapshotId: snapshot.id, inputHash: payload.inputHash }, 'Order-effect cache hit');
@@ -113,81 +132,57 @@ export async function getCurrentOrderEffectSnapshot(payload: Pick<OrderEffectCac
 }
 
 export async function writeCurrentOrderEffectSnapshot(params: {
+  client: SnapshotClient;
   payload: OrderEffectCachePayload;
   output: Prisma.InputJsonValue;
 }) {
   const config = buildOrderEffectSnapshotConfig(params.payload);
-  const lockKey = `${params.payload.assumptionKey}:${params.payload.analysisType}:${params.payload.configSignature}`;
+  const current = await getCurrentOrderEffectSnapshot(params.client, params.payload);
+  if (current != null) {
+    log.debug({
+      snapshotId: current.id,
+      inputHash: params.payload.inputHash,
+      configSignature: params.payload.configSignature,
+      reusedExisting: true,
+    }, 'Reused existing order-effect snapshot during write');
+    return current;
+  }
 
-  const persisted = await db.$transaction(async (tx) => {
-    await tx.$queryRawUnsafe(
-      'SELECT pg_advisory_xact_lock(hashtext($1))',
-      lockKey
-    );
+  const superseded = await params.client.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      assumptionKey: params.payload.assumptionKey,
+      analysisType: params.payload.analysisType,
+      configSignature: params.payload.configSignature,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    data: {
+      status: 'SUPERSEDED',
+    },
+  });
 
-    const current = await tx.assumptionAnalysisSnapshot.findFirst({
-      where: {
-        assumptionKey: params.payload.assumptionKey,
-        analysisType: params.payload.analysisType,
-        inputHash: params.payload.inputHash,
-        status: 'CURRENT',
-        deletedAt: null,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    if (current != null) {
-      return {
-        snapshot: current,
-        supersededCount: 0,
-        reusedExisting: true,
-      };
-    }
-
-    const superseded = await tx.assumptionAnalysisSnapshot.updateMany({
-      where: {
-        assumptionKey: params.payload.assumptionKey,
-        analysisType: params.payload.analysisType,
-        configSignature: params.payload.configSignature,
-        status: 'CURRENT',
-        deletedAt: null,
-      },
-      data: {
-        status: 'SUPERSEDED',
-      },
-    });
-
-    const created = await tx.assumptionAnalysisSnapshot.create({
-      data: {
-        assumptionKey: params.payload.assumptionKey,
-        analysisType: params.payload.analysisType,
-        inputHash: params.payload.inputHash,
-        codeVersion: params.payload.codeVersion,
-        configSignature: params.payload.configSignature,
-        config,
-        output: params.output,
-        status: 'CURRENT',
-      },
-    });
-
-    return {
-      snapshot: created,
-      supersededCount: superseded.count,
-      reusedExisting: false,
-    };
+  const created = await params.client.assumptionAnalysisSnapshot.create({
+    data: {
+      assumptionKey: params.payload.assumptionKey,
+      analysisType: params.payload.analysisType,
+      inputHash: params.payload.inputHash,
+      codeVersion: params.payload.codeVersion,
+      configSignature: params.payload.configSignature,
+      config,
+      output: params.output,
+      status: 'CURRENT',
+    },
   });
 
   log.debug({
-    snapshotId: persisted.snapshot.id,
+    snapshotId: created.id,
     inputHash: params.payload.inputHash,
     configSignature: params.payload.configSignature,
-    supersededCount: persisted.supersededCount,
-    reusedExisting: persisted.reusedExisting,
-  }, persisted.reusedExisting ? 'Reused existing order-effect snapshot during write' : 'Persisted order-effect snapshot');
+    supersededCount: superseded.count,
+    reusedExisting: false,
+  }, 'Persisted order-effect snapshot');
 
-  return persisted.snapshot;
+  return created;
 }
 
 function sortStrings(values: string[]): string[] {

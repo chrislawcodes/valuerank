@@ -20,6 +20,7 @@ import {
 } from './order-effect-analysis.js';
 import {
   buildOrderEffectCachePayload,
+  DuplicateCurrentOrderEffectSnapshotError,
   getCurrentOrderEffectSnapshot,
   writeCurrentOrderEffectSnapshot,
 } from './order-effect-cache.js';
@@ -169,225 +170,242 @@ export async function getOrderInvarianceAnalysisResult(params: {
   directionOnly: boolean;
   trimOutliers: boolean;
 }): Promise<OrderInvarianceResult> {
-  const pairRows = await db.assumptionScenarioPair.findMany({
-    where: {
-      assumptionKey: ORDER_INVARIANCE_KEY,
-      equivalenceReviewStatus: 'APPROVED',
-      equivalenceReviewedAt: { not: null },
-    },
-    select: {
-      id: true,
-      variantType: true,
-      sourceScenario: {
-        select: {
-          id: true,
-          name: true,
-          definitionId: true,
-          orientationFlipped: true,
-        },
-      },
-      variantScenario: {
-        select: {
-          id: true,
-          name: true,
-          definitionId: true,
-          orientationFlipped: true,
-        },
-      },
-    },
-  }) as PairRecord[];
+  return db.$transaction(async (tx) => {
+    const pipelineLockKey = [
+      ORDER_INVARIANCE_KEY,
+      params.directionOnly ? 'direction' : 'exact',
+      params.trimOutliers ? 'trim' : 'no-trim',
+      ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
+    ].join(':');
+    await tx.$queryRawUnsafe(
+      'SELECT pg_advisory_xact_lock(hashtext($1))',
+      pipelineLockKey
+    );
 
-  const lockedById = new Map(
-    LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
-  );
-  const relevantPairs = pairRows.filter((pair) => lockedById.has(pair.sourceScenario.definitionId));
-
-  const activeModels = await db.llmModel.findMany({
-    where: { status: 'ACTIVE' },
-    select: { modelId: true, displayName: true },
-  });
-  const activeModelLabels = new Map(
-    activeModels.map((model) => [model.modelId, model.displayName])
-  );
-
-  const allScenarioIds = Array.from(new Set(
-    relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
-  ));
-  const scenarioIdToVariantType = new Map<string, string | null>();
-  for (const pair of pairRows) {
-    scenarioIdToVariantType.set(pair.sourceScenario.id, null);
-    scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
-  }
-
-  const transcriptRecords = allScenarioIds.length > 0
-    ? await db.transcript.findMany({
+    const pairRows = await tx.assumptionScenarioPair.findMany({
       where: {
-        deletedAt: null,
-        scenarioId: { in: allScenarioIds },
-        decisionCode: { in: Array.from(VALID_DECISIONS) },
+        assumptionKey: ORDER_INVARIANCE_KEY,
+        equivalenceReviewStatus: 'APPROVED',
+        equivalenceReviewedAt: { not: null },
       },
       select: {
         id: true,
-        scenarioId: true,
-        modelId: true,
-        modelVersion: true,
-        decisionCode: true,
-        createdAt: true,
-        run: {
+        variantType: true,
+        sourceScenario: {
           select: {
-            deletedAt: true,
-            config: true,
-            tags: {
-              select: {
-                tag: {
-                  select: { name: true },
+            id: true,
+            name: true,
+            definitionId: true,
+            orientationFlipped: true,
+          },
+        },
+        variantScenario: {
+          select: {
+            id: true,
+            name: true,
+            definitionId: true,
+            orientationFlipped: true,
+          },
+        },
+      },
+    }) as PairRecord[];
+
+    const lockedById = new Map(
+      LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
+    );
+    const relevantPairs = pairRows.filter((pair) => lockedById.has(pair.sourceScenario.definitionId));
+
+    const activeModels = await tx.llmModel.findMany({
+      where: { status: 'ACTIVE' },
+      select: { modelId: true, displayName: true },
+    });
+    const activeModelLabels = new Map(
+      activeModels.map((model) => [model.modelId, model.displayName])
+    );
+
+    const allScenarioIds = Array.from(new Set(
+      relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
+    ));
+    const scenarioIdToVariantType = new Map<string, string | null>();
+    for (const pair of pairRows) {
+      scenarioIdToVariantType.set(pair.sourceScenario.id, null);
+      scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
+    }
+
+    const transcriptRecords = allScenarioIds.length > 0
+      ? await tx.transcript.findMany({
+        where: {
+          deletedAt: null,
+          scenarioId: { in: allScenarioIds },
+          decisionCode: { in: Array.from(VALID_DECISIONS) },
+        },
+        select: {
+          id: true,
+          scenarioId: true,
+          modelId: true,
+          modelVersion: true,
+          decisionCode: true,
+          createdAt: true,
+          run: {
+            select: {
+              deletedAt: true,
+              config: true,
+              tags: {
+                select: {
+                  tag: {
+                    select: { name: true },
+                  },
                 },
               },
             },
           },
         },
-      },
-    })
-    : [];
+      })
+      : [];
 
-  const sourceScenarioIds = new Set(relevantPairs.map((pair) => pair.sourceScenario.id));
-  const transcriptsByScenarioAndModel = new Map<string, CandidateTranscript[]>();
-  const inferredModelIds = new Set<string>();
+    const sourceScenarioIds = new Set(relevantPairs.map((pair) => pair.sourceScenario.id));
+    const transcriptsByScenarioAndModel = new Map<string, CandidateTranscript[]>();
+    const inferredModelIds = new Set<string>();
 
-  for (const transcript of transcriptRecords as CandidateTranscriptRecord[]) {
-    if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
-      continue;
-    }
-    if (!isTempZeroRun(transcript.run.config)) {
-      continue;
-    }
-
-    const assumptionKey = getRunAssumptionKey(transcript.run.config);
-    const isBaselineScenario = sourceScenarioIds.has(transcript.scenarioId);
-    if (isBaselineScenario) {
-      if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
+    for (const transcript of transcriptRecords as CandidateTranscriptRecord[]) {
+      if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
         continue;
       }
-      if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript.run.tags)) {
+      if (!isTempZeroRun(transcript.run.config)) {
         continue;
       }
-    } else {
-      if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript.run.tags)) {
+
+      const assumptionKey = getRunAssumptionKey(transcript.run.config);
+      const isBaselineScenario = sourceScenarioIds.has(transcript.scenarioId);
+      if (isBaselineScenario) {
+        if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
+          continue;
+        }
+        if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript.run.tags)) {
+          continue;
+        }
+      } else {
+        if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript.run.tags)) {
+          continue;
+        }
+      }
+
+      const decision = parseDecision(transcript.decisionCode);
+      if (decision == null) {
         continue;
+      }
+
+      inferredModelIds.add(transcript.modelId);
+      const key = `${transcript.scenarioId}::${transcript.modelId}`;
+      const candidate: CandidateTranscript = {
+        id: transcript.id,
+        scenarioId: transcript.scenarioId,
+        modelId: transcript.modelId,
+        modelVersion: transcript.modelVersion,
+        rawDecision: decision,
+        decision: normalizeDecision(
+          decision,
+          scenarioIdToVariantType.get(transcript.scenarioId) ?? null
+        ),
+        createdAt: transcript.createdAt,
+      };
+      const existing = transcriptsByScenarioAndModel.get(key);
+      if (existing != null) {
+        existing.push(candidate);
+      } else {
+        transcriptsByScenarioAndModel.set(key, [candidate]);
       }
     }
 
-    const decision = parseDecision(transcript.decisionCode);
-    if (decision == null) {
-      continue;
+    const effectiveModels = Array.from(inferredModelIds)
+      .sort()
+      .map((modelId) => ({
+        modelId,
+        modelLabel: activeModelLabels.get(modelId) ?? modelId,
+      }));
+
+    const pickCache = new Map<string, PickResult>();
+    const selectionFingerprints = new Set<string>();
+
+    function getPick(scenarioId: string, modelId: string): PickResult {
+      const key = `${scenarioId}::${modelId}`;
+      const existing = pickCache.get(key);
+      if (existing != null) {
+        return existing;
+      }
+      const next = pickStableTranscripts(
+        transcriptsByScenarioAndModel.get(key) ?? [],
+        ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT
+      );
+      pickCache.set(key, next);
+      selectionFingerprints.add(fingerprintPick(key, next));
+      return next;
     }
 
-    inferredModelIds.add(transcript.modelId);
-    const key = `${transcript.scenarioId}::${transcript.modelId}`;
-    const candidate: CandidateTranscript = {
-      id: transcript.id,
-      scenarioId: transcript.scenarioId,
-      modelId: transcript.modelId,
-      modelVersion: transcript.modelVersion,
-      rawDecision: decision,
-      decision: normalizeDecision(
-        decision,
-        scenarioIdToVariantType.get(transcript.scenarioId) ?? null
-      ),
-      createdAt: transcript.createdAt,
-    };
-    const existing = transcriptsByScenarioAndModel.get(key);
-    if (existing != null) {
-      existing.push(candidate);
-    } else {
-      transcriptsByScenarioAndModel.set(key, [candidate]);
+    for (const pair of relevantPairs) {
+      for (const model of effectiveModels) {
+        getPick(pair.sourceScenario.id, model.modelId);
+        getPick(pair.variantScenario.id, model.modelId);
+      }
     }
-  }
 
-  const effectiveModels = Array.from(inferredModelIds)
-    .sort()
-    .map((modelId) => ({
-      modelId,
-      modelLabel: activeModelLabels.get(modelId) ?? modelId,
-    }));
+    const cachePayload = buildOrderEffectCachePayload({
+      trimOutliers: params.trimOutliers,
+      directionOnly: params.directionOnly,
+      requiredTrialCount: ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
+      lockedVignetteIds: Array.from(new Set(relevantPairs.map((pair) => pair.sourceScenario.definitionId))),
+      approvedPairIds: relevantPairs
+        .map((pair) => pair.id)
+        .filter((pairId): pairId is string => typeof pairId === 'string' && pairId !== ''),
+      snapshotModelIds: effectiveModels.map((model) => model.modelId),
+      selectionFingerprints: Array.from(selectionFingerprints),
+    });
 
-  const pickCache = new Map<string, PickResult>();
-  const selectionFingerprints = new Set<string>();
-
-  function getPick(scenarioId: string, modelId: string): PickResult {
-    const key = `${scenarioId}::${modelId}`;
-    const existing = pickCache.get(key);
-    if (existing != null) {
-      return existing;
-    }
-    const next = pickStableTranscripts(
-      transcriptsByScenarioAndModel.get(key) ?? [],
-      ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT
-    );
-    pickCache.set(key, next);
-    selectionFingerprints.add(fingerprintPick(key, next));
-    return next;
-  }
-
-  for (const pair of relevantPairs) {
-    for (const model of effectiveModels) {
-      getPick(pair.sourceScenario.id, model.modelId);
-      getPick(pair.variantScenario.id, model.modelId);
-    }
-  }
-
-  const cachePayload = buildOrderEffectCachePayload({
-    trimOutliers: params.trimOutliers,
-    directionOnly: params.directionOnly,
-    requiredTrialCount: ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
-    lockedVignetteIds: Array.from(new Set(relevantPairs.map((pair) => pair.sourceScenario.definitionId))),
-    approvedPairIds: relevantPairs
-      .map((pair) => pair.id)
-      .filter((pairId): pairId is string => typeof pairId === 'string' && pairId !== ''),
-    snapshotModelIds: effectiveModels.map((model) => model.modelId),
-    selectionFingerprints: Array.from(selectionFingerprints),
-  });
-
-  try {
-    const cachedSnapshot = await getCurrentOrderEffectSnapshot(cachePayload);
-    if (cachedSnapshot != null) {
-      const cachedResult = deserializeOrderInvarianceSnapshotOutput(cachedSnapshot);
-      if (cachedResult != null) {
-        log.debug({
+    try {
+      const cachedSnapshot = await getCurrentOrderEffectSnapshot(tx, cachePayload);
+      if (cachedSnapshot != null) {
+        const cachedResult = deserializeOrderInvarianceSnapshotOutput(cachedSnapshot);
+        if (cachedResult != null) {
+          log.debug({
+            inputHash: cachePayload.inputHash,
+            snapshotId: cachedSnapshot.id,
+            selectionFingerprintCount: selectionFingerprints.size,
+          }, 'Returning cached order-invariance snapshot');
+          return cachedResult;
+        }
+        log.warn({
           inputHash: cachePayload.inputHash,
           snapshotId: cachedSnapshot.id,
-          selectionFingerprintCount: selectionFingerprints.size,
-        }, 'Returning cached order-invariance snapshot');
-        return cachedResult;
+        }, 'Order-invariance snapshot output was unreadable, recomputing');
       }
-      log.warn({
-        inputHash: cachePayload.inputHash,
-        snapshotId: cachedSnapshot.id,
-      }, 'Order-invariance snapshot output was unreadable, recomputing');
+    } catch (error) {
+      if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
+        throw error;
+      }
+      log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
     }
-  } catch (error) {
-    log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
-  }
 
-  const computedResult = computeOrderInvarianceFromSelections({
-    relevantPairs,
-    effectiveModels,
-    lockedById,
-    trimOutliers: params.trimOutliers,
-    directionOnly: params.directionOnly,
-    getPick,
-  });
-
-  try {
-    await writeCurrentOrderEffectSnapshot({
-      payload: cachePayload,
-      output: serializeOrderInvarianceSnapshotOutput(computedResult),
+    const computedResult = computeOrderInvarianceFromSelections({
+      relevantPairs,
+      effectiveModels,
+      lockedById,
+      trimOutliers: params.trimOutliers,
+      directionOnly: params.directionOnly,
+      getPick,
     });
-  } catch (error) {
-    log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
-  }
 
-  return computedResult;
+    try {
+      await writeCurrentOrderEffectSnapshot({
+        client: tx,
+        payload: cachePayload,
+        output: serializeOrderInvarianceSnapshotOutput(computedResult),
+      });
+    } catch (error) {
+      log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
+    }
+
+    return computedResult;
+  });
 }
 
 function computeOrderInvarianceFromSelections(params: {

@@ -615,7 +615,8 @@ Config signature means the cache dimensions other than transcript membership and
 
 Do not supersede CURRENT snapshots for a different config signature. Multiple CURRENT snapshots for different config signatures are valid.
 Do not copy the existing run-based `cache.ts` supersede pattern that updates all CURRENT rows for a broader key. This feature must supersede only rows whose config signature matches exactly.
-Use a transactional lock keyed by config signature when writing snapshots so concurrent recomputes do not leave zero CURRENT rows or nondeterministic duplicates.
+Acquire a coarse per-config pipeline lock before reading mutable inputs and hold it through cache lookup / compute / write, so an older request cannot read older data and later supersede a fresher CURRENT snapshot.
+Also enforce one CURRENT row per `(assumptionKey, analysisType, configSignature)` with a partial unique index in Postgres.
 
 This should mirror the existing analysis cache pattern in [cache.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/cache.ts).
 

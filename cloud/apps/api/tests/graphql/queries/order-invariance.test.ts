@@ -32,7 +32,7 @@ vi.mock('@valuerank/db', () => ({
       findMany: vi.fn(),
     },
     assumptionAnalysisSnapshot: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -151,6 +151,7 @@ describe('assumptionsOrderInvariance query', () => {
     vi.mocked(db.assumptionAnalysisSnapshot.updateMany).mockResolvedValue({
       count: 0,
     } as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([] as never);
   });
 
   it('returns backend-computed modelMetrics while preserving rows', async () => {
@@ -181,7 +182,7 @@ describe('assumptionsOrderInvariance query', () => {
       buildTranscript({ id: 'f4', scenarioId: 'scenario-f', decisionCode: '5', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
       buildTranscript({ id: 'f5', scenarioId: 'scenario-f', decisionCode: '2', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
     ] as never);
-    vi.mocked(db.assumptionAnalysisSnapshot.findFirst).mockResolvedValue(null as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([] as never);
 
     const response = await request(app)
       .post('/graphql')
@@ -240,7 +241,7 @@ describe('assumptionsOrderInvariance query', () => {
       buildTranscript({ id: 'p4', scenarioId: 'scenario-p', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
       buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
     ] as never);
-    vi.mocked(db.assumptionAnalysisSnapshot.findFirst).mockResolvedValue({
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([{
       id: 'snapshot-cached',
       createdAt: new Date('2026-03-09T08:00:00Z'),
       output: {
@@ -298,7 +299,7 @@ describe('assumptionsOrderInvariance query', () => {
           },
         ],
       },
-    } as never);
+    }] as never);
 
     const response = await request(app)
       .post('/graphql')
@@ -331,7 +332,7 @@ describe('assumptionsOrderInvariance query', () => {
       buildTranscript({ id: 'f4', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
       buildTranscript({ id: 'f5', scenarioId: 'scenario-f', decisionCode: '3', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
     ] as never);
-    vi.mocked(db.assumptionAnalysisSnapshot.findFirst).mockResolvedValue(null as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([] as never);
 
     const response = await request(app)
       .post('/graphql')
@@ -361,5 +362,35 @@ describe('assumptionsOrderInvariance query', () => {
         isMatch: false,
       }),
     ]);
+  });
+
+  it('fails loudly when duplicate CURRENT snapshots exist for one input hash', async () => {
+    vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
+      buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      buildTranscript({ id: 'b1', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b2', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b3', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b4', scenarioId: 'scenario-baseline', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b5', scenarioId: 'scenario-baseline', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'p1', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p2', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p3', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p4', scenarioId: 'scenario-p', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
+    ] as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([
+      { id: 'snapshot-a', createdAt: new Date('2026-03-09T08:00:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
+      { id: 'snapshot-b', createdAt: new Date('2026-03-09T08:01:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
+    ] as never);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({ query, variables: { directionOnly: true, trimOutliers: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors?.[0]?.message).toContain('Multiple CURRENT order-effect snapshots found');
   });
 });
