@@ -786,7 +786,10 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
       directionOnly: t.arg.boolean({ required: false }),
       trimOutliers: t.arg.boolean({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const directionOnly = args.directionOnly ?? true;
       const trimOutliers = args.trimOutliers ?? true;
       return getOrderInvarianceAnalysisResult({ directionOnly, trimOutliers });

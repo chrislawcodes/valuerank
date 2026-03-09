@@ -201,7 +201,7 @@ export function AnalysisPanel() {
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Supporting Rows</h3>
               <p className="mt-1 text-xs text-gray-600">
-                `rows` remain available for drilldown compatibility. `isMatch` here is the legacy row-level match flag, not a reversal signal.
+                Rows remain available for drilldown compatibility. Legacy Match here is the legacy row-level match flag, not a reversal signal.
               </p>
             </div>
             <div className="max-h-[28rem] overflow-auto">

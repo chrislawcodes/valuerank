@@ -266,6 +266,14 @@ describe('assumptionsOrderInvariance query', () => {
     expect(db.assumptionAnalysisSnapshot.updateMany).toHaveBeenCalledTimes(1);
   });
 
+  it('requires authentication for the main analysis query', async () => {
+    const response = await request(app)
+      .post('/graphql')
+      .send({ query, variables: { directionOnly: true, trimOutliers: true } });
+
+    expect(response.status).toBe(401);
+  });
+
   it('reuses a cached snapshot when the input hash matches', async () => {
     vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
       buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
