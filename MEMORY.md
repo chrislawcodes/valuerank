@@ -33,6 +33,7 @@ Related docs:
 - Cache hash is based on the selected transcript state that actually drives the analysis, not just transcript ids.
 - The analysis service acquires a coarse per-config pipeline lock before reading mutable inputs, so older requests cannot supersede newer CURRENT snapshots for the same config.
 - DB also enforces one CURRENT row per `(assumptionKey, analysisType, configSignature)` via a partial unique index.
+- DB also enforces one CURRENT row per exact `(assumptionKey, analysisType, inputHash)` cache hit and uses partial indexes for hit/supersede paths.
 - Cache hit requires exact match on:
   - `assumptionKey`
   - `analysisType`

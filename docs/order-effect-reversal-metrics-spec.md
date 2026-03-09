@@ -617,6 +617,12 @@ Do not supersede CURRENT snapshots for a different config signature. Multiple CU
 Do not copy the existing run-based `cache.ts` supersede pattern that updates all CURRENT rows for a broader key. This feature must supersede only rows whose config signature matches exactly.
 Acquire a coarse per-config pipeline lock before reading mutable inputs and hold it through cache lookup / compute / write, so an older request cannot read older data and later supersede a fresher CURRENT snapshot.
 Also enforce one CURRENT row per `(assumptionKey, analysisType, configSignature)` with a partial unique index in Postgres.
+Also enforce one CURRENT row per exact `(assumptionKey, analysisType, inputHash)` hit and add partial indexes for:
+
+- current exact-hit reads
+- current config-signature supersede updates
+
+These partial indexes live in SQL migration DDL; Prisma schema cannot express the full partial-index contract directly.
 
 This should mirror the existing analysis cache pattern in [cache.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/cache.ts).
 

@@ -41,3 +41,12 @@ CREATE INDEX "assumption_analysis_snapshots_assumption_key_analysis_type_inp_idx
 
 -- CreateIndex
 CREATE UNIQUE INDEX "assumption_analysis_snapshots_current_config_signature_key" ON "assumption_analysis_snapshots"("assumption_key", "analysis_type", "config_signature") WHERE "status" = 'CURRENT' AND "deleted_at" IS NULL;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "assumption_analysis_snapshots_current_input_hash_key" ON "assumption_analysis_snapshots"("assumption_key", "analysis_type", "input_hash") WHERE "status" = 'CURRENT' AND "deleted_at" IS NULL;
+
+-- CreateIndex
+CREATE INDEX "assumption_analysis_snapshots_current_hit_idx" ON "assumption_analysis_snapshots"("assumption_key", "analysis_type", "input_hash", "created_at" DESC) WHERE "status" = 'CURRENT' AND "deleted_at" IS NULL;
+
+-- CreateIndex
+CREATE INDEX "assumption_analysis_snapshots_current_config_idx" ON "assumption_analysis_snapshots"("assumption_key", "analysis_type", "config_signature") WHERE "status" = 'CURRENT' AND "deleted_at" IS NULL;
