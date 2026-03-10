@@ -35,6 +35,7 @@ vi.mock('@valuerank/db', () => ({
 
 import { db } from '@valuerank/db';
 import { getOrderInvarianceAnalysisResult } from '../order-effect-service.js';
+import { buildOrderEffectCachePayload, buildOrderEffectSnapshotConfig } from '../order-effect-cache.js';
 
 const mockDb = db as unknown as {
   $transaction: ReturnType<typeof vi.fn>;
@@ -309,6 +310,15 @@ describe('order-effect service', () => {
 
   it('repairs duplicate CURRENT snapshots and returns the newest readable snapshot', async () => {
     const transcriptRecords = buildFullyFlippedDataset('2');
+    const payload = buildOrderEffectCachePayload({
+      trimOutliers: true,
+      directionOnly: true,
+      requiredTrialCount: 5,
+      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
+      approvedPairIds: ['pair-f'],
+      snapshotModelIds: ['model-a'],
+      selectionFingerprints: ['baseline', 'variant'],
+    });
     const cachedOutput = {
       schemaVersion: 1,
       summary: {
@@ -366,12 +376,40 @@ describe('order-effect service', () => {
     mockDb.transcript.findMany.mockResolvedValue(transcriptRecords);
     mockDb.assumptionAnalysisSnapshot.findMany
       .mockResolvedValueOnce([
-        { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z') },
-        { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z') },
+        {
+          id: 'snapshot-new',
+          createdAt: new Date('2026-03-01T01:00:00Z'),
+          configSignature: payload.configSignature,
+          codeVersion: payload.codeVersion,
+          config: buildOrderEffectSnapshotConfig(payload),
+          output: cachedOutput,
+        },
+        {
+          id: 'snapshot-old',
+          createdAt: new Date('2026-03-01T00:00:00Z'),
+          configSignature: payload.configSignature,
+          codeVersion: payload.codeVersion,
+          config: buildOrderEffectSnapshotConfig(payload),
+          output: cachedOutput,
+        },
       ])
       .mockResolvedValueOnce([
-        { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z'), output: cachedOutput },
-        { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z'), output: cachedOutput },
+        {
+          id: 'snapshot-new',
+          createdAt: new Date('2026-03-01T01:00:00Z'),
+          configSignature: payload.configSignature,
+          codeVersion: payload.codeVersion,
+          config: buildOrderEffectSnapshotConfig(payload),
+          output: cachedOutput,
+        },
+        {
+          id: 'snapshot-old',
+          createdAt: new Date('2026-03-01T00:00:00Z'),
+          configSignature: payload.configSignature,
+          codeVersion: payload.codeVersion,
+          config: buildOrderEffectSnapshotConfig(payload),
+          output: cachedOutput,
+        },
       ]);
     mockDb.assumptionAnalysisSnapshot.updateMany.mockResolvedValue({ count: 1 });
 

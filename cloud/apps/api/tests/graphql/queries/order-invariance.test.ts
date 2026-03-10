@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { getAuthHeader } from '../../test-utils.js';
+import { buildOrderEffectCachePayload, buildOrderEffectSnapshotConfig } from '../../../src/services/assumptions/order-effect-cache.js';
 
 vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: vi.fn(() => ({
@@ -415,6 +416,15 @@ describe('assumptionsOrderInvariance query', () => {
   });
 
   it('repairs duplicate CURRENT snapshots instead of failing the query', async () => {
+    const payload = buildOrderEffectCachePayload({
+      trimOutliers: true,
+      directionOnly: true,
+      requiredTrialCount: 5,
+      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
+      approvedPairIds: ['pair-p'],
+      snapshotModelIds: ['model-a'],
+      selectionFingerprints: ['baseline', 'variant'],
+    });
     vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
       buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
     ] as never);
@@ -431,8 +441,22 @@ describe('assumptionsOrderInvariance query', () => {
       buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
     ] as never);
     vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([
-      { id: 'snapshot-b', createdAt: new Date('2026-03-09T08:01:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
-      { id: 'snapshot-a', createdAt: new Date('2026-03-09T08:00:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
+      {
+        id: 'snapshot-b',
+        createdAt: new Date('2026-03-09T08:01:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: {}, modelMetrics: [], rows: [] },
+      },
+      {
+        id: 'snapshot-a',
+        createdAt: new Date('2026-03-09T08:00:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: {}, modelMetrics: [], rows: [] },
+      },
     ] as never);
 
     const response = await request(app)

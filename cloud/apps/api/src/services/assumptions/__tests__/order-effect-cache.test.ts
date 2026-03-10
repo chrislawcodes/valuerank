@@ -142,18 +142,37 @@ describe('order-effect-cache helpers', () => {
   });
 
   it('repairs duplicate CURRENT snapshots by superseding older matches', async () => {
+    const payload = buildPayload();
     const updateMany = vi.fn(async () => ({ count: 1 }));
     const client = {
       assumptionAnalysisSnapshot: {
         findMany: vi.fn(async () => ([
-          { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z') },
-          { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z') },
+          {
+            id: 'snapshot-new',
+            createdAt: new Date('2026-03-01T01:00:00Z'),
+            configSignature: payload.configSignature,
+            codeVersion: payload.codeVersion,
+            config: buildOrderEffectSnapshotConfig(payload),
+            output: { summary: {}, modelMetrics: [], rows: [] },
+          },
+          {
+            id: 'snapshot-old',
+            createdAt: new Date('2026-03-01T00:00:00Z'),
+            configSignature: payload.configSignature,
+            codeVersion: payload.codeVersion,
+            config: buildOrderEffectSnapshotConfig(payload),
+            output: { summary: {}, modelMetrics: [], rows: [] },
+          },
         ])),
         updateMany,
       },
     };
 
-    const keptSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(client as never, { inputHash: 'dup-hash' });
+    const keptSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(client as never, {
+      inputHash: payload.inputHash,
+      configSignature: payload.configSignature,
+      codeVersion: payload.codeVersion,
+    });
 
     expect(keptSnapshot?.id).toBe('snapshot-new');
     expect(updateMany).toHaveBeenCalledWith({
@@ -166,6 +185,42 @@ describe('order-effect-cache helpers', () => {
         status: 'SUPERSEDED',
       },
     });
+  });
+
+  it('refuses to repair duplicate CURRENT snapshots that are not provably equivalent', async () => {
+    const payload = buildPayload();
+    const client = {
+      assumptionAnalysisSnapshot: {
+        findMany: vi.fn(async () => ([
+          {
+            id: 'snapshot-new',
+            createdAt: new Date('2026-03-01T01:00:00Z'),
+            configSignature: payload.configSignature,
+            codeVersion: payload.codeVersion,
+            config: buildOrderEffectSnapshotConfig(payload),
+            output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+          },
+          {
+            id: 'snapshot-old',
+            createdAt: new Date('2026-03-01T00:00:00Z'),
+            configSignature: payload.configSignature,
+            codeVersion: payload.codeVersion,
+            config: buildOrderEffectSnapshotConfig(payload),
+            output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+          },
+        ])),
+        updateMany: vi.fn(),
+      },
+    };
+
+    await expect(
+      repairDuplicateCurrentOrderEffectSnapshots(client as never, {
+        inputHash: payload.inputHash,
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+      })
+    ).rejects.toBeInstanceOf(DuplicateCurrentOrderEffectSnapshotError);
+    expect(client.assumptionAnalysisSnapshot.updateMany).not.toHaveBeenCalled();
   });
 
   it('supersedes only CURRENT snapshots with the same config signature before creating a replacement', async () => {

@@ -133,7 +133,7 @@ export async function getCurrentOrderEffectSnapshot(
 
 export async function repairDuplicateCurrentOrderEffectSnapshots(
   client: SnapshotClient,
-  payload: Pick<OrderEffectCachePayload, 'inputHash'>
+  payload: Pick<OrderEffectCachePayload, 'inputHash' | 'configSignature' | 'codeVersion'>
 ) {
   const snapshots = await client.assumptionAnalysisSnapshot.findMany({
     where: {
@@ -150,6 +150,28 @@ export async function repairDuplicateCurrentOrderEffectSnapshots(
 
   if (snapshots.length <= 1) {
     return snapshots[0] ?? null;
+  }
+
+  const canonicalSnapshot = snapshots[0];
+  const canonicalConfig = stableStringify(canonicalSnapshot?.config ?? null);
+  const canonicalOutput = stableStringify(canonicalSnapshot?.output ?? null);
+  const duplicatesAreEquivalent = snapshots.every((snapshot) => (
+    snapshot.configSignature === payload.configSignature
+    && snapshot.codeVersion === payload.codeVersion
+    && stableStringify(snapshot.config ?? null) === canonicalConfig
+    && stableStringify(snapshot.output ?? null) === canonicalOutput
+  ));
+
+  if (!duplicatesAreEquivalent) {
+    log.error({
+      inputHash: payload.inputHash,
+      snapshotIds: snapshots.map((snapshot) => snapshot.id),
+      configSignatures: snapshots.map((snapshot) => snapshot.configSignature),
+      codeVersions: snapshots.map((snapshot) => snapshot.codeVersion),
+    }, 'Order-effect cache repair aborted: duplicate CURRENT snapshots were not provably equivalent');
+    throw new DuplicateCurrentOrderEffectSnapshotError(
+      'Multiple CURRENT order-effect snapshots found for one input hash without provable equivalence'
+    );
   }
 
   const [keptSnapshot, ...duplicateSnapshots] = snapshots;
