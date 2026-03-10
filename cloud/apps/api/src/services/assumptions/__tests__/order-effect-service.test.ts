@@ -306,4 +306,93 @@ describe('order-effect service', () => {
     });
     expect(mockLogger.warn).toHaveBeenCalled();
   });
+
+  it('repairs duplicate CURRENT snapshots and returns the newest readable snapshot', async () => {
+    const transcriptRecords = buildFullyFlippedDataset('2');
+    const cachedOutput = {
+      schemaVersion: 1,
+      summary: {
+        status: 'COMPUTED',
+        matchRate: 1,
+        exactMatchRate: 1,
+        presentationEffectMAD: null,
+        scaleEffectMAD: null,
+        totalCandidatePairs: 1,
+        qualifyingPairs: 1,
+        missingPairs: 0,
+        comparablePairs: 1,
+        matchComparablePairs: 1,
+        presentationComparablePairs: 0,
+        scaleComparablePairs: 0,
+        presentationMissingPairs: 0,
+        scaleMissingPairs: 0,
+        sensitiveModelCount: 0,
+        sensitiveVignetteCount: 0,
+        excludedPairs: [],
+      },
+      modelMetrics: [{
+        modelId: 'model-a',
+        modelLabel: 'Model A',
+        matchRate: 1,
+        matchCount: 1,
+        matchEligibleCount: 1,
+        valueOrderReversalRate: null,
+        valueOrderEligibleCount: 0,
+        valueOrderExcludedCount: 0,
+        valueOrderPull: 'no clear pull',
+        scaleOrderReversalRate: null,
+        scaleOrderEligibleCount: 0,
+        scaleOrderExcludedCount: 0,
+        scaleOrderPull: 'no clear pull',
+        withinCellDisagreementRate: 0,
+        pairLevelMarginSummary: null,
+      }],
+      rows: [{
+        modelId: 'model-a',
+        modelLabel: 'Model A',
+        vignetteId: LOCKED_VIGNETTE_ID,
+        vignetteTitle: 'Cached',
+        conditionKey: '4x2',
+        variantType: 'fully_flipped',
+        majorityVoteBaseline: 4,
+        majorityVoteFlipped: 2,
+        rawScore: 2,
+        mismatchType: null,
+        ordinalDistance: 2,
+        isMatch: true,
+      }],
+    };
+
+    mockDb.transcript.findMany.mockResolvedValue(transcriptRecords);
+    mockDb.assumptionAnalysisSnapshot.findMany
+      .mockResolvedValueOnce([
+        { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z') },
+        { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z') },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z'), output: cachedOutput },
+        { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z'), output: cachedOutput },
+      ]);
+    mockDb.assumptionAnalysisSnapshot.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await getOrderInvarianceAnalysisResult({
+      directionOnly: true,
+      trimOutliers: true,
+    });
+
+    expect(result.summary.matchRate).toBe(1);
+    expect(mockDb.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
+    expect(mockDb.assumptionAnalysisSnapshot.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['snapshot-old'] },
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
+    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalled();
+  });
 });
