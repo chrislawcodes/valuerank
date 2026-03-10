@@ -1,5 +1,5 @@
 import { db, type Prisma } from '@valuerank/db';
-import { createLogger } from '@valuerank/shared';
+import { AppError, createLogger } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../../graphql/assumptions-constants.js';
 import { parseTemperature } from '../../utils/temperature.js';
 import {
@@ -35,6 +35,7 @@ const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIA
 const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT = 5;
 const log = createLogger('assumptions:order-effect-service');
+const ORDER_EFFECT_CACHE_INVARIANT_ERROR_CODE = 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT';
 
 export type OrderInvarianceStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 export type OrderInvarianceMismatchType = 'direction_flip' | 'exact_flip' | 'missing_pair' | null;
@@ -173,6 +174,41 @@ type CandidateTranscriptRecord = {
     tags: Array<{ tag: { name: string } }>;
   };
 };
+
+function buildOrderEffectCacheFailureContext(args: {
+  inputHash: string;
+  configSignature: string;
+  codeVersion: string;
+  selectionFingerprintCount: number;
+  approvedPairCount: number;
+  snapshotModelCount: number;
+  duplicateError: DuplicateCurrentOrderEffectSnapshotError;
+  phase: 'cache_read' | 'cache_repair' | 'cache_write';
+}) {
+  return {
+    inputHash: args.inputHash,
+    configSignature: args.configSignature,
+    codeVersion: args.codeVersion,
+    selectionFingerprintCount: args.selectionFingerprintCount,
+    approvedPairCount: args.approvedPairCount,
+    snapshotModelCount: args.snapshotModelCount,
+    phase: args.phase,
+    snapshotIds: args.duplicateError.details?.snapshotIds ?? [],
+    duplicateConfigSignatures: args.duplicateError.details?.configSignatures ?? [],
+    duplicateCodeVersions: args.duplicateError.details?.codeVersions ?? [],
+  };
+}
+
+function createOrderEffectCacheInvariantError(
+  context: ReturnType<typeof buildOrderEffectCacheFailureContext>
+) {
+  return new AppError(
+    'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.',
+    ORDER_EFFECT_CACHE_INVARIANT_ERROR_CODE,
+    500,
+    context
+  );
+}
 
 type TranscriptDetailRecord = {
   id: string;
@@ -425,9 +461,16 @@ export async function getOrderInvarianceAnalysisResult(params: {
       snapshotModelIds: effectiveModels.map((model) => model.modelId),
       selectionFingerprints: Array.from(selectionFingerprints),
     });
+    const cacheFailureBase = {
+      inputHash: cachePayload.inputHash,
+      configSignature: cachePayload.configSignature,
+      codeVersion: cachePayload.codeVersion,
+      selectionFingerprintCount: selectionFingerprints.size,
+      approvedPairCount: cachePayload.approvedPairIds.length,
+      snapshotModelCount: cachePayload.snapshotModelIds.length,
+    };
 
     let shouldRepairUnreadableSnapshot = false;
-    let shouldSkipSnapshotPersistence = false;
     try {
       const cachedSnapshot = await getCurrentOrderEffectSnapshot(tx, cachePayload);
       if (cachedSnapshot != null) {
@@ -448,34 +491,46 @@ export async function getOrderInvarianceAnalysisResult(params: {
       }
     } catch (error) {
       if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
-        log.error({ err: error, inputHash: cachePayload.inputHash }, 'Duplicate CURRENT order-effect snapshots detected, attempting repair');
+        log.error({
+          err: error,
+          ...buildOrderEffectCacheFailureContext({
+            ...cacheFailureBase,
+            duplicateError: error,
+            phase: 'cache_read',
+          }),
+        }, 'Duplicate CURRENT order-effect snapshots detected, attempting repair');
+        let repairedSnapshot;
         try {
-          const repairedSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(tx, cachePayload);
-          if (repairedSnapshot != null) {
-            const repairedResult = deserializeOrderInvarianceSnapshotOutput(repairedSnapshot);
-            if (repairedResult != null) {
-              log.warn({
-                inputHash: cachePayload.inputHash,
-                snapshotId: repairedSnapshot.id,
-              }, 'Returning repaired order-invariance snapshot after duplicate CURRENT repair');
-              return repairedResult;
-            }
+          repairedSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(tx, cachePayload);
+        } catch (repairError) {
+          if (repairError instanceof DuplicateCurrentOrderEffectSnapshotError) {
+            const failureContext = buildOrderEffectCacheFailureContext({
+              ...cacheFailureBase,
+              duplicateError: repairError,
+              phase: 'cache_repair',
+            });
+            log.error({
+              err: repairError,
+              ...failureContext,
+            }, 'Order-effect cache repair failed: duplicate CURRENT snapshots were not provably equivalent');
+            throw createOrderEffectCacheInvariantError(failureContext);
+          }
+          throw repairError;
+        }
+        if (repairedSnapshot != null) {
+          const repairedResult = deserializeOrderInvarianceSnapshotOutput(repairedSnapshot);
+          if (repairedResult != null) {
             log.warn({
               inputHash: cachePayload.inputHash,
               snapshotId: repairedSnapshot.id,
-            }, 'Repaired order-invariance snapshot was unreadable, recomputing');
-            shouldRepairUnreadableSnapshot = true;
+            }, 'Returning repaired order-invariance snapshot after duplicate CURRENT repair');
+            return repairedResult;
           }
-        } catch (repairError) {
-          if (repairError instanceof DuplicateCurrentOrderEffectSnapshotError) {
-            shouldSkipSnapshotPersistence = true;
-            log.error({
-              err: repairError,
-              inputHash: cachePayload.inputHash,
-            }, 'Duplicate CURRENT order-effect snapshots were ambiguous; recomputing in memory and skipping snapshot persistence');
-          } else {
-            throw repairError;
-          }
+          log.warn({
+            inputHash: cachePayload.inputHash,
+            snapshotId: repairedSnapshot.id,
+          }, 'Repaired order-invariance snapshot was unreadable, recomputing');
+          shouldRepairUnreadableSnapshot = true;
         }
       } else {
         log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
@@ -491,21 +546,27 @@ export async function getOrderInvarianceAnalysisResult(params: {
       getPick,
     });
 
-    if (!shouldSkipSnapshotPersistence) {
-      try {
-        await writeCurrentOrderEffectSnapshot({
-          client: tx,
-          payload: cachePayload,
-          output: serializeOrderInvarianceSnapshotOutput(computedResult),
-          allowReuseCurrent: !shouldRepairUnreadableSnapshot,
+    try {
+      await writeCurrentOrderEffectSnapshot({
+        client: tx,
+        payload: cachePayload,
+        output: serializeOrderInvarianceSnapshotOutput(computedResult),
+        allowReuseCurrent: !shouldRepairUnreadableSnapshot,
+      });
+    } catch (error) {
+      if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
+        const failureContext = buildOrderEffectCacheFailureContext({
+          ...cacheFailureBase,
+          duplicateError: error,
+          phase: 'cache_write',
         });
-      } catch (error) {
-        log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
+        log.error({
+          err: error,
+          ...failureContext,
+        }, 'Order-effect snapshot write failed because duplicate CURRENT snapshots require manual repair');
+        throw createOrderEffectCacheInvariantError(failureContext);
       }
-    } else {
-      log.warn({
-        inputHash: cachePayload.inputHash,
-      }, 'Skipped order-invariance snapshot persistence because duplicate CURRENT snapshots were ambiguous');
+      log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
     }
 
     return computedResult;

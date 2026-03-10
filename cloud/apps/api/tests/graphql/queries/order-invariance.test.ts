@@ -425,6 +425,123 @@ describe('assumptionsOrderInvariance query', () => {
       snapshotModelIds: ['model-a'],
       selectionFingerprints: ['baseline', 'variant'],
     });
+    const cachedOutput = {
+      schemaVersion: 1,
+      summary: {
+        status: 'COMPUTED',
+        matchRate: 1,
+        exactMatchRate: 1,
+        presentationEffectMAD: null,
+        scaleEffectMAD: null,
+        totalCandidatePairs: 1,
+        qualifyingPairs: 1,
+        missingPairs: 0,
+        comparablePairs: 1,
+        matchComparablePairs: 1,
+        presentationComparablePairs: 0,
+        scaleComparablePairs: 0,
+        presentationMissingPairs: 0,
+        scaleMissingPairs: 0,
+        sensitiveModelCount: 0,
+        sensitiveVignetteCount: 0,
+        excludedPairs: [],
+      },
+      modelMetrics: [{
+        modelId: 'model-a',
+        modelLabel: 'Model A',
+        matchRate: 1,
+        matchCount: 1,
+        matchEligibleCount: 1,
+        valueOrderReversalRate: null,
+        valueOrderEligibleCount: 0,
+        valueOrderExcludedCount: 0,
+        valueOrderPull: 'no clear pull',
+        scaleOrderReversalRate: null,
+        scaleOrderEligibleCount: 0,
+        scaleOrderExcludedCount: 0,
+        scaleOrderPull: 'no clear pull',
+        withinCellDisagreementRate: 0,
+        pairLevelMarginSummary: null,
+      }],
+      rows: [{
+        modelId: 'model-a',
+        modelLabel: 'Model A',
+        vignetteId: LOCKED_VIGNETTE_ID,
+        vignetteTitle: 'Cached',
+        conditionKey: '4x2',
+        variantType: 'presentation_flipped',
+        majorityVoteBaseline: 4,
+        majorityVoteFlipped: 2,
+        rawScore: 2,
+        mismatchType: null,
+        ordinalDistance: 2,
+        isMatch: true,
+      }],
+    };
+    vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
+      buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      buildTranscript({ id: 'b1', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b2', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b3', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b4', scenarioId: 'scenario-baseline', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b5', scenarioId: 'scenario-baseline', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'p1', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p2', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p3', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p4', scenarioId: 'scenario-p', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
+    ] as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([
+      {
+        id: 'snapshot-b',
+        createdAt: new Date('2026-03-09T08:01:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: cachedOutput,
+      },
+      {
+        id: 'snapshot-a',
+        createdAt: new Date('2026-03-09T08:00:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: cachedOutput,
+      },
+    ] as never);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({ query, variables: { directionOnly: true, trimOutliers: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.assumptionsOrderInvariance.summary.status).toBe('COMPUTED');
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['snapshot-a'] },
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
+  });
+
+  it('returns an explicit cache invariant error when duplicate CURRENT snapshots are ambiguous', async () => {
+    const payload = buildOrderEffectCachePayload({
+      trimOutliers: true,
+      directionOnly: true,
+      requiredTrialCount: 5,
+      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
+      approvedPairIds: ['pair-p'],
+      snapshotModelIds: ['model-a'],
+      selectionFingerprints: ['baseline', 'variant'],
+    });
     vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
       buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
     ] as never);
@@ -452,10 +569,10 @@ describe('assumptionsOrderInvariance query', () => {
       {
         id: 'snapshot-a',
         createdAt: new Date('2026-03-09T08:00:00Z'),
-        configSignature: payload.configSignature,
+        configSignature: `${payload.configSignature}-other`,
         codeVersion: payload.codeVersion,
-        config: buildOrderEffectSnapshotConfig(payload),
-        output: { summary: {}, modelMetrics: [], rows: [] },
+        config: { ...buildOrderEffectSnapshotConfig(payload), directionOnly: false },
+        output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
       },
     ] as never);
 
@@ -465,21 +582,15 @@ describe('assumptionsOrderInvariance query', () => {
       .send({ query, variables: { directionOnly: true, trimOutliers: true } });
 
     expect(response.status).toBe(200);
-    expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.assumptionsOrderInvariance.summary.status).toBe('COMPUTED');
-    expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).toHaveBeenCalledWith({
-      where: {
-        id: { in: ['snapshot-a'] },
-        status: 'CURRENT',
-        deletedAt: null,
-      },
-      data: {
-        status: 'SUPERSEDED',
-      },
-    });
+    expect(response.body.data).toBeNull();
+    expect(response.body.errors[0].message).toBe(
+      'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.'
+    );
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).not.toHaveBeenCalled();
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.create)).not.toHaveBeenCalled();
   });
 
-  it('recomputes instead of failing when duplicate CURRENT snapshots are ambiguous', async () => {
+  it('returns an explicit cache invariant error when write-time duplicate CURRENT snapshots are ambiguous', async () => {
     const payload = buildOrderEffectCachePayload({
       trimOutliers: true,
       directionOnly: true,
@@ -516,9 +627,9 @@ describe('assumptionsOrderInvariance query', () => {
       {
         id: 'snapshot-a',
         createdAt: new Date('2026-03-09T08:00:00Z'),
-        configSignature: payload.configSignature,
+        configSignature: `${payload.configSignature}-other`,
         codeVersion: payload.codeVersion,
-        config: buildOrderEffectSnapshotConfig(payload),
+        config: { ...buildOrderEffectSnapshotConfig(payload), directionOnly: false },
         output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
       },
     ] as never);
@@ -529,8 +640,10 @@ describe('assumptionsOrderInvariance query', () => {
       .send({ query, variables: { directionOnly: true, trimOutliers: true } });
 
     expect(response.status).toBe(200);
-    expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.assumptionsOrderInvariance.summary.status).toBe('COMPUTED');
+    expect(response.body.data).toBeNull();
+    expect(response.body.errors[0].message).toBe(
+      'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.'
+    );
     expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).not.toHaveBeenCalled();
     expect(vi.mocked(db.assumptionAnalysisSnapshot.create)).not.toHaveBeenCalled();
   });
