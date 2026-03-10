@@ -131,6 +131,72 @@ export async function getCurrentOrderEffectSnapshot(
   return snapshot;
 }
 
+export async function repairDuplicateCurrentOrderEffectSnapshots(
+  client: SnapshotClient,
+  payload: Pick<OrderEffectCachePayload, 'inputHash' | 'configSignature' | 'codeVersion'>
+) {
+  const snapshots = await client.assumptionAnalysisSnapshot.findMany({
+    where: {
+      assumptionKey: ORDER_INVARIANCE_ASSUMPTION_KEY,
+      analysisType: REVERSAL_METRICS_ANALYSIS_TYPE,
+      inputHash: payload.inputHash,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  if (snapshots.length <= 1) {
+    return snapshots[0] ?? null;
+  }
+
+  const canonicalSnapshot = snapshots[0];
+  const canonicalConfig = stableStringify(canonicalSnapshot?.config ?? null);
+  const canonicalOutput = stableStringify(canonicalSnapshot?.output ?? null);
+  const duplicatesAreEquivalent = snapshots.every((snapshot) => (
+    snapshot.configSignature === payload.configSignature
+    && snapshot.codeVersion === payload.codeVersion
+    && stableStringify(snapshot.config ?? null) === canonicalConfig
+    && stableStringify(snapshot.output ?? null) === canonicalOutput
+  ));
+
+  if (!duplicatesAreEquivalent) {
+    log.error({
+      inputHash: payload.inputHash,
+      snapshotIds: snapshots.map((snapshot) => snapshot.id),
+      configSignatures: snapshots.map((snapshot) => snapshot.configSignature),
+      codeVersions: snapshots.map((snapshot) => snapshot.codeVersion),
+    }, 'Order-effect cache repair aborted: duplicate CURRENT snapshots were not provably equivalent');
+    throw new DuplicateCurrentOrderEffectSnapshotError(
+      'Multiple CURRENT order-effect snapshots found for one input hash without provable equivalence'
+    );
+  }
+
+  const [keptSnapshot, ...duplicateSnapshots] = snapshots;
+  const duplicateIds = duplicateSnapshots.map((snapshot) => snapshot.id);
+
+  await client.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      id: { in: duplicateIds },
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    data: {
+      status: 'SUPERSEDED',
+    },
+  });
+
+  log.warn({
+    inputHash: payload.inputHash,
+    keptSnapshotId: keptSnapshot?.id ?? null,
+    supersededSnapshotIds: duplicateIds,
+  }, 'Repaired duplicate CURRENT order-effect snapshots for one input hash');
+
+  return keptSnapshot ?? null;
+}
+
 export async function writeCurrentOrderEffectSnapshot(params: {
   client: SnapshotClient;
   payload: OrderEffectCachePayload;
