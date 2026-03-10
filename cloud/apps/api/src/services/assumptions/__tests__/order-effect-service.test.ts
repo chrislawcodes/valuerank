@@ -1,15 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockLogger } = vi.hoisted(() => ({
+const { mockLogger, MockAppError } = vi.hoisted(() => ({
   mockLogger: {
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
+  MockAppError: class MockAppError extends Error {
+    constructor(
+      message: string,
+      public code: string,
+      public statusCode: number = 500,
+      public context?: Record<string, unknown>
+    ) {
+      super(message);
+      this.name = 'AppError';
+    }
+  },
 }));
 
 vi.mock('@valuerank/shared', () => ({
   createLogger: vi.fn(() => mockLogger),
+  AppError: MockAppError,
 }));
 
 vi.mock('@valuerank/db', () => ({
@@ -434,51 +446,111 @@ describe('order-effect service', () => {
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 
-  it('recomputes in memory and skips snapshot persistence when duplicate CURRENT snapshots are ambiguous', async () => {
+  it('fails explicitly when duplicate CURRENT snapshots are ambiguous during cache repair', async () => {
     const transcriptRecords = buildFullyFlippedDataset('2');
-    const payload = buildOrderEffectCachePayload({
-      trimOutliers: true,
-      directionOnly: true,
-      requiredTrialCount: 5,
-      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
-      approvedPairIds: ['pair-f'],
-      snapshotModelIds: ['model-a'],
-      selectionFingerprints: ['baseline', 'variant'],
-    });
-
+    mockDb.assumptionAnalysisSnapshot.findMany.mockReset();
+    mockDb.assumptionAnalysisSnapshot.updateMany.mockReset();
+    mockDb.assumptionAnalysisSnapshot.create.mockReset();
     mockDb.transcript.findMany.mockResolvedValue(transcriptRecords);
-    mockDb.assumptionAnalysisSnapshot.findMany.mockResolvedValue([
-      {
-        id: 'snapshot-new',
-        createdAt: new Date('2026-03-01T01:00:00Z'),
-        configSignature: payload.configSignature,
-        codeVersion: payload.codeVersion,
-        config: buildOrderEffectSnapshotConfig(payload),
-        output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
-      },
-      {
-        id: 'snapshot-old',
-        createdAt: new Date('2026-03-01T00:00:00Z'),
-        configSignature: payload.configSignature,
-        codeVersion: payload.codeVersion,
-        config: buildOrderEffectSnapshotConfig(payload),
-        output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
-      },
-    ]);
+    mockDb.assumptionAnalysisSnapshot.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'snapshot-new',
+          createdAt: new Date('2026-03-01T01:00:00Z'),
+          configSignature: 'config-current',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: true },
+          output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+        },
+        {
+          id: 'snapshot-old',
+          createdAt: new Date('2026-03-01T00:00:00Z'),
+          configSignature: 'config-other',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: false },
+          output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'snapshot-new',
+          createdAt: new Date('2026-03-01T01:00:00Z'),
+          configSignature: 'config-current',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: true },
+          output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+        },
+        {
+          id: 'snapshot-old',
+          createdAt: new Date('2026-03-01T00:00:00Z'),
+          configSignature: 'config-other',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: false },
+          output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+        },
+      ]);
 
-    const result = await getOrderInvarianceAnalysisResult({
+    await expect(getOrderInvarianceAnalysisResult({
       directionOnly: true,
       trimOutliers: true,
+    })).rejects.toMatchObject({
+      message: 'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.',
+      code: 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT',
     });
 
-    expect(result.summary.status).toBe('COMPUTED');
-    expect(result.summary.matchRate).toBe(1);
     expect(mockDb.assumptionAnalysisSnapshot.updateMany).not.toHaveBeenCalled();
     expect(mockDb.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalled();
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ inputHash: expect.any(String) }),
-      'Skipped order-invariance snapshot persistence because duplicate CURRENT snapshots were ambiguous'
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'cache_repair',
+        snapshotIds: ['snapshot-new', 'snapshot-old'],
+      }),
+      'Order-effect cache repair failed: duplicate CURRENT snapshots were not provably equivalent'
+    );
+  });
+
+  it('fails explicitly when duplicate CURRENT snapshots are discovered during snapshot write', async () => {
+    const transcriptRecords = buildFullyFlippedDataset('2');
+    mockDb.assumptionAnalysisSnapshot.findMany.mockReset();
+    mockDb.assumptionAnalysisSnapshot.updateMany.mockReset();
+    mockDb.assumptionAnalysisSnapshot.create.mockReset();
+    mockDb.transcript.findMany.mockResolvedValue(transcriptRecords);
+    mockDb.assumptionAnalysisSnapshot.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'snapshot-new',
+          createdAt: new Date('2026-03-01T01:00:00Z'),
+          configSignature: 'config-current',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: true },
+          output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+        },
+        {
+          id: 'snapshot-old',
+          createdAt: new Date('2026-03-01T00:00:00Z'),
+          configSignature: 'config-other',
+          codeVersion: 'reversal_metrics_v1',
+          config: { directionOnly: false },
+          output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+        },
+      ]);
+
+    await expect(getOrderInvarianceAnalysisResult({
+      directionOnly: true,
+      trimOutliers: true,
+    })).rejects.toMatchObject({
+      message: 'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.',
+      code: 'ASSUMPTION_ANALYSIS_CACHE_INVARIANT',
+    });
+
+    expect(mockDb.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'cache_write',
+        snapshotIds: ['snapshot-new', 'snapshot-old'],
+      }),
+      'Order-effect snapshot write failed because duplicate CURRENT snapshots require manual repair'
     );
   });
 });
