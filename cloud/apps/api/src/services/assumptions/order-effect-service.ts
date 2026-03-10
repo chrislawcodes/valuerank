@@ -427,6 +427,7 @@ export async function getOrderInvarianceAnalysisResult(params: {
     });
 
     let shouldRepairUnreadableSnapshot = false;
+    let shouldSkipSnapshotPersistence = false;
     try {
       const cachedSnapshot = await getCurrentOrderEffectSnapshot(tx, cachePayload);
       if (cachedSnapshot != null) {
@@ -448,21 +449,33 @@ export async function getOrderInvarianceAnalysisResult(params: {
     } catch (error) {
       if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
         log.error({ err: error, inputHash: cachePayload.inputHash }, 'Duplicate CURRENT order-effect snapshots detected, attempting repair');
-        const repairedSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(tx, cachePayload);
-        if (repairedSnapshot != null) {
-          const repairedResult = deserializeOrderInvarianceSnapshotOutput(repairedSnapshot);
-          if (repairedResult != null) {
+        try {
+          const repairedSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(tx, cachePayload);
+          if (repairedSnapshot != null) {
+            const repairedResult = deserializeOrderInvarianceSnapshotOutput(repairedSnapshot);
+            if (repairedResult != null) {
+              log.warn({
+                inputHash: cachePayload.inputHash,
+                snapshotId: repairedSnapshot.id,
+              }, 'Returning repaired order-invariance snapshot after duplicate CURRENT repair');
+              return repairedResult;
+            }
             log.warn({
               inputHash: cachePayload.inputHash,
               snapshotId: repairedSnapshot.id,
-            }, 'Returning repaired order-invariance snapshot after duplicate CURRENT repair');
-            return repairedResult;
+            }, 'Repaired order-invariance snapshot was unreadable, recomputing');
+            shouldRepairUnreadableSnapshot = true;
           }
-          log.warn({
-            inputHash: cachePayload.inputHash,
-            snapshotId: repairedSnapshot.id,
-          }, 'Repaired order-invariance snapshot was unreadable, recomputing');
-          shouldRepairUnreadableSnapshot = true;
+        } catch (repairError) {
+          if (repairError instanceof DuplicateCurrentOrderEffectSnapshotError) {
+            shouldSkipSnapshotPersistence = true;
+            log.error({
+              err: repairError,
+              inputHash: cachePayload.inputHash,
+            }, 'Duplicate CURRENT order-effect snapshots were ambiguous; recomputing in memory and skipping snapshot persistence');
+          } else {
+            throw repairError;
+          }
         }
       } else {
         log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
@@ -478,15 +491,21 @@ export async function getOrderInvarianceAnalysisResult(params: {
       getPick,
     });
 
-    try {
-      await writeCurrentOrderEffectSnapshot({
-        client: tx,
-        payload: cachePayload,
-        output: serializeOrderInvarianceSnapshotOutput(computedResult),
-        allowReuseCurrent: !shouldRepairUnreadableSnapshot,
-      });
-    } catch (error) {
-      log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
+    if (!shouldSkipSnapshotPersistence) {
+      try {
+        await writeCurrentOrderEffectSnapshot({
+          client: tx,
+          payload: cachePayload,
+          output: serializeOrderInvarianceSnapshotOutput(computedResult),
+          allowReuseCurrent: !shouldRepairUnreadableSnapshot,
+        });
+      } catch (error) {
+        log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot write failed, returning uncached result');
+      }
+    } else {
+      log.warn({
+        inputHash: cachePayload.inputHash,
+      }, 'Skipped order-invariance snapshot persistence because duplicate CURRENT snapshots were ambiguous');
     }
 
     return computedResult;

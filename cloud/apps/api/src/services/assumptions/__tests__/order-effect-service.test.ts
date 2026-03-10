@@ -433,4 +433,52 @@ describe('order-effect service', () => {
     expect(mockLogger.error).toHaveBeenCalled();
     expect(mockLogger.warn).toHaveBeenCalled();
   });
+
+  it('recomputes in memory and skips snapshot persistence when duplicate CURRENT snapshots are ambiguous', async () => {
+    const transcriptRecords = buildFullyFlippedDataset('2');
+    const payload = buildOrderEffectCachePayload({
+      trimOutliers: true,
+      directionOnly: true,
+      requiredTrialCount: 5,
+      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
+      approvedPairIds: ['pair-f'],
+      snapshotModelIds: ['model-a'],
+      selectionFingerprints: ['baseline', 'variant'],
+    });
+
+    mockDb.transcript.findMany.mockResolvedValue(transcriptRecords);
+    mockDb.assumptionAnalysisSnapshot.findMany.mockResolvedValue([
+      {
+        id: 'snapshot-new',
+        createdAt: new Date('2026-03-01T01:00:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+      },
+      {
+        id: 'snapshot-old',
+        createdAt: new Date('2026-03-01T00:00:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+      },
+    ]);
+
+    const result = await getOrderInvarianceAnalysisResult({
+      directionOnly: true,
+      trimOutliers: true,
+    });
+
+    expect(result.summary.status).toBe('COMPUTED');
+    expect(result.summary.matchRate).toBe(1);
+    expect(mockDb.assumptionAnalysisSnapshot.updateMany).not.toHaveBeenCalled();
+    expect(mockDb.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ inputHash: expect.any(String) }),
+      'Skipped order-invariance snapshot persistence because duplicate CURRENT snapshots were ambiguous'
+    );
+  });
 });
