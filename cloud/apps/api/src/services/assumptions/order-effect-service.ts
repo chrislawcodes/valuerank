@@ -26,6 +26,7 @@ import {
   buildOrderEffectCachePayload,
   DuplicateCurrentOrderEffectSnapshotError,
   getCurrentOrderEffectSnapshot,
+  repairDuplicateCurrentOrderEffectSnapshots,
   writeCurrentOrderEffectSnapshot,
 } from './order-effect-cache.js';
 
@@ -446,9 +447,26 @@ export async function getOrderInvarianceAnalysisResult(params: {
       }
     } catch (error) {
       if (error instanceof DuplicateCurrentOrderEffectSnapshotError) {
-        throw error;
+        log.error({ err: error, inputHash: cachePayload.inputHash }, 'Duplicate CURRENT order-effect snapshots detected, attempting repair');
+        const repairedSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(tx, cachePayload);
+        if (repairedSnapshot != null) {
+          const repairedResult = deserializeOrderInvarianceSnapshotOutput(repairedSnapshot);
+          if (repairedResult != null) {
+            log.warn({
+              inputHash: cachePayload.inputHash,
+              snapshotId: repairedSnapshot.id,
+            }, 'Returning repaired order-invariance snapshot after duplicate CURRENT repair');
+            return repairedResult;
+          }
+          log.warn({
+            inputHash: cachePayload.inputHash,
+            snapshotId: repairedSnapshot.id,
+          }, 'Repaired order-invariance snapshot was unreadable, recomputing');
+          shouldRepairUnreadableSnapshot = true;
+        }
+      } else {
+        log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
       }
-      log.error({ err: error, inputHash: cachePayload.inputHash }, 'Order-invariance snapshot lookup failed, recomputing in memory');
     }
 
     const computedResult = computeOrderInvarianceFromSelections({

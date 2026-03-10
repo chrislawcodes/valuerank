@@ -131,6 +131,50 @@ export async function getCurrentOrderEffectSnapshot(
   return snapshot;
 }
 
+export async function repairDuplicateCurrentOrderEffectSnapshots(
+  client: SnapshotClient,
+  payload: Pick<OrderEffectCachePayload, 'inputHash'>
+) {
+  const snapshots = await client.assumptionAnalysisSnapshot.findMany({
+    where: {
+      assumptionKey: ORDER_INVARIANCE_ASSUMPTION_KEY,
+      analysisType: REVERSAL_METRICS_ANALYSIS_TYPE,
+      inputHash: payload.inputHash,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+
+  if (snapshots.length <= 1) {
+    return snapshots[0] ?? null;
+  }
+
+  const [keptSnapshot, ...duplicateSnapshots] = snapshots;
+  const duplicateIds = duplicateSnapshots.map((snapshot) => snapshot.id);
+
+  await client.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      id: { in: duplicateIds },
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    data: {
+      status: 'SUPERSEDED',
+    },
+  });
+
+  log.warn({
+    inputHash: payload.inputHash,
+    keptSnapshotId: keptSnapshot?.id ?? null,
+    supersededSnapshotIds: duplicateIds,
+  }, 'Repaired duplicate CURRENT order-effect snapshots for one input hash');
+
+  return keptSnapshot ?? null;
+}
+
 export async function writeCurrentOrderEffectSnapshot(params: {
   client: SnapshotClient;
   payload: OrderEffectCachePayload;

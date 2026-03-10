@@ -414,7 +414,7 @@ describe('assumptionsOrderInvariance query', () => {
     ]);
   });
 
-  it('fails loudly when duplicate CURRENT snapshots exist for one input hash', async () => {
+  it('repairs duplicate CURRENT snapshots instead of failing the query', async () => {
     vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
       buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
     ] as never);
@@ -431,8 +431,8 @@ describe('assumptionsOrderInvariance query', () => {
       buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
     ] as never);
     vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([
-      { id: 'snapshot-a', createdAt: new Date('2026-03-09T08:00:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
       { id: 'snapshot-b', createdAt: new Date('2026-03-09T08:01:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
+      { id: 'snapshot-a', createdAt: new Date('2026-03-09T08:00:00Z'), output: { summary: {}, modelMetrics: [], rows: [] } },
     ] as never);
 
     const response = await request(app)
@@ -441,7 +441,18 @@ describe('assumptionsOrderInvariance query', () => {
       .send({ query, variables: { directionOnly: true, trimOutliers: true } });
 
     expect(response.status).toBe(200);
-    expect(response.body.errors?.[0]?.message).toContain('Multiple CURRENT order-effect snapshots found');
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.assumptionsOrderInvariance.summary.status).toBe('COMPUTED');
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['snapshot-a'] },
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
   });
 
   it('uses the backend service transcript filtering rules for drilldown', async () => {

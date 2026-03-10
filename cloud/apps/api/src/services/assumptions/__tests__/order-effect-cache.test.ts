@@ -6,6 +6,7 @@ import {
   computeOrderEffectConfigSignature,
   computeOrderEffectInputHash,
   getCurrentOrderEffectSnapshot,
+  repairDuplicateCurrentOrderEffectSnapshots,
   writeCurrentOrderEffectSnapshot,
 } from '../order-effect-cache.js';
 
@@ -138,6 +139,33 @@ describe('order-effect-cache helpers', () => {
     await expect(
       getCurrentOrderEffectSnapshot(client as never, { inputHash: 'dup-hash' })
     ).rejects.toBeInstanceOf(DuplicateCurrentOrderEffectSnapshotError);
+  });
+
+  it('repairs duplicate CURRENT snapshots by superseding older matches', async () => {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const client = {
+      assumptionAnalysisSnapshot: {
+        findMany: vi.fn(async () => ([
+          { id: 'snapshot-new', createdAt: new Date('2026-03-01T01:00:00Z') },
+          { id: 'snapshot-old', createdAt: new Date('2026-03-01T00:00:00Z') },
+        ])),
+        updateMany,
+      },
+    };
+
+    const keptSnapshot = await repairDuplicateCurrentOrderEffectSnapshots(client as never, { inputHash: 'dup-hash' });
+
+    expect(keptSnapshot?.id).toBe('snapshot-new');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['snapshot-old'] },
+        status: 'CURRENT',
+        deletedAt: null,
+      },
+      data: {
+        status: 'SUPERSEDED',
+      },
+    });
   });
 
   it('supersedes only CURRENT snapshots with the same config signature before creating a replacement', async () => {
