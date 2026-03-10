@@ -242,7 +242,7 @@ export async function getOrderInvarianceAnalysisResult(params: {
       params.trimOutliers ? 'trim' : 'no-trim',
       ORDER_INVARIANCE_REQUIRED_TRIAL_COUNT,
     ].join(':');
-    await tx.$queryRawUnsafe(
+    await tx.$executeRawUnsafe(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       pipelineLockKey
     );
