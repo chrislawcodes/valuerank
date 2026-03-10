@@ -27,7 +27,7 @@ vi.mock('@valuerank/shared', () => ({
 vi.mock('@valuerank/db', () => ({
   db: {
     $transaction: vi.fn(),
-    $queryRawUnsafe: vi.fn(),
+    $executeRawUnsafe: vi.fn(),
     assumptionScenarioPair: {
       findMany: vi.fn(),
     },
@@ -51,7 +51,7 @@ import { buildOrderEffectCachePayload, buildOrderEffectSnapshotConfig } from '..
 
 const mockDb = db as unknown as {
   $transaction: ReturnType<typeof vi.fn>;
-  $queryRawUnsafe: ReturnType<typeof vi.fn>;
+  $executeRawUnsafe: ReturnType<typeof vi.fn>;
   assumptionScenarioPair: {
     findMany: ReturnType<typeof vi.fn>;
   };
@@ -133,7 +133,7 @@ function buildFullyFlippedDataset(variantDecisionCode: string) {
 describe('order-effect service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb.$queryRawUnsafe.mockResolvedValue([]);
+    mockDb.$executeRawUnsafe.mockResolvedValue(1);
     mockDb.$transaction.mockImplementation((callback: (tx: typeof db) => unknown) => (
       Promise.resolve(callback(db))
     ));
