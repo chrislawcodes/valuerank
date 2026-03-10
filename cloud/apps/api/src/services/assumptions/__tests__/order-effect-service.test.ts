@@ -472,7 +472,7 @@ describe('order-effect service', () => {
     });
 
     expect(result.summary.status).toBe('COMPUTED');
-    expect(result.summary.matchRate).toBeNull();
+    expect(result.summary.matchRate).toBe(1);
     expect(mockDb.assumptionAnalysisSnapshot.updateMany).not.toHaveBeenCalled();
     expect(mockDb.assumptionAnalysisSnapshot.create).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalled();
