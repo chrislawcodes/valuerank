@@ -590,6 +590,64 @@ describe('assumptionsOrderInvariance query', () => {
     expect(vi.mocked(db.assumptionAnalysisSnapshot.create)).not.toHaveBeenCalled();
   });
 
+  it('returns an explicit cache invariant error when write-time duplicate CURRENT snapshots are ambiguous', async () => {
+    const payload = buildOrderEffectCachePayload({
+      trimOutliers: true,
+      directionOnly: true,
+      requiredTrialCount: 5,
+      lockedVignetteIds: [LOCKED_VIGNETTE_ID],
+      approvedPairIds: ['pair-p'],
+      snapshotModelIds: ['model-a'],
+      selectionFingerprints: ['baseline', 'variant'],
+    });
+    vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
+      buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
+    ] as never);
+    vi.mocked(db.transcript.findMany).mockResolvedValue([
+      buildTranscript({ id: 'b1', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b2', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b3', scenarioId: 'scenario-baseline', decisionCode: '4', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b4', scenarioId: 'scenario-baseline', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'b5', scenarioId: 'scenario-baseline', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'temp_zero_determinism' }),
+      buildTranscript({ id: 'p1', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T10:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p2', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T09:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p3', scenarioId: 'scenario-p', decisionCode: '2', createdAt: '2026-03-01T08:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p4', scenarioId: 'scenario-p', decisionCode: '1', createdAt: '2026-03-01T07:00:00Z', assumptionKey: 'order_invariance' }),
+      buildTranscript({ id: 'p5', scenarioId: 'scenario-p', decisionCode: '5', createdAt: '2026-03-01T06:00:00Z', assumptionKey: 'order_invariance' }),
+    ] as never);
+    vi.mocked(db.assumptionAnalysisSnapshot.findMany).mockResolvedValue([
+      {
+        id: 'snapshot-b',
+        createdAt: new Date('2026-03-09T08:01:00Z'),
+        configSignature: payload.configSignature,
+        codeVersion: payload.codeVersion,
+        config: buildOrderEffectSnapshotConfig(payload),
+        output: { summary: { status: 'COMPUTED' }, modelMetrics: [], rows: [] },
+      },
+      {
+        id: 'snapshot-a',
+        createdAt: new Date('2026-03-09T08:00:00Z'),
+        configSignature: `${payload.configSignature}-other`,
+        codeVersion: payload.codeVersion,
+        config: { ...buildOrderEffectSnapshotConfig(payload), directionOnly: false },
+        output: { summary: { status: 'INSUFFICIENT_DATA' }, modelMetrics: [], rows: [] },
+      },
+    ] as never);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({ query, variables: { directionOnly: true, trimOutliers: true } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toBeNull();
+    expect(response.body.errors[0].message).toBe(
+      'Assumptions analysis cache invariant failed. Duplicate CURRENT snapshots require manual repair.'
+    );
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.updateMany)).not.toHaveBeenCalled();
+    expect(vi.mocked(db.assumptionAnalysisSnapshot.create)).not.toHaveBeenCalled();
+  });
+
   it('uses the backend service transcript filtering rules for drilldown', async () => {
     vi.mocked(db.assumptionScenarioPair.findMany).mockResolvedValue([
       buildPair('pair-p', 'presentation_flipped', 'scenario-baseline', 'scenario-p'),
