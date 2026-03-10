@@ -10,7 +10,7 @@ import type { Transcript } from '../../api/operations/runs';
 import {
   LAUNCH_ORDER_INVARIANCE_MUTATION,
   ORDER_INVARIANCE_LAUNCH_STATUS_QUERY,
-  ORDER_INVARIANCE_QUERY,
+  ORDER_INVARIANCE_LEGACY_QUERY,
   ORDER_INVARIANCE_REVIEW_QUERY,
   ORDER_INVARIANCE_TRANSCRIPTS_QUERY,
   REVIEW_ORDER_INVARIANCE_PAIR_MUTATION,
@@ -18,7 +18,7 @@ import {
   type LaunchOrderInvarianceVariables,
   type OrderInvarianceLaunchStatusQueryResult,
   type OrderInvarianceLaunchStatusQueryVariables,
-  type OrderInvarianceQueryResult,
+  type OrderInvarianceLegacyQueryResult,
   type OrderInvarianceQueryVariables,
   type OrderInvarianceRow,
   type OrderInvarianceReviewVignette,
@@ -33,6 +33,23 @@ import {
 const ENABLE_2X2_ORDER_EFFECT_UI = true;
 const ORDER_INVARIANCE_LAUNCH_STORAGE_KEY = 'valuerank:order-invariance-launch-run-ids';
 const ORDER_INVARIANCE_LAUNCH_POLL_MS = 4000;
+const VARIANT_UI_METADATA = {
+  presentation_flipped: {
+    label: 'Narrative Order Flipped',
+    narrativeOrder: 'flipped',
+    scaleOrder: 'baseline',
+  },
+  scale_flipped: {
+    label: 'Scale Order Flipped',
+    narrativeOrder: 'baseline',
+    scaleOrder: 'flipped',
+  },
+  fully_flipped: {
+    label: 'Narrative + Scale Flipped',
+    narrativeOrder: 'flipped',
+    scaleOrder: 'flipped',
+  },
+} as const;
 
 function formatPercent(value: number | null): string {
   if (value == null) {
@@ -49,47 +66,13 @@ function formatMAD(value: number | null | undefined): string {
 function formatProgressCount(value: number): string {
   return value.toLocaleString();
 }
-function getScaleEffectColor(value: number | null | undefined): string {
-  if (value == null) return 'text-gray-900';
-  if (value > 1.00) return 'text-red-600 font-bold';
-  if (value > 0.50) return 'text-amber-600 font-semibold';
-  return 'text-green-700';
-}
-
-const DIAGNOSTIC_MIN_N = 15;
-
-function getDiagnosticLabel(pMAD: number | null, sMAD: number | null, nP: number, nS: number): string {
-  const hasEnoughP = nP >= DIAGNOSTIC_MIN_N;
-  const hasEnoughS = nS >= DIAGNOSTIC_MIN_N;
-  if (!hasEnoughP && !hasEnoughS) return 'Insufficient Evidence';
-  if (hasEnoughS && (sMAD ?? 0) > 1.0) return 'Evidence consistent with Severe Anchoring';
-  if (hasEnoughS && (sMAD ?? 0) > 0.5) return 'Evidence consistent with Possible Anchoring';
-  if (hasEnoughP && (pMAD ?? 0) > 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Evidence consistent with Narrative-Order Sensitivity';
-  if ((pMAD ?? 0) <= 0.5 && (sMAD == null || sMAD <= 0.5)) return 'Robust';
-  return 'Mixed Sensitivity';
-}
 
 function getVariantAxes(variantType: string | null | undefined): {
   narrativeOrder: 'baseline' | 'flipped';
   scaleOrder: 'baseline' | 'flipped';
 } {
-  if (variantType === 'fully_flipped') {
-    return {
-      narrativeOrder: 'flipped',
-      scaleOrder: 'flipped',
-    };
-  }
-  if (variantType === 'scale_flipped') {
-    return {
-      narrativeOrder: 'baseline',
-      scaleOrder: 'flipped',
-    };
-  }
-  if (variantType === 'presentation_flipped') {
-    return {
-      narrativeOrder: 'flipped',
-      scaleOrder: 'baseline',
-    };
+  if (variantType != null && variantType in VARIANT_UI_METADATA) {
+    return VARIANT_UI_METADATA[variantType as keyof typeof VARIANT_UI_METADATA];
   }
   return {
     narrativeOrder: 'baseline',
@@ -105,9 +88,9 @@ function getAxisBadgeClass(state: 'baseline' | 'flipped'): string {
 }
 
 function getVariantSideLabel(variantType: string | null | undefined): string {
-  if (variantType === 'scale_flipped') return 'Scale Order Flipped';
-  if (variantType === 'presentation_flipped') return 'Narrative Order Flipped';
-  if (variantType === 'fully_flipped') return 'Narrative + Scale Flipped';
+  if (variantType != null && variantType in VARIANT_UI_METADATA) {
+    return VARIANT_UI_METADATA[variantType as keyof typeof VARIANT_UI_METADATA].label;
+  }
   return 'Flipped';
 }
 
@@ -392,8 +375,8 @@ export function OrderEffectPanel() {
   const [trackedLaunchRunIds, setTrackedLaunchRunIds] = useState<string[]>([]);
   const [hasLoadedTrackedRuns, setHasLoadedTrackedRuns] = useState(false);
 
-  const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceQueryResult, OrderInvarianceQueryVariables>({
-    query: ORDER_INVARIANCE_QUERY,
+  const [{ data, fetching, error }, reexecuteResultQuery] = useQuery<OrderInvarianceLegacyQueryResult, OrderInvarianceQueryVariables>({
+    query: ORDER_INVARIANCE_LEGACY_QUERY,
     variables: {
       directionOnly,
       trimOutliers,
@@ -550,35 +533,7 @@ export function OrderEffectPanel() {
     }
     return allRows.filter((row) => selectedModelIds.has(row.modelId));
   }, [allRows, selectedModelIds]);
-
   const matrixGroups = useMemo(() => groupRowsIntoMatrix(filteredRows), [filteredRows]);
-  const modelLeaderboard = useMemo(() => {
-    if (allRows.length === 0) return [];
-    const byModel = new Map<string, OrderInvarianceRow[]>();
-    for (const row of allRows) {
-      const list = byModel.get(row.modelId) ?? [];
-      list.push(row);
-      byModel.set(row.modelId, list);
-    }
-    return Array.from(byModel.entries()).map(([modelId, rows]) => {
-      const modelLabel = rows[0]?.modelLabel ?? modelId;
-      const pRows = rows.filter(
-        (r) => r.variantType === 'presentation_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
-      );
-      const sRows = rows.filter(
-        (r) => r.variantType === 'scale_flipped' && r.majorityVoteBaseline != null && r.majorityVoteFlipped != null,
-      );
-      const pMAD = pRows.length > 0
-        ? pRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / pRows.length
-        : null;
-      const sMAD = sRows.length > 0
-        ? sRows.reduce((sum, r) => sum + Math.abs((r.majorityVoteBaseline ?? 0) - (r.majorityVoteFlipped ?? 0)), 0) / sRows.length
-        : null;
-      const matchRows = rows.filter((r) => r.variantType === 'fully_flipped' && r.isMatch != null);
-      const matchRate = matchRows.length > 0 ? matchRows.filter((r) => r.isMatch).length / matchRows.length : null;
-      return { modelId, modelLabel, pMAD, sMAD, matchRate, n: matchRows.length, nP: pRows.length, nS: sRows.length, nMatch: matchRows.length };
-    }).sort((a, b) => (b.sMAD ?? -1) - (a.sMAD ?? -1));
-  }, [allRows]);
 
   async function submitReview(vignette: OrderInvarianceReviewVignette, reviewStatus: 'APPROVED' | 'REJECTED') {
     setActiveReviewPairId(vignette.pairId);
@@ -1093,59 +1048,14 @@ export function OrderEffectPanel() {
                     <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
                       Scale Effect (Δ_S)
                     </div>
-                    <div className={`mt-1 text-lg font-semibold ${getScaleEffectColor(result.summary.scaleEffectMAD)}`}>
+                    <div className="mt-1 text-lg font-semibold text-gray-900">
                       {formatMAD(result.summary.scaleEffectMAD)}
                     </div>
-                    <div className="mt-0.5 text-[11px] text-gray-400">
-                      N={result.summary.scaleComparablePairs} ·{' '}
-                      {(result.summary.scaleEffectMAD ?? 0) > 1.0 ? '⚠ Severe anchoring' :
-                       (result.summary.scaleEffectMAD ?? 0) > 0.5 ? '⚠ Possible anchoring' :
-                       'Mean Abs Diff — scale-endpoint bias'}
-                    </div>
+                    <div className="mt-0.5 text-xs text-gray-400">Mean Abs Diff — scale bias</div>
                   </div>
                 </>
               )}
             </div>
-
-            {ENABLE_2X2_ORDER_EFFECT_UI && modelLeaderboard.length > 0 && (
-              <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Model</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Match</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_match</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_P</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔP</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Δ_S</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">N_ΔS</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Diagnostic</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {modelLeaderboard.map((ms) => (
-                      <tr key={ms.modelId} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium text-gray-900">{ms.modelLabel}</td>
-                        <td className="px-4 py-2 text-right text-gray-700">
-                          {ms.matchRate != null ? `${(ms.matchRate * 100).toFixed(0)}%` : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nMatch}</td>
-                        <td className="px-4 py-2 text-right text-gray-700">{formatMAD(ms.pMAD)}</td>
-                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nP}</td>
-                        <td className={`px-4 py-2 text-right ${getScaleEffectColor(ms.sMAD)}`}>
-                          {formatMAD(ms.sMAD)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-500 text-xs">{ms.nS}</td>
-                        <td className="px-4 py-2 text-left text-gray-600 text-xs">
-                          {getDiagnosticLabel(ms.pMAD, ms.sMAD, ms.nP, ms.nS)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
             {modelOptions.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {modelOptions.map((model) => (

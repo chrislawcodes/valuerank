@@ -83,7 +83,57 @@ export type OrderInvarianceTranscriptResult = {
 export type OrderInvarianceResult = {
   generatedAt: string;
   summary: OrderInvarianceSummary;
+  modelMetrics: OrderInvarianceModelMetrics[];
   rows: OrderInvarianceRow[];
+};
+
+export type OrderInvarianceAnalysisResult = {
+  generatedAt: string;
+  modelMetrics: OrderInvarianceModelMetrics[];
+  rows: Pick<
+    OrderInvarianceRow,
+    | 'modelId'
+    | 'modelLabel'
+    | 'vignetteId'
+    | 'vignetteTitle'
+    | 'conditionKey'
+    | 'variantType'
+    | 'majorityVoteBaseline'
+    | 'majorityVoteFlipped'
+    | 'ordinalDistance'
+    | 'isMatch'
+  >[];
+};
+
+export type OrderInvarianceLegacyResult = {
+  generatedAt: string;
+  summary: OrderInvarianceSummary;
+  rows: OrderInvarianceRow[];
+};
+
+export type PairLevelMarginSummary = {
+  mean: number | null;
+  median: number | null;
+  p25: number | null;
+  p75: number | null;
+};
+
+export type OrderInvarianceModelMetrics = {
+  modelId: string;
+  modelLabel: string;
+  matchRate: number | null;
+  matchCount: number;
+  matchEligibleCount: number;
+  valueOrderReversalRate: number | null;
+  valueOrderEligibleCount: number;
+  valueOrderExcludedCount: number;
+  valueOrderPull: 'toward first-listed' | 'toward second-listed' | 'no clear pull';
+  scaleOrderReversalRate: number | null;
+  scaleOrderEligibleCount: number;
+  scaleOrderExcludedCount: number;
+  scaleOrderPull: 'toward higher numbers' | 'toward lower numbers' | 'no clear pull';
+  withinCellDisagreementRate: number | null;
+  pairLevelMarginSummary: PairLevelMarginSummary | null;
 };
 
 export type OrderInvarianceReviewSummary = {
@@ -150,6 +200,14 @@ export type OrderInvarianceLaunchStatus = {
 
 export type OrderInvarianceQueryResult = {
   assumptionsOrderInvariance: OrderInvarianceResult;
+};
+
+export type OrderInvarianceAnalysisQueryResult = {
+  assumptionsOrderInvariance: OrderInvarianceAnalysisResult;
+};
+
+export type OrderInvarianceLegacyQueryResult = {
+  assumptionsOrderInvariance: OrderInvarianceLegacyResult;
 };
 
 export type OrderInvarianceReviewQueryResult = {
@@ -234,6 +292,28 @@ export const ORDER_INVARIANCE_QUERY = gql`
           count
         }
       }
+      modelMetrics {
+        modelId
+        modelLabel
+        matchRate
+        matchCount
+        matchEligibleCount
+        valueOrderReversalRate
+        valueOrderEligibleCount
+        valueOrderExcludedCount
+        valueOrderPull
+        scaleOrderReversalRate
+        scaleOrderEligibleCount
+        scaleOrderExcludedCount
+        scaleOrderPull
+        withinCellDisagreementRate
+        pairLevelMarginSummary {
+          mean
+          median
+          p25
+          p75
+        }
+      }
       rows {
         modelId
         modelLabel
@@ -244,6 +324,86 @@ export const ORDER_INVARIANCE_QUERY = gql`
         majorityVoteFlipped
         rawScore
         mismatchType
+        ordinalDistance
+        isMatch
+        variantType
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_LEGACY_QUERY = gql`
+  query AssumptionsOrderInvarianceLegacy($directionOnly: Boolean, $trimOutliers: Boolean) {
+    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
+      generatedAt
+      summary {
+        status
+        matchRate
+        exactMatchRate
+        totalCandidatePairs
+        qualifyingPairs
+        missingPairs
+        comparablePairs
+        sensitiveModelCount
+        sensitiveVignetteCount
+        presentationEffectMAD
+        scaleEffectMAD
+        excludedPairs {
+          reason
+          count
+        }
+      }
+      rows {
+        modelId
+        modelLabel
+        vignetteId
+        vignetteTitle
+        conditionKey
+        majorityVoteBaseline
+        majorityVoteFlipped
+        mismatchType
+        ordinalDistance
+        isMatch
+        variantType
+      }
+    }
+  }
+`;
+
+export const ORDER_INVARIANCE_ANALYSIS_QUERY = gql`
+  query AssumptionsOrderInvarianceAnalysis($directionOnly: Boolean, $trimOutliers: Boolean) {
+    assumptionsOrderInvariance(directionOnly: $directionOnly, trimOutliers: $trimOutliers) {
+      generatedAt
+      modelMetrics {
+        modelId
+        modelLabel
+        matchRate
+        matchCount
+        matchEligibleCount
+        valueOrderReversalRate
+        valueOrderEligibleCount
+        valueOrderExcludedCount
+        valueOrderPull
+        scaleOrderReversalRate
+        scaleOrderEligibleCount
+        scaleOrderExcludedCount
+        scaleOrderPull
+        withinCellDisagreementRate
+        pairLevelMarginSummary {
+          mean
+          median
+          p25
+          p75
+        }
+      }
+      rows {
+        modelId
+        modelLabel
+        vignetteId
+        vignetteTitle
+        conditionKey
+        majorityVoteBaseline
+        majorityVoteFlipped
         ordinalDistance
         isMatch
         variantType

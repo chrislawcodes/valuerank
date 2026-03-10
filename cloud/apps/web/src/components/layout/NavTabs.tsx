@@ -24,7 +24,8 @@ const domainMenuItems = [
 
 const assumptionsMenuItems = [
   { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
-  { name: 'Order Effect', path: '/assumptions/order-effect' },
+  { name: 'Analysis', path: '/assumptions/analysis' },
+  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
 ];
 
 const surveyMenuItems = [
@@ -207,7 +208,7 @@ export function NavTabs() {
                 }`
               }
             >
-              <NavLink to="/assumptions/temp-zero-effect" className="flex items-center gap-2 px-3 py-3">
+              <NavLink to="/assumptions" className="flex items-center gap-2 px-3 py-3">
                 <ShieldCheck className="w-4 h-4" />
                 <span className="hidden sm:inline">Assumptions</span>
               </NavLink>

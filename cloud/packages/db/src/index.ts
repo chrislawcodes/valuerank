@@ -19,6 +19,8 @@ export type {
   RunComparison,
   AnalysisResult,
   AnalysisStatus,
+  AssumptionAnalysisSnapshot,
+  AssumptionAnalysisStatus,
   Rubric,
   Cohort,
   Tag,

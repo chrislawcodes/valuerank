@@ -1,8 +1,21 @@
 import { builder } from '../builder.js';
 import { db } from '@valuerank/db';
-import { AuthenticationError, bucketDecisionDirection } from '@valuerank/shared';
+import { AuthenticationError } from '@valuerank/shared';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
-import { parseTemperature } from '../../utils/temperature.js';
+import {
+  ORDER_EFFECT_VARIANT_TYPES,
+  type PairLevelMarginSummary,
+} from '../../services/assumptions/order-effect-analysis.js';
+import {
+  getOrderInvarianceAnalysisResult,
+  getOrderInvarianceTranscriptResult,
+} from '../../services/assumptions/order-effect-service.js';
+
+export {
+  computeMADMetrics,
+  getScaleEffectStatus,
+  normalizeDecision,
+} from '../../services/assumptions/order-effect-analysis.js';
 
 type OrderInvarianceStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
 type OrderInvarianceMismatchType = 'direction_flip' | 'exact_flip' | 'missing_pair' | null;
@@ -82,7 +95,26 @@ type OrderInvarianceTranscriptResult = {
 type OrderInvarianceResult = {
   generatedAt: Date;
   summary: OrderInvarianceSummary;
+  modelMetrics: OrderInvarianceModelMetrics[];
   rows: OrderInvarianceRow[];
+};
+
+type OrderInvarianceModelMetrics = {
+  modelId: string;
+  modelLabel: string;
+  matchRate: number | null;
+  matchCount: number;
+  matchEligibleCount: number;
+  valueOrderReversalRate: number | null;
+  valueOrderEligibleCount: number;
+  valueOrderExcludedCount: number;
+  valueOrderPull: 'toward first-listed' | 'toward second-listed' | 'no clear pull';
+  scaleOrderReversalRate: number | null;
+  scaleOrderEligibleCount: number;
+  scaleOrderExcludedCount: number;
+  scaleOrderPull: 'toward higher numbers' | 'toward lower numbers' | 'no clear pull';
+  withinCellDisagreementRate: number | null;
+  pairLevelMarginSummary: PairLevelMarginSummary | null;
 };
 
 type OrderInvarianceReviewStatus = 'APPROVED' | 'REJECTED' | 'PENDING';
@@ -167,69 +199,7 @@ type PairRecord = {
   sourceScenario: PairScenario;
   variantScenario: PairScenario;
 };
-
-type CandidateTranscript = {
-  id: string;
-  scenarioId: string;
-  modelId: string;
-  modelVersion: string | null;
-  decision: number;
-  rawDecision: number;
-  createdAt: Date;
-};
-
-type CandidateTranscriptRecord = {
-  id: string;
-  scenarioId: string | null;
-  modelId: string;
-  modelVersion: string | null;
-  decisionCode: string | null;
-  createdAt: Date;
-  run: {
-    deletedAt: Date | null;
-    config: unknown;
-    tags: Array<{ tag: { name: string } }>;
-  };
-};
-
-type TranscriptDetailRecord = {
-  id: string;
-  runId: string;
-  scenarioId: string | null;
-  modelId: string;
-  modelVersion: string | null;
-  content: unknown;
-  decisionCode: string | null;
-  decisionCodeSource: string | null;
-  turnCount: number;
-  tokenCount: number;
-  durationMs: number;
-  estimatedCost: number | null;
-  createdAt: Date;
-  lastAccessedAt: Date | null;
-  run: {
-    deletedAt: Date | null;
-    config: unknown;
-    tags: Array<{ tag: { name: string } }>;
-  };
-};
-
-type PickResult =
-  | {
-    kind: 'selected';
-    selected: CandidateTranscript[];
-    modelVersion: string | null;
-  }
-  | {
-    kind: 'insufficient';
-  }
-  | {
-    kind: 'fragmented';
-  };
-
 const ORDER_INVARIANCE_KEY = 'order_invariance';
-const BASELINE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism', ORDER_INVARIANCE_KEY]);
-const VALID_DECISIONS = new Set(['1', '2', '3', '4', '5']);
 const ACTIVE_RUN_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
 
 function getRunAssumptionKey(config: unknown): string | null {
@@ -238,15 +208,6 @@ function getRunAssumptionKey(config: unknown): string | null {
   }
   const value = (config as Record<string, unknown>).assumptionKey;
   return typeof value === 'string' && value !== '' ? value : null;
-}
-
-function isAssumptionRun(record: CandidateTranscriptRecord): boolean {
-  return record.run.tags.some((tag) => tag.tag.name === 'assumption-run');
-}
-
-function isTempZeroRun(record: CandidateTranscriptRecord): boolean {
-  const config = record.run.config as { temperature?: unknown } | null;
-  return parseTemperature(config?.temperature) === 0;
 }
 
 function buildConditionKey(name: string): string {
@@ -264,13 +225,6 @@ function parseReviewGroupKey(groupKey: string): { definitionId: string; variantT
   return { definitionId, variantType };
 }
 
-function parseDecision(decisionCode: string | null): number | null {
-  if (decisionCode == null || !VALID_DECISIONS.has(decisionCode)) {
-    return null;
-  }
-  return Number(decisionCode);
-}
-
 function parseProgress(progress: unknown): { total: number; completed: number; failed: number } {
   if (progress == null || typeof progress !== 'object' || Array.isArray(progress)) {
     return { total: 0, completed: 0, failed: 0 };
@@ -283,124 +237,6 @@ function parseProgress(progress: unknown): { total: number; completed: number; f
 
   return { total, completed, failed };
 }
-export function normalizeDecision(decision: number, variantType: string | null): number {
-  return (variantType === 'scale_flipped' || variantType === 'fully_flipped')
-    ? 6 - decision
-    : decision;
-}
-
-export function computeMADMetrics(scorePivot: Map<string, Record<string, number>>): {
-  presentationEffectMAD: number | null;
-  scaleEffectMAD: number | null;
-} {
-  let pMADSum = 0, pMADCount = 0, sMADSum = 0, sMADCount = 0;
-  for (const s of scorePivot.values()) {
-    if (s['baseline'] != null && s['presentation_flipped'] != null) {
-      pMADSum += Math.abs(s['baseline'] - s['presentation_flipped']); pMADCount++;
-    }
-    if (s['baseline'] != null && s['scale_flipped'] != null) {
-      sMADSum += Math.abs(s['baseline'] - s['scale_flipped']); sMADCount++;
-    }
-    if (s['scale_flipped'] != null && s['fully_flipped'] != null) {
-      pMADSum += Math.abs(s['scale_flipped'] - s['fully_flipped']); pMADCount++;
-    }
-    if (s['presentation_flipped'] != null && s['fully_flipped'] != null) {
-      sMADSum += Math.abs(s['presentation_flipped'] - s['fully_flipped']); sMADCount++;
-    }
-  }
-  return {
-    presentationEffectMAD: pMADCount > 0 ? pMADSum / pMADCount : null,
-    scaleEffectMAD: sMADCount > 0 ? sMADSum / sMADCount : null,
-  };
-}
-
-export function getScaleEffectStatus(deltaS: number | null): 'NORMAL' | 'WARNING' | 'SEVERE' | 'UNKNOWN' {
-  if (deltaS == null) return 'UNKNOWN';
-  if (deltaS > 1.00) return 'SEVERE';
-  if (deltaS > 0.50) return 'WARNING';
-  return 'NORMAL';
-}
-
-function pickStableTranscripts(
-  candidates: CandidateTranscript[],
-  requiredCount: number
-): PickResult {
-  if (candidates.length < requiredCount) {
-    return { kind: 'insufficient' };
-  }
-
-  const sorted = [...candidates].sort((left, right) => (
-    right.createdAt.getTime() - left.createdAt.getTime()
-  ));
-  const groups = new Map<string, CandidateTranscript[]>();
-  const versionOrder: string[] = [];
-
-  for (const candidate of sorted) {
-    const key = candidate.modelVersion ?? '__NULL__';
-    const existing = groups.get(key);
-    if (existing != null) {
-      existing.push(candidate);
-      continue;
-    }
-    groups.set(key, [candidate]);
-    versionOrder.push(key);
-  }
-
-  for (const versionKey of versionOrder) {
-    const group = groups.get(versionKey) ?? [];
-    if (group.length >= requiredCount) {
-      return {
-        kind: 'selected',
-        selected: group.slice(0, requiredCount),
-        modelVersion: versionKey === '__NULL__' ? null : versionKey,
-      };
-    }
-  }
-
-  return groups.size > 1 ? { kind: 'fragmented' } : { kind: 'insufficient' };
-}
-
-function computeMajorityVote(values: number[], trimOutliers: boolean): number | null {
-  if (values.length === 0) {
-    return null;
-  }
-
-  const sorted = [...values].sort((left, right) => left - right);
-  const considered = trimOutliers && sorted.length >= 3
-    ? sorted.slice(1, sorted.length - 1)
-    : sorted;
-
-  if (considered.length === 0) {
-    return null;
-  }
-
-  const counts = new Map<number, number>();
-  let maxCount = 0;
-  for (const value of considered) {
-    const nextCount = (counts.get(value) ?? 0) + 1;
-    counts.set(value, nextCount);
-    maxCount = Math.max(maxCount, nextCount);
-  }
-
-  const modes = Array.from(counts.entries())
-    .filter(([, count]) => count === maxCount)
-    .map(([value]) => value)
-    .sort((left, right) => left - right);
-
-  if (modes.length === 1) {
-    return modes[0] ?? null;
-  }
-
-  return considered[Math.floor(considered.length / 2)] ?? null;
-}
-
-function valuesMatch(left: number, right: number, directionOnly: boolean): boolean {
-  if (!directionOnly) {
-    return left === right;
-  }
-  return bucketDecisionDirection(String(left)) === bucketDecisionDirection(String(right));
-}
-
 function normalizeReviewStatus(status: string | null | undefined): OrderInvarianceReviewStatus {
   if (status === 'APPROVED' || status === 'REJECTED') {
     return status;
@@ -451,33 +287,6 @@ function extractScenarioText(content: unknown): string {
   }
 
   return JSON.stringify(content, null, 2);
-}
-
-function parseAttributeLabels(vignetteTitle: string): { attributeALabel: string | null; attributeBLabel: string | null } {
-  const match = vignetteTitle.match(/\((.+?)\s+vs\s+(.+?)\)$/);
-  if (!match) {
-    return { attributeALabel: null, attributeBLabel: null };
-  }
-
-  return {
-    attributeALabel: match[1]?.trim() ?? null,
-    attributeBLabel: match[2]?.trim() ?? null,
-  };
-}
-
-function parseConditionLevels(conditionKey: string): { attributeALevel: number | null; attributeBLevel: number | null } {
-  const match = conditionKey.match(/^(\d+)x(\d+)$/);
-  if (!match) {
-    return { attributeALevel: null, attributeBLevel: null };
-  }
-
-  const attributeALevel = Number.parseInt(match[1] ?? '', 10);
-  const attributeBLevel = Number.parseInt(match[2] ?? '', 10);
-
-  return {
-    attributeALevel: Number.isFinite(attributeALevel) ? attributeALevel : null,
-    attributeBLevel: Number.isFinite(attributeBLevel) ? attributeBLevel : null,
-  };
 }
 
 const OrderInvarianceExclusionCountRef = builder
@@ -532,12 +341,49 @@ const OrderInvarianceRowRef = builder
     }),
   });
 
+const PairLevelMarginSummaryRef = builder
+  .objectRef<PairLevelMarginSummary>('PairLevelMarginSummary')
+  .implement({
+    fields: (t) => ({
+      mean: t.exposeFloat('mean', { nullable: true }),
+      median: t.exposeFloat('median', { nullable: true }),
+      p25: t.exposeFloat('p25', { nullable: true }),
+      p75: t.exposeFloat('p75', { nullable: true }),
+    }),
+  });
+
+const OrderInvarianceModelMetricsRef = builder
+  .objectRef<OrderInvarianceModelMetrics>('OrderInvarianceModelMetrics')
+  .implement({
+    fields: (t) => ({
+      modelId: t.exposeString('modelId'),
+      modelLabel: t.exposeString('modelLabel'),
+      matchRate: t.exposeFloat('matchRate', { nullable: true }),
+      matchCount: t.exposeInt('matchCount'),
+      matchEligibleCount: t.exposeInt('matchEligibleCount'),
+      valueOrderReversalRate: t.exposeFloat('valueOrderReversalRate', { nullable: true }),
+      valueOrderEligibleCount: t.exposeInt('valueOrderEligibleCount'),
+      valueOrderExcludedCount: t.exposeInt('valueOrderExcludedCount'),
+      valueOrderPull: t.exposeString('valueOrderPull'),
+      scaleOrderReversalRate: t.exposeFloat('scaleOrderReversalRate', { nullable: true }),
+      scaleOrderEligibleCount: t.exposeInt('scaleOrderEligibleCount'),
+      scaleOrderExcludedCount: t.exposeInt('scaleOrderExcludedCount'),
+      scaleOrderPull: t.exposeString('scaleOrderPull'),
+      withinCellDisagreementRate: t.exposeFloat('withinCellDisagreementRate', { nullable: true }),
+      pairLevelMarginSummary: t.expose('pairLevelMarginSummary', {
+        type: PairLevelMarginSummaryRef,
+        nullable: true,
+      }),
+    }),
+  });
+
 const OrderInvarianceResultRef = builder
   .objectRef<OrderInvarianceResult>('OrderInvarianceResult')
   .implement({
     fields: (t) => ({
       generatedAt: t.expose('generatedAt', { type: 'DateTime' }),
       summary: t.expose('summary', { type: OrderInvarianceSummaryRef }),
+      modelMetrics: t.expose('modelMetrics', { type: [OrderInvarianceModelMetricsRef] }),
       rows: t.expose('rows', { type: [OrderInvarianceRowRef] }),
     }),
   });
@@ -726,7 +572,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
           definitionId: true,
         },
       });
-      const expectedPairCount = expectedSourceScenarios.length * 3;
+      const expectedPairCount = expectedSourceScenarios.length * ORDER_EFFECT_VARIANT_TYPES.length;
       const expectedDefinitionIds = new Set(expectedSourceScenarios.map((scenario) => scenario.definitionId));
 
       const groupedPairs = new Map<string, PairRecord[]>();
@@ -788,7 +634,7 @@ builder.queryField('assumptionsOrderInvarianceReview', (t) =>
       const rejectedVignettes = vignettes.filter((vignette) => vignette.reviewStatus === 'REJECTED').length;
       const reviewedVignettes = vignettes.filter((vignette) => vignette.reviewedAt != null).length;
       const totalVignettes = vignettes.length;
-      const expectedGroupCount = lockedById.size * 3;
+      const expectedGroupCount = lockedById.size * ORDER_EFFECT_VARIANT_TYPES.length;
       const hasCompleteGeneratedSet = pairRows.length === expectedPairCount
         && totalVignettes === expectedGroupCount
         && expectedDefinitionIds.size === lockedById.size
@@ -951,369 +797,13 @@ builder.queryField('assumptionsOrderInvariance', (t) =>
       directionOnly: t.arg.boolean({ required: false }),
       trimOutliers: t.arg.boolean({ required: false }),
     },
-    resolve: async (_root, args) => {
+    resolve: async (_root, args, ctx) => {
+      if (!ctx.user) {
+        throw new AuthenticationError('Authentication required');
+      }
       const directionOnly = args.directionOnly ?? true;
       const trimOutliers = args.trimOutliers ?? true;
-
-      const pairRows = await db.assumptionScenarioPair.findMany({
-        where: {
-          assumptionKey: ORDER_INVARIANCE_KEY,
-          equivalenceReviewStatus: 'APPROVED',
-          equivalenceReviewedAt: { not: null },
-        },
-        select: {
-          variantType: true,
-          sourceScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-          variantScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-        },
-      }) as PairRecord[];
-
-      const lockedById = new Map(
-        LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
-      );
-      const relevantPairs = pairRows.filter((pair) => lockedById.has(pair.sourceScenario.definitionId));
-
-      const activeModels = await db.llmModel.findMany({
-        where: { status: 'ACTIVE' },
-        select: { modelId: true, displayName: true },
-      });
-      const activeModelLabels = new Map(
-        activeModels.map((model) => [model.modelId, model.displayName])
-      );
-
-      const allScenarioIds = Array.from(new Set(
-        relevantPairs.flatMap((pair) => [pair.sourceScenario.id, pair.variantScenario.id])
-      ));
-      const scenarioIdToVariantType = new Map<string, string | null>();
-      for (const pair of pairRows) {
-        scenarioIdToVariantType.set(pair.sourceScenario.id, null);
-        scenarioIdToVariantType.set(pair.variantScenario.id, pair.variantType);
-      }
-
-      const transcriptRecords = allScenarioIds.length > 0
-        ? await db.transcript.findMany({
-          where: {
-            deletedAt: null,
-            scenarioId: { in: allScenarioIds },
-            decisionCode: { in: Array.from(VALID_DECISIONS) },
-          },
-          select: {
-            id: true,
-            scenarioId: true,
-            modelId: true,
-            modelVersion: true,
-            decisionCode: true,
-            createdAt: true,
-            run: {
-              select: {
-                deletedAt: true,
-                config: true,
-                tags: {
-                  select: {
-                    tag: {
-                      select: { name: true },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        })
-        : [];
-
-      const sourceScenarioIds = new Set(relevantPairs.map((pair) => pair.sourceScenario.id));
-      const transcriptsByScenarioAndModel = new Map<string, CandidateTranscript[]>();
-      const inferredModels = new Map<string, string>();
-
-      for (const transcript of transcriptRecords as CandidateTranscriptRecord[]) {
-        if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
-          continue;
-        }
-        if (!isTempZeroRun(transcript)) {
-          continue;
-        }
-
-        const assumptionKey = getRunAssumptionKey(transcript.run.config);
-        const isBaselineScenario = sourceScenarioIds.has(transcript.scenarioId);
-        if (isBaselineScenario) {
-          if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
-            continue;
-          }
-          if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript)) {
-            continue;
-          }
-        } else {
-          if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript)) {
-            continue;
-          }
-        }
-
-        const decision = parseDecision(transcript.decisionCode);
-        if (decision == null) {
-          continue;
-        }
-
-        inferredModels.set(transcript.modelId, transcript.modelId);
-        const key = `${transcript.scenarioId}::${transcript.modelId}`;
-        const existing = transcriptsByScenarioAndModel.get(key);
-        const candidate: CandidateTranscript = {
-          id: transcript.id,
-          scenarioId: transcript.scenarioId,
-          modelId: transcript.modelId,
-          modelVersion: transcript.modelVersion,
-          decision: normalizeDecision(
-            decision,
-            scenarioIdToVariantType.get(transcript.scenarioId) ?? null
-          ),
-          rawDecision: decision,
-          createdAt: transcript.createdAt,
-        };
-
-        if (existing != null) {
-          existing.push(candidate);
-        } else {
-          transcriptsByScenarioAndModel.set(key, [candidate]);
-        }
-      }
-
-      const effectiveModels = Array.from(inferredModels.keys())
-        .sort()
-        .map((modelId) => ({
-          modelId,
-          modelLabel: activeModelLabels.get(modelId) ?? modelId,
-        }));
-
-      const excludedCounts = new Map<string, number>();
-      const rows: OrderInvarianceRow[] = [];
-      let qualifyingPairs = 0;
-      let missingPairs = 0;
-      let comparablePairs = 0;
-      let directionMatchCount = 0;
-      let exactMatchCount = 0;
-      let matchComparablePairs = 0;
-      let presentationComparablePairs = 0;
-      let scaleComparablePairs = 0;
-      let presentationMissingPairs = 0;
-      let scaleMissingPairs = 0;
-      const scorePivot = new Map<string, Record<string, number>>();
-
-      for (const pair of relevantPairs) {
-        const vignette = lockedById.get(pair.sourceScenario.definitionId);
-        const vignetteTitle = vignette?.title ?? pair.sourceScenario.definitionId;
-        const conditionKey = buildConditionKey(pair.sourceScenario.name);
-
-        for (const model of effectiveModels) {
-          const baselineKey = `${pair.sourceScenario.id}::${model.modelId}`;
-          const flippedKey = `${pair.variantScenario.id}::${model.modelId}`;
-
-          const baselinePick = pickStableTranscripts(
-            transcriptsByScenarioAndModel.get(baselineKey) ?? [],
-            5
-          );
-          const flippedPick = pickStableTranscripts(
-            transcriptsByScenarioAndModel.get(flippedKey) ?? [],
-            5
-          );
-
-          if (baselinePick.kind === 'fragmented' || flippedPick.kind === 'fragmented') {
-            excludedCounts.set(
-              'model_version_mismatch',
-              (excludedCounts.get('model_version_mismatch') ?? 0) + 1
-            );
-            continue;
-          }
-
-          qualifyingPairs += 1;
-
-          if (baselinePick.kind !== 'selected' || flippedPick.kind !== 'selected') {
-            missingPairs += 1;
-            const vtMissing = pair.variantType;
-            if (vtMissing === 'presentation_flipped' || vtMissing === 'fully_flipped') {
-              presentationMissingPairs += 1;
-            }
-            if (vtMissing === 'scale_flipped' || vtMissing === 'fully_flipped') {
-              scaleMissingPairs += 1;
-            }
-            rows.push({
-              modelId: model.modelId,
-              modelLabel: model.modelLabel,
-              vignetteId: pair.sourceScenario.definitionId,
-              vignetteTitle,
-              conditionKey,
-              variantType: pair.variantType,
-              majorityVoteBaseline: null,
-              majorityVoteFlipped: null,
-              rawScore: null,
-              mismatchType: 'missing_pair',
-              ordinalDistance: null,
-              isMatch: null,
-            });
-            continue;
-          }
-
-          const versionsCompatible = (
-            baselinePick.modelVersion === flippedPick.modelVersion
-            || (baselinePick.modelVersion == null && flippedPick.modelVersion == null)
-          );
-          if (!versionsCompatible) {
-            qualifyingPairs -= 1;
-            excludedCounts.set(
-              'model_version_mismatch',
-              (excludedCounts.get('model_version_mismatch') ?? 0) + 1
-            );
-            continue;
-          }
-
-          const baselineValue = computeMajorityVote(
-            baselinePick.selected.map((transcript) => transcript.decision),
-            trimOutliers
-          );
-          const flippedValue = computeMajorityVote(
-            flippedPick.selected.map((transcript) => transcript.decision),
-            trimOutliers
-          );
-          const rawFlippedValue = computeMajorityVote(
-            flippedPick.selected.map((transcript) => transcript.rawDecision),
-            trimOutliers
-          );
-
-          if (baselineValue == null || flippedValue == null) {
-            missingPairs += 1;
-            const vtMissing = pair.variantType;
-            if (vtMissing === 'presentation_flipped' || vtMissing === 'fully_flipped') {
-              presentationMissingPairs += 1;
-            }
-            if (vtMissing === 'scale_flipped' || vtMissing === 'fully_flipped') {
-              scaleMissingPairs += 1;
-            }
-            rows.push({
-              modelId: model.modelId,
-              modelLabel: model.modelLabel,
-              vignetteId: pair.sourceScenario.definitionId,
-              vignetteTitle,
-              conditionKey,
-              variantType: pair.variantType,
-              majorityVoteBaseline: baselineValue,
-              majorityVoteFlipped: flippedValue,
-              rawScore: rawFlippedValue ?? null,
-              mismatchType: 'missing_pair',
-              ordinalDistance: null,
-              isMatch: null,
-            });
-            continue;
-          }
-
-          comparablePairs += 1;
-          const vt = pair.variantType;
-          if (vt === 'presentation_flipped' || vt === 'fully_flipped') {
-            presentationComparablePairs += 1;
-          }
-          if (vt === 'scale_flipped' || vt === 'fully_flipped') {
-            scaleComparablePairs += 1;
-          }
-          if (vt === 'fully_flipped') {
-            matchComparablePairs += 1;
-          }
-          const directionMatch = valuesMatch(baselineValue, flippedValue, true);
-          const exactMatch = valuesMatch(baselineValue, flippedValue, false);
-          const isMatch = directionOnly ? directionMatch : exactMatch;
-          if (directionMatch) {
-            directionMatchCount += 1;
-          }
-          if (exactMatch) {
-            exactMatchCount += 1;
-          }
-
-          const mismatchType: OrderInvarianceMismatchType = isMatch
-            ? null
-            : (directionOnly ? 'direction_flip' : 'exact_flip');
-          const pivotKey = `${pair.sourceScenario.definitionId}::${conditionKey}::${model.modelId}`;
-          const scores = scorePivot.get(pivotKey) ?? {};
-          if (baselineValue != null) {
-            scores.baseline = baselineValue;
-          }
-          if (flippedValue != null && pair.variantType) {
-            scores[pair.variantType] = flippedValue;
-          }
-          scorePivot.set(pivotKey, scores);
-
-          rows.push({
-            modelId: model.modelId,
-            modelLabel: model.modelLabel,
-            vignetteId: pair.sourceScenario.definitionId,
-            vignetteTitle,
-            conditionKey,
-            variantType: pair.variantType,
-            majorityVoteBaseline: baselineValue,
-            majorityVoteFlipped: flippedValue,
-            rawScore: rawFlippedValue ?? null,
-            mismatchType,
-            ordinalDistance: Math.abs(baselineValue - flippedValue),
-            isMatch,
-          });
-        }
-      }
-
-      const comparableRows = rows.filter((row) => row.ordinalDistance != null);
-      const sensitiveModelCount = new Set(
-        comparableRows
-          .filter((row) => (row.ordinalDistance ?? 0) >= 2)
-          .map((row) => row.modelId)
-      ).size;
-      const sensitiveVignetteCount = new Set(
-        comparableRows
-          .filter((row) => (row.ordinalDistance ?? 0) >= 2)
-          .map((row) => row.vignetteId)
-      ).size;
-      const { presentationEffectMAD, scaleEffectMAD } = computeMADMetrics(scorePivot);
-
-      const summary: OrderInvarianceSummary = {
-        status: comparablePairs === 0 ? 'INSUFFICIENT_DATA' : 'COMPUTED',
-        matchRate: comparablePairs > 0
-          ? (directionOnly ? directionMatchCount : exactMatchCount) / comparablePairs
-          : null,
-        exactMatchRate: comparablePairs > 0 ? exactMatchCount / comparablePairs : null,
-        presentationEffectMAD,
-        scaleEffectMAD,
-        totalCandidatePairs: relevantPairs.length * effectiveModels.length,
-        qualifyingPairs,
-        missingPairs,
-        comparablePairs,
-        matchComparablePairs,
-        presentationComparablePairs,
-        scaleComparablePairs,
-        presentationMissingPairs,
-        scaleMissingPairs,
-        sensitiveModelCount,
-        sensitiveVignetteCount,
-        excludedPairs: Array.from(excludedCounts.entries())
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([reason, count]) => ({ reason, count })),
-      };
-
-      return {
-        generatedAt: new Date(),
-        summary,
-        rows: rows.sort((left, right) => (
-          left.vignetteTitle.localeCompare(right.vignetteTitle)
-          || left.modelLabel.localeCompare(right.modelLabel)
-          || left.conditionKey.localeCompare(right.conditionKey, undefined, { numeric: true, sensitivity: 'base' })
-        )),
-      };
+      return getOrderInvarianceAnalysisResult({ directionOnly, trimOutliers });
     },
   })
 );
@@ -1330,166 +820,11 @@ builder.queryField('assumptionsOrderInvarianceTranscripts', (t) =>
       if (!ctx.user) {
         throw new AuthenticationError('Authentication required');
       }
-
-      const vignetteId = String(args.vignetteId);
-      const activeModels = await db.llmModel.findMany({
-        where: { status: 'ACTIVE' },
-        select: { modelId: true, displayName: true },
-      });
-      const activeModelLabels = new Map(
-        activeModels.map((model) => [model.modelId, model.displayName])
-      );
-
-      const lockedById = new Map(
-        LOCKED_ASSUMPTION_VIGNETTES.map((vignette) => [vignette.id, vignette])
-      );
-      const vignetteTitle = lockedById.get(vignetteId)?.title ?? vignetteId;
-      const labels = parseAttributeLabels(vignetteTitle);
-      const levels = parseConditionLevels(args.conditionKey);
-
-      const pairs = await db.assumptionScenarioPair.findMany({
-        where: {
-          assumptionKey: ORDER_INVARIANCE_KEY,
-          equivalenceReviewStatus: 'APPROVED',
-          equivalenceReviewedAt: { not: null },
-          sourceScenario: {
-            definitionId: vignetteId,
-            deletedAt: null,
-          },
-          variantScenario: {
-            deletedAt: null,
-          },
-        },
-        include: {
-          sourceScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-          variantScenario: {
-            select: {
-              id: true,
-              name: true,
-              definitionId: true,
-              orientationFlipped: true,
-            },
-          },
-        },
-      }) as unknown as PairRecord[];
-
-      const matchingPair = pairs.find((candidate) => buildConditionKey(candidate.sourceScenario.name) === args.conditionKey) ?? null;
-
-      if (matchingPair == null) {
-        return {
-          generatedAt: new Date(),
-          vignetteId,
-          vignetteTitle,
-          modelId: args.modelId,
-          modelLabel: args.modelId,
-          conditionKey: args.conditionKey,
-          attributeALabel: labels.attributeALabel,
-          attributeBLabel: labels.attributeBLabel,
-          transcripts: [],
-        };
-      }
-
-      const scenarioIds = [matchingPair.sourceScenario.id, matchingPair.variantScenario.id];
-      const transcriptRecords = await db.transcript.findMany({
-        where: {
-          deletedAt: null,
-          scenarioId: { in: scenarioIds },
-          modelId: args.modelId,
-        },
-        select: {
-          id: true,
-          runId: true,
-          scenarioId: true,
-          modelId: true,
-          modelVersion: true,
-          content: true,
-          decisionCode: true,
-          decisionCodeSource: true,
-          turnCount: true,
-          tokenCount: true,
-          durationMs: true,
-          estimatedCost: true,
-          createdAt: true,
-          lastAccessedAt: true,
-          run: {
-            select: {
-              deletedAt: true,
-              config: true,
-              tags: {
-                select: {
-                  tag: {
-                    select: { name: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }) as TranscriptDetailRecord[];
-
-      const transcripts = transcriptRecords
-        .filter((transcript) => {
-          if (transcript.scenarioId == null || transcript.run.deletedAt != null) {
-            return false;
-          }
-          if (!isTempZeroRun(transcript)) {
-            return false;
-          }
-
-          const assumptionKey = getRunAssumptionKey(transcript.run.config);
-          const isBaselineScenario = transcript.scenarioId === matchingPair.sourceScenario.id;
-          if (isBaselineScenario) {
-            if (assumptionKey == null || !BASELINE_ASSUMPTION_KEYS.has(assumptionKey)) {
-              return false;
-            }
-            if (assumptionKey !== 'temp_zero_determinism' && !isAssumptionRun(transcript)) {
-              return false;
-            }
-          } else if (assumptionKey !== ORDER_INVARIANCE_KEY || !isAssumptionRun(transcript)) {
-            return false;
-          }
-
-          return true;
-        })
-        .map((transcript) => ({
-          id: transcript.id,
-          runId: transcript.runId,
-          scenarioId: transcript.scenarioId ?? '',
-          modelId: transcript.modelId,
-          modelVersion: transcript.modelVersion,
-          content: transcript.content,
-          decisionCode: transcript.decisionCode,
-          decisionCodeSource: transcript.decisionCodeSource,
-          turnCount: transcript.turnCount,
-          tokenCount: transcript.tokenCount,
-          durationMs: transcript.durationMs,
-          estimatedCost: transcript.estimatedCost,
-          createdAt: transcript.createdAt,
-          lastAccessedAt: transcript.lastAccessedAt,
-          orderLabel: transcript.scenarioId === matchingPair.sourceScenario.id ? 'A First' : 'B First',
-          attributeALevel: levels.attributeALevel,
-          attributeBLevel: levels.attributeBLevel,
-        }))
-        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-
-      return {
-        generatedAt: new Date(),
-        vignetteId,
-        vignetteTitle,
+      return getOrderInvarianceTranscriptResult({
+        vignetteId: String(args.vignetteId),
         modelId: args.modelId,
-        modelLabel: activeModelLabels.get(args.modelId) ?? args.modelId,
         conditionKey: args.conditionKey,
-        attributeALabel: labels.attributeALabel,
-        attributeBLabel: labels.attributeBLabel,
-        transcripts,
-      };
+      });
     },
   })
 );
