@@ -11,7 +11,15 @@ const log = createLogger('assumptions:order-effect-cache');
 type SnapshotClient = typeof db | Prisma.TransactionClient;
 
 export class DuplicateCurrentOrderEffectSnapshotError extends Error {
-  constructor(message = 'Multiple CURRENT order-effect snapshots found for one input hash') {
+  constructor(
+    message = 'Multiple CURRENT order-effect snapshots found for one input hash',
+    public details: {
+      inputHash: string;
+      snapshotIds: string[];
+      configSignatures?: Array<string | null>;
+      codeVersions?: Array<string | null>;
+    } | null = null
+  ) {
     super(message);
     this.name = 'DuplicateCurrentOrderEffectSnapshotError';
   }
@@ -117,7 +125,13 @@ export async function getCurrentOrderEffectSnapshot(
 
   if (snapshots.length > 1) {
     log.error({ inputHash: payload.inputHash, snapshotIds: snapshots.map((snapshot) => snapshot.id) }, 'Order-effect cache invariant violated: multiple CURRENT snapshots matched one inputHash');
-    throw new DuplicateCurrentOrderEffectSnapshotError();
+    throw new DuplicateCurrentOrderEffectSnapshotError(
+      'Multiple CURRENT order-effect snapshots found for one input hash',
+      {
+        inputHash: payload.inputHash,
+        snapshotIds: snapshots.map((snapshot) => snapshot.id),
+      }
+    );
   }
 
   const snapshot = snapshots[0] ?? null;
@@ -170,7 +184,13 @@ export async function repairDuplicateCurrentOrderEffectSnapshots(
       codeVersions: snapshots.map((snapshot) => snapshot.codeVersion),
     }, 'Order-effect cache repair aborted: duplicate CURRENT snapshots were not provably equivalent');
     throw new DuplicateCurrentOrderEffectSnapshotError(
-      'Multiple CURRENT order-effect snapshots found for one input hash without provable equivalence'
+      'Multiple CURRENT order-effect snapshots found for one input hash without provable equivalence',
+      {
+        inputHash: payload.inputHash,
+        snapshotIds: snapshots.map((snapshot) => snapshot.id),
+        configSignatures: snapshots.map((snapshot) => snapshot.configSignature),
+        codeVersions: snapshots.map((snapshot) => snapshot.codeVersion),
+      }
     );
   }
 
