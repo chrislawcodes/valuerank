@@ -91,9 +91,19 @@ type VarianceAnalysisShape = {
   leastVariableScenarios: ScenarioVarianceEntry[];
 };
 
+type PreferenceSummaryShape = {
+  perModel: Record<string, unknown>;
+};
+
+type ReliabilitySummaryShape = {
+  perModel: Record<string, unknown>;
+};
+
 // Type for output data stored in JSONB
 type AnalysisOutput = {
   perModel: Record<string, unknown>;
+  preferenceSummary?: PreferenceSummaryShape | null;
+  reliabilitySummary?: ReliabilitySummaryShape | null;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis?: Record<string, unknown>;
   varianceAnalysis?: VarianceAnalysisShape;
@@ -151,6 +161,8 @@ async function getNormalizedArtifacts(
 export const AnalysisResultRef = builder.objectRef<AnalysisResultShape>('AnalysisResult');
 const ContestedScenarioRef = builder.objectRef<ContestedScenarioShape>('ContestedScenario');
 const AnalysisWarningRef = builder.objectRef<AnalysisWarningShape>('AnalysisWarning');
+const PreferenceSummaryRef = builder.objectRef<PreferenceSummaryShape>('PreferenceSummary');
+const ReliabilitySummaryRef = builder.objectRef<ReliabilitySummaryShape>('ReliabilitySummary');
 
 // AnalysisStatus enum is defined in enums.ts - reference by string name
 
@@ -172,6 +184,26 @@ builder.objectType(AnalysisWarningRef, {
     code: t.exposeString('code'),
     message: t.exposeString('message'),
     recommendation: t.exposeString('recommendation'),
+  }),
+});
+
+builder.objectType(PreferenceSummaryRef, {
+  description: 'Explicit preference summary for vignette analysis semantics',
+  fields: (t) => ({
+    perModel: t.expose('perModel', {
+      type: 'JSON',
+      description: 'Per-model preference direction and strength summary',
+    }),
+  }),
+});
+
+builder.objectType(ReliabilitySummaryRef, {
+  description: 'Explicit baseline reliability summary for vignette analysis semantics',
+  fields: (t) => ({
+    perModel: t.expose('perModel', {
+      type: 'JSON',
+      description: 'Per-model baseline noise and reliability summary',
+    }),
   }),
 });
 
@@ -216,6 +248,26 @@ builder.objectType(AnalysisResultRef, {
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
         return output?.perModel ?? {};
+      },
+    }),
+
+    preferenceSummary: t.field({
+      type: PreferenceSummaryRef,
+      nullable: true,
+      description: 'Explicit preference direction and strength summary',
+      resolve: (analysis) => {
+        const output = analysis.output as AnalysisOutput | null;
+        return output?.preferenceSummary ?? null;
+      },
+    }),
+
+    reliabilitySummary: t.field({
+      type: ReliabilitySummaryRef,
+      nullable: true,
+      description: 'Explicit baseline noise and reliability summary',
+      resolve: (analysis) => {
+        const output = analysis.output as AnalysisOutput | null;
+        return output?.reliabilitySummary ?? null;
       },
     }),
 

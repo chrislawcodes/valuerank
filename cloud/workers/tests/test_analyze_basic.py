@@ -195,6 +195,198 @@ class TestAnalyzeBasicIntegration:
         assert result["success"] is True
         assert result["analysis"]["perModel"] == {}
 
+    def test_preference_summary_uses_orientation_corrected_scenario_means(self):
+        """Preference strength should use per-scenario means, not flattened repeats."""
+        input_data = {
+            "runId": "test-run-preference-summary",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "orientationFlipped": True,
+                    "summary": {"score": 1, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 3, "values": {}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        summary = result["analysis"]["preferenceSummary"]["perModel"]["m1"]
+        direction = summary["preferenceDirection"]
+
+        assert direction["overallLean"] == "A"
+        assert direction["overallSignedCenter"] == pytest.approx(1.333333, abs=1e-6)
+        assert summary["preferenceStrength"] == pytest.approx(1.333333, abs=1e-6)
+
+    def test_reliability_summary_is_unavailable_without_repeats(self):
+        """Single-sample runs should not expose reliability from cross-scenario spread."""
+        input_data = {
+            "runId": "test-run-reliability-unavailable",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 1, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        variance = result["analysis"]["varianceAnalysis"]["perModel"]["m1"]
+
+        assert variance["consistencyScore"] == 1.0
+        assert reliability["coverageCount"] == 0
+        assert reliability["baselineNoise"] is None
+        assert reliability["baselineReliability"] is None
+        assert reliability["directionalAgreement"] is None
+        assert reliability["neutralShare"] is None
+
+    def test_reliability_summary_weights_directional_metrics_by_sample_count(self):
+        """Directional reliability rollups should be weighted by repeated sample count."""
+        input_data = {
+            "runId": "test-run-reliability-weighted",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 2,
+                    "summary": {"score": 3, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "summary": {"score": 1, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t5",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 1,
+                    "summary": {"score": 1, "values": {}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        variance = result["analysis"]["varianceAnalysis"]["perModel"]["m1"]
+
+        assert reliability["coverageCount"] == 2
+        assert reliability["uniqueScenarios"] == 2
+        assert reliability["baselineReliability"] == pytest.approx(
+            variance["consistencyScore"],
+            abs=1e-6,
+        )
+        assert reliability["baselineNoise"] == pytest.approx(
+            variance["avgWithinScenarioVariance"] ** 0.5,
+            abs=1e-6,
+        )
+        assert reliability["directionalAgreement"] == pytest.approx(0.8, abs=1e-6)
+        assert reliability["neutralShare"] == pytest.approx(0.2, abs=1e-6)
+
+    def test_summaries_are_suppressed_when_vignette_semantics_are_disabled(self):
+        """Assumption-style runs should not emit baseline semantic summaries."""
+        input_data = {
+            "runId": "test-run-assumption-suppressed",
+            "emitVignetteSemantics": False,
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "summary": {"score": 5, "values": {"Value_A": "prioritized"}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 1,
+                    "summary": {"score": 4, "values": {"Value_A": "prioritized"}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        analysis = result["analysis"]
+        assert analysis["preferenceSummary"] is None
+        assert analysis["reliabilitySummary"] is None
+        assert analysis["perModel"]["m1"]["sampleSize"] == 2
+        assert analysis["varianceAnalysis"]["perModel"]["m1"]["uniqueScenarios"] == 1
+
     def test_missing_run_id(self):
         """Test error when runId is missing."""
         input_data = {

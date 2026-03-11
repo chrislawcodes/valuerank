@@ -146,6 +146,34 @@ export type VarianceAnalysis = {
   orientationCorrectedCount?: number;
 };
 
+export type PreferenceDirectionSummary = {
+  byValue: Record<string, ValueStats>;
+  overallLean: 'A' | 'B' | 'NEUTRAL' | null;
+  overallSignedCenter: number | null;
+};
+
+export type ModelPreferenceSummary = {
+  preferenceDirection: PreferenceDirectionSummary;
+  preferenceStrength: number | null;
+};
+
+export type PreferenceSummary = {
+  perModel: Record<string, ModelPreferenceSummary>;
+};
+
+export type ModelReliabilitySummary = {
+  baselineNoise: number | null;
+  baselineReliability: number | null;
+  directionalAgreement: number | null;
+  neutralShare: number | null;
+  coverageCount: number;
+  uniqueScenarios: number;
+};
+
+export type ReliabilitySummary = {
+  perModel: Record<string, ModelReliabilitySummary>;
+};
+
 export type AnalysisResult = {
   id: string;
   runId: string;
@@ -157,6 +185,8 @@ export type AnalysisResult = {
   computedAt: string | null;
   durationMs: number | null;
   perModel: Record<string, PerModelStats>;
+  preferenceSummary?: PreferenceSummary | null;
+  reliabilitySummary?: ReliabilitySummary | null;
   modelAgreement: ModelAgreement;
   dimensionAnalysis: DimensionAnalysis | null;
   visualizationData: VisualizationData | null;
@@ -182,6 +212,12 @@ export const ANALYSIS_RESULT_FRAGMENT = gql`
     computedAt
     durationMs
     perModel
+    preferenceSummary {
+      perModel
+    }
+    reliabilitySummary {
+      perModel
+    }
     modelAgreement
     dimensionAnalysis
     visualizationData

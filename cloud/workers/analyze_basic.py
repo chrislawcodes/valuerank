@@ -13,6 +13,7 @@ Protocol:
 Input format:
 {
   "runId": string,
+  "emitVignetteSemantics": boolean,
   "transcripts": [
     {
       "id": string,
@@ -30,6 +31,8 @@ Output format (see plan.md AnalysisOutput schema):
   "success": true,
   "analysis": {
     "perModel": {...},
+    "preferenceSummary": {...},
+    "reliabilitySummary": {...},
     "modelAgreement": {...},
     "dimensionAnalysis": {...},
     "mostContestedScenarios": [...],
@@ -42,6 +45,7 @@ Output format (see plan.md AnalysisOutput schema):
 """
 
 import json
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -57,7 +61,7 @@ from stats.variance_analysis import compute_variance_analysis
 log = get_logger("analyze_basic")
 
 # Code version for reproducibility tracking
-CODE_VERSION = "1.0.0"
+CODE_VERSION = "1.1.1"
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -74,6 +78,9 @@ def validate_input(data: dict[str, Any]) -> None:
 
     if not isinstance(data["transcripts"], list):
         raise ValidationError(message="transcripts must be an array")
+
+    if "emitVignetteSemantics" in data and not isinstance(data["emitVignetteSemantics"], bool):
+        raise ValidationError(message="emitVignetteSemantics must be a boolean")
 
 
 def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[float]]:
@@ -206,10 +213,175 @@ def generate_warnings(
     return warnings
 
 
+def normalize_score(score: Any, orientation_flipped: bool) -> float | None:
+    """Normalize a score onto the canonical 1-5 orientation."""
+    try:
+        numeric_score = float(score)
+    except (TypeError, ValueError):
+        return None
+
+    if numeric_score < 1.0 or numeric_score > 5.0:
+        return None
+
+    return float(6 - numeric_score) if orientation_flipped else numeric_score
+
+
+def build_preference_summary(
+    transcripts: list[dict[str, Any]],
+    per_model: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build explicit preference semantics for vignette analysis.
+
+    Preference strength is computed from orientation-corrected per-scenario means
+    so repeated probes do not overweight a single scenario.
+    """
+    scores_by_model_scenario: dict[str, dict[str, list[float]]] = {}
+
+    for transcript in transcripts:
+        model_id = transcript.get("modelId", "unknown")
+        scenario_id = transcript.get("scenarioId", "unknown")
+        summary = transcript.get("summary", {})
+        score = summary.get("score")
+
+        normalized_score = normalize_score(
+            score,
+            bool(transcript.get("orientationFlipped", False)),
+        )
+        if normalized_score is None:
+            continue
+
+        if model_id not in scores_by_model_scenario:
+            scores_by_model_scenario[model_id] = {}
+        if scenario_id not in scores_by_model_scenario[model_id]:
+            scores_by_model_scenario[model_id][scenario_id] = []
+
+        scores_by_model_scenario[model_id][scenario_id].append(normalized_score)
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model.items():
+        scenario_scores = scores_by_model_scenario.get(model_id, {})
+        scenario_means = [
+            sum(scores) / len(scores)
+            for scores in scenario_scores.values()
+            if scores
+        ]
+
+        overall_signed_center: float | None = None
+        overall_lean: str | None = None
+        preference_strength: float | None = None
+
+        if scenario_means:
+            signed_center = sum(mean - 3.0 for mean in scenario_means) / len(scenario_means)
+            strength = sum(abs(mean - 3.0) for mean in scenario_means) / len(scenario_means)
+
+            overall_signed_center = round(float(signed_center), 6)
+            preference_strength = round(float(strength), 6)
+
+            if overall_signed_center > 0:
+                overall_lean = "A"
+            elif overall_signed_center < 0:
+                overall_lean = "B"
+            else:
+                overall_lean = "NEUTRAL"
+
+        per_model_summary[model_id] = {
+            "preferenceDirection": {
+                "byValue": model_stats.get("values", {}),
+                "overallLean": overall_lean,
+                "overallSignedCenter": overall_signed_center,
+            },
+            "preferenceStrength": preference_strength,
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
+def build_reliability_summary(variance_analysis: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build baseline reliability semantics from repeated-trial variance analysis.
+
+    Reliability is unavailable without actual repeat coverage and never falls back
+    to cross-scenario spread metrics.
+    """
+    is_multi_sample = bool(variance_analysis.get("isMultiSample", False))
+    per_model_variance = variance_analysis.get("perModel", {})
+
+    per_model_summary: dict[str, Any] = {}
+    for model_id, model_stats in per_model_variance.items():
+        per_scenario = model_stats.get("perScenario", {})
+        repeated_scenarios = [
+            stats
+            for stats in per_scenario.values()
+            if stats.get("sampleCount", 0) > 1
+        ]
+        coverage_count = len(repeated_scenarios)
+
+        baseline_noise: float | None = None
+        baseline_reliability: float | None = None
+        directional_agreement: float | None = None
+        neutral_share: float | None = None
+
+        if coverage_count > 0:
+            avg_within_scenario_variance = float(model_stats.get("avgWithinScenarioVariance", 0.0))
+            baseline_noise = round(math.sqrt(max(avg_within_scenario_variance, 0.0)), 6)
+
+            if is_multi_sample:
+                consistency_score = model_stats.get("consistencyScore")
+                if consistency_score is not None:
+                    baseline_reliability = round(float(consistency_score), 6)
+
+            agreement_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("directionalAgreement") is not None
+            )
+            if agreement_weight > 0:
+                directional_agreement = round(
+                    sum(
+                        float(stats["directionalAgreement"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("directionalAgreement") is not None
+                    ) / agreement_weight,
+                    6,
+                )
+
+            neutral_weight = sum(
+                int(stats.get("sampleCount", 0))
+                for stats in repeated_scenarios
+                if stats.get("neutralShare") is not None
+            )
+            if neutral_weight > 0:
+                neutral_share = round(
+                    sum(
+                        float(stats["neutralShare"]) * int(stats.get("sampleCount", 0))
+                        for stats in repeated_scenarios
+                        if stats.get("neutralShare") is not None
+                    ) / neutral_weight,
+                    6,
+                )
+
+        per_model_summary[model_id] = {
+            "baselineNoise": baseline_noise,
+            "baselineReliability": baseline_reliability,
+            "directionalAgreement": directional_agreement,
+            "neutralShare": neutral_share,
+            "coverageCount": coverage_count,
+            "uniqueScenarios": int(model_stats.get("uniqueScenarios", 0)),
+        }
+
+    return {
+        "perModel": per_model_summary,
+    }
+
+
 def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     """Run full Tier 1 analysis and return result."""
     start_time = time.time()
     run_id = data["runId"]
+    emit_vignette_semantics = bool(data.get("emitVignetteSemantics", True))
     transcripts = data.get("transcripts", [])
 
     # Legacy mode: return stub if only transcriptIds provided
@@ -250,6 +422,18 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
     # Compute variance analysis (for multi-sample runs)
     variance_analysis = compute_variance_analysis(transcripts)
 
+    # Build explicit semantic summaries for baseline vignette runs only.
+    preference_summary = (
+        build_preference_summary(transcripts, per_model)
+        if emit_vignette_semantics
+        else None
+    )
+    reliability_summary = (
+        build_reliability_summary(variance_analysis)
+        if emit_vignette_semantics
+        else None
+    )
+
     # Find most contested scenarios
     contested = find_contested_scenarios(transcripts)
 
@@ -273,6 +457,8 @@ def run_analysis(data: dict[str, Any]) -> dict[str, Any]:
         "success": True,
         "analysis": {
             "perModel": per_model,
+            "preferenceSummary": preference_summary,
+            "reliabilitySummary": reliability_summary,
             "modelAgreement": model_agreement,
             "dimensionAnalysis": dimension_analysis,
             "varianceAnalysis": variance_analysis,  # Multi-sample variance metrics

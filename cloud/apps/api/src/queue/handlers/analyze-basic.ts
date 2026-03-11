@@ -22,7 +22,7 @@ const log = createLogger('queue:analyze-basic');
 const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // Code version for tracking analysis versions
-const CODE_VERSION = '1.0.0';
+const CODE_VERSION = '1.1.1';
 
 /**
  * Transcript data structure sent to Python worker.
@@ -60,17 +60,20 @@ function toDimensionRecord(value: unknown): Record<string, number | string> | nu
 
 function buildValueOutcomes(
   score: number | null,
+  orientationFlipped: boolean,
   valueA: string | null,
   valueB: string | null
 ): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
   if (score == null || valueA == null || valueB == null) return undefined;
-  if (score >= 4) {
+  const normalizedScore = orientationFlipped ? 6 - score : score;
+
+  if (normalizedScore >= 4) {
     return {
       [valueA]: 'prioritized',
       [valueB]: 'deprioritized',
     };
   }
-  if (score <= 2) {
+  if (normalizedScore <= 2) {
     return {
       [valueA]: 'deprioritized',
       [valueB]: 'prioritized',
@@ -82,11 +85,22 @@ function buildValueOutcomes(
   };
 }
 
+function getAssumptionKey(config: unknown): string | null {
+  if (config == null || typeof config !== 'object') return null;
+  const value = (config as Record<string, unknown>).assumptionKey;
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function hasAssumptionRunTag(tags: Array<{ tag: { name: string } }>): boolean {
+  return tags.some((entry) => entry.tag.name === 'assumption-run');
+}
+
 /**
  * Python worker input structure.
  */
 type AnalyzeWorkerInput = {
   runId: string;
+  emitVignetteSemantics: boolean;
   transcripts: TranscriptData[];
 };
 
@@ -95,8 +109,15 @@ type AnalyzeWorkerInput = {
  */
 type AnalysisOutput = {
   perModel: Record<string, unknown>;
+  preferenceSummary?: {
+    perModel: Record<string, unknown>;
+  } | null;
+  reliabilitySummary?: {
+    perModel: Record<string, unknown>;
+  } | null;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis: Record<string, unknown>;
+  visualizationData?: Record<string, unknown>;
   varianceAnalysis: {
     isMultiSample: boolean;
     samplesPerScenario: number;
@@ -182,8 +203,21 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
 
         const runMeta = await db.run.findUnique({
           where: { id: runId },
-          select: { definitionId: true },
+          select: {
+            definitionId: true,
+            config: true,
+            tags: {
+              include: {
+                tag: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
         });
+        const emitVignetteSemantics =
+          getAssumptionKey(runMeta?.config ?? null) == null &&
+          !hasAssumptionRunTag(runMeta?.tags ?? []);
         let valueA: string | null = null;
         let valueB: string | null = null;
         if (runMeta?.definitionId != null && runMeta.definitionId !== '') {
@@ -230,14 +264,15 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
                 score = parsed;
               }
             }
-            const values = buildValueOutcomes(score, valueA, valueB);
+            const orientationFlipped = scenario.orientationFlipped ?? false;
+            const values = buildValueOutcomes(score, orientationFlipped, valueA, valueB);
 
             return {
               id: t.id,
               modelId: t.modelId,
               scenarioId: t.scenarioId as string,
               sampleIndex: t.sampleIndex,
-              orientationFlipped: t.scenario?.orientationFlipped ?? false,
+              orientationFlipped,
               summary: values ? { score, values } : { score },
               scenario: {
                 name: t.scenario!.name,
@@ -249,7 +284,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
         // Execute Python analyze worker
         const result = await spawnPython<AnalyzeWorkerInput, AnalyzeWorkerOutput>(
           ANALYZE_WORKER_PATH,
-          { runId, transcripts: transcriptData },
+          { runId, emitVignetteSemantics, transcripts: transcriptData },
           { cwd: path.resolve(process.cwd(), '../..'), timeout: 120000 }
         );
 
