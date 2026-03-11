@@ -74,13 +74,17 @@ This slice must classify summary availability from the data already exposed to t
 - `isAggregate`
 
 Locked consumer rules:
-1. `isAggregate === true` or `analysis.analysisType === 'AGGREGATE'` means aggregate analysis. This is not a legacy row.
-2. Use semver comparison, not string comparison, for `analysis.codeVersion`. Do not compare version strings lexicographically.
-3. `analysis.codeVersion` earlier than `1.1.1` and both summary objects are `null` means legacy analysis.
-4. `analysis.codeVersion` at or after `1.1.1` and both summary objects are `null` means a current run type that does not publish vignette semantics in this surface. The UI must not assume legacy and must not suggest recompute.
-5. A present `reliabilitySummary` with `coverageCount === 0` or `baselineReliability === null` for a model means current single-sample / no-repeat coverage for that model, not missing data.
-6. If the raw JSON shape of `preferenceSummary.perModel` or `reliabilitySummary.perModel` is invalid at runtime, the UI must fail closed and show an invalid-summary unavailable state. Do not best-effort read unvalidated JSON.
-7. If `analysis.codeVersion >= 1.1.1`, `isAggregate !== true`, and both summary objects are `null`, the adapter must classify the row as `suppressed-run-type`. This is the required classification for current rows with intentionally missing vignette semantics.
+1. Use semver comparison, not string comparison, for `analysis.codeVersion`. Do not compare version strings lexicographically.
+2. The adapter must evaluate row-level discriminators in this strict order:
+   - aggregate: `isAggregate === true` or `analysis.analysisType === 'AGGREGATE'`
+   - unknown version: `analysis.codeVersion` cannot be parsed as semver
+   - legacy: parsed `analysis.codeVersion < 1.1.1` and both summary objects are `null`
+   - suppressed: parsed `analysis.codeVersion >= 1.1.1` and both summary objects are `null`
+   - otherwise available for section-level evaluation
+3. A row that matches the aggregate condition must never fall through to `legacy-analysis`, even when `analysis.codeVersion` is earlier than `1.1.1` and both summary objects are `null`.
+4. A present `reliabilitySummary` with `coverageCount === 0` or `baselineReliability === null` for a model means current single-sample / no-repeat coverage for that model, not missing data.
+5. If the raw JSON shape of `preferenceSummary.perModel` or `reliabilitySummary.perModel` is invalid at runtime, the UI must fail closed and show an invalid-summary unavailable state. Do not best-effort read unvalidated JSON.
+6. Preference and reliability section availability are resolved independently after the strict row-level discriminator pass. A row may therefore have available preference but unavailable reliability, or vice versa.
 
 Note:
 - There is no dedicated assumption-run discriminator in the current analysis result shape.
@@ -164,6 +168,8 @@ type RawPreferenceSummary = { perModel: unknown } | null;
 type RawReliabilitySummary = { perModel: unknown } | null;
 ```
 
+- `AnalysisResult.preferenceSummary` and `AnalysisResult.reliabilitySummary` in the web operations layer must use these raw types, not trusted `PreferenceSummary` / `ReliabilitySummary` structs.
+- Do not export trusted structured summary types from `cloud/apps/web/src/api/operations/analysis.ts` for direct React consumption in this slice.
 - Only the adapter module may turn these raw fields into trusted view models.
 - UI components must not import raw summary types directly.
 
@@ -198,6 +204,14 @@ type RawModelReliabilitySummary = {
 };
 ```
 
+Numeric-domain validation:
+- every numeric field must be a finite number when non-null
+- `winRate`, `baselineReliability`, `directionalAgreement`, and `neutralShare` must be within `[0, 1]`
+- `baselineNoise`, `preferenceStrength`, `coverageCount`, and `uniqueScenarios` must be greater than or equal to `0`
+- `coverageCount` and `uniqueScenarios` must be integers
+- `overallSignedCenter` may be any finite signed numeric value emitted by the backend
+- fail closed to `invalid-summary-shape`; do not coerce, clamp, or best-effort parse invalid numbers
+
 Validation rule:
 - if any model entry needed by the current view fails this shape, mark that model unavailable with `invalid-summary-shape`
 - if the top-level `perModel` object is not a record, mark the whole section unavailable with `invalid-summary-shape`
@@ -206,6 +220,23 @@ Validation rule:
 - if a summary section is entirely absent, each model in that section receives the section-level unavailable reason
 - if a single model entry is missing or malformed inside an otherwise present summary section, only that model gets `invalid-summary-shape`
 - if no model in a section is valid, the whole section is unavailable with `invalid-summary-shape`
+- if `analysis.perModel` is an empty record `{}`, both `preference.rowAvailability` and `reliability.rowAvailability` must be unavailable with `invalid-summary-shape`; zero canonical models is not a renderable state for these surfaces
+
+Canonical availability precedence:
+- section-level precedence:
+  - `aggregate-analysis`
+  - `unknown-analysis-version`
+  - `legacy-analysis`
+  - `suppressed-run-type`
+  - `invalid-summary-shape`
+  - `no-repeat-coverage` for the reliability section when all enumerated models are unavailable for that reason
+  - `available`
+- model-level precedence:
+  - `invalid-summary-shape`
+  - `no-repeat-coverage`
+  - `insufficient-preference-data`
+  - `available`
+- `rowAvailability` is the section-level availability state after applying this precedence. Overview, Decisions, and `ModelConsistencyChart.tsx` must all use the same adapter-provided result and must not re-infer their own precedence.
 
 Adapter requirements:
 - It must runtime-validate the raw JSON shape from `preferenceSummary.perModel` and `reliabilitySummary.perModel`.
@@ -221,6 +252,18 @@ Adapter requirements:
 - row order in the Overview table is alphabetical by model name
 - tie-breaker inside value lists is alphabetical by value id after absolute-distance sorting
 - `topPrioritizedValues` and `topDeprioritizedValues` render raw value ids in this slice; user-facing label mapping is out of scope for this pass
+- all stored rate/proportion fields — `baselineReliability`, `directionalAgreement`, and `neutralShare` — are backend 0–1 floats; any UI rule that says `percent` means multiply by `100` before formatting
+- `baselineNoise` is a raw standard-deviation-like value and must never be multiplied by `100`
+- the adapter must catch all validation exceptions and convert them to `invalid-summary-shape`
+- do not surface validation field paths, raw payload fragments, or parser error text to users
+- log only sanitized diagnostics from the adapter at `warn` level using `createLogger('analysis-semantics-adapter')`
+- allowed diagnostic fields are limited to structured metadata such as `{ analysisId, codeVersion, section, reason, aggregateSource }`
+- do not log raw summary JSON or raw validation error text
+- emit sanitized diagnostics for:
+  - `invalid-summary-shape`
+  - `unknown-analysis-version`
+  - `legacy-analysis`
+  - aggregate classification fallback where `isAggregate !== true` but `analysis.analysisType === 'AGGREGATE'`
 
 Adapter-only consumption rules:
 - `OverviewTab.tsx` must consume only `AnalysisSemanticsView` for vignette preference semantics.
@@ -244,6 +287,14 @@ type DecisionsTabProps = {
 
 type OverviewTabProps = {
   semantics: AnalysisSemanticsView;
+};
+
+type StabilityTabProps = {
+  runId: string;
+  perModel: Record<string, PerModelStats>;
+  visualizationData: VisualizationData | null | undefined;
+  varianceAnalysis?: VarianceAnalysis | null;
+  isAggregate: boolean;
 };
 ```
 
@@ -287,6 +338,9 @@ Calling convention:
 - do not let child components parse raw `preferenceSummary` / `reliabilitySummary` independently
 - pass `reliability={semantics.reliability}` to `ModelConsistencyChart.tsx`
 - if `analysis.codeVersion` cannot be parsed as semver, the adapter must use `unknown-analysis-version` instead of guessing `legacy-analysis`
+- compute the adapter through `useMemo`
+- do not key the memo on the entire `analysis` object reference
+- use explicit memo dependencies keyed on `[analysis?.id, analysis?.computedAt, analysis?.codeVersion, isAggregateAnalysis]`
 
 This helper should live close to the analysis UI, not inside generic API code.
 
@@ -338,6 +392,11 @@ Display rules:
 - `directionalAgreement` and `neutralShare` render as percent with `0` decimals
 - `coverageCount` renders as `X / Y scenarios`
 - do not add qualitative buckets such as `high`, `medium`, or `low` in this slice
+- chart percent formatting means `Math.round(value * 100).toString() + '%'`
+- `ResponsiveContainer` or the chart root must expose `aria-label="Baseline Reliability by Model bar chart"`
+- render a visually hidden sentence below the chart: `Data also appears in the reliability ranking panels below.`
+- when `hasMixedAvailability` is true, render a footnote below the chart: `Some models are excluded because baseline reliability is unavailable.`
+- when model count exceeds `10`, allow horizontal overflow and scale the chart height with model count rather than clipping bars into a fixed `400px` viewport
 
 ### 3. Rewire Decisions Tab To The New Reliability Semantics
 Update:
@@ -353,6 +412,11 @@ Required behavior:
   - reliability section depends on `semantics.reliability`
 - if both sections are unavailable or absent, render one tab-level unavailable callout instead of two stacked empty sections
 - add a short note beneath the reliability section when it renders: `Repeatability details live in Stability.`
+- when both sections are unavailable or absent, the unified tab-level callout must use this priority:
+  - first, `semantics.reliability.rowAvailability.message` when `semantics.reliability.rowAvailability.status === 'unavailable'`
+  - otherwise, if every reliability model is unavailable with `no-repeat-coverage`, use the centralized `no-repeat-coverage` message
+  - otherwise use the centralized `invalid-summary-shape` message
+- the unified tab-level callout shows a recompute cue only when the chosen reason is `legacy-analysis`
 
 The goal is not to redesign the tab yet. The goal is to stop surfacing the wrong metric under a reliability-flavored label and to stop duplicating repeatability drilldown that belongs in `StabilityTab.tsx`.
 
@@ -384,7 +448,8 @@ Locked Overview layout for this slice:
   - `Top Deprioritized Values`
 - rendering rules:
   - `Overall Lean` uses `A`, `NEUTRAL`, `B`, never `Favors A/B`
-  - `Signed Center` renders `overallSignedCenter` to 2 decimals, or `—` if null
+  - `Signed Center` renders with explicit sign semantics: `+` for positive, `−` for negative, `0` for exact zero, and `—` if null
+  - normalize negative zero to `0`
   - `Preference Strength` renders `preferenceStrength` to 2 decimals, or `—` plus an inline muted second line reading `Insufficient data` if null
   - `Top Prioritized Values` and `Top Deprioritized Values` render comma-separated top-3 lists from the adapter, or `None`
 - explicitly not shown in this slice:
@@ -416,8 +481,9 @@ Locked dispositions:
 - `OverviewTab.tsx` no longer receives `visualizationData` or `varianceAnalysis`.
 - `ScenariosTab.tsx` becomes the only tab in this slice that depends on `modelScenarioMatrix` for condition-level interpretation.
 - aggregate handling:
-  - `ScenariosTab.tsx` remains accessible for aggregate rows and may continue to show aggregate condition/hyperogeneity artifacts
+  - `ScenariosTab.tsx` remains accessible for aggregate rows and may continue to show aggregate condition/heterogeneity artifacts
   - `StabilityTab.tsx` is gated for aggregate rows with the `aggregate-analysis` callout in this slice, because aggregate variance output must not be presented as baseline repeatability
+  - when `isAggregate` is true, `StabilityTab.tsx` renders the `aggregate-analysis` callout and returns without rendering the repeatability matrix
 
 ### 6. Minimal Panel Wiring
 Update:
@@ -428,6 +494,7 @@ Required behavior:
 - instantiate the adapter once from `analysis` plus `isAggregateAnalysis`
 - pass `semantics` to `OverviewTab.tsx`
 - pass `semantics` to `DecisionsTab.tsx`
+- pass `isAggregate={isAggregateAnalysis}` to `StabilityTab.tsx`
 - keep compatibility with current loading and empty states
 - do not redesign overall panel structure in this slice
 
@@ -435,8 +502,10 @@ Prop changes required:
 - `OverviewTabProps` becomes `semantics: AnalysisSemanticsView` only
 - `DecisionsTabProps` becomes `visualizationData`, `dimensionLabels`, and `semantics: AnalysisSemanticsView`
 - `ModelConsistencyChartProps` becomes `reliability: AnalysisSemanticsView['reliability']`
+- `StabilityTabProps` gains `isAggregate: boolean`
 - `AnalysisPanel.tsx` must not pass raw summary JSON to child tabs
 - `AnalysisPanel.tsx` must use `isAggregateAnalysis` consistently for panel chrome, recompute visibility, and tab behavior
+- `isAggregateAnalysis` gates the same chrome items currently gated by `!isAggregate`: `Export Excel`, `OData Link`, `CSV Feed`, and `Recompute`
 
 Section-level availability rules:
 - `OverviewTab.tsx` renders only from `semantics.preference`
@@ -521,8 +590,13 @@ Add or update component/integration coverage for:
 - a legacy row where both summary sections are `null`
 - a current suppressed-run-type row where both summary sections are `null` but no recompute prompt should appear
 - an aggregate row where summaries are unavailable but the message is not the legacy recompute prompt
+- an aggregate row where `isAggregate={false}` but `analysis.analysisType === 'AGGREGATE'`
 - a multi-model row where some models have reliability coverage and some do not
 - an invalid raw JSON summary payload that must fail closed in the adapter
+- an empty `analysis.perModel = {}` row that fails closed with `invalid-summary-shape`
+- a recompute transition where legacy messaging disappears after a current analysis result is returned
+- a memoization non-regression test that toggles non-analysis panel state without rebuilding semantics
+- a `StabilityTab.tsx` aggregate render that shows only the aggregate callout and no repeatability matrix
 
 Tests that must be rewritten or deleted:
 - `cloud/apps/web/tests/components/analysis/AnalysisPanel.test.tsx` assertions for:
@@ -546,12 +620,15 @@ Assertions to lock:
 - legacy rows show the recompute prompt
 - suppressed-run-type rows do not show the recompute prompt
 - aggregate rows do not show the recompute prompt
+- aggregate rows with `analysisType === 'AGGREGATE'` still classify as aggregate when the tag-derived prop is false
 - mixed-coverage rows render available models in the reliability chart and unavailable models in a separate list
 - preference summary content is sourced from validated `preferenceSummary`
 - `OverviewTab.tsx` no longer renders the prior condition-matrix-derived decision frequency or sensitivity view
 - `DecisionsTab.tsx` no longer duplicates repeatability drilldown already present in `StabilityTab.tsx`
 - `OverviewTab.tsx` does not depend on `visualizationData` or `varianceAnalysis`
 - `DecisionsTab.tsx` reliability rendering does not depend on `visualizationData`
+- empty `analysis.perModel` fails closed instead of rendering empty semantic surfaces
+- `Signed Center` formatting uses `+`, `−`, `0`, and `—` correctly, including negative-zero normalization
 
 ## Risks
 - The largest product risk is a perceived regression when legacy rows no longer show a pseudo-consistency number. This is acceptable; the previous number was semantically wrong.
