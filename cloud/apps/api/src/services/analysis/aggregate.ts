@@ -487,13 +487,6 @@ export async function updateAggregateRun(
             return;
         }
 
-        const analysisByRunId = new Map(
-            compatibleRuns.flatMap((run) => {
-                const analysis = run.analysisResults[0];
-                return analysis ? [[run.id, analysis] as const] : [];
-            })
-        );
-
         // 2. Perform Aggregation
         // Convert DB JsonValue to AnalysisOutput structure for processing
         const analysisObjects = validAnalyses.map((a) => {
