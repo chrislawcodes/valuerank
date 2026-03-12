@@ -1,10 +1,15 @@
 import process from 'node:process';
+import {
+  formatTrialSignature,
+  formatVnewSignature,
+  isVnewSignature,
+  parseVnewTemperature,
+} from '@valuerank/shared/trial-signature';
 
-// NOTE: This script intentionally mirrors signature and lineage selection logic from:
-// - cloud/apps/api/src/graphql/queries/domain.ts (resolveSignatureRuns + latest lineage selection)
-// - cloud/apps/api/src/utils/trial-signature.ts
-// - cloud/apps/api/src/utils/vnew-signature.ts
-// Keep these in sync when signature semantics change.
+// NOTE: This script intentionally mirrors lineage selection logic from
+// `cloud/apps/api/src/graphql/queries/domain.ts`.
+// Signature formatting and vnew parsing should come from the canonical shared helper:
+// `cloud/packages/shared/src/trial-signature.ts`.
 
 type LoginResponse = { token?: string; error?: string; message?: string };
 
@@ -75,20 +80,6 @@ function parseDefinitionVersion(config: unknown): number | null {
   return null;
 }
 
-function normalizeTemperatureToken(temperature: number | null): string {
-  if (temperature === null) return 'd';
-  return Number.isInteger(temperature) ? temperature.toString() : temperature.toString();
-}
-
-function formatSignature(version: number | null, temperature: number | null): string {
-  const versionToken = version === null ? 'v?' : `v${version}`;
-  return `${versionToken}t${normalizeTemperatureToken(temperature)}`;
-}
-
-function formatVnewSignature(temperature: number | null): string {
-  return `vnewt${normalizeTemperatureToken(temperature)}`;
-}
-
 function chooseDefaultVnewSignature(runs: DefinitionRun[]): string | null {
   const temperatureCounts = new Map<string, { temperature: number | null; count: number }>();
   for (const run of runs) {
@@ -118,13 +109,11 @@ function chooseDefaultVnewSignature(runs: DefinitionRun[]): string | null {
 function runMatchesSignature(run: DefinitionRun, signature: string): boolean {
   const runConfig = run.config as { temperature?: unknown } | null;
   const temperature = parseTemperature(runConfig?.temperature);
-  if (signature.startsWith('vnewt')) {
-    const token = signature.slice('vnewt'.length);
-    if (token === 'd') return temperature === null;
-    return temperature === Number(token);
+  if (isVnewSignature(signature)) {
+    return temperature === parseVnewTemperature(signature);
   }
   const version = parseDefinitionVersion(run.config);
-  return formatSignature(version, temperature) === signature;
+  return formatTrialSignature(version, temperature) === signature;
 }
 
 function isNewer(left: DefinitionRecord, right: DefinitionRecord): boolean {

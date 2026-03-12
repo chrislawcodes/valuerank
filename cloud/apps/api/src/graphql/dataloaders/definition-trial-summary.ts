@@ -1,8 +1,8 @@
 import DataLoader from 'dataloader';
 import { db } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../utils/temperature.js';
-import { formatTrialSignature } from '../../utils/trial-signature.js';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
 
 const log = createLogger('graphql:dataloader:definition-trial-summary');

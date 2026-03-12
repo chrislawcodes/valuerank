@@ -8,10 +8,9 @@
 
 import { builder } from '../builder.js';
 import { db, resolveDefinitionContent } from '@valuerank/db';
-import { formatTrialSignature } from '../../utils/trial-signature.js';
+import { formatTrialSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { isVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 
 import { DOMAIN_ANALYSIS_VALUE_KEYS } from './domain.js';
 

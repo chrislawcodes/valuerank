@@ -22,3 +22,10 @@ export {
 } from './canonical-dimensions.js';
 export { SYSTEM_ACTOR_ID, MAX_SAMPLES_PER_SCENARIO } from './constants.js';
 export { bucketDecisionDirection, decisionsMatch, type DecisionDirection } from './decision-scoring.js';
+export {
+  formatTrialSignature,
+  formatVnewLabel,
+  formatVnewSignature,
+  isVnewSignature,
+  parseVnewTemperature,
+} from './trial-signature.js';

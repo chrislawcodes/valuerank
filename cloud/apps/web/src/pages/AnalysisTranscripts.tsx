@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -23,7 +24,6 @@ import {
   normalizeModelId,
   normalizeScenarioId,
 } from '../utils/scenarioUtils';
-import { formatTrialSignature } from '../utils/trial-signature';
 import {
   deriveScenarioAttributesFromDefinition,
   deriveDecisionDimensionLabels,

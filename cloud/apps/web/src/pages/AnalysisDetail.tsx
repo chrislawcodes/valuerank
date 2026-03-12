@@ -6,6 +6,7 @@
 
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -13,7 +14,6 @@ import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
-import { formatTrialSignature } from '../utils/trial-signature';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
 import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
