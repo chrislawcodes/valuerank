@@ -1,0 +1,15 @@
+{
+  "repo_root": "/Users/chrislaw/valuerank-dominance-section-split",
+  "git_head_sha": "3cb90bd0e543480b1015082514c2aa8dc6b78261",
+  "git_base_ref": "upstream/main",
+  "git_base_sha": "3cb90bd0e543480b1015082514c2aa8dc6b78261",
+  "paths": [
+    "cloud/apps/web/src/components/domains/DominanceSection.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionChart.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionSummary.tsx",
+    "cloud/apps/web/src/components/domains/useDominanceGraph.ts",
+    "cloud/apps/web/tests/components/DominanceSection.test.tsx"
+  ],
+  "artifact_path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

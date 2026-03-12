@@ -1,0 +1,10 @@
+{
+  "source_artifact_path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "394e344ef7ca31b02359b39f4d1536ae5d84ccb0ce406005ff6f2fdbd7cbba63",
+  "narrowed_artifact_path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/diff.gemini.regression.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "a751a7fda99ed3780040cea728fa4ecad368edb482c1da0d0432c439ed5601d1",
+  "strategy": "diff-leading-chunks",
+  "included_chunks": [
+    "diff --git a/cloud/apps/web/src/components/domains/DominanceSection.tsx b/cloud/apps/web/src/components/domains/DominanceSection.tsx"
+  ]
+}
