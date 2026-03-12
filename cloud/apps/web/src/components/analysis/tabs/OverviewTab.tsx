@@ -222,6 +222,7 @@ function InfoTooltipTrigger({
       variant="light"
       className="max-w-xs whitespace-normal"
     >
+      {/* eslint-disable-next-line react/forbid-elements -- Lightweight tooltip trigger requires custom icon-only control */}
       <button
         type="button"
         className="inline-flex cursor-help text-gray-400 transition-colors hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded-sm"

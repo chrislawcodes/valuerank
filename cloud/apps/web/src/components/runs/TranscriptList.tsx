@@ -190,6 +190,7 @@ function SortHeaderButton({
   direction: SortDirection;
 }) {
   return (
+    /* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */
     <button
       type="button"
       onClick={onClick}
