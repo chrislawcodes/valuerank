@@ -6,9 +6,8 @@
  */
 
 import { db } from '@valuerank/db';
-import { isVnewSignature, parseVnewTemperature, formatVnewSignature } from '../utils/vnew-signature.js';
+import { formatTrialSignature, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../utils/temperature.js';
-import { formatTrialSignature } from '../utils/trial-signature.js';
 import { parseDefinitionVersion } from '../utils/definition-version.js';
 
 type DefinitionRow = {

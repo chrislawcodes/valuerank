@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'urql';
+import { isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
 import { Button } from '../components/ui/Button';
@@ -28,12 +29,12 @@ import { exportDomainTranscriptsAsCSV } from '../api/export';
 
 function parseTemperatureFromSignature(signature: string): number | null {
   if (signature.trim() === '') return null;
-  const vnewMatch = signature.match(/^vnewt(.+)$/);
-  if (vnewMatch) {
-    const token = vnewMatch[1] ?? '';
-    if (token === 'd') return null;
-    const parsed = Number.parseFloat(token);
-    return Number.isFinite(parsed) ? parsed : null;
+  if (isVnewSignature(signature)) {
+    try {
+      return parseVnewTemperature(signature);
+    } catch {
+      return null;
+    }
   }
   const standardMatch = signature.match(/t(.+)$/);
   if (standardMatch) {

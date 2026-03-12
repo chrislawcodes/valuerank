@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'urql';
 import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -9,7 +10,6 @@ import { DefinitionFilters, type DefinitionFilterState } from '../components/def
 import { DEFINITION_COUNT_QUERY, type DefinitionCountQueryResult, type DefinitionCountQueryVariables } from '../api/operations/definitions';
 import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
-import { formatTrialSignature } from '../utils/trial-signature';
 
 const defaultFilters: DefinitionFilterState = {
   search: '',

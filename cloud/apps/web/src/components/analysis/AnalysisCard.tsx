@@ -6,10 +6,10 @@
  */
 
 import { BarChart2, CheckCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import type { Run } from '../../api/operations/runs';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
-import { formatTrialSignature } from '../../utils/trial-signature';
 
 type AnalysisCardProps = {
   run: Run;

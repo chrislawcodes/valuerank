@@ -7,6 +7,7 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { formatRunName } from '../../lib/format';
 import { Button } from '../../components/ui/Button';
 import { Loading } from '../../components/ui/Loading';
@@ -26,7 +27,6 @@ import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { formatTemperatureSetting } from '../../lib/temperature';
-import { formatTrialSignature } from '../../utils/trial-signature';
 
 function formatDate(dateString: string | Date): string {
   const date = new Date(dateString);

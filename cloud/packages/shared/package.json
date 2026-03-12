@@ -10,6 +10,10 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./trial-signature": {
+      "import": "./dist/trial-signature.js",
+      "types": "./dist/trial-signature.d.ts"
+    },
     "./canonical-dimensions": {
       "import": "./dist/canonical-dimensions.js",
       "types": "./dist/canonical-dimensions.d.ts"

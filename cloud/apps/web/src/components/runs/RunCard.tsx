@@ -5,11 +5,11 @@
  */
 
 import { Play, Clock, CheckCircle, XCircle, Pause, AlertCircle, FileText } from 'lucide-react';
+import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import type { Run, RunStatus } from '../../api/operations/runs';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { formatTemperatureSetting } from '../../lib/temperature';
-import { formatTrialSignature } from '../../utils/trial-signature';
 
 type RunCardProps = {
   run: Run;

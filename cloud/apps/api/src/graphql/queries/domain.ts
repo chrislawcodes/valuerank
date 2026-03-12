@@ -4,10 +4,9 @@ import { DomainRef } from '../types/domain.js';
 import { normalizeDomainName } from '../../utils/domain-name.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { formatTrialSignature } from '../../utils/trial-signature.js';
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
-import { formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 import { AuthenticationError } from '@valuerank/shared';
+import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import {
   computeRankingShapes,
   type RankingShape,

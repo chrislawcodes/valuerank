@@ -1,9 +1,9 @@
 import { db } from '@valuerank/db';
 import { AuthenticationError, bucketDecisionDirection, decisionsMatch } from '@valuerank/shared';
+import { formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
 import { builder } from '../builder.js';
 import { estimateCost as estimateCostService } from '../../services/cost/estimate.js';
 import { parseTemperature } from '../../utils/temperature.js';
-import { formatVnewSignature, parseVnewTemperature } from '../../utils/vnew-signature.js';
 import { LOCKED_ASSUMPTION_VIGNETTES } from '../assumptions-constants.js';
 
 type AssumptionStatus = 'COMPUTED' | 'INSUFFICIENT_DATA';
@@ -115,6 +115,7 @@ const VALID_DECISIONS = ['1', '2', '3', '4', '5'] as const;
 
 function signatureMatches(runConfig: unknown, signature: string | null): boolean {
   if (signature === null) return true;
+  if (!isVnewSignature(signature)) return false;
   const runTemperature = parseTemperature((runConfig as { temperature?: unknown } | null)?.temperature);
   const signatureTemperature = parseVnewTemperature(signature);
   return runTemperature === signatureTemperature;
