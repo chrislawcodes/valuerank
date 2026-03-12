@@ -42,6 +42,30 @@ const MOCK_ANALYSIS = {
         confidenceInterval: { lower: 0.01, upper: 0.99 },
       },
     },
+    preferenceSummary: {
+      perModel: {
+        'gpt-4': {
+          preferenceDirection: {
+            byValue: {},
+            overallLean: 'A',
+            overallSignedCenter: 1.25,
+          },
+          preferenceStrength: 1.25,
+        },
+      },
+    },
+    reliabilitySummary: {
+      perModel: {
+        'gpt-4': {
+          baselineNoise: null,
+          baselineReliability: null,
+          directionalAgreement: null,
+          neutralShare: null,
+          coverageCount: 0,
+          uniqueScenarios: 2,
+        },
+      },
+    },
     modelAgreement: {
       pairwise: {},
       overallKappa: null,
@@ -104,7 +128,14 @@ describe('analyze-basic integration', () => {
       data: {
         id: TEST_IDS.definition,
         name: 'Test Definition',
-        content: { preamble: 'Test preamble' },
+        content: {
+          schema_version: 1,
+          preamble: 'Test preamble',
+          dimensions: [
+            { name: 'Value_A', values: ['low', 'high'] },
+            { name: 'Value_B', values: ['low', 'high'] },
+          ],
+        },
       },
     });
 
@@ -167,6 +198,7 @@ describe('analyze-basic integration', () => {
   afterEach(async () => {
     // Clean up in correct order
     await db.analysisResult.deleteMany({ where: { runId: TEST_IDS.run } });
+    await db.runTag.deleteMany({ where: { runId: TEST_IDS.run } });
     await db.transcript.deleteMany({ where: { runId: TEST_IDS.run } });
     await db.run.deleteMany({ where: { id: TEST_IDS.run } });
     await db.scenario.deleteMany({ where: { definitionId: TEST_IDS.definition } });
@@ -185,12 +217,14 @@ describe('analyze-basic integration', () => {
 
       expect(result).not.toBeNull();
       expect(result?.analysisType).toBe('basic');
-      expect(result?.codeVersion).toBe('1.0.0');
+      expect(result?.codeVersion).toBe('1.1.1');
       expect(result?.status).toBe('CURRENT');
 
       // Verify output structure
       const output = result?.output as typeof MOCK_ANALYSIS.analysis;
       expect(output.perModel).toBeDefined();
+      expect(output.preferenceSummary).toEqual(MOCK_ANALYSIS.analysis.preferenceSummary);
+      expect(output.reliabilitySummary).toEqual(MOCK_ANALYSIS.analysis.reliabilitySummary);
       expect(output.modelAgreement).toBeDefined();
       expect(output.methodsUsed).toBeDefined();
       expect(output.computedAt).toBe('2024-01-01T00:00:01.000Z');
@@ -204,6 +238,7 @@ describe('analyze-basic integration', () => {
         'workers/analyze_basic.py',
         expect.objectContaining({
           runId: TEST_IDS.run,
+          emitVignetteSemantics: true,
           transcripts: expect.arrayContaining([
             expect.objectContaining({
               id: TEST_IDS.transcript1,
@@ -218,6 +253,76 @@ describe('analyze-basic integration', () => {
           ]),
         }),
         expect.objectContaining({ timeout: 120000 })
+      );
+    });
+
+    it('keeps vignette semantic summaries enabled for temp-zero baseline-compatible runs', async () => {
+      await db.run.update({
+        where: { id: TEST_IDS.run },
+        data: {
+          config: {
+            models: ['gpt-4'],
+            assumptionKey: 'temp_zero_determinism',
+          },
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob()]);
+
+      expect(spawnPython).toHaveBeenCalledWith(
+        'workers/analyze_basic.py',
+        expect.objectContaining({
+          runId: TEST_IDS.run,
+          emitVignetteSemantics: true,
+        }),
+        expect.any(Object),
+      );
+
+      const result = await db.analysisResult.findFirst({
+        where: { runId: TEST_IDS.run },
+      });
+      const output = result?.output as typeof MOCK_ANALYSIS.analysis;
+      expect(output.preferenceSummary).toEqual(MOCK_ANALYSIS.analysis.preferenceSummary);
+      expect(output.reliabilitySummary).toEqual(MOCK_ANALYSIS.analysis.reliabilitySummary);
+    });
+
+    it('suppresses vignette semantic summaries for tagged assumption runs', async () => {
+      const assumptionTag = await db.tag.upsert({
+        where: { name: 'assumption-run' },
+        update: {},
+        create: { name: 'assumption-run' },
+      });
+      await db.runTag.create({
+        data: {
+          runId: TEST_IDS.run,
+          tagId: assumptionTag.id,
+        },
+      });
+
+      vi.mocked(spawnPython).mockResolvedValueOnce({
+        success: true,
+        data: {
+          ...MOCK_ANALYSIS,
+          analysis: {
+            ...MOCK_ANALYSIS.analysis,
+            preferenceSummary: null,
+            reliabilitySummary: null,
+          },
+        },
+        stderr: '',
+      });
+
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob()]);
+
+      expect(spawnPython).toHaveBeenCalledWith(
+        'workers/analyze_basic.py',
+        expect.objectContaining({
+          runId: TEST_IDS.run,
+          emitVignetteSemantics: false,
+        }),
+        expect.any(Object),
       );
     });
 
@@ -395,6 +500,61 @@ describe('analyze-basic integration', () => {
       const dimensionValues = transcriptsWithDimension.map((t) => t.scenario.dimensions['test-dimension']);
       expect(dimensionValues).toContain(1);
       expect(dimensionValues).toContain(2);
+    });
+
+    it('normalizes value outcomes for flipped orientations before sending to the worker', async () => {
+      const flippedScenarioId = 'test-scenario-flipped-' + Date.now();
+      const flippedTranscriptId = 'test-transcript-flipped-' + Date.now();
+
+      await db.scenario.create({
+        data: {
+          id: flippedScenarioId,
+          definitionId: TEST_IDS.definition,
+          name: 'Flipped Scenario',
+          orientationFlipped: true,
+          content: { dimensions: { 'test-dimension': 3 } },
+        },
+      });
+
+      await db.transcript.create({
+        data: {
+          id: flippedTranscriptId,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId: flippedScenarioId,
+          decisionCode: '4',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob({ transcriptIds: [flippedTranscriptId] })]);
+
+      expect(spawnPython).toHaveBeenCalledWith(
+        'workers/analyze_basic.py',
+        expect.objectContaining({
+          transcripts: expect.arrayContaining([
+            expect.objectContaining({
+              id: flippedTranscriptId,
+              orientationFlipped: true,
+              summary: {
+                score: 4,
+                values: {
+                  Value_A: 'deprioritized',
+                  Value_B: 'prioritized',
+                },
+              },
+            }),
+          ]),
+        }),
+        expect.any(Object),
+      );
+
+      await db.transcript.delete({ where: { id: flippedTranscriptId } });
+      await db.scenario.delete({ where: { id: flippedScenarioId } });
     });
 
     it('handles transcripts without scenarios gracefully', async () => {

@@ -48,4 +48,23 @@ describe('MobileNav Component', () => {
     ).toBe(true);
     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
   });
+
+  it('includes only the unified vignette analysis route', () => {
+    renderMobileNav('/analysis');
+
+    expect(
+      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+    ).toBe(true);
+    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
+  });
+
+  it('activates the unified analysis item on transcript routes', () => {
+    renderMobileNav('/analysis/run-1/transcripts');
+
+    const currentAnalysisLink = screen
+      .getAllByRole('link', { name: 'Analysis' })
+      .find((link) => link.getAttribute('href') === '/analysis');
+
+    expect(currentAnalysisLink?.className).toContain('border-teal-500');
+  });
 });

@@ -4,16 +4,16 @@
  * Displays a list of transcripts with filtering and selection.
  */
 
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { Transcript } from '../../api/operations/runs';
 import type { VisualizationData } from '../../api/operations/analysis';
 import {
   buildNormalizedScenarioDimensionsMap,
   getScenarioDimensionsForId,
+  normalizeScenarioId,
 } from '../../utils/scenarioUtils';
-import { TranscriptRow } from './TranscriptRow';
-import { useCallback } from 'react';
+import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
 
 type TranscriptListProps = {
   transcripts: Transcript[];
@@ -26,6 +26,45 @@ type TranscriptListProps = {
 };
 
 type GroupedTranscripts = Record<string, Transcript[]>;
+type SortDirection = 'asc' | 'desc';
+type SortColumn =
+  | { type: 'scenario' }
+  | { type: 'model' }
+  | { type: 'dimension'; key: string }
+  | { type: 'decision' }
+  | { type: 'tokens' }
+  | { type: 'created' };
+type SortState = {
+  column: SortColumn;
+  direction: SortDirection;
+};
+
+const SCENARIO_HIGHLIGHT_VARIANTS: Array<Pick<TranscriptScenarioHighlight, 'containerClassName' | 'badgeClassName'>> = [
+  {
+    containerClassName: 'border-teal-200 bg-teal-50/60 hover:bg-teal-100/70',
+    badgeClassName: 'bg-teal-100 text-teal-700 ring-1 ring-inset ring-teal-200',
+  },
+  {
+    containerClassName: 'border-amber-200 bg-amber-50/60 hover:bg-amber-100/70',
+    badgeClassName: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200',
+  },
+  {
+    containerClassName: 'border-sky-200 bg-sky-50/60 hover:bg-sky-100/70',
+    badgeClassName: 'bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200',
+  },
+  {
+    containerClassName: 'border-rose-200 bg-rose-50/60 hover:bg-rose-100/70',
+    badgeClassName: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200',
+  },
+  {
+    containerClassName: 'border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/70',
+    badgeClassName: 'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200',
+  },
+  {
+    containerClassName: 'border-violet-200 bg-violet-50/60 hover:bg-violet-100/70',
+    badgeClassName: 'bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200',
+  },
+];
 
 function groupTranscriptsByModel(transcripts: Transcript[]): GroupedTranscripts {
   const groups: GroupedTranscripts = {};
@@ -88,6 +127,86 @@ function compareDimensionValues(a: string | number | undefined, b: string | numb
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
 
+function getDefaultSortState(
+  sortKeys: { primary: string | null; secondary: string | null },
+  dimensionKeys: string[],
+): SortState {
+  const defaultDimension = sortKeys.primary ?? dimensionKeys[0] ?? null;
+
+  if (defaultDimension) {
+    return {
+      column: { type: 'dimension', key: defaultDimension },
+      direction: 'asc',
+    };
+  }
+
+  return {
+    column: { type: 'scenario' },
+    direction: 'asc',
+  };
+}
+
+function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
+  if (a.type !== b.type) {
+    return false;
+  }
+
+  if (a.type === 'dimension' && b.type === 'dimension') {
+    return a.key === b.key;
+  }
+
+  return true;
+}
+
+function getTranscriptDecisionValue(transcript: Transcript): string | number {
+  const fallbackCandidates = [
+    transcript.decisionCode,
+    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
+    (transcript.content as { decision?: unknown } | null)?.decision,
+    (transcript.content as { score?: unknown } | null)?.score,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
+    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    if (typeof candidate === 'number' || typeof candidate === 'string') {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+function SortHeaderButton({
+  label,
+  onClick,
+  active,
+  direction,
+}: {
+  label: string;
+  onClick: () => void;
+  active: boolean;
+  direction: SortDirection;
+}) {
+  return (
+    /* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 text-left transition-colors ${
+        active ? 'text-gray-700' : 'text-gray-400 hover:text-gray-600'
+      }`}
+      aria-label={`Sort by ${label}${active ? ` (${direction === 'asc' ? 'ascending' : 'descending'})` : ''}`}
+    >
+      <span>{label}</span>
+      <span aria-hidden="true" className={`text-[11px] leading-none ${active ? 'text-gray-700' : 'text-gray-300'}`}>
+        {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
+      </span>
+    </button>
+  );
+}
+
 export function TranscriptList({
   transcripts,
   onSelect,
@@ -134,36 +253,160 @@ export function TranscriptList({
     [dimensionKeys, dimensionLabels]
   );
 
-  const sortTranscriptsByAttributes = useCallback((items: Transcript[]): Transcript[] => {
-    const { primary, secondary } = sortKeys;
-    if (!primary && !secondary) return items;
+  const [sortState, setSortState] = useState<SortState>(() => getDefaultSortState(sortKeys, dimensionKeys));
+  const [hasUserChosenSort, setHasUserChosenSort] = useState(false);
+
+  useEffect(() => {
+    if (!hasUserChosenSort) {
+      setSortState(getDefaultSortState(sortKeys, dimensionKeys));
+      return;
+    }
+
+    setSortState((current) => {
+      const currentDimensionExists = current.column.type !== 'dimension'
+        || dimensionKeys.includes(current.column.key);
+
+      if (currentDimensionExists) {
+        return current;
+      }
+
+      return getDefaultSortState(sortKeys, dimensionKeys);
+    });
+  }, [dimensionKeys, hasUserChosenSort, sortKeys]);
+
+  const compareByColumn = useCallback((a: Transcript, b: Transcript, column: SortColumn): number => {
+    switch (column.type) {
+      case 'scenario':
+        return compareDimensionValues(a.scenarioId ?? undefined, b.scenarioId ?? undefined);
+      case 'model':
+        return compareDimensionValues(a.modelId, b.modelId);
+      case 'dimension': {
+        const aDimensions = getScenarioDimensions(a.scenarioId);
+        const bDimensions = getScenarioDimensions(b.scenarioId);
+        return compareDimensionValues(aDimensions?.[column.key], bDimensions?.[column.key]);
+      }
+      case 'decision':
+        return compareDimensionValues(getTranscriptDecisionValue(a), getTranscriptDecisionValue(b));
+      case 'tokens':
+        return a.tokenCount - b.tokenCount;
+      case 'created':
+        return a.createdAt.localeCompare(b.createdAt);
+      default:
+        return 0;
+    }
+  }, [getScenarioDimensions]);
+
+  const sortTranscripts = useCallback((items: Transcript[]): Transcript[] => {
+    const fallbackColumns: SortColumn[] = [];
+
+    if (sortKeys.primary) {
+      fallbackColumns.push({ type: 'dimension', key: sortKeys.primary });
+    }
+    if (sortKeys.secondary && sortKeys.secondary !== sortKeys.primary) {
+      fallbackColumns.push({ type: 'dimension', key: sortKeys.secondary });
+    }
+
+    fallbackColumns.push(
+      { type: 'scenario' },
+      { type: 'model' },
+      { type: 'created' },
+    );
 
     return [...items].sort((a, b) => {
-      const aDimensions = getScenarioDimensions(a.scenarioId);
-      const bDimensions = getScenarioDimensions(b.scenarioId);
-
-      if (primary) {
-        const primaryCmp = compareDimensionValues(aDimensions?.[primary], bDimensions?.[primary]);
-        if (primaryCmp !== 0) return primaryCmp;
+      const primaryResult = compareByColumn(a, b, sortState.column);
+      if (primaryResult !== 0) {
+        return sortState.direction === 'asc' ? primaryResult : -primaryResult;
       }
 
-      if (secondary) {
-        const secondaryCmp = compareDimensionValues(aDimensions?.[secondary], bDimensions?.[secondary]);
-        if (secondaryCmp !== 0) return secondaryCmp;
+      for (const fallback of fallbackColumns) {
+        if (isSameSortColumn(fallback, sortState.column)) {
+          continue;
+        }
+
+        const fallbackResult = compareByColumn(a, b, fallback);
+        if (fallbackResult !== 0) {
+          return fallbackResult;
+        }
       }
 
-      return a.createdAt.localeCompare(b.createdAt);
+      return 0;
     });
-  }, [sortKeys, getScenarioDimensions]);
+  }, [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction]);
+
+  const handleSortChange = useCallback((column: SortColumn) => {
+    setHasUserChosenSort(true);
+    setSortState((current) => {
+      if (isSameSortColumn(current.column, column)) {
+        return {
+          column,
+          direction: current.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+
+      return {
+        column,
+        direction: 'asc',
+      };
+    });
+  }, []);
 
   const groupedTranscripts = useMemo(() => {
     const grouped = groupTranscriptsByModel(transcripts);
     const sortedGroups: GroupedTranscripts = {};
     for (const [modelId, modelTranscripts] of Object.entries(grouped)) {
-      sortedGroups[modelId] = sortTranscriptsByAttributes(modelTranscripts);
+      sortedGroups[modelId] = sortTranscripts(modelTranscripts);
     }
     return sortedGroups;
-  }, [transcripts, sortTranscriptsByAttributes]);
+  }, [transcripts, sortTranscripts]);
+
+  const scenarioHighlights = useMemo(() => {
+    const orderedScenarioIds: string[] = [];
+    const seenScenarioIds = new Set<string>();
+
+    sortTranscripts(transcripts).forEach((transcript) => {
+      if (!transcript.scenarioId) {
+        return;
+      }
+
+      const normalizedScenario = normalizeScenarioId(transcript.scenarioId);
+      if (seenScenarioIds.has(normalizedScenario)) {
+        return;
+      }
+
+      seenScenarioIds.add(normalizedScenario);
+      orderedScenarioIds.push(normalizedScenario);
+    });
+
+    if (orderedScenarioIds.length <= 1) {
+      return new Map<string, TranscriptScenarioHighlight>();
+    }
+
+    const defaultVariant = SCENARIO_HIGHLIGHT_VARIANTS[0]!;
+
+    return new Map<string, TranscriptScenarioHighlight>(
+      orderedScenarioIds.map((scenarioId, index) => {
+        const variant = SCENARIO_HIGHLIGHT_VARIANTS[index % SCENARIO_HIGHLIGHT_VARIANTS.length] ?? defaultVariant;
+
+        return [
+          scenarioId,
+          {
+            label: `C${index + 1}`,
+            containerClassName: variant.containerClassName,
+            badgeClassName: variant.badgeClassName,
+          },
+        ];
+      }),
+    );
+  }, [sortTranscripts, transcripts]);
+
+  const getScenarioHighlight = useCallback((scenarioId: string | null): TranscriptScenarioHighlight | null => {
+    if (!scenarioId) {
+      return null;
+    }
+
+    return scenarioHighlights.get(normalizeScenarioId(scenarioId)) ?? null;
+  }, [scenarioHighlights]);
+  const showScenarioLegend = scenarioHighlights.size > 1;
 
   const modelIds = Object.keys(groupedTranscripts).sort();
 
@@ -181,15 +424,19 @@ export function TranscriptList({
 
   // Filter transcripts by scenario ID or model ID
   const filteredTranscripts = useMemo(() => {
-    if (!filter) return transcripts;
+    if (!filter) return sortTranscripts(transcripts);
     const lowerFilter = filter.toLowerCase();
     const filtered = transcripts.filter(
       (t) =>
         t.modelId.toLowerCase().includes(lowerFilter) ||
         (t.scenarioId?.toLowerCase().includes(lowerFilter) ?? false)
     );
-    return sortTranscriptsByAttributes(filtered);
-  }, [transcripts, filter, sortTranscriptsByAttributes]);
+    return sortTranscripts(filtered);
+  }, [transcripts, filter, sortTranscripts]);
+
+  const isActiveSort = useCallback((column: SortColumn) => {
+    return isSameSortColumn(sortState.column, column);
+  }, [sortState.column]);
 
   if (transcripts.length === 0) {
     return (
@@ -223,20 +470,57 @@ export function TranscriptList({
           />
         )}
 
+        {showScenarioLegend && (
+          <p className="text-xs text-gray-500">
+            Rows with the same <span className="font-medium text-gray-700">C#</span> badge come from the same repeated condition.
+          </p>
+        )}
+
         {/* Transcript list */}
         <div className="space-y-1">
           <div
             className="grid gap-3 px-3 py-2 text-xs uppercase tracking-wide text-gray-400"
             style={{ gridTemplateColumns }}
           >
-            <span>Scenario</span>
-            <span>Model</span>
+            <SortHeaderButton
+              label="Scenario"
+              onClick={() => handleSortChange({ type: 'scenario' })}
+              active={isActiveSort({ type: 'scenario' })}
+              direction={sortState.direction}
+            />
+            <SortHeaderButton
+              label="Model"
+              onClick={() => handleSortChange({ type: 'model' })}
+              active={isActiveSort({ type: 'model' })}
+              direction={sortState.direction}
+            />
             {dimensionKeys.map((key) => (
-              <span key={key}>{dimensionLabels?.[key] ?? key}</span>
+              <SortHeaderButton
+                key={key}
+                label={dimensionLabels?.[key] ?? key}
+                onClick={() => handleSortChange({ type: 'dimension', key })}
+                active={isActiveSort({ type: 'dimension', key })}
+                direction={sortState.direction}
+              />
             ))}
-            <span>Decision</span>
-            <span>Tokens</span>
-            <span>Created</span>
+            <SortHeaderButton
+              label="Decision"
+              onClick={() => handleSortChange({ type: 'decision' })}
+              active={isActiveSort({ type: 'decision' })}
+              direction={sortState.direction}
+            />
+            <SortHeaderButton
+              label="Tokens"
+              onClick={() => handleSortChange({ type: 'tokens' })}
+              active={isActiveSort({ type: 'tokens' })}
+              direction={sortState.direction}
+            />
+            <SortHeaderButton
+              label="Created"
+              onClick={() => handleSortChange({ type: 'created' })}
+              active={isActiveSort({ type: 'created' })}
+              direction={sortState.direction}
+            />
           </div>
           {filteredTranscripts.map((transcript) => (
             <TranscriptRow
@@ -250,6 +534,7 @@ export function TranscriptList({
               showModelColumn
               onDecisionChange={onDecisionChange}
               decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
+              scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
             />
           ))}
         </div>
@@ -268,6 +553,11 @@ export function TranscriptList({
 
   return (
     <div className="space-y-3">
+      {showScenarioLegend && (
+        <p className="text-xs text-gray-500">
+          Rows with the same <span className="font-medium text-gray-700">C#</span> badge come from the same repeated condition.
+        </p>
+      )}
       {modelIds.map((modelId) => {
         const modelTranscripts = groupedTranscripts[modelId] ?? [];
         const isExpanded = expandedModels.has(modelId);
@@ -301,13 +591,39 @@ export function TranscriptList({
                   className="grid gap-3 px-4 py-2 text-xs uppercase tracking-wide text-gray-400"
                   style={{ gridTemplateColumns: groupedGridTemplateColumns }}
                 >
-                  <span>Scenario</span>
+                  <SortHeaderButton
+                    label="Scenario"
+                    onClick={() => handleSortChange({ type: 'scenario' })}
+                    active={isActiveSort({ type: 'scenario' })}
+                    direction={sortState.direction}
+                  />
                   {dimensionKeys.map((key) => (
-                    <span key={key}>{dimensionLabels?.[key] ?? key}</span>
+                    <SortHeaderButton
+                      key={key}
+                      label={dimensionLabels?.[key] ?? key}
+                      onClick={() => handleSortChange({ type: 'dimension', key })}
+                      active={isActiveSort({ type: 'dimension', key })}
+                      direction={sortState.direction}
+                    />
                   ))}
-                  <span>Decision</span>
-                  <span>Tokens</span>
-                  <span>Created</span>
+                  <SortHeaderButton
+                    label="Decision"
+                    onClick={() => handleSortChange({ type: 'decision' })}
+                    active={isActiveSort({ type: 'decision' })}
+                    direction={sortState.direction}
+                  />
+                  <SortHeaderButton
+                    label="Tokens"
+                    onClick={() => handleSortChange({ type: 'tokens' })}
+                    active={isActiveSort({ type: 'tokens' })}
+                    direction={sortState.direction}
+                  />
+                  <SortHeaderButton
+                    label="Created"
+                    onClick={() => handleSortChange({ type: 'created' })}
+                    active={isActiveSort({ type: 'created' })}
+                    direction={sortState.direction}
+                  />
                 </div>
                 {modelTranscripts.map((transcript) => (
                   <TranscriptRow
@@ -322,6 +638,7 @@ export function TranscriptList({
                     showModelColumn={false}
                     onDecisionChange={onDecisionChange}
                     decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
+                    scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
                   />
                 ))}
               </div>

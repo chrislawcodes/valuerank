@@ -242,6 +242,80 @@ describe('TranscriptList', () => {
     expect(screen.getByText('Decision')).toBeInTheDocument();
   });
 
+  it('applies the same condition marker to rows from the same scenario', () => {
+    const transcripts = [
+      createMockTranscript({ id: 't1', scenarioId: 'scenario-1', modelId: 'gpt-4' }),
+      createMockTranscript({ id: 't2', scenarioId: 'scenario-1', modelId: 'claude-3' }),
+      createMockTranscript({ id: 't3', scenarioId: 'scenario-2', modelId: 'gemini-2' }),
+    ];
+
+    render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+      />
+    );
+
+    expect(screen.getAllByText('C1')).toHaveLength(2);
+    expect(screen.getByText('C2')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Rows with the same C# badge come from the same repeated condition.')
+    ).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/Condition group C1\. Rows with this badge come from the same repeated condition\./i)).toHaveLength(2);
+  });
+
+  it('sorts flat transcript rows by the first value and then the second by default', () => {
+    const transcripts = [
+      createMockTranscript({ id: 't1', scenarioId: 'scenario-3', modelId: 'gpt-4' }),
+      createMockTranscript({ id: 't2', scenarioId: 'scenario-1', modelId: 'claude-3' }),
+      createMockTranscript({ id: 't3', scenarioId: 'scenario-2', modelId: 'gemini-2' }),
+    ];
+
+    const { container } = render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        scenarioDimensions={{
+          'scenario-1': { AttributeA: '1', AttributeB: '2' },
+          'scenario-2': { AttributeA: '1', AttributeB: '1' },
+          'scenario-3': { AttributeA: '2', AttributeB: '1' },
+        }}
+      />
+    );
+
+    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
+      .map((element) => element.getAttribute('data-transcript-id'));
+
+    expect(rowIds).toEqual(['t3', 't2', 't1']);
+  });
+
+  it('sorts flat transcript rows when a column header is clicked', async () => {
+    const user = userEvent.setup();
+    const transcripts = [
+      createMockTranscript({ id: 't1', tokenCount: 300 }),
+      createMockTranscript({ id: 't2', tokenCount: 100 }),
+      createMockTranscript({ id: 't3', tokenCount: 200 }),
+    ];
+
+    const { container } = render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Sort by Tokens/i }));
+    await user.click(screen.getByRole('button', { name: /Sort by Tokens/i }));
+
+    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
+      .map((element) => element.getAttribute('data-transcript-id'));
+
+    expect(rowIds).toEqual(['t1', 't3', 't2']);
+  });
+
   it('renders decision override dropdown for transcripts with decisionCode "other"', async () => {
     const user = userEvent.setup();
     const onDecisionChange = vi.fn();

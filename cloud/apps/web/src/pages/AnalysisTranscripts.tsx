@@ -17,7 +17,12 @@ import { useRuns } from '../hooks/useRuns';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRunMutations } from '../hooks/useRunMutations';
 import type { Transcript } from '../api/operations/runs';
-import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
+import {
+  filterTranscriptsForPivotCell,
+  getScenarioDimensionsForId,
+  normalizeModelId,
+  normalizeScenarioId,
+} from '../utils/scenarioUtils';
 import { formatTrialSignature } from '../utils/trial-signature';
 import {
   deriveScenarioAttributesFromDefinition,
@@ -28,9 +33,87 @@ import {
   resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
+import {
+  ANALYSIS_BASE_PATH,
+  buildAnalysisTranscriptsPath,
+  isAggregateAnalysis,
+} from '../utils/analysisRouting';
 
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
+}
+
+function parseConditionIds(value: string): string[] {
+  return value
+    .split(',')
+    .map((conditionId) => conditionId.trim())
+    .filter((conditionId) => conditionId.length > 0);
+}
+
+function formatRepeatPatternLabel(value: string): string {
+  switch (value) {
+    case 'stable':
+      return 'Stable';
+    case 'softLean':
+      return 'Soft Lean';
+    case 'torn':
+      return 'Torn';
+    case 'noisy':
+      return 'Unstable';
+    default:
+      return value;
+  }
+}
+
+function filterTranscriptsForConditionIds(
+  transcripts: Transcript[],
+  modelId: string,
+  conditionIds: string[],
+  scenarioDimensions: Record<string, Record<string, string | number>> | null | undefined,
+  rowDim: string,
+  colDim: string,
+): Transcript[] {
+  if (!modelId) {
+    return [];
+  }
+
+  const selectedModelNormalized = normalizeModelId(modelId);
+  const canonicalIds = new Set(conditionIds);
+  const normalizedIds = new Set(conditionIds.map((conditionId) => normalizeScenarioId(conditionId)));
+
+  return transcripts.filter((transcript) => {
+    const transcriptModelNormalized = normalizeModelId(transcript.modelId);
+    const modelMatches = transcript.modelId === modelId
+      || transcriptModelNormalized === selectedModelNormalized
+      || transcript.modelId.includes(modelId)
+      || modelId.includes(transcript.modelId);
+
+    if (!modelMatches) {
+      return false;
+    }
+    if (!transcript.scenarioId) {
+      return false;
+    }
+
+    const transcriptScenarioId = String(transcript.scenarioId);
+    const transcriptScenarioNormalized = normalizeScenarioId(transcriptScenarioId);
+
+    if (canonicalIds.has(transcriptScenarioId) || normalizedIds.has(transcriptScenarioNormalized)) {
+      return true;
+    }
+
+    if (!scenarioDimensions || !rowDim || !colDim) {
+      return false;
+    }
+
+    const dimensions = getScenarioDimensionsForId(transcript.scenarioId, scenarioDimensions);
+    if (!dimensions) {
+      return false;
+    }
+
+    const conditionId = `${String(dimensions[rowDim] ?? 'N/A')}||${String(dimensions[colDim] ?? 'N/A')}`;
+    return canonicalIds.has(conditionId);
+  });
 }
 
 export function AnalysisTranscripts() {
@@ -44,9 +127,14 @@ export function AnalysisTranscripts() {
   const colDim = searchParams.get('colDim') ?? '';
   const row = searchParams.get('row') ?? '';
   const col = searchParams.get('col') ?? '';
-  const selectedModel = searchParams.get('model') ?? '';
+  const selectedModel = searchParams.get('modelId') ?? searchParams.get('model') ?? '';
   const decisionCode = searchParams.get('decisionCode') ?? '';
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
+  const repeatPattern = searchParams.get('repeatPattern') ?? '';
+  const conditionIds = useMemo(
+    () => parseConditionIds(searchParams.get('conditionIds') ?? ''),
+    [searchParams]
+  );
 
   const { run, loading, error, refetch } = useRun({
     id: id || '',
@@ -63,7 +151,10 @@ export function AnalysisTranscripts() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
-  const isAggregate = run?.tags?.some((tag) => tag.name === 'Aggregate') ?? false;
+  const isAggregate = isAggregateAnalysis(
+    run?.tags?.some((tag) => tag.name === 'Aggregate') ?? false,
+    analysis?.analysisType,
+  );
 
   const config = run?.config as {
     definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
@@ -146,6 +237,7 @@ export function AnalysisTranscripts() {
   const activeRowDim = resolvedAxes.rowDim;
   const activeColDim = resolvedAxes.colDim;
   const hasCellFilterParams = Boolean(activeRowDim && activeColDim && row && col);
+  const hasRepeatPatternParams = Boolean(selectedModel && repeatPattern && searchParams.has('conditionIds'));
   const hasBucketFilterParams = Boolean(
     activeRowDim
     && activeColDim
@@ -175,6 +267,7 @@ export function AnalysisTranscripts() {
 
   useEffect(() => {
     if (!scenarioDimensions) return;
+    if (hasRepeatPatternParams) return;
 
     const rowChanged = rowDim !== activeRowDim;
     const colChanged = colDim !== activeColDim;
@@ -197,6 +290,7 @@ export function AnalysisTranscripts() {
     colDim,
     activeRowDim,
     activeColDim,
+    hasRepeatPatternParams,
   ]);
 
   const handleDecisionChange = useCallback(async (transcript: Transcript, nextDecisionCode: string) => {
@@ -218,6 +312,17 @@ export function AnalysisTranscripts() {
   }, [updateTranscriptDecision, refetch]);
 
   const filteredTranscripts = useMemo(() => {
+    if (hasRepeatPatternParams) {
+      return filterTranscriptsForConditionIds(
+        run?.transcripts ?? [],
+        selectedModel,
+        conditionIds,
+        scenarioDimensions,
+        activeRowDim,
+        activeColDim,
+      );
+    }
+
     if (hasBucketFilterParams) {
       const transcripts = run?.transcripts ?? [];
       if (!scenarioDimensions || !modelScenarioMatrix) return [];
@@ -289,8 +394,11 @@ export function AnalysisTranscripts() {
     row,
     col,
     selectedModel,
+    repeatPattern,
+    conditionIds,
     decisionCode,
     decisionBucket,
+    hasRepeatPatternParams,
     hasBucketFilterParams,
   ]);
 
@@ -359,7 +467,7 @@ export function AnalysisTranscripts() {
                     onChange={(e) => {
                       const nextRun = aggregateRuns.find((candidate) => candidate.signature === e.target.value);
                       if (nextRun) {
-                        navigate(`/analysis/${nextRun.id}/transcripts?${searchParams.toString()}`);
+                        navigate(buildAnalysisTranscriptsPath(ANALYSIS_BASE_PATH, nextRun.id, searchParams));
                       }
                     }}
                   >
@@ -384,7 +492,15 @@ export function AnalysisTranscripts() {
           )}
           <span className="text-gray-300">•</span>
           <div className="contents">
-              {(activeRowDim && activeColDim) ? (
+              {hasRepeatPatternParams ? (
+                <>
+                  Repeat Pattern: <span className="font-medium text-gray-900">{formatRepeatPatternLabel(repeatPattern)}</span>
+                  <span className="mx-2">•</span>
+                  Model: <span className="font-medium text-gray-900">{selectedModel}</span>
+                  <span className="mx-2">•</span>
+                  Conditions: <span className="font-medium text-gray-900">{conditionIds.length}</span>
+                </>
+              ) : (activeRowDim && activeColDim) ? (
                 <>
                   {hasCellFilterParams ? (
                     <>
@@ -419,19 +535,19 @@ export function AnalysisTranscripts() {
         </div>
       </div>
 
-      {!scenarioDimensions && (
+      {!scenarioDimensions && !hasRepeatPatternParams && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
           Scenario dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
       )}
 
-      {scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {!hasRepeatPatternParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
-      ) : scenarioDimensions && filteredTranscripts.length === 0 ? (
+      ) : filteredTranscripts.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
-          No transcripts found for this condition.
+          {hasRepeatPatternParams ? 'No transcripts found for these conditions.' : 'No transcripts found for this condition.'}
         </div>
       ) : (
         <TranscriptList

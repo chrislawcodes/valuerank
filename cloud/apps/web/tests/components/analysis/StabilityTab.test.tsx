@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { VarianceAnalysis } from '../../../src/api/operations/analysis';
 import {
   StabilityTab,
@@ -9,9 +9,15 @@ import {
   getStabilityLabel,
 } from '../../../src/components/analysis/tabs/StabilityTab';
 
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
-}));
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 function createVarianceAnalysis(): VarianceAnalysis {
   return {
@@ -118,6 +124,10 @@ describe('getModelStabilityMetrics', () => {
 });
 
 describe('StabilityTab', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+  });
+
   it('renders directional stability cells and orientation footnote', () => {
     render(
       <StabilityTab
@@ -155,5 +165,41 @@ describe('StabilityTab', () => {
     expect(screen.getByText(/\+0\.6.*IQR 0\.4/)).toBeInTheDocument();
     expect(screen.getByText('Moderate')).toBeInTheDocument();
     expect(screen.getByText(/normalized before computing direction/i)).toBeInTheDocument();
+  });
+
+  it('opens stability transcripts on the unified analysis route', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisBasePath="/analysis"
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={{
+          decisionDistribution: {},
+          modelScenarioMatrix: {
+            model1: {
+              s1: 1.2,
+              s2: 1.1,
+            },
+          },
+          scenarioDimensions: {
+            s1: { Freedom: 'High', Harmony: 'Low' },
+            s2: { Freedom: 'High', Harmony: 'Low' },
+          },
+        }}
+        varianceAnalysis={createVarianceAnalysis()}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('View 5 transcripts for model1 | Freedom: High, Harmony: Low'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1'
+    );
   });
 });

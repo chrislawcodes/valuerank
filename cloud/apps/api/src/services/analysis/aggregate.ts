@@ -1,12 +1,21 @@
 
-import { db } from '@valuerank/db';
+import path from 'path';
+import { db, resolveDefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { Prisma } from '@valuerank/db';
 import { z } from 'zod';
 import { normalizeAnalysisArtifacts } from './normalize-analysis-output.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import { spawnPython } from '../../queue/spawn.js';
 
 const log = createLogger('analysis:aggregate');
+const AGGREGATE_ANALYSIS_CODE_VERSION = '1.2.0';
+const MIN_REPEAT_COVERAGE_COUNT = 3;
+const MIN_REPEAT_COVERAGE_SHARE = 0.2;
+const LOW_COVERAGE_CAUTION_THRESHOLD = 5;
+const DRIFT_WARNING_THRESHOLD = 0.25;
+const BASELINE_COMPATIBLE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism']);
+const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // --- Feature-Specific Interfaces & Zod Schemas ---
 
@@ -25,6 +34,7 @@ const zRunConfig = z.object({
     sourceRunIds: z.array(z.string()).optional(),
     transcriptCount: z.number().optional(),
     temperature: z.number().nullable().optional(),
+    assumptionKey: z.string().optional(),
 }).passthrough(); // Allow unknown properies
 
 type RunConfig = z.infer<typeof zRunConfig>;
@@ -141,6 +151,86 @@ type AnalysisOutput = z.infer<typeof zAnalysisOutput>;
 type ModelStats = z.infer<typeof zModelStats>;
 type ContestedScenario = z.infer<typeof zContestedScenario>;
 
+type AggregateEligibility =
+    | 'eligible_same_signature_baseline'
+    | 'ineligible_mixed_signature'
+    | 'ineligible_run_type'
+    | 'ineligible_partial_coverage'
+    | 'ineligible_missing_metadata'
+    | 'ineligible_missing_repeatability'
+    | 'ineligible_model_instability';
+
+type AggregateMetadata = {
+    aggregateEligibility: AggregateEligibility;
+    aggregateIneligibilityReason: string | null;
+    sourceRunCount: number;
+    sourceRunIds: string[];
+    conditionCoverage: {
+        plannedConditionCount: number;
+        observedConditionCount: number;
+        complete: boolean;
+    };
+    perModelRepeatCoverage: Record<string, {
+        repeatCoverageCount: number;
+        repeatCoverageShare: number;
+        contributingRunCount: number;
+    }>;
+    perModelDrift: Record<string, {
+        weightedOverallSignedCenterSd: number | null;
+        exceedsWarningThreshold: boolean;
+    }>;
+};
+
+type AggregateWorkerTranscript = {
+    id: string;
+    runId: string;
+    modelId: string;
+    scenarioId: string;
+    sampleIndex: number;
+    orientationFlipped: boolean;
+    summary: {
+        score: number | null;
+        values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
+    };
+    scenario: {
+        name: string;
+        dimensions: Record<string, number>;
+    };
+};
+
+type AggregateWorkerInput = {
+    runId: string;
+    emitVignetteSemantics: true;
+    aggregateSemantics: {
+        mode: 'same_signature_v1';
+        plannedScenarioIds: string[];
+        minRepeatCoverageCount: number;
+        minRepeatCoverageShare: number;
+        lowCoverageCautionThreshold: number;
+        driftWarningThreshold: number;
+    };
+    transcripts: AggregateWorkerTranscript[];
+};
+
+type AggregateWorkerOutput = {
+    success: true;
+    analysis: {
+        preferenceSummary?: {
+            perModel: Record<string, unknown>;
+        } | null;
+        reliabilitySummary?: {
+            perModel: Record<string, unknown>;
+        } | null;
+        aggregateSemantics?: {
+            perModelRepeatCoverage: AggregateMetadata['perModelRepeatCoverage'];
+            perModelDrift: AggregateMetadata['perModelDrift'];
+        } | null;
+    };
+} | {
+    success: false;
+    error: { message: string; code: string; retryable: boolean };
+};
+
 interface DecisionStatsOption {
     mean: number;
     sd: number;
@@ -223,6 +313,54 @@ function getConfigTemperature(config: RunConfig): number | null {
     return parseTemperature(config.temperature);
 }
 
+function getAssumptionKey(config: RunConfig): string | null {
+    return typeof config.assumptionKey === 'string' && config.assumptionKey.trim() !== ''
+        ? config.assumptionKey
+        : null;
+}
+
+function hasAssumptionRunTag(tags: Array<{ tag: { name: string } }>): boolean {
+    return tags.some((entry) => entry.tag.name === 'assumption-run');
+}
+
+function isBaselineCompatibleRun(config: RunConfig | null, tags: Array<{ tag: { name: string } }>): boolean {
+    if (config == null) return false;
+
+    const assumptionKey = getAssumptionKey(config);
+    if (assumptionKey === null) {
+        return !hasAssumptionRunTag(tags);
+    }
+
+    return BASELINE_COMPATIBLE_ASSUMPTION_KEYS.has(assumptionKey);
+}
+
+function buildValueOutcomes(
+    score: number | null,
+    orientationFlipped: boolean,
+    valueA: string | null,
+    valueB: string | null
+): Record<string, 'prioritized' | 'deprioritized' | 'neutral'> | undefined {
+    if (score == null || valueA == null || valueB == null) return undefined;
+    const normalizedScore = orientationFlipped ? 6 - score : score;
+
+    if (normalizedScore >= 4) {
+        return {
+            [valueA]: 'prioritized',
+            [valueB]: 'deprioritized',
+        };
+    }
+    if (normalizedScore <= 2) {
+        return {
+            [valueA]: 'deprioritized',
+            [valueB]: 'prioritized',
+        };
+    }
+    return {
+        [valueA]: 'neutral',
+        [valueB]: 'neutral',
+    };
+}
+
 /**
  * Updates or creates the "Aggregate" run for a given definition and preamble version.
  * Uses advisory locks to ensure serial execution for a given definition.
@@ -290,6 +428,13 @@ export async function updateAggregateRun(
                     orderBy: { createdAt: 'desc' },
                     take: 1,
                 },
+                tags: {
+                    include: {
+                        tag: {
+                            select: { name: true },
+                        },
+                    },
+                },
                 definition: true,
                 _count: {
                     select: { transcripts: true }
@@ -323,11 +468,17 @@ export async function updateAggregateRun(
             return;
         }
 
-        const sourceRunIds = compatibleRuns.map(r => r.id);
+        const sourceRunIds = compatibleRuns.map((r) => r.id);
+        const parsedConfigs = new Map(
+            compatibleRuns.map((run) => {
+                const parseResult = zRunConfig.safeParse(run.config);
+                return [run.id, parseResult.success ? parseResult.data : null] as const;
+            })
+        );
 
         // Get valid analysis results with safe access to includes
         const validAnalyses = compatibleRuns
-            .map(r => r.analysisResults[0])
+            .map((r) => r.analysisResults[0])
             // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
             .filter((a): a is NonNullable<typeof compatibleRuns[number]['analysisResults'][number]> => a !== undefined && a !== null);
 
@@ -361,29 +512,203 @@ export async function updateAggregateRun(
             return;
         }
 
-        // Valid transcripts for aggregation
+        let valueA: string | null = null;
+        let valueB: string | null = null;
+        try {
+            const resolved = await resolveDefinitionContent(definitionId);
+            valueA = resolved.resolvedContent.dimensions[0]?.name ?? null;
+            valueB = resolved.resolvedContent.dimensions[1]?.name ?? null;
+        } catch (err) {
+            log.warn({ definitionId, err }, 'Failed to resolve definition value pair for aggregate analysis');
+        }
+
+        // Transcript set for aggregate processing
         const allTranscripts = await tx.transcript.findMany({
             where: {
                 runId: { in: sourceRunIds },
-                decisionCode: { not: null },
                 scenarioId: { not: null },
-                scenario: {
-                    deletedAt: null
-                }
+                decisionCode: { in: ['1', '2', '3', '4', '5'] },
             },
             select: {
+                id: true,
+                runId: true,
+                sampleIndex: true,
                 modelId: true,
                 scenarioId: true,
                 decisionCode: true,
                 scenario: {
                     select: {
-                        orientationFlipped: true
+                        id: true,
+                        name: true,
+                        deletedAt: true,
+                        orientationFlipped: true,
+                        content: true,
                     }
                 }
             }
         });
 
-        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, allTranscripts, scenarios);
+        const validAggregateTranscripts = allTranscripts.filter(
+            (transcript) =>
+                transcript.modelId != null &&
+                transcript.modelId !== '' &&
+                transcript.scenarioId != null &&
+                transcript.scenarioId !== '' &&
+                transcript.decisionCode != null &&
+                transcript.scenario != null &&
+                transcript.scenario.deletedAt == null
+        );
+
+        const aggregatedResult = aggregateAnalysesLogic(analysisObjects, validAggregateTranscripts, scenarios);
+
+        const plannedScenarioIds = scenarios.map((scenario) => scenario.id).sort();
+        const observedScenarioIds = Array.from(
+            new Set(
+                validAggregateTranscripts
+                    .map((transcript) => transcript.scenarioId)
+                    .filter((scenarioId): scenarioId is string => scenarioId != null && scenarioId !== '')
+            )
+        ).sort();
+        const hasDeletedOrMissingScenarioRows = allTranscripts.some(
+            (transcript) => transcript.scenario == null || transcript.scenario.deletedAt != null
+        );
+        const pooledModelIds = new Set(
+            validAnalyses.flatMap((analysis) => Object.keys((analysis.output as AnalysisOutput).perModel ?? {})),
+        );
+        const observedScenarioIdsByModel = new Map<string, Set<string>>();
+        for (const transcript of validAggregateTranscripts) {
+            const scenarioId = transcript.scenarioId;
+            if (scenarioId == null || scenarioId === '') continue;
+            const existing = observedScenarioIdsByModel.get(transcript.modelId) ?? new Set<string>();
+            existing.add(scenarioId);
+            observedScenarioIdsByModel.set(transcript.modelId, existing);
+        }
+
+        const conditionCoverage = {
+            plannedConditionCount: plannedScenarioIds.length,
+            observedConditionCount: observedScenarioIds.length,
+            complete:
+                !hasDeletedOrMissingScenarioRows &&
+                plannedScenarioIds.length > 0 &&
+                plannedScenarioIds.every((scenarioId) => observedScenarioIds.includes(scenarioId)),
+        };
+
+        const baselineEligible = compatibleRuns.every((run) => {
+            const config = parsedConfigs.get(run.id);
+            return isBaselineCompatibleRun(config ?? null, run.tags);
+        });
+
+        const hasStableModelIds = validAggregateTranscripts.every(
+            (transcript) => typeof transcript.modelId === 'string' && transcript.modelId !== ''
+        );
+        const hasPerModelConditionCoverage = Array.from(pooledModelIds).every((modelId) => {
+            const scenarioIds = observedScenarioIdsByModel.get(modelId);
+            return scenarioIds != null &&
+                plannedScenarioIds.length > 0 &&
+                plannedScenarioIds.every((scenarioId) => scenarioIds.has(scenarioId));
+        });
+
+        let aggregateEligibility: AggregateEligibility = 'eligible_same_signature_baseline';
+        let aggregateIneligibilityReason: string | null = null;
+
+        if (!baselineEligible) {
+            aggregateEligibility = 'ineligible_run_type';
+            aggregateIneligibilityReason = 'This aggregate mixes in assumption or manipulated runs, so it cannot be shown as baseline analysis.';
+        } else if (!hasStableModelIds) {
+            aggregateEligibility = 'ineligible_model_instability';
+            aggregateIneligibilityReason = 'This aggregate is missing stable model identity metadata.';
+        } else if (!conditionCoverage.complete || !hasPerModelConditionCoverage) {
+            aggregateEligibility = 'ineligible_partial_coverage';
+            aggregateIneligibilityReason = !conditionCoverage.complete
+                ? 'This aggregate does not cover the full baseline condition set for this signature.'
+                : 'At least one model is missing planned baseline conditions, so pooled baseline summaries would be incomplete.';
+        }
+
+        const aggregateWorkerTranscripts: AggregateWorkerTranscript[] = validAggregateTranscripts.map((transcript) => {
+            const score = transcript.decisionCode == null ? null : Number.parseInt(transcript.decisionCode, 10);
+            const rawDimensions = (transcript.scenario?.content as Record<string, unknown> | null)?.dimensions as Record<string, unknown> | undefined;
+            const dimensions: Record<string, number> = {};
+            for (const [key, value] of Object.entries(rawDimensions ?? {})) {
+                if (typeof value === 'number') {
+                    dimensions[key] = value;
+                }
+            }
+            const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
+            const values = buildValueOutcomes(
+                Number.isFinite(score) ? score : null,
+                orientationFlipped,
+                valueA,
+                valueB,
+            );
+
+            return {
+                id: transcript.id,
+                runId: transcript.runId,
+                modelId: transcript.modelId,
+                scenarioId: transcript.scenarioId!,
+                sampleIndex: transcript.sampleIndex,
+                orientationFlipped,
+                summary: values ? { score, values } : { score },
+                scenario: {
+                    name: transcript.scenario?.name ?? transcript.scenarioId ?? '',
+                    dimensions,
+                },
+            };
+        });
+
+        let preferenceSummary: { perModel: Record<string, unknown> } | null = null;
+        let reliabilitySummary: { perModel: Record<string, unknown> } | null = null;
+        let aggregateSemanticMetadata: Pick<AggregateMetadata, 'perModelRepeatCoverage' | 'perModelDrift'> = {
+            perModelRepeatCoverage: {},
+            perModelDrift: {},
+        };
+
+        if (aggregateEligibility === 'eligible_same_signature_baseline') {
+            const workerResult = await spawnPython<AggregateWorkerInput, AggregateWorkerOutput>(
+                ANALYZE_WORKER_PATH,
+                {
+                    runId: `aggregate:${definitionId}:${preambleVersionId ?? 'none'}:${definitionVersion ?? 'none'}:${temperature ?? 'default'}`,
+                    emitVignetteSemantics: true,
+                    aggregateSemantics: {
+                        mode: 'same_signature_v1',
+                        plannedScenarioIds,
+                        minRepeatCoverageCount: MIN_REPEAT_COVERAGE_COUNT,
+                        minRepeatCoverageShare: MIN_REPEAT_COVERAGE_SHARE,
+                        lowCoverageCautionThreshold: LOW_COVERAGE_CAUTION_THRESHOLD,
+                        driftWarningThreshold: DRIFT_WARNING_THRESHOLD,
+                    },
+                    transcripts: aggregateWorkerTranscripts,
+                },
+                { cwd: path.resolve(process.cwd(), '../..'), timeout: 120000 }
+            );
+
+            if (!workerResult.success) {
+                throw new Error(`Aggregate semantic worker failed: ${workerResult.error}`);
+            }
+
+            if (!workerResult.data.success) {
+                throw new Error(`${workerResult.data.error.code}: ${workerResult.data.error.message}`);
+            }
+
+            preferenceSummary = workerResult.data.analysis.preferenceSummary ?? null;
+            reliabilitySummary = workerResult.data.analysis.reliabilitySummary ?? null;
+            aggregateSemanticMetadata = {
+                perModelRepeatCoverage:
+                    workerResult.data.analysis.aggregateSemantics?.perModelRepeatCoverage ?? {},
+                perModelDrift:
+                    workerResult.data.analysis.aggregateSemantics?.perModelDrift ?? {},
+            };
+        }
+
+        const aggregateMetadata: AggregateMetadata = {
+            aggregateEligibility,
+            aggregateIneligibilityReason,
+            sourceRunCount: sourceRunIds.length,
+            sourceRunIds,
+            conditionCoverage,
+            perModelRepeatCoverage: aggregateSemanticMetadata.perModelRepeatCoverage,
+            perModelDrift: aggregateSemanticMetadata.perModelDrift,
+        };
 
         // 3. Find/Create Aggregate Run
         const aggregateRuns = await tx.run.findMany({
@@ -494,6 +819,9 @@ export async function updateAggregateRun(
 
         const newOutput: Record<string, unknown> = {
             perModel: aggregatedResult.perModel,
+            preferenceSummary,
+            reliabilitySummary,
+            aggregateMetadata,
             modelAgreement: aggregatedResult.modelAgreement,
             visualizationData: aggregatedResult.visualizationData,
             mostContestedScenarios: aggregatedResult.mostContestedScenarios,
@@ -502,6 +830,13 @@ export async function updateAggregateRun(
             valueAggregateStats: aggregatedResult.valueAggregateStats,
             runCount: validAnalyses.length,
             sourceRunIds,
+            methodsUsed: {
+                aggregateSemantics: 'same-signature-v1',
+                codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
+            },
+            warnings: [],
+            computedAt: new Date().toISOString(),
+            durationMs: 0,
         };
 
         // Save new
@@ -510,7 +845,7 @@ export async function updateAggregateRun(
                 runId: aggregateRun.id,
                 analysisType: 'AGGREGATE',
                 status: 'CURRENT',
-                codeVersion: '1.0.0',
+                codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
                 inputHash: `aggregate - ${Date.now()} `,
                 output: newOutput as unknown as Prisma.InputJsonValue
             }

@@ -26,9 +26,14 @@ import {
   deriveDecisionDimensionLabels,
   deriveScenarioAttributesFromDefinition,
 } from '../../utils/decisionLabels';
+import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../utils/analysisRouting';
+import {
+  buildAnalysisSemanticsView,
+} from '../analysis-v2/analysisSemantics';
 
 type AnalysisPanelProps = {
   runId: string;
+  analysisBasePath?: AnalysisBasePath;
   analysisStatus?: string | null;
   definitionContent?: unknown;
   isOldVersion?: boolean;
@@ -254,6 +259,7 @@ function AnalysisEmpty({
 
 export function AnalysisPanel({
   runId,
+  analysisBasePath = ANALYSIS_BASE_PATH,
   analysisStatus,
   definitionContent,
   isOldVersion = false,
@@ -265,6 +271,7 @@ export function AnalysisPanel({
     runId,
     analysisStatus,
   });
+  const isAggregateAnalysis = isAggregate === true || analysis?.analysisType === 'AGGREGATE';
 
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
@@ -280,6 +287,13 @@ export function AnalysisPanel({
   const [exportError, setExportError] = useState<string | null>(null);
   const [odataLinkCopied, setOdataLinkCopied] = useState(false);
   const [csvLinkCopied, setCsvLinkCopied] = useState(false);
+  const semantics = useMemo(() => {
+    if (!analysis) {
+      return null;
+    }
+
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
+  }, [analysis, isAggregateAnalysis]);
 
   const handleExportExcel = useCallback(async () => {
     setIsExporting(true);
@@ -382,7 +396,7 @@ export function AnalysisPanel({
     analysis.perModel,
     analysis.visualizationData?.modelScenarioMatrix,
   );
-
+  const aggregateSourceRunCount = analysis.aggregateMetadata?.sourceRunCount ?? null;
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
       {/* Header */}
@@ -399,7 +413,7 @@ export function AnalysisPanel({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isAggregate && (
+          {!isAggregateAnalysis && (
             <>
               <Button variant="secondary" size="sm" onClick={() => void handleExportExcel()} disabled={isExporting}>
                 {isExporting ? (
@@ -476,9 +490,13 @@ export function AnalysisPanel({
           detail={`${modelCount} model${modelCount !== 1 ? 's' : ''} analyzed`}
         />
         <StatCard
-          label="Batches"
-          value={batches}
-          detail={batchDetail}
+          label={isAggregateAnalysis ? 'Source Runs' : 'Batches'}
+          value={isAggregateAnalysis ? (aggregateSourceRunCount ?? '-') : batches}
+          detail={isAggregateAnalysis
+            ? aggregateSourceRunCount === null
+              ? 'Contributing source-run count unavailable'
+              : `${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'} pooled`
+            : batchDetail}
         />
         <StatCard
           label="Total Trials"
@@ -499,7 +517,6 @@ export function AnalysisPanel({
         />
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-4 -mb-px">
           {TABS.map((tab) => (
@@ -518,29 +535,33 @@ export function AnalysisPanel({
         </nav>
       </div>
 
-      {/* Tab Content */}
       <div className="min-h-[400px]">
-        {activeTab === 'overview' && (
+        {activeTab === 'overview' && semantics && (
           <OverviewTab
             runId={runId}
+            analysisBasePath={analysisBasePath}
             perModel={perModel}
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
             dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
+            semantics={semantics}
+            completedBatches={batches}
+            aggregateSourceRunCount={aggregateSourceRunCount}
+            isAggregate={isAggregateAnalysis}
           />
         )}
-        {activeTab === 'decisions' && (
+        {activeTab === 'decisions' && semantics && (
           <DecisionsTab
             visualizationData={analysis.visualizationData}
-            perModel={perModel}
-            varianceAnalysis={analysis.varianceAnalysis}
             dimensionLabels={dimensionLabels}
+            semantics={semantics}
           />
         )}
         {activeTab === 'scenarios' && (
           <ScenariosTab
             runId={runId}
+            analysisBasePath={analysisBasePath}
             visualizationData={analysis.visualizationData}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}
@@ -550,6 +571,7 @@ export function AnalysisPanel({
         {activeTab === 'stability' && (
           <StabilityTab
             runId={runId}
+            analysisBasePath={analysisBasePath}
             perModel={perModel}
             visualizationData={loading ? null : analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}

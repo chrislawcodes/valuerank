@@ -9,8 +9,10 @@ import { ContestedScenariosList } from '../ContestedScenariosList';
 import { ConditionAnalysisTable } from '../ConditionAnalysisTable';
 import { PivotAnalysisTable } from '../PivotAnalysisTable';
 import type { VisualizationData, ContestedScenario } from '../../../api/operations/analysis';
+import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analysisRouting';
 type ScenariosTabProps = {
   runId: string;
+  analysisBasePath?: AnalysisBasePath;
   visualizationData: VisualizationData | null | undefined;
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
@@ -19,6 +21,7 @@ type ScenariosTabProps = {
 
 export function ScenariosTab({
   runId,
+  analysisBasePath = ANALYSIS_BASE_PATH,
   visualizationData,
   contestedScenarios,
   dimensionLabels,
@@ -47,6 +50,7 @@ export function ScenariosTab({
             {hasScenarioDimensions ? (
               <PivotAnalysisTable
                 runId={runId}
+                analysisBasePath={analysisBasePath}
                 visualizationData={visualizationData}
                 dimensionLabels={dimensionLabels}
                 expectedAttributes={expectedAttributes}

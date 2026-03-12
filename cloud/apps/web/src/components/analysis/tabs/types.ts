@@ -19,7 +19,7 @@ export type TabDefinition = {
 export const TABS: TabDefinition[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'decisions', label: 'Decisions' },
-  { id: 'scenarios', label: 'Conditions' },
+  { id: 'scenarios', label: 'Scenarios' },
   { id: 'stability', label: 'Stability' },
 ];
 

@@ -27,6 +27,7 @@ import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
 import { Settings } from './pages/Settings';
 import { Preambles } from './pages/Preambles';
+import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
 
 // Protected layout wrapper
@@ -230,8 +231,14 @@ function App() {
               }
             />
 
-            {/* Catch-all redirect */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="*"
+              element={
+                <ProtectedLayout>
+                  <NotFound />
+                </ProtectedLayout>
+              }
+            />
           </Routes>
         </AuthProvider>
       </Provider>
