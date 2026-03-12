@@ -299,6 +299,104 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('2 conditions per batch')).toBeInTheDocument();
   });
 
+  it('renders source runs instead of batches for aggregates', () => {
+    const analysis = createMockAnalysis({
+      analysisType: 'AGGREGATE',
+      codeVersion: '1.2.0',
+      aggregateMetadata: {
+        aggregateEligibility: 'eligible_same_signature_baseline',
+        aggregateIneligibilityReason: null,
+        sourceRunCount: 4,
+        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+        conditionCoverage: {
+          plannedConditionCount: 2,
+          observedConditionCount: 2,
+          complete: true,
+        },
+        perModelRepeatCoverage: {},
+        perModelDrift: {},
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" isAggregate />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Source Runs')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('4 contributing source runs pooled')).toBeInTheDocument();
+  });
+
+  it('keeps non-semantic tabs visible for ineligible aggregates', async () => {
+    const user = userEvent.setup();
+    const analysis = createMockAnalysis({
+      analysisType: 'AGGREGATE',
+      codeVersion: '1.2.0',
+      aggregateMetadata: {
+        aggregateEligibility: 'ineligible_run_type',
+        aggregateIneligibilityReason: 'This aggregate mixes in assumption or manipulated runs.',
+        sourceRunCount: 4,
+        sourceRunIds: ['run-a', 'run-b', 'run-c', 'run-d'],
+        conditionCoverage: {
+          plannedConditionCount: 2,
+          observedConditionCount: 2,
+          complete: true,
+        },
+        perModelRepeatCoverage: {},
+        perModelDrift: {},
+      },
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+        },
+      },
+      varianceAnalysis: {
+        isMultiSample: true,
+        samplesPerScenario: 2,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" isAggregate />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('This aggregate mixes in assumption or manipulated runs.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Scenarios' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stability' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
+    expect(screen.queryByText('Overview Summary')).not.toBeInTheDocument();
+  });
+
   it('renders overview table titles', () => {
     const analysis = createMockAnalysis({
       visualizationData: {
@@ -349,8 +447,8 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('button', { name: /Agreement/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Methods/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Agreement$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Methods$/i })).not.toBeInTheDocument();
   });
 
   it('renders warnings when present', () => {
@@ -445,7 +543,7 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    const button = screen.getByRole('button', { name: /Recompute/ });
+    const button = screen.getByRole('button', { name: /^Recompute$/ });
     expect(button).toBeDisabled();
   });
 

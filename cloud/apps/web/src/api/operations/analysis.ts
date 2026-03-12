@@ -146,32 +146,40 @@ export type VarianceAnalysis = {
   orientationCorrectedCount?: number;
 };
 
-export type PreferenceDirectionSummary = {
-  byValue: Record<string, ValueStats>;
-  overallLean: 'A' | 'B' | 'NEUTRAL' | null;
-  overallSignedCenter: number | null;
+export type RawPreferenceSummary = {
+  perModel: unknown;
 };
 
-export type ModelPreferenceSummary = {
-  preferenceDirection: PreferenceDirectionSummary;
-  preferenceStrength: number | null;
+export type RawReliabilitySummary = {
+  perModel: unknown;
 };
 
-export type PreferenceSummary = {
-  perModel: Record<string, ModelPreferenceSummary>;
-};
-
-export type ModelReliabilitySummary = {
-  baselineNoise: number | null;
-  baselineReliability: number | null;
-  directionalAgreement: number | null;
-  neutralShare: number | null;
-  coverageCount: number;
-  uniqueScenarios: number;
-};
-
-export type ReliabilitySummary = {
-  perModel: Record<string, ModelReliabilitySummary>;
+export type AggregateMetadata = {
+  aggregateEligibility:
+    | 'eligible_same_signature_baseline'
+    | 'ineligible_mixed_signature'
+    | 'ineligible_run_type'
+    | 'ineligible_partial_coverage'
+    | 'ineligible_missing_metadata'
+    | 'ineligible_missing_repeatability'
+    | 'ineligible_model_instability';
+  aggregateIneligibilityReason: string | null;
+  sourceRunCount: number;
+  sourceRunIds: string[];
+  conditionCoverage: {
+    plannedConditionCount: number;
+    observedConditionCount: number;
+    complete: boolean;
+  };
+  perModelRepeatCoverage: Record<string, {
+    repeatCoverageCount: number;
+    repeatCoverageShare: number;
+    contributingRunCount: number;
+  }>;
+  perModelDrift: Record<string, {
+    weightedOverallSignedCenterSd: number | null;
+    exceedsWarningThreshold: boolean;
+  }>;
 };
 
 export type AnalysisResult = {
@@ -185,8 +193,9 @@ export type AnalysisResult = {
   computedAt: string | null;
   durationMs: number | null;
   perModel: Record<string, PerModelStats>;
-  preferenceSummary?: PreferenceSummary | null;
-  reliabilitySummary?: ReliabilitySummary | null;
+  preferenceSummary?: RawPreferenceSummary | null;
+  reliabilitySummary?: RawReliabilitySummary | null;
+  aggregateMetadata?: AggregateMetadata | null;
   modelAgreement: ModelAgreement;
   dimensionAnalysis: DimensionAnalysis | null;
   visualizationData: VisualizationData | null;
@@ -217,6 +226,15 @@ export const ANALYSIS_RESULT_FRAGMENT = gql`
     }
     reliabilitySummary {
       perModel
+    }
+    aggregateMetadata {
+      aggregateEligibility
+      aggregateIneligibilityReason
+      sourceRunCount
+      sourceRunIds
+      conditionCoverage
+      perModelRepeatCoverage
+      perModelDrift
     }
     modelAgreement
     dimensionAnalysis

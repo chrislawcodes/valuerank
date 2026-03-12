@@ -23,6 +23,7 @@ const ANALYZE_WORKER_PATH = 'workers/analyze_basic.py';
 
 // Code version for tracking analysis versions
 const CODE_VERSION = '1.1.1';
+const BASELINE_COMPATIBLE_ASSUMPTION_KEYS = new Set(['temp_zero_determinism']);
 
 /**
  * Transcript data structure sent to Python worker.
@@ -93,6 +94,18 @@ function getAssumptionKey(config: unknown): string | null {
 
 function hasAssumptionRunTag(tags: Array<{ tag: { name: string } }>): boolean {
   return tags.some((entry) => entry.tag.name === 'assumption-run');
+}
+
+function isBaselineCompatibleRun(
+  config: unknown,
+  tags: Array<{ tag: { name: string } }>,
+): boolean {
+  const assumptionKey = getAssumptionKey(config);
+  if (assumptionKey === null) {
+    return !hasAssumptionRunTag(tags);
+  }
+
+  return BASELINE_COMPATIBLE_ASSUMPTION_KEYS.has(assumptionKey);
 }
 
 /**
@@ -215,9 +228,10 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
             },
           },
         });
-        const emitVignetteSemantics =
-          getAssumptionKey(runMeta?.config ?? null) == null &&
-          !hasAssumptionRunTag(runMeta?.tags ?? []);
+        const emitVignetteSemantics = isBaselineCompatibleRun(
+          runMeta?.config ?? null,
+          runMeta?.tags ?? [],
+        );
         let valueA: string | null = null;
         let valueB: string | null = null;
         if (runMeta?.definitionId != null && runMeta.definitionId !== '') {

@@ -171,6 +171,7 @@ class TestAnalyzeBasicIntegration:
         assert methods["effectSize"] == "cohens_d"
         assert methods["alpha"] == 0.05
         assert "codeVersion" in methods
+        assert methods["summaryContractVersion"] == "vignette-semantics-v1"
 
     def test_legacy_mode_with_transcript_ids(self):
         """Test backwards compatibility with transcriptIds only."""
@@ -352,6 +353,160 @@ class TestAnalyzeBasicIntegration:
         )
         assert reliability["directionalAgreement"] == pytest.approx(0.8, abs=1e-6)
         assert reliability["neutralShare"] == pytest.approx(0.2, abs=1e-6)
+
+    def test_same_signature_aggregate_keeps_preference_but_leaves_reliability_unavailable_without_within_run_repeats(self):
+        """Pooling single-sample runs should not create fake repeatability."""
+        input_data = {
+            "runId": "aggregate-run-preference-only",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "runId": "run-a",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t2",
+                    "runId": "run-a",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 4, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t3",
+                    "runId": "run-b",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 5, "values": {}},
+                    "scenario": {},
+                },
+                {
+                    "id": "t4",
+                    "runId": "run-b",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "sampleIndex": 0,
+                    "orientationFlipped": False,
+                    "summary": {"score": 1, "values": {}},
+                    "scenario": {},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        analysis = result["analysis"]
+        preference = analysis["preferenceSummary"]["perModel"]["m1"]
+        reliability = analysis["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = analysis["aggregateSemantics"]
+
+        assert preference["preferenceStrength"] is not None
+        assert reliability["coverageCount"] == 0
+        assert reliability["baselineReliability"] is None
+        assert reliability["baselineNoise"] is None
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 0
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.0, abs=1e-6)
+
+    def test_same_signature_aggregate_rolls_up_reliability_and_flags_high_drift(self):
+        """Aggregate pooling should weight within-run reliability and flag drift separately."""
+        input_data = {
+            "runId": "aggregate-run-reliability",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: repeated s1, s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "a5", "runId": "run-a", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                # Run B: repeated s3, s4, s5 with different center to trigger drift
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s3", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "b3", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "b4", "runId": "run-b", "modelId": "m1", "scenarioId": "s4", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
+                {"id": "b5", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                {"id": "b6", "runId": "run-b", "modelId": "m1", "scenarioId": "s5", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+
+        assert reliability["coverageCount"] == 5
+        assert reliability["uniqueScenarios"] == 5
+        assert reliability["baselineReliability"] is not None
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 5
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(1.0, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
+        assert aggregate_semantics["perModelDrift"]["m1"]["weightedOverallSignedCenterSd"] is not None
+        assert aggregate_semantics["perModelDrift"]["m1"]["exceedsWarningThreshold"] is True
+
+    def test_same_signature_aggregate_sums_repeat_coverage_across_runs_without_treating_runs_as_repeats(self):
+        """Pooled coverage should sum run-level repeat coverage while preserving within-run repeatability."""
+        input_data = {
+            "runId": "aggregate-run-overlapping-repeat-coverage",
+            "emitVignetteSemantics": True,
+            "aggregateSemantics": {
+                "mode": "same_signature_v1",
+                "plannedScenarioIds": ["s1", "s2", "s3", "s4", "s5"],
+                "minRepeatCoverageCount": 3,
+                "minRepeatCoverageShare": 0.2,
+                "lowCoverageCautionThreshold": 5,
+                "driftWarningThreshold": 0.25,
+            },
+            "transcripts": [
+                # Run A: repeated s1, s2
+                {"id": "a1", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "a2", "runId": "run-a", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 4, "values": {}}, "scenario": {}},
+                {"id": "a3", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 2, "values": {}}, "scenario": {}},
+                {"id": "a4", "runId": "run-a", "modelId": "m1", "scenarioId": "s2", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 1, "values": {}}, "scenario": {}},
+                # Run B: repeated s1 again only
+                {"id": "b1", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 0, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+                {"id": "b2", "runId": "run-b", "modelId": "m1", "scenarioId": "s1", "sampleIndex": 1, "orientationFlipped": False, "summary": {"score": 5, "values": {}}, "scenario": {}},
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        reliability = result["analysis"]["reliabilitySummary"]["perModel"]["m1"]
+        aggregate_semantics = result["analysis"]["aggregateSemantics"]
+
+        assert reliability["coverageCount"] == 3
+        assert reliability["uniqueScenarios"] == 2
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageCount"] == 3
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["repeatCoverageShare"] == pytest.approx(0.4, abs=1e-6)
+        assert aggregate_semantics["perModelRepeatCoverage"]["m1"]["contributingRunCount"] == 2
 
     def test_summaries_are_suppressed_when_vignette_semantics_are_disabled(self):
         """Assumption-style runs should not emit baseline semantic summaries."""

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { cloneElement, isValidElement, useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
@@ -48,6 +48,7 @@ export function Tooltip({
 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const tooltipId = useId();
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -128,6 +129,12 @@ export function Tooltip({
     };
   }, []);
 
+  const enhancedChildren = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        'aria-describedby': isVisible ? tooltipId : undefined,
+      })
+    : children;
+
   return (
     <>
       <div
@@ -138,12 +145,13 @@ export function Tooltip({
         onBlur={handleBlur}
         className="inline-block"
       >
-        {children}
+        {enhancedChildren}
       </div>
       {isVisible &&
         createPortal(
           <div
             ref={tooltipRef}
+            id={tooltipId}
             role="tooltip"
             className={cn(tooltipVariants({ variant }), className)}
             style={{

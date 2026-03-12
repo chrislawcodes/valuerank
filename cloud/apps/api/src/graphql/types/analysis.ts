@@ -99,11 +99,26 @@ type ReliabilitySummaryShape = {
   perModel: Record<string, unknown>;
 };
 
+type AggregateMetadataShape = {
+  aggregateEligibility: string;
+  aggregateIneligibilityReason: string | null;
+  sourceRunCount: number;
+  sourceRunIds: string[];
+  conditionCoverage: {
+    plannedConditionCount: number;
+    observedConditionCount: number;
+    complete: boolean;
+  };
+  perModelRepeatCoverage: Record<string, unknown>;
+  perModelDrift: Record<string, unknown>;
+};
+
 // Type for output data stored in JSONB
 type AnalysisOutput = {
   perModel: Record<string, unknown>;
   preferenceSummary?: PreferenceSummaryShape | null;
   reliabilitySummary?: ReliabilitySummaryShape | null;
+  aggregateMetadata?: AggregateMetadataShape | null;
   modelAgreement: Record<string, unknown>;
   dimensionAnalysis?: Record<string, unknown>;
   varianceAnalysis?: VarianceAnalysisShape;
@@ -163,6 +178,7 @@ const ContestedScenarioRef = builder.objectRef<ContestedScenarioShape>('Conteste
 const AnalysisWarningRef = builder.objectRef<AnalysisWarningShape>('AnalysisWarning');
 const PreferenceSummaryRef = builder.objectRef<PreferenceSummaryShape>('PreferenceSummary');
 const ReliabilitySummaryRef = builder.objectRef<ReliabilitySummaryShape>('ReliabilitySummary');
+const AggregateMetadataRef = builder.objectRef<AggregateMetadataShape>('AggregateMetadata');
 
 // AnalysisStatus enum is defined in enums.ts - reference by string name
 
@@ -203,6 +219,28 @@ builder.objectType(ReliabilitySummaryRef, {
     perModel: t.expose('perModel', {
       type: 'JSON',
       description: 'Per-model baseline noise and reliability summary',
+    }),
+  }),
+});
+
+builder.objectType(AggregateMetadataRef, {
+  description: 'Eligibility and coverage metadata for same-signature aggregate analysis support',
+  fields: (t) => ({
+    aggregateEligibility: t.exposeString('aggregateEligibility'),
+    aggregateIneligibilityReason: t.exposeString('aggregateIneligibilityReason', { nullable: true }),
+    sourceRunCount: t.exposeInt('sourceRunCount'),
+    sourceRunIds: t.exposeStringList('sourceRunIds'),
+    conditionCoverage: t.expose('conditionCoverage', {
+      type: 'JSON',
+      description: 'Coverage of the planned baseline condition set',
+    }),
+    perModelRepeatCoverage: t.expose('perModelRepeatCoverage', {
+      type: 'JSON',
+      description: 'Per-model pooled repeat coverage metadata',
+    }),
+    perModelDrift: t.expose('perModelDrift', {
+      type: 'JSON',
+      description: 'Per-model pooled cross-run drift metadata',
     }),
   }),
 });
@@ -268,6 +306,16 @@ builder.objectType(AnalysisResultRef, {
       resolve: (analysis) => {
         const output = analysis.output as AnalysisOutput | null;
         return output?.reliabilitySummary ?? null;
+      },
+    }),
+
+    aggregateMetadata: t.field({
+      type: AggregateMetadataRef,
+      nullable: true,
+      description: 'Eligibility and repeat-coverage metadata for aggregate analysis rows',
+      resolve: (analysis) => {
+        const output = analysis.output as AnalysisOutput | null;
+        return output?.aggregateMetadata ?? null;
       },
     }),
 

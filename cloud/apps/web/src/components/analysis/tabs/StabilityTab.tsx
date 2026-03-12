@@ -11,9 +11,11 @@ import type { PerModelStats } from './types';
 import type { VisualizationData, VarianceAnalysis } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
+import { ANALYSIS_BASE_PATH, type AnalysisBasePath, buildAnalysisTranscriptsPath } from '../../../utils/analysisRouting';
 
 type StabilityTabProps = {
     runId: string;
+    analysisBasePath?: AnalysisBasePath;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
@@ -156,11 +158,13 @@ export function getDirectionTextColor(direction: 'A' | 'B' | 'NEUTRAL' | null): 
 
 function ConditionStabilityMatrix({
     runId,
+    analysisBasePath = ANALYSIS_BASE_PATH,
     perModel,
     visualizationData,
     varianceAnalysis,
 }: {
     runId: string;
+    analysisBasePath?: AnalysisBasePath;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
@@ -253,7 +257,7 @@ function ConditionStabilityMatrix({
             col: row.attributeBLevel,
             model: modelId,
         });
-        navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
     };
 
     if (!scenarioDimensions) {
@@ -445,7 +449,13 @@ function ConditionStabilityMatrix({
     );
 }
 
-export function StabilityTab({ runId, perModel, visualizationData, varianceAnalysis }: StabilityTabProps) {
+export function StabilityTab({
+    runId,
+    analysisBasePath = ANALYSIS_BASE_PATH,
+    perModel,
+    visualizationData,
+    varianceAnalysis,
+}: StabilityTabProps) {
     const orientationCorrectedCount = varianceAnalysis?.orientationCorrectedCount ?? 0;
 
     return (
@@ -457,12 +467,13 @@ export function StabilityTab({ runId, perModel, visualizationData, varianceAnaly
                     Each cell shows the predominant direction (Favors A / Favors B / Neutral) and the fraction of
                     replicates that agree. High stability means all replicates pointed the same direction.
                 </p>
-                <ConditionStabilityMatrix
-                    runId={runId}
-                    perModel={perModel}
-                    visualizationData={visualizationData}
-                    varianceAnalysis={varianceAnalysis}
-                />
+            <ConditionStabilityMatrix
+                runId={runId}
+                analysisBasePath={analysisBasePath}
+                perModel={perModel}
+                visualizationData={visualizationData}
+                varianceAnalysis={varianceAnalysis}
+            />
                 {orientationCorrectedCount > 0 && (
                     <p className="mt-1 text-xs text-gray-400">
                         * Scores for {orientationCorrectedCount} scenario(s) with reversed presentation order were

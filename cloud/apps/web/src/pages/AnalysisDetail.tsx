@@ -10,11 +10,13 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
+import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
 import { formatTrialSignature } from '../utils/trial-signature';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
+import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
 
 function parseAnalysisTab(value: string | null): AnalysisTab {
   if (value === 'overview' || value === 'decisions' || value === 'scenarios' || value === 'stability') {
@@ -37,6 +39,13 @@ export function AnalysisDetail() {
     id: id || '',
     pause: !id,
     enablePolling: true,
+  });
+
+  const { analysis } = useAnalysis({
+    runId: id || '',
+    pause: !id || !run?.analysisStatus,
+    enablePolling: false,
+    analysisStatus: run?.analysisStatus ?? null,
   });
 
   // Loading state
@@ -84,8 +93,10 @@ export function AnalysisDetail() {
     );
   }
 
-  // Determine if this is an Aggregate Run based on tags
-  const isAggregate = run.tags?.some(t => t.name === 'Aggregate') ?? false;
+  const isAggregate = isAggregateAnalysis(
+    run.tags?.some((tag) => tag.name === 'Aggregate') ?? false,
+    analysis?.analysisType,
+  );
 
   const config = run.config as {
     definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
@@ -137,6 +148,7 @@ export function AnalysisDetail() {
         <AnalysisPanel
           runId={run.id}
           analysisStatus={run.analysisStatus}
+          analysisBasePath={ANALYSIS_BASE_PATH}
           definitionContent={getRunDefinitionContent(run)}
           isOldVersion={isOldVersion}
           isAggregate={isAggregate}
@@ -226,7 +238,7 @@ function Header({
                     onChange={(e) => {
                       const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
                       if (nextRun) {
-                        navigate(`/analysis/${nextRun.id}`);
+                        navigate(buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id));
                       }
                     }}
                   >

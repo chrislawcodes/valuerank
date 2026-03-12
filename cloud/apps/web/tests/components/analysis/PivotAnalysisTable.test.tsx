@@ -2,12 +2,26 @@
  * PivotAnalysisTable Component Tests
  */
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { PivotAnalysisTable } from '../../../src/components/analysis/PivotAnalysisTable';
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 describe('PivotAnalysisTable', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+  });
+
   it('shows legend counts for low/neutral/high decisions', () => {
     render(
       <MemoryRouter>
@@ -35,5 +49,37 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Freedom 1')).toBeInTheDocument();
     expect(screen.getByText('Neutral 1')).toBeInTheDocument();
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
+  });
+
+  it('opens pivot-cell transcripts on the unified analysis route', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          analysisBasePath="/analysis"
+          dimensionLabels={{
+            '1': 'Strongly Support Freedom',
+            '5': 'Strongly Support Harmony',
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1, s2: 3, s3: 5 },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByText('1.00'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1'
+    );
   });
 });

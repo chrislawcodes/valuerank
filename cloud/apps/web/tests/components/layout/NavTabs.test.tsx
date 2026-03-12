@@ -32,6 +32,15 @@ describe('NavTabs Component', () => {
     expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
   });
 
+  it('shows only the unified vignette analysis route in the menu', () => {
+    renderNavTabs('/analysis');
+
+    expect(
+      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+    ).toBe(true);
+    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
+  });
+
   it('shows the new assumptions analysis routes in the menu', () => {
     renderNavTabs('/assumptions/analysis');
 
@@ -40,6 +49,18 @@ describe('NavTabs Component', () => {
     ).toBe(true);
     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
     expect(screen.getByRole('link', { name: /assumptions/i })).toHaveAttribute('href', '/assumptions');
+  });
+
+  it('keeps the unified analysis menu item active on transcript routes', () => {
+    renderNavTabs('/analysis/run-1/transcripts');
+
+    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+    const currentAnalysisLink = screen
+      .getAllByRole('link', { name: 'Analysis' })
+      .find((link) => link.getAttribute('href') === '/analysis');
+
+    expect(currentAnalysisLink?.className).toContain('bg-teal-600/20');
+    expect(vignettesLink.parentElement?.className).toContain('border-teal-500');
   });
 
   it('should highlight active tab', () => {

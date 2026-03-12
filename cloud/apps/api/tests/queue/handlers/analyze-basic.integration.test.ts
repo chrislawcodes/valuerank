@@ -256,7 +256,7 @@ describe('analyze-basic integration', () => {
       );
     });
 
-    it('suppresses vignette semantic summaries for temp-zero assumption runs', async () => {
+    it('keeps vignette semantic summaries enabled for temp-zero baseline-compatible runs', async () => {
       await db.run.update({
         where: { id: TEST_IDS.run },
         data: {
@@ -267,19 +267,6 @@ describe('analyze-basic integration', () => {
         },
       });
 
-      vi.mocked(spawnPython).mockResolvedValueOnce({
-        success: true,
-        data: {
-          ...MOCK_ANALYSIS,
-          analysis: {
-            ...MOCK_ANALYSIS.analysis,
-            preferenceSummary: null,
-            reliabilitySummary: null,
-          },
-        },
-        stderr: '',
-      });
-
       const handler = createAnalyzeBasicHandler();
       await handler([createMockJob()]);
 
@@ -287,7 +274,7 @@ describe('analyze-basic integration', () => {
         'workers/analyze_basic.py',
         expect.objectContaining({
           runId: TEST_IDS.run,
-          emitVignetteSemantics: false,
+          emitVignetteSemantics: true,
         }),
         expect.any(Object),
       );
@@ -296,8 +283,8 @@ describe('analyze-basic integration', () => {
         where: { runId: TEST_IDS.run },
       });
       const output = result?.output as typeof MOCK_ANALYSIS.analysis;
-      expect(output.preferenceSummary).toBeNull();
-      expect(output.reliabilitySummary).toBeNull();
+      expect(output.preferenceSummary).toEqual(MOCK_ANALYSIS.analysis.preferenceSummary);
+      expect(output.reliabilitySummary).toEqual(MOCK_ANALYSIS.analysis.reliabilitySummary);
     });
 
     it('suppresses vignette semantic summaries for tagged assumption runs', async () => {

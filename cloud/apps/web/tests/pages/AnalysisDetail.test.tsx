@@ -19,6 +19,7 @@ const mockClient = createClient({
 // Mock useRun hook
 const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
+const mockUseAnalysis = vi.fn();
 
 vi.mock('../../src/hooks/useRun', () => ({
   useRun: () => mockUseRun(),
@@ -28,10 +29,16 @@ vi.mock('../../src/hooks/useRuns', () => ({
   useRuns: () => mockUseRuns(),
 }));
 
+vi.mock('../../src/hooks/useAnalysis', () => ({
+  useAnalysis: () => mockUseAnalysis(),
+}));
+
 // Mock AnalysisPanel to avoid complex setup
 vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
-  AnalysisPanel: ({ runId }: { runId: string }) => (
-    <div data-testid="analysis-panel">Analysis Panel for {runId}</div>
+  AnalysisPanel: ({ runId, isAggregate }: { runId: string; isAggregate?: boolean }) => (
+    <div data-testid="analysis-panel" data-is-aggregate={String(isAggregate)}>
+      Analysis Panel for {runId}
+    </div>
   ),
 }));
 
@@ -53,11 +60,20 @@ describe('AnalysisDetail', () => {
   beforeEach(() => {
     mockUseRun.mockReset();
     mockUseRuns.mockReset();
+    mockUseAnalysis.mockReset();
     mockUseRuns.mockReturnValue({
       runs: [],
       loading: false,
       error: null,
       refetch: vi.fn(),
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis: null,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
     });
   });
 
@@ -317,6 +333,35 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-123');
 
       expect(screen.getByText('Unnamed Definition')).toBeInTheDocument();
+    });
+
+    it('uses the canonical aggregate fallback when analysisType is AGGREGATE but tags are missing', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          tags: [],
+          analysisStatus: 'completed',
+          definition: { id: 'def-1', name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+      mockUseAnalysis.mockReturnValue({
+        analysis: {
+          analysisType: 'AGGREGATE',
+        },
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      });
+
+      renderWithRouter('run-123');
+
+      expect(screen.getByText('Aggregate View')).toBeInTheDocument();
+      expect(screen.queryByText('View Trial')).not.toBeInTheDocument();
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-is-aggregate', 'true');
     });
   });
 });

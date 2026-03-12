@@ -2,6 +2,12 @@ import { FileText, Zap } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
 
+export type TranscriptScenarioHighlight = {
+  label: string;
+  containerClassName: string;
+  badgeClassName: string;
+};
+
 type TranscriptRowProps = {
   transcript: Transcript;
   onSelect: (transcript: Transcript) => void;
@@ -13,6 +19,7 @@ type TranscriptRowProps = {
   showModelColumn?: boolean;
   onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
   decisionUpdating?: boolean;
+  scenarioHighlight?: TranscriptScenarioHighlight | null;
 };
 
 function formatDate(dateString: string): string {
@@ -62,11 +69,14 @@ export function TranscriptRow({
   showModelColumn = true,
   onDecisionChange,
   decisionUpdating = false,
+  scenarioHighlight = null,
 }: TranscriptRowProps) {
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
   const isDecisionOverrideAllowed = transcript.decisionCode === 'other' && Boolean(onDecisionChange);
+  const containerClassName = scenarioHighlight?.containerClassName
+    ?? 'border-gray-200 hover:bg-gray-50';
 
   const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
     event.stopPropagation();
@@ -83,6 +93,7 @@ export function TranscriptRow({
     <div
       role="button"
       tabIndex={0}
+      data-transcript-id={transcript.id}
       onClick={handleOpen}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -90,13 +101,23 @@ export function TranscriptRow({
           handleOpen();
         }
       }}
-      className={`w-full text-left hover:bg-gray-50 transition-colors ${
-        compact ? 'px-4 py-2' : 'p-3 border border-gray-200 rounded-lg'
-      }`}
+      className={`w-full text-left transition-colors ${
+        compact ? 'px-4 py-2' : 'rounded-lg border p-3'
+      } ${containerClassName}`}
+      data-condition-group={scenarioHighlight?.label}
     >
       {showGrid ? (
         <div className="grid items-center gap-3 text-sm text-gray-600" style={{ gridTemplateColumns }}>
           <div className="flex items-center gap-2 min-w-0">
+            {scenarioHighlight && (
+              <span
+                className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${scenarioHighlight.badgeClassName}`}
+                title={`Condition group ${scenarioHighlight.label}`}
+                aria-label={`Condition group ${scenarioHighlight.label}. Rows with this badge come from the same repeated condition.`}
+              >
+                {scenarioHighlight.label}
+              </span>
+            )}
             <FileText className="w-4 h-4 text-gray-400" />
             <span className="truncate">
               {transcript.scenarioId ? transcript.scenarioId.slice(0, 8) : 'No scenario'}
@@ -156,7 +177,16 @@ export function TranscriptRow({
                   {transcript.modelId}
                 </div>
               )}
-              <div className="text-sm text-gray-500 truncate">
+              <div className="flex items-center gap-2 text-sm text-gray-500 truncate">
+                {scenarioHighlight && (
+                  <span
+                    className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${scenarioHighlight.badgeClassName}`}
+                    title={`Condition group ${scenarioHighlight.label}`}
+                    aria-label={`Condition group ${scenarioHighlight.label}. Rows with this badge come from the same repeated condition.`}
+                  >
+                    {scenarioHighlight.label}
+                  </span>
+                )}
                 {transcript.scenarioId
                   ? `Scenario: ${transcript.scenarioId.slice(0, 8)}...`
                   : 'No scenario'}

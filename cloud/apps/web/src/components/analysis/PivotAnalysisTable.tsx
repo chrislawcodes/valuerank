@@ -8,9 +8,11 @@ import {
     mapDecisionSidesToScenarioAttributes,
     resolveScenarioAttributes,
 } from '../../utils/decisionLabels';
+import { ANALYSIS_BASE_PATH, type AnalysisBasePath, buildAnalysisTranscriptsPath } from '../../utils/analysisRouting';
 
 type PivotAnalysisTableProps = {
     runId: string;
+    analysisBasePath?: AnalysisBasePath;
     visualizationData: VisualizationData;
     dimensionLabels?: Record<string, string>;
     expectedAttributes?: string[];
@@ -72,6 +74,7 @@ function Legend({ lowName, highName, counts }: { lowName: string; highName: stri
 
 export function PivotAnalysisTable({
     runId,
+    analysisBasePath = ANALYSIS_BASE_PATH,
     visualizationData,
     dimensionLabels,
     expectedAttributes = [],
@@ -203,7 +206,7 @@ export function PivotAnalysisTable({
         if (options?.decisionCode) {
             params.set('decisionCode', options.decisionCode);
         }
-        navigate(`/analysis/${runId}/transcripts?${params.toString()}`);
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
     };
 
     if (!scenarioDimensions || availableDimensions.length === 0) {
