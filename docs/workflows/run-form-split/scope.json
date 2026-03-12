@@ -1,0 +1,19 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/runs/DefinitionPicker.tsx",
+    "cloud/apps/web/src/components/runs/RunConfigPanel.tsx",
+    "cloud/apps/web/src/components/runs/RunForm.tsx",
+    "cloud/apps/web/src/components/runs/useRunForm.ts",
+    "cloud/apps/web/tests/components/runs/RunForm.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/runs/DefinitionPicker.tsx",
+    "cloud/apps/web/src/components/runs/RunConfigPanel.tsx",
+    "cloud/apps/web/src/components/runs/RunForm.tsx",
+    "cloud/apps/web/src/components/runs/useRunForm.ts",
+    "cloud/apps/web/tests/components/runs/RunForm.test.tsx",
+    "docs/operations/codex-skills",
+    "docs/workflows/run-form-split",
+    "scripts/sync-codex-skills.py"
+  ]
+}

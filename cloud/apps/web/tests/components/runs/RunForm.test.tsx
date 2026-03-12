@@ -372,4 +372,32 @@ describe('RunForm', () => {
 
     expect(screen.getByText('[no condition selected]')).toBeInTheDocument();
   });
+
+  it('submits selected scenario ids for trial specific condition mode', async () => {
+    const user = userEvent.setup();
+    mockOnSubmit.mockResolvedValue(undefined);
+
+    render(
+      <RunForm
+        definitionId="def-1"
+        scenarioCount={100}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByText('GPT-4'));
+    await user.click(screen.getByText('Trial specific condition'));
+    await user.click(screen.getByRole('button', { name: 'n = 7' }));
+    await user.click(screen.getByText('Start Trial'));
+
+    expect(mockOnSubmit).toHaveBeenCalledWith({
+      definitionId: 'def-1',
+      models: ['gpt-4'],
+      samplePercentage: undefined,
+      samplesPerScenario: 1,
+      scenarioIds: ['scenario-1'],
+      finalTrial: false,
+    });
+  });
 });
