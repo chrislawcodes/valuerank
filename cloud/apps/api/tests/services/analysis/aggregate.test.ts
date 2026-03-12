@@ -379,4 +379,88 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       aggregateIneligibilityReason: null,
     });
   });
+
+  it('preserves worker payload shaping and normalized aggregate artifacts after the split', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 5}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } }, orientationFlipped: false },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } }, orientationFlipped: true },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: {
+        'gpt-4': [scenarioIds[0]!, scenarioIds[0]!, scenarioIds[1]!, scenarioIds[1]!],
+      },
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    expect(spawnPython).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        aggregateSemantics: expect.objectContaining({
+          plannedScenarioIds: scenarioIds,
+          minRepeatCoverageCount: 3,
+          minRepeatCoverageShare: 0.2,
+          lowCoverageCautionThreshold: 5,
+          driftWarningThreshold: 0.25,
+        }),
+        transcripts: expect.arrayContaining([
+          expect.objectContaining({
+            scenarioId: scenarioIds[1],
+            orientationFlipped: true,
+            summary: expect.objectContaining({
+              score: 5,
+              values: {
+                ValueA: 'deprioritized',
+                ValueB: 'prioritized',
+              },
+            }),
+          }),
+        ]),
+      }),
+      expect.any(Object),
+    );
+
+    const aggregateAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: {
+        analysisType: 'AGGREGATE',
+        run: { definitionId: definition.id },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    expect(aggregateAnalysis.output).toMatchObject({
+      methodsUsed: {
+        aggregateSemantics: 'same-signature-v1',
+        codeVersion: '1.2.0',
+      },
+      visualizationData: {
+        scenarioDimensions: {
+          [scenarioIds[0]!]: { stakes: 1 },
+          [scenarioIds[1]!]: { stakes: 2 },
+        },
+      },
+      varianceAnalysis: {
+        isMultiSample: true,
+        orientationCorrectedCount: 1,
+      },
+    });
+  });
 });
