@@ -16,10 +16,6 @@ import {
   computeFullBTScores,
   computeSmoothedLogOddsScore,
   DOMAIN_ANALYSIS_VALUE_KEYS,
-  DomainAnalysisConditionDetail,
-  DomainAnalysisValueCounts,
-  DomainAnalysisValueKey,
-  DomainAnalysisVignetteDetail,
   getMissingReasonLabel,
   hydrateDefinitionAncestors,
   incrementPairwiseWin,
@@ -28,6 +24,12 @@ import {
   resolveSignatureRuns,
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
+} from './shared.js';
+import type {
+  DomainAnalysisConditionDetail,
+  DomainAnalysisValueCounts,
+  DomainAnalysisValueKey,
+  DomainAnalysisVignetteDetail,
 } from './shared.js';
 
 builder.queryField('domainAnalysis', (t) =>

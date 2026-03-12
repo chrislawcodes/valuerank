@@ -8,7 +8,6 @@ import {
   DomainTrialRunStatusRef,
 } from './types.js';
 import {
-  DomainTrialPlanCellEstimate,
   formatRunSignature,
   formatVnewLabel,
   formatVnewSignature,
@@ -16,6 +15,7 @@ import {
   selectLatestDefinitionPerLineage,
   supportsTemperature,
 } from './shared.js';
+import type { DomainTrialPlanCellEstimate } from './shared.js';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { parseTemperature } from '../../../utils/temperature.js';
 
