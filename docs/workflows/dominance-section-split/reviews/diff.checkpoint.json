@@ -1,0 +1,25 @@
+{
+  "feature_slug": "dominance-section-split",
+  "stage": "diff",
+  "artifact_path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/implementation.diff.patch",
+  "git_base_ref": "",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "correctness",
+      "stage": "diff",
+      "path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/diff.codex.correctness.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "regression",
+      "stage": "diff",
+      "path": "/Users/chrislaw/valuerank-dominance-section-split/docs/workflows/dominance-section-split/reviews/diff.gemini.regression.review.md",
+      "context_paths": []
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}
