@@ -1,0 +1,22 @@
+{
+  "feature_slug": "definition-mutation-split",
+  "stage": "spec",
+  "artifact_path": "/private/tmp/valuerank-definition-mutation-split/docs/workflows/definition-mutation-split/spec.md",
+  "git_base_ref": "origin/main",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "architecture",
+      "stage": "spec",
+      "path": "/private/tmp/valuerank-definition-mutation-split/docs/workflows/definition-mutation-split/reviews/spec.codex.architecture.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements",
+      "stage": "spec",
+      "path": "/private/tmp/valuerank-definition-mutation-split/docs/workflows/definition-mutation-split/reviews/spec.gemini.requirements.review.md",
+      "context_paths": []
+    }
+  ]
+}
