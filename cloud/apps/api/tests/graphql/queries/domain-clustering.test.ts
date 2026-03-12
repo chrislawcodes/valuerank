@@ -35,6 +35,7 @@ describe('cosineSimilarity', () => {
   it('returns 0 for zero vector', () => {
     expect(cosineSimilarity([0, 0], [1, 2])).toBe(0);
     expect(cosineSimilarity([1, 2], [0, 0])).toBe(0);
+    expect(cosineSimilarity([0, 0], [0, 0])).toBe(0);
   });
 
   it('computes known value correctly', () => {

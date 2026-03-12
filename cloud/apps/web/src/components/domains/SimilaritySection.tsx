@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
+import { cosineSimilarity } from '@valuerank/shared';
 import { VALUES, type ModelEntry } from '../../data/domainAnalysisData';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
@@ -11,21 +12,6 @@ type PairMetric = {
   similarity: number;
   distance: number;
 };
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let aNorm = 0;
-  let bNorm = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
-    dot += av * bv;
-    aNorm += av * av;
-    bNorm += bv * bv;
-  }
-  if (aNorm === 0 || bNorm === 0) return 0;
-  return dot / (Math.sqrt(aNorm) * Math.sqrt(bNorm));
-}
 
 function getSimilarityColor(value: number): string {
   const clamped = Math.max(-1, Math.min(1, value));

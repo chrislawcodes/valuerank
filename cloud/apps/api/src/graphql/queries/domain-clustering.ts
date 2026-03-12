@@ -1,3 +1,5 @@
+import { cosineSimilarity } from '@valuerank/shared';
+
 /**
  * domain-clustering.ts
  *
@@ -69,21 +71,7 @@ const MIN_MODELS_FOR_CLUSTERING = 3;
 /**
  * Compute cosine similarity between two numeric vectors.
  */
-export function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let aNorm = 0;
-  let bNorm = 0;
-  for (let i = 0; i < a.length; i++) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
-    dot += av * bv;
-    aNorm += av * av;
-    bNorm += bv * bv;
-  }
-  if (aNorm === 0 && bNorm === 0) return 1; // two zero vectors are identical
-  if (aNorm === 0 || bNorm === 0) return 0;
-  return dot / (Math.sqrt(aNorm) * Math.sqrt(bNorm));
-}
+export { cosineSimilarity };
 
 /**
  * Build N×N cosine distance matrix.
