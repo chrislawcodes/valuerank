@@ -459,13 +459,15 @@ function SummaryCell({
   children,
   title,
   showInfoIcon = false,
+  align = 'left',
 }: {
   children: ReactNode;
   title?: string;
   showInfoIcon?: boolean;
+  align?: 'left' | 'center';
 }) {
   return (
-    <div className="flex items-center gap-1 truncate">
+    <div className={`flex items-center gap-1 truncate ${align === 'center' ? 'justify-center' : ''}`}>
       <div className="truncate" aria-label={title}>
         {children}
       </div>
@@ -498,7 +500,7 @@ function PatternMetricButton({
   const value = metrics.classifiedCount === 0 ? 0 : count / metrics.classifiedCount;
 
   if (count === 0) {
-    return <SummaryCell title={title}>{formatPercent(value)}</SummaryCell>;
+    return <SummaryCell title={title} align="center">{formatPercent(value)}</SummaryCell>;
   }
 
   return (
