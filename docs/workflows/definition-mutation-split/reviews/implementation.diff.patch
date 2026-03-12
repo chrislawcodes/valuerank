@@ -1,0 +1,855 @@
+diff --git a/cloud/apps/api/src/graphql/mutations/definition.ts b/cloud/apps/api/src/graphql/mutations/definition.ts
+index a795771..2db9b70 100644
+--- a/cloud/apps/api/src/graphql/mutations/definition.ts
++++ b/cloud/apps/api/src/graphql/mutations/definition.ts
+@@ -1,849 +1 @@
+-import { builder } from '../builder.js';
+-import {
+-  db,
+-  softDeleteDefinition,
+-  createInheritingContent,
+-  createPartialContent,
+-  resolveDefinitionContent,
+-} from '@valuerank/db';
+-import type { Prisma, Dimension } from '@valuerank/db';
+-import { DefinitionRef } from '../types/refs.js';
+-import { queueScenarioExpansion, cancelScenarioExpansion } from '../../services/scenario/index.js';
+-import { createAuditLog } from '../../services/audit/index.js';
+-import { z } from 'zod';
+-
+-const CURRENT_SCHEMA_VERSION = 2;
+-
+-/**
+- * Ensures content has schema_version field.
+- * If not present, adds the current version.
+- */
+-function ensureSchemaVersion(
+-  content: Record<string, unknown>
+-): Prisma.InputJsonValue {
+-  // If schema_version exists, keep it; otherwise add current version
+-  if (!('schema_version' in content)) {
+-    return { schema_version: CURRENT_SCHEMA_VERSION, ...content };
+-  }
+-
+-  return content as Prisma.InputJsonValue;
+-}
+-
+-// Zod schema for basic object validation of content
+-const zContentObject = z.record(z.unknown());
+-
+-function normalizeJsonValue(value: unknown): unknown {
+-  if (Array.isArray(value)) {
+-    return value.map(normalizeJsonValue);
+-  }
+-
+-  if (value !== null && typeof value === 'object') {
+-    const sortedEntries = Object.entries(value as Record<string, unknown>)
+-      .sort(([a], [b]) => a.localeCompare(b))
+-      .map(([key, child]) => [key, normalizeJsonValue(child)] as const);
+-    return Object.fromEntries(sortedEntries);
+-  }
+-
+-  return value;
+-}
+-
+-function jsonValuesEqual(a: unknown, b: unknown): boolean {
+-  return JSON.stringify(normalizeJsonValue(a)) === JSON.stringify(normalizeJsonValue(b));
+-}
+-
+-function stripRootSchemaVersion(value: unknown): unknown {
+-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+-    return value;
+-  }
+-
+-  const { schema_version: _schemaVersion, ...rest } = value as Record<string, unknown>;
+-  return rest;
+-}
+-
+-// Input type for creating a definition
+-const CreateDefinitionInput = builder.inputType('CreateDefinitionInput', {
+-  fields: (t) => ({
+-    name: t.string({
+-      required: true,
+-      description: 'Name of the definition',
+-      validate: {
+-        minLength: [1, { message: 'Name is required' }],
+-        maxLength: [255, { message: 'Name must be 255 characters or less' }],
+-      },
+-    }),
+-    content: t.field({
+-      type: 'JSON',
+-      required: true,
+-      description: 'JSONB content for the definition',
+-    }),
+-    parentId: t.string({
+-      required: false,
+-      description: 'Optional parent definition ID for forking',
+-    }),
+-    preambleVersionId: t.string({
+-      required: false,
+-      description: 'ID of the preamble version to use',
+-    }),
+-  }),
+-});
+-
+-// Mutation: createDefinition
+-builder.mutationField('createDefinition', (t) =>
+-  t.field({
+-    type: DefinitionRef,
+-    description: 'Create a new definition. Automatically adds schema_version to content if not present.',
+-    args: {
+-      input: t.arg({ type: CreateDefinitionInput, required: true }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { name, content, parentId, preambleVersionId } = args.input;
+-
+-      ctx.log.debug({ name, parentId, preambleVersionId }, 'Creating definition');
+-
+-      // Validate content is an object
+-      const parseResult = zContentObject.safeParse(content);
+-      if (!parseResult.success) {
+-        throw new Error('Content must be a JSON object');
+-      }
+-      const rawContent = parseResult.data;
+-
+-      // Ensure schema_version is present
+-      const processedContent = ensureSchemaVersion(rawContent);
+-
+-      // If parentId provided, verify it exists
+-      if (parentId !== null && parentId !== undefined && parentId !== '') {
+-        const parent = await db.definition.findUnique({
+-          where: { id: parentId },
+-        });
+-        if (!parent) {
+-          throw new Error(`Parent definition not found: ${parentId}`);
+-        }
+-      }
+-
+-      // Verify preamble version if provided
+-      if (preambleVersionId !== null && preambleVersionId !== undefined && preambleVersionId !== '') {
+-        const preambleCheck = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+-        if (!preambleCheck) {
+-          throw new Error(`Preamble version not found: ${preambleVersionId}`);
+-        }
+-      }
+-
+-      const definition = await db.definition.create({
+-        data: {
+-          name,
+-          content: processedContent,
+-          parentId: parentId ?? null,
+-          preambleVersionId: preambleVersionId ?? null,
+-          createdByUserId: ctx.user?.id ?? null,
+-        },
+-      });
+-
+-      ctx.log.info({ definitionId: definition.id, name }, 'Definition created');
+-
+-      // Queue async scenario expansion
+-      const queueResult = await queueScenarioExpansion(definition.id, 'create');
+-      ctx.log.info(
+-        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+-        'Scenario expansion queued'
+-      );
+-
+-      // Audit log (non-blocking)
+-      void createAuditLog({
+-        action: 'CREATE',
+-        entityType: 'Definition',
+-        entityId: definition.id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { name },
+-      });
+-
+-      return definition;
+-    },
+-  })
+-);
+-
+-// Input type for forking a definition
+-const ForkDefinitionInput = builder.inputType('ForkDefinitionInput', {
+-  fields: (t) => ({
+-    parentId: t.string({
+-      required: true,
+-      description: 'ID of the definition to fork from',
+-    }),
+-    name: t.string({
+-      required: true,
+-      description: 'Name for the forked definition',
+-      validate: {
+-        minLength: [1, { message: 'Name is required' }],
+-        maxLength: [255, { message: 'Name must be 255 characters or less' }],
+-      },
+-    }),
+-    content: t.field({
+-      type: 'JSON',
+-      required: false,
+-      description: 'Optional content override. If not provided, inherits everything from parent (stores minimal v2 content).',
+-    }),
+-    inheritAll: t.boolean({
+-      required: false,
+-      description: 'If true, fork with minimal content (inherit everything). Default: true. Set to false to copy parent content.',
+-    }),
+-  }),
+-});
+-
+-// Mutation: forkDefinition
+-builder.mutationField('forkDefinition', (t) =>
+-  t.field({
+-    type: DefinitionRef,
+-    description: 'Fork an existing definition. By default inherits all content from parent (sparse v2 storage).',
+-    args: {
+-      input: t.arg({ type: ForkDefinitionInput, required: true }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { parentId, name, content, inheritAll = true } = args.input;
+-
+-      ctx.log.debug({ parentId, name, inheritAll, hasContent: content !== null && content !== undefined }, 'Forking definition');
+-
+-      // Fetch parent - required for fork
+-      const parent = await db.definition.findUnique({
+-        where: { id: parentId },
+-      });
+-
+-      if (!parent) {
+-        throw new Error(`Parent definition not found: ${parentId}`);
+-      }
+-
+-      // Determine content based on options
+-      let finalContent: Prisma.InputJsonValue;
+-
+-      if (content !== null && content !== undefined) {
+-        // Explicit content provided - use as partial overrides
+-        const parseResult = zContentObject.safeParse(content);
+-        if (!parseResult.success) {
+-          throw new Error('Content must be a JSON object');
+-        }
+-        const contentObj = parseResult.data;
+-
+-        // Create v2 content with only provided fields as overrides
+-        finalContent = createPartialContent({
+-
+-          template: typeof contentObj.template === 'string' ? contentObj.template : undefined,
+-          dimensions: Array.isArray(contentObj.dimensions) ? contentObj.dimensions as Dimension[] : undefined,
+-          matching_rules: typeof contentObj.matching_rules === 'string' ? contentObj.matching_rules : undefined,
+-        }) as Prisma.InputJsonValue;
+-
+-        ctx.log.debug({ overrides: Object.keys(contentObj) }, 'Fork with partial overrides');
+-      } else if (inheritAll !== false) {
+-        // Inherit everything - store minimal v2 content
+-        finalContent = createInheritingContent() as Prisma.InputJsonValue;
+-        ctx.log.debug('Fork with full inheritance (minimal content)');
+-      } else {
+-        // inheritAll=false and no content - copy parent content (legacy behavior)
+-        finalContent = parent.content as Prisma.InputJsonValue;
+-        ctx.log.debug('Fork with copied parent content (legacy mode)');
+-      }
+-
+-      const definition = await db.definition.create({
+-        data: {
+-          name,
+-          content: finalContent,
+-          parentId,
+-          // Inherit preamble version from parent
+-          preambleVersionId: parent.preambleVersionId,
+-          createdByUserId: ctx.user?.id ?? null,
+-        },
+-      });
+-
+-      ctx.log.info(
+-        { definitionId: definition.id, name, parentId, inheritAll: inheritAll !== false },
+-        'Definition forked'
+-      );
+-
+-      // Queue async scenario expansion
+-      const queueResult = await queueScenarioExpansion(definition.id, 'fork');
+-      ctx.log.info(
+-        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+-        'Scenario expansion queued for fork'
+-      );
+-
+-      // Audit log (non-blocking)
+-      void createAuditLog({
+-        action: 'CREATE',
+-        entityType: 'Definition',
+-        entityId: definition.id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { name, parentId, inheritAll: inheritAll !== false },
+-      });
+-
+-      return definition;
+-    },
+-  })
+-);
+-
+-// Input type for updating a definition
+-const UpdateDefinitionInput = builder.inputType('UpdateDefinitionInput', {
+-  fields: (t) => ({
+-    name: t.string({
+-      required: false,
+-      description: 'Updated name (optional)',
+-      validate: {
+-        minLength: [1, { message: 'Name cannot be empty' }],
+-        maxLength: [255, { message: 'Name must be 255 characters or less' }],
+-      },
+-    }),
+-    content: t.field({
+-      type: 'JSON',
+-      required: false,
+-      description: 'Updated content (optional, replaces entire content if provided)',
+-    }),
+-    preambleVersionId: t.string({
+-      required: false,
+-      description: 'Update preamble version ID',
+-    }),
+-  }),
+-});
+-
+-// Input type for updating specific content fields with inheritance support
+-const UpdateDefinitionContentInput = builder.inputType('UpdateDefinitionContentInput', {
+-  fields: (t) => ({
+-
+-    template: t.string({
+-      required: false,
+-      description: 'Update template. Set to empty string to clear override and inherit from parent.',
+-    }),
+-    dimensions: t.field({
+-      type: 'JSON',
+-      required: false,
+-      description: 'Update dimensions array. Set to null to clear override and inherit from parent.',
+-    }),
+-    matchingRules: t.string({
+-      required: false,
+-      description: 'Update matching rules. Set to empty string to clear override.',
+-    }),
+-    clearOverrides: t.stringList({
+-      required: false,
+-      description: 'List of fields to clear local override for (inherit from parent). Valid values: template, dimensions, matching_rules',
+-    }),
+-  }),
+-});
+-
+-// Mutation: updateDefinition
+-builder.mutationField('updateDefinition', (t) =>
+-  t.field({
+-    type: DefinitionRef,
+-    description: 'Update an existing definition. Note: If definition has runs, consider forking instead to preserve history.',
+-    args: {
+-      id: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to update',
+-      }),
+-      input: t.arg({ type: UpdateDefinitionInput, required: true }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { id, input } = args;
+-      const { name, content, preambleVersionId } = input;
+-
+-      ctx.log.debug({ definitionId: id, hasName: name !== null && name !== undefined, hasContent: content !== null && content !== undefined, hasPreamble: preambleVersionId !== undefined }, 'Updating definition');
+-
+-      // Check if definition exists
+-      const existing = await db.definition.findUnique({
+-        where: { id },
+-      });
+-
+-      if (!existing) {
+-        throw new Error(`Definition not found: ${id}`);
+-      }
+-
+-      // Build update data using UncheckedUpdateInput to allow raw ID access
+-      // Using partial type to avoid 'any'
+-      const updateData: Prisma.DefinitionUncheckedUpdateInput = {};
+-      let needsVersionIncrement = false;
+-      let hasContentChange = false;
+-      const hasNameChange = name !== null && name !== undefined && name !== existing.name;
+-      let hasPreambleChange = false;
+-      let hasSchemaOnlyContentDifference = false;
+-
+-      if (name !== null && name !== undefined) {
+-        updateData.name = name;
+-      }
+-
+-      if (content !== null && content !== undefined) {
+-        // Validate content is an object
+-        const parseResult = zContentObject.safeParse(content);
+-        if (!parseResult.success) {
+-          throw new Error('Content must be a JSON object');
+-        }
+-        const processedContent = ensureSchemaVersion(parseResult.data);
+-        const exactContentEqual = jsonValuesEqual(existing.content, processedContent);
+-        const equalIgnoringSchemaVersion = jsonValuesEqual(
+-          stripRootSchemaVersion(existing.content),
+-          stripRootSchemaVersion(processedContent)
+-        );
+-        const contentChanged = !exactContentEqual && !equalIgnoringSchemaVersion;
+-        hasSchemaOnlyContentDifference = !exactContentEqual && equalIgnoringSchemaVersion;
+-
+-        if (contentChanged) {
+-          updateData.content = processedContent;
+-          needsVersionIncrement = true;
+-          hasContentChange = true;
+-        }
+-      }
+-
+-      if (preambleVersionId !== undefined) {
+-        if (preambleVersionId !== null) {
+-          const check = await db.preambleVersion.findUnique({ where: { id: preambleVersionId } });
+-          if (!check) throw new Error(`Preamble version not found: ${preambleVersionId}`);
+-          updateData.preambleVersionId = preambleVersionId;
+-        } else {
+-          updateData.preambleVersionId = null;
+-        }
+-
+-        // Preamble change is a content change effectively
+-        if (existing.preambleVersionId !== preambleVersionId) {
+-          needsVersionIncrement = true;
+-          hasPreambleChange = true;
+-        }
+-      }
+-
+-      // Check if there's anything to update
+-      if (Object.keys(updateData).length === 0) {
+-        ctx.log.debug({ definitionId: id }, 'No changes to apply');
+-        return existing;
+-      }
+-
+-      if (needsVersionIncrement) {
+-        // Increment version on content or preamble change
+-        updateData.version = { increment: 1 };
+-        ctx.log.info(
+-          {
+-            definitionId: id,
+-            currentVersion: existing.version,
+-            nextVersion: existing.version + 1,
+-            hasNameChange,
+-            hasContentChange,
+-            hasPreambleChange,
+-            hasSchemaOnlyContentDifference,
+-          },
+-          'Definition version incremented'
+-        );
+-      } else {
+-        ctx.log.debug(
+-          {
+-            definitionId: id,
+-            version: existing.version,
+-            hasNameChange,
+-            hasContentChange,
+-            hasPreambleChange,
+-            hasSchemaOnlyContentDifference,
+-          },
+-          'Definition version unchanged'
+-        );
+-      }
+-
+-      const definition = await db.definition.update({
+-        where: { id },
+-        data: updateData,
+-      });
+-
+-      ctx.log.info({ definitionId: id, name: definition.name }, 'Definition updated');
+-
+-      // Queue async scenario re-expansion only when content actually changed
+-      if (hasContentChange) {
+-        const queueResult = await queueScenarioExpansion(definition.id, 'update');
+-        ctx.log.info(
+-          { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+-          'Scenario re-expansion queued after update'
+-        );
+-      }
+-
+-      // Audit log (non-blocking)
+-      void createAuditLog({
+-        action: 'UPDATE',
+-        entityType: 'Definition',
+-        entityId: definition.id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { updatedFields: Object.keys(updateData) },
+-      });
+-
+-      return definition;
+-    },
+-  })
+-);
+-
+-// Mutation: updateDefinitionContent - granular content updates with inheritance support
+-builder.mutationField('updateDefinitionContent', (t) =>
+-  t.field({
+-    type: DefinitionRef,
+-    description: 'Update specific content fields of a definition. Supports clearing overrides to inherit from parent.',
+-    args: {
+-      id: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to update',
+-      }),
+-      input: t.arg({ type: UpdateDefinitionContentInput, required: true }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { id, input } = args;
+-      const { template, dimensions, matchingRules, clearOverrides } = input;
+-
+-      ctx.log.debug(
+-        { definitionId: id, clearOverrides, hasTemplate: template !== undefined },
+-        'Updating definition content'
+-      );
+-
+-      // Check if definition exists
+-      const existing = await db.definition.findUnique({
+-        where: { id },
+-      });
+-
+-      if (!existing) {
+-        throw new Error(`Definition not found: ${id}`);
+-      }
+-
+-      // Parse existing content
+-      const existingContent = existing.content as Record<string, unknown>;
+-
+-      // Build new content object (v2 format)
+-      const newContent: Record<string, unknown> = {
+-        schema_version: CURRENT_SCHEMA_VERSION,
+-      };
+-
+-      // Fields to clear (set to undefined to inherit)
+-      const fieldsToClear = new Set(clearOverrides ?? []);
+-
+-
+-
+-      // Template
+-      if (fieldsToClear.has('template')) {
+-        // Don't include template - will inherit from parent
+-      } else if (template !== undefined && template !== null) {
+-        newContent.template = template;
+-      } else if ('template' in existingContent) {
+-        newContent.template = existingContent.template;
+-      }
+-
+-      // Dimensions
+-      if (fieldsToClear.has('dimensions')) {
+-        // Don't include dimensions - will inherit from parent
+-      } else if (dimensions !== undefined && dimensions !== null) {
+-        if (!Array.isArray(dimensions)) {
+-          throw new Error('Dimensions must be an array');
+-        }
+-        newContent.dimensions = dimensions;
+-      } else if ('dimensions' in existingContent) {
+-        newContent.dimensions = existingContent.dimensions;
+-      }
+-
+-      // Matching rules
+-      if (fieldsToClear.has('matching_rules')) {
+-        // Don't include matching_rules - will inherit from parent
+-      } else if (matchingRules !== undefined && matchingRules !== null) {
+-        newContent.matching_rules = matchingRules;
+-      } else if ('matching_rules' in existingContent) {
+-        newContent.matching_rules = existingContent.matching_rules;
+-      }
+-
+-      const definition = await db.definition.update({
+-        where: { id },
+-        data: {
+-          content: newContent as Prisma.InputJsonValue,
+-        },
+-      });
+-
+-      ctx.log.info(
+-        { definitionId: id, clearedOverrides: Array.from(fieldsToClear) },
+-        'Definition content updated'
+-      );
+-
+-      // Queue async scenario re-expansion after content update
+-      const queueResult = await queueScenarioExpansion(definition.id, 'update');
+-      ctx.log.info(
+-        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+-        'Scenario re-expansion queued after content update'
+-      );
+-
+-      // Audit log (non-blocking)
+-      void createAuditLog({
+-        action: 'UPDATE',
+-        entityType: 'Definition',
+-        entityId: definition.id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { clearedOverrides: Array.from(fieldsToClear), contentUpdate: true },
+-      });
+-
+-      return definition;
+-    },
+-  })
+-);
+-
+-// Mutation: unforkDefinition - detach a forked definition from its parent.
+-builder.mutationField('unforkDefinition', (t) =>
+-  t.field({
+-    type: DefinitionRef,
+-    description: 'Detach a forked definition from its parent and snapshot inherited content locally.',
+-    args: {
+-      id: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to detach from parent',
+-      }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { id } = args;
+-
+-      ctx.log.debug({ definitionId: id }, 'Unforking definition');
+-
+-      const existing = await db.definition.findUnique({
+-        where: { id, deletedAt: null },
+-      });
+-
+-      if (!existing) {
+-        throw new Error(`Definition not found: ${id}`);
+-      }
+-
+-      if (existing.parentId === null) {
+-        throw new Error('Definition is already standalone');
+-      }
+-
+-      const oldParentId = existing.parentId;
+-      const resolved = await resolveDefinitionContent(id);
+-
+-      const definition = await db.definition.update({
+-        where: { id },
+-        data: {
+-          parentId: null,
+-          content: ensureSchemaVersion(resolved.resolvedContent as unknown as Record<string, unknown>),
+-          version: { increment: 1 },
+-        },
+-      });
+-
+-      // Queue async scenario re-expansion after detaching inheritance.
+-      const queueResult = await queueScenarioExpansion(definition.id, 'update');
+-      ctx.log.info(
+-        { definitionId: definition.id, jobId: queueResult.jobId, queued: queueResult.queued },
+-        'Scenario re-expansion queued after unfork'
+-      );
+-
+-      void createAuditLog({
+-        action: 'UPDATE',
+-        entityType: 'Definition',
+-        entityId: definition.id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { unforked: true, oldParentId },
+-      });
+-
+-      ctx.log.info({ definitionId: id, oldParentId }, 'Definition unforked');
+-
+-      return definition;
+-    },
+-  })
+-);
+-
+-// Result type for delete mutation
+-type DeleteDefinitionResultShape = {
+-  deletedIds: string[];
+-  count: number;
+-};
+-
+-const DeleteDefinitionResultRef = builder.objectRef<DeleteDefinitionResultShape>('DeleteDefinitionResult');
+-
+-builder.objectType(DeleteDefinitionResultRef, {
+-  description: 'Result of deleting a definition',
+-  fields: (t) => ({
+-    deletedIds: t.stringList({
+-      description: 'IDs of all definitions that were deleted (includes descendants)',
+-      resolve: (parent) => parent.deletedIds,
+-    }),
+-    count: t.exposeInt('count', {
+-      description: 'Total number of definitions deleted',
+-    }),
+-  }),
+-});
+-
+-// Mutation: deleteDefinition (soft delete)
+-builder.mutationField('deleteDefinition', (t) =>
+-  t.field({
+-    type: DeleteDefinitionResultRef,
+-    description: 'Soft delete a definition and all its descendants. Related scenarios and tags are also soft deleted.',
+-    args: {
+-      id: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to delete',
+-      }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { id } = args;
+-
+-      ctx.log.debug({ definitionId: id }, 'Deleting definition');
+-
+-      const result = await softDeleteDefinition(id, ctx.user?.id ?? null);
+-
+-      ctx.log.info(
+-        { definitionId: id, deletedCount: result.deletedCount },
+-        'Definition deleted'
+-      );
+-
+-      // Audit log for primary definition (non-blocking)
+-      void createAuditLog({
+-        action: 'DELETE',
+-        entityType: 'Definition',
+-        entityId: id,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { deletedIds: result.definitionIds, count: result.definitionIds.length },
+-      });
+-
+-      return {
+-        deletedIds: result.definitionIds,
+-        count: result.definitionIds.length,
+-      };
+-    },
+-  })
+-);
+-
+-// Result type for regenerate scenarios mutation
+-type RegenerateScenariosResultShape = {
+-  definitionId: string;
+-  jobId: string | null;
+-  queued: boolean;
+-};
+-
+-const RegenerateScenariosResultRef = builder.objectRef<RegenerateScenariosResultShape>('RegenerateScenariosResult');
+-
+-builder.objectType(RegenerateScenariosResultRef, {
+-  description: 'Result of triggering scenario regeneration',
+-  fields: (t) => ({
+-    definitionId: t.exposeString('definitionId', {
+-      description: 'ID of the definition being regenerated',
+-    }),
+-    jobId: t.exposeString('jobId', {
+-      nullable: true,
+-      description: 'ID of the queued expansion job (null if not queued)',
+-    }),
+-    queued: t.exposeBoolean('queued', {
+-      description: 'Whether a new expansion job was queued',
+-    }),
+-  }),
+-});
+-
+-// Mutation: regenerateScenarios - manually trigger scenario regeneration
+-builder.mutationField('regenerateScenarios', (t) =>
+-  t.field({
+-    type: RegenerateScenariosResultRef,
+-    description: 'Manually trigger scenario regeneration for a definition. Queues a new expansion job.',
+-    args: {
+-      definitionId: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to regenerate scenarios for',
+-      }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { definitionId } = args;
+-
+-      ctx.log.debug({ definitionId }, 'Manual scenario regeneration requested');
+-
+-      // Verify definition exists
+-      const definition = await db.definition.findUnique({
+-        where: { id: definitionId, deletedAt: null },
+-      });
+-
+-      if (!definition) {
+-        throw new Error(`Definition not found: ${definitionId}`);
+-      }
+-
+-      // Queue the expansion job
+-      const queueResult = await queueScenarioExpansion(definitionId, 'update');
+-
+-      ctx.log.info(
+-        { definitionId, jobId: queueResult.jobId, queued: queueResult.queued },
+-        'Manual scenario regeneration queued'
+-      );
+-
+-      // Audit log (non-blocking) - ACTION type for regeneration
+-      void createAuditLog({
+-        action: 'ACTION',
+-        entityType: 'Definition',
+-        entityId: definitionId,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { action: 'regenerateScenarios', jobId: queueResult.jobId, queued: queueResult.queued },
+-      });
+-
+-      return {
+-        definitionId,
+-        jobId: queueResult.jobId,
+-        queued: queueResult.queued,
+-      };
+-    },
+-  })
+-);
+-
+-// Result type for cancel expansion mutation
+-type CancelExpansionResultShape = {
+-  definitionId: string;
+-  cancelled: boolean;
+-  jobId: string | null;
+-  message: string;
+-};
+-
+-const CancelExpansionResultRef = builder.objectRef<CancelExpansionResultShape>('CancelExpansionResult');
+-
+-builder.objectType(CancelExpansionResultRef, {
+-  description: 'Result of cancelling scenario expansion',
+-  fields: (t) => ({
+-    definitionId: t.exposeString('definitionId', {
+-      description: 'ID of the definition',
+-    }),
+-    cancelled: t.exposeBoolean('cancelled', {
+-      description: 'Whether an active job was cancelled',
+-    }),
+-    jobId: t.exposeString('jobId', {
+-      nullable: true,
+-      description: 'ID of the cancelled job (null if no active job)',
+-    }),
+-    message: t.exposeString('message', {
+-      description: 'Status message',
+-    }),
+-  }),
+-});
+-
+-// Mutation: cancelScenarioExpansion - cancel an in-progress expansion
+-builder.mutationField('cancelScenarioExpansion', (t) =>
+-  t.field({
+-    type: CancelExpansionResultRef,
+-    description: 'Cancel an in-progress scenario expansion for a definition.',
+-    args: {
+-      definitionId: t.arg.string({
+-        required: true,
+-        description: 'Definition ID to cancel expansion for',
+-      }),
+-    },
+-    resolve: async (_root, args, ctx) => {
+-      const { definitionId } = args;
+-
+-      ctx.log.debug({ definitionId }, 'Cancel scenario expansion requested');
+-
+-      // Verify definition exists
+-      const definition = await db.definition.findUnique({
+-        where: { id: definitionId, deletedAt: null },
+-      });
+-
+-      if (!definition) {
+-        throw new Error(`Definition not found: ${definitionId}`);
+-      }
+-
+-      // Cancel the expansion
+-      const result = await cancelScenarioExpansion(definitionId);
+-
+-      ctx.log.info(
+-        { definitionId, cancelled: result.cancelled, jobId: result.jobId },
+-        'Cancel expansion result'
+-      );
+-
+-      // Audit log (non-blocking)
+-      void createAuditLog({
+-        action: 'ACTION',
+-        entityType: 'Definition',
+-        entityId: definitionId,
+-        userId: ctx.user?.id ?? null,
+-        metadata: { action: 'cancelScenarioExpansion', cancelled: result.cancelled, jobId: result.jobId },
+-      });
+-
+-      return result;
+-    },
+-  })
+-);
++import './definition/index.js';
