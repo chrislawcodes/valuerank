@@ -1,0 +1,8 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": true,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  }
+}
