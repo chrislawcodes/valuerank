@@ -183,6 +183,7 @@ export function RunForm({
               ].map((option) => {
                 const selected = formState.launchMode === option.value;
                 return (
+                  // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
                   <button
                     key={option.value}
                     type="button"
