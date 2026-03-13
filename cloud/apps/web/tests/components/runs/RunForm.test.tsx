@@ -198,13 +198,14 @@ describe('RunForm', () => {
     // Submit
     await user.click(screen.getByText('Start Trial'));
 
-    expect(mockOnSubmit).toHaveBeenCalledWith({
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4'],
       samplePercentage: 10,
       samplesPerScenario: 1,
       finalTrial: false,
-    });
+      launchMode: 'STANDARD',
+    }));
   });
 
   it('shows cost estimate section when models are selected', async () => {
@@ -347,13 +348,52 @@ describe('RunForm', () => {
     // Submit
     await user.click(screen.getByText('Start Trial'));
 
-    expect(mockOnSubmit).toHaveBeenCalledWith({
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4', 'claude-3'],
       samplePercentage: 10,
       samplesPerScenario: 1,
       finalTrial: false,
-    });
+      launchMode: 'STANDARD',
+    }));
+  });
+
+  it('defaults Job Choice definitions to paired batch launch mode', async () => {
+    const user = userEvent.setup();
+    mockOnSubmit.mockResolvedValue(undefined);
+
+    render(
+      <RunForm
+        definitionId="job-choice-def-1"
+        definitionContent={{
+          schema_version: 1,
+          methodology: {
+            family: 'job-choice',
+            presentation_order: 'A_first',
+          },
+        }}
+        scenarioCount={10}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    expect(screen.getByText('Batch Type')).toBeInTheDocument();
+    const pairedModeButton = screen
+      .getByText('Methodology-safe default. Launches both the A-first and B-first Job Choice companions when both are available.')
+      .closest('button');
+    expect(pairedModeButton).not.toBeNull();
+    expect(pairedModeButton).toHaveClass('border-teal-500');
+    expect(screen.getByText(/currently configured as/i)).toHaveTextContent('A-first');
+
+    await user.click(screen.getByText('OpenAI'));
+    await user.click(screen.getByText('GPT-4'));
+    await user.click(screen.getAllByRole('button', { name: 'Start Paired Batch' }).at(-1)!);
+
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      definitionId: 'job-choice-def-1',
+      models: ['gpt-4'],
+      launchMode: 'PAIRED_BATCH',
+    }));
   });
 
   it('requires condition selection for trial specific condition mode', async () => {
@@ -391,13 +431,15 @@ describe('RunForm', () => {
     await user.click(screen.getByRole('button', { name: 'n = 7' }));
     await user.click(screen.getByText('Start Trial'));
 
-    expect(mockOnSubmit).toHaveBeenCalledWith({
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4'],
       samplePercentage: undefined,
       samplesPerScenario: 1,
       scenarioIds: ['scenario-1'],
       finalTrial: false,
-    });
+      launchMode: 'STANDARD',
+      temperature: undefined,
+    }));
   });
 });

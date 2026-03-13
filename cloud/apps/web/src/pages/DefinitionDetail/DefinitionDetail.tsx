@@ -37,6 +37,7 @@ import { DefinitionContentView } from './DefinitionContentView';
 import { DeleteDefinitionModal } from './DeleteDefinitionModal';
 import { RunFormModal } from './RunFormModal';
 import { UnforkDefinitionModal } from './UnforkDefinitionModal';
+import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
 
 export function DefinitionDetail() {
   const navigate = useNavigate();
@@ -299,6 +300,10 @@ export function DefinitionDetail() {
   }
 
   const childCount = definition.children?.length ?? 0;
+  const resolvedContent = definition.resolvedContent ?? definition.content;
+  const methodology = getDefinitionMethodology(resolvedContent);
+  const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition.domain?.name ?? null);
+  const startLabel = methodology?.family === 'job-choice' ? 'Start Paired Batch' : 'Start Trial';
 
   // View mode
   return (
@@ -309,11 +314,13 @@ export function DefinitionDetail() {
         scenarioCount={scenarioCount}
         isForked={Boolean(definition.parentId)}
         isUnforking={isUnforking}
+        methodologyLabel={methodologyLabel}
         onEdit={() => setIsEditing(true)}
         onFork={() => setShowForkDialog(true)}
         onUnfork={() => setShowUnforkConfirm(true)}
         onDelete={() => setShowDeleteConfirm(true)}
         onStartRun={() => setShowRunForm(true)}
+        startLabel={startLabel}
       />
 
       {/* Main content */}
@@ -362,7 +369,7 @@ export function DefinitionDetail() {
 
         {/* Content sections */}
         <DefinitionContentView
-          content={definition.resolvedContent ?? definition.content}
+          content={resolvedContent}
           preambleVersion={definition.preambleVersion}
         />
 
@@ -422,6 +429,8 @@ export function DefinitionDetail() {
         isOpen={showRunForm}
         definitionId={definition.id}
         definitionName={definition.name}
+        definitionContent={resolvedContent}
+        methodologyLabel={methodologyLabel}
         scenarioCount={scenarioCount}
         error={runError}
         isSubmitting={isStartingRun}

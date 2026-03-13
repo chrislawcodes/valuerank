@@ -46,6 +46,7 @@ Error:
 """
 
 import json
+import hashlib
 import re
 import sys
 from typing import Any, Optional
@@ -105,6 +106,7 @@ REFUSAL_PATTERN = re.compile(
 # Default summary model if none specified
 DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
 LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
+PARSER_VERSION = "job-choice-v1"
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -123,6 +125,124 @@ def validate_input(data: dict[str, Any]) -> None:
 
     if "turns" not in content or not isinstance(content["turns"], list):
         raise ValidationError(message="transcriptContent.turns must be an array")
+
+
+def normalize_for_match(text: str) -> str:
+    sanitized = text.replace("**", " ").replace("__", " ").replace("`", " ")
+    sanitized = re.sub(r"[^a-z0-9]+", " ", sanitized.lower())
+    return re.sub(r"\s+", " ", sanitized).strip()
+
+
+def build_response_text(transcript_content: dict[str, Any]) -> str:
+    turns = transcript_content.get("turns", [])
+    responses: list[str] = []
+    for turn in turns:
+        response = turn.get("targetResponse", "")
+        if isinstance(response, str) and response:
+            responses.append(response)
+    return "\n".join(responses).strip()
+
+
+def response_excerpt(text: str, limit: int = 280) -> str:
+    compact = re.sub(r"\s+", " ", text).strip()
+    return compact[:limit]
+
+
+def response_segments(text: str) -> list[str]:
+    segments: list[str] = []
+    for block in re.split(r"[\n\r]+", text):
+        stripped = block.strip()
+        if not stripped:
+            continue
+        segments.extend(
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", stripped)
+            if sentence.strip()
+        )
+    return segments
+
+
+def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, str]]:
+    turns = transcript_content.get("turns", [])
+    for turn in turns:
+        probe_prompt = turn.get("probePrompt")
+        if not isinstance(probe_prompt, str) or probe_prompt.strip() == "":
+            continue
+
+        numbered_labels: list[dict[str, str]] = []
+        bullet_labels: list[str] = []
+
+        for raw_line in probe_prompt.splitlines():
+            line = raw_line.strip()
+            if line == "":
+                continue
+
+            numbered_match = re.match(r"^(?P<code>[1-9]\d*)\s*-\s*(?P<label>.+)$", line)
+            if numbered_match:
+                numbered_labels.append(
+                    {
+                        "code": numbered_match.group("code"),
+                        "label": numbered_match.group("label").strip(),
+                    }
+                )
+                continue
+
+            bullet_match = re.match(r"^-\s+(?P<label>.+)$", line)
+            if bullet_match:
+                bullet_labels.append(bullet_match.group("label").strip())
+
+        if len(numbered_labels) >= 5:
+            return numbered_labels
+        if len(bullet_labels) == 5:
+            return [
+                {"code": code, "label": label}
+                for code, label in zip(["5", "4", "3", "2", "1"], bullet_labels)
+            ]
+
+    return []
+
+
+def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str]]:
+    if not text or not scale_labels:
+        return None, None
+
+    segments = response_segments(text)
+    if not segments:
+        return None, None
+
+    normalized_labels = [
+        {
+            "code": entry.get("code", ""),
+            "label": entry.get("label", ""),
+            "normalized": normalize_for_match(entry.get("label", "")),
+        }
+        for entry in scale_labels
+        if entry.get("label")
+    ]
+
+    for segment in segments:
+        normalized_segment = normalize_for_match(segment)
+        if normalized_segment == "":
+            continue
+
+        prefix_matches = [
+            entry
+            for entry in normalized_labels
+            if entry["normalized"]
+            and (
+                normalized_segment == entry["normalized"]
+                or normalized_segment.startswith(entry["normalized"] + " ")
+            )
+        ]
+
+        unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
+        if len(unique_prefix_matches) == 1:
+            match = unique_prefix_matches[0]
+            return match["code"], match["label"]
+        if len(unique_prefix_matches) > 1:
+            return None, None
+
+    return None, None
 
 
 def extract_decision_code_from_text(text: str) -> Optional[str]:
@@ -212,16 +332,17 @@ def extract_decision_code(transcript_content: dict[str, Any]) -> str:
     return result if result else "other"
 
 
-def build_llm_decision_prompt(transcript_content: dict[str, Any]) -> str:
+def build_llm_decision_prompt(
+    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
+) -> str:
     """Build strict prompt for fallback LLM decision classification."""
-    turns = transcript_content.get("turns", [])
-
-    # Format transcript for analysis (target responses only).
-    transcript_text = ""
-    for turn in turns:
-        response = turn.get("targetResponse", "")
-        if response:
-            transcript_text += f"{response}\n\n"
+    transcript_text = build_response_text(transcript_content)
+    scale_section = ""
+    if scale_labels:
+        formatted_labels = "\n".join(
+            f"- {entry['code']}: {entry['label']}" for entry in scale_labels
+        )
+        scale_section = f"Available scale labels:\n{formatted_labels}\n\n"
 
     return (
         "You are extracting a single final decision code from an AI response.\n"
@@ -230,19 +351,22 @@ def build_llm_decision_prompt(transcript_content: dict[str, Any]) -> str:
         "- refusal\n"
         "- other\n"
         "No explanation, no punctuation, no extra words.\n\n"
+        f"{scale_section}"
         "Transcript:\n"
         f"{transcript_text}\n"
         "\nAnswer:"
     )
 
 
-def classify_decision_with_llm(transcript_content: dict[str, Any]) -> str:
+def classify_decision_with_llm(
+    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
+) -> str:
     """
     Use fallback LLM to classify an unresolved decision.
 
     Returns decision code string, "refusal", or "other".
     """
-    prompt = build_llm_decision_prompt(transcript_content)
+    prompt = build_llm_decision_prompt(transcript_content, scale_labels)
     messages = [{"role": "user", "content": prompt}]
 
     try:
@@ -271,6 +395,60 @@ def classify_decision_with_llm(transcript_content: dict[str, Any]) -> str:
         return "other"
 
 
+def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any]:
+    response_text = build_response_text(transcript_content)
+    response_hash = hashlib.sha256(response_text.encode("utf-8")).hexdigest() if response_text else None
+    scale_labels = collect_scale_labels(transcript_content)
+
+    decision_code = extract_decision_code(transcript_content)
+    decision_source = "deterministic"
+    parse_class = "exact"
+    parse_path = "numeric_deterministic"
+    matched_label = None
+
+    if decision_code == "other" and scale_labels:
+        text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
+        if text_label_code is not None:
+            decision_code = text_label_code
+            parse_path = "text_label_exact"
+        else:
+            llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
+            if llm_decision_code != "other":
+                decision_code = llm_decision_code
+                decision_source = "llm"
+                parse_class = "fallback_resolved"
+                parse_path = "text_label_llm"
+            else:
+                parse_class = "ambiguous"
+                parse_path = "text_label_ambiguous"
+    elif decision_code == "other":
+        llm_decision_code = classify_decision_with_llm(transcript_content)
+        if llm_decision_code != "other":
+            decision_code = llm_decision_code
+            decision_source = "llm"
+            parse_class = "fallback_resolved"
+            parse_path = "numeric_llm"
+        else:
+            parse_class = "ambiguous"
+            parse_path = "numeric_ambiguous"
+
+    metadata = {
+        "parserVersion": PARSER_VERSION,
+        "parseClass": parse_class,
+        "parsePath": parse_path,
+        "responseSha256": response_hash,
+        "responseExcerpt": response_excerpt(response_text) if response_text else None,
+        "matchedLabel": matched_label,
+        "scaleLabels": scale_labels,
+    }
+
+    return {
+        "decisionCode": decision_code,
+        "decisionSource": decision_source,
+        "decisionMetadata": metadata,
+    }
+
+
 def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
     """
     Execute the summarization.
@@ -292,25 +470,27 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
     )
 
     try:
-        # Extract decision code from transcript (deterministic first, then LLM fallback).
-        decision_code = extract_decision_code(transcript_content)
-        decision_source = "deterministic"
-
-        if decision_code == "other":
-            llm_decision_code = classify_decision_with_llm(transcript_content)
-            if llm_decision_code != "other":
-                decision_code = llm_decision_code
-                decision_source = "llm"
+        decision_result = extract_decision_result(transcript_content)
+        decision_code = decision_result["decisionCode"]
+        decision_source = decision_result["decisionSource"]
+        decision_metadata = decision_result["decisionMetadata"]
 
         # Log appropriate message based on what we found (or didn't find)
-        if decision_source == "llm":
+        if decision_metadata["parsePath"] == "text_label_exact":
+            log.info(
+                "Resolved decision code from text scale label",
+                transcriptId=transcript_id,
+                rating=decision_code,
+                matchedLabel=decision_metadata["matchedLabel"],
+            )
+        elif decision_source == "llm":
             log.info(
                 "Resolved decision code with fallback LLM",
                 transcriptId=transcript_id,
                 rating=decision_code,
                 fallbackModel=LLM_FALLBACK_MODEL,
             )
-        elif decision_code == "other":
+        elif decision_metadata["parseClass"] == "ambiguous":
             log.info(
                 "Could not extract deterministic rating from transcript",
                 transcriptId=transcript_id,
@@ -338,6 +518,7 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
                 "decisionCode": decision_code,
                 "decisionSource": decision_source,
                 "decisionText": decision_text,
+                "decisionMetadata": decision_metadata,
             },
         }
 

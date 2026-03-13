@@ -42,7 +42,9 @@ vi.mock('../../src/components/runs/TranscriptList', () => ({
 }));
 
 vi.mock('../../src/components/runs/TranscriptViewer', () => ({
-  TranscriptViewer: () => null,
+  TranscriptViewer: ({ transcript }: { transcript: { id: string } }) => (
+    <div data-testid="transcript-viewer">Viewer transcript: {transcript.id}</div>
+  ),
 }));
 
 function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
@@ -167,6 +169,14 @@ describe('AnalysisTranscripts', () => {
     renderPage('/analysis/run-1/transcripts?modelId=model1&repeatPattern=stable&conditionIds=');
 
     expect(screen.getByText('No transcripts found for these conditions.')).toBeInTheDocument();
+  });
+
+  it('opens a direct transcript exemplar link without cell filter params', () => {
+    renderPage('/analysis/run-1/transcripts?transcriptId=tx-2');
+
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+    expect(screen.queryByText('Missing filter parameters. Return to the pivot table and click a cell to view transcripts.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('transcript-viewer')).toHaveTextContent('Viewer transcript: tx-2');
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

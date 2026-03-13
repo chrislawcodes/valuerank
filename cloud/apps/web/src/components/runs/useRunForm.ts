@@ -9,12 +9,14 @@ export type RunFormState = {
   samplePercentage: number;
   samplesPerScenario: number;
   temperatureInput: string;
+  launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH';
 };
 
 type UseRunFormOptions = {
   definitionId: string;
   scenarioCount?: number;
   initialTemperature?: number | null;
+  defaultLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH';
   onSubmit: (input: StartRunInput) => Promise<void>;
   models: AvailableModel[];
   loadingModels: boolean;
@@ -37,6 +39,7 @@ type UseRunFormResult = {
   handleSampleChange: (value: number) => void;
   handleSamplesPerScenarioChange: (value: number) => void;
   handleTemperatureChange: (value: string) => void;
+  handleLaunchModeChange: (launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH') => void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleCloseConditionModal: () => void;
   handleImmediateConditionSelect: (rowLevel: string, colLevel: string, scenarioIds: string[]) => void;
@@ -46,6 +49,7 @@ export function useRunForm({
   definitionId,
   scenarioCount,
   initialTemperature = null,
+  defaultLaunchMode = 'PAIRED_BATCH',
   onSubmit,
   models,
   loadingModels,
@@ -55,6 +59,7 @@ export function useRunForm({
     samplePercentage: 10,
     samplesPerScenario: 1,
     temperatureInput: initialTemperature === null ? '' : String(initialTemperature),
+    launchMode: defaultLaunchMode,
   });
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasUserChangedSelection, setHasUserChangedSelection] = useState(false);
@@ -103,6 +108,13 @@ export function useRunForm({
     }));
   }, [initialTemperature]);
 
+  useEffect(() => {
+    setFormState((previousState) => ({
+      ...previousState,
+      launchMode: defaultLaunchMode,
+    }));
+  }, [defaultLaunchMode]);
+
   const handleModelSelectionChange = useCallback((selectedModels: string[]) => {
     setHasUserChangedSelection(true);
     setFormState((previousState) => ({
@@ -136,6 +148,14 @@ export function useRunForm({
     setFormState((previousState) => ({
       ...previousState,
       temperatureInput: value,
+    }));
+    setValidationError(null);
+  }, []);
+
+  const handleLaunchModeChange = useCallback((launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH') => {
+    setFormState((previousState) => ({
+      ...previousState,
+      launchMode,
     }));
     setValidationError(null);
   }, []);
@@ -227,6 +247,7 @@ export function useRunForm({
     handleSampleChange,
     handleSamplesPerScenarioChange,
     handleTemperatureChange,
+    handleLaunchModeChange,
     handleSubmit,
     handleCloseConditionModal,
     handleImmediateConditionSelect,

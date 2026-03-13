@@ -128,6 +128,7 @@ export function RerunDialog({
           {/* Re-run form */}
           <RunForm
             definitionId={run.definitionId}
+            definitionContent={run.definition?.content}
             scenarioCount={scenarioCount}
             initialTemperature={run.config?.temperature ?? null}
             onSubmit={handleSubmit}

@@ -1,5 +1,5 @@
 import { db } from '@valuerank/db';
-import { AuthenticationError } from '@valuerank/shared';
+import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
 import { RunRef } from '../../types/refs.js';
@@ -27,8 +27,101 @@ type StartRunArgs = {
   priority?: string | null;
   experimentId?: string | number | null;
   finalTrial?: boolean | null;
+  launchMode?: string | null;
   scenarioIds?: Array<string | number> | null;
 };
+
+type DefinitionMethodology = {
+  family?: string;
+  response_scale?: string;
+  presentation_order?: 'A_first' | 'B_first';
+  pair_key?: string;
+};
+
+function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    return null;
+  }
+
+  const methodology = (content as Record<string, unknown>).methodology;
+  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
+    return null;
+  }
+
+  const record = methodology as Record<string, unknown>;
+  return {
+    family: typeof record.family === 'string' ? record.family : undefined,
+    response_scale: typeof record.response_scale === 'string' ? record.response_scale : undefined,
+    presentation_order:
+      record.presentation_order === 'A_first' || record.presentation_order === 'B_first'
+        ? record.presentation_order
+        : undefined,
+    pair_key: typeof record.pair_key === 'string' ? record.pair_key : undefined,
+  };
+}
+
+async function resolvePairedJobChoiceDefinition(
+  definitionId: string,
+): Promise<{ primary: { id: string; content: unknown }; companionId: string; presentationOrder: 'A_first' | 'B_first' }> {
+  const definition = await db.definition.findUnique({
+    where: { id: definitionId },
+    select: {
+      id: true,
+      domainId: true,
+      content: true,
+      deletedAt: true,
+    },
+  });
+
+  if (!definition || definition.deletedAt !== null) {
+    throw new NotFoundError('Definition', definitionId);
+  }
+
+  const methodology = getDefinitionMethodology(definition.content);
+  if (methodology?.family !== 'job-choice' || !methodology.pair_key || !methodology.presentation_order) {
+    throw new ValidationError('Paired batches require a Job Choice vignette with paired-order metadata.');
+  }
+
+  const companionOrder = methodology.presentation_order === 'A_first' ? 'B_first' : 'A_first';
+  const companion = await db.definition.findFirst({
+    where: {
+      id: { not: definition.id },
+      deletedAt: null,
+      domainId: definition.domainId,
+      content: {
+        path: ['methodology', 'family'],
+        equals: 'job-choice',
+      },
+      AND: [
+        {
+          content: {
+            path: ['methodology', 'pair_key'],
+            equals: methodology.pair_key,
+          },
+        },
+        {
+          content: {
+            path: ['methodology', 'presentation_order'],
+            equals: companionOrder,
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!companion) {
+    throw new ValidationError(
+      'Paired batch launch requires both A-first and B-first Job Choice definitions. Generate both companion definitions first.'
+    );
+  }
+
+  return {
+    primary: { id: definition.id, content: definition.content },
+    companionId: companion.id,
+    presentationOrder: methodology.presentation_order,
+  };
+}
 
 async function loadRunForResult(runId: string, ctx: Context) {
   const run = await ctx.loaders.run.load(runId);
@@ -81,9 +174,8 @@ builder.mutationField('startRun', (t) =>
       const activeModelIdSet = new Set(activeModelsForAliases.map((model) => model.modelId));
 
       const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
-
-      const result = await startRunService({
-        definitionId: String(input.definitionId),
+      const launchMode = input.launchMode ?? 'STANDARD';
+      const sharedInput = {
         models,
         samplePercentage: input.samplePercentage ?? undefined,
         sampleSeed: input.sampleSeed ?? undefined,
@@ -97,7 +189,54 @@ builder.mutationField('startRun', (t) =>
         userId,
         finalTrial: input.finalTrial ?? false,
         scenarioIds: input.scenarioIds?.map((scenarioId) => String(scenarioId)),
-      });
+      };
+
+      let result;
+      let pairedRunIds: string[] | undefined;
+
+      if (launchMode === 'PAIRED_BATCH') {
+        const pair = await resolvePairedJobChoiceDefinition(String(input.definitionId));
+        const batchGroupId = crypto.randomUUID();
+
+        const primaryRun = await startRunService({
+          definitionId: pair.primary.id,
+          ...sharedInput,
+          configExtras: {
+            jobChoiceLaunchMode: launchMode,
+            jobChoiceBatchGroupId: batchGroupId,
+            jobChoicePresentationOrder: pair.presentationOrder,
+            methodologySafe: true,
+          },
+        });
+
+        const companionRun = await startRunService({
+          definitionId: pair.companionId,
+          ...sharedInput,
+          configExtras: {
+            jobChoiceLaunchMode: launchMode,
+            jobChoiceBatchGroupId: batchGroupId,
+            jobChoicePresentationOrder: pair.presentationOrder === 'A_first' ? 'B_first' : 'A_first',
+            methodologySafe: true,
+          },
+        });
+
+        result = {
+          run: primaryRun.run,
+          jobCount: primaryRun.jobCount + companionRun.jobCount,
+        };
+        pairedRunIds = [companionRun.run.id];
+      } else {
+        result = await startRunService({
+          definitionId: String(input.definitionId),
+          ...sharedInput,
+          configExtras: launchMode === 'AD_HOC_BATCH'
+            ? {
+                jobChoiceLaunchMode: launchMode,
+                methodologySafe: false,
+              }
+            : undefined,
+        });
+      }
 
       ctx.log.info(
         { userId, runId: result.run.id, jobCount: result.jobCount },
@@ -116,7 +255,10 @@ builder.mutationField('startRun', (t) =>
         },
       });
 
-      return result;
+      return {
+        ...result,
+        pairedRunIds,
+      };
     },
   })
 );

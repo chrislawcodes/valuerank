@@ -10,7 +10,8 @@
 
 import path from 'path';
 import type * as PgBoss from 'pg-boss';
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
+import type { DecisionMetadata } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
@@ -45,7 +46,15 @@ type SummarizeWorkerInput = {
  * Python worker output structure.
  */
 type SummarizeWorkerOutput =
-  | { success: true; summary: { decisionCode: string; decisionSource: string; decisionText: string | null } }
+  | {
+      success: true;
+      summary: {
+        decisionCode: string;
+        decisionSource: string;
+        decisionText: string | null;
+        decisionMetadata?: DecisionMetadata | null;
+      };
+    }
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
 
 /**
@@ -195,6 +204,7 @@ async function processSummarizeJob(
             decisionCode: 'error',
             decisionCodeSource: 'error',
             decisionText: `Summary failed: ${err.message}`,
+            decisionMetadata: Prisma.DbNull,
             summarizedAt: new Date(),
           },
         });
@@ -214,6 +224,10 @@ async function processSummarizeJob(
         decisionCode: output.summary.decisionCode,
         decisionCodeSource: output.summary.decisionSource,
         decisionText: output.summary.decisionText,
+        decisionMetadata:
+          output.summary.decisionMetadata == null
+            ? Prisma.DbNull
+            : (output.summary.decisionMetadata as Prisma.InputJsonValue),
         summarizedAt: new Date(),
       },
     });
@@ -247,6 +261,7 @@ async function processSummarizeJob(
             decisionCode: 'error',
             decisionCodeSource: 'error',
             decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
+            decisionMetadata: Prisma.DbNull,
             summarizedAt: new Date(),
           },
         });

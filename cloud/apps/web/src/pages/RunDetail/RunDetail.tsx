@@ -19,7 +19,7 @@ import { RerunDialog } from '../../components/runs/RerunDialog';
 import { useRun } from '../../hooks/useRun';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { useRunMutations } from '../../hooks/useRunMutations';
-import { exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
+import { exportRunAdjudicationCSV, exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
 import type { Run, TaskResult } from '../../api/operations/runs';
 import { RunHeader } from './RunHeader';
 import { RunMetadata } from './RunMetadata';
@@ -27,6 +27,7 @@ import { RunNameEditor } from './RunNameEditor';
 import { AnalysisBanner } from './AnalysisBanner';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { formatTemperatureSetting } from '../../lib/temperature';
+import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
 
 function formatDate(dateString: string | Date): string {
   const date = new Date(dateString);
@@ -139,6 +140,7 @@ export function RunDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingAdjudication, setIsExportingAdjudication] = useState(false);
   const [isExportingTranscripts, setIsExportingTranscripts] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isRerunDialogOpen, setIsRerunDialogOpen] = useState(false);
@@ -202,6 +204,20 @@ export function RunDetail() {
       setExportError(message);
     } finally {
       setIsExportingTranscripts(false);
+    }
+  }, [run]);
+
+  const handleExportAdjudication = useCallback(async () => {
+    if (!run) return;
+    setIsExportingAdjudication(true);
+    setExportError(null);
+    try {
+      await exportRunAdjudicationCSV(run.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Export failed';
+      setExportError(message);
+    } finally {
+      setIsExportingAdjudication(false);
     }
   }, [run]);
 
@@ -327,6 +343,19 @@ export function RunDetail() {
     run.definitionVersion ?? run.definition?.version ?? null,
     run.config?.temperature ?? null
   );
+  const methodology = getDefinitionMethodology(run.definition?.content);
+  const methodologyLabel = getDefinitionMethodologyLabel(
+    run.definition?.content,
+    run.definition?.domain?.name ?? null,
+  );
+  const isJobChoiceRun = methodology?.family === 'job-choice';
+  const launchModeLabel = isJobChoiceRun
+    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH'
+      ? 'Ad Hoc Batch'
+      : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH'
+        ? 'Paired Batch'
+        : null
+    : null;
 
   return (
     <div className="space-y-6">
@@ -404,6 +433,22 @@ export function RunDetail() {
                       <span className="text-gray-500 font-normal text-base">v{run.definitionVersion ?? run.definition?.version}</span>
                     )}
                   </Link>
+                  {methodologyLabel && (
+                    <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                      {methodologyLabel}
+                    </span>
+                  )}
+                  {launchModeLabel && (
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-medium ${
+                        launchModeLabel === 'Paired Batch'
+                          ? 'bg-teal-100 text-teal-800'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {launchModeLabel}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <RunNameEditor
@@ -481,6 +526,8 @@ export function RunDetail() {
               run={run}
               onExport={() => void handleExport()}
               isExporting={isExporting}
+              onExportAdjudication={isJobChoiceRun ? () => void handleExportAdjudication() : undefined}
+              isExportingAdjudication={isExportingAdjudication}
               onExportTranscripts={() => void handleExportTranscripts()}
               isExportingTranscripts={isExportingTranscripts}
               scenarioDimensions={analysis?.visualizationData?.scenarioDimensions}
