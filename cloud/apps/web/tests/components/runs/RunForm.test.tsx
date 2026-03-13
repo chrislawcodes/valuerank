@@ -431,13 +431,15 @@ describe('RunForm', () => {
     await user.click(screen.getByRole('button', { name: 'n = 7' }));
     await user.click(screen.getByText('Start Trial'));
 
-    expect(mockOnSubmit).toHaveBeenCalledWith({
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4'],
       samplePercentage: undefined,
       samplesPerScenario: 1,
       scenarioIds: ['scenario-1'],
       finalTrial: false,
-    });
+      launchMode: 'STANDARD',
+      temperature: undefined,
+    }));
   });
 });
