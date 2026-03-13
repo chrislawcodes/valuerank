@@ -25,6 +25,7 @@ export const StartRunPayload = builder.objectRef<{
     createdAt: Date;
   };
   jobCount: number;
+  pairedRunIds?: string[];
 }>('StartRunPayload').implement({
   description: 'Result of starting a new run',
   fields: (t) => ({
@@ -35,6 +36,10 @@ export const StartRunPayload = builder.objectRef<{
     }),
     jobCount: t.exposeInt('jobCount', {
       description: 'Number of jobs queued for this run',
+    }),
+    pairedRunIds: t.exposeStringList('pairedRunIds', {
+      nullable: true,
+      description: 'Companion run IDs created for paired Job Choice batch launches',
     }),
   }),
 });
