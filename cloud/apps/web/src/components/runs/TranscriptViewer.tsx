@@ -8,6 +8,7 @@ import { X, User, Bot, Clock, Hash, Zap } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
+import { getDecisionMetadata } from '../../utils/methodology';
 
 type TranscriptViewerProps = {
   transcript: Transcript;
@@ -93,15 +94,33 @@ export function TranscriptViewer({
   decisionUpdating = false,
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
+  const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const decision = transcript.decisionCode ?? '-';
   const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
-  const canOverrideDecision = decision === 'other' && Boolean(onDecisionChange);
+  const scaleLabels = decisionMetadata?.scaleLabels ?? [];
+  const canOverrideDecision = Boolean(onDecisionChange) && (
+    decisionMetadata?.parseClass === 'ambiguous'
+    || !['1', '2', '3', '4', '5'].includes(decision)
+  );
 
   const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const selected = event.target.value;
     if (!selected || !onDecisionChange) return;
     void onDecisionChange(transcript, selected);
   };
+
+  const decisionOptions = scaleLabels.length > 0
+    ? scaleLabels
+        .slice()
+        .sort((left, right) => Number(right.code) - Number(left.code))
+        .map((entry) => ({ value: entry.code, label: `${entry.code} - ${entry.label}` }))
+    : [
+        { value: '5', label: '5' },
+        { value: '4', label: '4' },
+        { value: '3', label: '3' },
+        { value: '2', label: '2' },
+        { value: '1', label: '1' },
+      ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -141,6 +160,21 @@ export function TranscriptViewer({
             <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
               {decisionDisplay}
             </span>
+            {decisionMetadata?.parseClass === 'ambiguous' && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                Ambiguous
+              </span>
+            )}
+            {decisionMetadata?.parseClass === 'fallback_resolved' && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                Fallback
+              </span>
+            )}
+            {transcript.decisionCodeSource === 'manual' && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                Manual
+              </span>
+            )}
             {canOverrideDecision && (
               <select
                 aria-label={`Set decision for transcript ${transcript.id}`}
@@ -150,11 +184,11 @@ export function TranscriptViewer({
                 onChange={handleDecisionChange}
               >
                 <option value="">{decisionUpdating ? 'Saving...' : 'Change'}</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
+                {decisionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             )}
           </span>
@@ -162,6 +196,35 @@ export function TranscriptViewer({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {(decisionMetadata?.parsePath || decisionMetadata?.matchedLabel || decisionMetadata?.manualOverride) && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <h3 className="mb-2 text-sm font-medium text-gray-900">Decision Metadata</h3>
+              <div className="space-y-1 text-xs">
+                {decisionMetadata?.parsePath && (
+                  <p>
+                    <span className="font-medium text-gray-700">Parse path:</span> {decisionMetadata.parsePath}
+                  </p>
+                )}
+                {decisionMetadata?.matchedLabel && (
+                  <p>
+                    <span className="font-medium text-gray-700">Matched label:</span> {decisionMetadata.matchedLabel}
+                  </p>
+                )}
+                {decisionMetadata?.responseExcerpt && (
+                  <p>
+                    <span className="font-medium text-gray-700">Response excerpt:</span> {decisionMetadata.responseExcerpt}
+                  </p>
+                )}
+                {decisionMetadata?.manualOverride?.overriddenAt && (
+                  <p>
+                    <span className="font-medium text-gray-700">Manual override:</span>{' '}
+                    {new Date(decisionMetadata.manualOverride.overriddenAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Preamble if present */}
           {content.preamble && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">

@@ -110,7 +110,7 @@ describe('CSV Export Endpoint', () => {
     }
   });
 
-  it('returns CSV with correct headers including variable columns', async () => {
+  it('returns CSV with the legacy header layout by default', async () => {
     const response = await request(app)
       .get(`/api/export/runs/${testRunId}/csv`)
       .set('Authorization', getAuthHeader());
@@ -121,9 +121,24 @@ describe('CSV Export Endpoint', () => {
     const lines = response.text.split('\n');
     // First line after BOM is header
     const headerLine = lines[0]?.replace('\uFEFF', '');
-    // Headers: Model, Trial Signature, Batch, Sample Index, Variables (alphabetical), Decision Code, Transcript ID, Probe Prompt, Target Response
+    // Headers: Model, Trial Signature, Batch, Sample Index, Variables (alphabetical),
+    // then the legacy decision/transcript columns.
     expect(headerLine).toBe(
       'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Code,Transcript ID,Probe Prompt,Target Response'
+    );
+  });
+
+  it('includes decision metadata columns when explicitly requested', async () => {
+    const response = await request(app)
+      .get(`/api/export/runs/${testRunId}/csv?includeDecisionMetadata=1`)
+      .set('Authorization', getAuthHeader());
+
+    expect(response.status).toBe(200);
+
+    const lines = response.text.split('\n');
+    const headerLine = lines[0]?.replace('\uFEFF', '');
+    expect(headerLine).toBe(
+      'AI Model Name,Trial Signature,Batch,Sample Index,Certainty,Stakes,Decision Code,Decision Source,Decision Parse Class,Decision Parse Path,Matched Label,Transcript ID,Probe Prompt,Target Response'
     );
   });
 
@@ -303,7 +318,8 @@ describe('CSV Serialization Helper', () => {
     expect(formatted).toContain('gpt-4o');
     // Scores read directly from content.dimensions
     expect(row.variables).toEqual({ Stakes: 1, Certainty: 2 });
-    // Format: Model, TrialSignature, Batch, SampleIndex, Certainty, Stakes, DecisionCode, TranscriptId, TargetResponse
+    // Format: Model, TrialSignature, Batch, SampleIndex, Certainty, Stakes,
+    // DecisionCode, TranscriptId, ...
     expect(formatted).toContain('gpt-4o,v1t0.5,,0,2,1,1,test-id');
     expect(row.targetResponse).toBe('I choose option A');
   });
@@ -505,7 +521,7 @@ describe('CSV Serialization Helper', () => {
     expect(row.probePrompt).toBe('What should I do?\n\n---\n\nAre you sure?');
 
     const formatted = formatCSVRow(row, []);
-    // Post-variable columns include Probe Prompt before Target Response.
+    // Post-variable columns default to the legacy export shape.
     expect(formatted).toContain(',1,transcript-id,');
     expect(formatted).toContain('What should I do?');
     expect(formatted).toContain('Are you sure?');

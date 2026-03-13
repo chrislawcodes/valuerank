@@ -35,8 +35,20 @@ vi.mock('../../src/hooks/useAnalysis', () => ({
 
 // Mock AnalysisPanel to avoid complex setup
 vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
-  AnalysisPanel: ({ runId, isAggregate }: { runId: string; isAggregate?: boolean }) => (
-    <div data-testid="analysis-panel" data-is-aggregate={String(isAggregate)}>
+  AnalysisPanel: ({
+    runId,
+    isAggregate,
+    transcripts,
+  }: {
+    runId: string;
+    isAggregate?: boolean;
+    transcripts?: Array<unknown>;
+  }) => (
+    <div
+      data-testid="analysis-panel"
+      data-is-aggregate={String(isAggregate)}
+      data-transcript-count={String(transcripts?.length ?? 0)}
+    >
       Analysis Panel for {runId}
     </div>
   ),
@@ -146,6 +158,7 @@ describe('AnalysisDetail', () => {
         run: {
           id: 'run-123',
           analysisStatus: 'completed',
+          transcripts: [{ id: 'tx-1' }, { id: 'tx-2' }],
           definition: { name: 'Test Definition' },
         },
         loading: false,
@@ -156,6 +169,7 @@ describe('AnalysisDetail', () => {
 
       expect(screen.getByTestId('analysis-panel')).toBeInTheDocument();
       expect(screen.getByText('Analysis Panel for run-123')).toBeInTheDocument();
+      expect(screen.getByTestId('analysis-panel')).toHaveAttribute('data-transcript-count', '2');
     });
 
     it('renders AnalysisPanel for pending analysis', () => {
@@ -238,6 +252,60 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-123');
 
       expect(screen.getByText('Trolley Problem')).toBeInTheDocument();
+    });
+
+    it('shows Job Choice and paired batch labels for Job Choice analysis', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: {
+            name: 'Test Definition',
+            content: {
+              methodology: {
+                family: 'job-choice',
+              },
+            },
+            domain: {
+              name: 'Job Choice',
+            },
+          },
+          config: {
+            jobChoiceLaunchMode: 'PAIRED_BATCH',
+          },
+          tags: [],
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('run-123');
+
+      expect(screen.getByText('Job Choice')).toBeInTheDocument();
+      expect(screen.getByText('Paired Batch')).toBeInTheDocument();
+    });
+
+    it('shows Old V1 label for retained professional analysis', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: {
+            name: 'Test Definition',
+            content: null,
+            domain: {
+              name: 'professional',
+            },
+          },
+          tags: [],
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('run-123');
+
+      expect(screen.getByText('Old V1')).toBeInTheDocument();
     });
 
     it('shows run ID in header', () => {

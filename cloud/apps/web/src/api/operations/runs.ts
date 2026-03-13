@@ -55,6 +55,7 @@ export type Transcript = {
   content: unknown;
   decisionCode: string | null;
   decisionCodeSource?: string | null;
+  decisionMetadata?: unknown;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
@@ -69,6 +70,10 @@ export type RunConfig = {
   sampleSeed?: number;
   temperature?: number | null;
   priority?: string;
+  jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
+  jobChoiceBatchGroupId?: string | null;
+  jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  methodologySafe?: boolean | null;
 };
 
 export type RunDefinitionTag = {
@@ -146,6 +151,9 @@ export type Run = {
     version: number;
     tags: RunDefinitionTag[];
     content: unknown;
+    domain?: {
+      name: string;
+    } | null;
   };
   tags: {
     id: string;
@@ -194,6 +202,9 @@ export const RUN_FRAGMENT = gql`
       id
       name
       version
+      domain {
+        name
+      }
       tags: allTags {
         id
         name
@@ -221,6 +232,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       content
       decisionCode
       decisionCodeSource
+      decisionMetadata
       turnCount
       tokenCount
       durationMs
@@ -389,6 +401,7 @@ export const START_RUN_MUTATION = gql`
         ...RunFields
       }
       jobCount
+      pairedRunIds
     }
   }
   ${RUN_FRAGMENT}
@@ -471,6 +484,7 @@ export const UPDATE_TRANSCRIPT_DECISION_MUTATION = gql`
       content
       decisionCode
       decisionCodeSource
+      decisionMetadata
       turnCount
       tokenCount
       durationMs
@@ -496,6 +510,7 @@ export type StartRunInput = {
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
   experimentId?: string;
   finalTrial?: boolean;
+  launchMode?: 'STANDARD' | 'PAIRED_BATCH' | 'AD_HOC_BATCH';
 };
 
 // ============================================================================
@@ -546,6 +561,7 @@ export type StartRunMutationResult = {
   startRun: {
     run: Run;
     jobCount: number;
+    pairedRunIds?: string[] | null;
   };
 };
 

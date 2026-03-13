@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Download, FileText, BarChart2, List, Grid, DollarSign, FileJson } from 'lucide-react';
+import { Download, FileText, BarChart2, List, Grid, DollarSign, FileJson, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
 import { TranscriptViewer } from './TranscriptViewer';
@@ -15,6 +15,8 @@ type RunResultsProps = {
   run: Run;
   onExport?: () => void;
   isExporting?: boolean;
+  onExportAdjudication?: () => void;
+  isExportingAdjudication?: boolean;
   onExportTranscripts?: () => void;
   isExportingTranscripts?: boolean;
   scenarioDimensions?: Record<string, Record<string, string | number>>;
@@ -95,6 +97,8 @@ export function RunResults({
   run,
   onExport,
   isExporting = false,
+  onExportAdjudication,
+  isExportingAdjudication = false,
   onExportTranscripts,
   isExportingTranscripts = false,
   scenarioDimensions,
@@ -286,6 +290,17 @@ export function RunResults({
             >
               <Download className="w-4 h-4 mr-2" />
               {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          )}
+          {onExportAdjudication && (
+            <Button
+              variant="secondary"
+              onClick={onExportAdjudication}
+              disabled={isExportingAdjudication}
+              title="Download adjudication-ready CSV with parser metadata"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              {isExportingAdjudication ? 'Exporting...' : 'Adjudication CSV'}
             </Button>
           )}
         </div>

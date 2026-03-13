@@ -26,10 +26,18 @@ export type CSVRow = {
   modelName: string;
   sampleIndex: number;
   decisionCode: string;
+  decisionCodeSource: string;
+  parseClass: string;
+  parsePath: string;
+  matchedLabel: string;
   trialSignature: string;
   probePrompt: string;
   targetResponse: string;
   variables: Record<string, number>;
+};
+
+export type CSVFormatOptions = {
+  includeDecisionMetadata?: boolean;
 };
 
 /**
@@ -44,6 +52,24 @@ export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Trial Signature', 'Batch'
  */
 export const POST_VARIABLE_HEADERS = [
   'Decision Code',
+  'Transcript ID',
+  'Probe Prompt',
+  'Target Response',
+] as const;
+
+export const DECISION_METADATA_HEADERS = [
+  'Decision Source',
+  'Decision Parse Class',
+  'Decision Parse Path',
+  'Matched Label',
+] as const;
+
+export const POST_VARIABLE_HEADERS_WITH_METADATA = [
+  'Decision Code',
+  'Decision Source',
+  'Decision Parse Class',
+  'Decision Parse Path',
+  'Matched Label',
   'Transcript ID',
   'Probe Prompt',
   'Target Response',
@@ -147,6 +173,22 @@ function getScenarioDimensions(transcript: TranscriptWithScenario): Record<strin
   return {};
 }
 
+function getDecisionMetadata(
+  transcript: TranscriptWithScenario
+): { parseClass: string; parsePath: string; matchedLabel: string } {
+  const metadata = transcript.decisionMetadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return { parseClass: '', parsePath: '', matchedLabel: '' };
+  }
+
+  const record = metadata as Record<string, unknown>;
+  return {
+    parseClass: typeof record.parseClass === 'string' ? record.parseClass : '',
+    parsePath: typeof record.parsePath === 'string' ? record.parsePath : '',
+    matchedLabel: typeof record.matchedLabel === 'string' ? record.matchedLabel : '',
+  };
+}
+
 /**
  * Format the trial signature from definition version and temperature.
  * Re-implemented cleanly here to avoid circular imports.
@@ -187,12 +229,17 @@ function extractTrialSignature(
  * @param transcript - The transcript with scenario data
  */
 export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
+  const decisionMetadata = getDecisionMetadata(transcript);
   return {
     batchName: transcript.run?.name ?? '',
     transcriptId: transcript.id,
     modelName: getModelName(transcript.modelId),
     sampleIndex: transcript.sampleIndex,
     decisionCode: transcript.decisionCode ?? 'pending',
+    decisionCodeSource: transcript.decisionCodeSource ?? '',
+    parseClass: decisionMetadata.parseClass,
+    parsePath: decisionMetadata.parsePath,
+    matchedLabel: decisionMetadata.matchedLabel,
     trialSignature: extractTrialSignature(transcript.run?.definition?.version, transcript.run?.config),
     probePrompt: getProbePrompt(transcript),
     targetResponse: getTargetResponse(transcript),
@@ -206,7 +253,11 @@ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
-export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
+export function formatCSVRow(
+  row: CSVRow,
+  variableNames: string[],
+  options: CSVFormatOptions = {},
+): string {
   // Pre-variable columns (Model Name, Trial Signature, Batch, Sample Index)
   const preVariableValues = [
     escapeCSV(row.modelName),
@@ -224,10 +275,22 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
   // Post-variable columns
   const postVariableValues = [
     escapeCSV(row.decisionCode),
+  ];
+
+  if (options.includeDecisionMetadata === true) {
+    postVariableValues.push(
+      escapeCSV(row.decisionCodeSource),
+      escapeCSV(row.parseClass),
+      escapeCSV(row.parsePath),
+      escapeCSV(row.matchedLabel),
+    );
+  }
+
+  postVariableValues.push(
     escapeCSV(row.transcriptId),
     escapeCSV(row.probePrompt),
     escapeCSV(row.targetResponse),
-  ];
+  );
 
   return [...preVariableValues, ...variableValues, ...postVariableValues].join(',');
 }
@@ -237,8 +300,14 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
  * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
-export function getCSVHeader(variableNames: string[]): string {
-  return [...PRE_VARIABLE_HEADERS, ...variableNames, ...POST_VARIABLE_HEADERS].join(',');
+export function getCSVHeader(
+  variableNames: string[],
+  options: CSVFormatOptions = {},
+): string {
+  const postHeaders = options.includeDecisionMetadata === true
+    ? POST_VARIABLE_HEADERS_WITH_METADATA
+    : POST_VARIABLE_HEADERS;
+  return [...PRE_VARIABLE_HEADERS, ...variableNames, ...postHeaders].join(',');
 }
 
 /**
@@ -263,14 +332,17 @@ function collectVariableNames(transcripts: TranscriptWithScenario[]): string[] {
  * Includes BOM for Excel compatibility.
  * Dynamically adds variable columns based on scenario dimensions.
  */
-export function transcriptsToCSV(transcripts: TranscriptWithScenario[]): string {
+export function transcriptsToCSV(
+  transcripts: TranscriptWithScenario[],
+  options: CSVFormatOptions = {},
+): string {
   const BOM = '\uFEFF'; // UTF-8 BOM for Excel
 
   // Collect all variable names across all transcripts
   const variableNames = collectVariableNames(transcripts);
 
-  const header = getCSVHeader(variableNames);
-  const rows = transcripts.map((t) => formatCSVRow(transcriptToCSVRow(t), variableNames));
+  const header = getCSVHeader(variableNames, options);
+  const rows = transcripts.map((t) => formatCSVRow(transcriptToCSVRow(t), variableNames, options));
 
   return BOM + header + '\n' + rows.join('\n');
 }

@@ -15,9 +15,11 @@ import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useFinalTrialPlan } from '../../hooks/useFinalTrialPlan';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
+import { getDefinitionMethodology } from '../../utils/methodology';
 
 type RunFormProps = {
   definitionId: string;
+  definitionContent?: unknown;
   scenarioCount?: number;
   initialTemperature?: number | null;
   onSubmit: (input: StartRunInput) => Promise<void>;
@@ -30,6 +32,7 @@ type RunFormState = {
   samplePercentage: number;
   samplesPerScenario: number;
   temperatureInput: string;
+  launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH';
 };
 
 const SAMPLE_OPTIONS = [
@@ -48,6 +51,7 @@ const SAMPLES_PER_SCENARIO_OPTIONS = [
 
 export function RunForm({
   definitionId,
+  definitionContent,
   scenarioCount,
   initialTemperature = null,
   onSubmit,
@@ -55,6 +59,8 @@ export function RunForm({
   isSubmitting = false,
 }: RunFormProps) {
   const SPECIFIC_CONDITION_TRIAL = -2;
+  const methodology = getDefinitionMethodology(definitionContent);
+  const isJobChoiceDefinition = methodology?.family === 'job-choice';
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',
@@ -65,6 +71,7 @@ export function RunForm({
     samplePercentage: 10, // Default to 10% run
     samplesPerScenario: 1, // Default to 1 sample (standard single-sample trial)
     temperatureInput: initialTemperature === null ? '' : String(initialTemperature),
+    launchMode: 'PAIRED_BATCH',
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -196,6 +203,11 @@ export function RunForm({
     setValidationError(null);
   }, []);
 
+  const handleLaunchModeChange = useCallback((launchMode: 'PAIRED_BATCH' | 'AD_HOC_BATCH') => {
+    setFormState((prev) => ({ ...prev, launchMode }));
+    setValidationError(null);
+  }, []);
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -232,6 +244,7 @@ export function RunForm({
         scenarioIds: isSpecificConditionTrial ? selectedConditionScenarioIds : undefined,
         temperature,
         finalTrial: isFinalTrial,
+        launchMode: isJobChoiceDefinition ? formState.launchMode : 'STANDARD',
       };
 
       try {
@@ -240,7 +253,7 @@ export function RunForm({
         // Error handling is done by parent
       }
     },
-    [definitionId, formState, onSubmit, isFinalTrial, isSpecificConditionTrial, selectedConditionScenarioIds]
+    [definitionId, formState, onSubmit, isFinalTrial, isSpecificConditionTrial, isJobChoiceDefinition, selectedConditionScenarioIds]
   );
 
   const handleCloseConditionModal = useCallback(() => {
@@ -322,6 +335,59 @@ export function RunForm({
           <p className="mt-2 text-sm text-red-600">{validationError}</p>
         )}
       </div>
+
+      {isJobChoiceDefinition && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Batch Type
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              {[
+                {
+                  value: 'PAIRED_BATCH' as const,
+                  title: 'Start Paired Batch',
+                  description:
+                    'Methodology-safe default. Launches both the A-first and B-first Job Choice companions when both are available.',
+                },
+                {
+                  value: 'AD_HOC_BATCH' as const,
+                  title: 'Start Ad Hoc Batch',
+                  description:
+                    'Exploratory only. Launches just this definition and should be treated as non-methodology-safe by default.',
+                },
+              ].map((option) => {
+                const selected = formState.launchMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleLaunchModeChange(option.value)}
+                    disabled={isSubmitting}
+                    className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                      selected
+                        ? 'border-teal-500 bg-teal-50 text-teal-900'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="text-sm font-medium">{option.title}</div>
+                    <div className="mt-1 text-xs text-gray-500">{option.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {methodology?.presentation_order && (
+            <p className="text-xs text-gray-500">
+              This vignette is currently configured as{' '}
+              <span className="font-medium">
+                {methodology.presentation_order === 'A_first' ? 'A-first' : 'B-first'}
+              </span>
+              . Paired batches use the matching companion definition to balance the order.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Sample Percentage */}
       <div>
@@ -577,11 +643,19 @@ export function RunForm({
           }
         >
           {isSubmitting ? (
-            'Starting Trial...'
+            isJobChoiceDefinition
+              ? formState.launchMode === 'PAIRED_BATCH'
+                ? 'Starting Paired Batch...'
+                : 'Starting Ad Hoc Batch...'
+              : 'Starting Trial...'
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              Start {isFinalTrial ? 'Final ' : ''}Trial
+              {isJobChoiceDefinition
+                ? formState.launchMode === 'PAIRED_BATCH'
+                  ? 'Start Paired Batch'
+                  : 'Start Ad Hoc Batch'
+                : `Start ${isFinalTrial ? 'Final ' : ''}Trial`}
             </>
           )}
         </Button>

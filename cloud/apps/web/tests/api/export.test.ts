@@ -33,6 +33,7 @@ describe('exportRunAsCSV', () => {
   let originalFetch: typeof fetch;
   let originalURL: typeof URL;
   let exportRunAsCSV: (runId: string) => Promise<void>;
+  let exportRunAdjudicationCSV: (runId: string) => Promise<void>;
 
   beforeEach(async () => {
     // Save originals
@@ -70,6 +71,7 @@ describe('exportRunAsCSV', () => {
     // Import module fresh for each test
     const module = await import('../../src/api/export');
     exportRunAsCSV = module.exportRunAsCSV;
+    exportRunAdjudicationCSV = module.exportRunAdjudicationCSV;
   });
 
   afterEach(() => {
@@ -166,6 +168,27 @@ describe('exportRunAsCSV', () => {
     expect(mockRemoveChild).toHaveBeenCalled();
     // Should revoke the blob URL
     expect(mockRevokeObjectURL).toHaveBeenCalled();
+  });
+
+  it('requests decision metadata columns for adjudication exports', async () => {
+    mockLocalStorage.getItem.mockReturnValue('test-token');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      blob: vi.fn().mockResolvedValue(new Blob(['test,data'])),
+    });
+
+    await exportRunAdjudicationCSV('run-123');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/export/runs/run-123/csv?includeDecisionMetadata=1'),
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      })
+    );
   });
 });
 

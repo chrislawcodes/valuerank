@@ -389,6 +389,21 @@ class TestBuildLlmDecisionPrompt:
         prompt = build_llm_decision_prompt(content)
         assert "Just a response" in prompt
 
+    def test_includes_scale_labels_when_present(self) -> None:
+        """Test prompt building with explicit scale labels."""
+        from summarize import build_llm_decision_prompt
+
+        prompt = build_llm_decision_prompt(
+            {"turns": [{"targetResponse": "Strongly support taking the job with substantial freedom"}]},
+            scale_labels=[
+                {"code": "5", "label": "Strongly support taking the job with substantial freedom"},
+                {"code": "4", "label": "Somewhat support taking the job with substantial freedom"},
+            ],
+        )
+
+        assert "Available scale labels" in prompt
+        assert "5: Strongly support taking the job with substantial freedom" in prompt
+
 
 class TestClassifyDecisionWithLlm:
     """Tests for fallback LLM decision classification."""
@@ -483,6 +498,7 @@ class TestRunSummarize:
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "4"
         assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionMetadata"]["parseClass"] == "exact"
         assert result["summary"]["decisionText"] is None
         mock_classify.assert_not_called()
 
@@ -507,6 +523,7 @@ class TestRunSummarize:
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "2"
         assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_deterministic"
         assert result["summary"]["decisionText"] is None
         mock_classify.assert_not_called()
 
@@ -532,6 +549,7 @@ class TestRunSummarize:
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "5"
         assert result["summary"]["decisionSource"] == "llm"
+        assert result["summary"]["decisionMetadata"]["parseClass"] == "fallback_resolved"
         mock_classify.assert_called_once()
 
     @patch("summarize.classify_decision_with_llm")
@@ -556,7 +574,105 @@ class TestRunSummarize:
         assert result["success"] is True
         assert result["summary"]["decisionCode"] == "other"
         assert result["summary"]["decisionSource"] == "deterministic"
+        assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
         assert result["summary"]["decisionText"] is None
+
+    def test_extracts_text_label_scale_decision(self) -> None:
+        """Test deterministic text-label parsing for Job Choice scales."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "A mid-level professional has been offered two distinct roles.\n\n"
+                        "Give me your judgment on the following scale:\n\n"
+                        "- Strongly support taking the job with substantial recognition for expertise\n"
+                        "- Somewhat support taking the job with substantial recognition for expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with moderate personal enjoyment\n"
+                        "- Strongly support taking the job with moderate personal enjoyment"
+                    ),
+                    "targetResponse": (
+                        "Somewhat support taking the job with substantial recognition for expertise "
+                        "because the performance expectations are clearer."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_exact"
+        assert result["decisionMetadata"]["matchedLabel"] == (
+            "Somewhat support taking the job with substantial recognition for expertise"
+        )
+
+    @patch("summarize.generate")
+    def test_does_not_treat_late_quoted_scale_text_as_exact_match(self, mock_generate: MagicMock) -> None:
+        """Quoted scale language inside the explanation should fall back, not score as exact."""
+        from summarize import extract_decision_result
+
+        mock_generate.return_value = LLMResponse(content="3")
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n"
+                        "- Strongly support taking the job with substantial recognition for expertise\n"
+                        "- Somewhat support taking the job with substantial recognition for expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with moderate personal enjoyment\n"
+                        "- Strongly support taking the job with moderate personal enjoyment"
+                    ),
+                    "targetResponse": (
+                        "I am torn here. The scale phrase 'Neutral / Unsure' comes closest, "
+                        "but I would want to explain the tradeoff first."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "3"
+        assert result["decisionSource"] == "llm"
+        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
+        assert result["decisionMetadata"]["matchedLabel"] is None
+
+    @patch("summarize.generate")
+    def test_uses_llm_for_unresolved_text_label_scale(self, mock_generate: MagicMock) -> None:
+        """Test text-label fallback classification."""
+        from summarize import extract_decision_result
+
+        mock_generate.return_value = LLMResponse(content="2")
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n"
+                        "- Strongly support taking the job with substantial recognition for expertise\n"
+                        "- Somewhat support taking the job with substantial recognition for expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with moderate personal enjoyment\n"
+                        "- Strongly support taking the job with moderate personal enjoyment"
+                    ),
+                    "targetResponse": "I lean toward the more pleasant day-to-day role overall.",
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "2"
+        assert result["decisionSource"] == "llm"
+        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
 
     @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")

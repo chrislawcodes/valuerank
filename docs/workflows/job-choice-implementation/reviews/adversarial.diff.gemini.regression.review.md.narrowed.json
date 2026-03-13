@@ -1,0 +1,19 @@
+{
+  "source_artifact_path": "docs/workflows/job-choice-implementation/reviews/adversarial.current.diff.patch",
+  "source_artifact_sha256": "2cb1f7719fc88d4d3144999f6b5af299514dfce398a55c09eab6a64dee88932d",
+  "narrowed_artifact_path": "docs/workflows/job-choice-implementation/reviews/adversarial.diff.gemini.regression.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "a65e3e7720175a695c6d6a0a9c3b5b81235d0e5b535a1ea3969701a56ed84dbc",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/cloud/apps/api/src/graphql/mutations/run.ts b/cloud/apps/api/src/graphql/mutations/run.ts",
+    "diff --git a/cloud/apps/api/src/graphql/types/inputs/start-run.ts b/cloud/apps/api/src/graphql/types/inputs/start-run.ts",
+    "diff --git a/cloud/apps/api/src/graphql/types/transcript.ts b/cloud/apps/api/src/graphql/types/transcript.ts",
+    "diff --git a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts",
+    "diff --git a/cloud/apps/api/src/routes/export.ts b/cloud/apps/api/src/routes/export.ts",
+    "diff --git a/cloud/apps/api/src/services/export/csv.ts b/cloud/apps/api/src/services/export/csv.ts"
+  ],
+  "tail_chunks": [
+    "diff --git a/cloud/workers/summarize.py b/cloud/workers/summarize.py",
+    "diff --git a/cloud/workers/tests/test_summarize.py b/cloud/workers/tests/test_summarize.py"
+  ]
+}

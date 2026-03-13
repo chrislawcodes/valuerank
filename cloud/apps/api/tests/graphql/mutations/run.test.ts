@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
-import { getAuthHeader } from '../../test-utils.js';
+import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 
 // Mock PgBoss
 vi.mock('../../../src/queue/boss.js', () => ({
@@ -31,9 +31,20 @@ const app = createServer();
 describe('GraphQL Run Mutations', () => {
   const createdDefinitionIds: string[] = [];
   const createdRunIds: string[] = [];
+  const createdDomainIds: string[] = [];
 
   // Ensure test models exist as ACTIVE for model validation
   beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
+
     const testProvider = await db.llmProvider.upsert({
       where: { name: 'test-provider-run-mutation' },
       create: { name: 'test-provider-run-mutation', displayName: 'Test Provider' },
@@ -75,6 +86,13 @@ describe('GraphQL Run Mutations', () => {
         where: { id: { in: createdDefinitionIds } },
       });
       createdDefinitionIds.length = 0;
+    }
+
+    if (createdDomainIds.length > 0) {
+      await db.domain.deleteMany({
+        where: { id: { in: createdDomainIds } },
+      });
+      createdDomainIds.length = 0;
     }
   });
 
@@ -476,6 +494,128 @@ describe('GraphQL Run Mutations', () => {
       expect(response.status).toBe(200);
       expect(response.body.errors).toBeDefined();
       expect(response.body.errors[0].message).toContain('no scenarios');
+    });
+
+    it('starts both companion runs for paired batch job choice launches', async () => {
+      const domain = await db.domain.create({
+        data: {
+          name: 'Job Choice Test Domain',
+          normalizedName: `job choice test domain ${Date.now()}`,
+        },
+      });
+      createdDomainIds.push(domain.id);
+
+      const pairKey = `job-choice:test-pair:${Date.now()}`;
+      const aFirstDefinition = await db.definition.create({
+        data: {
+          domainId: domain.id,
+          name: 'Job Choice A First',
+          content: {
+            schema_version: 1,
+            methodology: {
+              family: 'job-choice',
+              response_scale: 'option_text_short',
+              presentation_order: 'A_first',
+              pair_key: pairKey,
+            },
+          },
+        },
+      });
+      const bFirstDefinition = await db.definition.create({
+        data: {
+          domainId: domain.id,
+          name: 'Job Choice B First',
+          content: {
+            schema_version: 1,
+            methodology: {
+              family: 'job-choice',
+              response_scale: 'option_text_short',
+              presentation_order: 'B_first',
+              pair_key: pairKey,
+            },
+          },
+        },
+      });
+      createdDefinitionIds.push(aFirstDefinition.id, bFirstDefinition.id);
+
+      await db.scenario.createMany({
+        data: [
+          { definitionId: aFirstDefinition.id, name: 'A Scenario 1', content: { test: 1 } },
+          { definitionId: aFirstDefinition.id, name: 'A Scenario 2', content: { test: 2 } },
+          { definitionId: bFirstDefinition.id, name: 'B Scenario 1', content: { test: 1 } },
+          { definitionId: bFirstDefinition.id, name: 'B Scenario 2', content: { test: 2 } },
+        ],
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+              config
+              definition {
+                id
+              }
+            }
+            jobCount
+            pairedRunIds
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: aFirstDefinition.id,
+              models: ['gpt-4'],
+              launchMode: 'PAIRED_BATCH',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.errors).toBeUndefined();
+
+      const result = response.body.data.startRun;
+      createdRunIds.push(result.run.id, ...result.pairedRunIds);
+
+      expect(result.run.definition.id).toBe(aFirstDefinition.id);
+      expect(result.jobCount).toBe(4);
+      expect(result.pairedRunIds).toHaveLength(1);
+
+      const createdRuns = await db.run.findMany({
+        where: {
+          id: {
+            in: [result.run.id, result.pairedRunIds[0]],
+          },
+        },
+        select: {
+          id: true,
+          definitionId: true,
+          config: true,
+        },
+      });
+
+      expect(createdRuns).toHaveLength(2);
+
+      const aRun = createdRuns.find((run) => run.definitionId === aFirstDefinition.id);
+      const bRun = createdRuns.find((run) => run.definitionId === bFirstDefinition.id);
+
+      expect(aRun).toBeDefined();
+      expect(bRun).toBeDefined();
+      expect((aRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect((bRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
+      expect((aRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
+      expect((bRun?.config as Record<string, unknown>).methodologySafe).toBe(true);
+      expect((aRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('A_first');
+      expect((bRun?.config as Record<string, unknown>).jobChoicePresentationOrder).toBe('B_first');
+      expect((aRun?.config as Record<string, unknown>).jobChoiceBatchGroupId).toBe(
+        (bRun?.config as Record<string, unknown>).jobChoiceBatchGroupId
+      );
     });
   });
 

@@ -30,6 +30,15 @@ export type Dimension = {
   description?: string;
 };
 
+export type DefinitionMethodology = {
+  family?: string;
+  response_scale?: 'numeric' | 'option_text' | 'value_labels';
+  legacy_label?: string;
+  canonical_value_order?: string[];
+  presentation_order?: 'A_first' | 'B_first';
+  pair_key?: string;
+};
+
 /**
  * Schema v1: All fields are required (root definitions or legacy).
  * This is also the "resolved" content type after inheritance is applied.
@@ -40,6 +49,7 @@ export type DefinitionContentV1 = {
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
+  methodology?: DefinitionMethodology;
 };
 
 /**
@@ -53,6 +63,7 @@ export type DefinitionContentV2 = {
   template?: string;
   dimensions?: Dimension[];
   matching_rules?: string;
+  methodology?: DefinitionMethodology;
 };
 
 /**
@@ -72,6 +83,7 @@ export type DefinitionContent = {
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
+  methodology?: DefinitionMethodology;
 };
 
 /**
@@ -118,6 +130,7 @@ export type ScenarioContent = {
   prompt: string;
   dimension_values: Record<string, string>;
   expected_values?: string[];
+  metadata?: Record<string, unknown>;
 };
 
 // ============================================================================
@@ -135,6 +148,28 @@ export type TranscriptContent = {
   messages: TranscriptMessage[];
   model_response?: string;
   raw_output?: string;
+};
+
+export type DecisionScaleLabel = {
+  code: string;
+  label: string;
+};
+
+export type DecisionManualOverride = {
+  previousDecisionCode: string | null;
+  overriddenAt: string;
+  overriddenByUserId?: string | null;
+};
+
+export type DecisionMetadata = {
+  parserVersion: string;
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous';
+  parsePath: string;
+  responseSha256?: string;
+  responseExcerpt?: string;
+  matchedLabel?: string | null;
+  scaleLabels?: DecisionScaleLabel[];
+  manualOverride?: DecisionManualOverride;
 };
 
 // ============================================================================

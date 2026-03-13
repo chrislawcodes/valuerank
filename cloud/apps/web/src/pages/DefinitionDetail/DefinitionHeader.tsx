@@ -14,11 +14,13 @@ type DefinitionHeaderProps = {
   scenarioCount: number;
   isForked: boolean;
   isUnforking: boolean;
+  methodologyLabel?: string | null;
   onEdit: () => void;
   onFork: () => void;
   onUnfork: () => void;
   onDelete: () => void;
   onStartRun: () => void;
+  startLabel?: string;
 };
 
 export function DefinitionHeader({
@@ -26,11 +28,13 @@ export function DefinitionHeader({
   scenarioCount,
   isForked,
   isUnforking,
+  methodologyLabel,
   onEdit,
   onFork,
   onUnfork,
   onDelete,
   onStartRun,
+  startLabel = 'Start Trial',
 }: DefinitionHeaderProps) {
   const navigate = useNavigate();
 
@@ -41,6 +45,11 @@ export function DefinitionHeader({
         <span className="hidden sm:inline">Back</span>
       </Button>
       <div className="flex items-center gap-1 sm:gap-2">
+        {methodologyLabel && (
+          <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+            {methodologyLabel}
+          </span>
+        )}
         <ExportButton definitionId={definitionId} hasScenarios={scenarioCount > 0} />
         <Button
           variant="ghost"
@@ -65,9 +74,9 @@ export function DefinitionHeader({
           <Edit className="w-4 h-4 sm:mr-2" />
           <span className="hidden sm:inline">Edit</span>
         </Button>
-        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0} title="Start Trial">
+        <Button variant="primary" onClick={onStartRun} disabled={scenarioCount === 0} title={startLabel}>
           <Play className="w-4 h-4 sm:mr-2" />
-          <span className="hidden sm:inline">Start Trial</span>
+          <span className="hidden sm:inline">{startLabel}</span>
         </Button>
       </div>
     </div>
