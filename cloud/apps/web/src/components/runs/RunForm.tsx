@@ -10,9 +10,11 @@ import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useFinalTrialPlan } from '../../hooks/useFinalTrialPlan';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
+import { getDefinitionMethodology } from '../../utils/methodology';
 
 type RunFormProps = {
   definitionId: string;
+  definitionContent?: unknown;
   scenarioCount?: number;
   initialTemperature?: number | null;
   onSubmit: (input: StartRunInput) => Promise<void>;
@@ -22,12 +24,15 @@ type RunFormProps = {
 
 export function RunForm({
   definitionId,
+  definitionContent,
   scenarioCount,
   initialTemperature = null,
   onSubmit,
   onCancel,
   isSubmitting = false,
 }: RunFormProps) {
+  const methodology = getDefinitionMethodology(definitionContent);
+  const isJobChoiceDefinition = methodology?.family === 'job-choice';
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
     requestPolicy: 'cache-and-network',
@@ -50,6 +55,7 @@ export function RunForm({
     handleSampleChange,
     handleSamplesPerScenarioChange,
     handleTemperatureChange,
+    handleLaunchModeChange,
     handleSubmit,
     handleCloseConditionModal,
     handleImmediateConditionSelect,
@@ -57,7 +63,13 @@ export function RunForm({
     definitionId,
     scenarioCount,
     initialTemperature,
-    onSubmit,
+    defaultLaunchMode: 'PAIRED_BATCH',
+    onSubmit: async (input) => {
+      await onSubmit({
+        ...input,
+        launchMode: isJobChoiceDefinition ? formState.launchMode : 'STANDARD',
+      });
+    },
     models,
     loadingModels,
   });
@@ -71,20 +83,17 @@ export function RunForm({
     pause: !isSpecificConditionTrial && !isConditionModalOpen,
   });
 
-  // Fetch Final Trial Plan
   const {
     plan: finalTrialPlan,
-    loading: loadingFinalTrialPlan
+    loading: loadingFinalTrialPlan,
   } = useFinalTrialPlan({
     definitionId,
     models: formState.selectedModels,
-    pause: !isFinalTrial || formState.selectedModels.length === 0
+    pause: !isFinalTrial || formState.selectedModels.length === 0,
   });
 
-  // Get all available model IDs for cost preview
-  const allAvailableModelIds = models.filter((m) => m.isAvailable).map((m) => m.id);
+  const allAvailableModelIds = models.filter((model) => model.isAvailable).map((model) => model.id);
 
-  // Fetch cost estimate for ALL available models (so we can show preview costs)
   const {
     costEstimate: allModelsCostEstimate,
     loading: loadingCost,
@@ -101,23 +110,20 @@ export function RunForm({
     pause: allAvailableModelIds.length === 0,
   });
 
-  // Filter cost estimate to only selected models for summary display
   const costEstimate = allModelsCostEstimate
     ? (() => {
-      const selectedPerModel = allModelsCostEstimate.perModel.filter((m) =>
-        formState.selectedModels.includes(m.modelId)
-      );
-      // Only show fallback warning if ANY selected model is using fallback
-      const isUsingFallback = selectedPerModel.some((m) => m.isUsingFallback);
-      return {
-        ...allModelsCostEstimate,
-        total: selectedPerModel.reduce((sum, m) => sum + m.totalCost, 0),
-        perModel: selectedPerModel,
-        isUsingFallback,
-        // Clear fallback reason if no selected models are using fallback
-        fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
-      };
-    })()
+        const selectedPerModel = allModelsCostEstimate.perModel.filter((model) =>
+          formState.selectedModels.includes(model.modelId)
+        );
+        const isUsingFallback = selectedPerModel.some((model) => model.isUsingFallback);
+        return {
+          ...allModelsCostEstimate,
+          total: selectedPerModel.reduce((sum, model) => sum + model.totalCost, 0),
+          perModel: selectedPerModel,
+          isUsingFallback,
+          fallbackReason: isUsingFallback ? allModelsCostEstimate.fallbackReason : null,
+        };
+      })()
     : null;
 
   const totalJobs = isFinalTrial
@@ -153,6 +159,59 @@ export function RunForm({
           <p className="mt-2 text-sm text-red-600">{validationError}</p>
         )}
       </div>
+
+      {isJobChoiceDefinition && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Batch Type
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              {[
+                {
+                  value: 'PAIRED_BATCH' as const,
+                  title: 'Start Paired Batch',
+                  description:
+                    'Methodology-safe default. Launches both the A-first and B-first Job Choice companions when both are available.',
+                },
+                {
+                  value: 'AD_HOC_BATCH' as const,
+                  title: 'Start Ad Hoc Batch',
+                  description:
+                    'Exploratory only. Launches just this definition and should be treated as non-methodology-safe by default.',
+                },
+              ].map((option) => {
+                const selected = formState.launchMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleLaunchModeChange(option.value)}
+                    disabled={isSubmitting}
+                    className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                      selected
+                        ? 'border-teal-500 bg-teal-50 text-teal-900'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="text-sm font-medium">{option.title}</div>
+                    <div className="mt-1 text-xs text-gray-500">{option.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {methodology?.presentation_order && (
+            <p className="text-xs text-gray-500">
+              This vignette is currently configured as{' '}
+              <span className="font-medium">
+                {methodology.presentation_order === 'A_first' ? 'A-first' : 'B-first'}
+              </span>
+              . Paired batches use the matching companion definition to balance the order.
+            </p>
+          )}
+        </div>
+      )}
 
       <DefinitionPicker
         samplePercentage={formState.samplePercentage}
@@ -220,11 +279,19 @@ export function RunForm({
           }
         >
           {isSubmitting ? (
-            'Starting Trial...'
+            isJobChoiceDefinition
+              ? formState.launchMode === 'PAIRED_BATCH'
+                ? 'Starting Paired Batch...'
+                : 'Starting Ad Hoc Batch...'
+              : 'Starting Trial...'
           ) : (
             <>
               <Play className="w-4 h-4 mr-2" />
-              Start {isFinalTrial ? 'Final ' : ''}Trial
+              {isJobChoiceDefinition
+                ? formState.launchMode === 'PAIRED_BATCH'
+                  ? 'Start Paired Batch'
+                  : 'Start Ad Hoc Batch'
+                : `Start ${isFinalTrial ? 'Final ' : ''}Trial`}
             </>
           )}
         </Button>

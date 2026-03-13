@@ -361,6 +361,25 @@ describe('RunDetail', () => {
   it('shows results section for completed runs with transcripts', () => {
     const run = createMockRun({
       status: 'COMPLETED',
+      transcripts: [
+        {
+          id: 'tx-1',
+          runId: 'run-123456',
+          scenarioId: 'scenario-1',
+          modelId: 'gpt-4',
+          modelVersion: null,
+          content: null,
+          decisionCode: '5',
+          decisionCodeSource: 'summary',
+          decisionMetadata: null,
+          turnCount: 1,
+          tokenCount: 10,
+          durationMs: 100,
+          estimatedCost: null,
+          createdAt: '2024-01-15T10:00:00Z',
+          lastAccessedAt: null,
+        },
+      ],
       transcriptCount: 50,
     });
     vi.mocked(useRun).mockReturnValue({
@@ -373,6 +392,116 @@ describe('RunDetail', () => {
     renderWithRouter();
 
     expect(screen.getByText('Results')).toBeInTheDocument();
+  });
+
+  it('shows adjudication CSV export for completed Job Choice runs', () => {
+    const run = createMockRun({
+      status: 'COMPLETED',
+      transcripts: [
+        {
+          id: 'tx-1',
+          runId: 'run-123456',
+          scenarioId: 'scenario-1',
+          modelId: 'gpt-4',
+          modelVersion: null,
+          content: null,
+          decisionCode: '5',
+          decisionCodeSource: 'summary',
+          decisionMetadata: { parseClass: 'fallback_resolved' },
+          turnCount: 1,
+          tokenCount: 10,
+          durationMs: 100,
+          estimatedCost: null,
+          createdAt: '2024-01-15T10:00:00Z',
+          lastAccessedAt: null,
+        },
+      ],
+      transcriptCount: 1,
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 1,
+        tags: [],
+        content: {
+          methodology: {
+            family: 'job-choice',
+          },
+        },
+      },
+    });
+    vi.mocked(useRun).mockReturnValue({
+      run,
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderWithRouter();
+
+    expect(screen.getByRole('button', { name: /adjudication csv/i })).toBeInTheDocument();
+  });
+
+  it('shows Job Choice and paired batch labels for Job Choice runs', () => {
+    const run = createMockRun({
+      status: 'COMPLETED',
+      config: {
+        models: ['gpt-4', 'claude-3'],
+        samplePercentage: 100,
+        jobChoiceLaunchMode: 'PAIRED_BATCH',
+        methodologySafe: true,
+      },
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 1,
+        tags: [],
+        content: {
+          methodology: {
+            family: 'job-choice',
+          },
+        },
+        domain: {
+          name: 'Job Choice',
+        },
+      },
+    });
+    vi.mocked(useRun).mockReturnValue({
+      run,
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderWithRouter();
+
+    expect(screen.getByText('Job Choice')).toBeInTheDocument();
+    expect(screen.getByText('Paired Batch')).toBeInTheDocument();
+  });
+
+  it('shows Old V1 label for retained professional runs', () => {
+    const run = createMockRun({
+      status: 'COMPLETED',
+      definition: {
+        id: 'def-1',
+        name: 'Test Definition',
+        version: 1,
+        tags: [],
+        content: null,
+        domain: {
+          name: 'professional',
+        },
+      },
+    });
+    vi.mocked(useRun).mockReturnValue({
+      run,
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderWithRouter();
+
+    expect(screen.getByText('Old V1')).toBeInTheDocument();
   });
 
   it('shows results section for single transcript', () => {

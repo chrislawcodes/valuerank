@@ -31,6 +31,15 @@ const log = createLogger('export');
 
 export const exportRouter = Router();
 
+function parseBooleanQueryParam(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
 /**
  * GET /api/export/runs/:id/csv
  *
@@ -52,8 +61,9 @@ exportRouter.get(
       if (runId === undefined || runId === null || runId === '') {
         throw new NotFoundError('Run', 'missing');
       }
+      const includeDecisionMetadata = parseBooleanQueryParam(req.query.includeDecisionMetadata);
 
-      log.info({ userId: req.user.id, runId }, 'Exporting run as CSV');
+      log.info({ userId: req.user.id, runId, includeDecisionMetadata }, 'Exporting run as CSV');
 
       // Verify run exists
       const run = await db.run.findUnique({
@@ -113,15 +123,18 @@ exportRouter.get(
       res.write('\uFEFF');
 
       // Write header with variable columns
-      res.write(getCSVHeader(variableNames) + '\n');
+      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }) + '\n');
 
       // Stream rows with variable names
       for (const transcript of transcripts) {
         const row = transcriptToCSVRow(transcript);
-        res.write(formatCSVRow(row, variableNames) + '\n');
+        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }) + '\n');
       }
 
-      log.info({ runId, rowsWritten: transcripts.length, variableCount: variableNames.length }, 'CSV export complete');
+      log.info(
+        { runId, rowsWritten: transcripts.length, variableCount: variableNames.length, includeDecisionMetadata },
+        'CSV export complete',
+      );
 
       res.end();
     } catch (err) {
@@ -264,8 +277,12 @@ exportRouter.get(
       const signature = typeof req.query.signature === 'string' && req.query.signature.trim() !== ''
         ? req.query.signature.trim()
         : null;
+      const includeDecisionMetadata = parseBooleanQueryParam(req.query.includeDecisionMetadata);
 
-      log.info({ userId: req.user.id, domainId, signature }, 'Exporting domain transcripts as CSV');
+      log.info(
+        { userId: req.user.id, domainId, signature, includeDecisionMetadata },
+        'Exporting domain transcripts as CSV',
+      );
 
       const resolved = await resolveDomainSignatureRunIds(domainId, signature);
       if (!resolved) {
@@ -319,15 +336,15 @@ exportRouter.get(
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
       res.write('\uFEFF');
-      res.write(getCSVHeader(variableNames) + '\n');
+      res.write(getCSVHeader(variableNames, { includeDecisionMetadata }) + '\n');
 
       for (const transcript of transcripts) {
         const row = transcriptToCSVRow(transcript);
-        res.write(formatCSVRow(row, variableNames) + '\n');
+        res.write(formatCSVRow(row, variableNames, { includeDecisionMetadata }) + '\n');
       }
 
       log.info(
-        { domainId, rowsWritten: transcripts.length, variableCount: variableNames.length },
+        { domainId, rowsWritten: transcripts.length, variableCount: variableNames.length, includeDecisionMetadata },
         'Domain CSV export complete',
       );
 
@@ -589,6 +606,8 @@ exportRouter.get(
           estimatedCost: t.estimatedCost,
           decisionCode: t.decisionCode,
           decisionText: t.decisionText,
+          decisionCodeSource: t.decisionCodeSource,
+          decisionMetadata: t.decisionMetadata,
           createdAt: t.createdAt,
         })),
       };

@@ -38,6 +38,7 @@ import {
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
+import { getDecisionMetadata } from '../utils/methodology';
 
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
@@ -131,6 +132,7 @@ export function AnalysisTranscripts() {
   const decisionCode = searchParams.get('decisionCode') ?? '';
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
   const repeatPattern = searchParams.get('repeatPattern') ?? '';
+  const selectedTranscriptId = searchParams.get('transcriptId') ?? '';
   const conditionIds = useMemo(
     () => parseConditionIds(searchParams.get('conditionIds') ?? ''),
     [searchParams]
@@ -238,6 +240,7 @@ export function AnalysisTranscripts() {
   const activeColDim = resolvedAxes.colDim;
   const hasCellFilterParams = Boolean(activeRowDim && activeColDim && row && col);
   const hasRepeatPatternParams = Boolean(selectedModel && repeatPattern && searchParams.has('conditionIds'));
+  const hasDirectTranscriptParam = selectedTranscriptId.length > 0;
   const hasBucketFilterParams = Boolean(
     activeRowDim
     && activeColDim
@@ -312,6 +315,11 @@ export function AnalysisTranscripts() {
   }, [updateTranscriptDecision, refetch]);
 
   const filteredTranscripts = useMemo(() => {
+    if (hasDirectTranscriptParam) {
+      const matched = (run?.transcripts ?? []).find((transcript) => transcript.id === selectedTranscriptId);
+      return matched ? [matched] : [];
+    }
+
     if (hasRepeatPatternParams) {
       return filterTranscriptsForConditionIds(
         run?.transcripts ?? [],
@@ -400,7 +408,40 @@ export function AnalysisTranscripts() {
     decisionBucket,
     hasRepeatPatternParams,
     hasBucketFilterParams,
+    hasDirectTranscriptParam,
+    selectedTranscriptId,
   ]);
+
+  useEffect(() => {
+    if (!hasDirectTranscriptParam) {
+      return;
+    }
+    const matched = filteredTranscripts.find((transcript) => transcript.id === selectedTranscriptId) ?? null;
+    setSelectedTranscript(matched);
+  }, [filteredTranscripts, hasDirectTranscriptParam, selectedTranscriptId]);
+
+  const transcriptCoverage = useMemo(() => {
+    return filteredTranscripts.reduce(
+      (acc, transcript) => {
+        const metadata = getDecisionMetadata(transcript.decisionMetadata);
+        if (transcript.decisionCodeSource === 'manual') {
+          acc.manual += 1;
+        }
+        if (metadata?.parseClass === 'exact') {
+          acc.exact += 1;
+        } else if (metadata?.parseClass === 'fallback_resolved') {
+          acc.fallback += 1;
+        } else if (metadata?.parseClass === 'ambiguous') {
+          acc.ambiguous += 1;
+        }
+        if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
+          acc.unresolved += 1;
+        }
+        return acc;
+      },
+      { exact: 0, fallback: 0, ambiguous: 0, manual: 0, unresolved: 0 }
+    );
+  }, [filteredTranscripts]);
 
   if (loading && !run) {
     return (
@@ -535,13 +576,39 @@ export function AnalysisTranscripts() {
         </div>
       </div>
 
-      {!scenarioDimensions && !hasRepeatPatternParams && (
+      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
           Scenario dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
       )}
 
-      {!hasRepeatPatternParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {filteredTranscripts.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-gray-900">Parse coverage</span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+              Exact {transcriptCoverage.exact}
+            </span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+              Fallback {transcriptCoverage.fallback}
+            </span>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              Ambiguous {transcriptCoverage.ambiguous}
+            </span>
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+              Manual {transcriptCoverage.manual}
+            </span>
+          </div>
+          {transcriptCoverage.unresolved > 0 && (
+            <p className="mt-2 text-xs text-amber-700">
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable 1-5 decision.
+              Open those transcripts to review and relabel them manually when needed.
+            </p>
+          )}
+        </div>
+      )}
+
+      {!hasDirectTranscriptParam && !hasRepeatPatternParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>

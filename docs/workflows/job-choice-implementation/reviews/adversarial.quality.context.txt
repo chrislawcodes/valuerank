@@ -1,0 +1,3 @@
+Adopt a skeptical, adversarial code-review posture.
+Focus on maintainability traps, observability gaps, future-change cost, confusing UX behavior, and weak test shape.
+Findings first, ordered by severity.

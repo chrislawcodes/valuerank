@@ -53,13 +53,29 @@ function getAuthToken(): string | null {
  * @returns Promise that resolves when download starts
  */
 export async function exportRunAsCSV(runId: string): Promise<void> {
+  return exportRunAsCSVWithOptions(runId);
+}
+
+type RunCSVExportOptions = {
+  includeDecisionMetadata?: boolean;
+};
+
+export async function exportRunAsCSVWithOptions(
+  runId: string,
+  options: RunCSVExportOptions = {},
+): Promise<void> {
   const token = getAuthToken();
   if (!token) {
     throw new Error('Not authenticated');
   }
 
   const baseUrl = getApiBaseUrl();
-  const url = `${baseUrl}/api/export/runs/${runId}/csv`;
+  const query = new URLSearchParams();
+  if (options.includeDecisionMetadata === true) {
+    query.set('includeDecisionMetadata', '1');
+  }
+  const suffix = query.toString();
+  const url = `${baseUrl}/api/export/runs/${runId}/csv${suffix ? `?${suffix}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -98,6 +114,10 @@ export async function exportRunAsCSV(runId: string): Promise<void> {
   // Cleanup
   document.body.removeChild(link);
   URL.revokeObjectURL(blobUrl);
+}
+
+export async function exportRunAdjudicationCSV(runId: string): Promise<void> {
+  return exportRunAsCSVWithOptions(runId, { includeDecisionMetadata: true });
 }
 
 /**

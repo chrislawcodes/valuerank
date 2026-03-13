@@ -46,6 +46,10 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'If true, runs an adaptive sampling strategy to reach 10 samples per condition',
     }),
+    launchMode: t.string({
+      required: false,
+      description: 'Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH',
+    }),
     scenarioIds: t.idList({
       required: false,
       description: 'Optional explicit scenario IDs to run instead of percentage sampling',

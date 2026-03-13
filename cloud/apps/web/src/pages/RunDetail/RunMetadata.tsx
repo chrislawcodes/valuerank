@@ -51,9 +51,14 @@ function calculateDuration(startedAt: string | null, completedAt: string | null)
   return `${seconds}s`;
 }
 
-export function RunMetadata({ createdAt, startedAt, completedAt, temperature }: RunMetadataProps) {
+export function RunMetadata({
+  createdAt,
+  startedAt,
+  completedAt,
+  temperature,
+}: RunMetadataProps) {
   return (
-    <div className="flex items-center gap-6 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
+    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
       <span className="flex items-center gap-1">
         <Calendar className="w-4 h-4" />
         Created {formatDate(createdAt)}

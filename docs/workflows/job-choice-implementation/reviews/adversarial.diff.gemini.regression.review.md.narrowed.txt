@@ -1,0 +1,847 @@
+diff --git a/cloud/apps/api/src/graphql/mutations/run.ts b/cloud/apps/api/src/graphql/mutations/run.ts
+index 22c2052..fbd2218 100644
+--- a/cloud/apps/api/src/graphql/mutations/run.ts
++++ b/cloud/apps/api/src/graphql/mutations/run.ts
+@@ -6,7 +6,7 @@
+ 
+ import { builder } from '../builder.js';
+ import { db } from '@valuerank/db';
+-import { AuthenticationError, NotFoundError } from '@valuerank/shared';
++import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
+ import { RunRef, TranscriptRef } from '../types/refs.js';
+ import {
+   startRun as startRunService,
+@@ -38,6 +38,7 @@ const StartRunPayload = builder.objectRef<{
+     createdAt: Date;
+   };
+   jobCount: number;
++  pairedRunIds?: string[];
+ }>('StartRunPayload').implement({
+   description: 'Result of starting a new run',
+   fields: (t) => ({
+@@ -56,6 +57,12 @@ const StartRunPayload = builder.objectRef<{
+     jobCount: t.exposeInt('jobCount', {
+       description: 'Number of jobs queued for this run',
+     }),
++    pairedRunIds: t.field({
++      type: ['String'],
++      nullable: true,
++      description: 'Additional run IDs started for a paired batch launch',
++      resolve: (parent) => parent.pairedRunIds ?? null,
++    }),
+   }),
+ });
+ 
+@@ -70,9 +77,102 @@ type StartRunArgs = {
+   priority?: string | null;
+   experimentId?: string | number | null;
+   finalTrial?: boolean | null;
++  launchMode?: string | null;
+   scenarioIds?: Array<string | number> | null;
+ };
+ 
++type DefinitionMethodology = {
++  family?: string;
++  response_scale?: string;
++  presentation_order?: 'A_first' | 'B_first';
++  pair_key?: string;
++};
++
++function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
++  if (!content || typeof content !== 'object' || Array.isArray(content)) {
++    return null;
++  }
++
++  const methodology = (content as Record<string, unknown>).methodology;
++  if (!methodology || typeof methodology !== 'object' || Array.isArray(methodology)) {
++    return null;
++  }
++
++  const record = methodology as Record<string, unknown>;
++  return {
++    family: typeof record.family === 'string' ? record.family : undefined,
++    response_scale: typeof record.response_scale === 'string' ? record.response_scale : undefined,
++    presentation_order:
++      record.presentation_order === 'A_first' || record.presentation_order === 'B_first'
++        ? record.presentation_order
++        : undefined,
++    pair_key: typeof record.pair_key === 'string' ? record.pair_key : undefined,
++  };
++}
++
++async function resolvePairedJobChoiceDefinition(
++  definitionId: string,
++): Promise<{ primary: { id: string; content: unknown }; companionId: string; presentationOrder: 'A_first' | 'B_first' }> {
++  const definition = await db.definition.findUnique({
++    where: { id: definitionId },
++    select: {
++      id: true,
++      domainId: true,
++      content: true,
++      deletedAt: true,
++    },
++  });
++
++  if (!definition || definition.deletedAt !== null) {
++    throw new NotFoundError('Definition', definitionId);
++  }
++
++  const methodology = getDefinitionMethodology(definition.content);
++  if (methodology?.family !== 'job-choice' || !methodology.pair_key || !methodology.presentation_order) {
++    throw new ValidationError('Paired batches require a Job Choice vignette with paired-order metadata.');
++  }
++
++  const companionOrder = methodology.presentation_order === 'A_first' ? 'B_first' : 'A_first';
++  const companion = await db.definition.findFirst({
++    where: {
++      id: { not: definition.id },
++      deletedAt: null,
++      domainId: definition.domainId,
++      content: {
++        path: ['methodology', 'family'],
++        equals: 'job-choice',
++      },
++      AND: [
++        {
++          content: {
++            path: ['methodology', 'pair_key'],
++            equals: methodology.pair_key,
++          },
++        },
++        {
++          content: {
++            path: ['methodology', 'presentation_order'],
++            equals: companionOrder,
++          },
++        },
++      ],
++    },
++    select: { id: true },
++  });
++
++  if (!companion) {
++    throw new ValidationError(
++      'Paired batch launch requires both A-first and B-first Job Choice definitions. Generate both companion definitions first.'
++    );
++  }
++
++  return {
++    primary: { id: definition.id, content: definition.content },
++    companionId: companion.id,
++    presentationOrder: methodology.presentation_order,
++  };
++}
++
+ // startRun mutation
+ builder.mutationField('startRun', (t) =>
+   t.field({
+@@ -119,23 +219,72 @@ builder.mutationField('startRun', (t) =>
+       const activeModelIdSet = new Set(activeModelsForAliases.map((m) => m.modelId));
+ 
+       const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
+-
+-      const result = await startRunService({
+-        definitionId: String(input.definitionId),
+-        models: models,
++      const launchMode = input.launchMode ?? 'STANDARD';
++      const sharedInput = {
++        models,
+         samplePercentage: input.samplePercentage ?? undefined,
+         sampleSeed: input.sampleSeed ?? undefined,
+         samplesPerScenario: input.samplesPerScenario ?? undefined,
+         temperature: input.temperature ?? undefined,
+         priority: input.priority ?? 'NORMAL',
+-        experimentId: (input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== '') ? String(input.experimentId) : undefined,
++        experimentId:
++          input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== ''
++            ? String(input.experimentId)
++            : undefined,
+         userId,
+         finalTrial: input.finalTrial ?? false,
+         scenarioIds: input.scenarioIds?.map((scenarioId) => String(scenarioId)),
+-      });
++      };
++
++      let result;
++      let pairedRunIds: string[] | undefined;
++
++      if (launchMode === 'PAIRED_BATCH') {
++        const pair = await resolvePairedJobChoiceDefinition(String(input.definitionId));
++        const batchGroupId = crypto.randomUUID();
++
++        const primaryRun = await startRunService({
++          definitionId: pair.primary.id,
++          ...sharedInput,
++          configExtras: {
++            jobChoiceLaunchMode: launchMode,
++            jobChoiceBatchGroupId: batchGroupId,
++            jobChoicePresentationOrder: pair.presentationOrder,
++            methodologySafe: true,
++          },
++        });
++
++        const companionRun = await startRunService({
++          definitionId: pair.companionId,
++          ...sharedInput,
++          configExtras: {
++            jobChoiceLaunchMode: launchMode,
++            jobChoiceBatchGroupId: batchGroupId,
++            jobChoicePresentationOrder: pair.presentationOrder === 'A_first' ? 'B_first' : 'A_first',
++            methodologySafe: true,
++          },
++        });
++
++        result = {
++          run: primaryRun.run,
++          jobCount: primaryRun.jobCount + companionRun.jobCount,
++        };
++        pairedRunIds = [companionRun.run.id];
++      } else {
++        result = await startRunService({
++          definitionId: String(input.definitionId),
++          ...sharedInput,
++          configExtras: launchMode === 'AD_HOC_BATCH'
++            ? {
++                jobChoiceLaunchMode: launchMode,
++                methodologySafe: false,
++              }
++            : undefined,
++        });
++      }
+ 
+       ctx.log.info(
+-        { userId, runId: result.run.id, jobCount: result.jobCount },
++        { userId, runId: result.run.id, jobCount: result.jobCount, launchMode, pairedRunIds },
+         'Run started successfully'
+       );
+ 
+@@ -149,10 +298,15 @@ builder.mutationField('startRun', (t) =>
+           definitionId: String(input.definitionId),
+           models: input.models,
+           jobCount: result.jobCount,
++          launchMode,
++          pairedRunIds,
+         },
+       });
+ 
+-      return result;
++      return {
++        ...result,
++        pairedRunIds,
++      };
+     },
+   })
+ );
+@@ -649,6 +803,7 @@ builder.mutationField('updateTranscriptDecision', (t) =>
+           id: true,
+           runId: true,
+           decisionCode: true,
++          decisionMetadata: true,
+         },
+       });
+ 
+@@ -656,11 +811,27 @@ builder.mutationField('updateTranscriptDecision', (t) =>
+         throw new NotFoundError('Transcript', transcriptId);
+       }
+ 
++      const decisionMetadata =
++        transcript.decisionMetadata !== null &&
++        transcript.decisionMetadata !== undefined &&
++        typeof transcript.decisionMetadata === 'object' &&
++        !Array.isArray(transcript.decisionMetadata)
++          ? { ...(transcript.decisionMetadata as Record<string, unknown>) }
++          : {};
++
+       const updatedTranscript = await db.transcript.update({
+         where: { id: transcriptId },
+         data: {
+           decisionCode,
+           decisionCodeSource: 'manual',
++          decisionMetadata: {
++            ...decisionMetadata,
++            manualOverride: {
++              previousDecisionCode: transcript.decisionCode,
++              overriddenAt: new Date().toISOString(),
++              overriddenByUserId: ctx.user.id,
++            },
++          },
+         },
+       });
+ 
+diff --git a/cloud/apps/api/src/graphql/types/inputs/start-run.ts b/cloud/apps/api/src/graphql/types/inputs/start-run.ts
+index 4bf2d98..f213af6 100644
+--- a/cloud/apps/api/src/graphql/types/inputs/start-run.ts
++++ b/cloud/apps/api/src/graphql/types/inputs/start-run.ts
+@@ -46,6 +46,10 @@ export const StartRunInput = builder.inputType('StartRunInput', {
+       required: false,
+       description: 'If true, runs an adaptive sampling strategy to reach 10 samples per condition',
+     }),
++    launchMode: t.string({
++      required: false,
++      description: 'Launch mode hint: STANDARD, PAIRED_BATCH, or AD_HOC_BATCH',
++    }),
+     scenarioIds: t.idList({
+       required: false,
+       description: 'Optional explicit scenario IDs to run instead of percentage sampling',
+diff --git a/cloud/apps/api/src/graphql/types/transcript.ts b/cloud/apps/api/src/graphql/types/transcript.ts
+index 857d582..d3684b7 100644
+--- a/cloud/apps/api/src/graphql/types/transcript.ts
++++ b/cloud/apps/api/src/graphql/types/transcript.ts
+@@ -30,6 +30,11 @@ builder.objectType(TranscriptRef, {
+       nullable: true,
+       description: 'How decisionCode was assigned: deterministic, llm, manual, or error',
+     }),
++    decisionMetadata: t.expose('decisionMetadata', {
++      type: 'JSON',
++      nullable: true,
++      description: 'Parser and adjudication metadata for the transcript decision',
++    }),
+     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
+     contentExpiresAt: t.expose('contentExpiresAt', { type: 'DateTime', nullable: true }),
+diff --git a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+index 2799834..d38ab91 100644
+--- a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
++++ b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+@@ -10,7 +10,8 @@
+ 
+ import path from 'path';
+ import type * as PgBoss from 'pg-boss';
+-import { db } from '@valuerank/db';
++import { db, Prisma } from '@valuerank/db';
++import type { DecisionMetadata } from '@valuerank/db';
+ import { createLogger } from '@valuerank/shared';
+ import type { SummarizeTranscriptJobData } from '../types.js';
+ import { DEFAULT_JOB_OPTIONS } from '../types.js';
+@@ -45,7 +46,15 @@ type SummarizeWorkerInput = {
+  * Python worker output structure.
+  */
+ type SummarizeWorkerOutput =
+-  | { success: true; summary: { decisionCode: string; decisionSource: string; decisionText: string | null } }
++  | {
++      success: true;
++      summary: {
++        decisionCode: string;
++        decisionSource: string;
++        decisionText: string | null;
++        decisionMetadata?: DecisionMetadata | null;
++      };
++    }
+   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+ 
+ /**
+@@ -195,6 +204,7 @@ async function processSummarizeJob(
+             decisionCode: 'error',
+             decisionCodeSource: 'error',
+             decisionText: `Summary failed: ${err.message}`,
++            decisionMetadata: Prisma.DbNull,
+             summarizedAt: new Date(),
+           },
+         });
+@@ -214,6 +224,10 @@ async function processSummarizeJob(
+         decisionCode: output.summary.decisionCode,
+         decisionCodeSource: output.summary.decisionSource,
+         decisionText: output.summary.decisionText,
++        decisionMetadata:
++          output.summary.decisionMetadata == null
++            ? Prisma.DbNull
++            : (output.summary.decisionMetadata as Prisma.InputJsonValue),
+         summarizedAt: new Date(),
+       },
+     });
+@@ -247,6 +261,7 @@ async function processSummarizeJob(
+             decisionCode: 'error',
+             decisionCodeSource: 'error',
+             decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
++            decisionMetadata: Prisma.DbNull,
+             summarizedAt: new Date(),
+           },
+         });
+diff --git a/cloud/apps/api/src/routes/export.ts b/cloud/apps/api/src/routes/export.ts
+index 1f07ebc..e2aece3 100644
+--- a/cloud/apps/api/src/routes/export.ts
++++ b/cloud/apps/api/src/routes/export.ts
+@@ -589,6 +589,8 @@ exportRouter.get(
+           estimatedCost: t.estimatedCost,
+           decisionCode: t.decisionCode,
+           decisionText: t.decisionText,
++          decisionCodeSource: t.decisionCodeSource,
++          decisionMetadata: t.decisionMetadata,
+           createdAt: t.createdAt,
+         })),
+       };
+diff --git a/cloud/apps/api/src/services/export/csv.ts b/cloud/apps/api/src/services/export/csv.ts
+index 0963358..269afce 100644
+--- a/cloud/apps/api/src/services/export/csv.ts
++++ b/cloud/apps/api/src/services/export/csv.ts
+@@ -26,6 +26,10 @@ export type CSVRow = {
+   modelName: string;
+   sampleIndex: number;
+   decisionCode: string;
++  decisionCodeSource: string;
++  parseClass: string;
++  parsePath: string;
++  matchedLabel: string;
+   trialSignature: string;
+   probePrompt: string;
+   targetResponse: string;
+@@ -44,6 +48,10 @@ export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Trial Signature', 'Batch'
+  */
+ export const POST_VARIABLE_HEADERS = [
+   'Decision Code',
++  'Decision Source',
++  'Decision Parse Class',
++  'Decision Parse Path',
++  'Matched Label',
+   'Transcript ID',
+   'Probe Prompt',
+   'Target Response',
+@@ -147,6 +155,22 @@ function getScenarioDimensions(transcript: TranscriptWithScenario): Record<strin
+   return {};
+ }
+ 
++function getDecisionMetadata(
++  transcript: TranscriptWithScenario
++): { parseClass: string; parsePath: string; matchedLabel: string } {
++  const metadata = transcript.decisionMetadata;
++  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
++    return { parseClass: '', parsePath: '', matchedLabel: '' };
++  }
++
++  const record = metadata as Record<string, unknown>;
++  return {
++    parseClass: typeof record.parseClass === 'string' ? record.parseClass : '',
++    parsePath: typeof record.parsePath === 'string' ? record.parsePath : '',
++    matchedLabel: typeof record.matchedLabel === 'string' ? record.matchedLabel : '',
++  };
++}
++
+ /**
+  * Format the trial signature from definition version and temperature.
+  * Re-implemented cleanly here to avoid circular imports.
+@@ -187,12 +211,17 @@ function extractTrialSignature(
+  * @param transcript - The transcript with scenario data
+  */
+ export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
++  const decisionMetadata = getDecisionMetadata(transcript);
+   return {
+     batchName: transcript.run?.name ?? '',
+     transcriptId: transcript.id,
+     modelName: getModelName(transcript.modelId),
+     sampleIndex: transcript.sampleIndex,
+     decisionCode: transcript.decisionCode ?? 'pending',
++    decisionCodeSource: transcript.decisionCodeSource ?? '',
++    parseClass: decisionMetadata.parseClass,
++    parsePath: decisionMetadata.parsePath,
++    matchedLabel: decisionMetadata.matchedLabel,
+     trialSignature: extractTrialSignature(transcript.run?.definition?.version, transcript.run?.config),
+     probePrompt: getProbePrompt(transcript),
+     targetResponse: getTargetResponse(transcript),
+@@ -224,6 +253,10 @@ export function formatCSVRow(row: CSVRow, variableNames: string[]): string {
+   // Post-variable columns
+   const postVariableValues = [
+     escapeCSV(row.decisionCode),
++    escapeCSV(row.decisionCodeSource),
++    escapeCSV(row.parseClass),
++    escapeCSV(row.parsePath),
++    escapeCSV(row.matchedLabel),
+     escapeCSV(row.transcriptId),
+     escapeCSV(row.probePrompt),
+     escapeCSV(row.targetResponse),
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/workers/summarize.py b/cloud/workers/summarize.py
+index 9fc85a4..89f512c 100644
+--- a/cloud/workers/summarize.py
++++ b/cloud/workers/summarize.py
+@@ -46,6 +46,7 @@ Error:
+ """
+ 
+ import json
++import hashlib
+ import re
+ import sys
+ from typing import Any, Optional
+@@ -105,6 +106,7 @@ REFUSAL_PATTERN = re.compile(
+ # Default summary model if none specified
+ DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
+ LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
++PARSER_VERSION = "job-choice-v1"
+ 
+ 
+ def validate_input(data: dict[str, Any]) -> None:
+@@ -125,6 +127,90 @@ def validate_input(data: dict[str, Any]) -> None:
+         raise ValidationError(message="transcriptContent.turns must be an array")
+ 
+ 
++def normalize_for_match(text: str) -> str:
++    sanitized = text.replace("**", " ").replace("__", " ").replace("`", " ")
++    sanitized = re.sub(r"[^a-z0-9]+", " ", sanitized.lower())
++    return re.sub(r"\s+", " ", sanitized).strip()
++
++
++def build_response_text(transcript_content: dict[str, Any]) -> str:
++    turns = transcript_content.get("turns", [])
++    responses: list[str] = []
++    for turn in turns:
++        response = turn.get("targetResponse", "")
++        if isinstance(response, str) and response:
++            responses.append(response)
++    return "\n".join(responses).strip()
++
++
++def response_excerpt(text: str, limit: int = 280) -> str:
++    compact = re.sub(r"\s+", " ", text).strip()
++    return compact[:limit]
++
++
++def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, str]]:
++    turns = transcript_content.get("turns", [])
++    for turn in turns:
++        probe_prompt = turn.get("probePrompt")
++        if not isinstance(probe_prompt, str) or probe_prompt.strip() == "":
++            continue
++
++        numbered_labels: list[dict[str, str]] = []
++        bullet_labels: list[str] = []
++
++        for raw_line in probe_prompt.splitlines():
++            line = raw_line.strip()
++            if line == "":
++                continue
++
++            numbered_match = re.match(r"^(?P<code>[1-9]\d*)\s*-\s*(?P<label>.+)$", line)
++            if numbered_match:
++                numbered_labels.append(
++                    {
++                        "code": numbered_match.group("code"),
++                        "label": numbered_match.group("label").strip(),
++                    }
++                )
++                continue
++
++            bullet_match = re.match(r"^-\s+(?P<label>.+)$", line)
++            if bullet_match:
++                bullet_labels.append(bullet_match.group("label").strip())
++
++        if len(numbered_labels) >= 5:
++            return numbered_labels
++        if len(bullet_labels) == 5:
++            return [
++                {"code": code, "label": label}
++                for code, label in zip(["5", "4", "3", "2", "1"], bullet_labels)
++            ]
++
++    return []
++
++
++def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str]]:
++    if not text or not scale_labels:
++        return None, None
++
++    normalized_response = normalize_for_match(text)
++    if normalized_response == "":
++        return None, None
++
++    matches: list[dict[str, str]] = []
++    for entry in scale_labels:
++        label = entry.get("label", "")
++        normalized_label = normalize_for_match(label)
++        if normalized_label and normalized_label in normalized_response:
++            matches.append(entry)
++
++    unique_matches = list({entry["code"]: entry for entry in matches}.values())
++    if len(unique_matches) != 1:
++        return None, None
++
++    match = unique_matches[0]
++    return match["code"], match["label"]
++
++
+ def extract_decision_code_from_text(text: str) -> Optional[str]:
+     """
+     Extract numeric decision code (positive integer) from text.
+@@ -212,16 +298,17 @@ def extract_decision_code(transcript_content: dict[str, Any]) -> str:
+     return result if result else "other"
+ 
+ 
+-def build_llm_decision_prompt(transcript_content: dict[str, Any]) -> str:
++def build_llm_decision_prompt(
++    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
++) -> str:
+     """Build strict prompt for fallback LLM decision classification."""
+-    turns = transcript_content.get("turns", [])
+-
+-    # Format transcript for analysis (target responses only).
+-    transcript_text = ""
+-    for turn in turns:
+-        response = turn.get("targetResponse", "")
+-        if response:
+-            transcript_text += f"{response}\n\n"
++    transcript_text = build_response_text(transcript_content)
++    scale_section = ""
++    if scale_labels:
++        formatted_labels = "\n".join(
++            f"- {entry['code']}: {entry['label']}" for entry in scale_labels
++        )
++        scale_section = f"Available scale labels:\n{formatted_labels}\n\n"
+ 
+     return (
+         "You are extracting a single final decision code from an AI response.\n"
+@@ -230,19 +317,22 @@ def build_llm_decision_prompt(transcript_content: dict[str, Any]) -> str:
+         "- refusal\n"
+         "- other\n"
+         "No explanation, no punctuation, no extra words.\n\n"
++        f"{scale_section}"
+         "Transcript:\n"
+         f"{transcript_text}\n"
+         "\nAnswer:"
+     )
+ 
+ 
+-def classify_decision_with_llm(transcript_content: dict[str, Any]) -> str:
++def classify_decision_with_llm(
++    transcript_content: dict[str, Any], scale_labels: Optional[list[dict[str, str]]] = None
++) -> str:
+     """
+     Use fallback LLM to classify an unresolved decision.
+ 
+     Returns decision code string, "refusal", or "other".
+     """
+-    prompt = build_llm_decision_prompt(transcript_content)
++    prompt = build_llm_decision_prompt(transcript_content, scale_labels)
+     messages = [{"role": "user", "content": prompt}]
+ 
+     try:
+@@ -271,6 +361,60 @@ def classify_decision_with_llm(transcript_content: dict[str, Any]) -> str:
+         return "other"
+ 
+ 
++def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any]:
++    response_text = build_response_text(transcript_content)
++    response_hash = hashlib.sha256(response_text.encode("utf-8")).hexdigest() if response_text else None
++    scale_labels = collect_scale_labels(transcript_content)
++
++    decision_code = extract_decision_code(transcript_content)
++    decision_source = "deterministic"
++    parse_class = "exact"
++    parse_path = "numeric_deterministic"
++    matched_label = None
++
++    if decision_code == "other" and scale_labels:
++        text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
++        if text_label_code is not None:
++            decision_code = text_label_code
++            parse_path = "text_label_exact"
++        else:
++            llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
++            if llm_decision_code != "other":
++                decision_code = llm_decision_code
++                decision_source = "llm"
++                parse_class = "fallback_resolved"
++                parse_path = "text_label_llm"
++            else:
++                parse_class = "ambiguous"
++                parse_path = "text_label_ambiguous"
++    elif decision_code == "other":
++        llm_decision_code = classify_decision_with_llm(transcript_content)
++        if llm_decision_code != "other":
++            decision_code = llm_decision_code
++            decision_source = "llm"
++            parse_class = "fallback_resolved"
++            parse_path = "numeric_llm"
++        else:
++            parse_class = "ambiguous"
++            parse_path = "numeric_ambiguous"
++
++    metadata = {
++        "parserVersion": PARSER_VERSION,
++        "parseClass": parse_class,
++        "parsePath": parse_path,
++        "responseSha256": response_hash,
++        "responseExcerpt": response_excerpt(response_text) if response_text else None,
++        "matchedLabel": matched_label,
++        "scaleLabels": scale_labels,
++    }
++
++    return {
++        "decisionCode": decision_code,
++        "decisionSource": decision_source,
++        "decisionMetadata": metadata,
++    }
++
++
+ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+     """
+     Execute the summarization.
+@@ -292,25 +436,27 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+     )
+ 
+     try:
+-        # Extract decision code from transcript (deterministic first, then LLM fallback).
+-        decision_code = extract_decision_code(transcript_content)
+-        decision_source = "deterministic"
+-
+-        if decision_code == "other":
+-            llm_decision_code = classify_decision_with_llm(transcript_content)
+-            if llm_decision_code != "other":
+-                decision_code = llm_decision_code
+-                decision_source = "llm"
++        decision_result = extract_decision_result(transcript_content)
++        decision_code = decision_result["decisionCode"]
++        decision_source = decision_result["decisionSource"]
++        decision_metadata = decision_result["decisionMetadata"]
+ 
+         # Log appropriate message based on what we found (or didn't find)
+-        if decision_source == "llm":
++        if decision_metadata["parsePath"] == "text_label_exact":
++            log.info(
++                "Resolved decision code from text scale label",
++                transcriptId=transcript_id,
++                rating=decision_code,
++                matchedLabel=decision_metadata["matchedLabel"],
++            )
++        elif decision_source == "llm":
+             log.info(
+                 "Resolved decision code with fallback LLM",
+                 transcriptId=transcript_id,
+                 rating=decision_code,
+                 fallbackModel=LLM_FALLBACK_MODEL,
+             )
+-        elif decision_code == "other":
++        elif decision_metadata["parseClass"] == "ambiguous":
+             log.info(
+                 "Could not extract deterministic rating from transcript",
+                 transcriptId=transcript_id,
+@@ -338,6 +484,7 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
+                 "decisionCode": decision_code,
+                 "decisionSource": decision_source,
+                 "decisionText": decision_text,
++                "decisionMetadata": decision_metadata,
+             },
+         }
+ 
+diff --git a/cloud/workers/tests/test_summarize.py b/cloud/workers/tests/test_summarize.py
+index 6532928..39f5481 100644
+--- a/cloud/workers/tests/test_summarize.py
++++ b/cloud/workers/tests/test_summarize.py
+@@ -389,6 +389,21 @@ class TestBuildLlmDecisionPrompt:
+         prompt = build_llm_decision_prompt(content)
+         assert "Just a response" in prompt
+ 
++    def test_includes_scale_labels_when_present(self) -> None:
++        """Test prompt building with explicit scale labels."""
++        from summarize import build_llm_decision_prompt
++
++        prompt = build_llm_decision_prompt(
++            {"turns": [{"targetResponse": "Strongly support taking the job with substantial freedom"}]},
++            scale_labels=[
++                {"code": "5", "label": "Strongly support taking the job with substantial freedom"},
++                {"code": "4", "label": "Somewhat support taking the job with substantial freedom"},
++            ],
++        )
++
++        assert "Available scale labels" in prompt
++        assert "5: Strongly support taking the job with substantial freedom" in prompt
++
+ 
+ class TestClassifyDecisionWithLlm:
+     """Tests for fallback LLM decision classification."""
+@@ -483,6 +498,7 @@ class TestRunSummarize:
+         assert result["success"] is True
+         assert result["summary"]["decisionCode"] == "4"
+         assert result["summary"]["decisionSource"] == "deterministic"
++        assert result["summary"]["decisionMetadata"]["parseClass"] == "exact"
+         assert result["summary"]["decisionText"] is None
+         mock_classify.assert_not_called()
+ 
+@@ -507,6 +523,7 @@ class TestRunSummarize:
+         assert result["success"] is True
+         assert result["summary"]["decisionCode"] == "2"
+         assert result["summary"]["decisionSource"] == "deterministic"
++        assert result["summary"]["decisionMetadata"]["parsePath"] == "numeric_deterministic"
+         assert result["summary"]["decisionText"] is None
+         mock_classify.assert_not_called()
+ 
+@@ -532,6 +549,7 @@ class TestRunSummarize:
+         assert result["success"] is True
+         assert result["summary"]["decisionCode"] == "5"
+         assert result["summary"]["decisionSource"] == "llm"
++        assert result["summary"]["decisionMetadata"]["parseClass"] == "fallback_resolved"
+         mock_classify.assert_called_once()
+ 
+     @patch("summarize.classify_decision_with_llm")
+@@ -556,8 +574,72 @@ class TestRunSummarize:
+         assert result["success"] is True
+         assert result["summary"]["decisionCode"] == "other"
+         assert result["summary"]["decisionSource"] == "deterministic"
++        assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
+         assert result["summary"]["decisionText"] is None
+ 
++    def test_extracts_text_label_scale_decision(self) -> None:
++        """Test deterministic text-label parsing for Job Choice scales."""
++        from summarize import extract_decision_result
++
++        transcript_content = {
++            "turns": [
++                {
++                    "probePrompt": (
++                        "A mid-level professional has been offered two distinct roles.\n\n"
++                        "Give me your judgment on the following scale:\n\n"
++                        "- Strongly support taking the job with substantial recognition for expertise\n"
++                        "- Somewhat support taking the job with substantial recognition for expertise\n"
++                        "- Neutral / Unsure\n"
++                        "- Somewhat support taking the job with moderate personal enjoyment\n"
++                        "- Strongly support taking the job with moderate personal enjoyment"
++                    ),
++                    "targetResponse": (
++                        "Somewhat support taking the job with substantial recognition for expertise "
++                        "because the performance expectations are clearer."
++                    ),
++                }
++            ]
++        }
++
++        result = extract_decision_result(transcript_content)
++
++        assert result["decisionCode"] == "4"
++        assert result["decisionSource"] == "deterministic"
++        assert result["decisionMetadata"]["parsePath"] == "text_label_exact"
++        assert result["decisionMetadata"]["matchedLabel"] == (
++            "Somewhat support taking the job with substantial recognition for expertise"
++        )
++
++    @patch("summarize.generate")
++    def test_uses_llm_for_unresolved_text_label_scale(self, mock_generate: MagicMock) -> None:
++        """Test text-label fallback classification."""
++        from summarize import extract_decision_result
++
++        mock_generate.return_value = LLMResponse(content="2")
++
++        transcript_content = {
++            "turns": [
++                {
++                    "probePrompt": (
++                        "Give me your judgment on the following scale:\n"
++                        "- Strongly support taking the job with substantial recognition for expertise\n"
++                        "- Somewhat support taking the job with substantial recognition for expertise\n"
++                        "- Neutral / Unsure\n"
++                        "- Somewhat support taking the job with moderate personal enjoyment\n"
++                        "- Strongly support taking the job with moderate personal enjoyment"
++                    ),
++                    "targetResponse": "I lean toward the more pleasant day-to-day role overall.",
++                }
++            ]
++        }
++
++        result = extract_decision_result(transcript_content)
++
++        assert result["decisionCode"] == "2"
++        assert result["decisionSource"] == "llm"
++        assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
++        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
++
+     @patch("summarize.classify_decision_with_llm")
+     @patch("summarize.extract_decision_code")
+     def test_uses_default_model(

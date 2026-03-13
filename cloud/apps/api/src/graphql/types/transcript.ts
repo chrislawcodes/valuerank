@@ -30,6 +30,11 @@ builder.objectType(TranscriptRef, {
       nullable: true,
       description: 'How decisionCode was assigned: deterministic, llm, manual, or error',
     }),
+    decisionMetadata: t.expose('decisionMetadata', {
+      type: 'JSON',
+      nullable: true,
+      description: 'Parser and adjudication metadata for the transcript decision',
+    }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     lastAccessedAt: t.expose('lastAccessedAt', { type: 'DateTime', nullable: true }),
     contentExpiresAt: t.expose('contentExpiresAt', { type: 'DateTime', nullable: true }),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { VarianceAnalysis } from '../../../src/api/operations/analysis';
+import type { DecisionCoverageSummary } from '../../../src/utils/analysisCoverage';
 import {
   StabilityTab,
   getDirectionBgColor,
@@ -68,6 +69,33 @@ function createVarianceAnalysis(): VarianceAnalysis {
     leastVariableScenarios: [],
   };
 }
+
+const decisionCoverage: DecisionCoverageSummary = {
+  totalTranscripts: 6,
+  scoredTranscripts: 4,
+  unresolvedTranscripts: 2,
+  parserScoredTranscripts: 3,
+  manuallyAdjudicatedTranscripts: 1,
+  exactMatchTranscripts: 2,
+  fallbackResolvedTranscripts: 1,
+  ambiguousTranscripts: 2,
+  legacyNumericTranscripts: 0,
+  hasMethodologySignals: true,
+  perModel: {
+    model1: {
+      modelId: 'model1',
+      totalTranscripts: 6,
+      scoredTranscripts: 4,
+      unresolvedTranscripts: 2,
+      parserScoredTranscripts: 3,
+      manuallyAdjudicatedTranscripts: 1,
+      exactMatchTranscripts: 2,
+      fallbackResolvedTranscripts: 1,
+      ambiguousTranscripts: 2,
+      legacyNumericTranscripts: 0,
+    },
+  },
+};
 
 describe('getStabilityLabel', () => {
   it('returns null when N < 2', () => {
@@ -153,11 +181,11 @@ describe('StabilityTab', () => {
           },
         }}
         varianceAnalysis={createVarianceAnalysis()}
-      />
+      />,
     );
 
     expect(
-      screen.getByRole('heading', { level: 3, name: 'Condition x AI Directional Stability' })
+      screen.getByRole('heading', { level: 3, name: 'Condition x AI Directional Stability' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/predominant direction/i)).toBeInTheDocument();
     expect(screen.getByText('Favors A')).toBeInTheDocument();
@@ -193,13 +221,39 @@ describe('StabilityTab', () => {
           },
         }}
         varianceAnalysis={createVarianceAnalysis()}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByTitle('View 5 transcripts for model1 | Freedom: High, Harmony: Low'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1'
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1',
     );
+  });
+
+  it('shows parser, manual, and unresolved decision coverage above the matrix', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        perModel={{
+          model1: {
+            sampleSize: 6,
+            values: {},
+            overall: { mean: 0.5, stdDev: 0.2, min: -1, max: 1 },
+          },
+        }}
+        visualizationData={null}
+        varianceAnalysis={null}
+        decisionCoverage={decisionCoverage}
+      />,
+    );
+
+    const banner = screen.getByText('Decision coverage').parentElement;
+    expect(banner).not.toBeNull();
+    expect(banner).toHaveTextContent('Stability metrics include 4 of 6 transcripts.');
+    expect(banner).toHaveTextContent('2 unresolved transcripts are currently excluded until manually adjudicated.');
+    expect(banner).toHaveTextContent('Parser-scored: 3 (2 exact, 1 fallback)');
+    expect(screen.getByText('model1')).toBeInTheDocument();
+    expect(screen.getByText('4/6')).toBeInTheDocument();
   });
 });

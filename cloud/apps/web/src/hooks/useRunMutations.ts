@@ -37,6 +37,7 @@ import {
 type StartRunResult = {
   run: Run;
   jobCount: number;
+  pairedRunIds?: string[] | null;
 };
 
 type CancelSummarizationResult = {
