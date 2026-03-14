@@ -20,3 +20,5 @@ import './domain-coverage.js';
 import './assumptions.js';
 import './order-invariance.js';
 import './temp-zero-verification.js';
+import './domain-context.js';
+import './value-statement.js';

@@ -12,6 +12,9 @@ const tabs = [
 const vignetteMenuItems = [
   { name: 'List', path: '/definitions' },
   { name: 'Preambles', path: '/preambles' },
+  { name: 'Domain Contexts', path: '/domain-contexts' },
+  { name: 'Value Statements', path: '/value-statements' },
+  { name: 'New Job Choice', path: '/job-choice/new' },
   { name: 'Trials', path: '/runs' },
   { name: 'Analysis', path: '/analysis' },
 ];

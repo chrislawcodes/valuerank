@@ -27,6 +27,9 @@ import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
 import { Settings } from './pages/Settings';
 import { Preambles } from './pages/Preambles';
+import { DomainContexts } from './pages/DomainContexts';
+import { ValueStatements } from './pages/ValueStatements';
+import { JobChoiceNew } from './pages/JobChoiceNew';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
 
@@ -227,6 +230,30 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Preambles />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/domain-contexts"
+              element={
+                <ProtectedLayout>
+                  <DomainContexts />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/value-statements"
+              element={
+                <ProtectedLayout>
+                  <ValueStatements />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/job-choice/new"
+              element={
+                <ProtectedLayout>
+                  <JobChoiceNew />
                 </ProtectedLayout>
               }
             />
