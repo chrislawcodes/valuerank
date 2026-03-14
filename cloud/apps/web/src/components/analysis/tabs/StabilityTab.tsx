@@ -11,7 +11,12 @@ import type { PerModelStats } from './types';
 import type { VisualizationData, VarianceAnalysis } from '../../../api/operations/analysis';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
+import { DecisionCoverageBanner } from '../DecisionCoverageBanner';
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath, buildAnalysisTranscriptsPath } from '../../../utils/analysisRouting';
+import {
+    getCoverageForModel,
+    type DecisionCoverageSummary,
+} from '../../../utils/analysisCoverage';
 
 type StabilityTabProps = {
     runId: string;
@@ -19,6 +24,7 @@ type StabilityTabProps = {
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
+    decisionCoverage?: DecisionCoverageSummary | null;
 };
 
 type ConditionRow = {
@@ -455,8 +461,19 @@ export function StabilityTab({
     perModel,
     visualizationData,
     varianceAnalysis,
+    decisionCoverage,
 }: StabilityTabProps) {
     const orientationCorrectedCount = varianceAnalysis?.orientationCorrectedCount ?? 0;
+    const visibleCoverageRows = useMemo(
+        () => Object.keys(perModel)
+            .sort()
+            .map((modelId) => ({
+                modelId,
+                coverage: getCoverageForModel(decisionCoverage, modelId),
+            }))
+            .filter((entry) => entry.coverage !== null),
+        [decisionCoverage, perModel],
+    );
 
     return (
         <div className="space-y-6">
@@ -467,6 +484,61 @@ export function StabilityTab({
                     Each cell shows the predominant direction (Favors A / Favors B / Neutral) and the fraction of
                     replicates that agree. High stability means all replicates pointed the same direction.
                 </p>
+                {decisionCoverage && (
+                    <div className="space-y-3">
+                        <DecisionCoverageBanner
+                            coverage={decisionCoverage}
+                            contextLabel="stability metrics"
+                            compact
+                        />
+                        {visibleCoverageRows.length > 0 && (
+                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
+                                                AI
+                                            </th>
+                                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
+                                                Scored
+                                            </th>
+                                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
+                                                Parser
+                                            </th>
+                                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
+                                                Manual
+                                            </th>
+                                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
+                                                Unresolved
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 bg-white">
+                                        {visibleCoverageRows.map(({ modelId, coverage }) => (
+                                            coverage && (
+                                                <tr key={modelId}>
+                                                    <td className="px-3 py-2 text-sm text-gray-700">{modelId}</td>
+                                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                                        {coverage.scoredTranscripts}/{coverage.totalTranscripts}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                                        {coverage.parserScoredTranscripts}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-sm text-gray-700">
+                                                        {coverage.manuallyAdjudicatedTranscripts}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right text-sm text-amber-700">
+                                                        {coverage.unresolvedTranscripts}
+                                                    </td>
+                                                </tr>
+                                            )
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
             <ConditionStabilityMatrix
                 runId={runId}
                 analysisBasePath={analysisBasePath}

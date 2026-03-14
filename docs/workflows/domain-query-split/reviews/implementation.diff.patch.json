@@ -1,0 +1,14 @@
+{
+  "repo_root": "/Users/chrislaw/valuerank",
+  "git_head_sha": "3aa0478c59137277c911bea998522cfd86ec9934",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "3aa0478c59137277c911bea998522cfd86ec9934",
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/src/graphql/queries/domain.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-shape.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain.test.ts"
+  ],
+  "artifact_path": "/Users/chrislaw/valuerank/docs/workflows/domain-query-split/reviews/implementation.diff.patch"
+}

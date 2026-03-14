@@ -1,0 +1,21 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/mutations/run.ts",
+    "cloud/apps/api/src/graphql/mutations/run",
+    "cloud/apps/api/tests/graphql/mutations/run.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/run-control.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/cancel-summarization.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/run-registration.test.ts",
+    "cloud/apps/api/tests/graphql/types/audit-fields.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/mutations/run.ts",
+    "cloud/apps/api/src/graphql/mutations/run",
+    "cloud/apps/api/tests/graphql/mutations/run.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/run-control.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/cancel-summarization.test.ts",
+    "cloud/apps/api/tests/graphql/mutations/run-registration.test.ts",
+    "cloud/apps/api/tests/graphql/types/audit-fields.test.ts",
+    "docs/workflows/run-mutation-split"
+  ]
+}

@@ -1,6 +1,7 @@
 import { FileText, Zap } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
+import { getDecisionMetadata } from '../../utils/methodology';
 
 export type TranscriptScenarioHighlight = {
   label: string;
@@ -71,10 +72,16 @@ export function TranscriptRow({
   decisionUpdating = false,
   scenarioHighlight = null,
 }: TranscriptRowProps) {
+  const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
-  const isDecisionOverrideAllowed = transcript.decisionCode === 'other' && Boolean(onDecisionChange);
+  const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
+  const isDecisionOverrideAllowed = Boolean(onDecisionChange) && (
+    decisionMetadata?.parseClass === 'ambiguous'
+    || !isAnalyzableDecision
+  );
   const containerClassName = scenarioHighlight?.containerClassName
     ?? 'border-gray-200 hover:bg-gray-50';
 
@@ -88,6 +95,19 @@ export function TranscriptRow({
   const handleOpen = () => {
     onSelect(transcript);
   };
+
+  const decisionOptions = decisionScaleLabels.length > 0
+    ? decisionScaleLabels
+        .slice()
+        .sort((left, right) => Number(right.code) - Number(left.code))
+        .map((entry) => ({ value: entry.code, label: `${entry.code} - ${entry.label}` }))
+    : [
+        { value: '5', label: '5' },
+        { value: '4', label: '4' },
+        { value: '3', label: '3' },
+        { value: '2', label: '2' },
+        { value: '1', label: '1' },
+      ];
 
   return (
     <div
@@ -138,7 +158,7 @@ export function TranscriptRow({
           <div className="truncate">
             {isDecisionOverrideAllowed ? (
               <div className="flex items-center gap-2">
-                <span className="text-gray-700">other</span>
+                <span className="text-gray-700">{decisionDisplay}</span>
                 <select
                   aria-label={`Set decision for transcript ${transcript.id}`}
                   className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
@@ -150,15 +170,32 @@ export function TranscriptRow({
                   <option value="">
                     {decisionUpdating ? 'Saving...' : 'Change'}
                   </option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
+                  {decisionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             ) : (
-              decisionDisplay
+              <div className="flex items-center gap-2">
+                <span>{decisionDisplay}</span>
+                {decisionMetadata?.parseClass === 'ambiguous' && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                    Ambiguous
+                  </span>
+                )}
+                {decisionMetadata?.parseClass === 'fallback_resolved' && (
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                    Fallback
+                  </span>
+                )}
+                {transcript.decisionCodeSource === 'manual' && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                    Manual
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div className="flex items-center gap-1 text-gray-500">
@@ -195,8 +232,26 @@ export function TranscriptRow({
           </div>
 
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
-            <span title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}>
-              {decisionDisplay}
+            <span
+              className="flex items-center gap-2"
+              title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}
+            >
+              <span>{decisionDisplay}</span>
+              {decisionMetadata?.parseClass === 'ambiguous' && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                  Ambiguous
+                </span>
+              )}
+              {decisionMetadata?.parseClass === 'fallback_resolved' && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                  Fallback
+                </span>
+              )}
+              {transcript.decisionCodeSource === 'manual' && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                  Manual
+                </span>
+              )}
             </span>
             <span className="flex items-center gap-1" title="Tokens">
               <Zap className="w-3 h-3" />

@@ -58,8 +58,14 @@ describe('transformJobChoiceDefinition', () => {
     expect(result.content.template).toContain(
       'In the other role, this job offers [hedonism] enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work.',
     );
+    expect(result.content.template).toContain(
+      '- Strongly support taking the job with [achievement] recognition of their expertise'
+    );
     expect(result.content.template).not.toContain('they would gain');
     expect(result.content.template).not.toContain('1 to 5');
+    
+    // Validate role titles
+    expect(result.roleTitles).toEqual(['a sales executive', 'a luxury resort reviewer']);
   });
 
   it('produces correct option labels', () => {
@@ -71,19 +77,20 @@ describe('transformJobChoiceDefinition', () => {
     ]);
   });
 
-  it('preserves methodology metadata', () => {
+  it('preserves methodology metadata and includes default pair_key', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
-    expect(result.content.methodology).toMatchObject({
+    expect(result.content.methodology).toEqual({
       family: 'job-choice',
       response_scale: 'option_text',
       legacy_label: 'Old V1',
       canonical_value_order: ['Achievement', 'Hedonism'],
       presentation_order: 'A_first',
+      pair_key: undefined,
     });
   });
 
-  it('swaps value_first and value_second for B_first', () => {
+  it('swaps value_first and value_second and applies pair_key for B_first', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT, {
       presentationOrder: 'B_first',
       pairKey: 'jobs-achievement-vs-hedonism',
@@ -93,6 +100,15 @@ describe('transformJobChoiceDefinition', () => {
     expect(result.content.components?.value_second.token).toBe('achievement');
     expect(result.content.template).toContain('In one role, this job offers [hedonism]');
     expect(result.roleTitles).toEqual(['a luxury resort reviewer', 'a sales executive']);
+    
+    expect(result.content.methodology).toEqual({
+      family: 'job-choice',
+      response_scale: 'option_text',
+      legacy_label: 'Old V1',
+      canonical_value_order: ['Achievement', 'Hedonism'],
+      presentation_order: 'B_first',
+      pair_key: 'jobs-achievement-vs-hedonism',
+    });
   });
 
   it('throws for a token not in the VALUE_STATEMENTS map', () => {

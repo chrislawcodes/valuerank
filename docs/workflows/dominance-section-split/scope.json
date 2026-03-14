@@ -1,0 +1,19 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/domains/DominanceSection.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionChart.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionSummary.tsx",
+    "cloud/apps/web/src/components/domains/useDominanceGraph.ts",
+    "cloud/apps/web/tests/components/DominanceSection.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/domains/DominanceSection.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionChart.tsx",
+    "cloud/apps/web/src/components/domains/DominanceSectionSummary.tsx",
+    "cloud/apps/web/src/components/domains/useDominanceGraph.ts",
+    "cloud/apps/web/tests/components/DominanceSection.test.tsx",
+    "docs/operations/codex-skills",
+    "docs/workflows/dominance-section-split",
+    "scripts/sync-codex-skills.py"
+  ]
+}

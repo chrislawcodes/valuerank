@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/src/graphql/queries/domain.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-shape.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain",
+    "cloud/apps/api/src/graphql/queries/domain.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-clustering.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain.test.ts",
+    "cloud/apps/api/tests/graphql/queries/domain-shape.test.ts",
+    "docs/workflows/domain-query-split"
+  ]
+}

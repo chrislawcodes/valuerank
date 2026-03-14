@@ -14,6 +14,7 @@ type RawDefinitionRow = {
   id: string;
   parent_id: string | null;
   domain_id: string | null;
+  domain_context_id: string | null;
   name: string;
   content: Prisma.JsonValue;
   expansion_progress: Prisma.JsonValue | null;
@@ -176,7 +177,7 @@ builder.queryField('definitionAncestors', (t) =>
           JOIN ancestry a ON d.id = a.parent_id
           WHERE a.parent_id IS NOT NULL AND a.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, domain_context_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM ancestry
         WHERE id != ${id}
         ORDER BY created_at ASC
@@ -187,6 +188,7 @@ builder.queryField('definitionAncestors', (t) =>
         id: a.id,
         parentId: a.parent_id,
         domainId: a.domain_id,
+        domainContextId: a.domain_context_id,
         name: a.name,
         content: a.content,
         expansionProgress: a.expansion_progress,
@@ -245,7 +247,7 @@ builder.queryField('definitionDescendants', (t) =>
           JOIN tree t ON d.parent_id = t.id
           WHERE t.depth < ${maxDepth} AND d.deleted_at IS NULL
         )
-        SELECT id, parent_id, domain_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
+        SELECT id, parent_id, domain_id, domain_context_id, name, content, expansion_progress, expansion_debug, created_at, updated_at, last_accessed_at, created_by_user_id, deleted_by_user_id, version, preamble_version_id
         FROM tree
         WHERE id != ${id}
         ORDER BY created_at DESC
@@ -256,6 +258,7 @@ builder.queryField('definitionDescendants', (t) =>
         id: d.id,
         parentId: d.parent_id,
         domainId: d.domain_id,
+        domainContextId: d.domain_context_id,
         name: d.name,
         content: d.content,
         expansionProgress: d.expansion_progress,

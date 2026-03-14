@@ -1,0 +1,38 @@
+{
+  "feature_slug": "job-choice-implementation",
+  "stage": "spec",
+  "artifact_path": "/Users/chrislaw/valuerank/docs/workflows/job-choice-implementation/spec.md",
+  "git_base_ref": "",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "architecture",
+      "stage": "spec",
+      "path": "/Users/chrislaw/valuerank/docs/workflows/job-choice-implementation/reviews/spec.codex.architecture.review.md",
+      "context_paths": [
+        "/Users/chrislaw/valuerank/docs/plans/job-choice-vignettes/spec.md"
+      ]
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements",
+      "stage": "spec",
+      "path": "/Users/chrislaw/valuerank/docs/workflows/job-choice-implementation/reviews/spec.gemini.requirements.review.md",
+      "context_paths": [
+        "/Users/chrislaw/valuerank/docs/plans/job-choice-vignettes/spec.md"
+      ]
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "risk",
+      "stage": "spec",
+      "path": "/Users/chrislaw/valuerank/docs/workflows/job-choice-implementation/reviews/spec.gemini.risk.review.md",
+      "context_paths": [
+        "/Users/chrislaw/valuerank/docs/plans/job-choice-vignettes/spec.md"
+      ]
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

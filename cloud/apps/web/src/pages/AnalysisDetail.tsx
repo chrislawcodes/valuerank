@@ -17,6 +17,7 @@ import { useRuns } from '../hooks/useRuns';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import type { AnalysisTab } from '../components/analysis/tabs';
 import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from '../utils/analysisRouting';
+import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../utils/methodology';
 
 function parseAnalysisTab(value: string | null): AnalysisTab {
   if (value === 'overview' || value === 'decisions' || value === 'scenarios' || value === 'stability') {
@@ -122,6 +123,19 @@ export function AnalysisDetail() {
     && latestDefinitionVersion !== undefined
     && runDefinitionVersion !== latestDefinitionVersion
   );
+  const definitionContent = getRunDefinitionContent(run);
+  const methodologyLabel = getDefinitionMethodologyLabel(
+    definitionContent,
+    run.definition?.domain?.name ?? null,
+  );
+  const methodology = getDefinitionMethodology(definitionContent);
+  const launchModeLabel = methodology?.family === 'job-choice'
+    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH'
+      ? 'Ad Hoc Batch'
+      : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH'
+        ? 'Paired Batch'
+        : null
+    : null;
 
   return (
     <div className="space-y-6">
@@ -130,6 +144,8 @@ export function AnalysisDetail() {
           runId={run.id}
           definitionId={run.definition?.id}
           definitionName={run.definition?.name}
+          methodologyLabel={methodologyLabel}
+          launchModeLabel={launchModeLabel}
           isAggregate={isAggregate}
           currentSignature={trialSignature}
         />
@@ -149,7 +165,8 @@ export function AnalysisDetail() {
           runId={run.id}
           analysisStatus={run.analysisStatus}
           analysisBasePath={ANALYSIS_BASE_PATH}
-          definitionContent={getRunDefinitionContent(run)}
+          definitionContent={definitionContent}
+          transcripts={run.transcripts}
           isOldVersion={isOldVersion}
           isAggregate={isAggregate}
           pendingSince={run.completedAt}
@@ -167,12 +184,16 @@ function Header({
   runId,
   definitionId,
   definitionName,
+  methodologyLabel,
+  launchModeLabel,
   isAggregate,
   currentSignature,
 }: {
   runId: string;
   definitionId?: string | null;
   definitionName?: string | null;
+  methodologyLabel?: string | null;
+  launchModeLabel?: string | null;
   isAggregate?: boolean;
   currentSignature?: string | null;
 }) {
@@ -224,6 +245,22 @@ function Header({
         <span className="text-gray-300">|</span>
         <div className="text-sm text-gray-500 flex items-center gap-2">
           {definitionName || 'Unnamed Definition'}
+          {methodologyLabel && (
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+              {methodologyLabel}
+            </span>
+          )}
+          {launchModeLabel && (
+            <span
+              className={`rounded-full px-2 py-1 text-xs font-medium ${
+                launchModeLabel === 'Paired Batch'
+                  ? 'bg-teal-100 text-teal-800'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {launchModeLabel}
+            </span>
+          )}
           <span className="mx-1">•</span>
           {isAggregate ? (
             <div className="flex items-center gap-2">

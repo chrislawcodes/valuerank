@@ -55,7 +55,7 @@ export function transformJobChoiceDefinition(
 ): JobChoiceTransformResult {
   const template = content.template;
   const match = template.match(TEMPLATE_PATTERN);
-  if (match?.groups == null) {
+  if (!match?.groups) {
     throw new Error('Template does not match the expected Jobs vignette structure');
   }
 
@@ -118,7 +118,7 @@ export function isTransformableJobChoiceTemplate(template: string): boolean {
 
 export function extractLegacyRoleTitles(template: string): [string, string] | null {
   const match = template.match(TEMPLATE_PATTERN);
-  if (match?.groups == null) {
+  if (!match?.groups) {
     return null;
   }
   return [match.groups.roleA.trim(), match.groups.roleB.trim()];

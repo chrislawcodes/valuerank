@@ -11,6 +11,7 @@ import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { StatCard } from './StatCard';
+import { DecisionCoverageBanner } from './DecisionCoverageBanner';
 import {
   OverviewTab,
   DecisionsTab,
@@ -22,6 +23,7 @@ import {
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
+import type { Transcript } from '../../api/operations/runs';
 import {
   deriveDecisionDimensionLabels,
   deriveScenarioAttributesFromDefinition,
@@ -30,12 +32,17 @@ import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../utils/analysisR
 import {
   buildAnalysisSemanticsView,
 } from '../analysis-v2/analysisSemantics';
+import {
+  summarizeDecisionCoverage,
+  shouldShowDecisionCoverage,
+} from '../../utils/analysisCoverage';
 
 type AnalysisPanelProps = {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
   analysisStatus?: string | null;
   definitionContent?: unknown;
+  transcripts?: Transcript[];
   isOldVersion?: boolean;
   isAggregate?: boolean;
   pendingSince?: string | null;
@@ -262,6 +269,7 @@ export function AnalysisPanel({
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisStatus,
   definitionContent,
+  transcripts = [],
   isOldVersion = false,
   isAggregate,
   pendingSince,
@@ -294,6 +302,11 @@ export function AnalysisPanel({
 
     return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
   }, [analysis, isAggregateAnalysis]);
+  const decisionCoverage = useMemo(
+    () => summarizeDecisionCoverage(transcripts),
+    [transcripts],
+  );
+  const showDecisionCoverage = shouldShowDecisionCoverage(decisionCoverage);
 
   const handleExportExcel = useCallback(async () => {
     setIsExporting(true);
@@ -482,6 +495,15 @@ export function AnalysisPanel({
         </div>
       )}
 
+      {showDecisionCoverage && (
+        <div className="mb-6">
+          <DecisionCoverageBanner
+            coverage={decisionCoverage}
+            contextLabel="numeric summaries"
+          />
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard
@@ -575,6 +597,7 @@ export function AnalysisPanel({
             perModel={perModel}
             visualizationData={loading ? null : analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
+            decisionCoverage={showDecisionCoverage ? decisionCoverage : null}
           />
         )}
       </div>
