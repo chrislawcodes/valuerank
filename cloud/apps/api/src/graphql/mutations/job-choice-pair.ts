@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
-  Prisma,
   db,
   type DefinitionComponents,
   type DefinitionContentV1,
+  type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
 import { assembleTemplate } from '@valuerank/shared';

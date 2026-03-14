@@ -299,7 +299,7 @@ export function JobChoiceNew() {
             placeholder="e.g. achievement vs hedonism"
             className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white outline-none focus:border-teal-500"
           />
-          <p className="text-xs text-white/40">Will create "(A)" and "(B)" variants.</p>
+          <p className="text-xs text-white/40">Will create &quot;(A)&quot; and &quot;(B)&quot; variants.</p>
         </div>
 
         <div className="space-y-1">
