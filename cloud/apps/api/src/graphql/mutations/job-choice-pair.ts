@@ -10,6 +10,7 @@ import { assembleTemplate } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
+import { createAuditLog } from '../../services/audit/index.js';
 
 type JobChoiceDefinitionContent = DefinitionContentV1 & {
   components: DefinitionComponents;
@@ -177,6 +178,21 @@ builder.mutationField('createJobChoicePair', (t) =>
       });
 
       ctx.log.info({ aFirstId: defA.id, bFirstId: defB.id, pairKey }, 'Job choice pair created');
+
+      void createAuditLog({
+        action: 'CREATE',
+        entityType: 'Definition',
+        entityId: defA.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: defA.name, pairKey },
+      });
+      void createAuditLog({
+        action: 'CREATE',
+        entityType: 'Definition',
+        entityId: defB.id,
+        userId: ctx.user?.id ?? null,
+        metadata: { name: defB.name, pairKey },
+      });
 
       return {
         aFirst: defA as DefinitionShape,
