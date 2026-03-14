@@ -22,10 +22,17 @@ function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function DomainContexts() {
+type DomainContextsProps = {
+  /** When provided, scope to this domain and hide domain selector (embedded/panel mode). */
+  domainId?: string;
+};
+
+export function DomainContexts({ domainId: domainIdProp }: DomainContextsProps = {}) {
+  const isEmbedded = domainIdProp != null;
+
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<DomainContextsQueryResult, DomainContextsQueryVariables>({
     query: DOMAIN_CONTEXTS_QUERY,
-    variables: {},
+    variables: { domainId: domainIdProp },
   });
   const [{ data: domainsData, fetching: domainsFetching, error: domainsError }] = useQuery<
     DomainsQueryResult,
@@ -33,6 +40,7 @@ export function DomainContexts() {
   >({
     query: DOMAINS_QUERY,
     variables: { limit: 1000, offset: 0 },
+    pause: isEmbedded,
   });
   const [, createDomainContext] = useMutation(CREATE_DOMAIN_CONTEXT_MUTATION);
   const [, updateDomainContext] = useMutation(UPDATE_DOMAIN_CONTEXT_MUTATION);
@@ -50,7 +58,7 @@ export function DomainContexts() {
 
   const handleOpenCreate = () => {
     setEditingContext(null);
-    setDomainId(domains[0]?.id ?? '');
+    setDomainId(domainIdProp ?? domains[0]?.id ?? '');
     setText('');
     setIsModalOpen(true);
   };
@@ -126,31 +134,37 @@ export function DomainContexts() {
   }
 
   const isDomainSelectionDisabled = editingContext != null;
-  const canSubmit = text.trim() !== '' && domainId !== '' && !isSubmitting && (editingContext != null || domains.length > 0);
+  const canSubmit = text.trim() !== '' && domainId !== '' && !isSubmitting && (isEmbedded || editingContext != null || domains.length > 0);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={isEmbedded ? '' : 'max-w-7xl mx-auto px-4 py-8'}>
       <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-teal-200">
-            Domain Contexts
-          </h1>
-          <p className="text-white/60 mt-1">
-            Manage shared context paragraphs applied across all vignettes in a domain.
+        {isEmbedded ? (
+          <p className="text-sm text-white/60">
+            Shared context paragraphs shown to the model before the scenario.
           </p>
-        </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-teal-200">
+              Domain Contexts
+            </h1>
+            <p className="text-white/60 mt-1">
+              Manage shared context paragraphs applied across all vignettes in a domain.
+            </p>
+          </div>
+        )}
         <Button
           onClick={handleOpenCreate}
           variant="secondary"
           className="flex items-center gap-2"
-          disabled={domains.length === 0}
+          disabled={isEmbedded ? false : domains.length === 0}
         >
           <Plus className="w-4 h-4" />
           New Context
         </Button>
       </div>
 
-      {domains.length === 0 && (
+      {!isEmbedded && domains.length === 0 && (
         <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Create at least one domain before adding a context.
         </div>
@@ -241,28 +255,30 @@ export function DomainContexts() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-1">Domain</label>
-                <select
-                  value={domainId}
-                  onChange={(event) => setDomainId(event.target.value)}
-                  disabled={isDomainSelectionDisabled}
-                  className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-teal-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                  required
-                >
-                  <option value="" disabled>
-                    Select a domain
-                  </option>
-                  {domains.map((domain) => (
-                    <option key={domain.id} value={domain.id}>
-                      {domain.name}
+              {!isEmbedded && (
+                <div>
+                  <label className="block text-sm font-medium text-white/70 mb-1">Domain</label>
+                  <select
+                    value={domainId}
+                    onChange={(event) => setDomainId(event.target.value)}
+                    disabled={isDomainSelectionDisabled}
+                    className="w-full bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-teal-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    required
+                  >
+                    <option value="" disabled>
+                      Select a domain
                     </option>
-                  ))}
-                </select>
-                {editingContext && (
-                  <p className="text-xs text-white/30 mt-1">Domain assignment cannot be changed after creation.</p>
-                )}
-              </div>
+                    {domains.map((domain) => (
+                      <option key={domain.id} value={domain.id}>
+                        {domain.name}
+                      </option>
+                    ))}
+                  </select>
+                  {editingContext && (
+                    <p className="text-xs text-white/30 mt-1">Domain assignment cannot be changed after creation.</p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-white/70 mb-1">Text</label>
