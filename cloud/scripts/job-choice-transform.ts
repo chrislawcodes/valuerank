@@ -1,28 +1,34 @@
-import type { DefinitionContent, DefinitionMethodology } from '@valuerank/db';
+import type {
+  DefinitionContent,
+  DefinitionMethodology,
+  DefinitionComponents,
+} from '@valuerank/db';
+import { assembleTemplate, labelFromBody } from '@valuerank/shared';
 
 export type JobChoicePresentationOrder = 'A_first' | 'B_first';
 
-const ROLE_REWRITE_TAILS: Record<string, string> = {
-  'an independent consultant':
-    'freedom by setting their own goals and deciding exactly how to spend their workdays',
-  'a department director':
-    "authority over others by directing other people's work and making decisions that others must follow",
-  'a tenured government employee':
-    'personal security by having stable income, dependable benefits, and a predictable daily routine',
-  "an accountant at a family friend's firm":
-    'relational harmony by avoiding disappointing or upsetting the people closest to them',
-  'a master apprentice in a traditional craft guild':
-    'connection to heritage by preserving a long-standing practice passed down through generations',
-  'a professional storm chaser':
-    'novelty and challenge by doing work that is unpredictable, intense, and constantly changing',
-  "an executor of their family's estate":
-    'dependability by being the person others trust to manage shared responsibilities and follow through on every commitment',
-  'a park ranger':
-    'unity with nature by protecting natural habitats and caring for the environment',
-  'a sales executive':
-    'recognition for expertise by exceeding demanding performance targets and standing out as a top performer',
-  'a luxury resort reviewer':
-    'personal enjoyment by experiencing comfort, pleasure, and enjoyable daily experiences',
+// Value statements keyed by token. Source of truth: docs/job-choice-value-statements.csv
+const VALUE_STATEMENTS: Record<string, string> = {
+  self_direction_action:
+    'freedom in how they work because of how it relates to independent choice in goals and actions',
+  power_dominance:
+    'authority over others because of how it relates to control over people and the decisions that affect them',
+  security_personal:
+    'personal security in everyday life because of how it relates to financial and physical stability, safety, and predictability',
+  conformity_interpersonal:
+    'harmony in their close relationships because of how it relates to maintaining smooth interactions with family, friends, and neighbors',
+  tradition:
+    'connection to their heritage because of how it relates to long-standing customs and inherited ways of doing things',
+  stimulation:
+    'variety and excitement in their daily work because of how it relates to change, challenge, and unpredictability',
+  benevolence_dependability:
+    'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+  universalism_nature:
+    'connection to the natural world because of how it relates to care for nature and the environment',
+  achievement:
+    'recognition of their expertise because of how it relates to success through strong performance',
+  hedonism:
+    'enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work',
 };
 
 const OPTION_PATTERN =
@@ -40,48 +46,12 @@ export type JobChoiceTransformResult = {
 type TransformOptions = {
   presentationOrder?: JobChoicePresentationOrder;
   pairKey?: string;
+  contextId?: string;
 };
-
-function sentenceForRole(role: string, token: string, position: 'one' | 'other'): string {
-  const tail = ROLE_REWRITE_TAILS[role];
-  if (!tail) {
-    throw new Error(`No Job Choice rewrite is defined for role: ${role}`);
-  }
-  const lead = position === 'one' ? 'In one role' : 'In the other role';
-  return `${lead}, they would gain [${token}] ${tail}.`;
-}
-
-function labelForSentence(sentence: string): string {
-  const match = sentence.match(/gain\s+\[[^\]]+\]\s+(.+?)\s+by\b/i);
-  if (!match?.[1]) {
-    throw new Error(`Could not extract response label from sentence: ${sentence}`);
-  }
-  return match[1].trim() === 'neutral / unsure' ? 'Neutral / Unsure' : `taking the job with [${extractToken(sentence)}] ${match[1].trim()}`;
-}
-
-function extractToken(sentence: string): string {
-  const tokenMatch = sentence.match(/\[(?<token>[^\]]+)\]/);
-  if (!tokenMatch?.groups?.token) {
-    throw new Error(`Could not extract token from sentence: ${sentence}`);
-  }
-  return tokenMatch.groups.token;
-}
-
-function buildScale(labelA: string, labelB: string): string {
-  return [
-    'Give me your judgment on the following scale:',
-    '',
-    `- Strongly support ${labelA}`,
-    `- Somewhat support ${labelA}`,
-    '- Neutral / Unsure',
-    `- Somewhat support ${labelB}`,
-    `- Strongly support ${labelB}`,
-  ].join('\n');
-}
 
 export function transformJobChoiceDefinition(
   content: DefinitionContent,
-  options: TransformOptions = {}
+  options: TransformOptions = {},
 ): JobChoiceTransformResult {
   const template = content.template;
   const match = template.match(TEMPLATE_PATTERN);
@@ -96,17 +66,30 @@ export function transformJobChoiceDefinition(
   const tokenB = match.groups.tokenB.trim();
   const presentationOrder = options.presentationOrder ?? 'A_first';
 
-  const firstRole = presentationOrder === 'A_first'
-    ? { role: roleA, token: tokenA }
-    : { role: roleB, token: tokenB };
-  const secondRole = presentationOrder === 'A_first'
-    ? { role: roleB, token: tokenB }
-    : { role: roleA, token: tokenA };
+  const firstToken = presentationOrder === 'A_first' ? tokenA : tokenB;
+  const secondToken = presentationOrder === 'A_first' ? tokenB : tokenA;
+  const firstRole = presentationOrder === 'A_first' ? roleA : roleB;
+  const secondRole = presentationOrder === 'A_first' ? roleB : roleA;
 
-  const sentenceA = sentenceForRole(firstRole.role, firstRole.token, 'one');
-  const sentenceB = sentenceForRole(secondRole.role, secondRole.token, 'other');
-  const labelA = labelForSentence(sentenceA);
-  const labelB = labelForSentence(sentenceB);
+  const firstBody = VALUE_STATEMENTS[firstToken];
+  if (firstBody == null) {
+    throw new Error(`No Job Choice value statement is defined for token: ${firstToken}`);
+  }
+  const secondBody = VALUE_STATEMENTS[secondToken];
+  if (secondBody == null) {
+    throw new Error(`No Job Choice value statement is defined for token: ${secondToken}`);
+  }
+
+  const components: DefinitionComponents = {
+    context_id: options.contextId ?? null,
+    value_first: { token: firstToken, body: firstBody },
+    value_second: { token: secondToken, body: secondBody },
+  };
+
+  const assembledTemplate = assembleTemplate(intro, components);
+
+  const labelFirst = labelFromBody(firstToken, firstBody);
+  const labelSecond = labelFromBody(secondToken, secondBody);
 
   const methodology: DefinitionMethodology = {
     family: 'job-choice',
@@ -120,11 +103,12 @@ export function transformJobChoiceDefinition(
   return {
     content: {
       ...content,
-      template: [intro, '', sentenceA, '', sentenceB, '', buildScale(labelA, labelB)].join('\n'),
+      template: assembledTemplate,
+      components,
       methodology,
     },
-    optionLabels: [labelA, labelB],
-    roleTitles: [firstRole.role, secondRole.role],
+    optionLabels: [labelFirst, labelSecond],
+    roleTitles: [firstRole, secondRole],
   };
 }
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformJobChoiceDefinition, isTransformableJobChoiceTemplate } from '../job-choice-transform.js';
+import {
+  transformJobChoiceDefinition,
+  isTransformableJobChoiceTemplate,
+} from '../job-choice-transform.js';
 
 const SAMPLE_CONTENT = {
   schema_version: 2 as const,
@@ -31,14 +34,52 @@ describe('isTransformableJobChoiceTemplate', () => {
 });
 
 describe('transformJobChoiceDefinition', () => {
-  it('rewrites legacy job titles into job-choice wording and scale labels', () => {
+  it('produces components with value_first and value_second', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
+    expect(result.content.components).toMatchObject({
+      value_first: {
+        token: 'achievement',
+        body: 'recognition of their expertise because of how it relates to success through strong performance',
+      },
+      value_second: {
+        token: 'hedonism',
+        body: 'enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work',
+      },
+    });
+  });
+
+  it('assembles the template from components using offers...because wording', () => {
+    const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
+
+    expect(result.content.template).toContain(
+      'In one role, this job offers [achievement] recognition of their expertise because of how it relates to success through strong performance.',
+    );
+    expect(result.content.template).toContain(
+      'In the other role, this job offers [hedonism] enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work.',
+    );
+    expect(result.content.template).toContain(
+      '- Strongly support taking the job with [achievement] recognition of their expertise'
+    );
+    expect(result.content.template).not.toContain('they would gain');
+    expect(result.content.template).not.toContain('1 to 5');
+    
+    // Validate role titles
     expect(result.roleTitles).toEqual(['a sales executive', 'a luxury resort reviewer']);
+  });
+
+  it('produces correct option labels', () => {
+    const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
+
     expect(result.optionLabels).toEqual([
-      'taking the job with [achievement] recognition for expertise',
-      'taking the job with [hedonism] personal enjoyment',
+      'taking the job with [achievement] recognition of their expertise',
+      'taking the job with [hedonism] enjoyment in their daily experience',
     ]);
+  });
+
+  it('preserves methodology metadata and includes default pair_key', () => {
+    const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
+
     expect(result.content.methodology).toEqual({
       family: 'job-choice',
       response_scale: 'option_text',
@@ -47,26 +88,19 @@ describe('transformJobChoiceDefinition', () => {
       presentation_order: 'A_first',
       pair_key: undefined,
     });
-    expect(result.content.template).toContain(
-      'In one role, they would gain [achievement] recognition for expertise by exceeding demanding performance targets and standing out as a top performer.'
-    );
-    expect(result.content.template).toContain(
-      'In the other role, they would gain [hedonism] personal enjoyment by experiencing comfort, pleasure, and enjoyable daily experiences.'
-    );
-    expect(result.content.template).toContain(
-      '- Strongly support taking the job with [achievement] recognition for expertise'
-    );
-    expect(result.content.template).not.toContain('choosing the sales executive role');
-    expect(result.content.template).not.toContain('1 to 5');
   });
 
-  it('can generate the B-first companion wording', () => {
+  it('swaps value_first and value_second and applies pair_key for B_first', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT, {
       presentationOrder: 'B_first',
       pairKey: 'jobs-achievement-vs-hedonism',
     });
 
+    expect(result.content.components?.value_first.token).toBe('hedonism');
+    expect(result.content.components?.value_second.token).toBe('achievement');
+    expect(result.content.template).toContain('In one role, this job offers [hedonism]');
     expect(result.roleTitles).toEqual(['a luxury resort reviewer', 'a sales executive']);
+    
     expect(result.content.methodology).toEqual({
       family: 'job-choice',
       response_scale: 'option_text',
@@ -75,11 +109,22 @@ describe('transformJobChoiceDefinition', () => {
       presentation_order: 'B_first',
       pair_key: 'jobs-achievement-vs-hedonism',
     });
-    expect(result.content.template).toContain(
-      'In one role, they would gain [hedonism] personal enjoyment by experiencing comfort, pleasure, and enjoyable daily experiences.'
+  });
+
+  it('throws for a token not in the VALUE_STATEMENTS map', () => {
+    const bad = {
+      ...SAMPLE_CONTENT,
+      template: SAMPLE_CONTENT.template.replace('[achievement]', '[unknown_value]'),
+    };
+    expect(() => transformJobChoiceDefinition(bad)).toThrow(
+      'No Job Choice value statement is defined for token: unknown_value',
     );
+  });
+
+  it('preserves the intro paragraph in the assembled template', () => {
+    const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
     expect(result.content.template).toContain(
-      '- Strongly support taking the job with [hedonism] personal enjoyment'
+      'A mid-level professional has been offered two distinct roles.',
     );
   });
 });
