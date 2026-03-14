@@ -29,6 +29,7 @@ import { Settings } from './pages/Settings';
 import { Preambles } from './pages/Preambles';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
+import { JobChoiceNew } from './pages/JobChoiceNew';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
 
@@ -245,6 +246,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ValueStatements />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/job-choice/new"
+              element={
+                <ProtectedLayout>
+                  <JobChoiceNew />
                 </ProtectedLayout>
               }
             />
