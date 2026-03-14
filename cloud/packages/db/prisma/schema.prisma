@@ -102,6 +102,7 @@ model Definition {
   id                String    @id @default(cuid())
   parentId          String?   @map("parent_id")
   domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
   name              String
   content           Json      @db.JsonB
   expansionProgress Json?     @map("expansion_progress") @db.JsonB
@@ -118,6 +119,7 @@ model Definition {
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
   domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id])
 
   runs      Run[]
   scenarios Scenario[]
@@ -138,6 +140,7 @@ model Definition {
 
   @@index([parentId])
   @@index([domainId])
+  @@index([domainContextId])
   @@index([preambleVersionId])
   @@map("definitions")
 }
@@ -150,8 +153,33 @@ model Domain {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   definitions Definition[]
+  contexts    DomainContext[]
 
   @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain      Domain       @relation(fields: [domainId], references: [id])
+  definitions Definition[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("value_statements")
 }
 
 model Preamble {

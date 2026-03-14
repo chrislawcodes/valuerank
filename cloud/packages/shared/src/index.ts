@@ -29,3 +29,4 @@ export {
   isVnewSignature,
   parseVnewTemperature,
 } from './trial-signature.js';
+export * from './assemble-template.js';

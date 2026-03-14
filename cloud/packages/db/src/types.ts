@@ -3,6 +3,20 @@
  * All types include schema_version for read-time migration.
  */
 
+export type DefinitionComponents = {
+  context_id: string;
+  value_first: {
+    token: string;
+    body: string;
+    intensity?: string;
+  };
+  value_second: {
+    token: string;
+    body: string;
+    intensity?: string;
+  };
+};
+
 // ============================================================================
 // DEFINITION CONTENT
 // ============================================================================
@@ -72,6 +86,7 @@ export type DefinitionContent = {
   template: string;
   dimensions: Dimension[];
   matching_rules?: string;
+  components?: DefinitionComponents;
 };
 
 /**
