@@ -8,13 +8,14 @@ builder.mutationFields((t) => ({
     type: ValueStatementRef,
     args: { input: t.arg({ type: CreateValueStatementInput, required: true }) },
     resolve: async (_root, args, ctx) => {
-      ctx.log.info({ token: args.input.token }, 'Creating value statement');
+      const { domainId, token, body } = args.input;
+      ctx.log.info({ token, domainId }, 'Creating value statement');
       const existing = await db.valueStatement.findUnique({
-        where: { token: args.input.token },
+        where: { domainId_token: { domainId, token } },
       });
-      if (existing != null) throw new Error(`Value statement for token "${args.input.token}" already exists`);
+      if (existing != null) throw new Error(`Value statement for token "${token}" already exists in this domain`);
       return db.valueStatement.create({
-        data: { token: args.input.token, body: args.input.body },
+        data: { domainId, token, body },
       });
     },
   }),

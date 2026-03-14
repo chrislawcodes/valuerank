@@ -152,8 +152,9 @@ model Domain {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  definitions Definition[]
-  contexts    DomainContext[]
+  definitions     Definition[]
+  contexts        DomainContext[]
+  valueStatements ValueStatement[]
 
   @@map("domains")
 }
@@ -174,11 +175,16 @@ model DomainContext {
 
 model ValueStatement {
   id        String   @id @default(cuid())
-  token     String   @unique
+  domainId  String   @map("domain_id")
+  token     String
   body      String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, token])
+  @@index([domainId])
   @@map("value_statements")
 }
 

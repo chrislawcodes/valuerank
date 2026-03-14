@@ -2,16 +2,20 @@ import { gql } from 'urql';
 
 export type ValueStatement = {
   id: string;
+  domainId: string;
   token: string;
   body: string;
   createdAt?: string;
   updatedAt: string;
 };
 
+export type ValueStatementsQueryVariables = { domainId: string };
+
 export const VALUE_STATEMENTS_QUERY = gql`
-  query ValueStatements {
-    valueStatements {
+  query ValueStatements($domainId: ID!) {
+    valueStatements(domainId: $domainId) {
       id
+      domainId
       token
       body
       updatedAt
@@ -23,6 +27,7 @@ export const CREATE_VALUE_STATEMENT_MUTATION = gql`
   mutation CreateValueStatement($input: CreateValueStatementInput!) {
     createValueStatement(input: $input) {
       id
+      domainId
       token
       body
       updatedAt
@@ -34,6 +39,7 @@ export const UPDATE_VALUE_STATEMENT_MUTATION = gql`
   mutation UpdateValueStatement($id: ID!, $input: UpdateValueStatementInput!) {
     updateValueStatement(id: $id, input: $input) {
       id
+      domainId
       token
       body
       updatedAt

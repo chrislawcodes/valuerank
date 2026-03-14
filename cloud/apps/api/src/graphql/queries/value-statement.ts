@@ -6,9 +6,14 @@ import { ValueStatementRef } from '../types/refs.js';
 builder.queryFields((t) => ({
   valueStatements: t.field({
     type: [ValueStatementRef],
-    resolve: async (_root, _args, ctx) => {
-      ctx.log.debug('Listing value statements');
-      return db.valueStatement.findMany({ orderBy: { token: 'asc' } });
+    args: { domainId: t.arg.id({ required: true }) },
+    resolve: async (_root, args, ctx) => {
+      const domainId = String(args.domainId);
+      ctx.log.debug({ domainId }, 'Listing value statements for domain');
+      return db.valueStatement.findMany({
+        where: { domainId },
+        orderBy: { token: 'asc' },
+      });
     },
   }),
   valueStatement: t.field({

@@ -17,12 +17,23 @@ const VALUE_STATEMENTS = [
 ];
 
 async function main(): Promise<void> {
+  // Look up or create the job-choice domain
+  let domain = await db.domain.findUnique({ where: { normalizedName: 'job-choice' } });
+  if (domain == null) {
+    domain = await db.domain.create({
+      data: { name: 'Job Choice', normalizedName: 'job-choice' },
+    });
+    log.info({ id: domain.id }, 'Created job-choice domain');
+  } else {
+    log.info({ id: domain.id }, 'Found job-choice domain');
+  }
+
   let upserted = 0;
   for (const vs of VALUE_STATEMENTS) {
     await db.valueStatement.upsert({
-      where: { token: vs.token },
+      where: { domainId_token: { domainId: domain.id, token: vs.token } },
       update: {},
-      create: vs,
+      create: { domainId: domain.id, ...vs },
     });
     upserted += 1;
     log.info({ token: vs.token }, 'Upserted value statement');
