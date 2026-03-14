@@ -34,6 +34,8 @@ export type {
   Preamble,
   PreambleVersion,
   RunTag,
+  DomainContext,
+  ValueStatement,
 } from '@prisma/client';
 
 // Audit types

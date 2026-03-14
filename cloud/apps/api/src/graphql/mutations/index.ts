@@ -14,3 +14,5 @@ import './preamble.js';
 import './survey.js';
 import './domain.js';
 import './assumptions.js';
+import './domain-context.js';
+import './value-statement.js';
