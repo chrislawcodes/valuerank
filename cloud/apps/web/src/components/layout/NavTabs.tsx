@@ -50,7 +50,11 @@ export function NavTabs() {
     return location.pathname === tabPath || location.pathname.startsWith(`${tabPath}/`);
   };
   const isVignettesActive = vignetteMenuItems.some((item) => isTabActive(item.path));
-  const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path));
+  // Also highlight Domains when on pages that live under the Domains section
+  // (domain-contexts and value-statements were moved there from the Vignettes nav)
+  const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path))
+    || isTabActive('/domain-contexts')
+    || isTabActive('/value-statements');
   const isAssumptionsActive = assumptionsMenuItems.some((item) => isTabActive(item.path));
   const isSurveyActive = surveyMenuItems.some((item) => isTabActive(item.path));
 

@@ -412,7 +412,7 @@ export function Domains() {
 
         <section className="space-y-4">
           {selectedDomain != null && (
-            <div className="flex border-b border-gray-200">
+            <div role="tablist" aria-label="Domain sections" className="flex border-b border-gray-200">
               {([
                 { key: 'vignettes' as const, label: 'Vignettes' },
                 { key: 'contexts' as const, label: 'Contexts' },
@@ -421,6 +421,8 @@ export function Domains() {
                 <Button
                   key={tab.key}
                   type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
                   variant="ghost"
                   onClick={() => setActiveTab(tab.key)}
                   className={`rounded-none px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -595,9 +597,9 @@ export function Domains() {
           </div>
             </>
           ) : activeTab === 'contexts' ? (
-            <DomainContexts domainId={selectedDomain.id} />
+            <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
           ) : (
-            <ValueStatements domainId={selectedDomain.id} />
+            <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
           )}
         </section>
       </div>
