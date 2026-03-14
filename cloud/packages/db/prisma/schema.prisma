@@ -119,7 +119,7 @@ model Definition {
   parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
   children Definition[] @relation("DefinitionVersions")
   domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
-  domainContext DomainContext? @relation(fields: [domainContextId], references: [id])
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
 
   runs      Run[]
   scenarios Scenario[]

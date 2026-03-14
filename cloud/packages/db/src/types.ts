@@ -4,7 +4,7 @@
  */
 
 export type DefinitionComponents = {
-  context_id: string;
+  context_id: string | null;
   value_first: {
     token: string;
     body: string;

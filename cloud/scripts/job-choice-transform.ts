@@ -81,7 +81,7 @@ export function transformJobChoiceDefinition(
   }
 
   const components: DefinitionComponents = {
-    context_id: options.contextId ?? '',
+    context_id: options.contextId ?? null,
     value_first: { token: firstToken, body: firstBody },
     value_second: { token: secondToken, body: secondBody },
   };

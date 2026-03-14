@@ -1,7 +1,7 @@
 // Local type — intentionally not imported from @valuerank/db to avoid a circular
 // dependency (db already depends on shared). Keep in sync with DefinitionComponents.
 type ComponentsInput = {
-  context_id: string;
+  context_id: string | null;
   value_first: { token: string; body: string; intensity?: string };
   value_second: { token: string; body: string; intensity?: string };
 };

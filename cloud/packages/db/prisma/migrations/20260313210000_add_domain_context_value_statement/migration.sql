@@ -27,8 +27,8 @@ CREATE TABLE "value_statements" (
 -- CreateIndex
 CREATE UNIQUE INDEX "value_statements_token_key" ON "value_statements"("token");
 
--- CreateIndex
-CREATE INDEX "definitions_domain_context_id_idx" ON "definitions"("domain_context_id");
+-- CreateIndex (CONCURRENTLY avoids write-lock on a live definitions table)
+CREATE INDEX CONCURRENTLY "definitions_domain_context_id_idx" ON "definitions"("domain_context_id");
 
 -- AddForeignKey
 ALTER TABLE "definitions" ADD CONSTRAINT "definitions_domain_context_id_fkey" FOREIGN KEY ("domain_context_id") REFERENCES "domain_contexts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
