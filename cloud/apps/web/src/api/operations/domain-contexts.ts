@@ -6,7 +6,7 @@ export type DomainContext = {
   domain?: { id: string; name: string } | null;
   text: string;
   version: number;
-  createdAt: string;
+  createdAt?: string;
   updatedAt: string;
 };
 

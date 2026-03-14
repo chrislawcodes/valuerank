@@ -43,6 +43,7 @@ export function DomainContexts() {
   const [domainId, setDomainId] = useState('');
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const domains = domainsData?.domains ?? [];
   const contexts = data?.domainContexts ?? [];
@@ -73,13 +74,16 @@ export function DomainContexts() {
       return;
     }
 
-    const result = await deleteDomainContext({ id: context.id });
-    if (result.error) {
-      alert(result.error.message);
-      return;
+    setDeletingId(context.id);
+    try {
+      const result = await deleteDomainContext({ id: context.id });
+      if (result.error) throw result.error;
+      reexecuteQuery({ requestPolicy: 'network-only' });
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : 'Failed to delete domain context');
+    } finally {
+      setDeletingId(null);
     }
-
-    reexecuteQuery({ requestPolicy: 'network-only' });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -179,6 +183,8 @@ export function DomainContexts() {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDelete(context)}
+                  disabled={deletingId === context.id}
+                  isLoading={deletingId === context.id}
                   className="p-1.5 h-auto text-white/40 hover:text-red-400 hover:bg-red-400/10"
                   title="Delete Context"
                 >

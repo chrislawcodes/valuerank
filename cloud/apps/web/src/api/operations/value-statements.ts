@@ -4,7 +4,7 @@ export type ValueStatement = {
   id: string;
   token: string;
   body: string;
-  createdAt: string;
+  createdAt?: string;
   updatedAt: string;
 };
 
