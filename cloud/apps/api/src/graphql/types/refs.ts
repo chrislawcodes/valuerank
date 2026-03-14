@@ -48,7 +48,7 @@ import type { Preamble, PreambleVersion } from '@valuerank/db'; // Will import f
 export const PreambleRef = builder.objectRef<Preamble>('Preamble');
 export const PreambleVersionRef = builder.objectRef<PreambleVersion>('PreambleVersion');
 
-import type { DomainContext, ValueStatement } from '@prisma/client';
+import type { DomainContext, ValueStatement } from '@valuerank/db';
 
 export const DomainContextRef = builder.objectRef<DomainContext>('DomainContext');
 export const ValueStatementRef = builder.objectRef<ValueStatement>('ValueStatement');
