@@ -31,8 +31,18 @@ function makeLocalId(): string {
   return `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function ValueStatements() {
+type ValueStatementsProps = {
+  /** When provided, scope to this domain and hide domain selector (embedded/panel mode). */
+  domainId?: string;
+};
+
+export function ValueStatements({ domainId: domainIdProp }: ValueStatementsProps = {}) {
+  const isEmbedded = domainIdProp != null;
+
+  // Internal state used only when no prop is provided (standalone page mode).
   const [selectedDomainId, setSelectedDomainId] = useState<string>('');
+  // The effective domain to query: prop takes precedence over internal state.
+  const effectiveDomainId = domainIdProp ?? selectedDomainId;
 
   const [{ data: domainsData, fetching: domainsFetching, error: domainsError }] = useQuery<
     DomainsQueryResult,
@@ -40,6 +50,7 @@ export function ValueStatements() {
   >({
     query: DOMAINS_QUERY,
     variables: { limit: 1000, offset: 0 },
+    pause: isEmbedded,
   });
 
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<
@@ -47,8 +58,8 @@ export function ValueStatements() {
     ValueStatementsQueryVariables
   >({
     query: VALUE_STATEMENTS_QUERY,
-    variables: { domainId: selectedDomainId },
-    pause: selectedDomainId === '',
+    variables: { domainId: effectiveDomainId },
+    pause: effectiveDomainId === '',
   });
 
   const [, createValueStatement] = useMutation(CREATE_VALUE_STATEMENT_MUTATION);
@@ -120,7 +131,7 @@ export function ValueStatements() {
     try {
       const result = await createValueStatement({
         input: {
-          domainId: selectedDomainId,
+          domainId: effectiveDomainId,
           token: row.token.trim(),
           body: row.body,
         },
@@ -168,48 +179,56 @@ export function ValueStatements() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className={isEmbedded ? '' : 'max-w-7xl mx-auto px-4 py-8'}>
       <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-teal-200">
-            Value Statements
-          </h1>
-          <p className="text-white/60 mt-1">
-            Manage tokenized value statements used during Job Choice vignette assembly.
+        {isEmbedded ? (
+          <p className="text-sm text-white/60">
+            Tokenized value statements used during vignette assembly.
           </p>
-        </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-teal-200">
+              Value Statements
+            </h1>
+            <p className="text-white/60 mt-1">
+              Manage tokenized value statements used during Job Choice vignette assembly.
+            </p>
+          </div>
+        )}
         <Button
           onClick={handleAddRow}
           variant="secondary"
           className="flex items-center gap-2"
-          disabled={selectedDomainId === ''}
+          disabled={effectiveDomainId === ''}
         >
           <Plus className="w-4 h-4" />
           New Statement
         </Button>
       </div>
 
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-white/70 mb-1">Domain</label>
-        <select
-          value={selectedDomainId}
-          onChange={(event) => handleDomainChange(event.target.value)}
-          className="w-full max-w-sm bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-teal-500 outline-none"
-        >
-          <option value="" disabled>
-            Select a domain...
-          </option>
-          {domains.map((domain) => (
-            <option key={domain.id} value={domain.id}>
-              {domain.name}
+      {!isEmbedded && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-white/70 mb-1">Domain</label>
+          <select
+            value={selectedDomainId}
+            onChange={(event) => handleDomainChange(event.target.value)}
+            className="w-full max-w-sm bg-[#141414] border border-white/10 rounded-lg px-3 py-2 text-white focus:border-teal-500 outline-none"
+          >
+            <option value="" disabled>
+              Select a domain...
             </option>
-          ))}
-        </select>
-      </div>
+            {domains.map((domain) => (
+              <option key={domain.id} value={domain.id}>
+                {domain.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {inlineError && <div className="mb-6"><ErrorMessage message={inlineError} /></div>}
 
-      {selectedDomainId === '' ? (
+      {effectiveDomainId === '' ? (
         <div className="rounded-xl border border-white/10 bg-[#1A1A1A] p-8 text-center text-white/50">
           Select a domain above to manage its value statements.
         </div>

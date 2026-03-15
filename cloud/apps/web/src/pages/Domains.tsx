@@ -10,6 +10,8 @@ import { DefinitionFilters, type DefinitionFilterState } from '../components/def
 import { DEFINITION_COUNT_QUERY, type DefinitionCountQueryResult, type DefinitionCountQueryVariables } from '../api/operations/definitions';
 import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
+import { DomainContexts } from './DomainContexts';
+import { ValueStatements } from './ValueStatements';
 
 const defaultFilters: DefinitionFilterState = {
   search: '',
@@ -21,6 +23,7 @@ const defaultFilters: DefinitionFilterState = {
 type FolderKey = string;
 const ALL_SIGNATURE_FILTER = 'all';
 type SignatureFilterKey = string;
+type DomainTab = 'vignettes' | 'contexts' | 'value-statements';
 
 type SignatureSplitRow = {
   rowKey: string;
@@ -60,6 +63,8 @@ export function Domains() {
   const [selectAllShown, setSelectAllShown] = useState(false);
   const [assignTargetDomainId, setAssignTargetDomainId] = useState<string>('none');
   const [signatureFilter, setSignatureFilter] = useState<SignatureFilterKey>(ALL_SIGNATURE_FILTER);
+
+  const [activeTab, setActiveTab] = useState<DomainTab>('vignettes');
 
   const [createName, setCreateName] = useState('');
   const [renameName, setRenameName] = useState('');
@@ -192,7 +197,12 @@ export function Domains() {
 
   useEffect(() => {
     resetSelection();
-  }, [selectedFolder, filters.search, filters.rootOnly, filters.hasRuns, filters.tagIds, resetSelection]);
+    setActiveTab('vignettes');
+  }, [selectedFolder, resetSelection]);
+
+  useEffect(() => {
+    resetSelection();
+  }, [filters.search, filters.rootOnly, filters.hasRuns, filters.tagIds, resetSelection]);
 
   useEffect(() => {
     resetSelection();
@@ -401,7 +411,34 @@ export function Domains() {
         </section>
 
         <section className="space-y-4">
-          <DefinitionFilters filters={filters} onFiltersChange={setFilters} />
+          {selectedDomain != null && (
+            <div role="tablist" aria-label="Domain sections" className="flex border-b border-gray-200">
+              {([
+                { key: 'vignettes' as const, label: 'Vignettes' },
+                { key: 'contexts' as const, label: 'Contexts' },
+                { key: 'value-statements' as const, label: 'Value Statements' },
+              ]).map((tab) => (
+                <Button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  variant="ghost"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`rounded-none px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === tab.key
+                      ? 'border-teal-500 text-teal-700 bg-transparent hover:bg-transparent'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-transparent'
+                  }`}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
+          )}
+          {(selectedDomain == null || activeTab === 'vignettes') ? (
+            <>
+              <DefinitionFilters filters={filters} onFiltersChange={setFilters} />
 
           <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 space-y-3">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -558,6 +595,12 @@ export function Domains() {
               </div>
             )}
           </div>
+            </>
+          ) : activeTab === 'contexts' ? (
+            <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
+          ) : (
+            <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
+          )}
         </section>
       </div>
     </div>
