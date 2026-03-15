@@ -10,7 +10,7 @@ export function labelFromBody(body: string): string {
   // Strip [level] token (and optional trailing space) before extracting scale label.
   // Scale labels must be stable across all 25 level-preset conditions.
   const clean = body.replace(/\[level\]\s*/g, '');
-  const beforeBecause = clean.split(' because')[0].trim();
+  const beforeBecause = (clean.split(' because')[0] ?? clean).trim();
   return `taking the job with ${beforeBecause}`;
 }
 
