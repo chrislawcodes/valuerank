@@ -36,11 +36,11 @@ export function assembleTemplate(
   // Substitute [level] with the provided word, or leave as-is (base template mode).
   const bodyFirst =
     levelWords?.first != null
-      ? value_first.body.replace('[level]', levelWords.first)
+      ? value_first.body.replaceAll('[level]', levelWords.first)
       : value_first.body;
   const bodySecond =
     levelWords?.second != null
-      ? value_second.body.replace('[level]', levelWords.second)
+      ? value_second.body.replaceAll('[level]', levelWords.second)
       : value_second.body;
 
   const sentenceFirst = `In one role, this job offers [${value_first.token}] ${bodyFirst}.`;
