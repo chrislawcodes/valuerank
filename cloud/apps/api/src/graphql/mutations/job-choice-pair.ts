@@ -239,15 +239,16 @@ builder.mutationField('createJobChoicePair', (t) =>
 
           await Promise.all(scenarioCreates);
         } else {
-          // Backward-compatible fallback: single scenario with base template
+          // Backward-compatible fallback: single scenario — strip [level] token since
+          // no level word was chosen (value statement bodies now contain [level]).
           const scenarioAFirst: ScenarioContent = {
             schema_version: 1,
-            prompt: templateAFirst,
+            prompt: templateAFirst.replace(/\[level\]\s*/g, ''),
             dimension_values: {},
           };
           const scenarioBFirst: ScenarioContent = {
             schema_version: 1,
-            prompt: templateBFirst,
+            prompt: templateBFirst.replace(/\[level\]\s*/g, ''),
             dimension_values: {},
           };
 

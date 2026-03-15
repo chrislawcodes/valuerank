@@ -71,11 +71,12 @@ export function LevelPresets() {
       if (editingPreset != null) {
         await updateLevelPreset({
           id: editingPreset.id,
-          input: levelWords,
+          ...levelWords,
         });
       } else {
         await createLevelPreset({
-          input: { name, ...levelWords },
+          name,
+          ...levelWords,
         });
       }
       setIsModalOpen(false);

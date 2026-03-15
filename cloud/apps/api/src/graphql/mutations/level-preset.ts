@@ -64,7 +64,7 @@ builder.mutationField('createLevelPreset', (t) =>
 
 builder.mutationField('updateLevelPreset', (t) =>
   t.field({
-    type: LevelPresetVersionRef,
+    type: LevelPresetRef,
     args: {
       id: t.arg.id({ required: true }),
       l1: t.arg.string({ required: true }),
@@ -84,8 +84,10 @@ builder.mutationField('updateLevelPreset', (t) =>
       });
       const versionLabel = `v${versionCount + 1}`;
 
-      const newVersion = await db.$transaction(async (tx) => {
-        const v = await tx.levelPresetVersion.create({
+      // Create the new version and touch updatedAt; return the parent preset
+      // so the UI can resolve latestVersion via the LevelPreset type.
+      const updated = await db.$transaction(async (tx) => {
+        await tx.levelPresetVersion.create({
           data: {
             levelPresetId: id,
             version: versionLabel,
@@ -96,12 +98,10 @@ builder.mutationField('updateLevelPreset', (t) =>
             l5: args.l5,
           },
         });
-        // Touch updatedAt on parent
-        await tx.levelPreset.update({
+        return tx.levelPreset.update({
           where: { id },
           data: { updatedAt: new Date() },
         });
-        return v;
       });
 
       await createAuditLog({
@@ -112,7 +112,7 @@ builder.mutationField('updateLevelPreset', (t) =>
         metadata: { name: existing.name, newVersion: versionLabel },
       });
 
-      return newVersion;
+      return updated;
     },
   })
 );
