@@ -76,7 +76,8 @@ describe('NavTabs Component', () => {
     renderNavTabs();
     const domainsLink = screen.getByRole('link', { name: /domains/i });
     const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
-    expect(domainsLink.closest('.group')?.className).toContain('order-1');
-    expect(vignettesLink.closest('.group')?.className).toContain('order-2');
+    // Domains must precede Vignettes in the DOM (no longer uses CSS flex order tricks)
+    const position = domainsLink.compareDocumentPosition(vignettesLink);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
