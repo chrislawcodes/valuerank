@@ -7,7 +7,10 @@ type ComponentsInput = {
 };
 
 export function labelFromBody(body: string): string {
-  const beforeBecause = body.split(' because')[0];
+  // Strip [level] token (and optional trailing space) before extracting scale label.
+  // Scale labels must be stable across all 25 level-preset conditions.
+  const clean = body.replace(/\[level\]\s*/g, '');
+  const beforeBecause = (clean.split(' because')[0] ?? clean).trim();
   return `taking the job with ${beforeBecause}`;
 }
 
@@ -26,12 +29,25 @@ function buildScale(labelFirst: string, labelSecond: string): string {
 export function assembleTemplate(
   contextText: string,
   components: ComponentsInput,
+  levelWords?: { first?: string; second?: string },
 ): string {
   const { value_first, value_second } = components;
 
-  const sentenceFirst = `In one role, this job offers [${value_first.token}] ${value_first.body}.`;
-  const sentenceSecond = `In the other role, this job offers [${value_second.token}] ${value_second.body}.`;
+  // Substitute [level] with the provided word, or leave as-is (base template mode).
+  const bodyFirst =
+    levelWords?.first != null
+      ? value_first.body.replace('[level]', levelWords.first)
+      : value_first.body;
+  const bodySecond =
+    levelWords?.second != null
+      ? value_second.body.replace('[level]', levelWords.second)
+      : value_second.body;
 
+  const sentenceFirst = `In one role, this job offers [${value_first.token}] ${bodyFirst}.`;
+  const sentenceSecond = `In the other role, this job offers [${value_second.token}] ${bodySecond}.`;
+
+  // Scale labels use the original body (stripped of [level]) so they are stable
+  // regardless of which level word was substituted.
   const labelFirst = labelFromBody(value_first.body);
   const labelSecond = labelFromBody(value_second.body);
 

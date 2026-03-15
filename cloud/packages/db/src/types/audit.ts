@@ -18,7 +18,8 @@ export type AuditableEntityType =
   | 'SystemSetting'
   | 'ApiKey'
   | 'AnalysisResult'
-  | 'System'; // For queue operations
+  | 'System' // For queue operations
+  | 'LevelPreset';
 
 /**
  * Input type for creating an audit log entry.

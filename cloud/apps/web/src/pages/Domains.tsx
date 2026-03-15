@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from 'urql';
+import { useMutation, useQuery } from 'urql';
 import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,11 @@ import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
 import { DomainContexts } from './DomainContexts';
 import { ValueStatements } from './ValueStatements';
+import { SET_DOMAIN_DEFAULT_LEVEL_PRESET_MUTATION } from '../api/operations/domains';
+import {
+  LEVEL_PRESETS_QUERY,
+  type LevelPresetsQueryData,
+} from '../api/operations/level-presets';
 
 const defaultFilters: DefinitionFilterState = {
   search: '',
@@ -23,7 +28,7 @@ const defaultFilters: DefinitionFilterState = {
 type FolderKey = string;
 const ALL_SIGNATURE_FILTER = 'all';
 type SignatureFilterKey = string;
-type DomainTab = 'vignettes' | 'contexts' | 'value-statements';
+type DomainTab = 'vignettes' | 'contexts' | 'value-statements' | 'defaults';
 
 type SignatureSplitRow = {
   rowKey: string;
@@ -70,6 +75,14 @@ export function Domains() {
   const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+
+  // Level preset default management
+  const [, setDomainDefaultLevelPreset] = useMutation(SET_DOMAIN_DEFAULT_LEVEL_PRESET_MUTATION);
+  const [{ data: levelPresetsData }] = useQuery<LevelPresetsQueryData>({
+    query: LEVEL_PRESETS_QUERY,
+  });
+  const [defaultsLevelPresetVersionId, setDefaultsLevelPresetVersionId] = useState<string>('');
+  const [defaultsSaving, setDefaultsSaving] = useState(false);
 
   const {
     domains,
@@ -198,7 +211,10 @@ export function Domains() {
   useEffect(() => {
     resetSelection();
     setActiveTab('vignettes');
-  }, [selectedFolder, resetSelection]);
+    // Sync domain defaults state when selection changes
+    const domain = domains.find((d) => d.id === selectedFolder) ?? null;
+    setDefaultsLevelPresetVersionId(domain?.defaultLevelPresetVersion?.id ?? '');
+  }, [selectedFolder, resetSelection, domains]);
 
   useEffect(() => {
     resetSelection();
@@ -318,6 +334,25 @@ export function Domains() {
     }
   };
 
+  const handleSaveDomainDefaults = async () => {
+    if (selectedDomain == null) return;
+    setDefaultsSaving(true);
+    setInlineError(null);
+    setInlineSuccess(null);
+    try {
+      await setDomainDefaultLevelPreset({
+        domainId: selectedDomain.id,
+        levelPresetVersionId: defaultsLevelPresetVersionId !== '' ? defaultsLevelPresetVersionId : null,
+      });
+      refetchDomains();
+      setInlineSuccess('Domain defaults saved.');
+    } catch (err) {
+      setInlineError(err instanceof Error ? err.message : 'Failed to save defaults');
+    } finally {
+      setDefaultsSaving(false);
+    }
+  };
+
   const folderRows: Array<{ key: FolderKey; name: string; count: number }> = [
     { key: 'all', name: 'All', count: allCount ?? domains.reduce((sum, d) => sum + d.definitionCount, 0) + noneCount },
     { key: 'none', name: 'None', count: noneCount },
@@ -417,6 +452,7 @@ export function Domains() {
                 { key: 'vignettes' as const, label: 'Vignettes' },
                 { key: 'contexts' as const, label: 'Contexts' },
                 { key: 'value-statements' as const, label: 'Value Statements' },
+                { key: 'defaults' as const, label: 'Defaults' },
               ]).map((tab) => (
                 <Button
                   key={tab.key}
@@ -598,8 +634,57 @@ export function Domains() {
             </>
           ) : activeTab === 'contexts' ? (
             <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
-          ) : (
+          ) : activeTab === 'value-statements' ? (
             <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
+          ) : (
+            /* Defaults tab */
+            <div key={selectedDomain.id} className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-800">Domain Defaults</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Default settings pre-populated when creating a new vignette pair for this domain.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Default Level Preset
+                </label>
+                <p className="text-xs text-gray-500">
+                  When set, new vignette pairs will automatically use this level preset for 25-condition expansion.
+                </p>
+                <select
+                  value={defaultsLevelPresetVersionId}
+                  onChange={(e) => setDefaultsLevelPresetVersionId(e.target.value)}
+                  className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="">None (no expansion)</option>
+                  {(levelPresetsData?.levelPresets ?? []).map((preset) =>
+                    preset.latestVersion != null ? (
+                      <option key={preset.latestVersion.id} value={preset.latestVersion.id}>
+                        {preset.name} (v{preset.latestVersion.version})
+                      </option>
+                    ) : null,
+                  )}
+                </select>
+              </div>
+
+              {inlineSuccess != null && (
+                <p className="text-sm text-green-700">{inlineSuccess}</p>
+              )}
+              {inlineError != null && (
+                <p className="text-sm text-red-600">{inlineError}</p>
+              )}
+
+              <Button
+                onClick={() => void handleSaveDomainDefaults()}
+                disabled={defaultsSaving}
+                size="sm"
+                variant="secondary"
+              >
+                {defaultsSaving ? 'Saving...' : 'Save Defaults'}
+              </Button>
+            </div>
           )}
         </section>
       </div>

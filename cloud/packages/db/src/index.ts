@@ -36,6 +36,8 @@ export type {
   RunTag,
   DomainContext,
   ValueStatement,
+  LevelPreset,
+  LevelPresetVersion,
 } from '@prisma/client';
 
 // Audit types

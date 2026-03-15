@@ -17,6 +17,7 @@ export type CreateJobChoicePairVariables = {
     valueFirstId: string;
     valueSecondId: string;
     preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
   };
 };
 

@@ -27,6 +27,7 @@ import { Survey } from './pages/Survey';
 import { SurveyResults } from './pages/SurveyResults';
 import { Settings } from './pages/Settings';
 import { Preambles } from './pages/Preambles';
+import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
 import { JobChoiceNew } from './pages/JobChoiceNew';
@@ -230,6 +231,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <Preambles />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/level-presets"
+              element={
+                <ProtectedLayout>
+                  <LevelPresets />
                 </ProtectedLayout>
               }
             />

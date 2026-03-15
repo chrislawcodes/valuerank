@@ -13,6 +13,7 @@ const vignetteMenuItems = [
   { name: 'New Pair', path: '/job-choice/new' },
   { name: 'List', path: '/definitions' },
   { name: 'Preambles', path: '/preambles' },
+  { name: 'Level Presets', path: '/level-presets' },
   { name: 'Trials', path: '/runs' },
   { name: 'Analysis', path: '/analysis' },
 ];

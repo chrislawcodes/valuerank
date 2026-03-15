@@ -3,7 +3,6 @@ import {
   db,
   type DefinitionComponents,
   type DefinitionContentV1,
-  type DimensionLevel,
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
@@ -37,6 +36,7 @@ const CreateJobChoicePairInput = builder.inputType('CreateJobChoicePairInput', {
     valueFirstId: t.id({ required: true }),
     valueSecondId: t.id({ required: true }),
     preambleVersionId: t.id({ required: false }),
+    levelPresetVersionId: t.id({ required: false }),
   }),
 });
 
@@ -58,14 +58,17 @@ builder.mutationField('createJobChoicePair', (t) =>
 
       const preambleVersionId =
         input.preambleVersionId != null ? String(input.preambleVersionId) : null;
+      const inputLevelPresetVersionId =
+        input.levelPresetVersionId != null ? String(input.levelPresetVersionId) : null;
 
-      const [context, valueFirst, valueSecond, preambleVersion] = await Promise.all([
+      const [context, valueFirst, valueSecond, preambleVersion, domain] = await Promise.all([
         db.domainContext.findUnique({ where: { id: contextId } }),
         db.valueStatement.findUnique({ where: { id: valueFirstId } }),
         db.valueStatement.findUnique({ where: { id: valueSecondId } }),
         preambleVersionId == null
           ? Promise.resolve(null)
           : db.preambleVersion.findUnique({ where: { id: preambleVersionId } }),
+        db.domain.findUnique({ where: { id: domainId } }),
       ]);
 
       if (context == null) throw new Error(`DomainContext not found: ${contextId}`);
@@ -83,19 +86,27 @@ builder.mutationField('createJobChoicePair', (t) =>
       if (preambleVersionId != null && preambleVersion == null) {
         throw new Error(`Preamble version not found: ${preambleVersionId}`);
       }
+      if (domain == null) throw new Error(`Domain not found: ${domainId}`);
+
+      // Resolve level preset: explicit input → domain default → null (backward compat)
+      const resolvedLevelPresetVersionId =
+        inputLevelPresetVersionId ?? domain.defaultLevelPresetVersionId ?? null;
+
+      let levelPresetVersion: {
+        l1: string; l2: string; l3: string; l4: string; l5: string;
+      } | null = null;
+
+      if (resolvedLevelPresetVersionId != null) {
+        levelPresetVersion = await db.levelPresetVersion.findUnique({
+          where: { id: resolvedLevelPresetVersionId },
+          select: { l1: true, l2: true, l3: true, l4: true, l5: true },
+        });
+        if (levelPresetVersion == null) {
+          throw new Error(`LevelPresetVersion not found: ${resolvedLevelPresetVersionId}`);
+        }
+      }
 
       const pairKey = randomUUID();
-
-      // Standard 5-point rubric for every job-choice dimension.
-      // Both dimensions use the same levels; the judge knows that dimension[0]
-      // maps scale positions to scores 5→1 and dimension[1] maps them 1→5.
-      const jobChoiceLevels: DimensionLevel[] = [
-        { score: 5, label: 'Strongly supports' },
-        { score: 4, label: 'Somewhat supports' },
-        { score: 3, label: 'Neutral' },
-        { score: 2, label: 'Somewhat opposes' },
-        { score: 1, label: 'Strongly opposes' },
-      ];
 
       const componentsAFirst: DefinitionComponents = {
         context_id: contextId,
@@ -108,12 +119,14 @@ builder.mutationField('createJobChoicePair', (t) =>
         value_second: { token: valueFirst.token, body: valueFirst.body },
       };
 
+      // Base template (no level substitution) — used for definition content and
+      // as fallback when no level preset is resolved.
       const templateAFirst = assembleTemplate(context.text, componentsAFirst);
       const templateBFirst = assembleTemplate(context.text, componentsBFirst);
 
       const dimensions = [
-        { name: valueFirst.token, levels: jobChoiceLevels },
-        { name: valueSecond.token, levels: jobChoiceLevels },
+        { name: valueFirst.token },
+        { name: valueSecond.token },
       ];
 
       const contentAFirst: JobChoiceDefinitionContent = {
@@ -141,17 +154,6 @@ builder.mutationField('createJobChoicePair', (t) =>
         components: componentsBFirst,
       };
 
-      const scenarioAFirst: ScenarioContent = {
-        schema_version: 1,
-        prompt: templateAFirst,
-        dimension_values: {},
-      };
-      const scenarioBFirst: ScenarioContent = {
-        schema_version: 1,
-        prompt: templateBFirst,
-        dimension_values: {},
-      };
-
       const [defA, defB] = await db.$transaction(async (tx) => {
         const a = await tx.definition.create({
           data: {
@@ -160,6 +162,7 @@ builder.mutationField('createJobChoicePair', (t) =>
             domainId,
             domainContextId: contextId,
             preambleVersionId,
+            levelPresetVersionId: resolvedLevelPresetVersionId,
             createdByUserId: ctx.user?.id ?? null,
           },
         });
@@ -170,29 +173,114 @@ builder.mutationField('createJobChoicePair', (t) =>
             domainId,
             domainContextId: contextId,
             preambleVersionId,
+            levelPresetVersionId: resolvedLevelPresetVersionId,
             createdByUserId: ctx.user?.id ?? null,
           },
         });
 
-        await tx.scenario.create({
-          data: {
-            definitionId: a.id,
-            name: 'Default Scenario',
-            content: scenarioAFirst as unknown as Prisma.InputJsonValue,
-          },
-        });
-        await tx.scenario.create({
-          data: {
-            definitionId: b.id,
-            name: 'Default Scenario',
-            content: scenarioBFirst as unknown as Prisma.InputJsonValue,
-          },
-        });
+        if (levelPresetVersion != null) {
+          // 25-condition expansion: 5 levels for value_first × 5 levels for value_second
+          const words = [
+            levelPresetVersion.l1,
+            levelPresetVersion.l2,
+            levelPresetVersion.l3,
+            levelPresetVersion.l4,
+            levelPresetVersion.l5,
+          ];
+
+          const scenarioCreates: Promise<unknown>[] = [];
+
+          for (const firstWord of words) {
+            for (const secondWord of words) {
+              const promptA = assembleTemplate(context.text, componentsAFirst, {
+                first: firstWord,
+                second: secondWord,
+              });
+              const promptB = assembleTemplate(context.text, componentsBFirst, {
+                first: secondWord,
+                second: firstWord,
+              });
+
+              const scenarioContentA: ScenarioContent = {
+                schema_version: 1,
+                prompt: promptA,
+                dimension_values: {
+                  [valueFirst.token]: firstWord,
+                  [valueSecond.token]: secondWord,
+                },
+              };
+              const scenarioContentB: ScenarioContent = {
+                schema_version: 1,
+                prompt: promptB,
+                dimension_values: {
+                  [valueSecond.token]: secondWord,
+                  [valueFirst.token]: firstWord,
+                },
+              };
+
+              scenarioCreates.push(
+                tx.scenario.create({
+                  data: {
+                    definitionId: a.id,
+                    name: `${firstWord} / ${secondWord}`,
+                    content: scenarioContentA as unknown as Prisma.InputJsonValue,
+                  },
+                }),
+                tx.scenario.create({
+                  data: {
+                    definitionId: b.id,
+                    name: `${secondWord} / ${firstWord}`,
+                    content: scenarioContentB as unknown as Prisma.InputJsonValue,
+                  },
+                }),
+              );
+            }
+          }
+
+          await Promise.all(scenarioCreates);
+        } else {
+          // Backward-compatible fallback: single scenario — strip [level] token since
+          // no level word was chosen (value statement bodies now contain [level]).
+          const scenarioAFirst: ScenarioContent = {
+            schema_version: 1,
+            prompt: templateAFirst.replace(/\[level\]\s*/g, ''),
+            dimension_values: {},
+          };
+          const scenarioBFirst: ScenarioContent = {
+            schema_version: 1,
+            prompt: templateBFirst.replace(/\[level\]\s*/g, ''),
+            dimension_values: {},
+          };
+
+          await tx.scenario.create({
+            data: {
+              definitionId: a.id,
+              name: 'Default Scenario',
+              content: scenarioAFirst as unknown as Prisma.InputJsonValue,
+            },
+          });
+          await tx.scenario.create({
+            data: {
+              definitionId: b.id,
+              name: 'Default Scenario',
+              content: scenarioBFirst as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
 
         return [a, b] as const;
       });
 
-      ctx.log.info({ aFirstId: defA.id, bFirstId: defB.id, pairKey }, 'Job choice pair created');
+      ctx.log.info(
+        {
+          aFirstId: defA.id,
+          bFirstId: defB.id,
+          pairKey,
+          levelPresetVersionId: resolvedLevelPresetVersionId,
+          scenarioCount: levelPresetVersion != null ? 50 : 2,
+        },
+        'Job choice pair created',
+      );
 
       void createAuditLog({
         action: 'CREATE',

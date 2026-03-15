@@ -52,3 +52,8 @@ import type { DomainContext, ValueStatement } from '@valuerank/db';
 
 export const DomainContextRef = builder.objectRef<DomainContext>('DomainContext');
 export const ValueStatementRef = builder.objectRef<ValueStatement>('ValueStatement');
+
+import type { LevelPreset, LevelPresetVersion } from '@valuerank/db';
+
+export const LevelPresetRef = builder.objectRef<LevelPreset>('LevelPreset');
+export const LevelPresetVersionRef = builder.objectRef<LevelPresetVersion>('LevelPresetVersion');

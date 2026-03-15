@@ -7,7 +7,7 @@ import {
   type Prisma,
   type DefinitionOverrides,
 } from '@valuerank/db';
-import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef, DomainRef } from './refs.js';
+import { DefinitionRef, RunRef, ScenarioRef, TagRef, PreambleVersionRef, DomainRef, LevelPresetVersionRef } from './refs.js';
 import { UserRef } from './user.js';
 import {
   getDefinitionExpansionStatus,
@@ -235,6 +235,19 @@ builder.objectType(DefinitionRef, {
         return db.preambleVersion.findUnique({
           where: { id: definition.preambleVersionId },
         });
+      },
+    }),
+    levelPresetVersionId: t.exposeString('levelPresetVersionId', {
+      nullable: true,
+      description: 'ID of the level preset version used when this vignette was created',
+    }),
+    levelPresetVersion: t.field({
+      type: LevelPresetVersionRef,
+      nullable: true,
+      description: 'The level preset version used when this vignette was created',
+      resolve: async (definition) => {
+        if (definition.levelPresetVersionId == null) return null;
+        return db.levelPresetVersion.findUnique({ where: { id: definition.levelPresetVersionId } });
       },
     }),
     lastAccessedAt: t.expose('lastAccessedAt', {
@@ -580,6 +593,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: a.deleted_by_user_id,
           version: a.version,
           preambleVersionId: a.preamble_version_id,
+          levelPresetVersionId: null,
         }));
       },
     }),
@@ -620,6 +634,7 @@ builder.objectType(DefinitionRef, {
           deletedByUserId: d.deleted_by_user_id,
           version: d.version,
           preambleVersionId: d.preamble_version_id,
+          levelPresetVersionId: null,
         }));
       },
     }),

@@ -109,3 +109,28 @@ Do not rename these casually once implementation starts:
   - `rows` backward compatibility
   - cache hit/miss logging
   - golden fixture coverage
+
+---
+
+# Level-Set Presets Memory
+
+## Architectural Decisions
+- 2026-03-15: `[level]` substituted at expansion time (not creation time) — base template retains `[level]` placeholder
+- 2026-03-15: Scale labels strip `[level]` via regex in `labelFromBody` — stable across all 25 conditions
+- 2026-03-15: `[achievement]` token stays in narrative sentences — judge needs it to identify values
+- 2026-03-15: `LevelPreset` + `LevelPresetVersion` models — versioned like preambles
+- 2026-03-15: Domain `defaultLevelPresetVersionId` nullable — no backfill of existing domains
+- 2026-03-15: Graceful fallback when no preset: 1 un-expanded scenario (backward compat)
+- 2026-03-15: `dimension_values` in each scenario stores `{ [token]: levelScore }` for analysis
+
+## Off-limits Symbols
+- `jobChoiceLevels` constant: Wave 5 removes it — do NOT re-add
+- `DomainTab` union in Domains.tsx: Wave 7 adds `'defaults'` — check before touching tabs
+
+## Removed/Renamed Symbols (for check-symbols.sh)
+- `jobChoiceLevels` constant → removed in Wave 5
+
+## Status
+ALL 7 WAVES COMPLETE — PR open: feat/level-set-presets
+Branch: feat/level-set-presets
+Plan: docs/plans/level-set-presets-plan.md
