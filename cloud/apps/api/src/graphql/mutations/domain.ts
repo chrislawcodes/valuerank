@@ -630,6 +630,50 @@ builder.mutationField('runTrialsForDomain', (t) =>
   })
 );
 
+builder.mutationField('setDomainDefaultLevelPreset', (t) =>
+  t.field({
+    type: DomainRef,
+    args: {
+      domainId: t.arg.id({ required: true }),
+      levelPresetVersionId: t.arg.id({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const domainId = String(args.domainId);
+      const domain = await db.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+
+      const levelPresetVersionId =
+        args.levelPresetVersionId != null ? String(args.levelPresetVersionId) : null;
+
+      if (levelPresetVersionId != null) {
+        const version = await db.levelPresetVersion.findUnique({
+          where: { id: levelPresetVersionId },
+        });
+        if (!version) throw new Error(`Level preset version not found: ${levelPresetVersionId}`);
+      }
+
+      const updated = await db.domain.update({
+        where: { id: domainId },
+        data: { defaultLevelPresetVersionId: levelPresetVersionId },
+      });
+
+      await createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Domain',
+        entityId: domainId,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          operationType: 'set-default-level-preset',
+          domainName: domain.name,
+          levelPresetVersionId,
+        },
+      });
+
+      return updated;
+    },
+  })
+);
+
 builder.mutationField('retryDomainTrialCell', (t) =>
   t.field({
     type: RetryDomainTrialCellResultRef,

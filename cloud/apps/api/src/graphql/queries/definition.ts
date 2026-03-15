@@ -200,6 +200,7 @@ builder.queryField('definitionAncestors', (t) =>
         deletedByUserId: a.deleted_by_user_id,
         version: a.version,
         preambleVersionId: a.preamble_version_id,
+        levelPresetVersionId: null,
       }));
 
       ctx.log.debug({ count: mappedAncestors.length }, 'Ancestors fetched');
@@ -270,6 +271,7 @@ builder.queryField('definitionDescendants', (t) =>
         deletedByUserId: d.deleted_by_user_id,
         version: d.version,
         preambleVersionId: d.preamble_version_id,
+        levelPresetVersionId: null,
       }));
 
       ctx.log.debug({ count: mappedDescendants.length }, 'Descendants fetched');
