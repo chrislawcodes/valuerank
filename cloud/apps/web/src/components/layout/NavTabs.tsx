@@ -1,12 +1,11 @@
 import { type FocusEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown, ShieldCheck, BookOpen } from 'lucide-react';
+import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
 const tabs = [
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Glossary', path: '/glossary', icon: BookOpen },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
