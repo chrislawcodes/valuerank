@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assembleTemplate } from '../assemble-template.js';
+import { assembleTemplate } from '../src/assemble-template.js';
 
 const CONTEXT = 'A mid-level professional has been offered two distinct roles.';
 
