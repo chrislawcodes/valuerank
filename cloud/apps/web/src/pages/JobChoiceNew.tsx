@@ -22,6 +22,10 @@ import {
   type ValueStatementsQueryResult,
   type ValueStatementsQueryVariables,
 } from '../api/operations/value-statements';
+import {
+  LEVEL_PRESETS_QUERY,
+  type LevelPresetsQueryData,
+} from '../api/operations/level-presets';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 
@@ -51,6 +55,7 @@ export function JobChoiceNew() {
 
   const [selectedDomainId, setSelectedDomainId] = useState('');
   const [selectedPreambleVersionId, setSelectedPreambleVersionId] = useState('');
+  const [selectedLevelPresetVersionId, setSelectedLevelPresetVersionId] = useState('');
   const [selectedContextId, setSelectedContextId] = useState('');
   const [selectedValueFirstId, setSelectedValueFirstId] = useState('');
   const [selectedValueSecondId, setSelectedValueSecondId] = useState('');
@@ -87,6 +92,10 @@ export function JobChoiceNew() {
     query: VALUE_STATEMENTS_QUERY,
     variables: { domainId: selectedDomainId },
     pause: selectedDomainId === '',
+  });
+
+  const [{ data: levelPresetsData }] = useQuery<LevelPresetsQueryData>({
+    query: LEVEL_PRESETS_QUERY,
   });
 
   const [, createPair] = useMutation<CreateJobChoicePairResult, CreateJobChoicePairVariables>(
@@ -128,6 +137,9 @@ export function JobChoiceNew() {
     setName('');
     setNameWasAutoSet(false);
     setErrorMessage(null);
+    // Pre-populate level preset from domain default
+    const domain = domains.find((d) => d.id === domainId) ?? null;
+    setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersion?.id ?? '');
   }
 
   function handleValueFirstChange(valueId: string) {
@@ -179,6 +191,7 @@ export function JobChoiceNew() {
         valueFirstId: selectedValueFirstId,
         valueSecondId: selectedValueSecondId,
         preambleVersionId: selectedPreambleVersionId !== '' ? selectedPreambleVersionId : null,
+        levelPresetVersionId: selectedLevelPresetVersionId !== '' ? selectedLevelPresetVersionId : null,
       },
     });
 
@@ -250,6 +263,30 @@ export function JobChoiceNew() {
                 preamble.latestVersion != null ? (
                   <option key={preamble.latestVersion.id} value={preamble.latestVersion.id}>
                     {preamble.name} (v{preamble.latestVersion.version})
+                  </option>
+                ) : null,
+              )}
+            </select>
+          </div>
+
+          {/* Level Preset */}
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-white/70">
+              Level Preset <span className="text-white/30">(optional)</span>
+            </label>
+            <p className="text-xs text-white/40">
+              When set, creates 25 scenarios (5×5 intensity grid). Pre-filled from domain default.
+            </p>
+            <select
+              value={selectedLevelPresetVersionId}
+              onChange={(event) => setSelectedLevelPresetVersionId(event.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white outline-none focus:border-teal-500"
+            >
+              <option value="">None (single scenario)</option>
+              {(levelPresetsData?.levelPresets ?? []).map((preset) =>
+                preset.latestVersion != null ? (
+                  <option key={preset.latestVersion.id} value={preset.latestVersion.id}>
+                    {preset.name} (v{preset.latestVersion.version})
                   </option>
                 ) : null,
               )}
