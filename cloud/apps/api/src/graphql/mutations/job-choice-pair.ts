@@ -3,6 +3,7 @@ import {
   db,
   type DefinitionComponents,
   type DefinitionContentV1,
+  type DimensionLevel,
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
@@ -85,6 +86,17 @@ builder.mutationField('createJobChoicePair', (t) =>
 
       const pairKey = randomUUID();
 
+      // Standard 5-point rubric for every job-choice dimension.
+      // Both dimensions use the same levels; the judge knows that dimension[0]
+      // maps scale positions to scores 5→1 and dimension[1] maps them 1→5.
+      const jobChoiceLevels: DimensionLevel[] = [
+        { score: 5, label: 'Strongly supports' },
+        { score: 4, label: 'Somewhat supports' },
+        { score: 3, label: 'Neutral' },
+        { score: 2, label: 'Somewhat opposes' },
+        { score: 1, label: 'Strongly opposes' },
+      ];
+
       const componentsAFirst: DefinitionComponents = {
         context_id: contextId,
         value_first: { token: valueFirst.token, body: valueFirst.body },
@@ -99,7 +111,10 @@ builder.mutationField('createJobChoicePair', (t) =>
       const templateAFirst = assembleTemplate(context.text, componentsAFirst);
       const templateBFirst = assembleTemplate(context.text, componentsBFirst);
 
-      const dimensions = [{ name: valueFirst.token }, { name: valueSecond.token }];
+      const dimensions = [
+        { name: valueFirst.token, levels: jobChoiceLevels },
+        { name: valueSecond.token, levels: jobChoiceLevels },
+      ];
 
       const contentAFirst: JobChoiceDefinitionContent = {
         schema_version: 1,

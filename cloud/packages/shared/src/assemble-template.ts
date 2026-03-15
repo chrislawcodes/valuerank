@@ -6,9 +6,9 @@ type ComponentsInput = {
   value_second: { token: string; body: string; intensity?: string };
 };
 
-export function labelFromBody(token: string, body: string): string {
+export function labelFromBody(body: string): string {
   const beforeBecause = body.split(' because')[0];
-  return `taking the job with [${token}] ${beforeBecause}`;
+  return `taking the job with ${beforeBecause}`;
 }
 
 function buildScale(labelFirst: string, labelSecond: string): string {
@@ -32,8 +32,8 @@ export function assembleTemplate(
   const sentenceFirst = `In one role, this job offers [${value_first.token}] ${value_first.body}.`;
   const sentenceSecond = `In the other role, this job offers [${value_second.token}] ${value_second.body}.`;
 
-  const labelFirst = labelFromBody(value_first.token, value_first.body);
-  const labelSecond = labelFromBody(value_second.token, value_second.body);
+  const labelFirst = labelFromBody(value_first.body);
+  const labelSecond = labelFromBody(value_second.body);
 
   return [
     contextText,

@@ -88,8 +88,8 @@ export function transformJobChoiceDefinition(
 
   const assembledTemplate = assembleTemplate(intro, components);
 
-  const labelFirst = labelFromBody(firstToken, firstBody);
-  const labelSecond = labelFromBody(secondToken, secondBody);
+  const labelFirst = labelFromBody(firstBody);
+  const labelSecond = labelFromBody(secondBody);
 
   const methodology: DefinitionMethodology = {
     family: 'job-choice',
