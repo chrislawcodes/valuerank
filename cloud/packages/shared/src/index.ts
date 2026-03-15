@@ -20,6 +20,17 @@ export {
   type CanonicalLevel,
   type HigherOrderCategory,
 } from './canonical-dimensions.js';
+export {
+  CANONICAL_GLOSSARY_MAPPING_TABLE,
+  CANONICAL_GLOSSARY_OVERVIEW,
+  CANONICAL_GLOSSARY_PURPOSE,
+  CANONICAL_GLOSSARY_RELATED_DOCS,
+  CANONICAL_GLOSSARY_SECTIONS,
+  CANONICAL_GLOSSARY_USAGE,
+  type CanonicalGlossaryMapping,
+  type CanonicalGlossarySection,
+  type CanonicalGlossaryTerm,
+} from './canonical-glossary.js';
 export { SYSTEM_ACTOR_ID, MAX_SAMPLES_PER_SCENARIO } from './constants.js';
 export { bucketDecisionDirection, decisionsMatch, type DecisionDirection } from './decision-scoring.js';
 export { cosineSimilarity } from './cosine-similarity.js';

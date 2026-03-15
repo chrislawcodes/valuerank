@@ -30,6 +30,7 @@ import { Preambles } from './pages/Preambles';
 import { LevelPresets } from './pages/LevelPresets';
 import { DomainContexts } from './pages/DomainContexts';
 import { ValueStatements } from './pages/ValueStatements';
+import { Glossary } from './pages/Glossary';
 import { JobChoiceNew } from './pages/JobChoiceNew';
 import { NotFound } from './pages/NotFound';
 import { client } from './api/client';
@@ -255,6 +256,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <ValueStatements />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/glossary"
+              element={
+                <ProtectedLayout>
+                  <Glossary />
                 </ProtectedLayout>
               }
             />
