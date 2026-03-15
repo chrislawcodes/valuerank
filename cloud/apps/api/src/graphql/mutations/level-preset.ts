@@ -1,6 +1,6 @@
 import { builder } from '../builder.js';
 import { db, Prisma } from '@valuerank/db';
-import { LevelPresetRef, LevelPresetVersionRef } from '../types/refs.js';
+import { LevelPresetRef } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
 
 const DeleteLevelPresetResultRef = builder.objectRef<{ id: string }>('DeleteLevelPresetResult');
