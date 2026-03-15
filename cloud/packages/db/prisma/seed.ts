@@ -206,6 +206,36 @@ async function main() {
   console.log('Created default preamble');
 
   // ============================================================================
+  // LEVEL PRESETS
+  // ============================================================================
+
+  const standardLevelPreset = await prisma.levelPreset.upsert({
+    where: { name: 'Standard' },
+    update: {},
+    create: {
+      id: 'seed-level-preset-standard',
+      name: 'Standard',
+    },
+  });
+
+  await prisma.levelPresetVersion.upsert({
+    where: { id: 'seed-level-preset-standard-v1' },
+    update: {},
+    create: {
+      id: 'seed-level-preset-standard-v1',
+      levelPresetId: standardLevelPreset.id,
+      version: 'v1',
+      l1: 'negligible',
+      l2: 'minimal',
+      l3: 'moderate',
+      l4: 'substantial',
+      l5: 'full',
+    },
+  });
+
+  console.log('Created Standard level preset');
+
+  // ============================================================================
   // DEFINITIONS (with parent-child hierarchy)
   // ============================================================================
 

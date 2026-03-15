@@ -135,6 +135,10 @@ model Definition {
   preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
   version           Int              @default(1)
 
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
   // Cost visibility - per-definition token statistics (P3)
   tokenStatistics ModelTokenStatistics[]
 
@@ -142,6 +146,7 @@ model Definition {
   @@index([domainId])
   @@index([domainContextId])
   @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
   @@map("definitions")
 }
 
@@ -152,10 +157,14 @@ model Domain {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
   definitions     Definition[]
   contexts        DomainContext[]
   valueStatements ValueStatement[]
 
+  @@index([defaultLevelPresetVersionId])
   @@map("domains")
 }
 
@@ -197,6 +206,36 @@ model Preamble {
   versions PreambleVersion[]
 
   @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
 }
 
 model PreambleVersion {
