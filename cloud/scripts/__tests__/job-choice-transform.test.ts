@@ -59,7 +59,7 @@ describe('transformJobChoiceDefinition', () => {
       'In the other role, this job offers [hedonism] enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work.',
     );
     expect(result.content.template).toContain(
-      '- Strongly support taking the job with [achievement] recognition of their expertise'
+      '- Strongly support taking the job with recognition of their expertise'
     );
     expect(result.content.template).not.toContain('they would gain');
     expect(result.content.template).not.toContain('1 to 5');
@@ -72,8 +72,8 @@ describe('transformJobChoiceDefinition', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
     expect(result.optionLabels).toEqual([
-      'taking the job with [achievement] recognition of their expertise',
-      'taking the job with [hedonism] enjoyment in their daily experience',
+      'taking the job with recognition of their expertise',
+      'taking the job with enjoyment in their daily experience',
     ]);
   });
 
