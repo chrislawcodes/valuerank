@@ -592,7 +592,7 @@ export function Domains() {
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
                       <Plus className="w-4 h-4 mr-1" />
-                      Create Vignette Pair
+                      Create Vignette
                     </Button>
                     <Button onClick={() => void handleRunDomainTrials()} disabled={selectedDomain === null}>
                     <Play className="w-4 h-4 mr-1" />
@@ -683,7 +683,7 @@ export function Domains() {
                 <h3 className="text-lg font-medium text-[#1A1A1A]">Recommended next steps</h3>
                 <div className="mt-4 space-y-2">
                   <Button type="button" variant="secondary" className="w-full" onClick={() => void handleCreateVignettePair()}>
-                    Create Vignette Pair
+                    Create Vignette
                   </Button>
                   <Button type="button" variant="secondary" className="w-full" onClick={() => {
                     setActiveTab('setup');
@@ -732,7 +732,7 @@ export function Domains() {
                     </div>
                     <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
                       <Plus className="w-4 h-4 mr-1" />
-                      Create Vignette Pair
+                      Create Vignette
                     </Button>
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-3">

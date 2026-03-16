@@ -53,10 +53,10 @@ describe('transformJobChoiceDefinition', () => {
     const result = transformJobChoiceDefinition(SAMPLE_CONTENT);
 
     expect(result.content.template).toContain(
-      'In one role, this job offers [achievement] recognition of their expertise because of how it relates to success through strong performance.',
+      'In one role, this job offers recognition of their expertise because of how it relates to success through strong performance.',
     );
     expect(result.content.template).toContain(
-      'In the other role, this job offers [hedonism] enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work.',
+      'In the other role, this job offers enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work.',
     );
     expect(result.content.template).toContain(
       '- Strongly support taking the job with recognition of their expertise'
@@ -98,7 +98,8 @@ describe('transformJobChoiceDefinition', () => {
 
     expect(result.content.components?.value_first.token).toBe('hedonism');
     expect(result.content.components?.value_second.token).toBe('achievement');
-    expect(result.content.template).toContain('In one role, this job offers [hedonism]');
+    expect(result.content.template).toContain('In one role, this job offers enjoyment in their daily experience');
+    expect(result.content.template).not.toContain('[hedonism]');
     expect(result.roleTitles).toEqual(['a luxury resort reviewer', 'a sales executive']);
     
     expect(result.content.methodology).toEqual({

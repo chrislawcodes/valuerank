@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { Provider } from 'urql';
 import { fromValue, delay, pipe } from 'wonka';
@@ -16,11 +15,33 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+vi.mock('../../src/components/definitions/DefinitionEditor', () => ({
+  DefinitionEditor: ({ mode }: { mode: 'create' | 'edit' }) => (
+    <div>
+      <div>{mode === 'create' ? 'Definition Editor Stub (create)' : 'Definition Editor Stub (edit)'}</div>
+      <div>Vignette Name</div>
+    </div>
+  ),
+}));
+
+vi.mock('../../src/components/definitions/TagSelector', () => ({
+  TagSelector: ({ selectedTags }: { selectedTags?: { id: string; name: string }[] }) => (
+    <div>
+      <div>Add Tag</div>
+      {selectedTags?.map((tag) => <div key={tag.id}>{tag.name}</div>)}
+    </div>
+  ),
+}));
+
 function createMockClient(options: {
   definition?: {
     id: string;
     name: string;
     content: object;
+    domainId?: string | null;
+    domainContextId?: string | null;
+    preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
     parentId?: string | null;
     runCount?: number;
     createdAt?: string;
@@ -218,7 +239,6 @@ describe('DefinitionDetail', () => {
 
   describe('edit mode', () => {
     it('should switch to edit mode when Edit button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -226,17 +246,60 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /edit/i }));
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Edit Vignette')).toBeInTheDocument();
       });
     });
+
+    it('routes job-choice vignettes to the vignette editor', async () => {
+      const client = createMockClient({
+        definition: {
+          id: 'job-choice-1',
+          name: 'Care vs Freedom (A)',
+          domainId: 'domain-a',
+          domainContextId: 'context-1',
+          levelPresetVersionId: null,
+          preambleVersionId: null,
+          content: {
+            schema_version: 1,
+            template: 'Choose between care and freedom',
+            dimensions: [{ name: 'care' }, { name: 'freedom' }],
+            methodology: {
+              family: 'job-choice',
+              presentation_order: 'A_first',
+              pair_key: 'pair-1',
+            },
+            components: {
+              context_id: 'context-1',
+              value_first: { token: 'care', body: 'show care' },
+              value_second: { token: 'freedom', body: 'protect freedom' },
+            },
+          },
+          parentId: null,
+          runCount: 0,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-15T10:00:00Z',
+          tags: [],
+          parent: null,
+          children: [],
+        },
+      });
+      renderDefinitionDetail('job-choice-1', client);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith('/job-choice/job-choice-1/edit');
+    });
   });
 
   describe('fork dialog', () => {
     it('should show fork dialog when Fork button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -244,7 +307,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /fork/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /fork/i }));
+      fireEvent.click(screen.getByRole('button', { name: /fork/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Fork Vignette')).toBeInTheDocument();
@@ -254,7 +317,6 @@ describe('DefinitionDetail', () => {
 
   describe('delete confirmation', () => {
     it('should show delete confirmation when Delete button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -262,7 +324,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /delete/i }));
+      fireEvent.click(screen.getByRole('button', { name: /delete/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Delete Vignette')).toBeInTheDocument();

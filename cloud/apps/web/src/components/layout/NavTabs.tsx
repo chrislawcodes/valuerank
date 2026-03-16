@@ -12,7 +12,7 @@ const utilityTabs = [
 const domainMenuItems = [
   { name: 'Overview', path: '/domains' },
   { name: 'Vignettes', path: '/definitions' },
-  { name: 'New Pair', path: '/job-choice/new' },
+  { name: 'New Vignette', path: '/job-choice/new' },
   { name: 'Preambles', path: '/preambles' },
   { name: 'Level Presets', path: '/level-presets' },
   { name: 'Domain Contexts', path: '/domain-contexts' },

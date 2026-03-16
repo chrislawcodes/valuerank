@@ -207,6 +207,10 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'ID of assigned domain (null means None)',
     }),
+    domainContextId: t.exposeID('domainContextId', {
+      nullable: true,
+      description: 'ID of the domain context attached to this definition',
+    }),
     content: t.expose('content', {
       type: 'JSON',
       description: 'JSONB content with scenario configuration',

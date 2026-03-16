@@ -62,6 +62,7 @@ export type Definition = {
   id: string;
   name: string;
   domainId?: string | null;
+  domainContextId?: string | null;
   domain?: {
     id: string;
     name: string;
@@ -89,6 +90,7 @@ export type Definition = {
   scenarioCount?: number;
   version: number;
   preambleVersionId: string | null;
+  levelPresetVersionId?: string | null;
   preambleVersion?: PreambleVersion | null;
   tags: Tag[];
   parent?: Definition | null;
@@ -224,6 +226,12 @@ export const DEFINITION_QUERY = gql`
     definition(id: $id) {
       id
       name
+      domainId
+      domainContextId
+      domain {
+        id
+        name
+      }
       parentId
       content
       createdAt
@@ -248,6 +256,7 @@ export const DEFINITION_QUERY = gql`
       scenarioCount
       version
       preambleVersionId
+      levelPresetVersionId
       preambleVersion {
         id
         version

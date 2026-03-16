@@ -34,8 +34,10 @@ describe('assembleTemplate', () => {
 
   it('produces the correct sentence structure', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS_NO_LEVEL);
-    expect(result).toContain('In one role, this job offers [achievement]');
-    expect(result).toContain('In the other role, this job offers [hedonism]');
+    expect(result).toContain('In one role, this job offers recognition of their expertise');
+    expect(result).toContain('In the other role, this job offers enjoyment in their daily experience');
+    expect(result).not.toContain('[achievement]');
+    expect(result).not.toContain('[hedonism]');
   });
 
   it('includes scale labels derived from value bodies without token brackets', () => {
@@ -64,8 +66,10 @@ describe('assembleTemplate', () => {
       second: 'substantial',
     });
     // Narrative uses the substituted word
-    expect(result).toContain('[achievement] moderate recognition of their expertise');
-    expect(result).toContain('[hedonism] substantial enjoyment in their daily experience');
+    expect(result).toContain('moderate recognition of their expertise');
+    expect(result).toContain('substantial enjoyment in their daily experience');
+    expect(result).not.toContain('[achievement]');
+    expect(result).not.toContain('[hedonism]');
     // [level] token should not appear in output
     expect(result).not.toContain('[level]');
   });
@@ -91,7 +95,8 @@ describe('assembleTemplate', () => {
   it('leaves [level] in narrative when levelWords not provided (base template mode)', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS_WITH_LEVEL);
     // [level] remains in narrative — base template used for storage
-    expect(result).toContain('[achievement] [level] recognition of their expertise');
+    expect(result).toContain('In one role, this job offers [level] recognition of their expertise');
+    expect(result).not.toContain('[achievement]');
     // Scale labels still have [level] stripped
     expect(result).toContain(
       '- Strongly support taking the job with recognition of their expertise',

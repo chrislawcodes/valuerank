@@ -43,8 +43,8 @@ export function assembleTemplate(
       ? value_second.body.replaceAll('[level]', levelWords.second)
       : value_second.body;
 
-  const sentenceFirst = `In one role, this job offers [${value_first.token}] ${bodyFirst}.`;
-  const sentenceSecond = `In the other role, this job offers [${value_second.token}] ${bodySecond}.`;
+  const sentenceFirst = `In one role, this job offers ${bodyFirst}.`;
+  const sentenceSecond = `In the other role, this job offers ${bodySecond}.`;
 
   // Scale labels use the original body (stripped of [level]) so they are stable
   // regardless of which level word was substituted.

@@ -304,6 +304,13 @@ export function DefinitionDetail() {
   const methodology = getDefinitionMethodology(resolvedContent);
   const methodologyLabel = getDefinitionMethodologyLabel(resolvedContent, definition.domain?.name ?? null);
   const startLabel = methodology?.family === 'job-choice' ? 'Start Paired Batch' : 'Start Trial';
+  const handleEdit = () => {
+    if (methodology?.family === 'job-choice') {
+      navigate(`/job-choice/${definition.id}/edit`);
+      return;
+    }
+    setIsEditing(true);
+  };
 
   // View mode
   return (
@@ -315,7 +322,7 @@ export function DefinitionDetail() {
         isForked={Boolean(definition.parentId)}
         isUnforking={isUnforking}
         methodologyLabel={methodologyLabel}
-        onEdit={() => setIsEditing(true)}
+        onEdit={handleEdit}
         onFork={() => setShowForkDialog(true)}
         onUnfork={() => setShowUnforkConfirm(true)}
         onDelete={() => setShowDeleteConfirm(true)}
