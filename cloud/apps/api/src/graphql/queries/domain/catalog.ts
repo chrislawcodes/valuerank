@@ -21,6 +21,13 @@ builder.queryField('domains', (t) =>
 
       const domains = await db.domain.findMany({
         where: hasSearch ? { normalizedName: { contains: normalizedSearch ?? '' } } : undefined,
+        include: {
+          defaultLevelPresetVersion: {
+            include: {
+              levelPreset: true,
+            },
+          },
+        },
         orderBy: { name: 'asc' },
         take: limit,
         skip: offset,
@@ -64,6 +71,16 @@ builder.queryField('domain', (t) =>
     args: {
       id: t.arg.id({ required: true }),
     },
-    resolve: async (_root, args) => db.domain.findUnique({ where: { id: String(args.id) } }),
+    resolve: async (_root, args) =>
+      db.domain.findUnique({
+        where: { id: String(args.id) },
+        include: {
+          defaultLevelPresetVersion: {
+            include: {
+              levelPreset: true,
+            },
+          },
+        },
+      }),
   }),
 );

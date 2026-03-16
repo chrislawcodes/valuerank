@@ -1,8 +1,12 @@
 import { builder } from '../builder.js';
-import { db } from '@valuerank/db';
+import { db, type LevelPreset } from '@valuerank/db';
 import { LevelPresetRef, LevelPresetVersionRef } from './refs.js';
 
 export { LevelPresetRef, LevelPresetVersionRef };
+
+type LevelPresetVersionWithPreset = {
+  levelPreset?: LevelPreset | null;
+};
 
 // LevelPresetVersion Type
 builder.objectType(LevelPresetVersionRef, {
@@ -24,6 +28,10 @@ builder.objectType(LevelPresetVersionRef, {
       nullable: true,
       description: 'The parent level preset',
       resolve: async (parent) => {
+        const preloadedLevelPreset = (parent as LevelPresetVersionWithPreset).levelPreset;
+        if (preloadedLevelPreset !== undefined) {
+          return preloadedLevelPreset;
+        }
         return db.levelPreset.findUnique({
           where: { id: parent.levelPresetId },
         });
