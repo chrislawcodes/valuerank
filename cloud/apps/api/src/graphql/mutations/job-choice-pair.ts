@@ -588,7 +588,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
           levelPresetVersion: resolvedInputs.levelPresetVersion,
         });
 
-        return [updatedDefinitions[0]!, updatedDefinitions[1]!] as const;
+        return [updatedDefinitions[0], updatedDefinitions[1]] as const;
       });
 
       void createAuditLog({
