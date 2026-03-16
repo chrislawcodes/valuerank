@@ -17,7 +17,6 @@ import {
 import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders/definition-trial-summary.js';
 import {
   applyLevelPresetToDefinitionContent,
-  hydrateDefinitionContentWithLevelPreset,
 } from '../../utils/definition-level-preset.js';
 
 // Re-export for backward compatibility
