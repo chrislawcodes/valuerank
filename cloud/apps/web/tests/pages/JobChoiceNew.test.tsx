@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { JobChoiceNew } from '../../src/pages/JobChoiceNew';
 import { DEFINITION_QUERY } from '../../src/api/operations/definitions';
@@ -213,8 +212,6 @@ describe('JobChoiceNew', () => {
       }),
     );
 
-    const user = userEvent.setup();
-
     render(
       <MemoryRouter initialEntries={['/job-choice/def-1/edit']}>
         <Routes>
@@ -228,9 +225,12 @@ describe('JobChoiceNew', () => {
     });
 
     const nameInput = screen.getByDisplayValue('care vs freedom');
-    await user.clear(nameInput);
-    await user.type(nameInput, 'care vs freedom revised');
-    await user.click(screen.getByRole('button', { name: 'Save Vignette Changes' }));
+    fireEvent.change(nameInput, { target: { value: 'care vs freedom revised' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save Vignette Changes' }));
+      await Promise.resolve();
+    });
 
     await waitFor(() => {
       expect(mutationMocks.updatePairMock).toHaveBeenCalledWith({
@@ -246,7 +246,11 @@ describe('JobChoiceNew', () => {
       });
     });
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save Vignette Changes' })).not.toBeDisabled();
+      expect(mockNavigate).toHaveBeenCalledWith('/definitions/def-1');
+    });
+
     expect(mutationMocks.createPairMock).not.toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/definitions/def-1');
   });
 });

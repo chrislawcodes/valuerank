@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { Provider } from 'urql';
 import { fromValue, delay, pipe } from 'wonka';
@@ -15,6 +14,24 @@ vi.mock('react-router-dom', async () => {
     useNavigate: () => mockNavigate,
   };
 });
+
+vi.mock('../../src/components/definitions/DefinitionEditor', () => ({
+  DefinitionEditor: ({ mode }: { mode: 'create' | 'edit' }) => (
+    <div>
+      <div>{mode === 'create' ? 'Definition Editor Stub (create)' : 'Definition Editor Stub (edit)'}</div>
+      <div>Vignette Name</div>
+    </div>
+  ),
+}));
+
+vi.mock('../../src/components/definitions/TagSelector', () => ({
+  TagSelector: ({ selectedTags }: { selectedTags?: { id: string; name: string }[] }) => (
+    <div>
+      <div>Add Tag</div>
+      {selectedTags?.map((tag) => <div key={tag.id}>{tag.name}</div>)}
+    </div>
+  ),
+}));
 
 function createMockClient(options: {
   definition?: {
@@ -222,7 +239,6 @@ describe('DefinitionDetail', () => {
 
   describe('edit mode', () => {
     it('should switch to edit mode when Edit button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -230,7 +246,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /edit/i }));
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Edit Vignette')).toBeInTheDocument();
@@ -238,7 +254,6 @@ describe('DefinitionDetail', () => {
     });
 
     it('routes job-choice vignettes to the vignette editor', async () => {
-      const user = userEvent.setup();
       const client = createMockClient({
         definition: {
           id: 'job-choice-1',
@@ -277,7 +292,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /edit/i }));
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith('/job-choice/job-choice-1/edit');
     });
@@ -285,7 +300,6 @@ describe('DefinitionDetail', () => {
 
   describe('fork dialog', () => {
     it('should show fork dialog when Fork button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -293,7 +307,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /fork/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /fork/i }));
+      fireEvent.click(screen.getByRole('button', { name: /fork/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Fork Vignette')).toBeInTheDocument();
@@ -303,7 +317,6 @@ describe('DefinitionDetail', () => {
 
   describe('delete confirmation', () => {
     it('should show delete confirmation when Delete button clicked', async () => {
-      const user = userEvent.setup();
       const client = createMockClient();
       renderDefinitionDetail('def-1', client);
 
@@ -311,7 +324,7 @@ describe('DefinitionDetail', () => {
         expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /delete/i }));
+      fireEvent.click(screen.getByRole('button', { name: /delete/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Delete Vignette')).toBeInTheDocument();
