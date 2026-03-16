@@ -759,16 +759,18 @@ export function Domains() {
                     <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                       Create vignette is guided by setup coverage. This domain still needs {formatRequirementList(missingSetupRequirements)}.
                       {' '}
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => {
                           setActiveTab('setup');
                           setSetupTab(missingSetupRequirements[0]?.tab ?? 'contexts');
                         }}
-                        className="font-semibold underline"
+                        className="inline-flex min-h-0 h-auto px-0 py-0 align-baseline font-semibold underline"
                       >
                         Open the right setup section
-                      </button>
+                      </Button>
                       .
                     </div>
                   )}

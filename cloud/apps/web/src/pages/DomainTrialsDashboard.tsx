@@ -564,29 +564,30 @@ export function DomainTrialsDashboard() {
             <p className="text-sm text-gray-600">No domain evaluations yet.</p>
           ) : (
             <div className="space-y-2">
-              {recentEvaluations.map((evaluation) => (
-                <button
-                  key={evaluation.id}
-                  type="button"
-                  onClick={() => setCurrentEvaluationId(evaluation.id)}
-                  className={`w-full rounded-lg border px-3 py-3 text-left ${currentEvaluationId === evaluation.id ? 'border-teal-400 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {evaluation.scopeCategory.toLowerCase()} · {evaluation.status.toLowerCase()}
+                  {recentEvaluations.map((evaluation) => (
+                    <Button
+                      key={evaluation.id}
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setCurrentEvaluationId(evaluation.id)}
+                      className={`w-full rounded-lg px-3 py-3 text-left justify-start ${currentEvaluationId === evaluation.id ? 'border-teal-400 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                    >
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {evaluation.scopeCategory.toLowerCase()} · {evaluation.status.toLowerCase()}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {evaluation.memberCount} runs · {formatCost(evaluation.projectedCostUsd)} projected
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-gray-500">
+                          <div>{formatTimestamp(evaluation.createdAt)}</div>
+                          <div>{evaluation.id.slice(-8)}</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-600">
-                        {evaluation.memberCount} runs · {formatCost(evaluation.projectedCostUsd)} projected
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-gray-500">
-                      <div>{formatTimestamp(evaluation.createdAt)}</div>
-                      <div>{evaluation.id.slice(-8)}</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
+                    </Button>
+                  ))}
             </div>
           )}
         </div>
