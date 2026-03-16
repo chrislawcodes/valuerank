@@ -156,7 +156,7 @@ describe('Domains workspace', () => {
     renderDomainsPage();
 
     await user.click(screen.getByRole('button', { name: /domain a/i }));
-    await user.click(screen.getAllByRole('button', { name: /create vignette pair/i })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /create vignette/i })[0]!);
 
     expect(screen.getByRole('tab', { name: /setup/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { name: /setup coverage/i })).toBeInTheDocument();
