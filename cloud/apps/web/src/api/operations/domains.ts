@@ -407,12 +407,14 @@ export const RETRY_DOMAIN_TRIAL_CELL_MUTATION = gql`
     $definitionId: ID!
     $modelId: String!
     $temperature: Float
+    $scopeCategory: String
   ) {
     retryDomainTrialCell(
       domainId: $domainId
       definitionId: $definitionId
       modelId: $modelId
       temperature: $temperature
+      scopeCategory: $scopeCategory
     ) {
       success
       definitionId
@@ -782,4 +784,5 @@ export type RetryDomainTrialCellMutationVariables = {
   definitionId: string;
   modelId: string;
   temperature?: number;
+  scopeCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
 };

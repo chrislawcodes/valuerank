@@ -294,6 +294,7 @@ async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promi
   const activeRuns = await db.run.findMany({
     where: {
       definitionId: { in: latestDefinitionIds },
+      runCategory: scopeCategory,
       status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
       deletedAt: null,
     },
@@ -880,6 +881,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
       definitionId: t.arg.id({ required: true }),
       modelId: t.arg.string({ required: true }),
       temperature: t.arg.float({ required: false }),
+      scopeCategory: t.arg.string({ required: false }),
     },
     resolve: async (_root, args, ctx) => {
       if (!ctx.user) {
@@ -890,6 +892,10 @@ builder.mutationField('retryDomainTrialCell', (t) =>
       const domainId = String(args.domainId);
       const definitionId = String(args.definitionId);
       const modelId = String(args.modelId);
+      const requestedScopeCategory = String(args.scopeCategory ?? 'PRODUCTION').trim().toUpperCase();
+      const scopeCategory = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'].includes(requestedScopeCategory)
+        ? (requestedScopeCategory as DomainEvaluationLaunchInput['scopeCategory'])
+        : 'PRODUCTION';
 
       const domain = await db.domain.findUnique({ where: { id: domainId } });
       if (!domain) throw new Error(`Domain not found: ${domainId}`);
@@ -913,6 +919,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
       const activeRuns = await db.run.findMany({
         where: {
           definitionId,
+          runCategory: scopeCategory,
           status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
           deletedAt: null,
         },
@@ -937,7 +944,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
         samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
         temperature: args.temperature ?? undefined,
         priority: 'NORMAL',
-        runCategory: 'PRODUCTION',
+        runCategory: scopeCategory,
         userId,
         finalTrial: false,
       });
@@ -952,6 +959,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
           domainName: domain.name,
           definitionId,
           modelId,
+          scopeCategory,
           runId: run.run.id,
           temperature: args.temperature ?? null,
         },

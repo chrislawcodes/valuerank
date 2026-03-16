@@ -393,6 +393,7 @@ export function DomainTrialsDashboard() {
       definitionId,
       modelId,
       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
+      scopeCategory: currentEvaluation?.scopeCategory ?? scopeCategory,
     });
     setPendingRetryCell(null);
     if (result.error) {
