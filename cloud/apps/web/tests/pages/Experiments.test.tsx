@@ -22,13 +22,13 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
 }));
 
 describe('Survey Page', () => {
-  it('should render survey heading', () => {
+  it('should render the legacy survey heading', () => {
     render(
       <MemoryRouter>
         <Survey />
       </MemoryRouter>
     );
-    expect(screen.getByRole('heading', { name: /^survey$/i, level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^legacy survey work$/i, level: 1 })).toBeInTheDocument();
   });
 
   it('should render empty state message', () => {
