@@ -291,6 +291,14 @@ function App() {
                 </ProtectedLayout>
               }
             />
+            <Route
+              path="/job-choice/:id/edit"
+              element={
+                <ProtectedLayout>
+                  <JobChoiceNew />
+                </ProtectedLayout>
+              }
+            />
 
             <Route
               path="*"

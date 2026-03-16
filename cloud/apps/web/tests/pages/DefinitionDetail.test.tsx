@@ -21,6 +21,10 @@ function createMockClient(options: {
     id: string;
     name: string;
     content: object;
+    domainId?: string | null;
+    domainContextId?: string | null;
+    preambleVersionId?: string | null;
+    levelPresetVersionId?: string | null;
     parentId?: string | null;
     runCount?: number;
     createdAt?: string;
@@ -231,6 +235,51 @@ describe('DefinitionDetail', () => {
       await waitFor(() => {
         expect(screen.getByText('Edit Vignette')).toBeInTheDocument();
       });
+    });
+
+    it('routes job-choice vignettes to the vignette editor', async () => {
+      const user = userEvent.setup();
+      const client = createMockClient({
+        definition: {
+          id: 'job-choice-1',
+          name: 'Care vs Freedom (A)',
+          domainId: 'domain-a',
+          domainContextId: 'context-1',
+          levelPresetVersionId: null,
+          preambleVersionId: null,
+          content: {
+            schema_version: 1,
+            template: 'Choose between care and freedom',
+            dimensions: [{ name: 'care' }, { name: 'freedom' }],
+            methodology: {
+              family: 'job-choice',
+              presentation_order: 'A_first',
+              pair_key: 'pair-1',
+            },
+            components: {
+              context_id: 'context-1',
+              value_first: { token: 'care', body: 'show care' },
+              value_second: { token: 'freedom', body: 'protect freedom' },
+            },
+          },
+          parentId: null,
+          runCount: 0,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-15T10:00:00Z',
+          tags: [],
+          parent: null,
+          children: [],
+        },
+      });
+      renderDefinitionDetail('job-choice-1', client);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /edit/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith('/job-choice/job-choice-1/edit');
     });
   });
 

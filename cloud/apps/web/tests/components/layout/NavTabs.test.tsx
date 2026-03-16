@@ -27,7 +27,7 @@ describe('NavTabs Component', () => {
     renderNavTabs('/domains');
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
-    expect(screen.getByRole('link', { name: 'New Pair' })).toHaveAttribute('href', '/job-choice/new');
+    expect(screen.getByRole('link', { name: 'New Vignette' })).toHaveAttribute('href', '/job-choice/new');
     expect(screen.getByRole('link', { name: 'Preambles' })).toHaveAttribute('href', '/preambles');
     expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
     expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
