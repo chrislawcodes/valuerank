@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery } from 'urql';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from 'urql';
 import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
-import { formatTrialSignature } from '@valuerank/shared/trial-signature';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
@@ -12,11 +11,6 @@ import { useDefinitions } from '../hooks/useDefinitions';
 import { useDomains } from '../hooks/useDomains';
 import { DomainContexts } from './DomainContexts';
 import { ValueStatements } from './ValueStatements';
-import { SET_DOMAIN_DEFAULT_LEVEL_PRESET_MUTATION } from '../api/operations/domains';
-import {
-  LEVEL_PRESETS_QUERY,
-  type LevelPresetsQueryData,
-} from '../api/operations/level-presets';
 import {
   DOMAIN_CONTEXTS_QUERY,
   type DomainContextsQueryResult,
@@ -36,26 +30,12 @@ const defaultFilters: DefinitionFilterState = {
 };
 
 type FolderKey = string;
-const ALL_SIGNATURE_FILTER = 'all';
-type SignatureFilterKey = string;
 type DomainTab = 'overview' | 'vignettes' | 'setup' | 'runs' | 'findings';
-type SetupTab = 'contexts' | 'value-statements' | 'defaults';
+type SetupTab = 'contexts' | 'value-statements';
 
 type MissingSetupRequirement = {
   label: string;
   tab: SetupTab;
-};
-
-type SignatureSplitRow = {
-  rowKey: string;
-  definitionId: string;
-  definitionName: string;
-  signature: string;
-  definitionVersion: number | null;
-  temperature: number | null;
-  domainName: string;
-  trialCount: number;
-  isFromMixedDefinition: boolean;
 };
 
 function getFilterSummary(filters: DefinitionFilterState): string {
@@ -70,10 +50,6 @@ function getFilterSummary(filters: DefinitionFilterState): string {
 function formatTemperature(value: number | null | undefined): string {
   if (value === null || value === undefined) return 'default';
   return String(Number(value.toFixed(2)));
-}
-
-function getDisplaySignature(signature: string): string {
-  return signature !== 'v?td' ? signature : 'Unknown Signature';
 }
 
 function formatRequirementList(requirements: MissingSetupRequirement[]): string {
@@ -93,10 +69,6 @@ export function Domains() {
   const initialSetupTab = searchParams.get('setupTab');
   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
   const [selectedFolder, setSelectedFolder] = useState<FolderKey>(initialSelectedFolder ?? 'all');
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
-  const [selectAllShown, setSelectAllShown] = useState(false);
-  const [assignTargetDomainId, setAssignTargetDomainId] = useState<string>('none');
-  const [signatureFilter, setSignatureFilter] = useState<SignatureFilterKey>(ALL_SIGNATURE_FILTER);
 
   const [activeTab, setActiveTab] = useState<DomainTab>(
     initialTab === 'overview' || initialTab === 'vignettes' || initialTab === 'setup' || initialTab === 'runs' || initialTab === 'findings'
@@ -104,7 +76,7 @@ export function Domains() {
       : 'vignettes',
   );
   const [setupTab, setSetupTab] = useState<SetupTab>(
-    initialSetupTab === 'contexts' || initialSetupTab === 'value-statements' || initialSetupTab === 'defaults'
+    initialSetupTab === 'contexts' || initialSetupTab === 'value-statements'
       ? initialSetupTab
       : 'contexts',
   );
@@ -112,15 +84,6 @@ export function Domains() {
   const [createName, setCreateName] = useState('');
   const [renameName, setRenameName] = useState('');
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
-
-  // Level preset default management
-  const [, setDomainDefaultLevelPreset] = useMutation(SET_DOMAIN_DEFAULT_LEVEL_PRESET_MUTATION);
-  const [{ data: levelPresetsData }] = useQuery<LevelPresetsQueryData>({
-    query: LEVEL_PRESETS_QUERY,
-  });
-  const [defaultsLevelPresetVersionId, setDefaultsLevelPresetVersionId] = useState<string>('');
-  const [defaultsSaving, setDefaultsSaving] = useState(false);
 
   const {
     domains,
@@ -128,15 +91,10 @@ export function Domains() {
     creating,
     renaming,
     deleting,
-    assigningByIds,
-    assigningByFilter,
     error: domainError,
-    refetch: refetchDomains,
     createDomain,
     renameDomain,
     deleteDomain,
-    assignDomainToDefinitions,
-    assignDomainToDefinitionsByFilter,
   } = useDomains();
 
   const definitionFilterArgs = useMemo(() => {
@@ -149,7 +107,7 @@ export function Domains() {
     return { domainId: selectedFolder, withoutDomain: undefined };
   }, [selectedFolder]);
 
-  const { definitions, loading: definitionsLoading, error: definitionsError, refetch: refetchDefinitions } = useDefinitions({
+  const { definitions, loading: definitionsLoading, error: definitionsError } = useDefinitions({
     search: filters.search || undefined,
     rootOnly: filters.rootOnly || undefined,
     hasRuns: filters.hasRuns || undefined,
@@ -204,63 +162,10 @@ export function Domains() {
     pause: selectedDomain == null,
   });
 
-  const trialValidationErrors = useMemo(
+  const inconsistentBatchDefinitions = useMemo(
     () => definitions.filter((definition) => definition.trialConfig?.isConsistent === false),
     [definitions],
   );
-  const signatureSplitRows = useMemo<SignatureSplitRow[]>(() => {
-    const rows: SignatureSplitRow[] = [];
-    for (const definition of definitions) {
-      const domainName = definition.domain?.name ?? 'None';
-      const breakdown = definition.trialConfig?.signatureBreakdown ?? [];
-      const hasBreakdown = breakdown.length > 0;
-      const mixed = hasBreakdown && breakdown.length > 1;
-
-      if (hasBreakdown) {
-        for (const item of breakdown) {
-          rows.push({
-            rowKey: `${definition.id}::${item.signature}`,
-            definitionId: definition.id,
-            definitionName: definition.name,
-            signature: item.signature,
-            definitionVersion: item.definitionVersion,
-            temperature: item.temperature,
-            domainName,
-            trialCount: item.trialCount,
-            isFromMixedDefinition: mixed,
-          });
-        }
-        continue;
-      }
-
-      const fallbackSignature = definition.trialConfig?.signature
-        ?? formatTrialSignature(
-          definition.trialConfig?.definitionVersion ?? definition.version,
-          definition.trialConfig?.temperature,
-        );
-      rows.push({
-        rowKey: `${definition.id}::${fallbackSignature}`,
-        definitionId: definition.id,
-        definitionName: definition.name,
-        signature: fallbackSignature,
-        definitionVersion: definition.trialConfig?.definitionVersion ?? definition.version,
-        temperature: definition.trialConfig?.temperature ?? null,
-        domainName,
-        trialCount: definition.trialCount,
-        isFromMixedDefinition: definition.trialConfig?.isConsistent === false,
-      });
-    }
-    return rows;
-  }, [definitions]);
-  const signatureOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const row of signatureSplitRows) values.add(row.signature);
-    return Array.from(values).sort((left, right) => left.localeCompare(right));
-  }, [signatureSplitRows]);
-  const filteredRows = useMemo(() => {
-    if (signatureFilter === ALL_SIGNATURE_FILTER) return signatureSplitRows;
-    return signatureSplitRows.filter((row) => row.signature === signatureFilter);
-  }, [signatureFilter, signatureSplitRows]);
   const contextsCount = selectedDomainContextsData?.domainContexts.length ?? 0;
   const valueStatementsCount = selectedDomainValueStatementsData?.valueStatements.length ?? 0;
   const missingSetupRequirements = useMemo<MissingSetupRequirement[]>(() => {
@@ -287,21 +192,12 @@ export function Domains() {
     [definitions],
   );
 
-  const resetSelection = useCallback(() => {
-    setSelectedRowKeys(new Set());
-    setSelectAllShown(false);
-  }, []);
-
   useEffect(() => {
-    resetSelection();
     if (selectedFolder === 'all' || selectedFolder === 'none') {
       setActiveTab('vignettes');
       setSetupTab('contexts');
     }
-    // Sync domain defaults state when selection changes
-    const domain = domains.find((d) => d.id === selectedFolder) ?? null;
-    setDefaultsLevelPresetVersionId(domain?.defaultLevelPresetVersion?.id ?? '');
-  }, [selectedFolder, resetSelection, domains]);
+  }, [selectedFolder, domains]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -323,70 +219,6 @@ export function Domains() {
     }
   }, [activeTab, searchParams, selectedFolder, setSearchParams, setupTab]);
 
-  useEffect(() => {
-    resetSelection();
-  }, [filters.search, filters.rootOnly, filters.hasRuns, filters.tagIds, resetSelection]);
-
-  useEffect(() => {
-    resetSelection();
-  }, [signatureFilter, resetSelection]);
-
-  const handleToggleRow = (rowKey: string) => {
-    setSelectAllShown(false);
-    setSelectedRowKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowKey)) next.delete(rowKey);
-      else next.add(rowKey);
-      return next;
-    });
-  };
-
-  const handleBulkAssign = async () => {
-    setInlineError(null);
-    setInlineSuccess(null);
-    const targetDomainId = assignTargetDomainId === 'none' ? null : assignTargetDomainId;
-    try {
-      let result: { success: boolean; affectedDefinitions: number } | null = null;
-      if (selectAllShown) {
-        const filteredDefinitionIds = Array.from(new Set(filteredRows.map((row) => row.definitionId)));
-        if (signatureFilter !== ALL_SIGNATURE_FILTER) {
-          result = await assignDomainToDefinitions(filteredDefinitionIds, targetDomainId);
-        } else {
-          result = await assignDomainToDefinitionsByFilter({
-            domainId: targetDomainId,
-            search: filters.search || undefined,
-            rootOnly: filters.rootOnly || undefined,
-            hasRuns: filters.hasRuns || undefined,
-            tagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
-            sourceDomainId: selectedFolder === 'all' || selectedFolder === 'none' ? undefined : selectedFolder,
-            withoutDomain: selectedFolder === 'none' ? true : undefined,
-          });
-        }
-      } else if (selectedRowKeys.size > 0) {
-        const selectedDefinitionIds = Array.from(
-          new Set(
-            filteredRows
-              .filter((row) => selectedRowKeys.has(row.rowKey))
-              .map((row) => row.definitionId),
-          ),
-        );
-        result = await assignDomainToDefinitions(selectedDefinitionIds, targetDomainId);
-      } else {
-        setInlineError('Select one or more vignettes first.');
-        return;
-      }
-      const targetName = targetDomainId === null
-        ? 'None'
-        : (domains.find((domain) => domain.id === targetDomainId)?.name ?? 'selected domain');
-      setInlineSuccess(`${result?.affectedDefinitions ?? 0} vignette${(result?.affectedDefinitions ?? 0) === 1 ? '' : 's'} assigned to ${targetName}.`);
-      resetSelection();
-      refetchDefinitions();
-      refetchDomains();
-    } catch (error) {
-      setInlineError(error instanceof Error ? error.message : 'Failed to assign domain');
-    }
-  };
-
   const handleRunDomainTrials = () => {
     if (!selectedDomain) return;
     navigate(`/domains/${selectedDomain.id}/run-trials`);
@@ -404,7 +236,7 @@ export function Domains() {
   };
   const handleCreateVignettePair = () => {
     if (selectedDomain == null) {
-      setInlineError('Select a specific domain before creating a vignette pair.');
+      setInlineError('Select a specific domain before creating a vignette.');
       return;
     }
     if (!setupReady) {
@@ -412,9 +244,8 @@ export function Domains() {
       setActiveTab('setup');
       setSetupTab(nextTab);
       setInlineError(
-        `Before creating a vignette pair for ${selectedDomain.name}, add ${formatRequirementList(missingSetupRequirements)} in Setup.`,
+        `Before creating a vignette for ${selectedDomain.name}, add ${formatRequirementList(missingSetupRequirements)} in Setup.`,
       );
-      setInlineSuccess(null);
       return;
     }
     navigate(`/job-choice/new?domainId=${selectedDomain.id}`);
@@ -422,7 +253,6 @@ export function Domains() {
 
   const handleCreateDomain = async () => {
     setInlineError(null);
-    setInlineSuccess(null);
     try {
       if (createName.trim() === '') return;
       const created = await createDomain(createName);
@@ -438,7 +268,6 @@ export function Domains() {
   const handleRenameDomain = async () => {
     if (!selectedDomain) return;
     setInlineError(null);
-    setInlineSuccess(null);
     try {
       if (renameName.trim() === '') return;
       await renameDomain(selectedDomain.id, renameName);
@@ -451,7 +280,6 @@ export function Domains() {
   const handleDeleteDomain = async () => {
     if (!selectedDomain) return;
     setInlineError(null);
-    setInlineSuccess(null);
     const ok = window.confirm(
       `Delete domain "${selectedDomain.name}"? Attached vignettes will be moved to None.`
     );
@@ -459,28 +287,8 @@ export function Domains() {
     try {
       await deleteDomain(selectedDomain.id);
       setSelectedFolder('none');
-      resetSelection();
     } catch (error) {
       setInlineError(error instanceof Error ? error.message : 'Failed to delete domain');
-    }
-  };
-
-  const handleSaveDomainDefaults = async () => {
-    if (selectedDomain == null) return;
-    setDefaultsSaving(true);
-    setInlineError(null);
-    setInlineSuccess(null);
-    try {
-      await setDomainDefaultLevelPreset({
-        domainId: selectedDomain.id,
-        levelPresetVersionId: defaultsLevelPresetVersionId !== '' ? defaultsLevelPresetVersionId : null,
-      });
-      refetchDomains();
-      setInlineSuccess('Domain defaults saved.');
-    } catch (err) {
-      setInlineError(err instanceof Error ? err.message : 'Failed to save defaults');
-    } finally {
-      setDefaultsSaving(false);
     }
   };
 
@@ -510,7 +318,6 @@ export function Domains() {
                   onClick={() => {
                     setSelectedFolder(folder.key);
                     setRenameName('');
-                    resetSelection();
                   }}
                   variant="ghost"
                   size="sm"
@@ -581,23 +388,9 @@ export function Domains() {
             <div className="space-y-4">
               <div className="rounded-xl border border-gray-200 bg-white p-5">
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-700">Domain workspace</p>
-                <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="mt-2">
                   <div>
                     <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">{selectedDomain.name}</h2>
-                    <p className="mt-2 max-w-2xl text-sm text-gray-600">
-                      This workspace is the transitional home for domain setup, vignette inventory, domain evaluations,
-                      and findings while the deeper domain-first model lands in later waves.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
-                      <Plus className="w-4 h-4 mr-1" />
-                      Create Vignette
-                    </Button>
-                    <Button onClick={() => void handleRunDomainTrials()} disabled={selectedDomain === null}>
-                    <Play className="w-4 h-4 mr-1" />
-                      Open Domain Evaluation
-                    </Button>
                   </div>
                 </div>
               </div>
@@ -662,19 +455,12 @@ export function Domains() {
                     <p className="font-medium text-gray-900">Setup coverage</p>
                     <p className="mt-2">Contexts: {contextsCount}</p>
                     <p>Value statements: {valueStatementsCount}</p>
-                    <p className="mt-2">
-                      Default preset:{' '}
-                      <span className="font-medium text-gray-900">
-                        {selectedDomain.defaultLevelPresetVersion == null
-                          ? 'None'
-                          : `${selectedDomain.defaultLevelPresetVersion.levelPreset.name} (v${selectedDomain.defaultLevelPresetVersion.version})`}
-                      </span>
-                    </p>
+                    <p className="mt-2">No domain defaults. Each vignette must explicitly choose its own setup.</p>
                   </div>
                   <div className="rounded-lg border border-dashed border-gray-300 bg-[#F8F5EF] p-4 text-sm text-gray-600">
                     <p className="font-medium text-gray-900">Execution signal</p>
                     <p className="mt-2">{evaluatedDefinitionCount} vignette{evaluatedDefinitionCount === 1 ? '' : 's'} already have runs.</p>
-                    <p>{filteredRows.length} signature row{filteredRows.length === 1 ? '' : 's'} visible in the current domain view.</p>
+                    <p>{definitions.length} vignette{definitions.length === 1 ? '' : 's'} visible in the current domain view.</p>
                   </div>
                 </div>
               </div>
@@ -726,8 +512,7 @@ export function Domains() {
                     <div>
                       <h3 className="text-lg font-medium text-[#1A1A1A]">Vignette inventory</h3>
                       <p className="mt-1 text-sm text-gray-600">
-                        Create new vignette pairs, review existing inventory, and rerun individual vignettes through the
-                        domain evaluation flow.
+                        Create new vignettes, review inventory, and open any vignette directly to inspect or edit its details.
                       </p>
                     </div>
                     <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
@@ -805,73 +590,29 @@ export function Domains() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div className="text-sm text-gray-600">
                 {shownCount === null ? '...' : shownCount} vignette{shownCount === 1 ? '' : 's'} shown
-                {` · ${filteredRows.length} signature row${filteredRows.length === 1 ? '' : 's'} visible`}
                 {getFilterSummary(filters) !== '' && ` (${getFilterSummary(filters)})`}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={signatureFilter}
-                  onChange={(e) => setSignatureFilter(e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  <option value={ALL_SIGNATURE_FILTER}>All signatures</option>
-                  {signatureOptions.map((signature) => (
-                    <option key={signature} value={signature}>
-                      {signature}
-                    </option>
-                  ))}
-                </select>
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={selectAllShown}
-                    onChange={(e) => {
-                      setSelectAllShown(e.target.checked);
-                      if (e.target.checked) setSelectedRowKeys(new Set(filteredRows.map((row) => row.rowKey)));
-                      if (!e.target.checked) setSelectedRowKeys(new Set());
-                    }}
-                  />
-                  Select all shown ({filteredRows.length})
-                </label>
-                <select
-                  value={assignTargetDomainId}
-                  onChange={(e) => setAssignTargetDomainId(e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  <option value="none">None</option>
-                  {domains.map((domain) => (
-                    <option key={domain.id} value={domain.id}>
-                      {domain.name}
-                    </option>
-                  ))}
-                </select>
-                <Button onClick={() => void handleBulkAssign()} size="sm" disabled={assigningByIds || assigningByFilter}>
-                  {(assigningByIds || assigningByFilter) ? 'Assigning...' : 'Assign'}
-                </Button>
-              </div>
+              <div className="text-xs text-gray-500">Click a vignette name to open its details.</div>
             </div>
 
             {inlineError && (
               <div className="text-sm text-red-600">{inlineError}</div>
             )}
-            {inlineSuccess && (
-              <div className="text-sm text-green-700">{inlineSuccess}</div>
-            )}
-            {trialValidationErrors.length > 0 && (
+            {inconsistentBatchDefinitions.length > 0 && (
               <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 <p className="font-medium">
-                  Mixed settings detected on {trialValidationErrors.length} vignette
-                  {trialValidationErrors.length === 1 ? '' : 's'}.
-                  Showing split signature rows so you can filter/select a consistent signature.
+                  Inconsistent batch settings detected on {inconsistentBatchDefinitions.length} vignette
+                  {inconsistentBatchDefinitions.length === 1 ? '' : 's'}.
+                  Open the vignette to inspect the batch setup before running it again.
                 </p>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
-                  {trialValidationErrors.slice(0, 8).map((definition) => (
+                  {inconsistentBatchDefinitions.slice(0, 8).map((definition) => (
                     <li key={definition.id}>
                       {definition.name}: {definition.trialConfig?.message ?? 'Inconsistent trial settings.'}
                     </li>
                   ))}
                 </ul>
-                {trialValidationErrors.length > 8 && (
+                {inconsistentBatchDefinitions.length > 8 && (
                   <p className="mt-1 text-xs">Showing first 8 rows only.</p>
                 )}
               </div>
@@ -886,69 +627,41 @@ export function Domains() {
               <p className="text-sm text-gray-500">Loading...</p>
             ) : definitions.length === 0 ? (
               <p className="text-sm text-gray-500">No vignettes found for this folder/filter.</p>
-            ) : filteredRows.length === 0 ? (
-              <p className="text-sm text-gray-500">No rows match the selected signature filter.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-gray-500 border-b border-gray-200">
-                      <th className="py-2 pr-3">Select</th>
                       <th className="py-2 pr-3">Vignette</th>
-                      <th className="py-2 pr-3">Signature</th>
                       <th className="py-2 pr-3">Version</th>
                       <th className="py-2 pr-3">Temperature</th>
-                      <th className="py-2 pr-3">Domain</th>
-                      <th className="py-2 pr-3">Trials</th>
-                      <th className="py-2 pr-3">Actions</th>
+                      <th className="py-2 pr-3">Batches</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => (
+                    {definitions.map((definition) => (
                       <tr
-                        key={row.rowKey}
+                        key={definition.id}
                         className={`border-b border-gray-100 ${
-                          row.isFromMixedDefinition ? 'bg-amber-50/40' : ''
+                          definition.trialConfig?.isConsistent === false ? 'bg-amber-50/40' : ''
                         }`}
                       >
-                        <td className="py-2 pr-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedRowKeys.has(row.rowKey)}
-                            onChange={() => handleToggleRow(row.rowKey)}
-                            disabled={selectAllShown}
-                          />
-                        </td>
-                        <td className="py-2 pr-3 text-gray-900">{row.definitionName}</td>
-                        <td className="py-2 pr-3 text-gray-600 font-mono text-xs">{getDisplaySignature(row.signature)}</td>
                         <td className="py-2 pr-3 text-gray-600">
-                          {row.definitionVersion ?? '?'}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-0 h-auto px-0 py-0 text-sm font-medium text-gray-900 underline-offset-2 hover:underline"
+                            onClick={() => navigate(`/definitions/${definition.id}`)}
+                          >
+                            {definition.name}
+                          </Button>
                         </td>
-                        <td className="py-2 pr-3 text-gray-600">{formatTemperature(row.temperature)}</td>
-                        <td className="py-2 pr-3 text-gray-600">{row.domainName}</td>
-                        <td className="py-2 pr-3 text-gray-600">{row.trialCount}</td>
-                        <td className="py-2 pr-3">
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => navigate(`/definitions/${row.definitionId}`)}
-                            >
-                              Open
-                            </Button>
-                            {selectedDomain != null && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?definitionIds=${row.definitionId}`)}
-                              >
-                                Re-run
-                              </Button>
-                            )}
-                          </div>
+                        <td className="py-2 pr-3 text-gray-600">
+                          {definition.trialConfig?.definitionVersion ?? definition.version ?? '?'}
                         </td>
+                        <td className="py-2 pr-3 text-gray-600">{formatTemperature(definition.trialConfig?.temperature ?? null)}</td>
+                        <td className="py-2 pr-3 text-gray-600">{definition.trialCount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -962,7 +675,7 @@ export function Domains() {
               <div className="rounded-xl border border-gray-200 bg-white p-5">
                 <h3 className="text-lg font-medium text-[#1A1A1A]">Setup coverage</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  Domain defaults live here. Vignette-specific choices and overrides live in the vignette inventory and editor.
+                  Setup defines the reusable ingredients available in this domain. Each vignette must still choose its own configuration explicitly.
                 </p>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -985,7 +698,6 @@ export function Domains() {
                 {([
                   { key: 'contexts' as const, label: 'Contexts' },
                   { key: 'value-statements' as const, label: 'Value Statements' },
-                  { key: 'defaults' as const, label: 'Defaults' },
                 ]).map((tab) => (
                   <Button
                     key={tab.key}
@@ -1004,56 +716,8 @@ export function Domains() {
 
               {setupTab === 'contexts' ? (
                 <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
-              ) : setupTab === 'value-statements' ? (
-                <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
               ) : (
-                <div key={selectedDomain.id} className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800">Domain Defaults</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Default settings pre-populated when creating a new vignette pair for this domain.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Default Level Preset
-                    </label>
-                    <p className="text-xs text-gray-500">
-                      When set, new vignette pairs will automatically use this level preset for 25-condition expansion.
-                    </p>
-                    <select
-                      value={defaultsLevelPresetVersionId}
-                      onChange={(e) => setDefaultsLevelPresetVersionId(e.target.value)}
-                      className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    >
-                      <option value="">None (no expansion)</option>
-                      {(levelPresetsData?.levelPresets ?? []).map((preset) =>
-                        preset.latestVersion != null ? (
-                          <option key={preset.latestVersion.id} value={preset.latestVersion.id}>
-                            {preset.name} (v{preset.latestVersion.version})
-                          </option>
-                        ) : null,
-                      )}
-                    </select>
-                  </div>
-
-                  {inlineSuccess != null && (
-                    <p className="text-sm text-green-700">{inlineSuccess}</p>
-                  )}
-                  {inlineError != null && (
-                    <p className="text-sm text-red-600">{inlineError}</p>
-                  )}
-
-                  <Button
-                    onClick={() => void handleSaveDomainDefaults()}
-                    disabled={defaultsSaving}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    {defaultsSaving ? 'Saving...' : 'Save Defaults'}
-                  </Button>
-                </div>
+                <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
               )}
             </div>
           ) : activeTab === 'runs' ? (
@@ -1080,7 +744,7 @@ export function Domains() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button onClick={() => void handleRunDomainTrials()}>
                     <Play className="w-4 h-4 mr-1" />
-                    Open Domain Evaluation
+                    Run Domain Trials
                   </Button>
                   <Button type="button" variant="secondary" onClick={() => navigate('/runs')}>
                     Open All Runs

@@ -11,14 +11,12 @@ import {
   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
   DOMAIN_TRIALS_PLAN_QUERY,
   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
-  RETRY_DOMAIN_TRIAL_CELL_MUTATION,
   START_DOMAIN_EVALUATION_MUTATION,
 } from '../../src/api/operations/domains';
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
 const startDomainEvaluationMock = vi.fn();
-const retryCellMock = vi.fn();
 
 vi.mock('urql', async () => {
   const actual = await vi.importActual<typeof import('urql')>('urql');
@@ -44,14 +42,10 @@ describe('DomainTrialsDashboard', () => {
     useQueryMock.mockReset();
     useMutationMock.mockReset();
     startDomainEvaluationMock.mockReset();
-    retryCellMock.mockReset();
 
     useMutationMock.mockImplementation((query: unknown) => {
       if (query === START_DOMAIN_EVALUATION_MUTATION) {
         return [{ fetching: false }, startDomainEvaluationMock];
-      }
-      if (query === RETRY_DOMAIN_TRIAL_CELL_MUTATION) {
-        return [{ fetching: false }, retryCellMock];
       }
       return [{ fetching: false }, vi.fn()];
     });
@@ -60,11 +54,11 @@ describe('DomainTrialsDashboard', () => {
       if (args.query === DOMAIN_TRIALS_PLAN_QUERY) {
         return [{
           data: {
-            domainTrialsPlan: {
+              domainTrialsPlan: {
               domainId: 'domain-a',
               domainName: 'Domain A',
               vignettes: [
-                { definitionId: 'def-1', definitionName: 'Eval Vignette', definitionVersion: 1, signature: 'v1td', scenarioCount: 3 },
+                { definitionId: 'def-1', definitionName: 'Eval Vignette', definitionVersion: 1, signature: 'v1td', scenarioCount: 25 },
               ],
               models: [
                 { modelId: 'model-1', label: 'Model One', isDefault: true, supportsTemperature: true },
@@ -90,7 +84,7 @@ describe('DomainTrialsDashboard', () => {
               domainName: 'Domain A',
               scopeCategory: 'PRODUCTION',
               targetedDefinitions: 1,
-              totalScenarioCount: 3,
+              totalScenarioCount: 25,
               totalEstimatedCost: 1.4,
               basedOnSampleCount: 50,
               isUsingFallback: false,
@@ -238,10 +232,10 @@ describe('DomainTrialsDashboard', () => {
                     modelId: 'model-1',
                     generationCompleted: 1,
                     generationFailed: 0,
-                    generationTotal: 3,
+                    generationTotal: 25,
                     summarizationCompleted: 0,
                     summarizationFailed: 0,
-                    summarizationTotal: 3,
+                    summarizationTotal: 25,
                     latestErrorMessage: null,
                   },
                 ],
@@ -264,12 +258,18 @@ describe('DomainTrialsDashboard', () => {
     expect(screen.getByRole('heading', { name: /current cohort summary/i })).toBeInTheDocument();
     expect(screen.getAllByText(/eval vignette/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/domain evaluation summary is the cohort-level view/i)).toBeInTheDocument();
-    expect(screen.getByText(/configuration review before launch/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /planned batches/i })).toBeInTheDocument();
+    expect(screen.getByText(/each batch runs every configured condition/i)).toBeInTheDocument();
+    expect(screen.getByText(/advanced controls/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /review setup coverage/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=setup&setupTab=contexts');
     expect(screen.getByRole('link', { name: /review vignette overrides/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=vignettes');
     expect(screen.getByRole('link', { name: /open run diagnostics/i })).toHaveAttribute('href', '/runs/run-1');
 
     await user.selectOptions(screen.getByRole('combobox'), 'PILOT');
+    await user.click(screen.getByText(/advanced controls/i));
+    await user.click(screen.getByRole('radio', { name: /set evaluation temperature/i }));
+    await user.clear(screen.getByLabelText(/^evaluation temperature$/i));
+    await user.type(screen.getByLabelText(/^evaluation temperature$/i), '0');
     await user.click(screen.getByRole('button', { name: /review & start domain evaluation/i }));
 
     expect(screen.getByRole('heading', { name: /confirm domain evaluation/i })).toBeInTheDocument();
@@ -277,5 +277,6 @@ describe('DomainTrialsDashboard', () => {
     expect(within(dialog).getByText(/domain evaluation scope:/i)).toHaveTextContent(/pilot/i);
     expect(within(dialog).getByText(/review before confirming/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/judge\/evaluator passes are not included yet/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/temperature:/i)).toHaveTextContent(/0/);
   });
 });

@@ -252,8 +252,7 @@ export function JobChoiceNew() {
     setName('');
     setNameWasAutoSet(false);
     setErrorMessage(null);
-    const domain = domains.find((d) => d.id === domainId) ?? null;
-    setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersion?.id ?? '');
+    setSelectedLevelPresetVersionId('');
   }
 
   function handleValueFirstChange(valueId: string) {
@@ -414,7 +413,7 @@ export function JobChoiceNew() {
               Level Preset <span className="text-white/30">(optional)</span>
             </label>
             <p className="text-xs text-white/40">
-              When set, creates 25 scenarios (5×5 intensity grid). Pre-filled from domain default.
+              Choose this explicitly for the vignette. When set, it creates 25 scenarios (5×5 intensity grid).
             </p>
             <select
               value={selectedLevelPresetVersionId}
