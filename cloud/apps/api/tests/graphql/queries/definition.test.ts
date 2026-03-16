@@ -15,8 +15,11 @@ describe('GraphQL Definition Query', () => {
   let searchableDefinition: Definition;
   let taggedDefinition: Definition;
   let definitionWithRuns: Definition;
+  let levelPresetDefinition: Definition;
   let testTag: Tag;
   let testRun: Run;
+  let testLevelPresetId: string;
+  let testLevelPresetVersionId: string;
 
   beforeAll(async () => {
     // Create test definitions with parent-child relationship
@@ -92,6 +95,45 @@ describe('GraphQL Definition Query', () => {
         config: {},
       },
     });
+
+    const levelPreset = await db.levelPreset.create({
+      data: { name: `Definition Query Preset ${Date.now()}` },
+    });
+    testLevelPresetId = levelPreset.id;
+
+    const levelPresetVersion = await db.levelPresetVersion.create({
+      data: {
+        levelPresetId: levelPreset.id,
+        version: 'v1',
+        l1: 'negligible',
+        l2: 'low',
+        l3: 'moderate',
+        l4: 'high',
+        l5: 'full',
+      },
+    });
+    testLevelPresetVersionId = levelPresetVersion.id;
+
+    levelPresetDefinition = await db.definition.create({
+      data: {
+        name: 'Level Preset Definition',
+        levelPresetVersionId: levelPresetVersion.id,
+        content: {
+          schema_version: 1,
+          template: 'Choose between [care] and [freedom].',
+          methodology: {
+            family: 'job-choice',
+            response_scale: 'option_text',
+            presentation_order: 'A_first',
+            pair_key: 'test-pair',
+          },
+          dimensions: [
+            { name: 'care' },
+            { name: 'freedom' },
+          ],
+        },
+      },
+    });
   });
 
   afterAll(async () => {
@@ -105,6 +147,12 @@ describe('GraphQL Definition Query', () => {
     await db.tag.deleteMany({
       where: { id: testTag.id },
     });
+    await db.levelPresetVersion.deleteMany({
+      where: { id: testLevelPresetVersionId },
+    });
+    await db.levelPreset.deleteMany({
+      where: { id: testLevelPresetId },
+    });
     await db.definition.deleteMany({
       where: {
         id: {
@@ -116,6 +164,7 @@ describe('GraphQL Definition Query', () => {
             searchableDefinition.id,
             taggedDefinition.id,
             definitionWithRuns.id,
+            levelPresetDefinition.id,
           ],
         },
       },
@@ -316,6 +365,48 @@ describe('GraphQL Definition Query', () => {
           },
         },
       });
+    });
+
+    it('hydrates missing dimension levels from the saved level preset on content and resolvedContent', async () => {
+      const query = `
+        query GetDefinitionWithPresetLevels($id: ID!) {
+          definition(id: $id) {
+            id
+            content
+            resolvedContent
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: levelPresetDefinition.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const content = response.body.data.definition.content as {
+        dimensions: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+      };
+      const resolvedContent = response.body.data.definition.resolvedContent as {
+        dimensions: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+      };
+
+      expect(content.dimensions[0]?.levels).toEqual([
+        { score: 1, label: 'negligible' },
+        { score: 2, label: 'low' },
+        { score: 3, label: 'moderate' },
+        { score: 4, label: 'high' },
+        { score: 5, label: 'full' },
+      ]);
+      expect(resolvedContent.dimensions[1]?.levels).toEqual([
+        { score: 1, label: 'negligible' },
+        { score: 2, label: 'low' },
+        { score: 3, label: 'moderate' },
+        { score: 4, label: 'high' },
+        { score: 5, label: 'full' },
+      ]);
     });
   });
 

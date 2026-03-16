@@ -15,6 +15,7 @@ import {
   type ExpansionProgress,
 } from '../../services/scenario/index.js';
 import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders/definition-trial-summary.js';
+import { hydrateDefinitionContentWithLevelPreset } from '../../utils/definition-level-preset.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -211,9 +212,12 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'ID of the domain context attached to this definition',
     }),
-    content: t.expose('content', {
+    content: t.field({
       type: 'JSON',
       description: 'JSONB content with scenario configuration',
+      resolve: async (definition) => {
+        return hydrateDefinitionContentWithLevelPreset(definition.content, definition.levelPresetVersionId);
+      },
     }),
     updatedAt: t.expose('updatedAt', {
       type: 'DateTime',
@@ -453,7 +457,7 @@ builder.objectType(DefinitionRef, {
       description: 'Fully resolved content after walking ancestor chain. All fields are guaranteed present.',
       resolve: async (definition) => {
         const resolved = await resolveDefinitionContent(definition.id);
-        return resolved.resolvedContent;
+        return hydrateDefinitionContentWithLevelPreset(resolved.resolvedContent, definition.levelPresetVersionId);
       },
     }),
 
