@@ -240,6 +240,9 @@ builder.objectType(RunRef, {
     status: t.exposeString('status', {
       description: 'Current status of the run (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
     }),
+    runCategory: t.exposeString('runCategory', {
+      description: 'Workflow category assigned to the run',
+    }),
     config: t.expose('config', { type: 'JSON' }),
     definitionSnapshot: t.field({
       type: 'JSON',

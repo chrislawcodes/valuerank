@@ -24,6 +24,9 @@ import type {
   DomainTrialPlanModel,
   DomainTrialPlanResult,
   DomainTrialPlanVignette,
+  DomainEvaluationCostEstimate,
+  DomainEvaluationEstimateDefinition,
+  DomainEvaluationEstimateModel,
   DomainTrialRunStatus,
 } from './shared.js';
 
@@ -71,6 +74,9 @@ export const DomainTrialPlanModelRef = builder.objectRef<DomainTrialPlanModel>('
 export const DomainTrialPlanVignetteRef = builder.objectRef<DomainTrialPlanVignette>('DomainTrialPlanVignette');
 export const DomainTrialPlanCellEstimateRef = builder.objectRef<DomainTrialPlanCellEstimate>('DomainTrialPlanCellEstimate');
 export const DomainTrialPlanResultRef = builder.objectRef<DomainTrialPlanResult>('DomainTrialPlanResult');
+export const DomainEvaluationEstimateModelRef = builder.objectRef<DomainEvaluationEstimateModel>('DomainEvaluationEstimateModel');
+export const DomainEvaluationEstimateDefinitionRef = builder.objectRef<DomainEvaluationEstimateDefinition>('DomainEvaluationEstimateDefinition');
+export const DomainEvaluationCostEstimateRef = builder.objectRef<DomainEvaluationCostEstimate>('DomainEvaluationCostEstimate');
 export const DomainTrialModelStatusRef = builder.objectRef<DomainTrialModelStatus>('DomainTrialModelStatus');
 export const DomainTrialRunStatusRef = builder.objectRef<DomainTrialRunStatus>('DomainTrialRunStatus');
 
@@ -368,6 +374,61 @@ builder.objectType(DomainTrialPlanResultRef, {
       resolve: (parent) => parent.cellEstimates,
     }),
     totalEstimatedCost: t.exposeFloat('totalEstimatedCost'),
+    existingTemperatures: t.field({
+      type: ['Float'],
+      resolve: (parent) => parent.existingTemperatures,
+    }),
+    defaultTemperature: t.exposeFloat('defaultTemperature', { nullable: true }),
+    temperatureWarning: t.exposeString('temperatureWarning', { nullable: true }),
+  }),
+});
+
+builder.objectType(DomainEvaluationEstimateModelRef, {
+  fields: (t) => ({
+    modelId: t.exposeString('modelId'),
+    label: t.exposeString('label'),
+    isDefault: t.exposeBoolean('isDefault'),
+    supportsTemperature: t.exposeBoolean('supportsTemperature'),
+    estimatedCost: t.exposeFloat('estimatedCost'),
+    basedOnSampleCount: t.exposeInt('basedOnSampleCount'),
+    isUsingFallback: t.exposeBoolean('isUsingFallback'),
+  }),
+});
+
+builder.objectType(DomainEvaluationEstimateDefinitionRef, {
+  fields: (t) => ({
+    definitionId: t.exposeID('definitionId'),
+    definitionName: t.exposeString('definitionName'),
+    definitionVersion: t.exposeInt('definitionVersion'),
+    signature: t.exposeString('signature'),
+    scenarioCount: t.exposeInt('scenarioCount'),
+    estimatedCost: t.exposeFloat('estimatedCost'),
+    basedOnSampleCount: t.exposeInt('basedOnSampleCount'),
+    isUsingFallback: t.exposeBoolean('isUsingFallback'),
+  }),
+});
+
+builder.objectType(DomainEvaluationCostEstimateRef, {
+  fields: (t) => ({
+    domainId: t.exposeID('domainId'),
+    domainName: t.exposeString('domainName'),
+    scopeCategory: t.exposeString('scopeCategory'),
+    targetedDefinitions: t.exposeInt('targetedDefinitions'),
+    totalScenarioCount: t.exposeInt('totalScenarioCount'),
+    totalEstimatedCost: t.exposeFloat('totalEstimatedCost'),
+    basedOnSampleCount: t.exposeInt('basedOnSampleCount'),
+    isUsingFallback: t.exposeBoolean('isUsingFallback'),
+    fallbackReason: t.exposeString('fallbackReason', { nullable: true }),
+    estimateConfidence: t.exposeString('estimateConfidence'),
+    knownExclusions: t.exposeStringList('knownExclusions'),
+    models: t.field({
+      type: [DomainEvaluationEstimateModelRef],
+      resolve: (parent) => parent.models,
+    }),
+    definitions: t.field({
+      type: [DomainEvaluationEstimateDefinitionRef],
+      resolve: (parent) => parent.definitions,
+    }),
     existingTemperatures: t.field({
       type: ['Float'],
       resolve: (parent) => parent.existingTemperatures,

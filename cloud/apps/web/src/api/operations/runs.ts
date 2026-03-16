@@ -5,6 +5,7 @@ import { gql } from 'urql';
 // ============================================================================
 
 export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type RunCategory = 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
 
 export type RunProgress = {
   total: number;
@@ -123,6 +124,7 @@ export type Run = {
   definitionVersion: number | null; // Added
   experimentId: string | null;
   status: RunStatus;
+  runCategory: RunCategory;
   config: RunConfig;
   progress: { total: number; completed: number; failed: number } | null;
   runProgress: RunProgress | null;
@@ -173,6 +175,7 @@ export const RUN_FRAGMENT = gql`
     definitionVersion
     experimentId
     status
+    runCategory
     config
     progress
     runProgress {
@@ -292,6 +295,7 @@ export const RUNS_QUERY = gql`
     $definitionId: String
     $experimentId: String
     $status: String
+    $runCategory: String
     $hasAnalysis: Boolean
     $analysisStatus: String
     $runType: String
@@ -302,6 +306,7 @@ export const RUNS_QUERY = gql`
       definitionId: $definitionId
       experimentId: $experimentId
       status: $status
+      runCategory: $runCategory
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
       runType: $runType
@@ -319,6 +324,7 @@ export const RUN_COUNT_QUERY = gql`
     $definitionId: String
     $experimentId: String
     $status: String
+    $runCategory: String
     $hasAnalysis: Boolean
     $analysisStatus: String
     $runType: String
@@ -327,6 +333,7 @@ export const RUN_COUNT_QUERY = gql`
       definitionId: $definitionId
       experimentId: $experimentId
       status: $status
+      runCategory: $runCategory
       hasAnalysis: $hasAnalysis
       analysisStatus: $analysisStatus
       runType: $runType
@@ -340,6 +347,7 @@ export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
     $definitionTagIds: [ID!]
     $experimentId: String
     $status: String
+    $runCategory: String
     $analysisStatus: String
     $runType: String
   ) {
@@ -348,6 +356,7 @@ export const ANALYSIS_FOLDER_COUNTS_QUERY = gql`
       definitionTagIds: $definitionTagIds
       experimentId: $experimentId
       status: $status
+      runCategory: $runCategory
       analysisStatus: $analysisStatus
       runType: $runType
     ) {
@@ -382,6 +391,7 @@ export type AnalysisFolderCountsQueryVariables = {
   definitionTagIds?: string[];
   experimentId?: string;
   status?: string;
+  runCategory?: string;
   analysisStatus?: string;
   runType?: string;
 };
@@ -508,6 +518,7 @@ export type StartRunInput = {
   scenarioIds?: string[];
   sampleSeed?: number;
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
+  runCategory?: RunCategory;
   experimentId?: string;
   finalTrial?: boolean;
   launchMode?: 'STANDARD' | 'PAIRED_BATCH' | 'AD_HOC_BATCH';
@@ -521,6 +532,7 @@ export type RunsQueryVariables = {
   definitionId?: string;
   experimentId?: string;
   status?: string;
+  runCategory?: RunCategory;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';
@@ -536,6 +548,7 @@ export type RunCountQueryVariables = {
   definitionId?: string;
   experimentId?: string;
   status?: string;
+  runCategory?: RunCategory;
   hasAnalysis?: boolean;
   analysisStatus?: 'CURRENT' | 'SUPERSEDED';
   runType?: 'ALL' | 'SURVEY' | 'NON_SURVEY';

@@ -1,0 +1,814 @@
+diff --git a/cloud/apps/web/src/hooks/useInfiniteRuns.ts b/cloud/apps/web/src/hooks/useInfiniteRuns.ts
+index afe71d2..6543a81 100644
+--- a/cloud/apps/web/src/hooks/useInfiniteRuns.ts
++++ b/cloud/apps/web/src/hooks/useInfiniteRuns.ts
+@@ -20,6 +20,7 @@ type UseInfiniteRunsOptions = {
+   definitionId?: string;
+   experimentId?: string;
+   status?: string;
++  runCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
+   runType?: 'nonSurvey' | 'survey' | 'all';
+   pageSize?: number;
+   pause?: boolean;
+@@ -39,6 +40,7 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
+     definitionId,
+     experimentId,
+     status,
++    runCategory,
+     runType = 'nonSurvey',
+     pageSize,
+     pause = false,
+@@ -55,9 +57,10 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
+       definitionId: definitionId || undefined,
+       experimentId: experimentId || undefined,
+       status: status || undefined,
++      runCategory: runCategory || undefined,
+       runType: runTypeFilter,
+     }),
+-    [definitionId, experimentId, status, runTypeFilter]
++    [definitionId, experimentId, status, runCategory, runTypeFilter]
+   );
+ 
+   // Count query variables
+@@ -66,9 +69,10 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
+       definitionId: definitionId || undefined,
+       experimentId: experimentId || undefined,
+       status: status || undefined,
++      runCategory: runCategory || undefined,
+       runType: runTypeFilter,
+     }),
+-    [definitionId, experimentId, status, runTypeFilter]
++    [definitionId, experimentId, status, runCategory, runTypeFilter]
+   );
+ 
+   // Extract runs from query result
+diff --git a/cloud/apps/web/src/pages/AnalysisAssumptions.tsx b/cloud/apps/web/src/pages/AnalysisAssumptions.tsx
+index 5cd5d11..6f81f49 100644
+--- a/cloud/apps/web/src/pages/AnalysisAssumptions.tsx
++++ b/cloud/apps/web/src/pages/AnalysisAssumptions.tsx
+@@ -1,8 +1,18 @@
+ import { AnalysisPanel } from '../components/assumptions/AnalysisPanel';
++import { TransitionNotice } from '../components/ui/TransitionNotice';
+ 
+ export function AnalysisAssumptions() {
+   return (
+     <div className="space-y-6">
++      <TransitionNotice
++        eyebrow="Validation Compatibility"
++        title="This page remains live during the Validation migration"
++        description="Validation is now the top-level home for methodology reporting. This detailed analysis view remains live, but execution should stay domain-scoped in Runs and reporting should start from Validation."
++        links={[
++          { label: 'Open Validation home', to: '/validation' },
++          { label: 'Open validation run history', to: '/runs?runCategory=VALIDATION' },
++        ]}
++      />
+       <div>
+         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Analysis</h1>
+         <p className="mt-1 text-sm text-gray-600">
+diff --git a/cloud/apps/web/src/pages/OrderEffectAssumptions.tsx b/cloud/apps/web/src/pages/OrderEffectAssumptions.tsx
+index 5bd89c6..110aa14 100644
+--- a/cloud/apps/web/src/pages/OrderEffectAssumptions.tsx
++++ b/cloud/apps/web/src/pages/OrderEffectAssumptions.tsx
+@@ -1,8 +1,18 @@
+ import { OrderEffectPanel } from '../components/assumptions/OrderEffectPanel';
++import { TransitionNotice } from '../components/ui/TransitionNotice';
+ 
+ export function OrderEffectAssumptions() {
+   return (
+     <div className="space-y-6">
++      <TransitionNotice
++        eyebrow="Validation Compatibility"
++        title="Legacy validation view"
++        description="This old v1 page remains accessible during migration. Use it when you need the legacy assumptions workflow, but prefer Validation for reporting and domain Runs for new validation launches."
++        links={[
++          { label: 'Open Validation home', to: '/validation' },
++          { label: 'Open validation run history', to: '/runs?runCategory=VALIDATION' },
++        ]}
++      />
+       <div>
+         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Analysis (old v1)</h1>
+         <p className="mt-1 text-sm text-gray-600">
+diff --git a/cloud/apps/web/src/pages/Runs.tsx b/cloud/apps/web/src/pages/Runs.tsx
+index 69043e6..b66432e 100644
+--- a/cloud/apps/web/src/pages/Runs.tsx
++++ b/cloud/apps/web/src/pages/Runs.tsx
+@@ -7,11 +7,12 @@
+  */
+ 
+ import { useState, useCallback, useMemo } from 'react';
+-import { useNavigate } from 'react-router-dom';
++import { useNavigate, useSearchParams } from 'react-router-dom';
+ import { Play, RefreshCw } from 'lucide-react';
+ import { Button } from '../components/ui/Button';
+ import { Loading } from '../components/ui/Loading';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Badge } from '../components/ui/Badge';
+ import {
+   RunFilters,
+   VirtualizedRunList,
+@@ -19,6 +20,7 @@ import {
+   type RunFilterState,
+ } from '../components/runs';
+ import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
++import type { RunCategory } from '../api/operations/runs';
+ 
+ const defaultFilters: RunFilterState = {
+   status: '',
+@@ -26,9 +28,28 @@ const defaultFilters: RunFilterState = {
+   viewMode: 'folder',
+ };
+ 
++const RUN_CATEGORY_LABELS: Record<RunCategory, string> = {
++  PILOT: 'Pilot',
++  PRODUCTION: 'Production',
++  REPLICATION: 'Replication',
++  VALIDATION: 'Validation',
++  UNKNOWN_LEGACY: 'Legacy / Unknown',
++};
++
++function parseRunCategory(value: string | null): RunCategory | undefined {
++  if (value == null) return undefined;
++  if (value === 'PILOT' || value === 'PRODUCTION' || value === 'REPLICATION' || value === 'VALIDATION' || value === 'UNKNOWN_LEGACY') {
++    return value;
++  }
++  return undefined;
++}
++
+ export function Runs() {
+   const navigate = useNavigate();
++  const [searchParams, setSearchParams] = useSearchParams();
+   const [filters, setFilters] = useState<RunFilterState>(defaultFilters);
++  const runCategory = parseRunCategory(searchParams.get('runCategory'));
++  const runCategoryLabel = runCategory ? RUN_CATEGORY_LABELS[runCategory] : null;
+ 
+   // Use infinite scroll hook for efficient data loading
+   const {
+@@ -42,6 +63,7 @@ export function Runs() {
+     refetch,
+   } = useInfiniteRuns({
+     status: filters.status || undefined,
++    runCategory,
+   });
+ 
+   // Filter runs by selected tags (client-side filtering)
+@@ -63,22 +85,56 @@ export function Runs() {
+     navigate(`/runs/${runId}`);
+   }, [navigate]);
+ 
++  const clearRunCategory = useCallback(() => {
++    const next = new URLSearchParams(searchParams);
++    next.delete('runCategory');
++    setSearchParams(next, { replace: true });
++  }, [searchParams, setSearchParams]);
++
+   return (
+     <div className="h-full flex flex-col">
+       {/* Header */}
+-      <div className="flex items-center justify-between mb-6">
+-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
+-          Trials
+-        </h1>
+-        <Button
+-          variant="ghost"
+-          size="sm"
+-          onClick={refetch}
+-          disabled={loading || loadingMore}
+-        >
+-          <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
+-          Refresh
+-        </Button>
++      <div className="flex items-start justify-between mb-6 gap-4">
++        <div className="space-y-2">
++          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
++            Trials
++          </h1>
++          {runCategory ? (
++            <div className="space-y-2">
++              <div className="flex flex-wrap items-center gap-2">
++                <Badge variant="info" size="count">{runCategoryLabel} Run History</Badge>
++              </div>
++              <p className="text-sm text-gray-600 max-w-3xl">
++                This filtered view is being used as an operational companion to top-level Validation reporting. Domain-scoped validation checks
++                still launch from <span className="font-medium">Domains &gt; Runs</span>.
++              </p>
++            </div>
++          ) : (
++            <p className="text-sm text-gray-600 max-w-3xl">
++              Review persisted vignette-scoped runs, apply filters, and open individual run details.
++            </p>
++          )}
++        </div>
++        <div className="flex items-center gap-2">
++          {runCategory && (
++            <Button
++              variant="ghost"
++              size="sm"
++              onClick={clearRunCategory}
++            >
++              Show All Runs
++            </Button>
++          )}
++          <Button
++            variant="ghost"
++            size="sm"
++            onClick={refetch}
++            disabled={loading || loadingMore}
++          >
++            <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
++            Refresh
++          </Button>
++        </div>
+       </div>
+ 
+       {/* Filters */}
+@@ -93,7 +149,7 @@ export function Runs() {
+         ) : error ? (
+           <ErrorMessage message={`Failed to load trials: ${error.message}`} />
+         ) : filteredRuns.length === 0 ? (
+-          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
++          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} runCategoryLabel={runCategoryLabel} />
+         ) : filters.viewMode === 'folder' ? (
+           <VirtualizedFolderView
+             runs={filteredRuns}
+@@ -121,7 +177,7 @@ export function Runs() {
+ /**
+  * Empty state component.
+  */
+-function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: boolean }) {
++function EmptyState({ status, hasTagFilter, runCategoryLabel }: { status: string; hasTagFilter: boolean; runCategoryLabel: string | null }) {
+   const navigate = useNavigate();
+ 
+   if (status || hasTagFilter) {
+@@ -146,13 +202,15 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
+         <Play className="w-8 h-8 text-teal-600" />
+       </div>
+       <h3 className="text-lg font-medium text-gray-900 mb-2">
+-        No trials yet
++        {runCategoryLabel ? `No ${runCategoryLabel.toLowerCase()} runs yet` : 'No trials yet'}
+       </h3>
+       <p className="text-gray-500 mb-4">
+-        Start your first evaluation trial from a vignette.
++        {runCategoryLabel
++          ? `${runCategoryLabel} work is launched from domain Runs. Start there, then return here for history and drilldown.`
++          : 'Start your first evaluation trial from a vignette.'}
+       </p>
+-      <Button onClick={() => navigate('/definitions')}>
+-        Go to Vignettes
++      <Button onClick={() => navigate(runCategoryLabel ? '/domains' : '/definitions')}>
++        {runCategoryLabel ? 'Go to Domains' : 'Go to Vignettes'}
+       </Button>
+     </div>
+   );
+diff --git a/cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx b/cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx
+index 2dd9000..c67996b 100644
+--- a/cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx
++++ b/cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx
+@@ -14,6 +14,7 @@ import {
+   type TempZeroDecision,
+   type TempZeroRow,
+ } from '../api/operations/assumptions';
++import { TransitionNotice } from '../components/ui/TransitionNotice';
+ 
+ function formatPercent(value: number | null): string {
+   if (value === null) return 'n/a';
+@@ -325,6 +326,15 @@ export function TempZeroEffectAssumptions() {
+ 
+   return (
+     <div className="space-y-6">
++      <TransitionNotice
++        eyebrow="Validation Compatibility"
++        title="Temp=0 lives under Validation now"
++        description="This page remains live for detailed inspection, but top-level Validation is now the reporting home. Domain-scoped validation launches should happen from Domain Runs."
++        links={[
++          { label: 'Open Validation home', to: '/validation' },
++          { label: 'Open validation run history', to: '/runs?runCategory=VALIDATION' },
++        ]}
++      />
+       <div>
+         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Temp=0 Effect</h1>
+         <p className="mt-1 text-sm text-gray-600">
+diff --git a/cloud/apps/web/tests/pages/Runs.test.tsx b/cloud/apps/web/tests/pages/Runs.test.tsx
+index 8328580..cb37312 100644
+--- a/cloud/apps/web/tests/pages/Runs.test.tsx
++++ b/cloud/apps/web/tests/pages/Runs.test.tsx
+@@ -28,8 +28,10 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
+     id: 'run-12345678-abcd',
+     name: null, // Uses algorithmic name
+     definitionId: 'def-1',
++    definitionVersion: 1,
+     experimentId: null,
+     status: 'COMPLETED',
++    runCategory: 'PRODUCTION',
+     config: {
+       models: ['gpt-4'],
+     },
+@@ -48,10 +50,17 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
+     transcripts: [],
+     transcriptCount: 10,
+     recentTasks: [],
++    analysisStatus: null,
++    summarizeProgress: null,
++    executionMetrics: null,
++    analysis: null,
++    tags: [],
+     definition: {
+       id: 'def-1',
+       name: 'Test Definition',
++      version: 1,
+       tags: [],
++      content: {},
+     },
+     ...overrides,
+   };
+@@ -105,6 +114,16 @@ function renderRuns(client: Client) {
+   );
+ }
+ 
++function renderRunsAt(client: Client, path: string) {
++  return render(
++    <Provider value={client}>
++      <MemoryRouter initialEntries={[path]}>
++        <Runs />
++      </MemoryRouter>
++    </Provider>
++  );
++}
++
+ describe('Runs Page', () => {
+   beforeEach(() => {
+     vi.clearAllMocks();
+@@ -181,6 +200,27 @@ describe('Runs Page', () => {
+     expect(screen.getByRole('button', { name: 'Go to Vignettes' })).toBeInTheDocument();
+   });
+ 
++  it('shows validation-specific empty state when the runCategory filter comes from the URL', async () => {
++    const mockExecuteQuery = vi.fn(() =>
++      fromValue({
++        data: { runs: [] },
++        error: undefined,
++        stale: false,
++        hasNext: false,
++      })
++    );
++    const mockClient = createMockClient(mockExecuteQuery);
++    renderRunsAt(mockClient, '/runs?runCategory=VALIDATION');
++
++    await waitFor(() => {
++      expect(screen.getByText(/validation run history/i)).toBeInTheDocument();
++    });
++
++    expect(screen.getByText(/no validation runs yet/i)).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /show all runs/i })).toBeInTheDocument();
++    expect(screen.getByRole('button', { name: /go to domains/i })).toBeInTheDocument();
++  });
++
+   it('shows filtered empty state when filter applied', async () => {
+     const user = userEvent.setup();
+     const mockExecuteQuery = vi.fn(() =>
+diff --git a/Users/chrislaw/valuerank/cloud/apps/web/src/pages/ValidationHome.tsx b/Users/chrislaw/valuerank/cloud/apps/web/src/pages/ValidationHome.tsx
+new file mode 100644
+index 0000000..fd44b64
+--- /dev/null
++++ b/Users/chrislaw/valuerank/cloud/apps/web/src/pages/ValidationHome.tsx
+@@ -0,0 +1,306 @@
++import { Link } from 'react-router-dom';
++import { useQuery } from 'urql';
++import { ShieldCheck, FlaskConical, BarChart3, History, ArrowRight, Activity, CheckCircle2 } from 'lucide-react';
++import { Card } from '../components/ui/Card';
++import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Loading } from '../components/ui/Loading';
++import {
++  RUNS_QUERY,
++  RUN_COUNT_QUERY,
++  type RunCountQueryResult,
++  type Run,
++  type RunsQueryResult,
++} from '../api/operations/runs';
++import {
++  TEMP_ZERO_VERIFICATION_REPORT_QUERY,
++  type TempZeroVerificationReportQueryResult,
++} from '../api/operations/temp-zero-verification';
++import {
++  ORDER_INVARIANCE_REVIEW_QUERY,
++  type OrderInvarianceReviewQueryResult,
++} from '../api/operations/order-invariance';
++
++function formatTimestamp(value: string | null | undefined): string {
++  if (value == null) return 'Not available';
++  const parsed = new Date(value);
++  if (Number.isNaN(parsed.getTime())) return 'Not available';
++  return parsed.toLocaleString();
++}
++
++function getRunTone(run: Pick<Run, 'status'>): string {
++  switch (run.status) {
++    case 'RUNNING':
++    case 'PENDING':
++    case 'SUMMARIZING':
++      return 'text-amber-700';
++    case 'FAILED':
++    case 'CANCELLED':
++      return 'text-red-700';
++    case 'COMPLETED':
++      return 'text-teal-700';
++    default:
++      return 'text-gray-700';
++  }
++}
++
++const resourceCards = [
++  {
++    title: 'Temp=0 Effect',
++    description: 'Detailed drift and transcript review for the locked temp=0 package.',
++    to: '/assumptions/temp-zero-effect',
++    icon: FlaskConical,
++  },
++  {
++    title: 'Validation Analysis',
++    description: 'Backend-driven order invariance analysis for the current review set.',
++    to: '/assumptions/analysis',
++    icon: BarChart3,
++  },
++  {
++    title: 'Legacy Validation',
++    description: 'Older v1 order-effect view retained for migration compatibility.',
++    to: '/assumptions/analysis-v1',
++    icon: History,
++  },
++];
++
++export function ValidationHome() {
++  const [{ data: runCountData, fetching: runCountFetching, error: runCountError }] = useQuery<RunCountQueryResult>({
++    query: RUN_COUNT_QUERY,
++    variables: { runCategory: 'VALIDATION', runType: 'ALL' },
++    requestPolicy: 'cache-and-network',
++  });
++  const [{ data: recentRunsData, fetching: recentRunsFetching, error: recentRunsError }] = useQuery<RunsQueryResult>({
++    query: RUNS_QUERY,
++    variables: { runCategory: 'VALIDATION', runType: 'ALL', limit: 6, offset: 0 },
++    requestPolicy: 'cache-and-network',
++  });
++  const [{ data: tempZeroData, fetching: tempZeroFetching, error: tempZeroError }] = useQuery<TempZeroVerificationReportQueryResult>({
++    query: TEMP_ZERO_VERIFICATION_REPORT_QUERY,
++    requestPolicy: 'cache-and-network',
++  });
++  const [{ data: reviewData, fetching: reviewFetching, error: reviewError }] = useQuery<OrderInvarianceReviewQueryResult>({
++    query: ORDER_INVARIANCE_REVIEW_QUERY,
++    requestPolicy: 'cache-and-network',
++  });
++
++  const recentValidationRuns = recentRunsData?.runs ?? [];
++  const totalValidationRuns = runCountData?.runCount ?? 0;
++  const tempZeroReport = tempZeroData?.tempZeroVerificationReport ?? null;
++  const reviewSummary = reviewData?.assumptionsOrderInvarianceReview.summary ?? null;
++  const loadError = runCountError ?? recentRunsError ?? tempZeroError ?? reviewError;
++  const hasSettledInitialLoad = (
++    runCountData !== undefined
++    && recentRunsData !== undefined
++    && tempZeroData !== undefined
++    && reviewData !== undefined
++  );
++  const isLoading = !hasSettledInitialLoad && (runCountFetching || recentRunsFetching || tempZeroFetching || reviewFetching);
++
++  return (
++    <div className="space-y-6">
++      <div className="space-y-3">
++        <div className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
++          <ShieldCheck className="h-4 w-4" />
++          Validation
++        </div>
++        <div>
++          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Validation</h1>
++          <p className="mt-2 max-w-3xl text-gray-600">
++            Validation is the reporting and reference home for methodology checks. Domain-scoped validation work still launches from
++            <span className="font-medium"> Domains &gt; Runs</span>; this page helps you monitor validation history and review the
++            current cross-domain signals.
++          </p>
++        </div>
++      </div>
++
++      <div className="rounded-xl border border-gray-200 bg-white p-5">
++        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
++          <div>
++            <h2 className="text-lg font-medium text-[#1A1A1A]">How Validation Works Now</h2>
++            <p className="mt-2 text-sm text-gray-600 max-w-3xl">
++              Use domain Runs to launch validation-scoped work, then come back here to review recent validation history and the standing temp=0
++              and order-invariance reports.
++            </p>
++          </div>
++          <div className="flex flex-wrap gap-3">
++            <Link
++              to="/domains"
++              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++            >
++              Open Domains
++              <ArrowRight className="h-4 w-4" />
++            </Link>
++            <Link
++              to="/runs?runCategory=VALIDATION"
++              className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100"
++            >
++              Validation Run History
++              <ArrowRight className="h-4 w-4" />
++            </Link>
++          </div>
++        </div>
++      </div>
++
++      {loadError && <ErrorMessage message={`Failed to load validation reporting: ${loadError.message}`} />}
++      {isLoading && <Loading size="sm" text="Loading validation reporting..." />}
++
++      <div className="grid gap-4 lg:grid-cols-3">
++        <Card padding="spacious" className="h-full">
++          <div className="flex items-start gap-3">
++            <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++              <Activity className="h-5 w-5" />
++            </div>
++            <div className="space-y-2">
++              <h2 className="text-lg font-medium text-[#1A1A1A]">Validation Run History</h2>
++              <p className="text-sm text-gray-600">
++                Cross-domain run history filtered to the `VALIDATION` run category.
++              </p>
++              <div className="grid gap-3 sm:grid-cols-2">
++                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Total Validation Runs</div>
++                  <div className="mt-1 text-lg font-semibold text-gray-900">{totalValidationRuns}</div>
++                </div>
++                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                  <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Recent Runs Loaded</div>
++                  <div className="mt-1 text-lg font-semibold text-gray-900">{recentValidationRuns.length}</div>
++                </div>
++              </div>
++              {recentValidationRuns.length > 0 ? (
++                <div className="space-y-2">
++                  {recentValidationRuns.slice(0, 4).map((run) => (
++                    <Link
++                      key={run.id}
++                      to={`/runs/${run.id}`}
++                      className="block rounded-lg border border-gray-200 px-3 py-3 hover:bg-gray-50"
++                    >
++                      <div className="flex items-center justify-between gap-3">
++                        <div>
++                          <div className="text-sm font-medium text-gray-900">{run.definition.name}</div>
++                          <div className="text-xs text-gray-500">
++                            {run.definition.domain?.name ? `${run.definition.domain.name} · ` : ''}
++                            {formatTimestamp(run.createdAt)}
++                          </div>
++                        </div>
++                        <div className={`text-xs font-medium uppercase tracking-wide ${getRunTone(run)}`}>
++                          {run.status}
++                        </div>
++                      </div>
++                    </Link>
++                  ))}
++                </div>
++              ) : (
++                <p className="text-sm text-gray-600">
++                  No validation runs yet. Launch validation-scoped work from a domain’s Runs tab.
++                </p>
++              )}
++            </div>
++          </div>
++        </Card>
++
++        <Card padding="spacious" className="h-full">
++          <div className="flex items-start gap-3">
++            <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++              <FlaskConical className="h-5 w-5" />
++            </div>
++            <div className="space-y-2">
++              <h2 className="text-lg font-medium text-[#1A1A1A]">Temp=0 Snapshot</h2>
++              <p className="text-sm text-gray-600">
++                Latest cross-model stability report from the temp=0 validation package.
++              </p>
++              {tempZeroReport ? (
++                <>
++                  <div className="grid gap-3 sm:grid-cols-2">
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Models Reported</div>
++                      <div className="mt-1 text-lg font-semibold text-gray-900">{tempZeroReport.models.length}</div>
++                    </div>
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Transcripts Analyzed</div>
++                      <div className="mt-1 text-lg font-semibold text-gray-900">{tempZeroReport.transcriptCount}</div>
++                    </div>
++                  </div>
++                  <p className="text-xs text-gray-500">
++                    Generated {formatTimestamp(tempZeroReport.generatedAt)}
++                  </p>
++                </>
++              ) : (
++                <p className="text-sm text-gray-600">Temp=0 reporting is not available yet.</p>
++              )}
++              <Link to="/assumptions/temp-zero-effect" className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 hover:text-teal-900">
++                Open Temp=0 Effect
++                <ArrowRight className="h-4 w-4" />
++              </Link>
++            </div>
++          </div>
++        </Card>
++
++        <Card padding="spacious" className="h-full">
++          <div className="flex items-start gap-3">
++            <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++              <CheckCircle2 className="h-5 w-5" />
++            </div>
++            <div className="space-y-2">
++              <h2 className="text-lg font-medium text-[#1A1A1A]">Order-Invariance Review</h2>
++              <p className="text-sm text-gray-600">
++                Review-state snapshot for the current order-invariance package.
++              </p>
++              {reviewSummary ? (
++                <>
++                  <div className="grid gap-3 sm:grid-cols-2">
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Reviewed</div>
++                      <div className="mt-1 text-lg font-semibold text-gray-900">
++                        {reviewSummary.reviewedVignettes} / {reviewSummary.totalVignettes}
++                      </div>
++                    </div>
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pending</div>
++                      <div className="mt-1 text-lg font-semibold text-gray-900">{reviewSummary.pendingVignettes}</div>
++                    </div>
++                  </div>
++                  <p className="text-sm text-gray-700">
++                    Launch readiness: <span className="font-medium">{reviewSummary.launchReady ? 'Ready' : 'Needs review'}</span>
++                  </p>
++                </>
++              ) : (
++                <p className="text-sm text-gray-600">Order-invariance review data is not available yet.</p>
++              )}
++              <div className="flex flex-wrap gap-3">
++                <Link to="/assumptions/analysis" className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 hover:text-teal-900">
++                  Open Validation Analysis
++                  <ArrowRight className="h-4 w-4" />
++                </Link>
++                <Link to="/assumptions/analysis-v1" className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900">
++                  Open Legacy View
++                  <ArrowRight className="h-4 w-4" />
++                </Link>
++              </div>
++            </div>
++          </div>
++        </Card>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-3">
++        {resourceCards.map((card) => {
++          const Icon = card.icon;
++          return (
++            <Link key={card.to} to={card.to} className="block">
++              <Card variant="interactive" padding="spacious" className="h-full">
++                <div className="flex items-start gap-3">
++                  <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++                    <Icon className="h-5 w-5" />
++                  </div>
++                  <div>
++                    <h2 className="text-lg font-medium text-[#1A1A1A]">{card.title}</h2>
++                    <p className="mt-2 text-sm text-gray-600">{card.description}</p>
++                  </div>
++                </div>
++              </Card>
++            </Link>
++          );
++        })}
++      </div>
++    </div>
++  );
++}
+diff --git a/Users/chrislaw/valuerank/cloud/apps/web/tests/pages/ValidationHome.test.tsx b/Users/chrislaw/valuerank/cloud/apps/web/tests/pages/ValidationHome.test.tsx
+new file mode 100644
+index 0000000..f10dff5
+--- /dev/null
++++ b/Users/chrislaw/valuerank/cloud/apps/web/tests/pages/ValidationHome.test.tsx
+@@ -0,0 +1,129 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import { ValidationHome } from '../../src/pages/ValidationHome';
++import {
++  RUN_COUNT_QUERY,
++  RUNS_QUERY,
++} from '../../src/api/operations/runs';
++import { TEMP_ZERO_VERIFICATION_REPORT_QUERY } from '../../src/api/operations/temp-zero-verification';
++import { ORDER_INVARIANCE_REVIEW_QUERY } from '../../src/api/operations/order-invariance';
++
++const useQueryMock = vi.fn();
++
++vi.mock('urql', async () => {
++  const actual = await vi.importActual<typeof import('urql')>('urql');
++  return {
++    ...actual,
++    useQuery: (args: unknown) => useQueryMock(args),
++  };
++});
++
++describe('ValidationHome', () => {
++  beforeEach(() => {
++    useQueryMock.mockReset();
++    useQueryMock.mockImplementation((args: { query: unknown }) => {
++      if (args.query === RUN_COUNT_QUERY) {
++        return [{ data: { runCount: 7 }, fetching: false, error: undefined }];
++      }
++      if (args.query === RUNS_QUERY) {
++        return [{
++          data: {
++            runs: [
++              {
++                id: 'run-1',
++                name: null,
++                definitionId: 'def-1',
++                definitionVersion: 1,
++                experimentId: null,
++                status: 'RUNNING',
++                runCategory: 'VALIDATION',
++                config: { models: ['model-1'] },
++                progress: null,
++                runProgress: null,
++                summarizeProgress: null,
++                startedAt: null,
++                completedAt: null,
++                createdAt: '2026-03-15T10:00:00.000Z',
++                updatedAt: '2026-03-15T10:00:00.000Z',
++                lastAccessedAt: null,
++                transcripts: [],
++                transcriptCount: 0,
++                recentTasks: [],
++                analysisStatus: null,
++                executionMetrics: null,
++                analysis: null,
++                tags: [],
++                definition: {
++                  id: 'def-1',
++                  name: 'Validation Definition',
++                  version: 1,
++                  content: {},
++                  domain: { name: 'Professional Domain' },
++                  tags: [],
++                },
++              },
++            ],
++          },
++          fetching: false,
++          error: undefined,
++        }];
++      }
++      if (args.query === TEMP_ZERO_VERIFICATION_REPORT_QUERY) {
++        return [{
++          data: {
++            tempZeroVerificationReport: {
++              generatedAt: '2026-03-15T11:00:00.000Z',
++              transcriptCount: 120,
++              batchTimestamp: '2026-03-15T09:00:00.000Z',
++              models: [
++                { modelId: 'model-1', transcriptCount: 60, adapterModes: ['explicit_temp_zero'], promptHashStabilityPct: 100, fingerprintDriftPct: 0, decisionMatchRatePct: 98 },
++                { modelId: 'model-2', transcriptCount: 60, adapterModes: ['best_effort'], promptHashStabilityPct: 95, fingerprintDriftPct: 5, decisionMatchRatePct: 94 },
++              ],
++            },
++          },
++          fetching: false,
++          error: undefined,
++        }];
++      }
++      if (args.query === ORDER_INVARIANCE_REVIEW_QUERY) {
++        return [{
++          data: {
++            assumptionsOrderInvarianceReview: {
++              generatedAt: '2026-03-15T12:00:00.000Z',
++              summary: {
++                totalVignettes: 12,
++                reviewedVignettes: 9,
++                approvedVignettes: 7,
++                rejectedVignettes: 2,
++                pendingVignettes: 3,
++                launchReady: false,
++              },
++              vignettes: [],
++            },
++          },
++          fetching: false,
++          error: undefined,
++        }];
++      }
++      return [{ data: undefined, fetching: false, error: undefined }];
++    });
++  });
++
++  it('renders live validation reporting plus links to validation run history and detailed surfaces', () => {
++    render(
++      <MemoryRouter>
++        <ValidationHome />
++      </MemoryRouter>,
++    );
++
++    expect(screen.getByRole('heading', { name: /^validation$/i })).toBeInTheDocument();
++    expect(screen.getByText(/total validation runs/i)).toBeInTheDocument();
++    expect(screen.getByText('7')).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /validation run history/i })).toHaveAttribute('href', '/runs?runCategory=VALIDATION');
++    expect(screen.getByText(/transcripts analyzed/i)).toBeInTheDocument();
++    expect(screen.getByText(/launch readiness/i)).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /open temp=0 effect/i })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
++    expect(screen.getByRole('link', { name: /open validation analysis/i })).toHaveAttribute('href', '/assumptions/analysis');
++  });
++});

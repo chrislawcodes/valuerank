@@ -1,0 +1,58 @@
+{
+  "paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/pages/ArchiveHome.tsx",
+    "cloud/apps/web/src/pages/Survey.tsx",
+    "cloud/apps/web/src/pages/SurveyResults.tsx",
+    "cloud/apps/web/tests/App.test.tsx",
+    "cloud/apps/web/tests/components/layout/Layout.test.tsx",
+    "cloud/apps/web/tests/components/layout/MobileNav.test.tsx",
+    "cloud/apps/web/tests/components/layout/NavTabs.test.tsx",
+    "cloud/apps/web/tests/pages/ArchiveHome.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/file-route-inventory.md",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/route-compatibility-matrix.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md",
+    "docs/workflows/domain-first-site-ia-migration/waves/wave-6-archive-retirement.scope.json"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/pages/ArchiveHome.tsx",
+    "cloud/apps/web/src/pages/Survey.tsx",
+    "cloud/apps/web/src/pages/SurveyResults.tsx",
+    "cloud/apps/web/tests/App.test.tsx",
+    "cloud/apps/web/tests/components/layout/Layout.test.tsx",
+    "cloud/apps/web/tests/components/layout/MobileNav.test.tsx",
+    "cloud/apps/web/tests/components/layout/NavTabs.test.tsx",
+    "cloud/apps/web/tests/pages/ArchiveHome.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/file-route-inventory.md",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/route-compatibility-matrix.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md",
+    "docs/workflows/domain-first-site-ia-migration/waves/wave-6-archive-retirement.scope.json"
+  ],
+  "prerequisite_paths": [
+    "cloud/apps/web/src/components/ui/TransitionNotice.tsx",
+    "cloud/apps/web/src/pages/ValidationHome.tsx",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "docs/workflows/domain-first-site-ia-migration/spec.md"
+  ],
+  "review_context": {
+    "summary": "This wave makes archive-prefixed legacy survey routes canonical, keeps the old survey URLs as compatibility aliases, and updates archive/navigation copy so Archive reads as explicitly historical.",
+    "assumed_present": [
+      "The top-level `Archive` IA, compatibility banners, and prior wave navigation refactor are already landed."
+    ],
+    "out_of_scope": [
+      "This wave does not add backend archive classification fields or retire the underlying survey functionality.",
+      "This wave does not change findings snapshot completeness or validation reporting behavior."
+    ]
+  },
+  "verification_commands": [
+    "npm run typecheck --workspace=@valuerank/web",
+    "npm test --workspace=@valuerank/web -- tests/App.test.tsx tests/pages/ArchiveHome.test.tsx tests/components/layout/NavTabs.test.tsx tests/components/layout/MobileNav.test.tsx tests/components/layout/Layout.test.tsx"
+  ]
+}

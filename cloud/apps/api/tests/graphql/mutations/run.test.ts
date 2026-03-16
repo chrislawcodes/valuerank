@@ -274,6 +274,62 @@ describe('GraphQL Run Mutations', () => {
       expect(selections.length).toBe(3);
     });
 
+    it('persists an explicit runCategory from GraphQL input', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Test Definition Category',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const mutation = `
+        mutation StartRun($input: StartRunInput!) {
+          startRun(input: $input) {
+            run {
+              id
+              runCategory
+            }
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({
+          query: mutation,
+          variables: {
+            input: {
+              definitionId: definition.id,
+              models: ['gpt-4'],
+              runCategory: 'PILOT',
+            },
+          },
+        })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.startRun.run.runCategory).toBe('PILOT');
+
+      const runId = response.body.data.startRun.run.id;
+      createdRunIds.push(runId);
+
+      const persistedRun = await db.run.findUnique({
+        where: { id: runId },
+        select: { runCategory: true },
+      });
+      expect(persistedRun?.runCategory).toBe('PILOT');
+    });
+
     it('returns error for non-existent definition', async () => {
       const mutation = `
         mutation StartRun($input: StartRunInput!) {

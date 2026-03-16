@@ -1,0 +1,1890 @@
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+index dc09509..3565129 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+@@ -1,14 +1,21 @@
++import { Link } from 'react-router-dom';
+ import { Button } from '../../ui/Button';
+ import { formatCost } from './helpers';
+ 
+ type LaunchConfirmModalProps = {
+   open: boolean;
+   domainName: string;
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   estimatedTotalCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   temperatureLabel: string;
+   budgetCap: number | null;
++  reviewSetupHref: string;
++  reviewVignettesHref: string;
+   isStarting: boolean;
+   onCancel: () => void;
+   onConfirm: () => void;
+@@ -17,42 +24,83 @@ type LaunchConfirmModalProps = {
+ export function LaunchConfirmModal({
+   open,
+   domainName,
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   estimatedTotalCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   temperatureLabel,
+   budgetCap,
++  reviewSetupHref,
++  reviewVignettesHref,
+   isStarting,
+   onCancel,
+   onConfirm,
+ }: LaunchConfirmModalProps) {
+   if (!open) return null;
+ 
++  const headingId = 'launch-confirm-modal-heading';
++
+   return (
+     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+-      <div className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4">
+-        <h2 className="text-lg font-semibold text-gray-900">Confirm Domain Trial Launch</h2>
++      <div
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby={headingId}
++        className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
++      >
++        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Evaluation</h2>
+         <div className="space-y-1 text-sm text-gray-700">
+           <div>Domain: <span className="font-medium">{domainName}</span></div>
+-          <div>Latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
++          <div>Domain evaluation scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
++          <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
+           <div>Models: <span className="font-medium">{modelCount}</span></div>
+           <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
++          {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
+           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
+           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
+         </div>
++        {(fallbackReason || knownExclusions.length > 0) && (
++          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
++            <p className="font-medium">Setup summary and estimate notes</p>
++            {fallbackReason && <p>Fallback reason: {fallbackReason}</p>}
++            {knownExclusions.length > 0 && <p>{knownExclusions.join(' ')}</p>}
++          </div>
++        )}
++        <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
++          <p className="font-medium text-gray-900">Review before confirming</p>
++          <p>
++            This starts one domain evaluation cohort. Use these links if you need to double-check defaults or per-vignette overrides before member runs begin.
++          </p>
++          <div className="flex flex-wrap gap-2">
++            <Link
++              to={reviewSetupHref}
++              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++            >
++              Review setup coverage
++            </Link>
++            <Link
++              to={reviewVignettesHref}
++              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++            >
++              Review vignette overrides
++            </Link>
++          </div>
++        </div>
+         <p className="text-xs text-gray-500">
+-          This starts domain runs and incurs model costs. A duplicate active launch is blocked server-side.
++          This creates a domain evaluation cohort and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
+         </p>
+         <div className="flex justify-end gap-2">
+           <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>
+             Cancel
+           </Button>
+           <Button type="button" onClick={onConfirm} disabled={isStarting}>
+-            {isStarting ? 'Starting...' : 'Run All Domain Trials'}
++            {isStarting ? 'Starting...' : 'Start Domain Evaluation'}
+           </Button>
+         </div>
+       </div>
+     </div>
+   );
+ }
+-
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+index 62afd9e..5a1167f 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+@@ -1,11 +1,16 @@
++import { Link } from 'react-router-dom';
+ import { Button } from '../../ui/Button';
+ import { Badge } from '../../ui/Badge';
+ import { formatCost } from './helpers';
+ 
+ type LaunchControlsPanelProps = {
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   totalEstimatedCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   useDefaultTemperature: boolean;
+   disableTemperatureInput: boolean;
+   temperatureInput: string;
+@@ -18,6 +23,11 @@ type LaunchControlsPanelProps = {
+   isStarting: boolean;
+   planFetching: boolean;
+   temperatureWarning?: string | null;
++  reviewSetupHref: string;
++  reviewVignettesHref: string;
++  selectedDefinitionCount?: number;
++  excludedRequestedDefinitionCount?: number;
++  onSetScopeCategory: (value: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION') => void;
+   onSetUseDefaultTemperature: (value: boolean) => void;
+   onSetTemperatureInput: (value: string) => void;
+   onSetMaxBudgetEnabled: (value: boolean) => void;
+@@ -27,9 +37,13 @@ type LaunchControlsPanelProps = {
+ };
+ 
+ export function LaunchControlsPanel({
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   totalEstimatedCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   useDefaultTemperature,
+   disableTemperatureInput,
+   temperatureInput,
+@@ -42,6 +56,11 @@ export function LaunchControlsPanel({
+   isStarting,
+   planFetching,
+   temperatureWarning,
++  reviewSetupHref,
++  reviewVignettesHref,
++  selectedDefinitionCount,
++  excludedRequestedDefinitionCount = 0,
++  onSetScopeCategory,
+   onSetUseDefaultTemperature,
+   onSetTemperatureInput,
+   onSetMaxBudgetEnabled,
+@@ -49,15 +68,73 @@ export function LaunchControlsPanel({
+   onSetSafeMode,
+   onOpenConfirm,
+ }: LaunchControlsPanelProps) {
++  const confidenceTone = estimateConfidence === 'HIGH'
++    ? 'success'
++    : estimateConfidence === 'MEDIUM'
++      ? 'warning'
++      : 'error';
++
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+       <div className="flex flex-wrap items-center gap-3">
+-        <Badge variant="info" size="count">Latest Vignettes: {vignetteCount}</Badge>
++        <Badge variant="neutral" size="count">Domain evaluation scope: {scopeCategory.toLowerCase()}</Badge>
++        <Badge variant="info" size="count">Selected latest vignettes: {vignetteCount}</Badge>
+         <Badge variant="info" size="count">Models: {modelCount}</Badge>
+-        <Badge variant="success" size="count">Total Estimate: {formatCost(totalEstimatedCost)}</Badge>
++        <Badge variant="success" size="count">Projected evaluation cost: {formatCost(totalEstimatedCost)}</Badge>
++        {estimateConfidence && <Badge variant={confidenceTone} size="count">Estimate confidence: {estimateConfidence.toLowerCase()}</Badge>}
++      </div>
++
++      <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 space-y-2">
++        <p className="font-medium text-gray-900">Configuration review before launch</p>
++        <p>
++          This launch starts one domain evaluation cohort, then creates vignette-scoped runs underneath it. Review domain defaults and vignette overrides before you confirm.
++        </p>
++        <div className="grid gap-2 md:grid-cols-3 text-xs text-gray-600">
++          <div>
++            <span className="font-medium text-gray-900">Launch scope:</span> {selectedDefinitionCount ?? vignetteCount} selected latest vignette{(selectedDefinitionCount ?? vignetteCount) === 1 ? '' : 's'}
++          </div>
++          <div>
++            <span className="font-medium text-gray-900">Review defaults:</span> Setup coverage and domain-wide presets
++          </div>
++          <div>
++            <span className="font-medium text-gray-900">Review overrides:</span> Vignette inventory and per-vignette reruns
++          </div>
++        </div>
++        {excludedRequestedDefinitionCount > 0 && (
++          <p className="text-xs text-amber-700">
++            {excludedRequestedDefinitionCount} requested vignette{excludedRequestedDefinitionCount === 1 ? '' : 's'} are excluded because they are stale, invalid, or no longer the latest version.
++          </p>
++        )}
++        <div className="flex flex-wrap gap-2">
++          <Link
++            to={reviewSetupHref}
++            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++          >
++            Review setup coverage
++          </Link>
++          <Link
++            to={reviewVignettesHref}
++            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++          >
++            Review vignette overrides
++          </Link>
++        </div>
+       </div>
+ 
+       <div className="flex flex-wrap items-center gap-3">
++        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
++          Evaluation scope
++          <select
++            value={scopeCategory}
++            onChange={(event) => onSetScopeCategory(event.target.value as 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION')}
++            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
++          >
++            <option value="PILOT">Pilot</option>
++            <option value="PRODUCTION">Production</option>
++            <option value="REPLICATION">Replication</option>
++            <option value="VALIDATION">Validation</option>
++          </select>
++        </label>
+         <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+           <input type="radio" checked={useDefaultTemperature} onChange={() => onSetUseDefaultTemperature(true)} disabled={disableTemperatureInput} />
+           Use provider default temperature
+@@ -98,6 +175,12 @@ export function LaunchControlsPanel({
+ 
+       {disableTemperatureInput && <p className="text-xs text-amber-700">Some default models do not support custom temperature, so domain trials will use provider defaults.</p>}
+       {temperatureWarning && <p className="text-xs text-amber-700">{temperatureWarning}</p>}
++      {fallbackReason && <p className="text-xs text-amber-700">Estimate fallback: {fallbackReason}</p>}
++      {knownExclusions.length > 0 && (
++        <p className="text-xs text-gray-500">
++          Estimate notes: {knownExclusions.join(' ')}
++        </p>
++      )}
+       {maxBudgetEnabled && !hasValidBudget && <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>}
+       {retryAutoPaused && <p className="text-xs text-red-700">Retry controls auto-paused: failure rate is {(failureRate * 100).toFixed(0)}% (threshold 30%).</p>}
+ 
+@@ -106,9 +189,9 @@ export function LaunchControlsPanel({
+           onClick={onOpenConfirm}
+           disabled={isStarting || planFetching || modelCount === 0 || vignetteCount === 0 || (maxBudgetEnabled && !hasValidBudget)}
+         >
+-          {isStarting ? 'Starting...' : 'Review & Run Domain Trials'}
++          {isStarting ? 'Starting...' : 'Review & Start Domain Evaluation'}
+         </Button>
+-        <span className="text-xs text-gray-500">Runs start only after this second confirmation action.</span>
++        <span className="text-xs text-gray-500">Member runs start only after this second confirmation action.</span>
+       </div>
+     </div>
+   );
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+index 52a7e89..ab1b0dc 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+@@ -3,6 +3,8 @@ import { Badge } from '../../ui/Badge';
+ import { formatCost, type DomainTrialLaunchSummary } from './helpers';
+ 
+ type LaunchStatusPanelProps = {
++  evaluationId: string | null;
++  scopeCategory: string | null;
+   launchSummary: DomainTrialLaunchSummary | null;
+   started: boolean;
+   statusSummary: {
+@@ -19,6 +21,8 @@ type LaunchStatusPanelProps = {
+ };
+ 
+ export function LaunchStatusPanel({
++  evaluationId,
++  scopeCategory,
+   launchSummary,
+   started,
+   statusSummary,
+@@ -32,10 +36,12 @@ export function LaunchStatusPanel({
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+       <div className="flex flex-wrap items-center gap-2">
+-        <Badge variant="success" size="count">Started: {launchSummary?.startedRuns ?? statusSummary.total}</Badge>
+-        <Badge variant="warning" size="count">In Progress: {statusSummary.active}</Badge>
+-        <Badge variant="info" size="count">Completed: {statusSummary.completed}</Badge>
+-        <Badge variant={statusSummary.failed > 0 ? 'error' : 'neutral'} size="count">Failed: {statusSummary.failed}</Badge>
++        {evaluationId && <Badge variant="neutral" size="count">Evaluation: {evaluationId.slice(-8)}</Badge>}
++        {scopeCategory && <Badge variant="neutral" size="count">Evaluation scope: {scopeCategory.toLowerCase()}</Badge>}
++        <Badge variant="success" size="count">Member runs started: {launchSummary?.startedRuns ?? statusSummary.total}</Badge>
++        <Badge variant="warning" size="count">Member runs in progress: {statusSummary.active}</Badge>
++        <Badge variant="info" size="count">Member runs completed: {statusSummary.completed}</Badge>
++        <Badge variant={statusSummary.failed > 0 ? 'error' : 'neutral'} size="count">Member runs failed: {statusSummary.failed}</Badge>
+         {statusFetching && (
+           <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+             <Loader2 className="w-3 h-3 animate-spin" />
+@@ -49,6 +55,9 @@ export function LaunchStatusPanel({
+           ? `Launch result: started ${launchSummary.startedRuns}/${launchSummary.targetedDefinitions} vignette runs (${launchSummary.failedDefinitions} failed starts, ${launchSummary.skippedForBudget} budget-skipped) at ${new Date(launchSummary.startedAt).toLocaleTimeString()} · projected spend ${formatCost(launchSummary.projectedCostUsd)}.`
+           : 'Launch status is active.'}
+       </div>
++      <div className="text-xs text-gray-600">
++        This panel tracks the current domain evaluation cohort. Open an individual run when you need run-scoped diagnostics.
++      </div>
+       <div className="text-xs text-gray-500">
+         Live tracking: {statusSummary.known}/{statusSummary.total} runs resolved
+         {lastStatusUpdatedAt ? ` · Last refresh ${new Date(lastStatusUpdatedAt).toLocaleTimeString()}` : ''}.
+diff --git a/cloud/apps/web/src/pages/Dashboard.tsx b/cloud/apps/web/src/pages/Dashboard.tsx
+index 4e0e9c3..452594c 100644
+--- a/cloud/apps/web/src/pages/Dashboard.tsx
++++ b/cloud/apps/web/src/pages/Dashboard.tsx
+@@ -1,12 +1,137 @@
++import { Link } from 'react-router-dom';
++import { Archive, FolderTree, GitCompare, Settings, ShieldCheck } from 'lucide-react';
++import { Card } from '../components/ui/Card';
++import { useDomains } from '../hooks/useDomains';
++
++const quickLinks = [
++  {
++    title: 'Domains',
++    description: 'Start with active domain work, setup assets, and ongoing research programs.',
++    to: '/domains',
++    icon: FolderTree,
++  },
++  {
++    title: 'Validation',
++    description: 'Review methodology checks and validation reporting without mixing them into findings.',
++    to: '/validation',
++    icon: ShieldCheck,
++  },
++  {
++    title: 'Archive',
++    description: 'Open historical survey work and secondary research surfaces.',
++    to: '/archive',
++    icon: Archive,
++  },
++  {
++    title: 'Compare',
++    description: 'Use the global benchmark and comparison tooling as a cross-cutting utility.',
++    to: '/compare',
++    icon: GitCompare,
++  },
++];
++
+ export function Dashboard() {
++  const { domains } = useDomains();
++  const activeDomain = domains[0] ?? null;
++
+   return (
+-    <div className="space-y-6">
+-      <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
+-        Dashboard
+-      </h1>
+-      <p className="text-gray-600">
+-        Welcome to ValueRank. Select a section from the navigation to get started.
+-      </p>
++    <div className="space-y-8">
++      <div className="space-y-3">
++        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Home</p>
++        <div>
++          <h1 className="text-3xl font-serif font-medium text-[#1A1A1A]">Domain-first workspace</h1>
++          <p className="mt-3 max-w-3xl text-gray-600">
++            ValueRank is moving toward a domain-first workflow. During the migration, use Domains for active research,
++            Validation for methodology checks, and Archive for legacy or historical survey work.
++          </p>
++        </div>
++      </div>
++
++      <div className="rounded-xl border border-gray-200 bg-white p-5">
++        <h2 className="text-lg font-medium text-[#1A1A1A]">Primary workflow</h2>
++        <ol className="mt-3 grid gap-3 text-sm text-gray-600 md:grid-cols-2">
++          <li>1. Start with a domain idea and organize the work under Domains.</li>
++          <li>2. Build the instrument with preambles, contexts, value statements, and vignettes.</li>
++          <li>3. Pilot small runs, inspect diagnostics, and tune wording before larger evaluations.</li>
++          <li>4. Keep findings and validation separate so diagnostics do not masquerade as interpretation.</li>
++        </ol>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
++        {quickLinks.map((link) => {
++          const Icon = link.icon;
++          return (
++            <Link key={link.to} to={link.to} className="block">
++              <Card variant="interactive" padding="spacious" className="h-full">
++                <div className="flex items-start gap-3">
++                  <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++                    <Icon className="h-5 w-5" />
++                  </div>
++                  <div>
++                    <h2 className="text-lg font-medium text-[#1A1A1A]">{link.title}</h2>
++                    <p className="mt-2 text-sm text-gray-600">{link.description}</p>
++                  </div>
++                </div>
++              </Card>
++            </Link>
++          );
++        })}
++      </div>
++
++      {activeDomain && (
++        <div className="rounded-xl border border-gray-200 bg-white p-5">
++          <h2 className="text-lg font-medium text-[#1A1A1A]">Resume active domain work</h2>
++          <p className="mt-2 text-sm text-gray-600">
++            Jump straight back into exact surfaces for <span className="font-medium">{activeDomain.name}</span>.
++          </p>
++          <div className="mt-4 grid gap-3 md:grid-cols-3">
++            <Link
++              to={`/domains/${activeDomain.id}/run-trials?scopeCategory=PILOT`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pilot next</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Open domain evaluation launcher</div>
++              <div className="mt-1 text-xs text-gray-600">Resume the pilot or production launch flow for this domain.</div>
++            </Link>
++            <Link
++              to={`/domains/analysis?domainId=${activeDomain.id}`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Review evidence</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Open findings for this domain</div>
++              <div className="mt-1 text-xs text-gray-600">Go directly to the current findings or diagnostics state.</div>
++            </Link>
++            <Link
++              to={`/domains?domainId=${activeDomain.id}&tab=setup&setupTab=contexts`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Tune setup</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Review setup coverage</div>
++              <div className="mt-1 text-xs text-gray-600">Jump back to defaults, contexts, and value-statement coverage.</div>
++            </Link>
++          </div>
++        </div>
++      )}
++
++      <div className="rounded-xl border border-dashed border-gray-300 bg-[#F8F5EF] p-5">
++        <div className="flex items-start justify-between gap-4">
++          <div>
++            <h2 className="text-lg font-medium text-[#1A1A1A]">Compatibility surfaces remain live</h2>
++            <p className="mt-2 max-w-3xl text-sm text-gray-600">
++              Some pages still use the older object-first structure while the new information architecture lands in
++              slices. Use the new top-level labels to orient yourself, but expect a transitional mix of old and new
++              pages for now.
++            </p>
++          </div>
++          <Link
++            to="/settings"
++            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++          >
++            <Settings className="h-4 w-4" />
++            Settings
++          </Link>
++        </div>
++      </div>
+     </div>
+   );
+ }
+diff --git a/cloud/apps/web/src/pages/DomainAnalysis.tsx b/cloud/apps/web/src/pages/DomainAnalysis.tsx
+index eb1ef28..a294b55 100644
+--- a/cloud/apps/web/src/pages/DomainAnalysis.tsx
++++ b/cloud/apps/web/src/pages/DomainAnalysis.tsx
+@@ -9,9 +9,12 @@ import {
+   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+   DOMAIN_ANALYSIS_QUERY,
+   DOMAIN_ANALYSIS_QUERY_LEGACY,
++  DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+   type DomainAvailableSignature,
+   type DomainAvailableSignaturesQueryResult,
+   type DomainAvailableSignaturesQueryVariables,
++  type DomainFindingsEligibilityQueryResult,
++  type DomainFindingsEligibilityQueryVariables,
+   type DomainAnalysisQueryResult,
+   type DomainAnalysisQueryVariables,
+ } from '../api/operations/domainAnalysis';
+@@ -69,6 +72,15 @@ export function DomainAnalysis() {
+     () => signatureData?.domainAvailableSignatures ?? [],
+     [signatureData],
+   );
++  const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
++    DomainFindingsEligibilityQueryResult,
++    DomainFindingsEligibilityQueryVariables
++  >({
++    query: DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
++    variables: { domainId: selectedDomainId },
++    pause: selectedDomainId === '',
++    requestPolicy: 'cache-and-network',
++  });
+   const hasValidSelectedSignature = useMemo(
+     () => selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature),
+     [selectedSignature, signatureOptions],
+@@ -152,6 +164,7 @@ export function DomainAnalysis() {
+   const data = useLegacyQuery ? legacyData : scoredData;
+   const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+   const error = useLegacyQuery ? legacyError : scoredError;
++  const findingsEligibility = findingsEligibilityData?.domainFindingsEligibility;
+ 
+   const models = useMemo<ModelEntry[]>(() => {
+     const sourceModels = data?.domainAnalysis.models ?? [];
+@@ -226,14 +239,14 @@ export function DomainAnalysis() {
+   return (
+     <div className="space-y-6">
+       <div>
+-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Analysis</h1>
++        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
+         <p className="mt-1 text-sm text-gray-600">
+-          Structured model-value analysis across priorities, ranking behavior, and similarity for the selected domain.
++          Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
+         </p>
+       </div>
+ 
+-      {(domainsError || signaturesError || error) && (
+-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
++      {(domainsError || signaturesError || findingsEligibilityError || error) && (
++        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? findingsEligibilityError ?? error)?.message ?? 'Unknown error'}`} />
+       )}
+ 
+       <section className="rounded-lg border border-gray-200 bg-white p-4">
+@@ -330,6 +343,57 @@ export function DomainAnalysis() {
+         )}
+       </section>
+ 
++      {selectedDomainId !== '' && !findingsEligibilityLoading && findingsEligibility && (
++        <section className={`rounded-lg border p-4 ${findingsEligibility.eligible ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
++          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
++            <div className="space-y-2">
++              <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${findingsEligibility.eligible ? 'bg-green-100 text-green-900' : 'bg-amber-100 text-amber-900'}`}>
++                Current evidence scope: {findingsEligibility.eligible ? 'auditable findings' : 'diagnostic evidence only'}
++              </div>
++              <div>
++                <p className={`text-sm font-semibold ${findingsEligibility.eligible ? 'text-green-900' : 'text-amber-900'}`}>
++                  {findingsEligibility.eligible ? 'Findings are auditable' : 'Diagnostics only for now'}
++                </p>
++                <p className={`text-sm ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  {findingsEligibility.summary}
++                </p>
++                {!findingsEligibility.eligible && (
++                  <p className="mt-2 text-xs text-amber-900">
++                    What you are seeing on this page right now is domain-level diagnostic evidence. Do not treat it as final interpretation until an auditable production or replication evaluation is eligible.
++                  </p>
++                )}
++              </div>
++              {findingsEligibility.reasons.length > 0 && (
++                <ul className={`list-disc pl-5 text-xs space-y-1 ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  {findingsEligibility.reasons.map((reason) => (
++                    <li key={reason}>{reason}</li>
++                  ))}
++                </ul>
++              )}
++              {findingsEligibility.recommendedActions.length > 0 && (
++                <div className={`text-xs ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  Recommended next step: {findingsEligibility.recommendedActions[0]}
++                </div>
++              )}
++            </div>
++            <div className="rounded border border-white/60 bg-white/70 px-3 py-2 text-xs text-gray-700">
++              <div>Completed eligible evaluations: <span className="font-semibold">{findingsEligibility.completedEligibleEvaluationCount}</span></div>
++              <div>Scopes considered: <span className="font-semibold">{findingsEligibility.consideredScopeCategories.map((scope) => scope.toLowerCase()).join(', ')}</span></div>
++              {findingsEligibility.latestEligibleEvaluationId && (
++                <div>Latest eligible cohort: <span className="font-semibold">{findingsEligibility.latestEligibleEvaluationId.slice(-8)}</span></div>
++              )}
++            </div>
++          </div>
++          {!findingsEligibility.eligible && (
++            <div className="mt-3">
++              <Button type="button" size="sm" onClick={() => navigate(`/domains/${selectedDomainId}/run-trials?scopeCategory=PRODUCTION`)}>
++                Open Domain Evaluation and start a production run
++              </Button>
++            </div>
++          )}
++        </section>
++      )}
++
+       {(domainsLoading || signaturesLoading || (selectedDomainId !== '' && fetching)) ? (
+         <Loading size="lg" text="Loading domain analysis..." />
+       ) : (
+diff --git a/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx b/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
+index 3dcd6a3..4587134 100644
+--- a/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
++++ b/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
+@@ -1,9 +1,10 @@
+ import { useEffect, useMemo, useState } from 'react';
+ import { Link, useParams, useSearchParams } from 'react-router-dom';
+ import { useMutation, useQuery } from 'urql';
+-import { RefreshCw } from 'lucide-react';
++import { ExternalLink, RefreshCw } from 'lucide-react';
+ import { Button } from '../components/ui/Button';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Badge } from '../components/ui/Badge';
+ import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
+ import { LaunchStatusPanel } from '../components/domains/domainTrials/LaunchStatusPanel';
+ import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
+@@ -11,33 +12,65 @@ import { TrialGridTable } from '../components/domains/domainTrials/TrialGridTabl
+ import {
+   cellKey,
+   downloadCsv,
++  formatCost,
+   type DomainTrialLaunchSummary,
+   type DomainTrialCellStatus,
+ } from '../components/domains/domainTrials/helpers';
+ import {
+-  DOMAIN_TRIALS_PLAN_QUERY,
++  DOMAIN_EVALUATIONS_QUERY,
++  DOMAIN_EVALUATION_QUERY,
++  DOMAIN_EVALUATION_STATUS_QUERY,
++  DOMAIN_RUN_SUMMARY_QUERY,
+   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
++  DOMAIN_TRIALS_PLAN_QUERY,
++  ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+   RETRY_DOMAIN_TRIAL_CELL_MUTATION,
+-  RUN_TRIALS_FOR_DOMAIN_MUTATION,
++  START_DOMAIN_EVALUATION_MUTATION,
++  type DomainEvaluationQueryResult,
++  type DomainEvaluationQueryVariables,
++  type DomainEvaluationsQueryResult,
++  type DomainEvaluationsQueryVariables,
++  type DomainEvaluationStatusQueryResult,
++  type DomainEvaluationStatusQueryVariables,
++  type DomainRunSummaryQueryResult,
++  type DomainRunSummaryQueryVariables,
+   type DomainTrialRunsStatusQueryResult,
+   type DomainTrialRunsStatusQueryVariables,
+   type DomainTrialsPlanQueryResult,
+   type DomainTrialsPlanQueryVariables,
++  type EstimateDomainEvaluationCostQueryResult,
++  type EstimateDomainEvaluationCostQueryVariables,
+   type RetryDomainTrialCellMutationResult,
+   type RetryDomainTrialCellMutationVariables,
+-  type RunTrialsForDomainMutationResult,
+-  type RunTrialsForDomainMutationVariables,
++  type StartDomainEvaluationMutationResult,
++  type StartDomainEvaluationMutationVariables,
+ } from '../api/operations/domains';
+ 
+ const POLL_MS = 3000;
+-
++const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
++type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
+ type CellRunMap = Record<string, string>;
++
++function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
++  return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
++}
++
++function formatTimestamp(value: string | number | null | undefined): string {
++  if (value == null) return 'Unknown';
++  const date = typeof value === 'number' ? new Date(value) : new Date(value);
++  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
++}
++
+ export function DomainTrialsDashboard() {
+   const { domainId } = useParams<{ domainId: string }>();
+-  const [searchParams] = useSearchParams();
++  const [searchParams, setSearchParams] = useSearchParams();
+   const initialTemperatureParam = searchParams.get('temperature');
+   const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
+   const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
++  const initialScope = isEvaluationScopeCategory(searchParams.get('scopeCategory'))
++    ? (searchParams.get('scopeCategory') as EvaluationScopeCategory)
++    : 'PRODUCTION';
++  const [scopeCategory, setScopeCategory] = useState<EvaluationScopeCategory>(initialScope);
+   const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
+   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
+   const [started, setStarted] = useState(false);
+@@ -53,6 +86,7 @@ export function DomainTrialsDashboard() {
+   const [safeMode, setSafeMode] = useState(false);
+   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
+   const [maxBudgetInput, setMaxBudgetInput] = useState('');
++  const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
+ 
+   const parsedTemperature = Number.parseFloat(temperatureInput);
+   const hasValidTemperature = Number.isFinite(parsedTemperature) && parsedTemperature >= 0 && parsedTemperature <= 2;
+@@ -75,13 +109,94 @@ export function DomainTrialsDashboard() {
+     pause: !domainId,
+     requestPolicy: 'cache-and-network',
+   });
+-  const [startRunResult, runTrialsForDomain] = useMutation<RunTrialsForDomainMutationResult, RunTrialsForDomainMutationVariables>(
+-    RUN_TRIALS_FOR_DOMAIN_MUTATION
+-  );
++  const [estimateResult, refetchEstimate] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
++    query: ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
++    variables: {
++      domainId: domainId ?? '',
++      definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
++      temperature: selectedTemperature,
++      samplePercentage: 100,
++      samplesPerScenario: 1,
++      scopeCategory,
++    },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [summaryResult, refetchSummary] = useQuery<DomainRunSummaryQueryResult, DomainRunSummaryQueryVariables>({
++    query: DOMAIN_RUN_SUMMARY_QUERY,
++    variables: { domainId: domainId ?? '' },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [evaluationsResult, refetchEvaluations] = useQuery<DomainEvaluationsQueryResult, DomainEvaluationsQueryVariables>({
++    query: DOMAIN_EVALUATIONS_QUERY,
++    variables: { domainId: domainId ?? '', limit: 8 },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [currentEvaluationResult, refetchCurrentEvaluation] = useQuery<DomainEvaluationQueryResult, DomainEvaluationQueryVariables>({
++    query: DOMAIN_EVALUATION_QUERY,
++    variables: { id: currentEvaluationId ?? '' },
++    pause: !currentEvaluationId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [currentEvaluationStatusResult, refetchCurrentEvaluationStatus] = useQuery<
++    DomainEvaluationStatusQueryResult,
++    DomainEvaluationStatusQueryVariables
++  >({
++    query: DOMAIN_EVALUATION_STATUS_QUERY,
++    variables: { id: currentEvaluationId ?? '' },
++    pause: !currentEvaluationId,
++    requestPolicy: 'network-only',
++  });
++  const [startDomainEvaluationResult, startDomainEvaluation] = useMutation<
++    StartDomainEvaluationMutationResult,
++    StartDomainEvaluationMutationVariables
++  >(START_DOMAIN_EVALUATION_MUTATION);
+   const [retryResult, retryCell] = useMutation<RetryDomainTrialCellMutationResult, RetryDomainTrialCellMutationVariables>(
+     RETRY_DOMAIN_TRIAL_CELL_MUTATION
+   );
+ 
++  useEffect(() => {
++    const existingScope = searchParams.get('scopeCategory');
++    const existingEvaluationId = searchParams.get('evaluationId');
++    if (existingScope === scopeCategory && existingEvaluationId === currentEvaluationId) {
++      return;
++    }
++    const next = new URLSearchParams(searchParams);
++    next.set('scopeCategory', scopeCategory);
++    if (currentEvaluationId) next.set('evaluationId', currentEvaluationId);
++    else next.delete('evaluationId');
++    setSearchParams(next, { replace: true });
++  }, [scopeCategory, currentEvaluationId, searchParams, setSearchParams]);
++
++  const currentEvaluation = currentEvaluationResult.data?.domainEvaluation ?? null;
++  const recentEvaluations = evaluationsResult.data?.domainEvaluations ?? [];
++  const selectedEvaluation = currentEvaluation ?? recentEvaluations[0] ?? null;
++
++  useEffect(() => {
++    if (!currentEvaluationId && recentEvaluations.length > 0) {
++      setCurrentEvaluationId(recentEvaluations[0]?.id ?? null);
++    }
++  }, [currentEvaluationId, recentEvaluations]);
++
++  useEffect(() => {
++    if (!currentEvaluation) return;
++    const byDefinition: Record<string, string> = {};
++    for (const member of currentEvaluation.members) {
++      byDefinition[member.definitionIdAtLaunch] = member.runId;
++    }
++    setDefinitionRunIds((prev) => {
++      const prevKeys = Object.keys(prev);
++      const nextKeys = Object.keys(byDefinition);
++      if (prevKeys.length === nextKeys.length && nextKeys.every((key) => prev[key] === byDefinition[key])) {
++        return prev;
++      }
++      return byDefinition;
++    });
++    setStarted((prev) => prev || true);
++  }, [currentEvaluation]);
++
+   const runIds = useMemo(() => {
+     const ids = new Set<string>();
+     Object.values(definitionRunIds).forEach((id) => ids.add(id));
+@@ -96,7 +211,7 @@ export function DomainTrialsDashboard() {
+     requestPolicy: 'network-only',
+   });
+ 
+-  const statusSummary = useMemo(() => {
++  const computedStatusSummary = useMemo(() => {
+     const runStatuses = statusResult.data?.domainTrialRunsStatus ?? [];
+     const total = runIds.length;
+     const known = runStatuses.length;
+@@ -106,6 +221,17 @@ export function DomainTrialsDashboard() {
+     return { total, known, completed, failed, active };
+   }, [runIds.length, statusResult.data?.domainTrialRunsStatus]);
+ 
++  const domainEvaluationStatus = currentEvaluationStatusResult.data?.domainEvaluationStatus;
++  const statusSummary = domainEvaluationStatus
++    ? {
++      total: domainEvaluationStatus.totalRuns,
++      known: domainEvaluationStatus.totalRuns,
++      completed: domainEvaluationStatus.completedRuns,
++      failed: domainEvaluationStatus.failedRuns + domainEvaluationStatus.cancelledRuns,
++      active: domainEvaluationStatus.pendingRuns + domainEvaluationStatus.runningRuns,
++    }
++    : computedStatusSummary;
++
+   const allRunsTerminal = statusSummary.total > 0 && statusSummary.active === 0 && statusSummary.known === statusSummary.total;
+   const completionWithFailures = allRunsTerminal && statusSummary.failed > 0;
+   const completionClean = allRunsTerminal && statusSummary.failed === 0;
+@@ -116,10 +242,26 @@ export function DomainTrialsDashboard() {
+     if (!started || runIds.length === 0 || allRunsTerminal) return;
+     const interval = window.setInterval(() => {
+       refetchStatus({ requestPolicy: 'network-only' });
++      if (currentEvaluationId) {
++        refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++        refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++      }
++      refetchSummary({ requestPolicy: 'network-only' });
++      refetchEvaluations({ requestPolicy: 'network-only' });
+       setLastStatusUpdatedAt(Date.now());
+     }, POLL_MS);
+     return () => window.clearInterval(interval);
+-  }, [started, runIds.length, allRunsTerminal, refetchStatus]);
++  }, [
++    started,
++    runIds.length,
++    allRunsTerminal,
++    currentEvaluationId,
++    refetchCurrentEvaluation,
++    refetchCurrentEvaluationStatus,
++    refetchEvaluations,
++    refetchStatus,
++    refetchSummary,
++  ]);
+ 
+   useEffect(() => {
+     const message = planResult.error?.message ?? '';
+@@ -147,6 +289,7 @@ export function DomainTrialsDashboard() {
+   }, [statusResult.error?.message, statusNoContentRetries, started, refetchStatus]);
+ 
+   const plan = planResult.data?.domainTrialsPlan;
++  const estimate = estimateResult.data?.estimateDomainEvaluationCost;
+   const models = plan?.models ?? [];
+   const vignettes = plan?.vignettes ?? [];
+   const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
+@@ -173,7 +316,7 @@ export function DomainTrialsDashboard() {
+     setUseDefaultTemperature(true);
+   }, [disableTemperatureInput]);
+ 
+-  const isStarting = startRunResult.fetching;
++  const isStarting = startDomainEvaluationResult.fetching;
+   const isRetrying = retryResult.fetching;
+ 
+   const handleStart = async () => {
+@@ -188,19 +331,26 @@ export function DomainTrialsDashboard() {
+       return;
+     }
+ 
+-    const result = await runTrialsForDomain({
++    const result = await startDomainEvaluation({
+       domainId,
++      scopeCategory,
+       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
+       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
+       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
++      samplePercentage: 100,
++      samplesPerScenario: 1,
+     });
+     if (result.error) {
+       setRunError(result.error.message);
+       return;
+     }
+-    const payload = result.data?.runTrialsForDomain;
++    const payload = result.data?.startDomainEvaluation;
+     if (!payload) {
+-      setRunError('Failed to start domain trials.');
++      setRunError('Failed to start domain evaluation.');
++      return;
++    }
++    if (payload.blockedByActiveLaunch) {
++      setRunError('An equivalent active domain evaluation is already running for this domain.');
+       return;
+     }
+ 
+@@ -221,6 +371,11 @@ export function DomainTrialsDashboard() {
+     setCellOverrideRunIds({});
+     setStarted(true);
+     setShowLaunchConfirm(false);
++    setCurrentEvaluationId(payload.domainEvaluationId);
++    refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++    refetchEvaluations({ requestPolicy: 'network-only' });
++    refetchSummary({ requestPolicy: 'network-only' });
+     refetchStatus({ requestPolicy: 'network-only' });
+     setLastStatusUpdatedAt(Date.now());
+     if (payload.startedRuns === 0) {
+@@ -252,6 +407,7 @@ export function DomainTrialsDashboard() {
+     setCellOverrideRunIds((prev) => ({ ...prev, [key]: payload.runId! }));
+     setStarted(true);
+     refetchStatus({ requestPolicy: 'network-only' });
++    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+   };
+ 
+   const getCellStatus = (definitionId: string, modelId: string): DomainTrialCellStatus => {
+@@ -309,25 +465,41 @@ export function DomainTrialsDashboard() {
+   const planDisplayError = suppressPlanNoContentError ? undefined : planResult.error;
+   const statusDisplayError = suppressStatusNoContentError ? undefined : statusResult.error;
+   const displayError = planDisplayError ?? (started ? statusDisplayError : undefined);
++  const summary = summaryResult.data?.domainRunSummary;
++  const reviewSetupHref = `/domains?domainId=${domainId}&tab=setup&setupTab=contexts`;
++  const reviewVignettesHref = `/domains?domainId=${domainId}&tab=vignettes`;
+ 
+   return (
+     <div className="space-y-6">
+       <div className="flex items-center justify-between gap-3">
+         <div>
+-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Trial Dashboard</h1>
++          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Evaluation Summary</h1>
+           <p className="text-sm text-gray-600">
+-            Review and run latest vignettes for <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
++            Launch domain evaluations, monitor cohort-level status, and drill down into vignette-scoped runs for{' '}
++            <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
++          </p>
++          <p className="text-xs text-gray-500">
++            Domain Evaluation Summary is the cohort-level view. Use individual run pages for run-scoped diagnostics.
+           </p>
+           {filteredDefinitionIds.length > 0 && (
+             <p className="text-xs text-amber-700">
+-              Scoped to {filteredDefinitionIds.length} selected missing vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
++              Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+             </p>
+           )}
+         </div>
+         <div className="flex items-center gap-2">
+-          <Button type="button" variant="ghost" size="sm" onClick={() => refetchPlan({ requestPolicy: 'network-only' })}>
++          <Button type="button" variant="ghost" size="sm" onClick={() => {
++            refetchPlan({ requestPolicy: 'network-only' });
++            refetchEstimate({ requestPolicy: 'network-only' });
++            refetchSummary({ requestPolicy: 'network-only' });
++            refetchEvaluations({ requestPolicy: 'network-only' });
++            if (currentEvaluationId) {
++              refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++              refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++            }
++          }}>
+             <RefreshCw className="w-4 h-4 mr-1" />
+-            Refresh Plan
++            Refresh
+           </Button>
+           <Button type="button" variant="ghost" size="sm" onClick={handleExportLedger} disabled={vignettes.length === 0 || models.length === 0}>
+             Export Ledger CSV
+@@ -338,16 +510,96 @@ export function DomainTrialsDashboard() {
+         </div>
+       </div>
+ 
+-      {displayError && <ErrorMessage message={`Failed to load domain trial data: ${displayError.message ?? 'Unknown error'}`} />}
++      {displayError && <ErrorMessage message={`Failed to load domain evaluation data: ${displayError.message ?? 'Unknown error'}`} />}
+       {runError && <ErrorMessage message={runError} />}
+       {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
+         <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
+       )}
+ 
++      <section className="grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
++        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
++          <div className="flex flex-wrap items-center gap-2">
++            <Badge variant="info" size="count">Evaluations: {summary?.totalEvaluations ?? 0}</Badge>
++            <Badge variant="warning" size="count">Active member runs: {summary?.runningMemberRuns ?? 0}</Badge>
++            <Badge variant="success" size="count">Completed member runs: {summary?.completedMemberRuns ?? 0}</Badge>
++            <Badge variant={(summary?.failedMemberRuns ?? 0) > 0 ? 'error' : 'neutral'} size="count">
++              Failed member runs: {summary?.failedMemberRuns ?? 0}
++            </Badge>
++          </div>
++          <div className="grid gap-3 md:grid-cols-3">
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Latest evaluation</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">
++                {summary?.latestEvaluationId ? summary.latestEvaluationId.slice(-8) : 'No evaluation yet'}
++              </div>
++              <div className="text-xs text-gray-600">
++                {summary?.latestScopeCategory ? `${summary.latestScopeCategory.toLowerCase()} · ${summary.latestEvaluationStatus?.toLowerCase()}` : 'Start a pilot or production evaluation.'}
++              </div>
++            </div>
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">History mix</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">
++                {summary?.productionEvaluations ?? 0} production · {summary?.replicationEvaluations ?? 0} replication
++              </div>
++              <div className="text-xs text-gray-600">
++                {summary?.pilotEvaluations ?? 0} pilot · {summary?.validationEvaluations ?? 0} validation
++              </div>
++            </div>
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Current estimate</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">{formatCost(estimate?.totalEstimatedCost ?? 0)}</div>
++              <div className="text-xs text-gray-600">
++                {estimate?.estimateConfidence ? `Confidence: ${estimate.estimateConfidence.toLowerCase()}` : 'Estimate unavailable'}
++              </div>
++            </div>
++          </div>
++        </div>
++
++        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
++          <div>
++            <h2 className="text-lg font-medium text-[#1A1A1A]">Recent evaluations</h2>
++            <p className="text-sm text-gray-600">Select a cohort summary or launch a new scoped evaluation.</p>
++          </div>
++          {recentEvaluations.length === 0 ? (
++            <p className="text-sm text-gray-600">No domain evaluations yet.</p>
++          ) : (
++            <div className="space-y-2">
++              {recentEvaluations.map((evaluation) => (
++                <button
++                  key={evaluation.id}
++                  type="button"
++                  onClick={() => setCurrentEvaluationId(evaluation.id)}
++                  className={`w-full rounded-lg border px-3 py-3 text-left ${currentEvaluationId === evaluation.id ? 'border-teal-400 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
++                >
++                  <div className="flex items-center justify-between gap-3">
++                    <div>
++                      <div className="text-sm font-semibold text-gray-900">
++                        {evaluation.scopeCategory.toLowerCase()} · {evaluation.status.toLowerCase()}
++                      </div>
++                      <div className="text-xs text-gray-600">
++                        {evaluation.memberCount} runs · {formatCost(evaluation.projectedCostUsd)} projected
++                      </div>
++                    </div>
++                    <div className="text-right text-xs text-gray-500">
++                      <div>{formatTimestamp(evaluation.createdAt)}</div>
++                      <div>{evaluation.id.slice(-8)}</div>
++                    </div>
++                  </div>
++                </button>
++              ))}
++            </div>
++          )}
++        </div>
++      </section>
++
+       <LaunchControlsPanel
++        scopeCategory={scopeCategory}
+         vignetteCount={vignettes.length}
+         modelCount={models.length}
+-        totalEstimatedCost={plan?.totalEstimatedCost ?? 0}
++        totalEstimatedCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
++        estimateConfidence={estimate?.estimateConfidence}
++        fallbackReason={estimate?.fallbackReason}
++        knownExclusions={estimate?.knownExclusions}
+         useDefaultTemperature={useDefaultTemperature}
+         disableTemperatureInput={disableTemperatureInput}
+         temperatureInput={temperatureInput}
+@@ -358,8 +610,13 @@ export function DomainTrialsDashboard() {
+         retryAutoPaused={retryAutoPaused}
+         failureRate={failureRate}
+         isStarting={isStarting}
+-        planFetching={planResult.fetching}
+-        temperatureWarning={plan?.temperatureWarning}
++        planFetching={planResult.fetching || estimateResult.fetching}
++        temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
++        reviewSetupHref={reviewSetupHref}
++        reviewVignettesHref={reviewVignettesHref}
++        selectedDefinitionCount={filteredDefinitionIds.length > 0 ? filteredDefinitionIds.length : undefined}
++        excludedRequestedDefinitionCount={Math.max(0, excludedRequestedDefinitionCount)}
++        onSetScopeCategory={setScopeCategory}
+         onSetUseDefaultTemperature={setUseDefaultTemperature}
+         onSetTemperatureInput={setTemperatureInput}
+         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
+@@ -369,15 +626,77 @@ export function DomainTrialsDashboard() {
+       />
+ 
+       <LaunchStatusPanel
++        evaluationId={currentEvaluationId}
++        scopeCategory={selectedEvaluation?.scopeCategory ?? null}
+         launchSummary={launchSummary}
+         started={started}
+         statusSummary={statusSummary}
+-        statusFetching={statusResult.fetching}
++        statusFetching={statusResult.fetching || currentEvaluationStatusResult.fetching}
+         lastStatusUpdatedAt={lastStatusUpdatedAt}
+         completionClean={completionClean}
+         completionWithFailures={completionWithFailures}
+       />
+ 
++      {selectedEvaluation && (
++        <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
++          <div className="flex flex-wrap items-center justify-between gap-3">
++            <div>
++              <h2 className="text-lg font-medium text-[#1A1A1A]">Current cohort summary</h2>
++              <p className="text-sm text-gray-600">
++                Domain evaluation {selectedEvaluation.id.slice(-8)} · {selectedEvaluation.scopeCategory.toLowerCase()} · created {formatTimestamp(selectedEvaluation.createdAt)}
++              </p>
++              <p className="text-xs text-gray-500">
++                Member runs below are run-scoped evidence for this one domain evaluation cohort.
++              </p>
++            </div>
++            <div className="flex items-center gap-2">
++              <Badge variant="neutral" size="count">Members: {selectedEvaluation.memberCount}</Badge>
++              <Badge variant="success" size="count">Projected: {formatCost(selectedEvaluation.projectedCostUsd)}</Badge>
++            </div>
++          </div>
++
++          {currentEvaluation && currentEvaluation.members.length > 0 && (
++            <div className="overflow-x-auto">
++              <table className="min-w-full text-sm">
++                <thead>
++                  <tr className="border-b border-gray-200 text-left text-gray-600">
++                    <th className="py-2 pr-3">Vignette</th>
++                    <th className="py-2 pr-3">Run</th>
++                    <th className="py-2 pr-3">Status</th>
++                    <th className="py-2 pr-3">Category</th>
++                    <th className="py-2 pr-3">Started</th>
++                    <th className="py-2 pr-3"></th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {currentEvaluation.members.map((member) => (
++                    <tr key={member.runId} className="border-b border-gray-100">
++                      <td className="py-2 pr-3">
++                        <div className="font-medium text-gray-900">{member.definitionNameAtLaunch}</div>
++                        <div className="text-xs text-gray-500">{member.definitionIdAtLaunch.slice(-8)}</div>
++                      </td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runId.slice(-8)}</td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runStatus.toLowerCase()}</td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runCategory.toLowerCase()}</td>
++                      <td className="py-2 pr-3 text-gray-500">{formatTimestamp(member.runStartedAt)}</td>
++                      <td className="py-2 pr-3">
++                        <Link
++                          to={`/runs/${member.runId}`}
++                          className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
++                        >
++                          Open run diagnostics
++                          <ExternalLink className="h-3.5 w-3.5" />
++                        </Link>
++                      </td>
++                    </tr>
++                  ))}
++                </tbody>
++              </table>
++            </div>
++          )}
++        </section>
++      )}
++
+       <TrialGridTable
+         loading={planResult.fetching}
+         models={models.map((model) => ({ modelId: model.modelId, label: model.label }))}
+@@ -401,11 +720,17 @@ export function DomainTrialsDashboard() {
+       <LaunchConfirmModal
+         open={showLaunchConfirm}
+         domainName={plan?.domainName ?? domainId}
++        scopeCategory={scopeCategory}
+         vignetteCount={vignettes.length}
+         modelCount={models.length}
+-        estimatedTotalCost={plan?.totalEstimatedCost ?? 0}
++        estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
++        estimateConfidence={estimate?.estimateConfidence}
++        fallbackReason={estimate?.fallbackReason}
++        knownExclusions={estimate?.knownExclusions}
+         temperatureLabel={useDefaultTemperature || disableTemperatureInput ? 'Provider default' : String(parsedTemperature)}
+         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
++        reviewSetupHref={reviewSetupHref}
++        reviewVignettesHref={reviewVignettesHref}
+         isStarting={isStarting}
+         onCancel={() => setShowLaunchConfirm(false)}
+         onConfirm={() => void handleStart()}
+diff --git a/cloud/apps/web/src/pages/Domains.tsx b/cloud/apps/web/src/pages/Domains.tsx
+index dbd4ed3..08c2fad 100644
+--- a/cloud/apps/web/src/pages/Domains.tsx
++++ b/cloud/apps/web/src/pages/Domains.tsx
+@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
+ import { useMutation, useQuery } from 'urql';
+ import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
+ import { formatTrialSignature } from '@valuerank/shared/trial-signature';
+-import { useNavigate } from 'react-router-dom';
++import { useNavigate, useSearchParams } from 'react-router-dom';
+ import { Button } from '../components/ui/Button';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
+ import { Badge } from '../components/ui/Badge';
+@@ -17,6 +17,16 @@ import {
+   LEVEL_PRESETS_QUERY,
+   type LevelPresetsQueryData,
+ } from '../api/operations/level-presets';
++import {
++  DOMAIN_CONTEXTS_QUERY,
++  type DomainContextsQueryResult,
++  type DomainContextsQueryVariables,
++} from '../api/operations/domain-contexts';
++import {
++  VALUE_STATEMENTS_QUERY,
++  type ValueStatementsQueryResult,
++  type ValueStatementsQueryVariables,
++} from '../api/operations/value-statements';
+ 
+ const defaultFilters: DefinitionFilterState = {
+   search: '',
+@@ -28,7 +38,13 @@ const defaultFilters: DefinitionFilterState = {
+ type FolderKey = string;
+ const ALL_SIGNATURE_FILTER = 'all';
+ type SignatureFilterKey = string;
+-type DomainTab = 'vignettes' | 'contexts' | 'value-statements' | 'defaults';
++type DomainTab = 'overview' | 'vignettes' | 'setup' | 'runs' | 'findings';
++type SetupTab = 'contexts' | 'value-statements' | 'defaults';
++
++type MissingSetupRequirement = {
++  label: string;
++  tab: SetupTab;
++};
+ 
+ type SignatureSplitRow = {
+   rowKey: string;
+@@ -60,16 +76,38 @@ function getDisplaySignature(signature: string): string {
+   return signature !== 'v?td' ? signature : 'Unknown Signature';
+ }
+ 
++function formatRequirementList(requirements: MissingSetupRequirement[]): string {
++  if (requirements.length === 0) return '';
++  if (requirements.length === 1) return requirements[0]?.label ?? '';
++  if (requirements.length === 2) {
++    return `${requirements[0]?.label ?? ''} and ${requirements[1]?.label ?? ''}`;
++  }
++  return `${requirements.slice(0, -1).map((item) => item.label).join(', ')}, and ${requirements.at(-1)?.label ?? ''}`;
++}
++
+ export function Domains() {
++  const [searchParams, setSearchParams] = useSearchParams();
+   const navigate = useNavigate();
++  const initialSelectedFolder = searchParams.get('domainId');
++  const initialTab = searchParams.get('tab');
++  const initialSetupTab = searchParams.get('setupTab');
+   const [filters, setFilters] = useState<DefinitionFilterState>(defaultFilters);
+-  const [selectedFolder, setSelectedFolder] = useState<FolderKey>('all');
++  const [selectedFolder, setSelectedFolder] = useState<FolderKey>(initialSelectedFolder ?? 'all');
+   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
+   const [selectAllShown, setSelectAllShown] = useState(false);
+   const [assignTargetDomainId, setAssignTargetDomainId] = useState<string>('none');
+   const [signatureFilter, setSignatureFilter] = useState<SignatureFilterKey>(ALL_SIGNATURE_FILTER);
+ 
+-  const [activeTab, setActiveTab] = useState<DomainTab>('vignettes');
++  const [activeTab, setActiveTab] = useState<DomainTab>(
++    initialTab === 'overview' || initialTab === 'vignettes' || initialTab === 'setup' || initialTab === 'runs' || initialTab === 'findings'
++      ? initialTab
++      : 'vignettes',
++  );
++  const [setupTab, setSetupTab] = useState<SetupTab>(
++    initialSetupTab === 'contexts' || initialSetupTab === 'value-statements' || initialSetupTab === 'defaults'
++      ? initialSetupTab
++      : 'contexts',
++  );
+ 
+   const [createName, setCreateName] = useState('');
+   const [renameName, setRenameName] = useState('');
+@@ -145,6 +183,27 @@ export function Domains() {
+     variables: {},
+   });
+   const allCount = allCountData?.definitionCount ?? null;
++  const selectedDomain = selectedFolder !== 'all' && selectedFolder !== 'none'
++    ? domains.find((d) => d.id === selectedFolder) ?? null
++    : null;
++
++  const [{ data: selectedDomainContextsData }] = useQuery<
++    DomainContextsQueryResult,
++    DomainContextsQueryVariables
++  >({
++    query: DOMAIN_CONTEXTS_QUERY,
++    variables: { domainId: selectedDomain?.id },
++    pause: selectedDomain == null,
++  });
++  const [{ data: selectedDomainValueStatementsData }] = useQuery<
++    ValueStatementsQueryResult,
++    ValueStatementsQueryVariables
++  >({
++    query: VALUE_STATEMENTS_QUERY,
++    variables: { domainId: selectedDomain?.id ?? '' },
++    pause: selectedDomain == null,
++  });
++
+   const trialValidationErrors = useMemo(
+     () => definitions.filter((definition) => definition.trialConfig?.isConsistent === false),
+     [definitions],
+@@ -202,6 +261,31 @@ export function Domains() {
+     if (signatureFilter === ALL_SIGNATURE_FILTER) return signatureSplitRows;
+     return signatureSplitRows.filter((row) => row.signature === signatureFilter);
+   }, [signatureFilter, signatureSplitRows]);
++  const contextsCount = selectedDomainContextsData?.domainContexts.length ?? 0;
++  const valueStatementsCount = selectedDomainValueStatementsData?.valueStatements.length ?? 0;
++  const missingSetupRequirements = useMemo<MissingSetupRequirement[]>(() => {
++    const requirements: MissingSetupRequirement[] = [];
++    if (contextsCount === 0) {
++      requirements.push({ label: 'at least one context', tab: 'contexts' });
++    }
++    if (valueStatementsCount < 2) {
++      requirements.push({ label: 'at least two value statements', tab: 'value-statements' });
++    }
++    return requirements;
++  }, [contextsCount, valueStatementsCount]);
++  const setupReady = missingSetupRequirements.length === 0;
++  const recommendedPilotCount = useMemo(
++    () => (setupReady ? definitions.filter((definition) => definition.runCount === 0).length : 0),
++    [definitions, setupReady],
++  );
++  const recommendedProductionCount = useMemo(
++    () => (setupReady ? definitions.filter((definition) => definition.runCount > 0).length : 0),
++    [definitions, setupReady],
++  );
++  const evaluatedDefinitionCount = useMemo(
++    () => definitions.filter((definition) => definition.runCount > 0).length,
++    [definitions],
++  );
+ 
+   const resetSelection = useCallback(() => {
+     setSelectedRowKeys(new Set());
+@@ -210,12 +294,35 @@ export function Domains() {
+ 
+   useEffect(() => {
+     resetSelection();
+-    setActiveTab('vignettes');
++    if (selectedFolder === 'all' || selectedFolder === 'none') {
++      setActiveTab('vignettes');
++      setSetupTab('contexts');
++    }
+     // Sync domain defaults state when selection changes
+     const domain = domains.find((d) => d.id === selectedFolder) ?? null;
+     setDefaultsLevelPresetVersionId(domain?.defaultLevelPresetVersion?.id ?? '');
+   }, [selectedFolder, resetSelection, domains]);
+ 
++  useEffect(() => {
++    const next = new URLSearchParams(searchParams);
++    if (selectedFolder !== 'all' && selectedFolder !== 'none') {
++      next.set('domainId', selectedFolder);
++      next.set('tab', activeTab);
++      if (activeTab === 'setup') {
++        next.set('setupTab', setupTab);
++      } else {
++        next.delete('setupTab');
++      }
++    } else {
++      next.delete('domainId');
++      next.delete('tab');
++      next.delete('setupTab');
++    }
++    if (next.toString() !== searchParams.toString()) {
++      setSearchParams(next, { replace: true });
++    }
++  }, [activeTab, searchParams, selectedFolder, setSearchParams, setupTab]);
++
+   useEffect(() => {
+     resetSelection();
+   }, [filters.search, filters.rootOnly, filters.hasRuns, filters.tagIds, resetSelection]);
+@@ -284,10 +391,34 @@ export function Domains() {
+     if (!selectedDomain) return;
+     navigate(`/domains/${selectedDomain.id}/run-trials`);
+   };
+-
+-  const selectedDomain = selectedFolder !== 'all' && selectedFolder !== 'none'
+-    ? domains.find((d) => d.id === selectedFolder) ?? null
+-    : null;
++  const handleOpenDomainFindings = () => {
++    if (!selectedDomain) return;
++    navigate(`/domains/analysis?domainId=${selectedDomain.id}`);
++  };
++  const handleOpenDomainCoverage = () => {
++    if (!selectedDomain) return;
++    navigate(`/domains/coverage?domainId=${selectedDomain.id}`);
++  };
++  const handleOpenCompare = () => {
++    navigate('/compare');
++  };
++  const handleCreateVignettePair = () => {
++    if (selectedDomain == null) {
++      setInlineError('Select a specific domain before creating a vignette pair.');
++      return;
++    }
++    if (!setupReady) {
++      const nextTab = missingSetupRequirements[0]?.tab ?? 'contexts';
++      setActiveTab('setup');
++      setSetupTab(nextTab);
++      setInlineError(
++        `Before creating a vignette pair for ${selectedDomain.name}, add ${formatRequirementList(missingSetupRequirements)} in Setup.`,
++      );
++      setInlineSuccess(null);
++      return;
++    }
++    navigate(`/job-choice/new?domainId=${selectedDomain.id}`);
++  };
+ 
+   const handleCreateDomain = async () => {
+     setInlineError(null);
+@@ -447,12 +578,37 @@ export function Domains() {
+ 
+         <section className="space-y-4">
+           {selectedDomain != null && (
+-            <div role="tablist" aria-label="Domain sections" className="flex border-b border-gray-200">
++            <div className="space-y-4">
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-teal-700">Domain workspace</p>
++                <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
++                  <div>
++                    <h2 className="text-2xl font-serif font-medium text-[#1A1A1A]">{selectedDomain.name}</h2>
++                    <p className="mt-2 max-w-2xl text-sm text-gray-600">
++                      This workspace is the transitional home for domain setup, vignette inventory, domain evaluations,
++                      and findings while the deeper domain-first model lands in later waves.
++                    </p>
++                  </div>
++                  <div className="flex flex-wrap gap-2">
++                    <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
++                      <Plus className="w-4 h-4 mr-1" />
++                      Create Vignette Pair
++                    </Button>
++                    <Button onClick={() => void handleRunDomainTrials()} disabled={selectedDomain === null}>
++                    <Play className="w-4 h-4 mr-1" />
++                      Open Domain Evaluation
++                    </Button>
++                  </div>
++                </div>
++              </div>
++
++              <div role="tablist" aria-label="Domain sections" className="flex border-b border-gray-200">
+               {([
++                { key: 'overview' as const, label: 'Overview' },
+                 { key: 'vignettes' as const, label: 'Vignettes' },
+-                { key: 'contexts' as const, label: 'Contexts' },
+-                { key: 'value-statements' as const, label: 'Value Statements' },
+-                { key: 'defaults' as const, label: 'Defaults' },
++                { key: 'setup' as const, label: 'Setup' },
++                { key: 'runs' as const, label: 'Runs' },
++                { key: 'findings' as const, label: 'Findings' },
+               ]).map((tab) => (
+                 <Button
+                   key={tab.key}
+@@ -471,9 +627,153 @@ export function Domains() {
+                 </Button>
+               ))}
+             </div>
++            </div>
+           )}
+-          {(selectedDomain == null || activeTab === 'vignettes') ? (
++          {selectedDomain != null && activeTab === 'overview' ? (
++            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <h3 className="text-lg font-medium text-[#1A1A1A]">Readiness snapshot</h3>
++                <div className="mt-4 grid gap-3 md:grid-cols-3">
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Vignettes</div>
++                    <div className="mt-1 text-2xl font-semibold text-gray-900">{selectedDomain.definitionCount}</div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Setup readiness</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      {setupReady ? 'Ready to pilot' : formatRequirementList(missingSetupRequirements)}
++                    </div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested next step</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      {!setupReady
++                        ? 'Complete setup'
++                        : recommendedPilotCount > 0
++                          ? `Pilot ${recommendedPilotCount} vignette${recommendedPilotCount === 1 ? '' : 's'}`
++                          : recommendedProductionCount > 0
++                            ? `Production-ready on ${recommendedProductionCount} vignette${recommendedProductionCount === 1 ? '' : 's'}`
++                            : 'Add vignettes'}
++                    </div>
++                  </div>
++                </div>
++                <div className="mt-5 grid gap-3 md:grid-cols-2">
++                  <div className="rounded-lg border border-dashed border-gray-300 bg-[#F8F5EF] p-4 text-sm text-gray-600">
++                    <p className="font-medium text-gray-900">Setup coverage</p>
++                    <p className="mt-2">Contexts: {contextsCount}</p>
++                    <p>Value statements: {valueStatementsCount}</p>
++                    <p className="mt-2">
++                      Default preset:{' '}
++                      <span className="font-medium text-gray-900">
++                        {selectedDomain.defaultLevelPresetVersion == null
++                          ? 'None'
++                          : `${selectedDomain.defaultLevelPresetVersion.levelPreset.name} (v${selectedDomain.defaultLevelPresetVersion.version})`}
++                      </span>
++                    </p>
++                  </div>
++                  <div className="rounded-lg border border-dashed border-gray-300 bg-[#F8F5EF] p-4 text-sm text-gray-600">
++                    <p className="font-medium text-gray-900">Execution signal</p>
++                    <p className="mt-2">{evaluatedDefinitionCount} vignette{evaluatedDefinitionCount === 1 ? '' : 's'} already have runs.</p>
++                    <p>{filteredRows.length} signature row{filteredRows.length === 1 ? '' : 's'} visible in the current domain view.</p>
++                  </div>
++                </div>
++              </div>
++
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <h3 className="text-lg font-medium text-[#1A1A1A]">Recommended next steps</h3>
++                <div className="mt-4 space-y-2">
++                  <Button type="button" variant="secondary" className="w-full" onClick={() => void handleCreateVignettePair()}>
++                    Create Vignette Pair
++                  </Button>
++                  <Button type="button" variant="secondary" className="w-full" onClick={() => {
++                    setActiveTab('setup');
++                    setSetupTab(missingSetupRequirements[0]?.tab ?? 'contexts');
++                  }}>
++                    {setupReady ? 'Review setup coverage' : 'Fix setup gaps'}
++                  </Button>
++                  <Button
++                    type="button"
++                    variant="secondary"
++                    className="w-full"
++                    onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PILOT`)}
++                  >
++                    Start pilot evaluation
++                  </Button>
++                  <Button
++                    type="button"
++                    variant="secondary"
++                    className="w-full"
++                    onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?scopeCategory=PRODUCTION`)}
++                  >
++                    Start production evaluation
++                  </Button>
++                  <Button
++                    type="button"
++                    variant="secondary"
++                    className="w-full"
++                    onClick={handleOpenDomainFindings}
++                  >
++                    Open current findings
++                  </Button>
++                </div>
++              </div>
++            </div>
++          ) : (selectedDomain == null || activeTab === 'vignettes') ? (
+             <>
++              {selectedDomain != null && (
++                <div className="rounded-xl border border-gray-200 bg-white p-5">
++                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
++                    <div>
++                      <h3 className="text-lg font-medium text-[#1A1A1A]">Vignette inventory</h3>
++                      <p className="mt-1 text-sm text-gray-600">
++                        Create new vignette pairs, review existing inventory, and rerun individual vignettes through the
++                        domain evaluation flow.
++                      </p>
++                    </div>
++                    <Button variant="secondary" onClick={() => void handleCreateVignettePair()}>
++                      <Plus className="w-4 h-4 mr-1" />
++                      Create Vignette Pair
++                    </Button>
++                  </div>
++                  <div className="mt-4 grid gap-3 md:grid-cols-3">
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Contexts</div>
++                      <div className="mt-1 text-2xl font-semibold text-gray-900">{contextsCount}</div>
++                    </div>
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Value statements</div>
++                      <div className="mt-1 text-2xl font-semibold text-gray-900">{valueStatementsCount}</div>
++                    </div>
++                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Suggested stage</div>
++                      <div className="mt-1 text-sm font-semibold text-gray-900">
++                        {!setupReady
++                          ? 'Finish setup before creating or piloting new vignettes'
++                          : recommendedPilotCount > 0
++                            ? `Pilot ${recommendedPilotCount} new vignette${recommendedPilotCount === 1 ? '' : 's'}`
++                            : 'Use runs or findings to inspect existing work'}
++                      </div>
++                    </div>
++                  </div>
++                  {!setupReady && (
++                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
++                      Create vignette is guided by setup coverage. This domain still needs {formatRequirementList(missingSetupRequirements)}.
++                      {' '}
++                      <button
++                        type="button"
++                        onClick={() => {
++                          setActiveTab('setup');
++                          setSetupTab(missingSetupRequirements[0]?.tab ?? 'contexts');
++                        }}
++                        className="font-semibold underline"
++                      >
++                        Open the right setup section
++                      </button>
++                      .
++                    </div>
++                  )}
++                </div>
++              )}
+               <DefinitionFilters filters={filters} onFiltersChange={setFilters} />
+ 
+           <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 space-y-3">
+@@ -598,6 +898,7 @@ export function Domains() {
+                       <th className="py-2 pr-3">Temperature</th>
+                       <th className="py-2 pr-3">Domain</th>
+                       <th className="py-2 pr-3">Trials</th>
++                      <th className="py-2 pr-3">Actions</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+@@ -624,6 +925,28 @@ export function Domains() {
+                         <td className="py-2 pr-3 text-gray-600">{formatTemperature(row.temperature)}</td>
+                         <td className="py-2 pr-3 text-gray-600">{row.domainName}</td>
+                         <td className="py-2 pr-3 text-gray-600">{row.trialCount}</td>
++                        <td className="py-2 pr-3">
++                          <div className="flex flex-wrap gap-2">
++                            <Button
++                              type="button"
++                              size="sm"
++                              variant="secondary"
++                              onClick={() => navigate(`/definitions/${row.definitionId}`)}
++                            >
++                              Open
++                            </Button>
++                            {selectedDomain != null && (
++                              <Button
++                                type="button"
++                                size="sm"
++                                variant="ghost"
++                                onClick={() => navigate(`/domains/${selectedDomain.id}/run-trials?definitionIds=${row.definitionId}`)}
++                              >
++                                Re-run
++                              </Button>
++                            )}
++                          </div>
++                        </td>
+                       </tr>
+                     ))}
+                   </tbody>
+@@ -632,58 +955,176 @@ export function Domains() {
+             )}
+           </div>
+             </>
+-          ) : activeTab === 'contexts' ? (
+-            <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
+-          ) : activeTab === 'value-statements' ? (
+-            <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
+-          ) : (
+-            /* Defaults tab */
+-            <div key={selectedDomain.id} className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
+-              <div>
+-                <h3 className="text-sm font-semibold text-gray-800">Domain Defaults</h3>
+-                <p className="text-xs text-gray-500 mt-1">
+-                  Default settings pre-populated when creating a new vignette pair for this domain.
++          ) : activeTab === 'setup' ? (
++            <div className="space-y-4">
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <h3 className="text-lg font-medium text-[#1A1A1A]">Setup coverage</h3>
++                <p className="mt-1 text-sm text-gray-600">
++                  Domain defaults live here. Vignette-specific choices and overrides live in the vignette inventory and editor.
+                 </p>
++                <div className="mt-4 grid gap-3 md:grid-cols-3">
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Contexts</div>
++                    <div className="mt-1 text-2xl font-semibold text-gray-900">{contextsCount}</div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Value statements</div>
++                    <div className="mt-1 text-2xl font-semibold text-gray-900">{valueStatementsCount}</div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Override review</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      Use the vignette inventory and editor to inspect per-vignette overrides before launch.
++                    </div>
++                  </div>
++                </div>
++              </div>
++              <div className="flex border-b border-gray-200">
++                {([
++                  { key: 'contexts' as const, label: 'Contexts' },
++                  { key: 'value-statements' as const, label: 'Value Statements' },
++                  { key: 'defaults' as const, label: 'Defaults' },
++                ]).map((tab) => (
++                  <Button
++                    key={tab.key}
++                    type="button"
++                    variant="ghost"
++                    onClick={() => setSetupTab(tab.key)}
++                    className={`rounded-none px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${setupTab === tab.key
++                      ? 'border-teal-500 text-teal-700 bg-transparent hover:bg-transparent'
++                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-transparent'
++                    }`}
++                  >
++                    {tab.label}
++                  </Button>
++                ))}
+               </div>
+ 
+-              <div className="space-y-2">
+-                <label className="block text-sm font-medium text-gray-700">
+-                  Default Level Preset
+-                </label>
+-                <p className="text-xs text-gray-500">
+-                  When set, new vignette pairs will automatically use this level preset for 25-condition expansion.
+-                </p>
+-                <select
+-                  value={defaultsLevelPresetVersionId}
+-                  onChange={(e) => setDefaultsLevelPresetVersionId(e.target.value)}
+-                  className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm"
+-                >
+-                  <option value="">None (no expansion)</option>
+-                  {(levelPresetsData?.levelPresets ?? []).map((preset) =>
+-                    preset.latestVersion != null ? (
+-                      <option key={preset.latestVersion.id} value={preset.latestVersion.id}>
+-                        {preset.name} (v{preset.latestVersion.version})
+-                      </option>
+-                    ) : null,
++              {setupTab === 'contexts' ? (
++                <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
++              ) : setupTab === 'value-statements' ? (
++                <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
++              ) : (
++                <div key={selectedDomain.id} className="bg-white border border-gray-200 rounded-lg p-6 space-y-5">
++                  <div>
++                    <h3 className="text-sm font-semibold text-gray-800">Domain Defaults</h3>
++                    <p className="text-xs text-gray-500 mt-1">
++                      Default settings pre-populated when creating a new vignette pair for this domain.
++                    </p>
++                  </div>
++
++                  <div className="space-y-2">
++                    <label className="block text-sm font-medium text-gray-700">
++                      Default Level Preset
++                    </label>
++                    <p className="text-xs text-gray-500">
++                      When set, new vignette pairs will automatically use this level preset for 25-condition expansion.
++                    </p>
++                    <select
++                      value={defaultsLevelPresetVersionId}
++                      onChange={(e) => setDefaultsLevelPresetVersionId(e.target.value)}
++                      className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm"
++                    >
++                      <option value="">None (no expansion)</option>
++                      {(levelPresetsData?.levelPresets ?? []).map((preset) =>
++                        preset.latestVersion != null ? (
++                          <option key={preset.latestVersion.id} value={preset.latestVersion.id}>
++                            {preset.name} (v{preset.latestVersion.version})
++                          </option>
++                        ) : null,
++                      )}
++                    </select>
++                  </div>
++
++                  {inlineSuccess != null && (
++                    <p className="text-sm text-green-700">{inlineSuccess}</p>
++                  )}
++                  {inlineError != null && (
++                    <p className="text-sm text-red-600">{inlineError}</p>
+                   )}
+-                </select>
+-              </div>
+ 
+-              {inlineSuccess != null && (
+-                <p className="text-sm text-green-700">{inlineSuccess}</p>
+-              )}
+-              {inlineError != null && (
+-                <p className="text-sm text-red-600">{inlineError}</p>
++                  <Button
++                    onClick={() => void handleSaveDomainDefaults()}
++                    disabled={defaultsSaving}
++                    size="sm"
++                    variant="secondary"
++                  >
++                    {defaultsSaving ? 'Saving...' : 'Save Defaults'}
++                  </Button>
++                </div>
+               )}
+-
+-              <Button
+-                onClick={() => void handleSaveDomainDefaults()}
+-                disabled={defaultsSaving}
+-                size="sm"
+-                variant="secondary"
+-              >
+-                {defaultsSaving ? 'Saving...' : 'Save Defaults'}
+-              </Button>
++            </div>
++          ) : activeTab === 'runs' ? (
++            <div className="space-y-4">
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <h3 className="text-lg font-medium text-[#1A1A1A]">Runs</h3>
++                <p className="mt-1 text-sm text-gray-600">
++                  Runs is the canonical home for domain evaluations, launch status, and run-scoped diagnostics for this domain.
++                </p>
++                <div className="mt-4 grid gap-3 md:grid-cols-3">
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pilot-ready vignettes</div>
++                    <div className="mt-1 text-2xl font-semibold text-gray-900">{recommendedPilotCount}</div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Evaluated vignettes</div>
++                    <div className="mt-1 text-2xl font-semibold text-gray-900">{evaluatedDefinitionCount}</div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Status surfaces</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">Domain Evaluation Summary, Run Detail, and global runs list stay distinct.</div>
++                  </div>
++                </div>
++                <div className="mt-4 flex flex-wrap gap-2">
++                  <Button onClick={() => void handleRunDomainTrials()}>
++                    <Play className="w-4 h-4 mr-1" />
++                    Open Domain Evaluation
++                  </Button>
++                  <Button type="button" variant="secondary" onClick={() => navigate('/runs')}>
++                    Open All Runs
++                  </Button>
++                </div>
++              </div>
++            </div>
++          ) : (
++            <div className="space-y-4">
++              <div className="rounded-xl border border-gray-200 bg-white p-5">
++                <h3 className="text-lg font-medium text-[#1A1A1A]">Findings</h3>
++                <p className="mt-1 text-sm text-gray-600">
++                  Findings is the interpretation surface for domain-level results. Diagnostics remain accessible from runs and vignette detail.
++                </p>
++                <div className="mt-4 grid gap-3 md:grid-cols-3">
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Domain analysis</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      Open auditable domain interpretation for the current domain.
++                    </div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Coverage</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      Inspect gaps before drawing conclusions or starting another evaluation.
++                    </div>
++                  </div>
++                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++                    <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Cross-run comparison</div>
++                    <div className="mt-1 text-sm font-semibold text-gray-900">
++                      Compare runs globally when you need broader benchmarking.
++                    </div>
++                  </div>
++                </div>
++                <div className="mt-4 flex flex-wrap gap-2">
++                  <Button type="button" onClick={handleOpenDomainFindings}>
++                    Open Domain Findings
++                  </Button>
++                  <Button type="button" variant="secondary" onClick={handleOpenDomainCoverage}>
++                    Open Coverage
++                  </Button>
++                  <Button type="button" variant="ghost" onClick={handleOpenCompare}>
++                    Open Compare
++                  </Button>
++                </div>
++              </div>
+             </div>
+           )}
+         </section>
+diff --git a/cloud/apps/web/tests/pages/Dashboard.test.tsx b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+index d919863..8a2251f 100644
+--- a/cloud/apps/web/tests/pages/Dashboard.test.tsx
++++ b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+@@ -1,15 +1,29 @@
+-import { describe, it, expect } from 'vitest';
++import { describe, expect, it, vi } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
+ import { Dashboard } from '../../src/pages/Dashboard';
+ 
+-describe('Dashboard Page', () => {
+-  it('should render dashboard heading', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
+-  });
++vi.mock('../../src/hooks/useDomains', () => ({
++  useDomains: () => ({
++    domains: [{ id: 'domain-a', name: 'Domain A', definitionCount: 2 }],
++  }),
++}));
++
++describe('Dashboard', () => {
++  it('renders the home framing, primary quick links, and exact resume links', () => {
++    render(
++      <MemoryRouter>
++        <Dashboard />
++      </MemoryRouter>
++    );
+ 
+-  it('should render welcome message', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByText(/welcome to valuerank/i)).toBeInTheDocument();
++    expect(screen.getByRole('heading', { name: /domain-first workspace/i })).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /domains/i })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: /validation/i })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: /archive/i })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('heading', { name: /resume active domain work/i })).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /open domain evaluation launcher/i })).toHaveAttribute('href', '/domains/domain-a/run-trials?scopeCategory=PILOT');
++    expect(screen.getByRole('link', { name: /open findings for this domain/i })).toHaveAttribute('href', '/domains/analysis?domainId=domain-a');
++    expect(screen.getByRole('link', { name: /review setup coverage/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=setup&setupTab=contexts');
+   });
+ });

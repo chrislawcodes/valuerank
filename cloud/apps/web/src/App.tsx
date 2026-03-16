@@ -1,12 +1,14 @@
 // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
 // However, the underlying codebase, API, and database still use the term "Definition".
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Provider } from 'urql';
 import { AuthProvider } from './auth/context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { ValidationHome } from './pages/ValidationHome';
+import { ArchiveHome } from './pages/ArchiveHome';
 import { Definitions } from './pages/Definitions';
 import { Domains } from './pages/Domains';
 import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
@@ -41,6 +43,11 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
       <Layout fullWidth={fullWidth}>{children}</Layout>
     </ProtectedRoute>
   );
+}
+
+function LegacyRouteRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
 }
 
 function App() {
@@ -78,6 +85,22 @@ function App() {
               }
             />
             <Route
+              path="/validation"
+              element={
+                <ProtectedLayout>
+                  <ValidationHome />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/archive"
+              element={
+                <ProtectedLayout>
+                  <ArchiveHome />
+                </ProtectedLayout>
+              }
+            />
+            <Route
               path="/domains/:domainId/run-trials"
               element={
                 <ProtectedLayout fullWidth>
@@ -103,7 +126,7 @@ function App() {
             />
             <Route
               path="/assumptions"
-              element={<Navigate to="/assumptions/analysis-v1" replace />}
+              element={<Navigate to="/validation" replace />}
             />
             <Route
               path="/assumptions/temp-zero"
@@ -202,7 +225,7 @@ function App() {
               }
             />
             <Route
-              path="/survey"
+              path="/archive/surveys"
               element={
                 <ProtectedLayout>
                   <Survey />
@@ -210,14 +233,16 @@ function App() {
               }
             />
             <Route
-              path="/survey-results"
+              path="/archive/survey-results"
               element={
                 <ProtectedLayout>
                   <SurveyResults />
                 </ProtectedLayout>
               }
             />
-            <Route path="/experiments" element={<Navigate to="/survey" replace />} />
+            <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
+            <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
+            <Route path="/experiments" element={<Navigate to="/archive" replace />} />
             <Route
               path="/settings"
               element={

@@ -20,6 +20,7 @@ type UseInfiniteRunsOptions = {
   definitionId?: string;
   experimentId?: string;
   status?: string;
+  runCategory?: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
   runType?: 'nonSurvey' | 'survey' | 'all';
   pageSize?: number;
   pause?: boolean;
@@ -39,6 +40,7 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
     definitionId,
     experimentId,
     status,
+    runCategory,
     runType = 'nonSurvey',
     pageSize,
     pause = false,
@@ -55,9 +57,10 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runCategory: runCategory || undefined,
       runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status, runTypeFilter]
+    [definitionId, experimentId, status, runCategory, runTypeFilter]
   );
 
   // Count query variables
@@ -66,9 +69,10 @@ export function useInfiniteRuns(options: UseInfiniteRunsOptions = {}): UseInfini
       definitionId: definitionId || undefined,
       experimentId: experimentId || undefined,
       status: status || undefined,
+      runCategory: runCategory || undefined,
       runType: runTypeFilter,
     }),
-    [definitionId, experimentId, status, runTypeFilter]
+    [definitionId, experimentId, status, runCategory, runTypeFilter]
   );
 
   // Extract runs from query result

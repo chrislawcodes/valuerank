@@ -14,6 +14,7 @@ import {
   type TempZeroDecision,
   type TempZeroRow,
 } from '../api/operations/assumptions';
+import { TransitionNotice } from '../components/ui/TransitionNotice';
 
 function formatPercent(value: number | null): string {
   if (value === null) return 'n/a';
@@ -325,6 +326,15 @@ export function TempZeroEffectAssumptions() {
 
   return (
     <div className="space-y-6">
+      <TransitionNotice
+        eyebrow="Validation Compatibility"
+        title="Temp=0 lives under Validation now"
+        description="This page remains live for detailed inspection, but top-level Validation is now the reporting home. Domain-scoped validation launches should happen from Domain Runs."
+        links={[
+          { label: 'Open Validation home', to: '/validation' },
+          { label: 'Open validation run history', to: '/runs?runCategory=VALIDATION' },
+        ]}
+      />
       <div>
         <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Temp=0 Effect</h1>
         <p className="mt-1 text-sm text-gray-600">

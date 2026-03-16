@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
+import { TransitionNotice } from '../components/ui/TransitionNotice';
 import {
   AnalysisListFilters,
   VirtualizedAnalysisList,
@@ -294,9 +295,23 @@ export function SurveyResults() {
 
   return (
     <div className="h-full flex flex-col">
+      <div className="mb-6">
+        <TransitionNotice
+          eyebrow="Archive Compatibility"
+          title="Legacy survey results now live under Archive"
+          description="Use these results for historical or secondary survey programs while active comparative research moves through Domains and Findings."
+          links={[
+            { label: 'Open Archive home', to: '/archive' },
+            { label: 'Open legacy survey work', to: '/archive/surveys' },
+          ]}
+        />
+      </div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Survey Results</h1>
+          <div>
+            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Legacy Survey Results</h1>
+            <p className="mt-2 text-sm text-gray-600">Compatibility view for historical survey runs and their outputs.</p>
+          </div>
           {latestRun?.status === 'SUMMARIZING' && (
             <Badge variant="warning" size="count">
               Summarizing
