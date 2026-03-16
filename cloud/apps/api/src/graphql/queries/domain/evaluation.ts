@@ -1,4 +1,4 @@
-import { Prisma, db, type DomainEvaluationScopeCategory, type DomainEvaluationStatus, type RunStatus } from '@valuerank/db';
+import { db, type Prisma, type DomainEvaluationScopeCategory, type DomainEvaluationStatus, type RunStatus } from '@valuerank/db';
 import { AuthenticationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 
@@ -114,7 +114,6 @@ type DomainEvaluationRecord = Prisma.DomainEvaluationGetPayload<{
 }>;
 
 const ACTIVE_RUN_STATUSES = new Set<RunStatus>(['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING']);
-const TERMINAL_RUN_STATUSES = new Set<RunStatus>(['COMPLETED', 'FAILED', 'CANCELLED']);
 const SCOPE_CATEGORY_VALUES = new Set<DomainEvaluationScopeCategory>([
   'PILOT',
   'PRODUCTION',
@@ -262,6 +261,8 @@ function getSnapshot(configSnapshot: unknown): DomainEvaluationSnapshot {
     return {};
   }
   const snapshot = configSnapshot as Record<string, unknown>;
+  const temperatureValue = snapshot.temperature;
+  const maxBudgetValue = snapshot.maxBudgetUsd;
   return {
     startedRuns: typeof snapshot.startedRuns === 'number' ? snapshot.startedRuns : undefined,
     failedDefinitions: typeof snapshot.failedDefinitions === 'number' ? snapshot.failedDefinitions : undefined,
@@ -271,12 +272,12 @@ function getSnapshot(configSnapshot: unknown): DomainEvaluationSnapshot {
       ? snapshot.models.filter((value): value is string => typeof value === 'string')
       : undefined,
     temperature:
-      typeof snapshot.temperature === 'number' || snapshot.temperature === null
-        ? (snapshot.temperature as number | null)
+      typeof temperatureValue === 'number' || temperatureValue === null
+        ? temperatureValue
         : undefined,
     maxBudgetUsd:
-      typeof snapshot.maxBudgetUsd === 'number' || snapshot.maxBudgetUsd === null
-        ? (snapshot.maxBudgetUsd as number | null)
+      typeof maxBudgetValue === 'number' || maxBudgetValue === null
+        ? maxBudgetValue
         : undefined,
   };
 }
