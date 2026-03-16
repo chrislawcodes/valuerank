@@ -3,33 +3,13 @@ import type {
   DefinitionMethodology,
   DefinitionComponents,
 } from '@valuerank/db';
-import { assembleTemplate, labelFromBody } from '@valuerank/shared';
+import {
+  assembleTemplate,
+  getJobChoiceValueStatementBody,
+  labelFromBody,
+} from '@valuerank/shared';
 
 export type JobChoicePresentationOrder = 'A_first' | 'B_first';
-
-// Value statements keyed by token. Source of truth: docs/job-choice-value-statements.csv
-const VALUE_STATEMENTS: Record<string, string> = {
-  self_direction_action:
-    'freedom in how they work because of how it relates to independent choice in goals and actions',
-  power_dominance:
-    'authority over others because of how it relates to control over people and the decisions that affect them',
-  security_personal:
-    'personal security in everyday life because of how it relates to financial and physical stability, safety, and predictability',
-  conformity_interpersonal:
-    'harmony in their close relationships because of how it relates to maintaining smooth interactions with family, friends, and neighbors',
-  tradition:
-    'connection to their heritage because of how it relates to long-standing customs and inherited ways of doing things',
-  stimulation:
-    'variety and excitement in their daily work because of how it relates to change, challenge, and unpredictability',
-  benevolence_dependability:
-    'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
-  universalism_nature:
-    'connection to the natural world because of how it relates to care for nature and the environment',
-  achievement:
-    'recognition of their expertise because of how it relates to success through strong performance',
-  hedonism:
-    'enjoyment in their daily experience because of how it relates to pleasure and comfort in everyday work',
-};
 
 const OPTION_PATTERN =
   /If they work as (?<role>.+?), they gain (?<article>a |an )?\[(?<token>[^\]]+)\] (?<rest>.+?)\./;
@@ -71,11 +51,11 @@ export function transformJobChoiceDefinition(
   const firstRole = presentationOrder === 'A_first' ? roleA : roleB;
   const secondRole = presentationOrder === 'A_first' ? roleB : roleA;
 
-  const firstBody = VALUE_STATEMENTS[firstToken];
+  const firstBody = getJobChoiceValueStatementBody(firstToken);
   if (firstBody == null) {
     throw new Error(`No Job Choice value statement is defined for token: ${firstToken}`);
   }
-  const secondBody = VALUE_STATEMENTS[secondToken];
+  const secondBody = getJobChoiceValueStatementBody(secondToken);
   if (secondBody == null) {
     throw new Error(`No Job Choice value statement is defined for token: ${secondToken}`);
   }

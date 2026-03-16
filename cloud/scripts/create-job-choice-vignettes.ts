@@ -1,4 +1,4 @@
-import { db, resolveDefinitionContent, type Definition } from '@valuerank/db';
+import { db, resolveDefinitionContent, type Definition, type Prisma } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 
 import {
@@ -6,7 +6,7 @@ import {
   isTransformableJobChoiceTemplate,
   type JobChoicePresentationOrder,
 } from './job-choice-transform.js';
-import { expandScenarios } from '../apps/api/src/services/scenario/expand.js';
+import { buildJobChoiceScenarios } from './job-choice-vignette-utils.js';
 
 const log = createLogger('scripts:create-job-choice-vignettes');
 
@@ -144,7 +144,20 @@ async function createJobChoiceDefinition(
     return definition;
   });
 
-  await expandScenarios(created.id, transformed.content);
+  const scenarios = buildJobChoiceScenarios({
+    definitionId: created.id,
+    contextText: resolved.resolvedContent.template.split('\n\nIf they work as')[0]?.trimEnd() ?? '',
+    components: transformed.content.components!,
+    levelPresetVersion: null,
+  });
+
+  await db.scenario.createMany({
+    data: scenarios.map((scenario) => ({
+      definitionId: scenario.definitionId,
+      name: scenario.name,
+      content: scenario.content as unknown as Prisma.InputJsonValue,
+    })),
+  });
   return created.id;
 }
 
