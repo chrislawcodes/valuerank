@@ -15,6 +15,9 @@ import {
   type ExpansionProgress,
 } from '../../services/scenario/index.js';
 import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders/definition-trial-summary.js';
+import {
+  applyLevelPresetToDefinitionContent,
+} from '../../utils/definition-level-preset.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -211,9 +214,14 @@ builder.objectType(DefinitionRef, {
       nullable: true,
       description: 'ID of the domain context attached to this definition',
     }),
-    content: t.expose('content', {
+    content: t.field({
       type: 'JSON',
       description: 'JSONB content with scenario configuration',
+      resolve: async (definition, _args, ctx) => {
+        if (definition.levelPresetVersionId == null) return definition.content;
+        const levelPresetVersion = await ctx.loaders.levelPresetVersion.load(definition.levelPresetVersionId);
+        return applyLevelPresetToDefinitionContent(definition.content, levelPresetVersion);
+      },
     }),
     updatedAt: t.expose('updatedAt', {
       type: 'DateTime',
@@ -249,9 +257,9 @@ builder.objectType(DefinitionRef, {
       type: LevelPresetVersionRef,
       nullable: true,
       description: 'The level preset version used when this vignette was created',
-      resolve: async (definition) => {
+      resolve: async (definition, _args, ctx) => {
         if (definition.levelPresetVersionId == null) return null;
-        return db.levelPresetVersion.findUnique({ where: { id: definition.levelPresetVersionId } });
+        return ctx.loaders.levelPresetVersion.load(definition.levelPresetVersionId);
       },
     }),
     lastAccessedAt: t.expose('lastAccessedAt', {
@@ -451,9 +459,11 @@ builder.objectType(DefinitionRef, {
     resolvedContent: t.field({
       type: 'JSON',
       description: 'Fully resolved content after walking ancestor chain. All fields are guaranteed present.',
-      resolve: async (definition) => {
+      resolve: async (definition, _args, ctx) => {
         const resolved = await resolveDefinitionContent(definition.id);
-        return resolved.resolvedContent;
+        if (definition.levelPresetVersionId == null) return resolved.resolvedContent;
+        const levelPresetVersion = await ctx.loaders.levelPresetVersion.load(definition.levelPresetVersionId);
+        return applyLevelPresetToDefinitionContent(resolved.resolvedContent, levelPresetVersion);
       },
     }),
 

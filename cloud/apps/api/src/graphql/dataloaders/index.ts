@@ -1,5 +1,5 @@
 import type DataLoader from 'dataloader';
-import type { Definition, Run, Transcript, Scenario, Experiment, Tag, LlmProvider, LlmModel } from '@valuerank/db';
+import type { Definition, Run, Transcript, Scenario, Experiment, Tag, LlmProvider, LlmModel, LevelPresetVersion } from '@valuerank/db';
 import { createDefinitionLoader } from './definition.js';
 import { createDefinitionTrialSummaryLoader, type DefinitionTrialSummary } from './definition-trial-summary.js';
 import { createRunLoader } from './run.js';
@@ -13,6 +13,7 @@ import { createScenarioLoader } from './scenario.js';
 import { createExperimentLoader } from './experiment.js';
 import { createTagLoader, createTagsByDefinitionLoader } from './tag.js';
 import { createLlmProviderLoader, createLlmModelLoader, createLlmModelsByProviderLoader } from './llm.js';
+import { createLevelPresetVersionLoader } from './level-preset.js';
 
 // DataLoader types
 export interface DataLoaders {
@@ -29,6 +30,7 @@ export interface DataLoaders {
   llmProvider: DataLoader<string, LlmProvider | null>;
   llmModel: DataLoader<string, LlmModel | null>;
   llmModelsByProvider: DataLoader<string, LlmModel[]>;
+  levelPresetVersion: DataLoader<string, LevelPresetVersion | null>;
 }
 
 // Factory function - creates new DataLoader instances per request
@@ -48,5 +50,6 @@ export function createDataLoaders(): DataLoaders {
     llmProvider: createLlmProviderLoader(),
     llmModel: createLlmModelLoader(),
     llmModelsByProvider: createLlmModelsByProviderLoader(),
+    levelPresetVersion: createLevelPresetVersionLoader(),
   };
 }

@@ -10,6 +10,7 @@ import { db, Prisma, resolveDefinitionContent } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
 import type { ExpandScenariosJobData } from '../types.js';
 import { expandScenarios } from '../../services/scenario/expand.js';
+import { hydrateDefinitionContentWithLevelPreset } from '../../utils/definition-level-preset.js';
 
 const log = createLogger('queue:expand-scenarios');
 
@@ -31,7 +32,7 @@ export function createExpandScenariosHandler(): PgBoss.WorkHandler<ExpandScenari
         // Check if definition still exists
         const definition = await db.definition.findUnique({
           where: { id: definitionId },
-          select: { id: true, name: true, deletedAt: true },
+          select: { id: true, name: true, deletedAt: true, levelPresetVersionId: true },
         });
 
         if (!definition || definition.deletedAt !== null) {
@@ -41,9 +42,13 @@ export function createExpandScenariosHandler(): PgBoss.WorkHandler<ExpandScenari
 
         // Resolve the full definition content (with inheritance)
         const { resolvedContent } = await resolveDefinitionContent(definitionId);
+        const hydratedContent = await hydrateDefinitionContentWithLevelPreset(
+          resolvedContent,
+          definition.levelPresetVersionId,
+        );
 
         // Expand scenarios using LLM
-        const result = await expandScenarios(definitionId, resolvedContent);
+        const result = await expandScenarios(definitionId, hydratedContent);
 
         log.info(
           {

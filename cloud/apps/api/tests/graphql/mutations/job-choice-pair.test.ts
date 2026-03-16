@@ -261,6 +261,9 @@ describe('GraphQL Job Choice Pair Mutations', () => {
     const updatedB = definitions.find((definition) => definition.id === bFirstId)!;
     const firstScenarioA = updatedA.scenarios[0]!.content as Record<string, unknown>;
     const firstScenarioB = updatedB.scenarios[0]!.content as Record<string, unknown>;
+    const updatedAContent = updatedA.content as {
+      dimensions?: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+    };
 
     expect(firstScenarioA.prompt).not.toContain('[level]');
     expect(firstScenarioB.prompt).not.toContain('[level]');
@@ -272,5 +275,19 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       care: expect.any(String),
       freedom: expect.any(String),
     });
+    expect(updatedAContent.dimensions?.[0]?.levels).toEqual([
+      { score: 1, label: 'very low' },
+      { score: 2, label: 'low' },
+      { score: 3, label: 'medium' },
+      { score: 4, label: 'high' },
+      { score: 5, label: 'very high' },
+    ]);
+    expect(updatedAContent.dimensions?.[1]?.levels).toEqual([
+      { score: 1, label: 'very low' },
+      { score: 2, label: 'low' },
+      { score: 3, label: 'medium' },
+      { score: 4, label: 'high' },
+      { score: 5, label: 'very high' },
+    ]);
   });
 });
