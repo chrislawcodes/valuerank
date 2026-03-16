@@ -31,3 +31,4 @@ export {
   parseVnewTemperature,
 } from './trial-signature.js';
 export * from './assemble-template.js';
+export * from './job-choice-value-statements.js';
