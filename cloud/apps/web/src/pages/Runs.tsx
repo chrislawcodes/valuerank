@@ -7,11 +7,12 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Play, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Badge } from '../components/ui/Badge';
 import {
   RunFilters,
   VirtualizedRunList,
@@ -19,6 +20,7 @@ import {
   type RunFilterState,
 } from '../components/runs';
 import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
+import type { RunCategory } from '../api/operations/runs';
 
 const defaultFilters: RunFilterState = {
   status: '',
@@ -26,9 +28,28 @@ const defaultFilters: RunFilterState = {
   viewMode: 'folder',
 };
 
+const RUN_CATEGORY_LABELS: Record<RunCategory, string> = {
+  PILOT: 'Pilot',
+  PRODUCTION: 'Production',
+  REPLICATION: 'Replication',
+  VALIDATION: 'Validation',
+  UNKNOWN_LEGACY: 'Legacy / Unknown',
+};
+
+function parseRunCategory(value: string | null): RunCategory | undefined {
+  if (value == null) return undefined;
+  if (value === 'PILOT' || value === 'PRODUCTION' || value === 'REPLICATION' || value === 'VALIDATION' || value === 'UNKNOWN_LEGACY') {
+    return value;
+  }
+  return undefined;
+}
+
 export function Runs() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<RunFilterState>(defaultFilters);
+  const runCategory = parseRunCategory(searchParams.get('runCategory'));
+  const runCategoryLabel = runCategory ? RUN_CATEGORY_LABELS[runCategory] : null;
 
   // Use infinite scroll hook for efficient data loading
   const {
@@ -42,6 +63,7 @@ export function Runs() {
     refetch,
   } = useInfiniteRuns({
     status: filters.status || undefined,
+    runCategory,
   });
 
   // Filter runs by selected tags (client-side filtering)
@@ -63,22 +85,56 @@ export function Runs() {
     navigate(`/runs/${runId}`);
   }, [navigate]);
 
+  const clearRunCategory = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('runCategory');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
-          Trials
-        </h1>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={refetch}
-          disabled={loading || loadingMore}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+      <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
+            Trials
+          </h1>
+          {runCategory ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="info" size="count">{runCategoryLabel} Run History</Badge>
+              </div>
+              <p className="text-sm text-gray-600 max-w-3xl">
+                This filtered view is being used as an operational companion to top-level Validation reporting. Domain-scoped validation checks
+                still launch from <span className="font-medium">Domains &gt; Runs</span>.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600 max-w-3xl">
+              Review persisted vignette-scoped runs, apply filters, and open individual run details.
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {runCategory && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearRunCategory}
+            >
+              Show All Runs
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={refetch}
+            disabled={loading || loadingMore}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading || loadingMore ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -93,7 +149,7 @@ export function Runs() {
         ) : error ? (
           <ErrorMessage message={`Failed to load trials: ${error.message}`} />
         ) : filteredRuns.length === 0 ? (
-          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} />
+          <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} runCategoryLabel={runCategoryLabel} />
         ) : filters.viewMode === 'folder' ? (
           <VirtualizedFolderView
             runs={filteredRuns}
@@ -121,7 +177,7 @@ export function Runs() {
 /**
  * Empty state component.
  */
-function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: boolean }) {
+function EmptyState({ status, hasTagFilter, runCategoryLabel }: { status: string; hasTagFilter: boolean; runCategoryLabel: string | null }) {
   const navigate = useNavigate();
 
   if (status || hasTagFilter) {
@@ -146,13 +202,15 @@ function EmptyState({ status, hasTagFilter }: { status: string; hasTagFilter: bo
         <Play className="w-8 h-8 text-teal-600" />
       </div>
       <h3 className="text-lg font-medium text-gray-900 mb-2">
-        No trials yet
+        {runCategoryLabel ? `No ${runCategoryLabel.toLowerCase()} runs yet` : 'No trials yet'}
       </h3>
       <p className="text-gray-500 mb-4">
-        Start your first evaluation trial from a vignette.
+        {runCategoryLabel
+          ? `${runCategoryLabel} work is launched from domain Runs. Start there, then return here for history and drilldown.`
+          : 'Start your first evaluation trial from a vignette.'}
       </p>
-      <Button onClick={() => navigate('/definitions')}>
-        Go to Vignettes
+      <Button onClick={() => navigate(runCategoryLabel ? '/domains' : '/definitions')}>
+        {runCategoryLabel ? 'Go to Domains' : 'Go to Vignettes'}
       </Button>
     </div>
   );

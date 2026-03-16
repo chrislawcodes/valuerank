@@ -1,0 +1,1511 @@
+diff --git a/cloud/apps/api/tests/graphql/queries/domain.test.ts b/cloud/apps/api/tests/graphql/queries/domain.test.ts
+index cfdb2cc..985c025 100644
+--- a/cloud/apps/api/tests/graphql/queries/domain.test.ts
++++ b/cloud/apps/api/tests/graphql/queries/domain.test.ts
+@@ -1,10 +1,53 @@
+-import { describe, it, expect } from 'vitest';
++import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+ import request from 'supertest';
++import { db } from '@valuerank/db';
+ import { createServer } from '../../../src/server.js';
++import { getAuthHeader, TEST_USER } from '../../test-utils.js';
+ 
+ const app = createServer();
+ 
+ describe('GraphQL Domain Query Registration', () => {
++  const createdDomainIds: string[] = [];
++  const createdDefinitionIds: string[] = [];
++  const createdProviderIds: string[] = [];
++  const createdModelIds: string[] = [];
++  const createdStatsIds: string[] = [];
++
++  beforeAll(async () => {
++    await db.user.upsert({
++      where: { id: TEST_USER.id },
++      create: {
++        id: TEST_USER.id,
++        email: TEST_USER.email,
++        passwordHash: 'test-hash',
++      },
++      update: {},
++    });
++  });
++
++  afterEach(async () => {
++    if (createdStatsIds.length > 0) {
++      await db.modelTokenStatistics.deleteMany({ where: { id: { in: createdStatsIds } } });
++      createdStatsIds.length = 0;
++    }
++    if (createdDefinitionIds.length > 0) {
++      await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
++      createdDefinitionIds.length = 0;
++    }
++    if (createdDomainIds.length > 0) {
++      await db.domain.deleteMany({ where: { id: { in: createdDomainIds } } });
++      createdDomainIds.length = 0;
++    }
++    if (createdModelIds.length > 0) {
++      await db.llmModel.deleteMany({ where: { id: { in: createdModelIds } } });
++      createdModelIds.length = 0;
++    }
++    if (createdProviderIds.length > 0) {
++      await db.llmProvider.deleteMany({ where: { id: { in: createdProviderIds } } });
++      createdProviderIds.length = 0;
++    }
++  });
++
+   it('registers the expected domain query fields', async () => {
+     const query = `
+       query DomainQueryFields {
+@@ -30,7 +73,14 @@ describe('GraphQL Domain Query Registration', () => {
+     expect(fieldNames.has('domains')).toBe(true);
+     expect(fieldNames.has('domain')).toBe(true);
+     expect(fieldNames.has('domainTrialsPlan')).toBe(true);
++    expect(fieldNames.has('estimateDomainEvaluationCost')).toBe(true);
+     expect(fieldNames.has('domainTrialRunsStatus')).toBe(true);
++    expect(fieldNames.has('domainEvaluations')).toBe(true);
++    expect(fieldNames.has('domainEvaluation')).toBe(true);
++    expect(fieldNames.has('domainEvaluationMembers')).toBe(true);
++    expect(fieldNames.has('domainEvaluationStatus')).toBe(true);
++    expect(fieldNames.has('domainRunSummary')).toBe(true);
++    expect(fieldNames.has('domainFindingsEligibility')).toBe(true);
+     expect(fieldNames.has('domainAvailableSignatures')).toBe(true);
+     expect(fieldNames.has('domainAnalysis')).toBe(true);
+     expect(fieldNames.has('domainAnalysisValueDetail')).toBe(true);
+@@ -74,4 +124,503 @@ describe('GraphQL Domain Query Registration', () => {
+     expect(clusterFields.has('faultLinesByPair')).toBe(true);
+     expect(clusterFields.has('defaultPair')).toBe(true);
+   });
++
++  it('returns domain evaluation history, detail, and derived status', async () => {
++    const domain = await db.domain.create({
++      data: {
++        name: 'Domain Evaluation Query Test',
++        normalizedName: `domain-evaluation-query-${Date.now()}`,
++      },
++    });
++    createdDomainIds.push(domain.id);
++
++    const definition = await db.definition.create({
++      data: {
++        name: 'Evaluation Vignette',
++        domainId: domain.id,
++        version: 1,
++        content: { schema_version: 1, preamble: 'eval' },
++        createdByUserId: TEST_USER.id,
++      },
++    });
++    createdDefinitionIds.push(definition.id);
++
++    const run = await db.run.create({
++      data: {
++        definitionId: definition.id,
++        status: 'RUNNING',
++        runCategory: 'PRODUCTION',
++        config: { models: ['test-domain-model'], temperature: null },
++        progress: { total: 1, completed: 0, failed: 0 },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++      },
++    });
++
++    const completedRun = await db.run.create({
++      data: {
++        definitionId: definition.id,
++        status: 'COMPLETED',
++        runCategory: 'VALIDATION',
++        config: { models: ['test-validation-model'], temperature: 0 },
++        progress: { total: 1, completed: 1, failed: 0 },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        completedAt: new Date(),
++      },
++    });
++
++    const evaluation = await db.domainEvaluation.create({
++      data: {
++        domainId: domain.id,
++        domainNameAtLaunch: domain.name,
++        scopeCategory: 'PRODUCTION',
++        status: 'RUNNING',
++        configSnapshot: {
++          models: ['test-domain-model'],
++          projectedCostUsd: 1.23,
++          startedRuns: 1,
++          skippedForBudget: 0,
++        },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++      },
++    });
++
++    const validationEvaluation = await db.domainEvaluation.create({
++      data: {
++        domainId: domain.id,
++        domainNameAtLaunch: domain.name,
++        scopeCategory: 'VALIDATION',
++        status: 'COMPLETED',
++        configSnapshot: {
++          models: ['test-validation-model'],
++          projectedCostUsd: 0.45,
++          startedRuns: 1,
++          skippedForBudget: 0,
++        },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        completedAt: new Date(),
++      },
++    });
++
++    await db.domainEvaluationRun.create({
++      data: {
++        domainEvaluationId: evaluation.id,
++        runId: run.id,
++        definitionIdAtLaunch: definition.id,
++        definitionNameAtLaunch: definition.name,
++        domainIdAtLaunch: domain.id,
++      },
++    });
++
++    await db.domainEvaluationRun.create({
++      data: {
++        domainEvaluationId: validationEvaluation.id,
++        runId: completedRun.id,
++        definitionIdAtLaunch: definition.id,
++        definitionNameAtLaunch: definition.name,
++        domainIdAtLaunch: domain.id,
++      },
++    });
++
++    const query = `
++      query DomainEvaluations($domainId: ID!, $evaluationId: ID!) {
++        domainEvaluations(domainId: $domainId) {
++          id
++          domainId
++          domainNameAtLaunch
++          scopeCategory
++          status
++          memberCount
++          members {
++            runId
++            definitionIdAtLaunch
++            runStatus
++            runCategory
++          }
++        }
++        domainEvaluation(id: $evaluationId) {
++          id
++          domainId
++          domainNameAtLaunch
++          scopeCategory
++          projectedCostUsd
++          models
++          members {
++            definitionNameAtLaunch
++            runStatus
++          }
++        }
++        domainEvaluationMembers(id: $evaluationId) {
++          runId
++          definitionIdAtLaunch
++          definitionNameAtLaunch
++          runStatus
++          runCategory
++        }
++        domainEvaluationStatus(id: $evaluationId) {
++          id
++          status
++          totalRuns
++          pendingRuns
++          runningRuns
++          completedRuns
++          failedRuns
++          cancelledRuns
++        }
++        domainRunSummary(domainId: $domainId) {
++          domainId
++          totalEvaluations
++          runningEvaluations
++          completedEvaluations
++          totalMemberRuns
++          runningMemberRuns
++          completedMemberRuns
++          productionEvaluations
++          validationEvaluations
++          latestEvaluationId
++          latestEvaluationStatus
++          latestScopeCategory
++        }
++        validationSummary: domainRunSummary(domainId: $domainId, scopeCategory: "VALIDATION") {
++          domainId
++          scopeCategory
++          totalEvaluations
++          completedEvaluations
++          validationEvaluations
++          totalMemberRuns
++          completedMemberRuns
++        }
++      }
++    `;
++
++    const response = await request(app)
++      .post('/graphql')
++      .set('Authorization', getAuthHeader())
++      .send({
++        query,
++        variables: {
++          domainId: domain.id,
++          evaluationId: evaluation.id,
++        },
++      })
++      .expect(200);
++
++    expect(response.body.errors).toBeUndefined();
++
++    const listedEvaluations = response.body.data.domainEvaluations as Array<Record<string, unknown>>;
++    expect(listedEvaluations).toHaveLength(2);
++    expect(listedEvaluations[0]?.id).toBe(validationEvaluation.id);
++    expect(listedEvaluations[0]?.status).toBe('COMPLETED');
++    expect(listedEvaluations[0]?.memberCount).toBe(1);
++    expect(listedEvaluations[1]?.id).toBe(evaluation.id);
++    expect(listedEvaluations[1]?.status).toBe('RUNNING');
++    expect(listedEvaluations[1]?.memberCount).toBe(1);
++
++    const detailedEvaluation = response.body.data.domainEvaluation as Record<string, unknown>;
++    expect(detailedEvaluation.id).toBe(evaluation.id);
++    expect(detailedEvaluation.scopeCategory).toBe('PRODUCTION');
++    expect(detailedEvaluation.projectedCostUsd).toBe(1.23);
++    expect(detailedEvaluation.models).toEqual(['test-domain-model']);
++
++    expect(response.body.data.domainEvaluationMembers).toEqual([
++      expect.objectContaining({
++        runId: run.id,
++        definitionIdAtLaunch: definition.id,
++        definitionNameAtLaunch: definition.name,
++        runStatus: 'RUNNING',
++        runCategory: 'PRODUCTION',
++      }),
++    ]);
++
++    const status = response.body.data.domainEvaluationStatus as Record<string, unknown>;
++    expect(status.id).toBe(evaluation.id);
++    expect(status.status).toBe('RUNNING');
++    expect(status.totalRuns).toBe(1);
++    expect(status.pendingRuns).toBe(0);
++    expect(status.runningRuns).toBe(1);
++    expect(status.completedRuns).toBe(0);
++    expect(status.failedRuns).toBe(0);
++    expect(status.cancelledRuns).toBe(0);
++
++    const summary = response.body.data.domainRunSummary as Record<string, unknown>;
++    expect(summary.domainId).toBe(domain.id);
++    expect(summary.totalEvaluations).toBe(2);
++    expect(summary.runningEvaluations).toBe(1);
++    expect(summary.completedEvaluations).toBe(1);
++    expect(summary.totalMemberRuns).toBe(2);
++    expect(summary.runningMemberRuns).toBe(1);
++    expect(summary.completedMemberRuns).toBe(1);
++    expect(summary.productionEvaluations).toBe(1);
++    expect(summary.validationEvaluations).toBe(1);
++    expect(summary.latestEvaluationId).toBe(validationEvaluation.id);
++    expect(summary.latestEvaluationStatus).toBe('COMPLETED');
++    expect(summary.latestScopeCategory).toBe('VALIDATION');
++
++    const validationSummary = response.body.data.validationSummary as Record<string, unknown>;
++    expect(validationSummary.domainId).toBe(domain.id);
++    expect(validationSummary.scopeCategory).toBe('VALIDATION');
++    expect(validationSummary.totalEvaluations).toBe(1);
++    expect(validationSummary.completedEvaluations).toBe(1);
++    expect(validationSummary.validationEvaluations).toBe(1);
++    expect(validationSummary.totalMemberRuns).toBe(1);
++    expect(validationSummary.completedMemberRuns).toBe(1);
++  });
++
++  it('returns a conservative findings-eligibility result for domain findings', async () => {
++    const domain = await db.domain.create({
++      data: {
++        name: 'Domain Findings Eligibility Test',
++        normalizedName: `domain-findings-eligibility-${Date.now()}`,
++      },
++    });
++    createdDomainIds.push(domain.id);
++
++    const definition = await db.definition.create({
++      data: {
++        name: 'Findings Vignette',
++        domainId: domain.id,
++        version: 1,
++        content: { schema_version: 1, preamble: 'findings' },
++        createdByUserId: TEST_USER.id,
++      },
++    });
++    createdDefinitionIds.push(definition.id);
++
++    const run = await db.run.create({
++      data: {
++        definitionId: definition.id,
++        status: 'COMPLETED',
++        runCategory: 'PRODUCTION',
++        config: {
++          models: ['test-domain-model'],
++          definitionSnapshot: {
++            _meta: {
++              definitionVersion: 1,
++            },
++          },
++        },
++        progress: { total: 1, completed: 1, failed: 0 },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        completedAt: new Date(),
++      },
++    });
++
++    const evaluation = await db.domainEvaluation.create({
++      data: {
++        domainId: domain.id,
++        domainNameAtLaunch: domain.name,
++        scopeCategory: 'PRODUCTION',
++        status: 'COMPLETED',
++        configSnapshot: {
++          models: ['test-domain-model'],
++          startedRuns: 1,
++          skippedForBudget: 0,
++        },
++        createdByUserId: TEST_USER.id,
++        startedAt: new Date(),
++        completedAt: new Date(),
++      },
++    });
++
++    await db.domainEvaluationRun.create({
++      data: {
++        domainEvaluationId: evaluation.id,
++        runId: run.id,
++        definitionIdAtLaunch: definition.id,
++        definitionNameAtLaunch: definition.name,
++        domainIdAtLaunch: domain.id,
++      },
++    });
++
++    const query = `
++      query DomainFindingsEligibility($domainId: ID!) {
++        domainFindingsEligibility(domainId: $domainId) {
++          domainId
++          eligible
++          status
++          summary
++          reasons
++          recommendedActions
++          consideredScopeCategories
++          completedEligibleEvaluationCount
++          latestEligibleEvaluationId
++          latestEligibleScopeCategory
++        }
++      }
++    `;
++
++    const response = await request(app)
++      .post('/graphql')
++      .set('Authorization', getAuthHeader())
++      .send({
++        query,
++        variables: {
++          domainId: domain.id,
++        },
++      })
++      .expect(200);
++
++    expect(response.body.errors).toBeUndefined();
++
++    const eligibility = response.body.data.domainFindingsEligibility as Record<string, unknown>;
++    expect(eligibility.domainId).toBe(domain.id);
++    expect(eligibility.eligible).toBe(false);
++    expect(eligibility.status).toBe('DIAGNOSTIC_ONLY');
++    expect(eligibility.completedEligibleEvaluationCount).toBe(1);
++    expect(eligibility.latestEligibleEvaluationId).toBe(evaluation.id);
++    expect(eligibility.latestEligibleScopeCategory).toBe('PRODUCTION');
++    expect(eligibility.consideredScopeCategories).toEqual(['PRODUCTION', 'REPLICATION']);
++    expect(eligibility.summary).toMatch(/diagnostic signals/i);
++    expect(eligibility.reasons).toContain(
++      'Launch snapshot boundary is not complete for auditable findings yet, so this domain remains diagnostic-only.',
++    );
++  });
++
++  it('returns a domain evaluation cost estimate with fallback metadata and confidence', async () => {
++    const provider = await db.llmProvider.create({
++      data: {
++        name: `domain-estimate-provider-${Date.now()}`,
++        displayName: 'Domain Estimate Provider',
++      },
++    });
++    createdProviderIds.push(provider.id);
++
++    const model = await db.llmModel.create({
++      data: {
++        providerId: provider.id,
++        modelId: `domain-estimate-model-${Date.now()}`,
++        displayName: 'Domain Estimate Model',
++        status: 'ACTIVE',
++        isDefault: true,
++        costInputPerMillion: 10,
++        costOutputPerMillion: 20,
++      },
++    });
++    createdModelIds.push(model.id);
++
++    const stats = await db.modelTokenStatistics.create({
++      data: {
++        modelId: model.id,
++        definitionId: null,
++        avgInputTokens: 100,
++        avgOutputTokens: 200,
++        sampleCount: 75,
++      },
++    });
++    createdStatsIds.push(stats.id);
++
++    const domain = await db.domain.create({
++      data: {
++        name: 'Domain Estimate Query Test',
++        normalizedName: `domain-estimate-query-${Date.now()}`,
++      },
++    });
++    createdDomainIds.push(domain.id);
++
++    const definition = await db.definition.create({
++      data: {
++        name: 'Estimate Vignette',
++        domainId: domain.id,
++        version: 1,
++        content: { schema_version: 1, preamble: 'estimate' },
++        createdByUserId: TEST_USER.id,
++        scenarios: {
++          create: [
++            { name: 'Scenario 1', content: { body: 'one', dimensionValues: {} } },
++            { name: 'Scenario 2', content: { body: 'two', dimensionValues: {} } },
++            { name: 'Scenario 3', content: { body: 'three', dimensionValues: {} } },
++          ],
++        },
++      },
++    });
++    createdDefinitionIds.push(definition.id);
++
++    const query = `
++      query EstimateDomainEvaluationCost($domainId: ID!, $definitionIds: [ID!], $modelIds: [String!], $scopeCategory: String) {
++        estimateDomainEvaluationCost(
++          domainId: $domainId
++          definitionIds: $definitionIds
++          modelIds: $modelIds
++          scopeCategory: $scopeCategory
++        ) {
++          domainId
++          domainName
++          scopeCategory
++          targetedDefinitions
++          totalScenarioCount
++          totalEstimatedCost
++          basedOnSampleCount
++          isUsingFallback
++          fallbackReason
++          estimateConfidence
++          knownExclusions
++          models {
++            modelId
++            label
++            estimatedCost
++            basedOnSampleCount
++            isUsingFallback
++          }
++          definitions {
++            definitionId
++            definitionName
++            scenarioCount
++            estimatedCost
++            basedOnSampleCount
++            isUsingFallback
++          }
++        }
++      }
++    `;
++
++    const response = await request(app)
++      .post('/graphql')
++      .set('Authorization', getAuthHeader())
++      .send({
++        query,
++        variables: {
++          domainId: domain.id,
++          definitionIds: [definition.id],
++          modelIds: [model.modelId],
++          scopeCategory: 'PRODUCTION',
++        },
++      })
++      .expect(200);
++
++    expect(response.body.errors).toBeUndefined();
++
++    const estimate = response.body.data.estimateDomainEvaluationCost as Record<string, unknown>;
++    expect(estimate.domainId).toBe(domain.id);
++    expect(estimate.domainName).toBe(domain.name);
++    expect(estimate.scopeCategory).toBe('PRODUCTION');
++    expect(estimate.targetedDefinitions).toBe(1);
++    expect(estimate.totalScenarioCount).toBe(3);
++    expect(estimate.isUsingFallback).toBe(false);
++    expect(estimate.fallbackReason).toBeNull();
++    expect(estimate.basedOnSampleCount).toBe(75);
++    expect(estimate.estimateConfidence).toBe('HIGH');
++    expect(estimate.totalEstimatedCost).toBeCloseTo(0.015, 5);
++    expect(estimate.knownExclusions).toContain(
++      'Judge/evaluator and summarization passes are not included in this estimate yet.',
++    );
++
++    const [modelEstimate] = estimate.models as Array<Record<string, unknown>>;
++    expect(modelEstimate.modelId).toBe(model.modelId);
++    expect(modelEstimate.label).toBe('Domain Estimate Model');
++    expect(modelEstimate.estimatedCost).toBeCloseTo(0.015, 5);
++    expect(modelEstimate.basedOnSampleCount).toBe(75);
++    expect(modelEstimate.isUsingFallback).toBe(false);
++
++    const [definitionEstimate] = estimate.definitions as Array<Record<string, unknown>>;
++    expect(definitionEstimate.definitionId).toBe(definition.id);
++    expect(definitionEstimate.definitionName).toBe('Estimate Vignette');
++    expect(definitionEstimate.scenarioCount).toBe(3);
++    expect(definitionEstimate.estimatedCost).toBeCloseTo(0.015, 5);
++    expect(definitionEstimate.basedOnSampleCount).toBe(75);
++    expect(definitionEstimate.isUsingFallback).toBe(false);
++  });
+ });
+diff --git a/cloud/apps/web/src/api/operations/domainAnalysis.ts b/cloud/apps/web/src/api/operations/domainAnalysis.ts
+index af90450..77ec933 100644
+--- a/cloud/apps/web/src/api/operations/domainAnalysis.ts
++++ b/cloud/apps/web/src/api/operations/domainAnalysis.ts
+@@ -235,6 +235,24 @@ export const DOMAIN_AVAILABLE_SIGNATURES_QUERY = gql`
+   }
+ `;
+ 
++export const DOMAIN_FINDINGS_ELIGIBILITY_QUERY = gql`
++  query DomainFindingsEligibility($domainId: ID!) {
++    domainFindingsEligibility(domainId: $domainId) {
++      domainId
++      eligible
++      status
++      summary
++      reasons
++      recommendedActions
++      consideredScopeCategories
++      completedEligibleEvaluationCount
++      latestEligibleEvaluationId
++      latestEligibleScopeCategory
++      latestEligibleCompletedAt
++    }
++  }
++`;
++
+ export type DomainAnalysisValueScore = {
+   valueKey: string;
+   score: number;
+@@ -352,6 +370,28 @@ export type DomainAnalysisQueryVariables = {
+   signature?: string;
+ };
+ 
++export type DomainFindingsEligibility = {
++  domainId: string;
++  eligible: boolean;
++  status: 'ELIGIBLE' | 'DIAGNOSTIC_ONLY';
++  summary: string;
++  reasons: string[];
++  recommendedActions: string[];
++  consideredScopeCategories: Array<'PRODUCTION' | 'REPLICATION'>;
++  completedEligibleEvaluationCount: number;
++  latestEligibleEvaluationId: string | null;
++  latestEligibleScopeCategory: 'PRODUCTION' | 'REPLICATION' | null;
++  latestEligibleCompletedAt: string | null;
++};
++
++export type DomainFindingsEligibilityQueryResult = {
++  domainFindingsEligibility: DomainFindingsEligibility;
++};
++
++export type DomainFindingsEligibilityQueryVariables = {
++  domainId: string;
++};
++
+ export type DomainAnalysisValueDetailCondition = {
+   scenarioId: string | null;
+   conditionName: string;
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+index dc09509..3295c52 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+@@ -4,9 +4,13 @@ import { formatCost } from './helpers';
+ type LaunchConfirmModalProps = {
+   open: boolean;
+   domainName: string;
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   estimatedTotalCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   temperatureLabel: string;
+   budgetCap: number | null;
+   isStarting: boolean;
+@@ -17,9 +21,13 @@ type LaunchConfirmModalProps = {
+ export function LaunchConfirmModal({
+   open,
+   domainName,
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   estimatedTotalCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   temperatureLabel,
+   budgetCap,
+   isStarting,
+@@ -28,31 +36,46 @@ export function LaunchConfirmModal({
+ }: LaunchConfirmModalProps) {
+   if (!open) return null;
+ 
++  const headingId = 'launch-confirm-modal-heading';
++
+   return (
+     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+-      <div className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4">
+-        <h2 className="text-lg font-semibold text-gray-900">Confirm Domain Trial Launch</h2>
++      <div
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby={headingId}
++        className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
++      >
++        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Evaluation</h2>
+         <div className="space-y-1 text-sm text-gray-700">
+           <div>Domain: <span className="font-medium">{domainName}</span></div>
++          <div>Scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
+           <div>Latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
+           <div>Models: <span className="font-medium">{modelCount}</span></div>
+           <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
++          {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
+           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
+           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
+         </div>
++        {(fallbackReason || knownExclusions.length > 0) && (
++          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
++            <p className="font-medium">Setup summary and estimate notes</p>
++            {fallbackReason && <p>Fallback reason: {fallbackReason}</p>}
++            {knownExclusions.length > 0 && <p>{knownExclusions.join(' ')}</p>}
++          </div>
++        )}
+         <p className="text-xs text-gray-500">
+-          This starts domain runs and incurs model costs. A duplicate active launch is blocked server-side.
++          This creates a domain evaluation cohort and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
+         </p>
+         <div className="flex justify-end gap-2">
+           <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>
+             Cancel
+           </Button>
+           <Button type="button" onClick={onConfirm} disabled={isStarting}>
+-            {isStarting ? 'Starting...' : 'Run All Domain Trials'}
++            {isStarting ? 'Starting...' : 'Start Domain Evaluation'}
+           </Button>
+         </div>
+       </div>
+     </div>
+   );
+ }
+-
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+index 62afd9e..dcd3748 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+@@ -3,9 +3,13 @@ import { Badge } from '../../ui/Badge';
+ import { formatCost } from './helpers';
+ 
+ type LaunchControlsPanelProps = {
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   totalEstimatedCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   useDefaultTemperature: boolean;
+   disableTemperatureInput: boolean;
+   temperatureInput: string;
+@@ -18,6 +22,7 @@ type LaunchControlsPanelProps = {
+   isStarting: boolean;
+   planFetching: boolean;
+   temperatureWarning?: string | null;
++  onSetScopeCategory: (value: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION') => void;
+   onSetUseDefaultTemperature: (value: boolean) => void;
+   onSetTemperatureInput: (value: string) => void;
+   onSetMaxBudgetEnabled: (value: boolean) => void;
+@@ -27,9 +32,13 @@ type LaunchControlsPanelProps = {
+ };
+ 
+ export function LaunchControlsPanel({
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   totalEstimatedCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   useDefaultTemperature,
+   disableTemperatureInput,
+   temperatureInput,
+@@ -42,6 +51,7 @@ export function LaunchControlsPanel({
+   isStarting,
+   planFetching,
+   temperatureWarning,
++  onSetScopeCategory,
+   onSetUseDefaultTemperature,
+   onSetTemperatureInput,
+   onSetMaxBudgetEnabled,
+@@ -49,15 +59,36 @@ export function LaunchControlsPanel({
+   onSetSafeMode,
+   onOpenConfirm,
+ }: LaunchControlsPanelProps) {
++  const confidenceTone = estimateConfidence === 'HIGH'
++    ? 'success'
++    : estimateConfidence === 'MEDIUM'
++      ? 'warning'
++      : 'error';
++
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+       <div className="flex flex-wrap items-center gap-3">
++        <Badge variant="neutral" size="count">Scope: {scopeCategory.toLowerCase()}</Badge>
+         <Badge variant="info" size="count">Latest Vignettes: {vignetteCount}</Badge>
+         <Badge variant="info" size="count">Models: {modelCount}</Badge>
+         <Badge variant="success" size="count">Total Estimate: {formatCost(totalEstimatedCost)}</Badge>
++        {estimateConfidence && <Badge variant={confidenceTone} size="count">Estimate confidence: {estimateConfidence.toLowerCase()}</Badge>}
+       </div>
+ 
+       <div className="flex flex-wrap items-center gap-3">
++        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
++          Evaluation scope
++          <select
++            value={scopeCategory}
++            onChange={(event) => onSetScopeCategory(event.target.value as 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION')}
++            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
++          >
++            <option value="PILOT">Pilot</option>
++            <option value="PRODUCTION">Production</option>
++            <option value="REPLICATION">Replication</option>
++            <option value="VALIDATION">Validation</option>
++          </select>
++        </label>
+         <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+           <input type="radio" checked={useDefaultTemperature} onChange={() => onSetUseDefaultTemperature(true)} disabled={disableTemperatureInput} />
+           Use provider default temperature
+@@ -98,6 +129,12 @@ export function LaunchControlsPanel({
+ 
+       {disableTemperatureInput && <p className="text-xs text-amber-700">Some default models do not support custom temperature, so domain trials will use provider defaults.</p>}
+       {temperatureWarning && <p className="text-xs text-amber-700">{temperatureWarning}</p>}
++      {fallbackReason && <p className="text-xs text-amber-700">Estimate fallback: {fallbackReason}</p>}
++      {knownExclusions.length > 0 && (
++        <p className="text-xs text-gray-500">
++          Estimate notes: {knownExclusions.join(' ')}
++        </p>
++      )}
+       {maxBudgetEnabled && !hasValidBudget && <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>}
+       {retryAutoPaused && <p className="text-xs text-red-700">Retry controls auto-paused: failure rate is {(failureRate * 100).toFixed(0)}% (threshold 30%).</p>}
+ 
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+index 52a7e89..10eec05 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+@@ -3,6 +3,8 @@ import { Badge } from '../../ui/Badge';
+ import { formatCost, type DomainTrialLaunchSummary } from './helpers';
+ 
+ type LaunchStatusPanelProps = {
++  evaluationId: string | null;
++  scopeCategory: string | null;
+   launchSummary: DomainTrialLaunchSummary | null;
+   started: boolean;
+   statusSummary: {
+@@ -19,6 +21,8 @@ type LaunchStatusPanelProps = {
+ };
+ 
+ export function LaunchStatusPanel({
++  evaluationId,
++  scopeCategory,
+   launchSummary,
+   started,
+   statusSummary,
+@@ -32,6 +36,8 @@ export function LaunchStatusPanel({
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+       <div className="flex flex-wrap items-center gap-2">
++        {evaluationId && <Badge variant="neutral" size="count">Evaluation: {evaluationId.slice(-8)}</Badge>}
++        {scopeCategory && <Badge variant="neutral" size="count">Scope: {scopeCategory.toLowerCase()}</Badge>}
+         <Badge variant="success" size="count">Started: {launchSummary?.startedRuns ?? statusSummary.total}</Badge>
+         <Badge variant="warning" size="count">In Progress: {statusSummary.active}</Badge>
+         <Badge variant="info" size="count">Completed: {statusSummary.completed}</Badge>
+diff --git a/cloud/apps/web/src/pages/DomainAnalysis.tsx b/cloud/apps/web/src/pages/DomainAnalysis.tsx
+index eb1ef28..ab286ad 100644
+--- a/cloud/apps/web/src/pages/DomainAnalysis.tsx
++++ b/cloud/apps/web/src/pages/DomainAnalysis.tsx
+@@ -9,9 +9,12 @@ import {
+   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
+   DOMAIN_ANALYSIS_QUERY,
+   DOMAIN_ANALYSIS_QUERY_LEGACY,
++  DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+   type DomainAvailableSignature,
+   type DomainAvailableSignaturesQueryResult,
+   type DomainAvailableSignaturesQueryVariables,
++  type DomainFindingsEligibilityQueryResult,
++  type DomainFindingsEligibilityQueryVariables,
+   type DomainAnalysisQueryResult,
+   type DomainAnalysisQueryVariables,
+ } from '../api/operations/domainAnalysis';
+@@ -69,6 +72,15 @@ export function DomainAnalysis() {
+     () => signatureData?.domainAvailableSignatures ?? [],
+     [signatureData],
+   );
++  const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
++    DomainFindingsEligibilityQueryResult,
++    DomainFindingsEligibilityQueryVariables
++  >({
++    query: DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
++    variables: { domainId: selectedDomainId },
++    pause: selectedDomainId === '',
++    requestPolicy: 'cache-and-network',
++  });
+   const hasValidSelectedSignature = useMemo(
+     () => selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature),
+     [selectedSignature, signatureOptions],
+@@ -152,6 +164,7 @@ export function DomainAnalysis() {
+   const data = useLegacyQuery ? legacyData : scoredData;
+   const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
+   const error = useLegacyQuery ? legacyError : scoredError;
++  const findingsEligibility = findingsEligibilityData?.domainFindingsEligibility;
+ 
+   const models = useMemo<ModelEntry[]>(() => {
+     const sourceModels = data?.domainAnalysis.models ?? [];
+@@ -232,8 +245,8 @@ export function DomainAnalysis() {
+         </p>
+       </div>
+ 
+-      {(domainsError || signaturesError || error) && (
+-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
++      {(domainsError || signaturesError || findingsEligibilityError || error) && (
++        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? findingsEligibilityError ?? error)?.message ?? 'Unknown error'}`} />
+       )}
+ 
+       <section className="rounded-lg border border-gray-200 bg-white p-4">
+@@ -330,6 +343,49 @@ export function DomainAnalysis() {
+         )}
+       </section>
+ 
++      {selectedDomainId !== '' && !findingsEligibilityLoading && findingsEligibility && (
++        <section className={`rounded-lg border p-4 ${findingsEligibility.eligible ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
++          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
++            <div className="space-y-2">
++              <div>
++                <p className={`text-sm font-semibold ${findingsEligibility.eligible ? 'text-green-900' : 'text-amber-900'}`}>
++                  {findingsEligibility.eligible ? 'Findings are auditable' : 'Diagnostics only for now'}
++                </p>
++                <p className={`text-sm ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  {findingsEligibility.summary}
++                </p>
++              </div>
++              {findingsEligibility.reasons.length > 0 && (
++                <ul className={`list-disc pl-5 text-xs space-y-1 ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  {findingsEligibility.reasons.map((reason) => (
++                    <li key={reason}>{reason}</li>
++                  ))}
++                </ul>
++              )}
++              {findingsEligibility.recommendedActions.length > 0 && (
++                <div className={`text-xs ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
++                  Recommended next step: {findingsEligibility.recommendedActions[0]}
++                </div>
++              )}
++            </div>
++            <div className="rounded border border-white/60 bg-white/70 px-3 py-2 text-xs text-gray-700">
++              <div>Completed eligible evaluations: <span className="font-semibold">{findingsEligibility.completedEligibleEvaluationCount}</span></div>
++              <div>Scopes considered: <span className="font-semibold">{findingsEligibility.consideredScopeCategories.map((scope) => scope.toLowerCase()).join(', ')}</span></div>
++              {findingsEligibility.latestEligibleEvaluationId && (
++                <div>Latest eligible cohort: <span className="font-semibold">{findingsEligibility.latestEligibleEvaluationId.slice(-8)}</span></div>
++              )}
++            </div>
++          </div>
++          {!findingsEligibility.eligible && (
++            <div className="mt-3">
++              <Button type="button" size="sm" onClick={() => navigate(`/domains/${selectedDomainId}/run-trials?scopeCategory=PRODUCTION`)}>
++                Open Runs and start a production evaluation
++              </Button>
++            </div>
++          )}
++        </section>
++      )}
++
+       {(domainsLoading || signaturesLoading || (selectedDomainId !== '' && fetching)) ? (
+         <Loading size="lg" text="Loading domain analysis..." />
+       ) : (
+diff --git a/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx b/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
+index 3dcd6a3..2b4e828 100644
+--- a/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
++++ b/cloud/apps/web/src/pages/DomainTrialsDashboard.tsx
+@@ -1,9 +1,10 @@
+ import { useEffect, useMemo, useState } from 'react';
+ import { Link, useParams, useSearchParams } from 'react-router-dom';
+ import { useMutation, useQuery } from 'urql';
+-import { RefreshCw } from 'lucide-react';
++import { ExternalLink, RefreshCw } from 'lucide-react';
+ import { Button } from '../components/ui/Button';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
++import { Badge } from '../components/ui/Badge';
+ import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
+ import { LaunchStatusPanel } from '../components/domains/domainTrials/LaunchStatusPanel';
+ import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
+@@ -11,33 +12,65 @@ import { TrialGridTable } from '../components/domains/domainTrials/TrialGridTabl
+ import {
+   cellKey,
+   downloadCsv,
++  formatCost,
+   type DomainTrialLaunchSummary,
+   type DomainTrialCellStatus,
+ } from '../components/domains/domainTrials/helpers';
+ import {
+-  DOMAIN_TRIALS_PLAN_QUERY,
++  DOMAIN_EVALUATIONS_QUERY,
++  DOMAIN_EVALUATION_QUERY,
++  DOMAIN_EVALUATION_STATUS_QUERY,
++  DOMAIN_RUN_SUMMARY_QUERY,
+   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
++  DOMAIN_TRIALS_PLAN_QUERY,
++  ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+   RETRY_DOMAIN_TRIAL_CELL_MUTATION,
+-  RUN_TRIALS_FOR_DOMAIN_MUTATION,
++  START_DOMAIN_EVALUATION_MUTATION,
++  type DomainEvaluationQueryResult,
++  type DomainEvaluationQueryVariables,
++  type DomainEvaluationsQueryResult,
++  type DomainEvaluationsQueryVariables,
++  type DomainEvaluationStatusQueryResult,
++  type DomainEvaluationStatusQueryVariables,
++  type DomainRunSummaryQueryResult,
++  type DomainRunSummaryQueryVariables,
+   type DomainTrialRunsStatusQueryResult,
+   type DomainTrialRunsStatusQueryVariables,
+   type DomainTrialsPlanQueryResult,
+   type DomainTrialsPlanQueryVariables,
++  type EstimateDomainEvaluationCostQueryResult,
++  type EstimateDomainEvaluationCostQueryVariables,
+   type RetryDomainTrialCellMutationResult,
+   type RetryDomainTrialCellMutationVariables,
+-  type RunTrialsForDomainMutationResult,
+-  type RunTrialsForDomainMutationVariables,
++  type StartDomainEvaluationMutationResult,
++  type StartDomainEvaluationMutationVariables,
+ } from '../api/operations/domains';
+ 
+ const POLL_MS = 3000;
+-
++const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
++type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
+ type CellRunMap = Record<string, string>;
++
++function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
++  return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
++}
++
++function formatTimestamp(value: string | number | null | undefined): string {
++  if (value == null) return 'Unknown';
++  const date = typeof value === 'number' ? new Date(value) : new Date(value);
++  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
++}
++
+ export function DomainTrialsDashboard() {
+   const { domainId } = useParams<{ domainId: string }>();
+-  const [searchParams] = useSearchParams();
++  const [searchParams, setSearchParams] = useSearchParams();
+   const initialTemperatureParam = searchParams.get('temperature');
+   const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
+   const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
++  const initialScope = isEvaluationScopeCategory(searchParams.get('scopeCategory'))
++    ? (searchParams.get('scopeCategory') as EvaluationScopeCategory)
++    : 'PRODUCTION';
++  const [scopeCategory, setScopeCategory] = useState<EvaluationScopeCategory>(initialScope);
+   const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
+   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
+   const [started, setStarted] = useState(false);
+@@ -53,6 +86,7 @@ export function DomainTrialsDashboard() {
+   const [safeMode, setSafeMode] = useState(false);
+   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
+   const [maxBudgetInput, setMaxBudgetInput] = useState('');
++  const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
+ 
+   const parsedTemperature = Number.parseFloat(temperatureInput);
+   const hasValidTemperature = Number.isFinite(parsedTemperature) && parsedTemperature >= 0 && parsedTemperature <= 2;
+@@ -75,13 +109,94 @@ export function DomainTrialsDashboard() {
+     pause: !domainId,
+     requestPolicy: 'cache-and-network',
+   });
+-  const [startRunResult, runTrialsForDomain] = useMutation<RunTrialsForDomainMutationResult, RunTrialsForDomainMutationVariables>(
+-    RUN_TRIALS_FOR_DOMAIN_MUTATION
+-  );
++  const [estimateResult, refetchEstimate] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
++    query: ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
++    variables: {
++      domainId: domainId ?? '',
++      definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
++      temperature: selectedTemperature,
++      samplePercentage: 100,
++      samplesPerScenario: 1,
++      scopeCategory,
++    },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [summaryResult, refetchSummary] = useQuery<DomainRunSummaryQueryResult, DomainRunSummaryQueryVariables>({
++    query: DOMAIN_RUN_SUMMARY_QUERY,
++    variables: { domainId: domainId ?? '' },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [evaluationsResult, refetchEvaluations] = useQuery<DomainEvaluationsQueryResult, DomainEvaluationsQueryVariables>({
++    query: DOMAIN_EVALUATIONS_QUERY,
++    variables: { domainId: domainId ?? '', limit: 8 },
++    pause: !domainId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [currentEvaluationResult, refetchCurrentEvaluation] = useQuery<DomainEvaluationQueryResult, DomainEvaluationQueryVariables>({
++    query: DOMAIN_EVALUATION_QUERY,
++    variables: { id: currentEvaluationId ?? '' },
++    pause: !currentEvaluationId,
++    requestPolicy: 'cache-and-network',
++  });
++  const [currentEvaluationStatusResult, refetchCurrentEvaluationStatus] = useQuery<
++    DomainEvaluationStatusQueryResult,
++    DomainEvaluationStatusQueryVariables
++  >({
++    query: DOMAIN_EVALUATION_STATUS_QUERY,
++    variables: { id: currentEvaluationId ?? '' },
++    pause: !currentEvaluationId,
++    requestPolicy: 'network-only',
++  });
++  const [startDomainEvaluationResult, startDomainEvaluation] = useMutation<
++    StartDomainEvaluationMutationResult,
++    StartDomainEvaluationMutationVariables
++  >(START_DOMAIN_EVALUATION_MUTATION);
+   const [retryResult, retryCell] = useMutation<RetryDomainTrialCellMutationResult, RetryDomainTrialCellMutationVariables>(
+     RETRY_DOMAIN_TRIAL_CELL_MUTATION
+   );
+ 
++  useEffect(() => {
++    const existingScope = searchParams.get('scopeCategory');
++    const existingEvaluationId = searchParams.get('evaluationId');
++    if (existingScope === scopeCategory && existingEvaluationId === currentEvaluationId) {
++      return;
++    }
++    const next = new URLSearchParams(searchParams);
++    next.set('scopeCategory', scopeCategory);
++    if (currentEvaluationId) next.set('evaluationId', currentEvaluationId);
++    else next.delete('evaluationId');
++    setSearchParams(next, { replace: true });
++  }, [scopeCategory, currentEvaluationId, searchParams, setSearchParams]);
++
++  const currentEvaluation = currentEvaluationResult.data?.domainEvaluation ?? null;
++  const recentEvaluations = evaluationsResult.data?.domainEvaluations ?? [];
++  const selectedEvaluation = currentEvaluation ?? recentEvaluations[0] ?? null;
++
++  useEffect(() => {
++    if (!currentEvaluationId && recentEvaluations.length > 0) {
++      setCurrentEvaluationId(recentEvaluations[0]?.id ?? null);
++    }
++  }, [currentEvaluationId, recentEvaluations]);
++
++  useEffect(() => {
++    if (!currentEvaluation) return;
++    const byDefinition: Record<string, string> = {};
++    for (const member of currentEvaluation.members) {
++      byDefinition[member.definitionIdAtLaunch] = member.runId;
++    }
++    setDefinitionRunIds((prev) => {
++      const prevKeys = Object.keys(prev);
++      const nextKeys = Object.keys(byDefinition);
++      if (prevKeys.length === nextKeys.length && nextKeys.every((key) => prev[key] === byDefinition[key])) {
++        return prev;
++      }
++      return byDefinition;
++    });
++    setStarted((prev) => prev || true);
++  }, [currentEvaluation]);
++
+   const runIds = useMemo(() => {
+     const ids = new Set<string>();
+     Object.values(definitionRunIds).forEach((id) => ids.add(id));
+@@ -96,7 +211,7 @@ export function DomainTrialsDashboard() {
+     requestPolicy: 'network-only',
+   });
+ 
+-  const statusSummary = useMemo(() => {
++  const computedStatusSummary = useMemo(() => {
+     const runStatuses = statusResult.data?.domainTrialRunsStatus ?? [];
+     const total = runIds.length;
+     const known = runStatuses.length;
+@@ -106,6 +221,17 @@ export function DomainTrialsDashboard() {
+     return { total, known, completed, failed, active };
+   }, [runIds.length, statusResult.data?.domainTrialRunsStatus]);
+ 
++  const domainEvaluationStatus = currentEvaluationStatusResult.data?.domainEvaluationStatus;
++  const statusSummary = domainEvaluationStatus
++    ? {
++      total: domainEvaluationStatus.totalRuns,
++      known: domainEvaluationStatus.totalRuns,
++      completed: domainEvaluationStatus.completedRuns,
++      failed: domainEvaluationStatus.failedRuns + domainEvaluationStatus.cancelledRuns,
++      active: domainEvaluationStatus.pendingRuns + domainEvaluationStatus.runningRuns,
++    }
++    : computedStatusSummary;
++
+   const allRunsTerminal = statusSummary.total > 0 && statusSummary.active === 0 && statusSummary.known === statusSummary.total;
+   const completionWithFailures = allRunsTerminal && statusSummary.failed > 0;
+   const completionClean = allRunsTerminal && statusSummary.failed === 0;
+@@ -116,10 +242,26 @@ export function DomainTrialsDashboard() {
+     if (!started || runIds.length === 0 || allRunsTerminal) return;
+     const interval = window.setInterval(() => {
+       refetchStatus({ requestPolicy: 'network-only' });
++      if (currentEvaluationId) {
++        refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++        refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++      }
++      refetchSummary({ requestPolicy: 'network-only' });
++      refetchEvaluations({ requestPolicy: 'network-only' });
+       setLastStatusUpdatedAt(Date.now());
+     }, POLL_MS);
+     return () => window.clearInterval(interval);
+-  }, [started, runIds.length, allRunsTerminal, refetchStatus]);
++  }, [
++    started,
++    runIds.length,
++    allRunsTerminal,
++    currentEvaluationId,
++    refetchCurrentEvaluation,
++    refetchCurrentEvaluationStatus,
++    refetchEvaluations,
++    refetchStatus,
++    refetchSummary,
++  ]);
+ 
+   useEffect(() => {
+     const message = planResult.error?.message ?? '';
+@@ -147,6 +289,7 @@ export function DomainTrialsDashboard() {
+   }, [statusResult.error?.message, statusNoContentRetries, started, refetchStatus]);
+ 
+   const plan = planResult.data?.domainTrialsPlan;
++  const estimate = estimateResult.data?.estimateDomainEvaluationCost;
+   const models = plan?.models ?? [];
+   const vignettes = plan?.vignettes ?? [];
+   const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
+@@ -173,7 +316,7 @@ export function DomainTrialsDashboard() {
+     setUseDefaultTemperature(true);
+   }, [disableTemperatureInput]);
+ 
+-  const isStarting = startRunResult.fetching;
++  const isStarting = startDomainEvaluationResult.fetching;
+   const isRetrying = retryResult.fetching;
+ 
+   const handleStart = async () => {
+@@ -188,19 +331,26 @@ export function DomainTrialsDashboard() {
+       return;
+     }
+ 
+-    const result = await runTrialsForDomain({
++    const result = await startDomainEvaluation({
+       domainId,
++      scopeCategory,
+       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
+       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
+       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
++      samplePercentage: 100,
++      samplesPerScenario: 1,
+     });
+     if (result.error) {
+       setRunError(result.error.message);
+       return;
+     }
+-    const payload = result.data?.runTrialsForDomain;
++    const payload = result.data?.startDomainEvaluation;
+     if (!payload) {
+-      setRunError('Failed to start domain trials.');
++      setRunError('Failed to start domain evaluation.');
++      return;
++    }
++    if (payload.blockedByActiveLaunch) {
++      setRunError('An equivalent active domain evaluation is already running for this domain.');
+       return;
+     }
+ 
+@@ -221,6 +371,11 @@ export function DomainTrialsDashboard() {
+     setCellOverrideRunIds({});
+     setStarted(true);
+     setShowLaunchConfirm(false);
++    setCurrentEvaluationId(payload.domainEvaluationId);
++    refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++    refetchEvaluations({ requestPolicy: 'network-only' });
++    refetchSummary({ requestPolicy: 'network-only' });
+     refetchStatus({ requestPolicy: 'network-only' });
+     setLastStatusUpdatedAt(Date.now());
+     if (payload.startedRuns === 0) {
+@@ -252,6 +407,7 @@ export function DomainTrialsDashboard() {
+     setCellOverrideRunIds((prev) => ({ ...prev, [key]: payload.runId! }));
+     setStarted(true);
+     refetchStatus({ requestPolicy: 'network-only' });
++    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+   };
+ 
+   const getCellStatus = (definitionId: string, modelId: string): DomainTrialCellStatus => {
+@@ -309,25 +465,36 @@ export function DomainTrialsDashboard() {
+   const planDisplayError = suppressPlanNoContentError ? undefined : planResult.error;
+   const statusDisplayError = suppressStatusNoContentError ? undefined : statusResult.error;
+   const displayError = planDisplayError ?? (started ? statusDisplayError : undefined);
++  const summary = summaryResult.data?.domainRunSummary;
+ 
+   return (
+     <div className="space-y-6">
+       <div className="flex items-center justify-between gap-3">
+         <div>
+-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Trial Dashboard</h1>
++          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Evaluation Summary</h1>
+           <p className="text-sm text-gray-600">
+-            Review and run latest vignettes for <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
++            Launch domain evaluations, monitor cohort-level status, and drill down into vignette-scoped runs for{' '}
++            <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
+           </p>
+           {filteredDefinitionIds.length > 0 && (
+             <p className="text-xs text-amber-700">
+-              Scoped to {filteredDefinitionIds.length} selected missing vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
++              Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+             </p>
+           )}
+         </div>
+         <div className="flex items-center gap-2">
+-          <Button type="button" variant="ghost" size="sm" onClick={() => refetchPlan({ requestPolicy: 'network-only' })}>
++          <Button type="button" variant="ghost" size="sm" onClick={() => {
++            refetchPlan({ requestPolicy: 'network-only' });
++            refetchEstimate({ requestPolicy: 'network-only' });
++            refetchSummary({ requestPolicy: 'network-only' });
++            refetchEvaluations({ requestPolicy: 'network-only' });
++            if (currentEvaluationId) {
++              refetchCurrentEvaluation({ requestPolicy: 'network-only' });
++              refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
++            }
++          }}>
+             <RefreshCw className="w-4 h-4 mr-1" />
+-            Refresh Plan
++            Refresh
+           </Button>
+           <Button type="button" variant="ghost" size="sm" onClick={handleExportLedger} disabled={vignettes.length === 0 || models.length === 0}>
+             Export Ledger CSV
+@@ -338,16 +505,96 @@ export function DomainTrialsDashboard() {
+         </div>
+       </div>
+ 
+-      {displayError && <ErrorMessage message={`Failed to load domain trial data: ${displayError.message ?? 'Unknown error'}`} />}
++      {displayError && <ErrorMessage message={`Failed to load domain evaluation data: ${displayError.message ?? 'Unknown error'}`} />}
+       {runError && <ErrorMessage message={runError} />}
+       {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
+         <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
+       )}
+ 
++      <section className="grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
++        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
++          <div className="flex flex-wrap items-center gap-2">
++            <Badge variant="info" size="count">Evaluations: {summary?.totalEvaluations ?? 0}</Badge>
++            <Badge variant="warning" size="count">Active member runs: {summary?.runningMemberRuns ?? 0}</Badge>
++            <Badge variant="success" size="count">Completed member runs: {summary?.completedMemberRuns ?? 0}</Badge>
++            <Badge variant={(summary?.failedMemberRuns ?? 0) > 0 ? 'error' : 'neutral'} size="count">
++              Failed member runs: {summary?.failedMemberRuns ?? 0}
++            </Badge>
++          </div>
++          <div className="grid gap-3 md:grid-cols-3">
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Latest evaluation</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">
++                {summary?.latestEvaluationId ? summary.latestEvaluationId.slice(-8) : 'No evaluation yet'}
++              </div>
++              <div className="text-xs text-gray-600">
++                {summary?.latestScopeCategory ? `${summary.latestScopeCategory.toLowerCase()} · ${summary.latestEvaluationStatus?.toLowerCase()}` : 'Start a pilot or production evaluation.'}
++              </div>
++            </div>
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">History mix</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">
++                {summary?.productionEvaluations ?? 0} production · {summary?.replicationEvaluations ?? 0} replication
++              </div>
++              <div className="text-xs text-gray-600">
++                {summary?.pilotEvaluations ?? 0} pilot · {summary?.validationEvaluations ?? 0} validation
++              </div>
++            </div>
++            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Current estimate</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">{formatCost(estimate?.totalEstimatedCost ?? 0)}</div>
++              <div className="text-xs text-gray-600">
++                {estimate?.estimateConfidence ? `Confidence: ${estimate.estimateConfidence.toLowerCase()}` : 'Estimate unavailable'}
++              </div>
++            </div>
++          </div>
++        </div>
++
++        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
++          <div>
++            <h2 className="text-lg font-medium text-[#1A1A1A]">Recent evaluations</h2>
++            <p className="text-sm text-gray-600">Select a cohort summary or launch a new scoped evaluation.</p>
++          </div>
++          {recentEvaluations.length === 0 ? (
++            <p className="text-sm text-gray-600">No domain evaluations yet.</p>
++          ) : (
++            <div className="space-y-2">
++              {recentEvaluations.map((evaluation) => (
++                <button
++                  key={evaluation.id}
++                  type="button"
++                  onClick={() => setCurrentEvaluationId(evaluation.id)}
++                  className={`w-full rounded-lg border px-3 py-3 text-left ${currentEvaluationId === evaluation.id ? 'border-teal-400 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
++                >
++                  <div className="flex items-center justify-between gap-3">
++                    <div>
++                      <div className="text-sm font-semibold text-gray-900">
++                        {evaluation.scopeCategory.toLowerCase()} · {evaluation.status.toLowerCase()}
++                      </div>
++                      <div className="text-xs text-gray-600">
++                        {evaluation.memberCount} runs · {formatCost(evaluation.projectedCostUsd)} projected
++                      </div>
++                    </div>
++                    <div className="text-right text-xs text-gray-500">
++                      <div>{formatTimestamp(evaluation.createdAt)}</div>
++                      <div>{evaluation.id.slice(-8)}</div>
++                    </div>
++                  </div>
++                </button>
++              ))}
++            </div>
++          )}
++        </div>
++      </section>
++
+       <LaunchControlsPanel
++        scopeCategory={scopeCategory}
+         vignetteCount={vignettes.length}
+         modelCount={models.length}
+-        totalEstimatedCost={plan?.totalEstimatedCost ?? 0}
++        totalEstimatedCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
++        estimateConfidence={estimate?.estimateConfidence}
++        fallbackReason={estimate?.fallbackReason}
++        knownExclusions={estimate?.knownExclusions}
+         useDefaultTemperature={useDefaultTemperature}
+         disableTemperatureInput={disableTemperatureInput}
+         temperatureInput={temperatureInput}
+@@ -358,8 +605,9 @@ export function DomainTrialsDashboard() {
+         retryAutoPaused={retryAutoPaused}
+         failureRate={failureRate}
+         isStarting={isStarting}
+-        planFetching={planResult.fetching}
+-        temperatureWarning={plan?.temperatureWarning}
++        planFetching={planResult.fetching || estimateResult.fetching}
++        temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
++        onSetScopeCategory={setScopeCategory}
+         onSetUseDefaultTemperature={setUseDefaultTemperature}
+         onSetTemperatureInput={setTemperatureInput}
+         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
+@@ -369,15 +617,74 @@ export function DomainTrialsDashboard() {
+       />
+ 
+       <LaunchStatusPanel
++        evaluationId={currentEvaluationId}
++        scopeCategory={selectedEvaluation?.scopeCategory ?? null}
+         launchSummary={launchSummary}
+         started={started}
+         statusSummary={statusSummary}
+-        statusFetching={statusResult.fetching}
++        statusFetching={statusResult.fetching || currentEvaluationStatusResult.fetching}
+         lastStatusUpdatedAt={lastStatusUpdatedAt}
+         completionClean={completionClean}
+         completionWithFailures={completionWithFailures}
+       />
+ 
++      {selectedEvaluation && (
++        <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
++          <div className="flex flex-wrap items-center justify-between gap-3">
++            <div>
++              <h2 className="text-lg font-medium text-[#1A1A1A]">Current cohort summary</h2>
++              <p className="text-sm text-gray-600">
++                Domain evaluation {selectedEvaluation.id.slice(-8)} · {selectedEvaluation.scopeCategory.toLowerCase()} · created {formatTimestamp(selectedEvaluation.createdAt)}
++              </p>
++            </div>
++            <div className="flex items-center gap-2">
++              <Badge variant="neutral" size="count">Members: {selectedEvaluation.memberCount}</Badge>
++              <Badge variant="success" size="count">Projected: {formatCost(selectedEvaluation.projectedCostUsd)}</Badge>
++            </div>
++          </div>
++
++          {currentEvaluation && currentEvaluation.members.length > 0 && (
++            <div className="overflow-x-auto">
++              <table className="min-w-full text-sm">
++                <thead>
++                  <tr className="border-b border-gray-200 text-left text-gray-600">
++                    <th className="py-2 pr-3">Vignette</th>
++                    <th className="py-2 pr-3">Run</th>
++                    <th className="py-2 pr-3">Status</th>
++                    <th className="py-2 pr-3">Category</th>
++                    <th className="py-2 pr-3">Started</th>
++                    <th className="py-2 pr-3"></th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {currentEvaluation.members.map((member) => (
++                    <tr key={member.runId} className="border-b border-gray-100">
++                      <td className="py-2 pr-3">
++                        <div className="font-medium text-gray-900">{member.definitionNameAtLaunch}</div>
++                        <div className="text-xs text-gray-500">{member.definitionIdAtLaunch.slice(-8)}</div>
++                      </td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runId.slice(-8)}</td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runStatus.toLowerCase()}</td>
++                      <td className="py-2 pr-3 text-gray-700">{member.runCategory.toLowerCase()}</td>
++                      <td className="py-2 pr-3 text-gray-500">{formatTimestamp(member.runStartedAt)}</td>
++                      <td className="py-2 pr-3">
++                        <Link
++                          to={`/runs/${member.runId}`}
++                          className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
++                        >
++                          Open run
++                          <ExternalLink className="h-3.5 w-3.5" />
++                        </Link>
++                      </td>
++                    </tr>
++                  ))}
++                </tbody>
++              </table>
++            </div>
++          )}
++        </section>
++      )}
++
+       <TrialGridTable
+         loading={planResult.fetching}
+         models={models.map((model) => ({ modelId: model.modelId, label: model.label }))}
+@@ -401,9 +708,13 @@ export function DomainTrialsDashboard() {
+       <LaunchConfirmModal
+         open={showLaunchConfirm}
+         domainName={plan?.domainName ?? domainId}
++        scopeCategory={scopeCategory}
+         vignetteCount={vignettes.length}
+         modelCount={models.length}
+-        estimatedTotalCost={plan?.totalEstimatedCost ?? 0}
++        estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
++        estimateConfidence={estimate?.estimateConfidence}
++        fallbackReason={estimate?.fallbackReason}
++        knownExclusions={estimate?.knownExclusions}
+         temperatureLabel={useDefaultTemperature || disableTemperatureInput ? 'Provider default' : String(parsedTemperature)}
+         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
+         isStarting={isStarting}

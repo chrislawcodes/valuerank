@@ -1,0 +1,52 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx",
+    "cloud/apps/web/src/pages/Dashboard.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/src/pages/Domains.tsx",
+    "cloud/apps/web/tests/pages/Dashboard.test.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysis.test.tsx",
+    "cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx",
+    "cloud/apps/web/tests/pages/Domains.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx",
+    "cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx",
+    "cloud/apps/web/src/pages/Dashboard.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysis.tsx",
+    "cloud/apps/web/src/pages/DomainTrialsDashboard.tsx",
+    "cloud/apps/web/src/pages/Domains.tsx",
+    "cloud/apps/web/tests/pages/Dashboard.test.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysis.test.tsx",
+    "cloud/apps/web/tests/pages/DomainTrialsDashboard.test.tsx",
+    "cloud/apps/web/tests/pages/Domains.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md"
+  ],
+  "prerequisite_paths": [
+    "cloud/apps/web/src/api/operations/domains.ts",
+    "cloud/apps/web/src/api/operations/domainAnalysis.ts",
+    "cloud/apps/web/src/hooks/useDomains.ts"
+  ],
+  "review_context": {
+    "summary": "This wave hardens the usability seams called out in the Gemini usability review: exact resume links, stronger launch-time configuration review, explicit findings trust-state messaging, and clearer domain-evaluation versus run-scoped diagnostics labeling.",
+    "assumed_present": [
+      "The earlier domain-evaluation launch, grouped-summary, and findings-eligibility contracts are already landed and should be treated as prerequisites, not as part of this diff."
+    ],
+    "out_of_scope": [
+      "No new backend schema or API work is included.",
+      "No archive classification changes are included.",
+      "Existing non-blocking React act warnings are not being fixed in this slice."
+    ]
+  },
+  "verification_commands": [
+    "npm run typecheck --workspace=@valuerank/web",
+    "npm test --workspace=@valuerank/web -- tests/pages/Dashboard.test.tsx tests/pages/Domains.test.tsx tests/pages/DomainTrialsDashboard.test.tsx tests/pages/DomainAnalysis.test.tsx"
+  ]
+}

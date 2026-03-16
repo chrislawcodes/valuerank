@@ -28,8 +28,10 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     id: 'run-12345678-abcd',
     name: null, // Uses algorithmic name
     definitionId: 'def-1',
+    definitionVersion: 1,
     experimentId: null,
     status: 'COMPLETED',
+    runCategory: 'PRODUCTION',
     config: {
       models: ['gpt-4'],
     },
@@ -48,10 +50,17 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     transcripts: [],
     transcriptCount: 10,
     recentTasks: [],
+    analysisStatus: null,
+    summarizeProgress: null,
+    executionMetrics: null,
+    analysis: null,
+    tags: [],
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      version: 1,
       tags: [],
+      content: {},
     },
     ...overrides,
   };
@@ -99,6 +108,16 @@ function renderRuns(client: Client) {
   return render(
     <Provider value={client}>
       <MemoryRouter>
+        <Runs />
+      </MemoryRouter>
+    </Provider>
+  );
+}
+
+function renderRunsAt(client: Client, path: string) {
+  return render(
+    <Provider value={client}>
+      <MemoryRouter initialEntries={[path]}>
         <Runs />
       </MemoryRouter>
     </Provider>
@@ -179,6 +198,27 @@ describe('Runs Page', () => {
     });
     expect(screen.getByText('Start your first evaluation trial from a vignette.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Go to Vignettes' })).toBeInTheDocument();
+  });
+
+  it('shows validation-specific empty state when the runCategory filter comes from the URL', async () => {
+    const mockExecuteQuery = vi.fn(() =>
+      fromValue({
+        data: { runs: [] },
+        error: undefined,
+        stale: false,
+        hasNext: false,
+      })
+    );
+    const mockClient = createMockClient(mockExecuteQuery);
+    renderRunsAt(mockClient, '/runs?runCategory=VALIDATION');
+
+    await waitFor(() => {
+      expect(screen.getByText(/validation run history/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/no validation runs yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show all runs/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go to domains/i })).toBeInTheDocument();
   });
 
   it('shows filtered empty state when filter applied', async () => {

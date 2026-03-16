@@ -10,7 +10,7 @@ import { createLogger } from '@valuerank/shared';
 
 const log = createLogger('infra-models');
 
-export type InfraModelPurpose = 'scenario_expansion' | 'summarizer';
+export type InfraModelPurpose = 'scenario_expansion' | 'judge' | 'summarizer';
 
 export type InfraModelConfig = {
   modelId: string;
@@ -19,6 +19,48 @@ export type InfraModelConfig = {
   displayName: string;
   apiConfig?: Record<string, unknown> | null;
 };
+
+async function getLowestCostActiveModel(labelSuffix: string): Promise<InfraModelConfig> {
+  const lowestCostModel = await db.llmModel.findFirst({
+    where: {
+      status: 'ACTIVE',
+      provider: {
+        isEnabled: true,
+      },
+    },
+    orderBy: [
+      { costInputPerMillion: 'asc' },
+      { costOutputPerMillion: 'asc' },
+    ],
+    include: {
+      provider: true,
+    },
+  });
+
+  if (lowestCostModel !== null) {
+    log.info(
+      { modelId: lowestCostModel.modelId, provider: lowestCostModel.provider.name },
+      `Using lowest cost model for ${labelSuffix}`
+    );
+
+    return {
+      modelId: lowestCostModel.modelId,
+      providerId: lowestCostModel.provider.id,
+      providerName: lowestCostModel.provider.name,
+      displayName: `${lowestCostModel.displayName} (${labelSuffix})`,
+      apiConfig: lowestCostModel.apiConfig as Record<string, unknown> | null,
+    };
+  }
+
+  log.warn(`No active models found, using hardcoded default for ${labelSuffix}`);
+  return {
+    modelId: 'claude-3-5-haiku-20241022',
+    providerId: 'anthropic',
+    providerName: 'anthropic',
+    displayName: `Claude 3.5 Haiku (${labelSuffix})`,
+    apiConfig: null,
+  };
+}
 
 /**
  * Get the configured infrastructure model for a specific purpose.
@@ -118,48 +160,22 @@ export async function getSummarizerModel(): Promise<InfraModelConfig> {
 
   // Fall back to the lowest cost active model
   log.info('No summarizer model configured, finding lowest cost model');
+  return getLowestCostActiveModel('Lowest Cost');
+}
 
-  const lowestCostModel = await db.llmModel.findFirst({
-    where: {
-      status: 'ACTIVE',
-      provider: {
-        isEnabled: true,
-      },
-    },
-    orderBy: [
-      { costInputPerMillion: 'asc' },
-      { costOutputPerMillion: 'asc' },
-    ],
-    include: {
-      provider: true,
-    },
-  });
+/**
+ * Get the configured infrastructure model for judging/evaluation.
+ * Falls back to the lowest cost active model if not configured.
+ */
+export async function getJudgeModel(): Promise<InfraModelConfig> {
+  const configured = await getInfraModel('judge');
 
-  if (lowestCostModel !== null) {
-    log.info(
-      { modelId: lowestCostModel.modelId, provider: lowestCostModel.provider.name },
-      'Using lowest cost model for summarization'
-    );
-
-    return {
-      modelId: lowestCostModel.modelId,
-      providerId: lowestCostModel.provider.id,
-      providerName: lowestCostModel.provider.name,
-      displayName: `${lowestCostModel.displayName} (Lowest Cost)`,
-      apiConfig: lowestCostModel.apiConfig as Record<string, unknown> | null,
-    };
+  if (configured !== null) {
+    return configured;
   }
 
-  // Ultimate fallback if no models exist
-  log.warn('No active models found, using hardcoded default');
-
-  return {
-    modelId: 'claude-3-5-haiku-20241022',
-    providerId: 'anthropic',
-    providerName: 'anthropic',
-    displayName: 'Claude 3.5 Haiku (Default)',
-    apiConfig: null,
-  };
+  log.info('No judge model configured, finding lowest cost model');
+  return getLowestCostActiveModel('Judge Fallback');
 }
 
 /**

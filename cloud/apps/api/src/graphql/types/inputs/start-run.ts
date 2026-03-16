@@ -38,6 +38,10 @@ export const StartRunInput = builder.inputType('StartRunInput', {
       required: false,
       description: 'Priority level: LOW, NORMAL (default), HIGH',
     }),
+    runCategory: t.string({
+      required: false,
+      description: 'Optional workflow category: PILOT, PRODUCTION, REPLICATION, VALIDATION, or UNKNOWN_LEGACY',
+    }),
     experimentId: t.id({
       required: false,
       description: 'Optional experiment to associate this run with',

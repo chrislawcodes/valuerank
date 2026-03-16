@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
-import { RefreshCw } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Badge } from '../components/ui/Badge';
 import { LaunchConfirmModal } from '../components/domains/domainTrials/LaunchConfirmModal';
 import { LaunchStatusPanel } from '../components/domains/domainTrials/LaunchStatusPanel';
 import { LaunchControlsPanel } from '../components/domains/domainTrials/LaunchControlsPanel';
@@ -11,33 +12,65 @@ import { TrialGridTable } from '../components/domains/domainTrials/TrialGridTabl
 import {
   cellKey,
   downloadCsv,
+  formatCost,
   type DomainTrialLaunchSummary,
   type DomainTrialCellStatus,
 } from '../components/domains/domainTrials/helpers';
 import {
-  DOMAIN_TRIALS_PLAN_QUERY,
+  DOMAIN_EVALUATIONS_QUERY,
+  DOMAIN_EVALUATION_QUERY,
+  DOMAIN_EVALUATION_STATUS_QUERY,
+  DOMAIN_RUN_SUMMARY_QUERY,
   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
+  DOMAIN_TRIALS_PLAN_QUERY,
+  ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
   RETRY_DOMAIN_TRIAL_CELL_MUTATION,
-  RUN_TRIALS_FOR_DOMAIN_MUTATION,
+  START_DOMAIN_EVALUATION_MUTATION,
+  type DomainEvaluationQueryResult,
+  type DomainEvaluationQueryVariables,
+  type DomainEvaluationsQueryResult,
+  type DomainEvaluationsQueryVariables,
+  type DomainEvaluationStatusQueryResult,
+  type DomainEvaluationStatusQueryVariables,
+  type DomainRunSummaryQueryResult,
+  type DomainRunSummaryQueryVariables,
   type DomainTrialRunsStatusQueryResult,
   type DomainTrialRunsStatusQueryVariables,
   type DomainTrialsPlanQueryResult,
   type DomainTrialsPlanQueryVariables,
+  type EstimateDomainEvaluationCostQueryResult,
+  type EstimateDomainEvaluationCostQueryVariables,
   type RetryDomainTrialCellMutationResult,
   type RetryDomainTrialCellMutationVariables,
-  type RunTrialsForDomainMutationResult,
-  type RunTrialsForDomainMutationVariables,
+  type StartDomainEvaluationMutationResult,
+  type StartDomainEvaluationMutationVariables,
 } from '../api/operations/domains';
 
 const POLL_MS = 3000;
-
+const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
+type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
 type CellRunMap = Record<string, string>;
+
+function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
+  return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
+}
+
+function formatTimestamp(value: string | number | null | undefined): string {
+  if (value == null) return 'Unknown';
+  const date = typeof value === 'number' ? new Date(value) : new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
+}
+
 export function DomainTrialsDashboard() {
   const { domainId } = useParams<{ domainId: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialTemperatureParam = searchParams.get('temperature');
   const initialParsedTemperature = initialTemperatureParam == null ? Number.NaN : Number.parseFloat(initialTemperatureParam);
   const hasInitialTemperature = Number.isFinite(initialParsedTemperature) && initialParsedTemperature >= 0 && initialParsedTemperature <= 2;
+  const initialScope = isEvaluationScopeCategory(searchParams.get('scopeCategory'))
+    ? (searchParams.get('scopeCategory') as EvaluationScopeCategory)
+    : 'PRODUCTION';
+  const [scopeCategory, setScopeCategory] = useState<EvaluationScopeCategory>(initialScope);
   const [useDefaultTemperature, setUseDefaultTemperature] = useState(!hasInitialTemperature);
   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
   const [started, setStarted] = useState(false);
@@ -53,6 +86,7 @@ export function DomainTrialsDashboard() {
   const [safeMode, setSafeMode] = useState(false);
   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
   const [maxBudgetInput, setMaxBudgetInput] = useState('');
+  const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
 
   const parsedTemperature = Number.parseFloat(temperatureInput);
   const hasValidTemperature = Number.isFinite(parsedTemperature) && parsedTemperature >= 0 && parsedTemperature <= 2;
@@ -75,12 +109,93 @@ export function DomainTrialsDashboard() {
     pause: !domainId,
     requestPolicy: 'cache-and-network',
   });
-  const [startRunResult, runTrialsForDomain] = useMutation<RunTrialsForDomainMutationResult, RunTrialsForDomainMutationVariables>(
-    RUN_TRIALS_FOR_DOMAIN_MUTATION
-  );
+  const [estimateResult, refetchEstimate] = useQuery<EstimateDomainEvaluationCostQueryResult, EstimateDomainEvaluationCostQueryVariables>({
+    query: ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
+    variables: {
+      domainId: domainId ?? '',
+      definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
+      temperature: selectedTemperature,
+      samplePercentage: 100,
+      samplesPerScenario: 1,
+      scopeCategory,
+    },
+    pause: !domainId,
+    requestPolicy: 'cache-and-network',
+  });
+  const [summaryResult, refetchSummary] = useQuery<DomainRunSummaryQueryResult, DomainRunSummaryQueryVariables>({
+    query: DOMAIN_RUN_SUMMARY_QUERY,
+    variables: { domainId: domainId ?? '' },
+    pause: !domainId,
+    requestPolicy: 'cache-and-network',
+  });
+  const [evaluationsResult, refetchEvaluations] = useQuery<DomainEvaluationsQueryResult, DomainEvaluationsQueryVariables>({
+    query: DOMAIN_EVALUATIONS_QUERY,
+    variables: { domainId: domainId ?? '', limit: 8 },
+    pause: !domainId,
+    requestPolicy: 'cache-and-network',
+  });
+  const [currentEvaluationResult, refetchCurrentEvaluation] = useQuery<DomainEvaluationQueryResult, DomainEvaluationQueryVariables>({
+    query: DOMAIN_EVALUATION_QUERY,
+    variables: { id: currentEvaluationId ?? '' },
+    pause: !currentEvaluationId,
+    requestPolicy: 'cache-and-network',
+  });
+  const [currentEvaluationStatusResult, refetchCurrentEvaluationStatus] = useQuery<
+    DomainEvaluationStatusQueryResult,
+    DomainEvaluationStatusQueryVariables
+  >({
+    query: DOMAIN_EVALUATION_STATUS_QUERY,
+    variables: { id: currentEvaluationId ?? '' },
+    pause: !currentEvaluationId,
+    requestPolicy: 'network-only',
+  });
+  const [startDomainEvaluationResult, startDomainEvaluation] = useMutation<
+    StartDomainEvaluationMutationResult,
+    StartDomainEvaluationMutationVariables
+  >(START_DOMAIN_EVALUATION_MUTATION);
   const [retryResult, retryCell] = useMutation<RetryDomainTrialCellMutationResult, RetryDomainTrialCellMutationVariables>(
     RETRY_DOMAIN_TRIAL_CELL_MUTATION
   );
+
+  useEffect(() => {
+    const existingScope = searchParams.get('scopeCategory');
+    const existingEvaluationId = searchParams.get('evaluationId');
+    if (existingScope === scopeCategory && existingEvaluationId === currentEvaluationId) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set('scopeCategory', scopeCategory);
+    if (currentEvaluationId) next.set('evaluationId', currentEvaluationId);
+    else next.delete('evaluationId');
+    setSearchParams(next, { replace: true });
+  }, [scopeCategory, currentEvaluationId, searchParams, setSearchParams]);
+
+  const currentEvaluation = currentEvaluationResult.data?.domainEvaluation ?? null;
+  const recentEvaluations = evaluationsResult.data?.domainEvaluations ?? [];
+  const selectedEvaluation = currentEvaluation ?? recentEvaluations[0] ?? null;
+
+  useEffect(() => {
+    if (!currentEvaluationId && recentEvaluations.length > 0) {
+      setCurrentEvaluationId(recentEvaluations[0]?.id ?? null);
+    }
+  }, [currentEvaluationId, recentEvaluations]);
+
+  useEffect(() => {
+    if (!currentEvaluation) return;
+    const byDefinition: Record<string, string> = {};
+    for (const member of currentEvaluation.members) {
+      byDefinition[member.definitionIdAtLaunch] = member.runId;
+    }
+    setDefinitionRunIds((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(byDefinition);
+      if (prevKeys.length === nextKeys.length && nextKeys.every((key) => prev[key] === byDefinition[key])) {
+        return prev;
+      }
+      return byDefinition;
+    });
+    setStarted((prev) => prev || true);
+  }, [currentEvaluation]);
 
   const runIds = useMemo(() => {
     const ids = new Set<string>();
@@ -96,7 +211,7 @@ export function DomainTrialsDashboard() {
     requestPolicy: 'network-only',
   });
 
-  const statusSummary = useMemo(() => {
+  const computedStatusSummary = useMemo(() => {
     const runStatuses = statusResult.data?.domainTrialRunsStatus ?? [];
     const total = runIds.length;
     const known = runStatuses.length;
@@ -105,6 +220,17 @@ export function DomainTrialsDashboard() {
     const active = runStatuses.filter((run) => ['PENDING', 'RUNNING', 'SUMMARIZING', 'PAUSED'].includes(run.status)).length;
     return { total, known, completed, failed, active };
   }, [runIds.length, statusResult.data?.domainTrialRunsStatus]);
+
+  const domainEvaluationStatus = currentEvaluationStatusResult.data?.domainEvaluationStatus;
+  const statusSummary = domainEvaluationStatus
+    ? {
+      total: domainEvaluationStatus.totalRuns,
+      known: domainEvaluationStatus.totalRuns,
+      completed: domainEvaluationStatus.completedRuns,
+      failed: domainEvaluationStatus.failedRuns + domainEvaluationStatus.cancelledRuns,
+      active: domainEvaluationStatus.pendingRuns + domainEvaluationStatus.runningRuns,
+    }
+    : computedStatusSummary;
 
   const allRunsTerminal = statusSummary.total > 0 && statusSummary.active === 0 && statusSummary.known === statusSummary.total;
   const completionWithFailures = allRunsTerminal && statusSummary.failed > 0;
@@ -116,10 +242,26 @@ export function DomainTrialsDashboard() {
     if (!started || runIds.length === 0 || allRunsTerminal) return;
     const interval = window.setInterval(() => {
       refetchStatus({ requestPolicy: 'network-only' });
+      if (currentEvaluationId) {
+        refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+        refetchCurrentEvaluation({ requestPolicy: 'network-only' });
+      }
+      refetchSummary({ requestPolicy: 'network-only' });
+      refetchEvaluations({ requestPolicy: 'network-only' });
       setLastStatusUpdatedAt(Date.now());
     }, POLL_MS);
     return () => window.clearInterval(interval);
-  }, [started, runIds.length, allRunsTerminal, refetchStatus]);
+  }, [
+    started,
+    runIds.length,
+    allRunsTerminal,
+    currentEvaluationId,
+    refetchCurrentEvaluation,
+    refetchCurrentEvaluationStatus,
+    refetchEvaluations,
+    refetchStatus,
+    refetchSummary,
+  ]);
 
   useEffect(() => {
     const message = planResult.error?.message ?? '';
@@ -147,6 +289,7 @@ export function DomainTrialsDashboard() {
   }, [statusResult.error?.message, statusNoContentRetries, started, refetchStatus]);
 
   const plan = planResult.data?.domainTrialsPlan;
+  const estimate = estimateResult.data?.estimateDomainEvaluationCost;
   const models = plan?.models ?? [];
   const vignettes = plan?.vignettes ?? [];
   const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
@@ -173,7 +316,7 @@ export function DomainTrialsDashboard() {
     setUseDefaultTemperature(true);
   }, [disableTemperatureInput]);
 
-  const isStarting = startRunResult.fetching;
+  const isStarting = startDomainEvaluationResult.fetching;
   const isRetrying = retryResult.fetching;
 
   const handleStart = async () => {
@@ -188,19 +331,26 @@ export function DomainTrialsDashboard() {
       return;
     }
 
-    const result = await runTrialsForDomain({
+    const result = await startDomainEvaluation({
       domainId,
+      scopeCategory,
       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
       maxBudgetUsd: maxBudgetEnabled ? parsedBudget : undefined,
       definitionIds: filteredDefinitionIds.length > 0 ? filteredDefinitionIds : undefined,
+      samplePercentage: 100,
+      samplesPerScenario: 1,
     });
     if (result.error) {
       setRunError(result.error.message);
       return;
     }
-    const payload = result.data?.runTrialsForDomain;
+    const payload = result.data?.startDomainEvaluation;
     if (!payload) {
-      setRunError('Failed to start domain trials.');
+      setRunError('Failed to start domain evaluation.');
+      return;
+    }
+    if (payload.blockedByActiveLaunch) {
+      setRunError('An equivalent active domain evaluation is already running for this domain.');
       return;
     }
 
@@ -221,6 +371,11 @@ export function DomainTrialsDashboard() {
     setCellOverrideRunIds({});
     setStarted(true);
     setShowLaunchConfirm(false);
+    setCurrentEvaluationId(payload.domainEvaluationId);
+    refetchCurrentEvaluation({ requestPolicy: 'network-only' });
+    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+    refetchEvaluations({ requestPolicy: 'network-only' });
+    refetchSummary({ requestPolicy: 'network-only' });
     refetchStatus({ requestPolicy: 'network-only' });
     setLastStatusUpdatedAt(Date.now());
     if (payload.startedRuns === 0) {
@@ -238,6 +393,7 @@ export function DomainTrialsDashboard() {
       definitionId,
       modelId,
       temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
+      scopeCategory: currentEvaluation?.scopeCategory ?? scopeCategory,
     });
     setPendingRetryCell(null);
     if (result.error) {
@@ -252,6 +408,7 @@ export function DomainTrialsDashboard() {
     setCellOverrideRunIds((prev) => ({ ...prev, [key]: payload.runId! }));
     setStarted(true);
     refetchStatus({ requestPolicy: 'network-only' });
+    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
   };
 
   const getCellStatus = (definitionId: string, modelId: string): DomainTrialCellStatus => {
@@ -309,25 +466,41 @@ export function DomainTrialsDashboard() {
   const planDisplayError = suppressPlanNoContentError ? undefined : planResult.error;
   const statusDisplayError = suppressStatusNoContentError ? undefined : statusResult.error;
   const displayError = planDisplayError ?? (started ? statusDisplayError : undefined);
+  const summary = summaryResult.data?.domainRunSummary;
+  const reviewSetupHref = `/domains?domainId=${domainId}&tab=setup&setupTab=contexts`;
+  const reviewVignettesHref = `/domains?domainId=${domainId}&tab=vignettes`;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Trial Dashboard</h1>
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Evaluation Summary</h1>
           <p className="text-sm text-gray-600">
-            Review and run latest vignettes for <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
+            Launch domain evaluations, monitor cohort-level status, and drill down into vignette-scoped runs for{' '}
+            <span className="font-medium">{plan?.domainName ?? 'selected domain'}</span>.
+          </p>
+          <p className="text-xs text-gray-500">
+            Domain Evaluation Summary is the cohort-level view. Use individual run pages for run-scoped diagnostics.
           </p>
           {filteredDefinitionIds.length > 0 && (
             <p className="text-xs text-amber-700">
-              Scoped to {filteredDefinitionIds.length} selected missing vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
+              Scoped to {filteredDefinitionIds.length} selected vignette{filteredDefinitionIds.length === 1 ? '' : 's'}.
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={() => refetchPlan({ requestPolicy: 'network-only' })}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => {
+            refetchPlan({ requestPolicy: 'network-only' });
+            refetchEstimate({ requestPolicy: 'network-only' });
+            refetchSummary({ requestPolicy: 'network-only' });
+            refetchEvaluations({ requestPolicy: 'network-only' });
+            if (currentEvaluationId) {
+              refetchCurrentEvaluation({ requestPolicy: 'network-only' });
+              refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
+            }
+          }}>
             <RefreshCw className="w-4 h-4 mr-1" />
-            Refresh Plan
+            Refresh
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={handleExportLedger} disabled={vignettes.length === 0 || models.length === 0}>
             Export Ledger CSV
@@ -338,16 +511,97 @@ export function DomainTrialsDashboard() {
         </div>
       </div>
 
-      {displayError && <ErrorMessage message={`Failed to load domain trial data: ${displayError.message ?? 'Unknown error'}`} />}
+      {displayError && <ErrorMessage message={`Failed to load domain evaluation data: ${displayError.message ?? 'Unknown error'}`} />}
       {runError && <ErrorMessage message={runError} />}
       {filteredDefinitionIdCount > 0 && excludedRequestedDefinitionCount > 0 && (
         <ErrorMessage message={`Requested ${filteredDefinitionIdCount} scoped vignette IDs but ${excludedRequestedDefinitionCount} were invalid, stale, or not latest definitions in this domain.`} />
       )}
 
+      <section className="grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="info" size="count">Evaluations: {summary?.totalEvaluations ?? 0}</Badge>
+            <Badge variant="warning" size="count">Active member runs: {summary?.runningMemberRuns ?? 0}</Badge>
+            <Badge variant="success" size="count">Completed member runs: {summary?.completedMemberRuns ?? 0}</Badge>
+            <Badge variant={(summary?.failedMemberRuns ?? 0) > 0 ? 'error' : 'neutral'} size="count">
+              Failed member runs: {summary?.failedMemberRuns ?? 0}
+            </Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Latest evaluation</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                {summary?.latestEvaluationId ? summary.latestEvaluationId.slice(-8) : 'No evaluation yet'}
+              </div>
+              <div className="text-xs text-gray-600">
+                {summary?.latestScopeCategory ? `${summary.latestScopeCategory.toLowerCase()} · ${summary.latestEvaluationStatus?.toLowerCase()}` : 'Start a pilot or production evaluation.'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">History mix</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                {summary?.productionEvaluations ?? 0} production · {summary?.replicationEvaluations ?? 0} replication
+              </div>
+              <div className="text-xs text-gray-600">
+                {summary?.pilotEvaluations ?? 0} pilot · {summary?.validationEvaluations ?? 0} validation
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Current estimate</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">{formatCost(estimate?.totalEstimatedCost ?? 0)}</div>
+              <div className="text-xs text-gray-600">
+                {estimate?.estimateConfidence ? `Confidence: ${estimate.estimateConfidence.toLowerCase()}` : 'Estimate unavailable'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+          <div>
+            <h2 className="text-lg font-medium text-[#1A1A1A]">Recent evaluations</h2>
+            <p className="text-sm text-gray-600">Select a cohort summary or launch a new scoped evaluation.</p>
+          </div>
+          {recentEvaluations.length === 0 ? (
+            <p className="text-sm text-gray-600">No domain evaluations yet.</p>
+          ) : (
+            <div className="space-y-2">
+                  {recentEvaluations.map((evaluation) => (
+                    <Button
+                      key={evaluation.id}
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setCurrentEvaluationId(evaluation.id)}
+                      className={`w-full rounded-lg px-3 py-3 text-left justify-start ${currentEvaluationId === evaluation.id ? 'border-teal-400 bg-teal-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                    >
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {evaluation.scopeCategory.toLowerCase()} · {evaluation.status.toLowerCase()}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {evaluation.memberCount} runs · {formatCost(evaluation.projectedCostUsd)} projected
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-gray-500">
+                          <div>{formatTimestamp(evaluation.createdAt)}</div>
+                          <div>{evaluation.id.slice(-8)}</div>
+                        </div>
+                      </div>
+                    </Button>
+                  ))}
+            </div>
+          )}
+        </div>
+      </section>
+
       <LaunchControlsPanel
+        scopeCategory={scopeCategory}
         vignetteCount={vignettes.length}
         modelCount={models.length}
-        totalEstimatedCost={plan?.totalEstimatedCost ?? 0}
+        totalEstimatedCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+        estimateConfidence={estimate?.estimateConfidence}
+        fallbackReason={estimate?.fallbackReason}
+        knownExclusions={estimate?.knownExclusions}
         useDefaultTemperature={useDefaultTemperature}
         disableTemperatureInput={disableTemperatureInput}
         temperatureInput={temperatureInput}
@@ -358,8 +612,13 @@ export function DomainTrialsDashboard() {
         retryAutoPaused={retryAutoPaused}
         failureRate={failureRate}
         isStarting={isStarting}
-        planFetching={planResult.fetching}
-        temperatureWarning={plan?.temperatureWarning}
+        planFetching={planResult.fetching || estimateResult.fetching}
+        temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
+        reviewSetupHref={reviewSetupHref}
+        reviewVignettesHref={reviewVignettesHref}
+        selectedDefinitionCount={filteredDefinitionIds.length > 0 ? filteredDefinitionIds.length : undefined}
+        excludedRequestedDefinitionCount={Math.max(0, excludedRequestedDefinitionCount)}
+        onSetScopeCategory={setScopeCategory}
         onSetUseDefaultTemperature={setUseDefaultTemperature}
         onSetTemperatureInput={setTemperatureInput}
         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
@@ -369,14 +628,76 @@ export function DomainTrialsDashboard() {
       />
 
       <LaunchStatusPanel
+        evaluationId={currentEvaluationId}
+        scopeCategory={selectedEvaluation?.scopeCategory ?? null}
         launchSummary={launchSummary}
         started={started}
         statusSummary={statusSummary}
-        statusFetching={statusResult.fetching}
+        statusFetching={statusResult.fetching || currentEvaluationStatusResult.fetching}
         lastStatusUpdatedAt={lastStatusUpdatedAt}
         completionClean={completionClean}
         completionWithFailures={completionWithFailures}
       />
+
+      {selectedEvaluation && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-medium text-[#1A1A1A]">Current cohort summary</h2>
+              <p className="text-sm text-gray-600">
+                Domain evaluation {selectedEvaluation.id.slice(-8)} · {selectedEvaluation.scopeCategory.toLowerCase()} · created {formatTimestamp(selectedEvaluation.createdAt)}
+              </p>
+              <p className="text-xs text-gray-500">
+                Member runs below are run-scoped evidence for this one domain evaluation cohort.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="neutral" size="count">Members: {selectedEvaluation.memberCount}</Badge>
+              <Badge variant="success" size="count">Projected: {formatCost(selectedEvaluation.projectedCostUsd)}</Badge>
+            </div>
+          </div>
+
+          {currentEvaluation && currentEvaluation.members.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-gray-600">
+                    <th className="py-2 pr-3">Vignette</th>
+                    <th className="py-2 pr-3">Run</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Category</th>
+                    <th className="py-2 pr-3">Started</th>
+                    <th className="py-2 pr-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentEvaluation.members.map((member) => (
+                    <tr key={member.runId} className="border-b border-gray-100">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium text-gray-900">{member.definitionNameAtLaunch}</div>
+                        <div className="text-xs text-gray-500">{member.definitionIdAtLaunch.slice(-8)}</div>
+                      </td>
+                      <td className="py-2 pr-3 text-gray-700">{member.runId.slice(-8)}</td>
+                      <td className="py-2 pr-3 text-gray-700">{member.runStatus.toLowerCase()}</td>
+                      <td className="py-2 pr-3 text-gray-700">{member.runCategory.toLowerCase()}</td>
+                      <td className="py-2 pr-3 text-gray-500">{formatTimestamp(member.runStartedAt)}</td>
+                      <td className="py-2 pr-3">
+                        <Link
+                          to={`/runs/${member.runId}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
+                        >
+                          Open run diagnostics
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <TrialGridTable
         loading={planResult.fetching}
@@ -401,11 +722,17 @@ export function DomainTrialsDashboard() {
       <LaunchConfirmModal
         open={showLaunchConfirm}
         domainName={plan?.domainName ?? domainId}
+        scopeCategory={scopeCategory}
         vignetteCount={vignettes.length}
         modelCount={models.length}
-        estimatedTotalCost={plan?.totalEstimatedCost ?? 0}
+        estimatedTotalCost={estimate?.totalEstimatedCost ?? plan?.totalEstimatedCost ?? 0}
+        estimateConfidence={estimate?.estimateConfidence}
+        fallbackReason={estimate?.fallbackReason}
+        knownExclusions={estimate?.knownExclusions}
         temperatureLabel={useDefaultTemperature || disableTemperatureInput ? 'Provider default' : String(parsedTemperature)}
         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
+        reviewSetupHref={reviewSetupHref}
+        reviewVignettesHref={reviewVignettesHref}
         isStarting={isStarting}
         onCancel={() => setShowLaunchConfirm(false)}
         onConfirm={() => void handleStart()}

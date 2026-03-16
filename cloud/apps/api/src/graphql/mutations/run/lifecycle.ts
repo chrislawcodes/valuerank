@@ -1,4 +1,4 @@
-import { db } from '@valuerank/db';
+import { db, type RunCategory } from '@valuerank/db';
 import { AuthenticationError, NotFoundError, ValidationError } from '@valuerank/shared';
 import { builder } from '../../builder.js';
 import type { Context } from '../../context.js';
@@ -15,6 +15,7 @@ import {
   getEquivalentModelIds,
   resolveModelIdFromAvailable,
 } from '../../../services/models/aliases.js';
+import { parseRunCategory } from '../../../services/run/query.js';
 import { StartRunPayload } from './payloads.js';
 
 type StartRunArgs = {
@@ -25,6 +26,7 @@ type StartRunArgs = {
   samplesPerScenario?: number | null;
   temperature?: number | null;
   priority?: string | null;
+  runCategory?: RunCategory | null;
   experimentId?: string | number | null;
   finalTrial?: boolean | null;
   launchMode?: string | null;
@@ -175,6 +177,16 @@ builder.mutationField('startRun', (t) =>
 
       const models = input.models.map((id) => resolveModelIdFromAvailable(id, activeModelIdSet) ?? id);
       const launchMode = input.launchMode ?? 'STANDARD';
+      const requestedRunCategory =
+        typeof input.runCategory === 'string' && input.runCategory.trim() !== ''
+          ? input.runCategory
+          : undefined;
+      const parsedRunCategory = parseRunCategory(requestedRunCategory);
+      if (requestedRunCategory !== undefined && parsedRunCategory === undefined) {
+        throw new ValidationError(
+          'Invalid runCategory. Expected PILOT, PRODUCTION, REPLICATION, VALIDATION, or UNKNOWN_LEGACY.'
+        );
+      }
       const sharedInput = {
         models,
         samplePercentage: input.samplePercentage ?? undefined,
@@ -182,6 +194,7 @@ builder.mutationField('startRun', (t) =>
         samplesPerScenario: input.samplesPerScenario ?? undefined,
         temperature: input.temperature ?? undefined,
         priority: input.priority ?? 'NORMAL',
+        runCategory: parsedRunCategory,
         experimentId:
           input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== ''
             ? String(input.experimentId)

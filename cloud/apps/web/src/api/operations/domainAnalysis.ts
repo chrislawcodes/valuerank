@@ -235,6 +235,24 @@ export const DOMAIN_AVAILABLE_SIGNATURES_QUERY = gql`
   }
 `;
 
+export const DOMAIN_FINDINGS_ELIGIBILITY_QUERY = gql`
+  query DomainFindingsEligibility($domainId: ID!) {
+    domainFindingsEligibility(domainId: $domainId) {
+      domainId
+      eligible
+      status
+      summary
+      reasons
+      recommendedActions
+      consideredScopeCategories
+      completedEligibleEvaluationCount
+      latestEligibleEvaluationId
+      latestEligibleScopeCategory
+      latestEligibleCompletedAt
+    }
+  }
+`;
+
 export type DomainAnalysisValueScore = {
   valueKey: string;
   score: number;
@@ -350,6 +368,28 @@ export type DomainAnalysisQueryVariables = {
   domainId: string;
   scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
   signature?: string;
+};
+
+export type DomainFindingsEligibility = {
+  domainId: string;
+  eligible: boolean;
+  status: 'ELIGIBLE' | 'DIAGNOSTIC_ONLY';
+  summary: string;
+  reasons: string[];
+  recommendedActions: string[];
+  consideredScopeCategories: Array<'PRODUCTION' | 'REPLICATION'>;
+  completedEligibleEvaluationCount: number;
+  latestEligibleEvaluationId: string | null;
+  latestEligibleScopeCategory: 'PRODUCTION' | 'REPLICATION' | null;
+  latestEligibleCompletedAt: string | null;
+};
+
+export type DomainFindingsEligibilityQueryResult = {
+  domainFindingsEligibility: DomainFindingsEligibility;
+};
+
+export type DomainFindingsEligibilityQueryVariables = {
+  domainId: string;
 };
 
 export type DomainAnalysisValueDetailCondition = {

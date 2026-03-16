@@ -6,6 +6,7 @@ import { ValidationError } from '@valuerank/shared';
 import {
   buildRunWhere,
   parseAnalysisStatus,
+  parseRunCategory,
   parseRunStatus,
   parseRunType,
 } from '../../services/run/query.js';
@@ -108,6 +109,10 @@ builder.queryField('runs', (t) =>
         required: false,
         description: 'Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
       }),
+      runCategory: t.arg.string({
+        required: false,
+        description: 'Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)',
+      }),
       hasAnalysis: t.arg.boolean({
         required: false,
         description: 'Filter to runs that have analysis results (any status)',
@@ -140,6 +145,7 @@ builder.queryField('runs', (t) =>
           definitionTagIds: args.definitionTagIds,
           experimentId: args.experimentId,
           status: args.status,
+          runCategory: args.runCategory,
           hasAnalysis: args.hasAnalysis,
           analysisStatus: args.analysisStatus,
           runType: args.runType,
@@ -154,6 +160,7 @@ builder.queryField('runs', (t) =>
         definitionTagIds: args.definitionTagIds?.map(String),
         experimentId: args.experimentId,
         status: parseRunStatus(args.status),
+        runCategory: parseRunCategory(args.runCategory),
         hasAnalysis: args.hasAnalysis,
         analysisStatus: parseAnalysisStatus(args.analysisStatus),
         runType: parseRunType(args.runType),
@@ -251,6 +258,10 @@ builder.queryField('runCount', (t) =>
         required: false,
         description: 'Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
       }),
+      runCategory: t.arg.string({
+        required: false,
+        description: 'Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)',
+      }),
       hasAnalysis: t.arg.boolean({
         required: false,
         description: 'Filter to runs that have analysis results (any status)',
@@ -270,6 +281,7 @@ builder.queryField('runCount', (t) =>
           definitionId: args.definitionId,
           experimentId: args.experimentId,
           status: args.status,
+          runCategory: args.runCategory,
           hasAnalysis: args.hasAnalysis,
           analysisStatus: args.analysisStatus,
           runType: args.runType,
@@ -281,6 +293,7 @@ builder.queryField('runCount', (t) =>
         definitionId: args.definitionId,
         experimentId: args.experimentId,
         status: parseRunStatus(args.status),
+        runCategory: parseRunCategory(args.runCategory),
         hasAnalysis: args.hasAnalysis,
         analysisStatus: parseAnalysisStatus(args.analysisStatus),
         runType: parseRunType(args.runType),
@@ -320,6 +333,10 @@ builder.queryField('analysisFolderCounts', (t) =>
         required: false,
         description: 'Filter by status (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)',
       }),
+      runCategory: t.arg.string({
+        required: false,
+        description: 'Filter by workflow category (PILOT, PRODUCTION, REPLICATION, VALIDATION, UNKNOWN_LEGACY)',
+      }),
       analysisStatus: t.arg.string({
         required: false,
         description: 'Filter by analysis status (CURRENT or SUPERSEDED)',
@@ -336,6 +353,7 @@ builder.queryField('analysisFolderCounts', (t) =>
           definitionTagIds: args.definitionTagIds,
           experimentId: args.experimentId,
           status: args.status,
+          runCategory: args.runCategory,
           analysisStatus: args.analysisStatus,
           runType: args.runType,
         },
@@ -347,6 +365,7 @@ builder.queryField('analysisFolderCounts', (t) =>
         definitionTagIds: args.definitionTagIds?.map(String),
         experimentId: args.experimentId,
         status: parseRunStatus(args.status),
+        runCategory: parseRunCategory(args.runCategory),
         hasAnalysis: true,
         analysisStatus: parseAnalysisStatus(args.analysisStatus),
         runType: parseRunType(args.runType),

@@ -1,0 +1,1104 @@
+diff --git a/cloud/apps/web/src/App.tsx b/cloud/apps/web/src/App.tsx
+index 4f26beb..dd93693 100644
+--- a/cloud/apps/web/src/App.tsx
++++ b/cloud/apps/web/src/App.tsx
+@@ -1,12 +1,14 @@
+ // NOTE: The term "Vignette" is used throughout the UI for user-friendliness.
+ // However, the underlying codebase, API, and database still use the term "Definition".
+-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
++import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+ import { Provider } from 'urql';
+ import { AuthProvider } from './auth/context';
+ import { ProtectedRoute } from './components/ProtectedRoute';
+ import { Layout } from './components/layout/Layout';
+ import { Login } from './pages/Login';
+ import { Dashboard } from './pages/Dashboard';
++import { ValidationHome } from './pages/ValidationHome';
++import { ArchiveHome } from './pages/ArchiveHome';
+ import { Definitions } from './pages/Definitions';
+ import { Domains } from './pages/Domains';
+ import { DomainTrialsDashboard } from './pages/DomainTrialsDashboard';
+@@ -43,6 +45,11 @@ function ProtectedLayout({ children, fullWidth = false }: { children: React.Reac
+   );
+ }
+ 
++function LegacyRouteRedirect({ to }: { to: string }) {
++  const location = useLocation();
++  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
++}
++
+ function App() {
+   return (
+     <BrowserRouter>
+@@ -77,6 +84,22 @@ function App() {
+                 </ProtectedLayout>
+               }
+             />
++            <Route
++              path="/validation"
++              element={
++                <ProtectedLayout>
++                  <ValidationHome />
++                </ProtectedLayout>
++              }
++            />
++            <Route
++              path="/archive"
++              element={
++                <ProtectedLayout>
++                  <ArchiveHome />
++                </ProtectedLayout>
++              }
++            />
+             <Route
+               path="/domains/:domainId/run-trials"
+               element={
+@@ -103,7 +126,7 @@ function App() {
+             />
+             <Route
+               path="/assumptions"
+-              element={<Navigate to="/assumptions/analysis-v1" replace />}
++              element={<Navigate to="/validation" replace />}
+             />
+             <Route
+               path="/assumptions/temp-zero"
+@@ -202,7 +225,7 @@ function App() {
+               }
+             />
+             <Route
+-              path="/survey"
++              path="/archive/surveys"
+               element={
+                 <ProtectedLayout>
+                   <Survey />
+@@ -210,14 +233,16 @@ function App() {
+               }
+             />
+             <Route
+-              path="/survey-results"
++              path="/archive/survey-results"
+               element={
+                 <ProtectedLayout>
+                   <SurveyResults />
+                 </ProtectedLayout>
+               }
+             />
+-            <Route path="/experiments" element={<Navigate to="/survey" replace />} />
++            <Route path="/survey" element={<LegacyRouteRedirect to="/archive/surveys" />} />
++            <Route path="/survey-results" element={<LegacyRouteRedirect to="/archive/survey-results" />} />
++            <Route path="/experiments" element={<Navigate to="/archive" replace />} />
+             <Route
+               path="/settings"
+               element={
+diff --git a/cloud/apps/web/src/components/layout/MobileNav.tsx b/cloud/apps/web/src/components/layout/MobileNav.tsx
+index 8472dc0..925e320 100644
+--- a/cloud/apps/web/src/components/layout/MobileNav.tsx
++++ b/cloud/apps/web/src/components/layout/MobileNav.tsx
+@@ -1,6 +1,6 @@
+-import { useState, useRef, useEffect } from 'react';
++import { useEffect, useRef, useState } from 'react';
+ import { NavLink, useLocation } from 'react-router-dom';
+-import { type LucideIcon, Menu, X, FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, FolderTree } from 'lucide-react';
++import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Menu, Settings, ShieldCheck, X } from 'lucide-react';
+ import { Button } from '../ui/Button';
+ import { cn } from '../../lib/utils';
+ 
+@@ -9,23 +9,25 @@ type NavItem = {
+   path: string;
+   icon: LucideIcon;
+   isNested?: boolean;
++  aliases?: string[];
+ };
+ 
+ const navItems: NavItem[] = [
++  { name: 'Home', path: '/', icon: Home },
+   { name: 'Domains', path: '/domains', icon: FolderTree },
+-  { name: 'Vignettes', path: '/definitions', icon: FileText },
+-  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText },
+-  { name: 'Value Statements', path: '/value-statements', icon: FileText },
++  { name: 'Vignettes', path: '/definitions', icon: FileText, isNested: true },
++  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText, isNested: true },
++  { name: 'Value Statements', path: '/value-statements', icon: FileText, isNested: true },
++  { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
+   { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
+-  { name: 'Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
+-  { name: 'Trials', path: '/runs', icon: Play },
+-  { name: 'Analysis', path: '/analysis', icon: BarChart2 },
++  { name: 'Validation', path: '/validation', icon: ShieldCheck },
++  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck, isNested: true },
++  { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck, isNested: true },
++  { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck, isNested: true },
++  { name: 'Archive', path: '/archive', icon: Archive },
++  { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, isNested: true, aliases: ['/survey'] },
++  { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, isNested: true, aliases: ['/survey-results'] },
+   { name: 'Compare', path: '/compare', icon: GitCompare },
+-  { name: 'Survey', path: '/survey', icon: ClipboardList },
+-  { name: 'Survey Results', path: '/survey-results', icon: BarChart2, isNested: true },
+-  { name: 'Assumptions', path: '/assumptions', icon: ClipboardList },
+-  { name: 'Analysis', path: '/assumptions/analysis', icon: ClipboardList, isNested: true },
+-  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1', icon: ClipboardList, isNested: true },
+   { name: 'Settings', path: '/settings', icon: Settings },
+ ];
+ 
+@@ -38,12 +40,10 @@ export function MobileNav({ className }: MobileNavProps) {
+   const menuRef = useRef<HTMLDivElement>(null);
+   const location = useLocation();
+ 
+-  // Close menu when route changes
+   useEffect(() => {
+     setIsOpen(false);
+   }, [location.pathname]);
+ 
+-  // Close menu when clicking outside
+   useEffect(() => {
+     function handleClickOutside(event: MouseEvent) {
+       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+@@ -53,7 +53,6 @@ export function MobileNav({ className }: MobileNavProps) {
+ 
+     if (isOpen) {
+       document.addEventListener('mousedown', handleClickOutside);
+-      // Prevent body scroll when menu is open
+       document.body.style.overflow = 'hidden';
+     }
+ 
+@@ -63,7 +62,6 @@ export function MobileNav({ className }: MobileNavProps) {
+     };
+   }, [isOpen]);
+ 
+-  // Close menu on escape key
+   useEffect(() => {
+     function handleEscape(event: KeyboardEvent) {
+       if (event.key === 'Escape') {
+@@ -80,8 +78,11 @@ export function MobileNav({ className }: MobileNavProps) {
+     };
+   }, [isOpen]);
+ 
+-  // Check if the current path matches or is a child of the nav path
+   const isNavActive = (item: NavItem) => {
++    if (item.path === '/') {
++      return location.pathname === '/';
++    }
++
+     const hasNestedChildren = !item.isNested
+       && navItems.some((candidate) => candidate.isNested && candidate.path.startsWith(`${item.path}/`));
+ 
+@@ -89,12 +90,15 @@ export function MobileNav({ className }: MobileNavProps) {
+       return location.pathname === item.path;
+     }
+ 
+-    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
++    return (
++      location.pathname === item.path
++      || location.pathname.startsWith(`${item.path}/`)
++      || (item.aliases ?? []).some((alias) => location.pathname === alias || location.pathname.startsWith(`${alias}/`))
++    );
+   };
+ 
+   return (
+     <div className={cn('sm:hidden', className)} ref={menuRef}>
+-      {/* Hamburger button - 44x44px touch target */}
+       <Button
+         variant="ghost"
+         size="sm"
+@@ -107,7 +111,6 @@ export function MobileNav({ className }: MobileNavProps) {
+         <Menu className="w-6 h-6" />
+       </Button>
+ 
+-      {/* Backdrop */}
+       {isOpen && (
+         <div
+           className="fixed inset-0 bg-black/50 z-40 sm:hidden"
+@@ -115,7 +118,6 @@ export function MobileNav({ className }: MobileNavProps) {
+         />
+       )}
+ 
+-      {/* Slide-out menu */}
+       <nav
+         id="mobile-nav-menu"
+         className={cn(
+@@ -124,7 +126,6 @@ export function MobileNav({ className }: MobileNavProps) {
+         )}
+         aria-label="Mobile navigation"
+       >
+-        {/* Menu header */}
+         <div className="flex items-center justify-between h-14 px-4 border-b border-gray-800">
+           <span className="text-xl font-serif font-medium text-white">
+             ValueRank
+@@ -140,7 +141,6 @@ export function MobileNav({ className }: MobileNavProps) {
+           </Button>
+         </div>
+ 
+-        {/* Navigation links */}
+         <div className="py-4">
+           {navItems.map((item) => {
+             const Icon = item.icon;
+diff --git a/cloud/apps/web/src/components/layout/NavTabs.tsx b/cloud/apps/web/src/components/layout/NavTabs.tsx
+index e940d15..6840948 100644
+--- a/cloud/apps/web/src/components/layout/NavTabs.tsx
++++ b/cloud/apps/web/src/components/layout/NavTabs.tsx
+@@ -1,83 +1,74 @@
+ import { type FocusEvent, type RefObject, useEffect, useRef, useState } from 'react';
+ import { NavLink, useLocation } from 'react-router-dom';
+-import { FileText, GitCompare, ClipboardList, Settings, FolderTree, ChevronDown, ShieldCheck } from 'lucide-react';
++import { Archive, FileText, FolderTree, GitCompare, Home, Settings, ShieldCheck, ChevronDown } from 'lucide-react';
+ import { Button } from '../ui/Button';
+ import { useClickOutside } from '../../hooks/useClickOutside';
+ 
+-const tabs = [
++const utilityTabs = [
+   { name: 'Compare', path: '/compare', icon: GitCompare },
+   { name: 'Settings', path: '/settings', icon: Settings },
+ ];
+ 
+-const vignetteMenuItems = [
++const domainMenuItems = [
++  { name: 'Overview', path: '/domains' },
++  { name: 'Vignettes', path: '/definitions' },
+   { name: 'New Pair', path: '/job-choice/new' },
+-  { name: 'List', path: '/definitions' },
+   { name: 'Preambles', path: '/preambles' },
+   { name: 'Level Presets', path: '/level-presets' },
+-  { name: 'Trials', path: '/runs' },
+-  { name: 'Analysis', path: '/analysis' },
+-];
+-
+-const domainMenuItems = [
+-  { name: 'List', path: '/domains' },
+-  { name: 'Analysis', path: '/domains/analysis' },
++  { name: 'Domain Contexts', path: '/domain-contexts' },
++  { name: 'Value Statements', path: '/value-statements' },
++  { name: 'Domain Analysis', path: '/domains/analysis' },
+   { name: 'Coverage', path: '/domains/coverage' },
+ ];
+ 
+-const assumptionsMenuItems = [
++const validationMenuItems = [
++  { name: 'Overview', path: '/validation' },
+   { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
+   { name: 'Analysis', path: '/assumptions/analysis' },
+   { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
+ ];
+ 
+-const surveyMenuItems = [
+-  { name: 'Survey', path: '/survey' },
+-  { name: 'Survey Results', path: '/survey-results' },
++const archiveMenuItems = [
++  { name: 'Overview', path: '/archive', aliases: [] as string[] },
++  { name: 'Legacy Survey Work', path: '/archive/surveys', aliases: ['/survey'] },
++  { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
+ ];
+ 
+ export function NavTabs() {
+   const location = useLocation();
+-  const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
+   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+-  const [isAssumptionsMenuOpen, setIsAssumptionsMenuOpen] = useState(false);
+-  const [isSurveyMenuOpen, setIsSurveyMenuOpen] = useState(false);
+-  const vignetteMenuRef = useRef<HTMLDivElement>(null);
++  const [isValidationMenuOpen, setIsValidationMenuOpen] = useState(false);
++  const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
+   const domainMenuRef = useRef<HTMLDivElement>(null);
+-  const assumptionsMenuRef = useRef<HTMLDivElement>(null);
+-  const surveyMenuRef = useRef<HTMLDivElement>(null);
++  const validationMenuRef = useRef<HTMLDivElement>(null);
++  const archiveMenuRef = useRef<HTMLDivElement>(null);
+ 
+-  // Check if the current path matches or is a child of the tab path
+-  const isTabActive = (tabPath: string) => {
+-    return location.pathname === tabPath || location.pathname.startsWith(`${tabPath}/`);
+-  };
+-  const isVignettesActive = vignetteMenuItems.some((item) => isTabActive(item.path));
+-  // Also highlight Domains when on pages that live under the Domains section
+-  // (domain-contexts and value-statements were moved there from the Vignettes nav)
+-  const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path))
+-    || isTabActive('/domain-contexts')
+-    || isTabActive('/value-statements');
+-  const isAssumptionsActive = assumptionsMenuItems.some((item) => isTabActive(item.path));
+-  const isSurveyActive = surveyMenuItems.some((item) => isTabActive(item.path));
++  const isPathActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
++
++  const isTabActive = (tabPath: string, aliases: string[] = []) => (
++    isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
++  );
++
++  const isHomeActive = location.pathname === '/';
++  const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path));
++  const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
++  const isArchiveActive = archiveMenuItems.some((item) => isTabActive(item.path, item.aliases));
+ 
+   useEffect(() => {
+-    setIsVignettesMenuOpen(false);
+     setIsDomainsMenuOpen(false);
+-    setIsAssumptionsMenuOpen(false);
+-    setIsSurveyMenuOpen(false);
++    setIsValidationMenuOpen(false);
++    setIsArchiveMenuOpen(false);
+   }, [location.pathname]);
+ 
+   useClickOutside(domainMenuRef, () => {
+     if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);
+   }, isDomainsMenuOpen);
+-  useClickOutside(vignetteMenuRef, () => {
+-    if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
+-  }, isVignettesMenuOpen);
+-  useClickOutside(assumptionsMenuRef, () => {
+-    if (isAssumptionsMenuOpen) setIsAssumptionsMenuOpen(false);
+-  }, isAssumptionsMenuOpen);
+-  useClickOutside(surveyMenuRef, () => {
+-    if (isSurveyMenuOpen) setIsSurveyMenuOpen(false);
+-  }, isSurveyMenuOpen);
++  useClickOutside(validationMenuRef, () => {
++    if (isValidationMenuOpen) setIsValidationMenuOpen(false);
++  }, isValidationMenuOpen);
++  useClickOutside(archiveMenuRef, () => {
++    if (isArchiveMenuOpen) setIsArchiveMenuOpen(false);
++  }, isArchiveMenuOpen);
+ 
+   const handleMenuFocus = (setOpen: (value: boolean) => void) => () => {
+     setOpen(true);
+@@ -93,224 +84,101 @@ export function NavTabs() {
+         setOpen(false);
+       };
+ 
++  const renderMenu = (
++    ref: RefObject<HTMLDivElement>,
++    label: string,
++    path: string,
++    icon: React.ComponentType<{ className?: string }>,
++    items: Array<{ name: string; path: string; aliases?: string[] }>,
++    isActive: boolean,
++    isOpen: boolean,
++    setOpen: (value: boolean | ((prev: boolean) => boolean)) => void,
++  ) => {
++    const Icon = icon;
++    return (
++      <div
++        ref={ref}
++        className="relative group"
++        onMouseEnter={() => setOpen(true)}
++        onMouseLeave={() => setOpen(false)}
++        onFocus={handleMenuFocus((value) => setOpen(value))}
++        onBlur={handleMenuBlur(ref, (value) => setOpen(value))}
++      >
++        <div
++          className={`flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
++            ? 'text-white border-teal-500'
++            : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
++          }`}
++        >
++          <NavLink to={path} className="flex items-center gap-2 px-3 py-3">
++            <Icon className="w-4 h-4" />
++            <span className="hidden sm:inline">{label}</span>
++          </NavLink>
++          <Button
++            type="button"
++            variant="ghost"
++            size="sm"
++            aria-label={`Toggle ${label} menu`}
++            aria-haspopup="menu"
++            aria-expanded={isOpen}
++            onClick={() => setOpen((prev) => !prev)}
++            className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
++          >
++            <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
++          </Button>
++        </div>
++        <div className={`absolute left-0 top-full z-50 min-w-[200px] pt-1 transition-all duration-150 ${isOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
++          <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
++            {items.map((item) => {
++              const itemActive = isTabActive(item.path, item.aliases ?? []);
++              return (
++                <NavLink
++                  key={item.path}
++                  to={item.path}
++                  className={`block px-3 py-2 text-sm ${itemActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
++                >
++                  {item.name}
++                </NavLink>
++              );
++            })}
++          </div>
++        </div>
++      </div>
++    );
++  };
++
+   return (
+-    // Hidden on mobile (< 640px), visible on tablet/desktop
+     <nav className="hidden sm:block bg-[#1A1A1A] border-t border-gray-800">
+       <div className="max-w-7xl mx-auto px-4">
+         <div className="flex gap-1">
+-          <div
+-            ref={domainMenuRef}
+-            className="relative group"
+-            onMouseEnter={() => setIsDomainsMenuOpen(true)}
+-            onMouseLeave={() => setIsDomainsMenuOpen(false)}
+-            onFocus={handleMenuFocus(setIsDomainsMenuOpen)}
+-            onBlur={handleMenuBlur(domainMenuRef, setIsDomainsMenuOpen)}
++          <NavLink
++            to="/"
++            end
++            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isHomeActive
++              ? 'text-white border-teal-500'
++              : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
++            }`}
+           >
+-            <div
+-              className={
+-                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isDomainsActive
+-                  ? 'text-white border-teal-500'
+-                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+-                }`
+-              }
+-            >
+-              <NavLink to="/domains" end className="flex items-center gap-2 px-3 py-3">
+-                <FolderTree className="w-4 h-4" />
+-                <span className="hidden sm:inline">Domains</span>
+-              </NavLink>
+-              <Button
+-                type="button"
+-                variant="ghost"
+-                size="sm"
+-                aria-label="Toggle Domains menu"
+-                aria-haspopup="menu"
+-                aria-expanded={isDomainsMenuOpen}
+-                onClick={() => setIsDomainsMenuOpen((prev) => !prev)}
+-                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+-              >
+-                <ChevronDown className={`w-4 h-4 transition-transform ${isDomainsMenuOpen ? 'rotate-180' : ''}`} />
+-              </Button>
+-            </div>
+-            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isDomainsMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+-              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+-                {domainMenuItems.map((item) => {
+-                  const isActive = isTabActive(item.path);
+-                  return (
+-                    <NavLink
+-                      key={item.path}
+-                      to={item.path}
+-                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+-                    >
+-                      {item.name}
+-                    </NavLink>
+-                  );
+-                })}
+-              </div>
+-            </div>
+-          </div>
+-          <div
+-            ref={vignetteMenuRef}
+-            className="relative group"
+-            onMouseEnter={() => setIsVignettesMenuOpen(true)}
+-            onMouseLeave={() => setIsVignettesMenuOpen(false)}
+-            onFocus={handleMenuFocus(setIsVignettesMenuOpen)}
+-            onBlur={handleMenuBlur(vignetteMenuRef, setIsVignettesMenuOpen)}
+-          >
+-            <div
+-              className={
+-                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isVignettesActive
+-                  ? 'text-white border-teal-500'
+-                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+-                }`
+-              }
+-            >
+-              <NavLink to="/definitions" className="flex items-center gap-2 px-3 py-3">
+-                <FileText className="w-4 h-4" />
+-                <span className="hidden sm:inline">Vignettes</span>
+-              </NavLink>
+-              <Button
+-                type="button"
+-                variant="ghost"
+-                size="sm"
+-                aria-label="Toggle Vignettes menu"
+-                aria-haspopup="menu"
+-                aria-expanded={isVignettesMenuOpen}
+-                onClick={() => setIsVignettesMenuOpen((prev) => !prev)}
+-                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+-              >
+-                <ChevronDown className={`w-4 h-4 transition-transform ${isVignettesMenuOpen ? 'rotate-180' : ''}`} />
+-              </Button>
+-            </div>
+-            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isVignettesMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+-              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+-                {vignetteMenuItems.map((item) => {
+-                  const isActive = isTabActive(item.path);
+-                  return (
+-                    <NavLink
+-                      key={item.path}
+-                      to={item.path}
+-                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+-                    >
+-                      {item.name}
+-                    </NavLink>
+-                  );
+-                })}
+-              </div>
+-            </div>
+-          </div>
+-          <div
+-            ref={assumptionsMenuRef}
+-            className="relative group"
+-            onMouseEnter={() => setIsAssumptionsMenuOpen(true)}
+-            onMouseLeave={() => setIsAssumptionsMenuOpen(false)}
+-            onFocus={handleMenuFocus(setIsAssumptionsMenuOpen)}
+-            onBlur={handleMenuBlur(assumptionsMenuRef, setIsAssumptionsMenuOpen)}
+-          >
+-            <div
+-              className={
+-                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isAssumptionsActive
+-                  ? 'text-white border-teal-500'
+-                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+-                }`
+-              }
+-            >
+-              <NavLink to="/assumptions" className="flex items-center gap-2 px-3 py-3">
+-                <ShieldCheck className="w-4 h-4" />
+-                <span className="hidden sm:inline">Assumptions</span>
+-              </NavLink>
+-              <Button
+-                type="button"
+-                variant="ghost"
+-                size="sm"
+-                aria-label="Toggle Assumptions menu"
+-                aria-haspopup="menu"
+-                aria-expanded={isAssumptionsMenuOpen}
+-                onClick={() => setIsAssumptionsMenuOpen((prev) => !prev)}
+-                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+-              >
+-                <ChevronDown className={`w-4 h-4 transition-transform ${isAssumptionsMenuOpen ? 'rotate-180' : ''}`} />
+-              </Button>
+-            </div>
+-            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isAssumptionsMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+-              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+-                {assumptionsMenuItems.map((item) => {
+-                  const isActive = isTabActive(item.path);
+-                  return (
+-                    <NavLink
+-                      key={item.path}
+-                      to={item.path}
+-                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+-                    >
+-                      {item.name}
+-                    </NavLink>
+-                  );
+-                })}
+-              </div>
+-            </div>
+-          </div>
+-          <div
+-            ref={surveyMenuRef}
+-            className="relative group"
+-            onMouseEnter={() => setIsSurveyMenuOpen(true)}
+-            onMouseLeave={() => setIsSurveyMenuOpen(false)}
+-            onFocus={handleMenuFocus(setIsSurveyMenuOpen)}
+-            onBlur={handleMenuBlur(surveyMenuRef, setIsSurveyMenuOpen)}
+-          >
+-            <div
+-              className={
+-                `flex items-center min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isSurveyActive
+-                  ? 'text-white border-teal-500'
+-                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+-                }`
+-              }
+-            >
+-              <NavLink to="/survey" className="flex items-center gap-2 px-3 py-3">
+-                <ClipboardList className="w-4 h-4" />
+-                <span className="hidden sm:inline">Survey</span>
+-              </NavLink>
+-              <Button
+-                type="button"
+-                variant="ghost"
+-                size="sm"
+-                aria-label="Toggle Survey menu"
+-                aria-haspopup="menu"
+-                aria-expanded={isSurveyMenuOpen}
+-                onClick={() => setIsSurveyMenuOpen((prev) => !prev)}
+-                className="px-2 py-3 min-h-[44px] text-white/80 hover:text-white hover:bg-transparent"
+-              >
+-                <ChevronDown className={`w-4 h-4 transition-transform ${isSurveyMenuOpen ? 'rotate-180' : ''}`} />
+-              </Button>
+-            </div>
+-            <div className={`absolute left-0 top-full z-50 min-w-[180px] pt-1 transition-all duration-150 ${isSurveyMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+-              <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+-                {surveyMenuItems.map((item) => {
+-                  const isActive = isTabActive(item.path);
+-                  return (
+-                    <NavLink
+-                      key={item.path}
+-                      to={item.path}
+-                      className={`block px-3 py-2 text-sm ${isActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+-                    >
+-                      {item.name}
+-                    </NavLink>
+-                  );
+-                })}
+-              </div>
+-            </div>
+-          </div>
+-          {tabs.map((tab) => {
++            <Home className="w-4 h-4" />
++            <span className="hidden sm:inline">Home</span>
++          </NavLink>
++
++          {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
++          {renderMenu(validationMenuRef, 'Validation', '/validation', ShieldCheck, validationMenuItems, isValidationActive, isValidationMenuOpen, setIsValidationMenuOpen)}
++          {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}
++
++          {utilityTabs.map((tab) => {
+             const Icon = tab.icon;
+             const isActive = isTabActive(tab.path);
++
+             return (
+               <NavLink
+                 key={tab.path}
+                 to={tab.path}
+-                className={
+-                  `flex items-center gap-2 px-4 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
+-                    ? 'text-white border-teal-500'
+-                    : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
+-                  }`
+-                }
++                className={`flex items-center gap-2 px-3 py-3 min-h-[44px] text-sm font-medium transition-colors border-b-2 ${isActive
++                  ? 'text-white border-teal-500'
++                  : 'text-white/70 border-transparent hover:text-white hover:border-gray-600'
++                }`}
+               >
+                 <Icon className="w-4 h-4" />
+                 <span className="hidden sm:inline">{tab.name}</span>
+diff --git a/cloud/apps/web/src/pages/Survey.tsx b/cloud/apps/web/src/pages/Survey.tsx
+index 6e6801b..e9ca7ec 100644
+--- a/cloud/apps/web/src/pages/Survey.tsx
++++ b/cloud/apps/web/src/pages/Survey.tsx
+@@ -5,6 +5,7 @@ import { Copy, Edit2, Plus, Play, Trash2 } from 'lucide-react';
+ import { Button } from '../components/ui/Button';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
+ import { Loading } from '../components/ui/Loading';
++import { TransitionNotice } from '../components/ui/TransitionNotice';
+ import { ModelSelector } from '../components/runs/ModelSelector';
+ import { CostBreakdown } from '../components/runs/CostBreakdown';
+ import { useAvailableModels } from '../hooks/useAvailableModels';
+@@ -399,7 +400,7 @@ export function Survey() {
+         experimentId: runningSurvey.id,
+       });
+       closeRunModal();
+-      navigate(`/survey-results?surveyId=${runningSurvey.id}`);
++      navigate(`/archive/survey-results?surveyId=${runningSurvey.id}`);
+     } catch (startError) {
+       setRunError(getErrorMessage(startError));
+     }
+@@ -407,8 +408,20 @@ export function Survey() {
+ 
+   return (
+     <div className="space-y-6">
++        <TransitionNotice
++          eyebrow="Archive Compatibility"
++        title="Legacy survey work now lives under Archive"
++        description="Use this surface for historical or secondary survey programs. New active comparative research should start from Domains."
++        links={[
++          { label: 'Open Archive home', to: '/archive' },
++          { label: 'Open legacy survey results', to: '/archive/survey-results' },
++        ]}
++      />
+       <div className="flex items-center justify-between">
+-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Survey</h1>
++        <div>
++          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Legacy Survey Work</h1>
++          <p className="mt-2 text-sm text-gray-600">Compatibility surface for historical attitudinal survey programs.</p>
++        </div>
+         <Button onClick={openCreateModal}>
+           <Plus className="w-4 h-4 mr-2" />
+           New Survey
+@@ -472,7 +485,7 @@ export function Survey() {
+                             <Play className="mr-1 h-4 w-4" />
+                             Run
+                           </Button>
+-                          <Button variant="secondary" size="sm" onClick={() => navigate(`/survey-results?surveyId=${survey.id}`)}>
++                          <Button variant="secondary" size="sm" onClick={() => navigate(`/archive/survey-results?surveyId=${survey.id}`)}>
+                             Results
+                           </Button>
+                         </div>
+diff --git a/cloud/apps/web/src/pages/SurveyResults.tsx b/cloud/apps/web/src/pages/SurveyResults.tsx
+index 9ad518c..51b5281 100644
+--- a/cloud/apps/web/src/pages/SurveyResults.tsx
++++ b/cloud/apps/web/src/pages/SurveyResults.tsx
+@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
+ import { Loading } from '../components/ui/Loading';
+ import { ErrorMessage } from '../components/ui/ErrorMessage';
+ import { Badge } from '../components/ui/Badge';
++import { TransitionNotice } from '../components/ui/TransitionNotice';
+ import {
+   AnalysisListFilters,
+   VirtualizedAnalysisList,
+@@ -294,9 +295,23 @@ export function SurveyResults() {
+ 
+   return (
+     <div className="h-full flex flex-col">
++      <div className="mb-6">
++        <TransitionNotice
++          eyebrow="Archive Compatibility"
++          title="Legacy survey results now live under Archive"
++          description="Use these results for historical or secondary survey programs while active comparative research moves through Domains and Findings."
++          links={[
++            { label: 'Open Archive home', to: '/archive' },
++            { label: 'Open legacy survey work', to: '/archive/surveys' },
++          ]}
++        />
++      </div>
+       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+         <div className="flex items-center gap-2">
+-          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Survey Results</h1>
++          <div>
++            <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Legacy Survey Results</h1>
++            <p className="mt-2 text-sm text-gray-600">Compatibility view for historical survey runs and their outputs.</p>
++          </div>
+           {latestRun?.status === 'SUMMARIZING' && (
+             <Badge variant="warning" size="count">
+               Summarizing
+diff --git a/cloud/apps/web/tests/App.test.tsx b/cloud/apps/web/tests/App.test.tsx
+index 9f42ebb..c3e5ad1 100644
+--- a/cloud/apps/web/tests/App.test.tsx
++++ b/cloud/apps/web/tests/App.test.tsx
+@@ -1,6 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, waitFor } from '@testing-library/react';
+-import { MemoryRouter } from 'react-router-dom';
+ import App from '../src/App';
+ 
+ // Mock urql client
+@@ -15,6 +14,8 @@ vi.mock('../src/api/client', () => ({
+ // Mock localStorage
+ beforeEach(() => {
+   localStorage.clear();
++  window.history.pushState({}, '', '/');
++  vi.resetAllMocks();
+ });
+ 
+ describe('App Component', () => {
+@@ -47,4 +48,69 @@ describe('App Routing', () => {
+       expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+     });
+   });
++
++  it('redirects /assumptions to the Validation landing page for authenticated users', async () => {
++    localStorage.setItem('valuerank_token', 'valid-token');
++    window.history.pushState({}, '', '/assumptions');
++    global.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null }),
++    });
++
++    render(<App />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('heading', { name: /^validation$/i })).toBeInTheDocument();
++    });
++    expect(window.location.pathname).toBe('/validation');
++  });
++
++  it('redirects /experiments to the Archive landing page for authenticated users', async () => {
++    localStorage.setItem('valuerank_token', 'valid-token');
++    window.history.pushState({}, '', '/experiments');
++    global.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null }),
++    });
++
++    render(<App />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('heading', { name: /^archive$/i })).toBeInTheDocument();
++    });
++    expect(window.location.pathname).toBe('/archive');
++  });
++
++  it('redirects /survey to the canonical Archive survey route for authenticated users', async () => {
++    localStorage.setItem('valuerank_token', 'valid-token');
++    window.history.pushState({}, '', '/survey');
++    global.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null }),
++    });
++
++    render(<App />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('heading', { level: 1, name: 'Legacy Survey Work' })).toBeInTheDocument();
++    });
++    expect(window.location.pathname).toBe('/archive/surveys');
++  });
++
++  it('redirects /survey-results while preserving search params for authenticated users', async () => {
++    localStorage.setItem('valuerank_token', 'valid-token');
++    window.history.pushState({}, '', '/survey-results?surveyId=abc123');
++    global.fetch = vi.fn().mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ id: '1', email: 'test@example.com', name: 'Test', createdAt: '2024-01-01', lastLoginAt: null }),
++    });
++
++    render(<App />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('heading', { level: 1, name: 'Legacy Survey Results' })).toBeInTheDocument();
++    });
++    expect(window.location.pathname).toBe('/archive/survey-results');
++    expect(window.location.search).toBe('?surveyId=abc123');
++  });
+ });
+diff --git a/cloud/apps/web/tests/components/layout/Layout.test.tsx b/cloud/apps/web/tests/components/layout/Layout.test.tsx
+index dae5ce9..7e044e5 100644
+--- a/cloud/apps/web/tests/components/layout/Layout.test.tsx
++++ b/cloud/apps/web/tests/components/layout/Layout.test.tsx
+@@ -34,10 +34,10 @@ describe('Layout Component', () => {
+     renderLayout();
+     // Navigation items appear in both NavTabs (desktop) and MobileNav (mobile)
+     // so we check at least one of each exists
+-    expect(screen.getAllByText('Vignettes').length).toBeGreaterThan(0);
+-    expect(screen.getAllByText('Trials').length).toBeGreaterThan(0);
+-    expect(screen.getAllByText('Survey').length).toBeGreaterThan(0);
+-    expect(screen.getAllByText('Survey Results').length).toBeGreaterThan(0);
++    expect(screen.getAllByText('Domains').length).toBeGreaterThan(0);
++    expect(screen.getAllByText('Validation').length).toBeGreaterThan(0);
++    expect(screen.getAllByText('Archive').length).toBeGreaterThan(0);
++    expect(screen.getAllByText('Legacy Survey Work').length).toBeGreaterThan(0);
+     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0);
+   });
+ 
+diff --git a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+index 9142ae9..4a8d4d9 100644
+--- a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
++++ b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+@@ -1,70 +1,70 @@
+ import { describe, it, expect } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
+ import { MemoryRouter } from 'react-router-dom';
+ import { MobileNav } from '../../../src/components/layout/MobileNav';
+ 
+-function renderMobileNav(initialRoute: string) {
+-  return render(
++async function renderMobileNav(initialRoute: string) {
++  const result = render(
+     <MemoryRouter initialEntries={[initialRoute]}>
+       <MobileNav />
+     </MemoryRouter>
+   );
++
++  await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
++  return result;
+ }
+ 
+ describe('MobileNav Component', () => {
+-  it('highlights only the nested coverage item for the coverage route', () => {
+-    renderMobileNav('/domains/coverage');
+-
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
++  it('renders the new top-level navigation items', async () => {
++    await renderMobileNav('/domains');
+ 
+-    expect(domainsLink.className).not.toContain('border-teal-500');
+-    expect(coverageLink.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
++    expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
++    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+   });
+ 
+-  it('keeps the top-level domains item active on the domains list route', () => {
+-    renderMobileNav('/domains');
+-
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
++  it('keeps the domain compatibility links nested under Domains', async () => {
++    await renderMobileNav('/domains');
+ 
+-    expect(domainsLink.className).toContain('border-teal-500');
+-    expect(coverageLink.className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
++    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
++    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+   });
+ 
+-  it('renders Domains before Vignettes in the mobile nav list', () => {
+-    renderMobileNav('/domains');
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
+-    expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++  it('keeps the validation compatibility links nested under Validation', async () => {
++    await renderMobileNav('/assumptions/analysis');
++
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
++    expect(screen.getByRole('link', { name: 'Validation Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
++    expect(screen.getByRole('link', { name: 'Validation (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+   });
+ 
+-  it('includes the new analysis and analysis-v1 assumption routes', () => {
+-    renderMobileNav('/assumptions/analysis');
++  it('keeps the archive compatibility links nested under Archive', async () => {
++    await renderMobileNav('/archive/surveys');
+ 
+-    expect(screen.getByRole('link', { name: 'Assumptions' })).toHaveAttribute('href', '/assumptions');
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+-    ).toBe(true);
+-    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
++    expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
+   });
+ 
+-  it('includes only the unified vignette analysis route', () => {
+-    renderMobileNav('/analysis');
++  it('highlights the validation item on validation compatibility routes', async () => {
++    await renderMobileNav('/assumptions/analysis');
+ 
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+-    ).toBe(true);
+-    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
++    expect(screen.getByRole('link', { name: 'Validation' }).className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Validation Analysis' }).className).toContain('border-teal-500');
+   });
+ 
+-  it('activates the unified analysis item on transcript routes', () => {
+-    renderMobileNav('/analysis/run-1/transcripts');
+-
+-    const currentAnalysisLink = screen
+-      .getAllByRole('link', { name: 'Analysis' })
+-      .find((link) => link.getAttribute('href') === '/analysis');
++  it('highlights the archive item on archive compatibility routes', async () => {
++    await renderMobileNav('/archive/surveys');
+ 
+-    expect(currentAnalysisLink?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Archive' }).className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('border-teal-500');
+   });
+ });
+diff --git a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+index 9bbe0e1..b9f5dc1 100644
+--- a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
++++ b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+@@ -12,72 +12,73 @@ function renderNavTabs(initialRoute = '/') {
+ }
+ 
+ describe('NavTabs Component', () => {
+-  it('should render all navigation tabs', () => {
++  it('renders the new top-level navigation tabs', () => {
+     renderNavTabs();
+-    expect(screen.getByRole('link', { name: /vignettes/i })).toBeInTheDocument();
+-    expect(screen.getByRole('link', { name: /trials/i })).toBeInTheDocument();
+-    expect(screen.getAllByRole('link', { name: /^survey$/i }).length).toBeGreaterThan(0);
+-    expect(screen.getByRole('link', { name: /survey results/i })).toBeInTheDocument();
+-    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
+-  });
+ 
+-  it('should link to correct paths', () => {
+-    renderNavTabs();
+-    expect(screen.getByRole('link', { name: /vignettes/i })).toHaveAttribute('href', '/definitions');
+-    expect(screen.getByRole('link', { name: /trials/i })).toHaveAttribute('href', '/runs');
+-    expect(
+-      screen.getAllByRole('link', { name: /^survey$/i }).every((link) => link.getAttribute('href') === '/survey')
+-    ).toBe(true);
+-    expect(screen.getByRole('link', { name: /survey results/i })).toHaveAttribute('href', '/survey-results');
+-    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
++    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
++    expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
++    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+   });
+ 
+-  it('shows only the unified vignette analysis route in the menu', () => {
+-    renderNavTabs('/analysis');
++  it('keeps the domain compatibility links available from the domains menu', () => {
++    renderNavTabs('/domains');
+ 
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+-    ).toBe(true);
+-    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
++    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
++    expect(screen.getByRole('link', { name: 'New Pair' })).toHaveAttribute('href', '/job-choice/new');
++    expect(screen.getByRole('link', { name: 'Preambles' })).toHaveAttribute('href', '/preambles');
++    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
++    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
++    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+   });
+ 
+-  it('shows the new assumptions analysis routes in the menu', () => {
++  it('keeps the validation compatibility links available from the validation menu', () => {
+     renderNavTabs('/assumptions/analysis');
+ 
++    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
+     expect(
+       screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+     ).toBe(true);
+     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+-    expect(screen.getByRole('link', { name: /assumptions/i })).toHaveAttribute('href', '/assumptions');
+   });
+ 
+-  it('keeps the unified analysis menu item active on transcript routes', () => {
+-    renderNavTabs('/analysis/run-1/transcripts');
++  it('keeps the archive compatibility links available from the archive menu', () => {
++    renderNavTabs('/archive');
++
++    expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
++    expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
++  });
+ 
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    const currentAnalysisLink = screen
+-      .getAllByRole('link', { name: 'Analysis' })
+-      .find((link) => link.getAttribute('href') === '/analysis');
++  it('highlights Validation on validation compatibility routes', () => {
++    renderNavTabs('/assumptions/analysis');
+ 
+-    expect(currentAnalysisLink?.className).toContain('bg-teal-600/20');
+-    expect(vignettesLink.parentElement?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Validation' }).parentElement?.className).toContain('border-teal-500');
++    expect(
++      screen.getAllByRole('link', { name: 'Analysis' }).some(
++        (link) => link.getAttribute('href') === '/assumptions/analysis' && link.className.includes('bg-teal-600/20')
++      )
++    ).toBe(true);
+   });
+ 
+-  it('should highlight active tab', () => {
+-    renderNavTabs('/definitions');
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    const vignettesTrigger = vignettesLink.parentElement;
+-    expect(vignettesTrigger).not.toBeNull();
+-    expect(vignettesTrigger?.className).toContain('text-white');
+-    expect(vignettesTrigger?.className).toContain('border-teal-500');
++  it('highlights Archive on archive compatibility routes', () => {
++    renderNavTabs('/archive/surveys');
++
++    expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('bg-teal-600/20');
+   });
+ 
+-  it('renders Domains before Vignettes in the top-level tab order', () => {
++  it('renders Domains before Validation and Archive in the top-level order', () => {
+     renderNavTabs();
+-    const domainsLink = screen.getByRole('link', { name: /domains/i });
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    // Domains must precede Vignettes in the DOM (no longer uses CSS flex order tricks)
+-    const position = domainsLink.compareDocumentPosition(vignettesLink);
+-    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++
++    const domainsLink = screen.getByRole('link', { name: 'Domains' });
++    const validationLink = screen.getByRole('link', { name: 'Validation' });
++    const archiveLink = screen.getByRole('link', { name: 'Archive' });
++
++    expect(domainsLink.compareDocumentPosition(validationLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++    expect(validationLink.compareDocumentPosition(archiveLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   });
+ });

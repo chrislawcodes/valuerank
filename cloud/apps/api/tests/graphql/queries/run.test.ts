@@ -26,6 +26,7 @@ describe('GraphQL Run Query', () => {
       data: {
         definitionId: testDefinition.id,
         status: 'COMPLETED',
+        runCategory: 'PRODUCTION',
         config: { models: ['gpt-4', 'claude-3'], samplePercentage: 50 },
         progress: { completed: 10, total: 10 },
         startedAt: new Date('2024-01-01T10:00:00Z'),
@@ -62,6 +63,7 @@ describe('GraphQL Run Query', () => {
             id
             definitionId
             status
+            runCategory
             config
             progress
             startedAt
@@ -88,6 +90,7 @@ describe('GraphQL Run Query', () => {
         id: testRun.id,
         definitionId: testDefinition.id,
         status: 'COMPLETED',
+        runCategory: 'PRODUCTION',
       });
       expect(response.body.data.run.config).toHaveProperty('models');
       expect(response.body.data.run.progress).toHaveProperty('completed', 10);
@@ -332,6 +335,7 @@ describe('GraphQL Run Query', () => {
         data: {
           definitionId: testDefinition.id,
           status: 'PENDING',
+          runCategory: 'UNKNOWN_LEGACY',
           config: { models: ['gpt-4'] },
         },
       });
@@ -418,6 +422,32 @@ describe('GraphQL Run Query', () => {
       const ids = response.body.data.runs.map((r: { id: string }) => r.id);
       expect(ids).toContain(testRun.id);
       // Should NOT include our pending run
+      expect(ids).not.toContain(pendingRun.id);
+    });
+
+    it('filters by runCategory', async () => {
+      const query = `
+        query ListRunsByCategory($runCategory: String) {
+          runs(runCategory: $runCategory) {
+            id
+            runCategory
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { runCategory: 'PRODUCTION' } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+      expect(response.body.data.runs.length).toBeGreaterThan(0);
+      for (const run of response.body.data.runs) {
+        expect(run.runCategory).toBe('PRODUCTION');
+      }
+      const ids = response.body.data.runs.map((r: { id: string }) => r.id);
+      expect(ids).toContain(testRun.id);
       expect(ids).not.toContain(pendingRun.id);
     });
 

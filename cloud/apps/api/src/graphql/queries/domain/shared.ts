@@ -145,6 +145,48 @@ export type DomainTrialPlanCellEstimate = {
   estimatedCost: number;
 };
 
+export type DomainEvaluationEstimateConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type DomainEvaluationEstimateModel = {
+  modelId: string;
+  label: string;
+  isDefault: boolean;
+  supportsTemperature: boolean;
+  estimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+};
+
+export type DomainEvaluationEstimateDefinition = {
+  definitionId: string;
+  definitionName: string;
+  definitionVersion: number;
+  signature: string;
+  scenarioCount: number;
+  estimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+};
+
+export type DomainEvaluationCostEstimate = {
+  domainId: string;
+  domainName: string;
+  scopeCategory: string;
+  targetedDefinitions: number;
+  totalScenarioCount: number;
+  totalEstimatedCost: number;
+  basedOnSampleCount: number;
+  isUsingFallback: boolean;
+  fallbackReason: string | null;
+  estimateConfidence: DomainEvaluationEstimateConfidence;
+  knownExclusions: string[];
+  models: DomainEvaluationEstimateModel[];
+  definitions: DomainEvaluationEstimateDefinition[];
+  existingTemperatures: number[];
+  defaultTemperature: number | null;
+  temperatureWarning: string | null;
+};
+
 export type DomainTrialPlanResult = {
   domainId: string;
   domainName: string;

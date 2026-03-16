@@ -9,9 +9,12 @@ import {
   DOMAIN_AVAILABLE_SIGNATURES_QUERY,
   DOMAIN_ANALYSIS_QUERY,
   DOMAIN_ANALYSIS_QUERY_LEGACY,
+  DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
   type DomainAvailableSignature,
   type DomainAvailableSignaturesQueryResult,
   type DomainAvailableSignaturesQueryVariables,
+  type DomainFindingsEligibilityQueryResult,
+  type DomainFindingsEligibilityQueryVariables,
   type DomainAnalysisQueryResult,
   type DomainAnalysisQueryVariables,
 } from '../api/operations/domainAnalysis';
@@ -69,6 +72,15 @@ export function DomainAnalysis() {
     () => signatureData?.domainAvailableSignatures ?? [],
     [signatureData],
   );
+  const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
+    DomainFindingsEligibilityQueryResult,
+    DomainFindingsEligibilityQueryVariables
+  >({
+    query: DOMAIN_FINDINGS_ELIGIBILITY_QUERY,
+    variables: { domainId: selectedDomainId },
+    pause: selectedDomainId === '',
+    requestPolicy: 'cache-and-network',
+  });
   const hasValidSelectedSignature = useMemo(
     () => selectedSignature !== '' && signatureOptions.some((option) => option.signature === selectedSignature),
     [selectedSignature, signatureOptions],
@@ -152,6 +164,7 @@ export function DomainAnalysis() {
   const data = useLegacyQuery ? legacyData : scoredData;
   const fetching = useLegacyQuery ? legacyFetching : scoredFetching;
   const error = useLegacyQuery ? legacyError : scoredError;
+  const findingsEligibility = findingsEligibilityData?.domainFindingsEligibility;
 
   const models = useMemo<ModelEntry[]>(() => {
     const sourceModels = data?.domainAnalysis.models ?? [];
@@ -226,14 +239,14 @@ export function DomainAnalysis() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Domain Analysis</h1>
+        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Findings</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Structured model-value analysis across priorities, ranking behavior, and similarity for the selected domain.
+          Structured domain interpretation across priorities, ranking behavior, and similarity for the selected domain.
         </p>
       </div>
 
-      {(domainsError || signaturesError || error) && (
-        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? error)?.message ?? 'Unknown error'}`} />
+      {(domainsError || signaturesError || findingsEligibilityError || error) && (
+        <ErrorMessage message={`Failed to load domain analysis: ${(domainsError ?? signaturesError ?? findingsEligibilityError ?? error)?.message ?? 'Unknown error'}`} />
       )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -329,6 +342,57 @@ export function DomainAnalysis() {
           </div>
         )}
       </section>
+
+      {selectedDomainId !== '' && !findingsEligibilityLoading && findingsEligibility && (
+        <section className={`rounded-lg border p-4 ${findingsEligibility.eligible ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${findingsEligibility.eligible ? 'bg-green-100 text-green-900' : 'bg-amber-100 text-amber-900'}`}>
+                Current evidence scope: {findingsEligibility.eligible ? 'auditable findings' : 'diagnostic evidence only'}
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${findingsEligibility.eligible ? 'text-green-900' : 'text-amber-900'}`}>
+                  {findingsEligibility.eligible ? 'Findings are auditable' : 'Diagnostics only for now'}
+                </p>
+                <p className={`text-sm ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
+                  {findingsEligibility.summary}
+                </p>
+                {!findingsEligibility.eligible && (
+                  <p className="mt-2 text-xs text-amber-900">
+                    What you are seeing on this page right now is domain-level diagnostic evidence. Do not treat it as final interpretation until an auditable production or replication evaluation is eligible.
+                  </p>
+                )}
+              </div>
+              {findingsEligibility.reasons.length > 0 && (
+                <ul className={`list-disc pl-5 text-xs space-y-1 ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
+                  {findingsEligibility.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
+              {findingsEligibility.recommendedActions.length > 0 && (
+                <div className={`text-xs ${findingsEligibility.eligible ? 'text-green-800' : 'text-amber-900'}`}>
+                  Recommended next step: {findingsEligibility.recommendedActions[0]}
+                </div>
+              )}
+            </div>
+            <div className="rounded border border-white/60 bg-white/70 px-3 py-2 text-xs text-gray-700">
+              <div>Completed eligible evaluations: <span className="font-semibold">{findingsEligibility.completedEligibleEvaluationCount}</span></div>
+              <div>Scopes considered: <span className="font-semibold">{findingsEligibility.consideredScopeCategories.map((scope) => scope.toLowerCase()).join(', ')}</span></div>
+              {findingsEligibility.latestEligibleEvaluationId && (
+                <div>Latest eligible cohort: <span className="font-semibold">{findingsEligibility.latestEligibleEvaluationId.slice(-8)}</span></div>
+              )}
+            </div>
+          </div>
+          {!findingsEligibility.eligible && (
+            <div className="mt-3">
+              <Button type="button" size="sm" onClick={() => navigate(`/domains/${selectedDomainId}/run-trials?scopeCategory=PRODUCTION`)}>
+                Open Domain Evaluation and start a production run
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
 
       {(domainsLoading || signaturesLoading || (selectedDomainId !== '' && fetching)) ? (
         <Loading size="lg" text="Loading domain analysis..." />

@@ -1,70 +1,70 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MobileNav } from '../../../src/components/layout/MobileNav';
 
-function renderMobileNav(initialRoute: string) {
-  return render(
+async function renderMobileNav(initialRoute: string) {
+  const result = render(
     <MemoryRouter initialEntries={[initialRoute]}>
       <MobileNav />
     </MemoryRouter>
   );
+
+  await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
+  return result;
 }
 
 describe('MobileNav Component', () => {
-  it('highlights only the nested coverage item for the coverage route', () => {
-    renderMobileNav('/domains/coverage');
+  it('renders the new top-level navigation items', async () => {
+    await renderMobileNav('/domains');
 
-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
-
-    expect(domainsLink.className).not.toContain('border-teal-500');
-    expect(coverageLink.className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
+    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
+    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
+    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
   });
 
-  it('keeps the top-level domains item active on the domains list route', () => {
-    renderMobileNav('/domains');
+  it('keeps the domain compatibility links nested under Domains', async () => {
+    await renderMobileNav('/domains');
 
-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
-
-    expect(domainsLink.className).toContain('border-teal-500');
-    expect(coverageLink.className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
+    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
+    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
+    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
+    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
   });
 
-  it('renders Domains before Vignettes in the mobile nav list', () => {
-    renderMobileNav('/domains');
-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
-    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
-    expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it('keeps the validation compatibility links nested under Validation', async () => {
+    await renderMobileNav('/assumptions/analysis');
+
+    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
+    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
+    expect(screen.getByRole('link', { name: 'Validation Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
+    expect(screen.getByRole('link', { name: 'Validation (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
   });
 
-  it('includes the new analysis and analysis-v1 assumption routes', () => {
-    renderMobileNav('/assumptions/analysis');
+  it('keeps the archive compatibility links nested under Archive', async () => {
+    await renderMobileNav('/archive/surveys');
 
-    expect(screen.getByRole('link', { name: 'Assumptions' })).toHaveAttribute('href', '/assumptions');
-    expect(
-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
-    ).toBe(true);
-    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
+    expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
+    expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
   });
 
-  it('includes only the unified vignette analysis route', () => {
-    renderMobileNav('/analysis');
+  it('highlights the validation item on validation compatibility routes', async () => {
+    await renderMobileNav('/assumptions/analysis');
 
-    expect(
-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
-    ).toBe(true);
-    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Validation' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Validation Analysis' }).className).toContain('border-teal-500');
   });
 
-  it('activates the unified analysis item on transcript routes', () => {
-    renderMobileNav('/analysis/run-1/transcripts');
+  it('highlights the archive item on archive compatibility routes', async () => {
+    await renderMobileNav('/archive/surveys');
 
-    const currentAnalysisLink = screen
-      .getAllByRole('link', { name: 'Analysis' })
-      .find((link) => link.getAttribute('href') === '/analysis');
-
-    expect(currentAnalysisLink?.className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Archive' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('border-teal-500');
   });
 });

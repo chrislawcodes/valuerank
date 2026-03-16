@@ -5,7 +5,7 @@
  * Jobs are routed to provider-specific queues for parallelism enforcement.
  */
 
-import { db } from '@valuerank/db';
+import { db, resolveDefinitionContent, type DefinitionContent, type RunCategory } from '@valuerank/db';
 import { createLogger, NotFoundError, ValidationError } from '@valuerank/shared';
 import { getBoss } from '../../queue/boss.js';
 import type { JobOptions, ProbeScenarioJobData, PriorityLevel } from '../../queue/types.js';
@@ -13,6 +13,7 @@ import { PRIORITY_VALUES, DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
 import { estimateCost, type CostEstimate } from '../cost/index.js';
 import { signalRunActivity } from './scheduler.js';
+import { getJudgeModel, getSummarizerModel } from '../infra-models.js';
 
 const log = createLogger('services:run:start');
 
@@ -24,6 +25,7 @@ export type StartRunInput = {
   samplesPerScenario?: number; // Number of samples per scenario-model pair (1-100, default 1)
   temperature?: number;
   priority?: string;
+  runCategory?: RunCategory;
   experimentId?: string;
   userId?: string | null;
   finalTrial?: boolean;
@@ -80,6 +82,14 @@ type JobEntry = {
   queueName: string;
   data: ProbeScenarioJobData;
   options: JobOptions;
+};
+
+type FindingsSnapshotModelConfig = {
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  displayName: string;
+  apiConfig: Record<string, unknown> | null;
 };
 
 type EnqueueFailure = {
@@ -326,6 +336,129 @@ function convertToAlpha(n: number): string {
   return result;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function buildResolvedValueStatements(
+  resolvedContent: DefinitionContent,
+  availableStatements: Array<{ id: string; token: string; body: string; domainId: string }>,
+): Array<Record<string, unknown>> | null {
+  const components = resolvedContent.components;
+  if (!components) return null;
+
+  return [
+    components.value_first,
+    components.value_second,
+  ].map((component) => {
+    const matched = availableStatements.find((statement) => statement.token === component.token);
+    return {
+      id: matched?.id ?? null,
+      domainId: matched?.domainId ?? null,
+      token: component.token,
+      body: matched?.body ?? component.body,
+      intensity: component.intensity ?? null,
+    };
+  });
+}
+
+async function buildFindingsSnapshot(input: {
+  definition: {
+    domainId: string | null;
+    domainContext: { id: string; domainId: string; text: string; version: number } | null;
+    levelPresetVersion: {
+      id: string;
+      version: string;
+      levelPresetId: string;
+      l1: string;
+      l2: string;
+      l3: string;
+      l4: string;
+      l5: string;
+    } | null;
+    preambleVersion: { id: string; version: string; content: string; preambleId: string } | null;
+    domain: {
+      id: string;
+      valueStatements: Array<{ id: string; token: string; body: string; domainId: string }>;
+    } | null;
+  };
+  resolvedContent: DefinitionContent;
+  selectedModels: FindingsSnapshotModelConfig[];
+}): Promise<Record<string, unknown>> {
+  const { definition, resolvedContent, selectedModels } = input;
+  const [judgeModel, summarizerModel] = await Promise.all([
+    getJudgeModel(),
+    getSummarizerModel(),
+  ]);
+
+  const resolvedContext = definition.domainContext
+    ? {
+      id: definition.domainContext.id,
+      domainId: definition.domainContext.domainId,
+      text: definition.domainContext.text,
+      version: definition.domainContext.version,
+    }
+    : null;
+
+  const resolvedValueStatements = definition.domain
+    ? buildResolvedValueStatements(resolvedContent, definition.domain.valueStatements)
+    : null;
+
+  const resolvedLevelWords = definition.levelPresetVersion
+    ? {
+      id: definition.levelPresetVersion.id,
+      levelPresetId: definition.levelPresetVersion.levelPresetId,
+      version: definition.levelPresetVersion.version,
+      words: [
+        definition.levelPresetVersion.l1,
+        definition.levelPresetVersion.l2,
+        definition.levelPresetVersion.l3,
+        definition.levelPresetVersion.l4,
+        definition.levelPresetVersion.l5,
+      ],
+    }
+    : null;
+
+  return {
+    findingsSnapshotVersion: 'v1',
+    resolvedPreamble: definition.preambleVersion
+      ? {
+        id: definition.preambleVersion.id,
+        preambleId: definition.preambleVersion.preambleId,
+        version: definition.preambleVersion.version,
+        content: definition.preambleVersion.content,
+      }
+      : null,
+    resolvedContext,
+    resolvedValueStatements,
+    resolvedLevelWords,
+    targetModelConfigs: selectedModels.map((model) => ({
+      modelId: model.modelId,
+      providerId: model.providerId,
+      providerName: model.providerName,
+      displayName: model.displayName,
+      apiConfig: model.apiConfig,
+    })),
+    evaluatorConfig: {
+      modelId: judgeModel.modelId,
+      providerId: judgeModel.providerId,
+      providerName: judgeModel.providerName,
+      displayName: judgeModel.displayName,
+      apiConfig: judgeModel.apiConfig ?? null,
+    },
+    summarizerConfig: {
+      modelId: summarizerModel.modelId,
+      providerId: summarizerModel.providerId,
+      providerName: summarizerModel.providerName,
+      displayName: summarizerModel.displayName,
+      apiConfig: summarizerModel.apiConfig ?? null,
+    },
+  };
+}
+
 /**
  * Starts a new evaluation run.
  *
@@ -347,6 +480,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     samplesPerScenario = 1,
     temperature,
     priority = 'NORMAL',
+    runCategory,
     experimentId,
     userId,
     finalTrial = false,
@@ -394,7 +528,17 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       modelId: { in: models },
       status: 'ACTIVE',
     },
-    select: { modelId: true },
+    select: {
+      modelId: true,
+      displayName: true,
+      apiConfig: true,
+      providerId: true,
+      provider: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
 
   const activeModelIds = activeModels.map(m => m.modelId);
@@ -435,6 +579,21 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         select: { id: true },
       },
       preambleVersion: true,
+      domainContext: true,
+      levelPresetVersion: true,
+      domain: {
+        select: {
+          id: true,
+          valueStatements: {
+            select: {
+              id: true,
+              token: true,
+              body: true,
+              domainId: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -542,8 +701,21 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     samplesPerScenario: finalTrial ? 10 : samplesPerScenario, // Upper bound?
   });
 
+  const resolvedDefinition = await resolveDefinitionContent(definitionId);
+
   // Prepare definition snapshot...
-  const content = definition.content as Record<string, unknown>;
+  const content = resolvedDefinition.resolvedContent as unknown as Record<string, unknown>;
+  const findingsSnapshot = await buildFindingsSnapshot({
+    definition,
+    resolvedContent: resolvedDefinition.resolvedContent,
+    selectedModels: activeModels.map((model) => ({
+      modelId: model.modelId,
+      providerId: model.providerId,
+      providerName: model.provider.name,
+      displayName: model.displayName,
+      apiConfig: asRecord(model.apiConfig),
+    })),
+  });
   const definitionSnapshot = {
     ...content,
     preamble: (definition.preambleVersion?.content ?? content.preamble) as string | undefined,
@@ -559,6 +731,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   // Create run config
   const config = {
+    ...(configExtras ?? {}),
     models,
     samplePercentage: finalTrial ? null : samplePercentage,
     sampleSeed: finalTrial ? null : sampleSeed,
@@ -570,7 +743,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     priority,
     definitionSnapshot,
     estimatedCosts: costEstimate,
-    ...(configExtras ?? {}),
+    ...findingsSnapshot,
   };
 
   const initialProgress = {
@@ -607,6 +780,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
         definitionId,
         experimentId: experimentId ?? null,
         status: 'PENDING',
+        runCategory: runCategory ?? 'UNKNOWN_LEGACY',
         config,
         progress: initialProgress,
         createdByUserId: userId ?? null,

@@ -34,10 +34,10 @@ describe('Layout Component', () => {
     renderLayout();
     // Navigation items appear in both NavTabs (desktop) and MobileNav (mobile)
     // so we check at least one of each exists
-    expect(screen.getAllByText('Vignettes').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Trials').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Survey').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Survey Results').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Domains').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Validation').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Archive').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Legacy Survey Work').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Settings').length).toBeGreaterThan(0);
   });
 

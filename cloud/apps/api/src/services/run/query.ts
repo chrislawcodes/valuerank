@@ -1,4 +1,4 @@
-import { db, type AnalysisStatus, type Prisma, type RunStatus } from '@valuerank/db';
+import { db, type AnalysisStatus, type Prisma, type RunCategory, type RunStatus } from '@valuerank/db';
 
 export type RunTypeFilter = 'ALL' | 'SURVEY' | 'NON_SURVEY';
 
@@ -7,6 +7,7 @@ export type RunQueryFilters = {
   definitionTagIds?: string[] | null;
   experimentId?: string | null;
   status?: RunStatus;
+  runCategory?: RunCategory;
   hasAnalysis?: boolean | null;
   analysisStatus?: AnalysisStatus;
   runType?: RunTypeFilter;
@@ -34,6 +35,13 @@ const RUN_STATUS_VALUES = new Set<RunStatus>([
 ]);
 
 const ANALYSIS_STATUS_VALUES = new Set<AnalysisStatus>(['CURRENT', 'SUPERSEDED']);
+const RUN_CATEGORY_VALUES = new Set<RunCategory>([
+  'PILOT',
+  'PRODUCTION',
+  'REPLICATION',
+  'VALIDATION',
+  'UNKNOWN_LEGACY',
+]);
 
 export function parseRunStatus(value: string | null | undefined): RunStatus | undefined {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -49,6 +57,13 @@ export function parseAnalysisStatus(value: string | null | undefined): AnalysisS
   return ANALYSIS_STATUS_VALUES.has(value as AnalysisStatus)
     ? (value as AnalysisStatus)
     : undefined;
+}
+
+export function parseRunCategory(value: string | null | undefined): RunCategory | undefined {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return undefined;
+  }
+  return RUN_CATEGORY_VALUES.has(value as RunCategory) ? (value as RunCategory) : undefined;
 }
 
 export function parseRunType(value: string | null | undefined): RunTypeFilter {
@@ -120,6 +135,10 @@ export async function buildRunWhere(filters: RunQueryFilters): Promise<ResolvedR
 
   if (filters.status !== undefined) {
     where.status = filters.status;
+  }
+
+  if (filters.runCategory !== undefined) {
+    where.runCategory = filters.runCategory;
   }
 
   const runType = filters.runType ?? 'ALL';

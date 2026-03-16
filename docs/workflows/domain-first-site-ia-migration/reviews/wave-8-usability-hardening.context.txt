@@ -1,0 +1,17 @@
+Wave 8 hardens usability only.
+
+Assume these earlier contracts are already landed:
+- domain-evaluation launch and grouped summary queries
+- findings eligibility
+- archive and validation top-level navigation
+
+Review this diff for regressions in:
+- exact resume links from Home
+- launch-time configuration review and pre-confirmation safety language
+- domain workspace query-string restoration for setup surfaces
+- findings trust-state and diagnostics-versus-findings wording
+
+Out of scope:
+- backend schema or API changes
+- archive classification changes
+- existing non-blocking React act warnings unless they hide a real regression

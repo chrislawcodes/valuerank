@@ -1,0 +1,520 @@
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+index dc09509..3565129 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchConfirmModal.tsx
+@@ -1,14 +1,21 @@
++import { Link } from 'react-router-dom';
+ import { Button } from '../../ui/Button';
+ import { formatCost } from './helpers';
+ 
+ type LaunchConfirmModalProps = {
+   open: boolean;
+   domainName: string;
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   estimatedTotalCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   temperatureLabel: string;
+   budgetCap: number | null;
++  reviewSetupHref: string;
++  reviewVignettesHref: string;
+   isStarting: boolean;
+   onCancel: () => void;
+   onConfirm: () => void;
+@@ -17,42 +24,83 @@ type LaunchConfirmModalProps = {
+ export function LaunchConfirmModal({
+   open,
+   domainName,
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   estimatedTotalCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   temperatureLabel,
+   budgetCap,
++  reviewSetupHref,
++  reviewVignettesHref,
+   isStarting,
+   onCancel,
+   onConfirm,
+ }: LaunchConfirmModalProps) {
+   if (!open) return null;
+ 
++  const headingId = 'launch-confirm-modal-heading';
++
+   return (
+     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+-      <div className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4">
+-        <h2 className="text-lg font-semibold text-gray-900">Confirm Domain Trial Launch</h2>
++      <div
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby={headingId}
++        className="w-full max-w-xl rounded-lg border border-gray-200 bg-white p-5 shadow-xl space-y-4"
++      >
++        <h2 id={headingId} className="text-lg font-semibold text-gray-900">Confirm Domain Evaluation</h2>
+         <div className="space-y-1 text-sm text-gray-700">
+           <div>Domain: <span className="font-medium">{domainName}</span></div>
+-          <div>Latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
++          <div>Domain evaluation scope: <span className="font-medium">{scopeCategory.toLowerCase()}</span></div>
++          <div>Selected latest vignettes: <span className="font-medium">{vignetteCount}</span></div>
+           <div>Models: <span className="font-medium">{modelCount}</span></div>
+           <div>Estimated total cost: <span className="font-medium">{formatCost(estimatedTotalCost)}</span></div>
++          {estimateConfidence && <div>Estimate confidence: <span className="font-medium">{estimateConfidence.toLowerCase()}</span></div>}
+           <div>Temperature: <span className="font-medium">{temperatureLabel}</span></div>
+           <div>Budget cap: <span className="font-medium">{budgetCap === null ? 'None' : formatCost(budgetCap)}</span></div>
+         </div>
++        {(fallbackReason || knownExclusions.length > 0) && (
++          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
++            <p className="font-medium">Setup summary and estimate notes</p>
++            {fallbackReason && <p>Fallback reason: {fallbackReason}</p>}
++            {knownExclusions.length > 0 && <p>{knownExclusions.join(' ')}</p>}
++          </div>
++        )}
++        <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
++          <p className="font-medium text-gray-900">Review before confirming</p>
++          <p>
++            This starts one domain evaluation cohort. Use these links if you need to double-check defaults or per-vignette overrides before member runs begin.
++          </p>
++          <div className="flex flex-wrap gap-2">
++            <Link
++              to={reviewSetupHref}
++              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++            >
++              Review setup coverage
++            </Link>
++            <Link
++              to={reviewVignettesHref}
++              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++            >
++              Review vignette overrides
++            </Link>
++          </div>
++        </div>
+         <p className="text-xs text-gray-500">
+-          This starts domain runs and incurs model costs. A duplicate active launch is blocked server-side.
++          This creates a domain evaluation cohort and incurs model costs. Duplicate active launches with the same scope and sampling are blocked server-side.
+         </p>
+         <div className="flex justify-end gap-2">
+           <Button type="button" variant="ghost" onClick={onCancel} disabled={isStarting}>
+             Cancel
+           </Button>
+           <Button type="button" onClick={onConfirm} disabled={isStarting}>
+-            {isStarting ? 'Starting...' : 'Run All Domain Trials'}
++            {isStarting ? 'Starting...' : 'Start Domain Evaluation'}
+           </Button>
+         </div>
+       </div>
+     </div>
+   );
+ }
+-
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+index 62afd9e..5a1167f 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchControlsPanel.tsx
+@@ -1,11 +1,16 @@
++import { Link } from 'react-router-dom';
+ import { Button } from '../../ui/Button';
+ import { Badge } from '../../ui/Badge';
+ import { formatCost } from './helpers';
+ 
+ type LaunchControlsPanelProps = {
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
+   vignetteCount: number;
+   modelCount: number;
+   totalEstimatedCost: number;
++  estimateConfidence?: 'HIGH' | 'MEDIUM' | 'LOW';
++  fallbackReason?: string | null;
++  knownExclusions?: string[];
+   useDefaultTemperature: boolean;
+   disableTemperatureInput: boolean;
+   temperatureInput: string;
+@@ -18,6 +23,11 @@ type LaunchControlsPanelProps = {
+   isStarting: boolean;
+   planFetching: boolean;
+   temperatureWarning?: string | null;
++  reviewSetupHref: string;
++  reviewVignettesHref: string;
++  selectedDefinitionCount?: number;
++  excludedRequestedDefinitionCount?: number;
++  onSetScopeCategory: (value: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION') => void;
+   onSetUseDefaultTemperature: (value: boolean) => void;
+   onSetTemperatureInput: (value: string) => void;
+   onSetMaxBudgetEnabled: (value: boolean) => void;
+@@ -27,9 +37,13 @@ type LaunchControlsPanelProps = {
+ };
+ 
+ export function LaunchControlsPanel({
++  scopeCategory,
+   vignetteCount,
+   modelCount,
+   totalEstimatedCost,
++  estimateConfidence,
++  fallbackReason,
++  knownExclusions = [],
+   useDefaultTemperature,
+   disableTemperatureInput,
+   temperatureInput,
+@@ -42,6 +56,11 @@ export function LaunchControlsPanel({
+   isStarting,
+   planFetching,
+   temperatureWarning,
++  reviewSetupHref,
++  reviewVignettesHref,
++  selectedDefinitionCount,
++  excludedRequestedDefinitionCount = 0,
++  onSetScopeCategory,
+   onSetUseDefaultTemperature,
+   onSetTemperatureInput,
+   onSetMaxBudgetEnabled,
+@@ -49,15 +68,73 @@ export function LaunchControlsPanel({
+   onSetSafeMode,
+   onOpenConfirm,
+ }: LaunchControlsPanelProps) {
++  const confidenceTone = estimateConfidence === 'HIGH'
++    ? 'success'
++    : estimateConfidence === 'MEDIUM'
++      ? 'warning'
++      : 'error';
++
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+       <div className="flex flex-wrap items-center gap-3">
+-        <Badge variant="info" size="count">Latest Vignettes: {vignetteCount}</Badge>
++        <Badge variant="neutral" size="count">Domain evaluation scope: {scopeCategory.toLowerCase()}</Badge>
++        <Badge variant="info" size="count">Selected latest vignettes: {vignetteCount}</Badge>
+         <Badge variant="info" size="count">Models: {modelCount}</Badge>
+-        <Badge variant="success" size="count">Total Estimate: {formatCost(totalEstimatedCost)}</Badge>
++        <Badge variant="success" size="count">Projected evaluation cost: {formatCost(totalEstimatedCost)}</Badge>
++        {estimateConfidence && <Badge variant={confidenceTone} size="count">Estimate confidence: {estimateConfidence.toLowerCase()}</Badge>}
++      </div>
++
++      <div className="rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 space-y-2">
++        <p className="font-medium text-gray-900">Configuration review before launch</p>
++        <p>
++          This launch starts one domain evaluation cohort, then creates vignette-scoped runs underneath it. Review domain defaults and vignette overrides before you confirm.
++        </p>
++        <div className="grid gap-2 md:grid-cols-3 text-xs text-gray-600">
++          <div>
++            <span className="font-medium text-gray-900">Launch scope:</span> {selectedDefinitionCount ?? vignetteCount} selected latest vignette{(selectedDefinitionCount ?? vignetteCount) === 1 ? '' : 's'}
++          </div>
++          <div>
++            <span className="font-medium text-gray-900">Review defaults:</span> Setup coverage and domain-wide presets
++          </div>
++          <div>
++            <span className="font-medium text-gray-900">Review overrides:</span> Vignette inventory and per-vignette reruns
++          </div>
++        </div>
++        {excludedRequestedDefinitionCount > 0 && (
++          <p className="text-xs text-amber-700">
++            {excludedRequestedDefinitionCount} requested vignette{excludedRequestedDefinitionCount === 1 ? '' : 's'} are excluded because they are stale, invalid, or no longer the latest version.
++          </p>
++        )}
++        <div className="flex flex-wrap gap-2">
++          <Link
++            to={reviewSetupHref}
++            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++          >
++            Review setup coverage
++          </Link>
++          <Link
++            to={reviewVignettesHref}
++            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
++          >
++            Review vignette overrides
++          </Link>
++        </div>
+       </div>
+ 
+       <div className="flex flex-wrap items-center gap-3">
++        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
++          Evaluation scope
++          <select
++            value={scopeCategory}
++            onChange={(event) => onSetScopeCategory(event.target.value as 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION')}
++            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
++          >
++            <option value="PILOT">Pilot</option>
++            <option value="PRODUCTION">Production</option>
++            <option value="REPLICATION">Replication</option>
++            <option value="VALIDATION">Validation</option>
++          </select>
++        </label>
+         <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+           <input type="radio" checked={useDefaultTemperature} onChange={() => onSetUseDefaultTemperature(true)} disabled={disableTemperatureInput} />
+           Use provider default temperature
+@@ -98,6 +175,12 @@ export function LaunchControlsPanel({
+ 
+       {disableTemperatureInput && <p className="text-xs text-amber-700">Some default models do not support custom temperature, so domain trials will use provider defaults.</p>}
+       {temperatureWarning && <p className="text-xs text-amber-700">{temperatureWarning}</p>}
++      {fallbackReason && <p className="text-xs text-amber-700">Estimate fallback: {fallbackReason}</p>}
++      {knownExclusions.length > 0 && (
++        <p className="text-xs text-gray-500">
++          Estimate notes: {knownExclusions.join(' ')}
++        </p>
++      )}
+       {maxBudgetEnabled && !hasValidBudget && <p className="text-xs text-amber-700">Enter a budget cap above $0 to enforce launch spend limits.</p>}
+       {retryAutoPaused && <p className="text-xs text-red-700">Retry controls auto-paused: failure rate is {(failureRate * 100).toFixed(0)}% (threshold 30%).</p>}
+ 
+@@ -106,9 +189,9 @@ export function LaunchControlsPanel({
+           onClick={onOpenConfirm}
+           disabled={isStarting || planFetching || modelCount === 0 || vignetteCount === 0 || (maxBudgetEnabled && !hasValidBudget)}
+         >
+-          {isStarting ? 'Starting...' : 'Review & Run Domain Trials'}
++          {isStarting ? 'Starting...' : 'Review & Start Domain Evaluation'}
+         </Button>
+-        <span className="text-xs text-gray-500">Runs start only after this second confirmation action.</span>
++        <span className="text-xs text-gray-500">Member runs start only after this second confirmation action.</span>
+       </div>
+     </div>
+   );
+diff --git a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+index 52a7e89..ab1b0dc 100644
+--- a/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
++++ b/cloud/apps/web/src/components/domains/domainTrials/LaunchStatusPanel.tsx
+@@ -3,6 +3,8 @@ import { Badge } from '../../ui/Badge';
+ import { formatCost, type DomainTrialLaunchSummary } from './helpers';
+ 
+ type LaunchStatusPanelProps = {
++  evaluationId: string | null;
++  scopeCategory: string | null;
+   launchSummary: DomainTrialLaunchSummary | null;
+   started: boolean;
+   statusSummary: {
+@@ -19,6 +21,8 @@ type LaunchStatusPanelProps = {
+ };
+ 
+ export function LaunchStatusPanel({
++  evaluationId,
++  scopeCategory,
+   launchSummary,
+   started,
+   statusSummary,
+@@ -32,10 +36,12 @@ export function LaunchStatusPanel({
+   return (
+     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+       <div className="flex flex-wrap items-center gap-2">
+-        <Badge variant="success" size="count">Started: {launchSummary?.startedRuns ?? statusSummary.total}</Badge>
+-        <Badge variant="warning" size="count">In Progress: {statusSummary.active}</Badge>
+-        <Badge variant="info" size="count">Completed: {statusSummary.completed}</Badge>
+-        <Badge variant={statusSummary.failed > 0 ? 'error' : 'neutral'} size="count">Failed: {statusSummary.failed}</Badge>
++        {evaluationId && <Badge variant="neutral" size="count">Evaluation: {evaluationId.slice(-8)}</Badge>}
++        {scopeCategory && <Badge variant="neutral" size="count">Evaluation scope: {scopeCategory.toLowerCase()}</Badge>}
++        <Badge variant="success" size="count">Member runs started: {launchSummary?.startedRuns ?? statusSummary.total}</Badge>
++        <Badge variant="warning" size="count">Member runs in progress: {statusSummary.active}</Badge>
++        <Badge variant="info" size="count">Member runs completed: {statusSummary.completed}</Badge>
++        <Badge variant={statusSummary.failed > 0 ? 'error' : 'neutral'} size="count">Member runs failed: {statusSummary.failed}</Badge>
+         {statusFetching && (
+           <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+             <Loader2 className="w-3 h-3 animate-spin" />
+@@ -49,6 +55,9 @@ export function LaunchStatusPanel({
+           ? `Launch result: started ${launchSummary.startedRuns}/${launchSummary.targetedDefinitions} vignette runs (${launchSummary.failedDefinitions} failed starts, ${launchSummary.skippedForBudget} budget-skipped) at ${new Date(launchSummary.startedAt).toLocaleTimeString()} · projected spend ${formatCost(launchSummary.projectedCostUsd)}.`
+           : 'Launch status is active.'}
+       </div>
++      <div className="text-xs text-gray-600">
++        This panel tracks the current domain evaluation cohort. Open an individual run when you need run-scoped diagnostics.
++      </div>
+       <div className="text-xs text-gray-500">
+         Live tracking: {statusSummary.known}/{statusSummary.total} runs resolved
+         {lastStatusUpdatedAt ? ` · Last refresh ${new Date(lastStatusUpdatedAt).toLocaleTimeString()}` : ''}.
+diff --git a/cloud/apps/web/src/pages/Dashboard.tsx b/cloud/apps/web/src/pages/Dashboard.tsx
+index 4e0e9c3..452594c 100644
+--- a/cloud/apps/web/src/pages/Dashboard.tsx
++++ b/cloud/apps/web/src/pages/Dashboard.tsx
+@@ -1,12 +1,137 @@
++import { Link } from 'react-router-dom';
++import { Archive, FolderTree, GitCompare, Settings, ShieldCheck } from 'lucide-react';
++import { Card } from '../components/ui/Card';
++import { useDomains } from '../hooks/useDomains';
++
++const quickLinks = [
++  {
++    title: 'Domains',
++    description: 'Start with active domain work, setup assets, and ongoing research programs.',
++    to: '/domains',
++    icon: FolderTree,
++  },
++  {
++    title: 'Validation',
++    description: 'Review methodology checks and validation reporting without mixing them into findings.',
++    to: '/validation',
++    icon: ShieldCheck,
++  },
++  {
++    title: 'Archive',
++    description: 'Open historical survey work and secondary research surfaces.',
++    to: '/archive',
++    icon: Archive,
++  },
++  {
++    title: 'Compare',
++    description: 'Use the global benchmark and comparison tooling as a cross-cutting utility.',
++    to: '/compare',
++    icon: GitCompare,
++  },
++];
++
+ export function Dashboard() {
++  const { domains } = useDomains();
++  const activeDomain = domains[0] ?? null;
++
+   return (
+-    <div className="space-y-6">
+-      <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
+-        Dashboard
+-      </h1>
+-      <p className="text-gray-600">
+-        Welcome to ValueRank. Select a section from the navigation to get started.
+-      </p>
++    <div className="space-y-8">
++      <div className="space-y-3">
++        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Home</p>
++        <div>
++          <h1 className="text-3xl font-serif font-medium text-[#1A1A1A]">Domain-first workspace</h1>
++          <p className="mt-3 max-w-3xl text-gray-600">
++            ValueRank is moving toward a domain-first workflow. During the migration, use Domains for active research,
++            Validation for methodology checks, and Archive for legacy or historical survey work.
++          </p>
++        </div>
++      </div>
++
++      <div className="rounded-xl border border-gray-200 bg-white p-5">
++        <h2 className="text-lg font-medium text-[#1A1A1A]">Primary workflow</h2>
++        <ol className="mt-3 grid gap-3 text-sm text-gray-600 md:grid-cols-2">
++          <li>1. Start with a domain idea and organize the work under Domains.</li>
++          <li>2. Build the instrument with preambles, contexts, value statements, and vignettes.</li>
++          <li>3. Pilot small runs, inspect diagnostics, and tune wording before larger evaluations.</li>
++          <li>4. Keep findings and validation separate so diagnostics do not masquerade as interpretation.</li>
++        </ol>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
++        {quickLinks.map((link) => {
++          const Icon = link.icon;
++          return (
++            <Link key={link.to} to={link.to} className="block">
++              <Card variant="interactive" padding="spacious" className="h-full">
++                <div className="flex items-start gap-3">
++                  <div className="rounded-lg bg-teal-50 p-2 text-teal-700">
++                    <Icon className="h-5 w-5" />
++                  </div>
++                  <div>
++                    <h2 className="text-lg font-medium text-[#1A1A1A]">{link.title}</h2>
++                    <p className="mt-2 text-sm text-gray-600">{link.description}</p>
++                  </div>
++                </div>
++              </Card>
++            </Link>
++          );
++        })}
++      </div>
++
++      {activeDomain && (
++        <div className="rounded-xl border border-gray-200 bg-white p-5">
++          <h2 className="text-lg font-medium text-[#1A1A1A]">Resume active domain work</h2>
++          <p className="mt-2 text-sm text-gray-600">
++            Jump straight back into exact surfaces for <span className="font-medium">{activeDomain.name}</span>.
++          </p>
++          <div className="mt-4 grid gap-3 md:grid-cols-3">
++            <Link
++              to={`/domains/${activeDomain.id}/run-trials?scopeCategory=PILOT`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Pilot next</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Open domain evaluation launcher</div>
++              <div className="mt-1 text-xs text-gray-600">Resume the pilot or production launch flow for this domain.</div>
++            </Link>
++            <Link
++              to={`/domains/analysis?domainId=${activeDomain.id}`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Review evidence</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Open findings for this domain</div>
++              <div className="mt-1 text-xs text-gray-600">Go directly to the current findings or diagnostics state.</div>
++            </Link>
++            <Link
++              to={`/domains?domainId=${activeDomain.id}&tab=setup&setupTab=contexts`}
++              className="rounded-lg border border-gray-200 bg-gray-50 p-4 hover:bg-gray-100"
++            >
++              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Tune setup</div>
++              <div className="mt-1 text-sm font-semibold text-gray-900">Review setup coverage</div>
++              <div className="mt-1 text-xs text-gray-600">Jump back to defaults, contexts, and value-statement coverage.</div>
++            </Link>
++          </div>
++        </div>
++      )}
++
++      <div className="rounded-xl border border-dashed border-gray-300 bg-[#F8F5EF] p-5">
++        <div className="flex items-start justify-between gap-4">
++          <div>
++            <h2 className="text-lg font-medium text-[#1A1A1A]">Compatibility surfaces remain live</h2>
++            <p className="mt-2 max-w-3xl text-sm text-gray-600">
++              Some pages still use the older object-first structure while the new information architecture lands in
++              slices. Use the new top-level labels to orient yourself, but expect a transitional mix of old and new
++              pages for now.
++            </p>
++          </div>
++          <Link
++            to="/settings"
++            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
++          >
++            <Settings className="h-4 w-4" />
++            Settings
++          </Link>
++        </div>
++      </div>
+     </div>
+   );
+ }
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/apps/web/tests/pages/Dashboard.test.tsx b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+index d919863..8a2251f 100644
+--- a/cloud/apps/web/tests/pages/Dashboard.test.tsx
++++ b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+@@ -1,15 +1,29 @@
+-import { describe, it, expect } from 'vitest';
++import { describe, expect, it, vi } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
+ import { Dashboard } from '../../src/pages/Dashboard';
+ 
+-describe('Dashboard Page', () => {
+-  it('should render dashboard heading', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
+-  });
++vi.mock('../../src/hooks/useDomains', () => ({
++  useDomains: () => ({
++    domains: [{ id: 'domain-a', name: 'Domain A', definitionCount: 2 }],
++  }),
++}));
++
++describe('Dashboard', () => {
++  it('renders the home framing, primary quick links, and exact resume links', () => {
++    render(
++      <MemoryRouter>
++        <Dashboard />
++      </MemoryRouter>
++    );
+ 
+-  it('should render welcome message', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByText(/welcome to valuerank/i)).toBeInTheDocument();
++    expect(screen.getByRole('heading', { name: /domain-first workspace/i })).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /domains/i })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: /validation/i })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: /archive/i })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('heading', { name: /resume active domain work/i })).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /open domain evaluation launcher/i })).toHaveAttribute('href', '/domains/domain-a/run-trials?scopeCategory=PILOT');
++    expect(screen.getByRole('link', { name: /open findings for this domain/i })).toHaveAttribute('href', '/domains/analysis?domainId=domain-a');
++    expect(screen.getByRole('link', { name: /review setup coverage/i })).toHaveAttribute('href', '/domains?domainId=domain-a&tab=setup&setupTab=contexts');
+   });
+ });

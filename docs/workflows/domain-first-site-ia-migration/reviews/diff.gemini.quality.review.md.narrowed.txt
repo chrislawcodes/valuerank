@@ -1,0 +1,1162 @@
+diff --git a/cloud/apps/api/src/graphql/mutations/assumptions.ts b/cloud/apps/api/src/graphql/mutations/assumptions.ts
+index 330f8c9..57b80c2 100644
+--- a/cloud/apps/api/src/graphql/mutations/assumptions.ts
++++ b/cloud/apps/api/src/graphql/mutations/assumptions.ts
+@@ -350,6 +350,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
+             samplesPerScenario: definition.samplesPerScenario,
+             temperature: 0,
+             priority: 'NORMAL',
++            runCategory: 'VALIDATION',
+             userId,
+             finalTrial: false,
+             configExtras: {
+@@ -662,6 +663,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
+             scenarioIds: launch.scenarioIds,
+             temperature: 0,
+             priority: 'NORMAL',
++            runCategory: 'VALIDATION',
+             userId,
+             finalTrial: false,
+             configExtras: {
+diff --git a/cloud/apps/api/src/graphql/mutations/domain.ts b/cloud/apps/api/src/graphql/mutations/domain.ts
+index 943e9b7..78f0363 100644
+--- a/cloud/apps/api/src/graphql/mutations/domain.ts
++++ b/cloud/apps/api/src/graphql/mutations/domain.ts
+@@ -24,6 +24,8 @@ type DomainMutationResult = {
+ };
+ 
+ type DomainTrialRunResult = {
++  domainEvaluationId: string | null;
++  scopeCategory: string;
+   success: boolean;
+   totalDefinitions: number;
+   targetedDefinitions: number;
+@@ -41,6 +43,22 @@ type DomainTrialRunEntry = {
+   modelIds: string[];
+ };
+ 
++type DomainEvaluationLaunchInput = {
++  domainId: string;
++  scopeCategory: 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION';
++  temperature?: number | null;
++  maxBudgetUsd?: number | null;
++  definitionIds?: string[];
++  modelIds?: string[];
++  samplePercentage: number;
++  samplesPerScenario: number;
++  userId: string;
++  log: {
++    error: (payload: Record<string, unknown>, message: string) => void;
++  };
++  auditOperationType: 'run-trials-for-domain' | 'start-domain-evaluation';
++};
++
+ type RetryDomainTrialCellResult = {
+   success: boolean;
+   definitionId: string;
+@@ -71,6 +89,8 @@ builder.objectType(DomainTrialRunEntryRef, {
+ 
+ builder.objectType(DomainTrialRunResultRef, {
+   fields: (t) => ({
++    domainEvaluationId: t.exposeID('domainEvaluationId', { nullable: true }),
++    scopeCategory: t.exposeString('scopeCategory'),
+     success: t.exposeBoolean('success'),
+     totalDefinitions: t.exposeInt('totalDefinitions'),
+     targetedDefinitions: t.exposeInt('targetedDefinitions'),
+@@ -114,6 +134,7 @@ function normalizeModelSet(models: unknown): string[] {
+ 
+ type DefinitionRow = {
+   id: string;
++  name: string;
+   parentId: string | null;
+   version: number;
+   createdAt: Date;
+@@ -177,6 +198,7 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
+       where: { id: { in: parentIdsBatch } },
+       select: {
+         id: true,
++        name: true,
+         parentId: true,
+         version: true,
+         createdAt: true,
+@@ -196,6 +218,318 @@ async function hydrateDefinitionAncestors(definitions: DefinitionRow[]): Promise
+   return definitionsById;
+ }
+ 
++async function launchDomainEvaluation(input: DomainEvaluationLaunchInput): Promise<DomainTrialRunResult> {
++  const {
++    domainId,
++    scopeCategory,
++    temperature = null,
++    maxBudgetUsd = null,
++    definitionIds = [],
++    modelIds = [],
++    samplePercentage,
++    samplesPerScenario,
++    userId,
++    log,
++    auditOperationType,
++  } = input;
++
++  const domain = await db.domain.findUnique({ where: { id: domainId } });
++  if (!domain) throw new Error(`Domain not found: ${domainId}`);
++
++  const definitions = await db.definition.findMany({
++    where: { domainId, deletedAt: null },
++    select: {
++      id: true,
++      name: true,
++      parentId: true,
++      version: true,
++      createdAt: true,
++      updatedAt: true,
++    },
++  });
++
++  if (definitions.length === 0) {
++    return {
++      domainEvaluationId: null,
++      scopeCategory,
++      success: true,
++      totalDefinitions: 0,
++      targetedDefinitions: 0,
++      startedRuns: 0,
++      failedDefinitions: 0,
++      skippedForBudget: 0,
++      projectedCostUsd: 0,
++      blockedByActiveLaunch: false,
++      runs: [],
++    };
++  }
++
++  const definitionsById = await hydrateDefinitionAncestors(definitions);
++  const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
++  const latestDefinitionById = new Map(latestDefinitions.map((definition) => [definition.id, definition]));
++  const targetedDefinitions = definitionIds.length > 0
++    ? definitionIds
++      .map((definitionId) => latestDefinitionById.get(definitionId))
++      .filter((definition): definition is DefinitionRow => definition !== undefined)
++    : latestDefinitions;
++  const latestDefinitionIds = targetedDefinitions.map((definition) => definition.id);
++
++  const activeModels = await db.llmModel.findMany({
++    where: {
++      status: 'ACTIVE',
++      ...(modelIds.length > 0 ? { modelId: { in: modelIds } } : {}),
++    },
++    select: { modelId: true, isDefault: true },
++  });
++  const defaultModels = activeModels.filter((model) => model.isDefault).map((model) => model.modelId);
++  const fallbackModels = activeModels.map((model) => model.modelId);
++  const selectedModels = modelIds.length > 0
++    ? fallbackModels
++    : (defaultModels.length > 0 ? defaultModels : fallbackModels);
++  if (selectedModels.length === 0) {
++    throw new Error('No active models are configured. Add an active model before starting a domain evaluation.');
++  }
++  const normalizedModels = selectedModels.slice().sort((left, right) => left.localeCompare(right));
++
++  const activeRuns = await db.run.findMany({
++    where: {
++      definitionId: { in: latestDefinitionIds },
++      status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
++      deletedAt: null,
++    },
++    select: {
++      id: true,
++      definitionId: true,
++      config: true,
++    },
++  });
++  const hasActiveEquivalentRun = activeRuns.some((run) => {
++    const config = run.config as {
++      models?: unknown;
++      temperature?: unknown;
++      samplePercentage?: unknown;
++      samplesPerScenario?: unknown;
++    } | null;
++    const runModels = normalizeModelSet(config?.models);
++    const runTemperature = parseTemperature(config?.temperature);
++    const runSamplePercentage =
++      typeof config?.samplePercentage === 'number' && Number.isFinite(config.samplePercentage)
++        ? config.samplePercentage
++        : null;
++    const runSamplesPerScenario =
++      typeof config?.samplesPerScenario === 'number' && Number.isFinite(config.samplesPerScenario)
++        ? config.samplesPerScenario
++        : null;
++
++    return runTemperature === temperature
++      && runModels.length === normalizedModels.length
++      && runModels.every((modelId, index) => modelId === normalizedModels[index])
++      && runSamplePercentage === samplePercentage
++      && runSamplesPerScenario === samplesPerScenario;
++  });
++  if (hasActiveEquivalentRun) {
++    throw new Error('Domain evaluation launch blocked: matching active work already exists for this scope, model selection, and temperature.');
++  }
++
++  if (maxBudgetUsd !== undefined && maxBudgetUsd !== null && maxBudgetUsd <= 0) {
++    throw new Error('maxBudgetUsd must be greater than 0 when provided.');
++  }
++  const budgetCap = maxBudgetUsd ?? null;
++
++  const launchableDefinitions: DefinitionRow[] = [];
++  const estimatedCostByDefinitionId = new Map<string, number>();
++  let skippedForBudget = 0;
++  let projectedCostUsd = 0;
++
++  for (const definition of targetedDefinitions) {
++    if (budgetCap !== null) {
++      const estimate = await estimateCostService({
++        definitionId: definition.id,
++        modelIds: selectedModels,
++        samplePercentage,
++        samplesPerScenario,
++      });
++      estimatedCostByDefinitionId.set(definition.id, estimate.total);
++      if (projectedCostUsd + estimate.total > budgetCap) {
++        skippedForBudget += 1;
++        continue;
++      }
++      projectedCostUsd += estimate.total;
++    }
++    launchableDefinitions.push(definition);
++  }
++
++  let domainEvaluationId: string | null = null;
++  if (launchableDefinitions.length > 0) {
++    const evaluation = await db.domainEvaluation.create({
++      data: {
++        domainId,
++        domainNameAtLaunch: domain.name,
++        scopeCategory,
++        status: 'PENDING',
++        configSnapshot: {
++          totalDefinitions: definitions.length,
++          targetedDefinitions: targetedDefinitions.length,
++          requestedDefinitionIds: definitionIds,
++          targetedDefinitionIds: latestDefinitionIds,
++          launchableDefinitionIds: launchableDefinitions.map((definition) => definition.id),
++          projectedCostUsd,
++          skippedForBudget,
++          models: selectedModels,
++          temperature,
++          maxBudgetUsd: budgetCap,
++          samplePercentage,
++          samplesPerScenario,
++          defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
++          runCategory: scopeCategory,
++        },
++        createdByUserId: userId,
++      },
++    });
++    domainEvaluationId = evaluation.id;
++  }
++
++  let startedRuns = 0;
++  let failedDefinitions = 0;
++  const runs: DomainTrialRunEntry[] = [];
++
++  for (let offset = 0; offset < launchableDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
++    const batch = launchableDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
++    if (batch.length === 0) {
++      continue;
++    }
++
++    const runResults = await Promise.allSettled(
++      batch.map(async (definition) =>
++        startRunService({
++          definitionId: definition.id,
++          models: selectedModels,
++          samplePercentage,
++          samplesPerScenario,
++          temperature: temperature ?? undefined,
++          priority: 'NORMAL',
++          runCategory: scopeCategory,
++          userId,
++          finalTrial: false,
++        })
++      )
++    );
++
++    runResults.forEach((result, index) => {
++      if (result.status === 'fulfilled') {
++        startedRuns += 1;
++        runs.push({
++          definitionId: result.value.run.definitionId,
++          runId: result.value.run.id,
++          modelIds: selectedModels,
++        });
++        return;
++      }
++      failedDefinitions += 1;
++      const failedDefinition = batch[index];
++      log.error(
++        {
++          domainId,
++          definitionId: failedDefinition?.id ?? null,
++          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
++          scopeCategory,
++        },
++        'Failed to start domain evaluation member run'
++      );
++    });
++  }
++
++  if (domainEvaluationId !== null) {
++    const definitionById = new Map(
++      launchableDefinitions.map((definition) => [definition.id, definition]),
++    );
++
++    if (runs.length > 0) {
++      await db.domainEvaluationRun.createMany({
++        data: runs.map((run) => {
++          const definition = definitionById.get(run.definitionId);
++          return {
++            domainEvaluationId,
++            runId: run.runId,
++            definitionIdAtLaunch: run.definitionId,
++            definitionNameAtLaunch: definition?.name ?? 'Untitled vignette',
++            domainIdAtLaunch: domainId,
++          };
++        }),
++      });
++    }
++
++    const status = startedRuns > 0 ? 'RUNNING' : 'FAILED';
++    await db.domainEvaluation.update({
++      where: { id: domainEvaluationId },
++      data: {
++        status,
++        startedAt: startedRuns > 0 ? new Date() : null,
++        completedAt: startedRuns > 0 ? null : new Date(),
++        configSnapshot: {
++          totalDefinitions: definitions.length,
++          targetedDefinitions: targetedDefinitions.length,
++          requestedDefinitionIds: definitionIds,
++          targetedDefinitionIds: latestDefinitionIds,
++          launchableDefinitionIds: launchableDefinitions.map((definition) => definition.id),
++          projectedCostUsd,
++          skippedForBudget,
++          startedRuns,
++          failedDefinitions,
++          launchableDefinitionEstimatesUsd: Object.fromEntries(estimatedCostByDefinitionId),
++          models: selectedModels,
++          temperature,
++          maxBudgetUsd: budgetCap,
++          samplePercentage,
++          samplesPerScenario,
++          defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
++          runCategory: scopeCategory,
++        } as Prisma.InputJsonValue,
++      },
++    });
++  }
++
++  await createAuditLog({
++    action: 'ACTION',
++    entityType: 'Domain',
++    entityId: domainId,
++    userId,
++    metadata: {
++      operationType: auditOperationType,
++      domainName: domain.name,
++      scopeCategory,
++      totalDefinitions: definitions.length,
++      targetedDefinitions: targetedDefinitions.length,
++      requestedDefinitionIds: definitionIds,
++      startedRuns,
++      failedDefinitions,
++      skippedForBudget,
++      projectedCostUsd,
++      blockedByActiveLaunch: false,
++      models: selectedModels,
++      temperature,
++      maxBudgetUsd: budgetCap,
++      samplePercentage,
++      samplesPerScenario,
++      defaultsOnly: modelIds.length === 0 && defaultModels.length > 0,
++    },
++  });
++
++  return {
++    domainEvaluationId,
++    scopeCategory,
++    success: failedDefinitions === 0,
++    totalDefinitions: definitions.length,
++    targetedDefinitions: targetedDefinitions.length,
++    startedRuns,
++    failedDefinitions,
++    skippedForBudget,
++    projectedCostUsd,
++    blockedByActiveLaunch: false,
++    runs,
++  };
++}
++
+ builder.mutationField('createDomain', (t) =>
+   t.field({
+     type: DomainRef,
+@@ -438,196 +772,60 @@ builder.mutationField('runTrialsForDomain', (t) =>
+       if (!ctx.user) {
+         throw new AuthenticationError('Authentication required');
+       }
+-      const userId = ctx.user.id;
+-
+-      const domainId = String(args.domainId);
+-      const domain = await db.domain.findUnique({ where: { id: domainId } });
+-      if (!domain) throw new Error(`Domain not found: ${domainId}`);
+-
+-      const definitions = await db.definition.findMany({
+-        where: { domainId, deletedAt: null },
+-        select: {
+-          id: true,
+-          parentId: true,
+-          version: true,
+-          createdAt: true,
+-          updatedAt: true,
+-        },
+-      });
+-
+-      if (definitions.length === 0) {
+-        return {
+-          success: true,
+-          totalDefinitions: 0,
+-          targetedDefinitions: 0,
+-          startedRuns: 0,
+-          failedDefinitions: 0,
+-          skippedForBudget: 0,
+-          projectedCostUsd: 0,
+-          blockedByActiveLaunch: false,
+-          runs: [],
+-        };
+-      }
+-
+-      // Intentionally no ownership gate: domain-level trial runs are collaborative and
+-      // any authenticated teammate may trigger runs for latest definitions in the domain.
+-      const definitionsById = await hydrateDefinitionAncestors(definitions);
+-      const latestDefinitions = selectLatestDefinitionPerLineage(definitions, definitionsById);
+-      const requestedDefinitionIds = args.definitionIds?.map(String) ?? [];
+-      const latestDefinitionById = new Map(latestDefinitions.map((definition) => [definition.id, definition]));
+-      const targetedDefinitions = requestedDefinitionIds.length > 0
+-        ? requestedDefinitionIds
+-          .map((definitionId) => latestDefinitionById.get(definitionId))
+-          .filter((definition): definition is DefinitionRow => definition !== undefined)
+-        : latestDefinitions;
+-      const latestDefinitionIds = targetedDefinitions.map((definition) => definition.id);
+-
+-      const activeModels = await db.llmModel.findMany({
+-        where: { status: 'ACTIVE' },
+-        select: { modelId: true, isDefault: true },
+-      });
+-      const defaultModels = activeModels.filter((model) => model.isDefault).map((model) => model.modelId);
+-      const fallbackModels = activeModels.map((model) => model.modelId);
+-      const models = defaultModels.length > 0 ? defaultModels : fallbackModels;
+-      if (models.length === 0) {
+-        throw new Error('No active models are configured. Add an active model before running domain trials.');
+-      }
+-      const normalizedModels = models.slice().sort((left, right) => left.localeCompare(right));
+-
+-      const activeRuns = await db.run.findMany({
+-        where: {
+-          definitionId: { in: latestDefinitionIds },
+-          status: { in: ['PENDING', 'RUNNING', 'PAUSED', 'SUMMARIZING'] },
+-          deletedAt: null,
+-        },
+-        select: {
+-          id: true,
+-          definitionId: true,
+-          config: true,
+-        },
+-      });
+-      const hasActiveEquivalentRun = activeRuns.some((run) => {
+-        const config = run.config as { models?: unknown; temperature?: unknown } | null;
+-        const runModels = normalizeModelSet(config?.models);
+-        const runTemperature = parseTemperature(config?.temperature);
+-        return runTemperature === (args.temperature ?? null)
+-          && runModels.length === normalizedModels.length
+-          && runModels.every((modelId, index) => modelId === normalizedModels[index]);
++      return launchDomainEvaluation({
++        domainId: String(args.domainId),
++        scopeCategory: 'PRODUCTION',
++        temperature: args.temperature ?? null,
++        maxBudgetUsd: args.maxBudgetUsd ?? null,
++        definitionIds: args.definitionIds?.map(String) ?? [],
++        samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
++        samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
++        userId: ctx.user.id,
++        log: ctx.log,
++        auditOperationType: 'run-trials-for-domain',
+       });
+-      if (hasActiveEquivalentRun) {
+-        throw new Error('Domain trial launch blocked: matching domain trials are already active for this domain and temperature.');
+-      }
+-
+-      if (args.maxBudgetUsd !== undefined && args.maxBudgetUsd !== null && args.maxBudgetUsd <= 0) {
+-        throw new Error('maxBudgetUsd must be greater than 0 when provided.');
+-      }
+-      const budgetCap = args.maxBudgetUsd ?? null;
+-
+-      let startedRuns = 0;
+-      let failedDefinitions = 0;
+-      let skippedForBudget = 0;
+-      let projectedCostUsd = 0;
+-      const runs: DomainTrialRunEntry[] = [];
+-
+-      for (let offset = 0; offset < targetedDefinitions.length; offset += DOMAIN_TRIAL_RUN_BATCH_SIZE) {
+-        const batch = targetedDefinitions.slice(offset, offset + DOMAIN_TRIAL_RUN_BATCH_SIZE);
+-        const launchableDefinitions: DefinitionRow[] = [];
+-        for (const definition of batch) {
+-          if (budgetCap !== null) {
+-            const estimate = await estimateCostService({
+-              definitionId: definition.id,
+-              modelIds: models,
+-              samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+-              samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+-            });
+-            if (projectedCostUsd + estimate.total > budgetCap) {
+-              skippedForBudget += 1;
+-              continue;
+-            }
+-            projectedCostUsd += estimate.total;
+-          }
+-          launchableDefinitions.push(definition);
+-        }
+-
+-        if (launchableDefinitions.length === 0) {
+-          continue;
+-        }
++    },
++  })
++);
+ 
+-        const runResults = await Promise.allSettled(
+-          launchableDefinitions.map(async (definition) =>
+-            startRunService({
+-              definitionId: definition.id,
+-              models,
+-              // Domain runs default to lightweight trial settings to avoid unexpectedly large fan-out.
+-              samplePercentage: DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
+-              samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+-              temperature: args.temperature ?? undefined,
+-              priority: 'NORMAL',
+-              userId,
+-              finalTrial: false,
+-            })
+-          )
+-        );
+-
+-        runResults.forEach((result, index) => {
+-          if (result.status === 'fulfilled') {
+-            startedRuns += 1;
+-            runs.push({
+-              definitionId: result.value.run.definitionId,
+-              runId: result.value.run.id,
+-              modelIds: models,
+-            });
+-            return;
+-          }
+-          failedDefinitions += 1;
+-          const failedDefinition = launchableDefinitions[index];
+-          ctx.log.error(
+-            {
+-              domainId,
+-              definitionId: failedDefinition?.id ?? null,
+-              error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+-            },
+-            'Failed to start domain trial for definition'
+-          );
+-        });
++builder.mutationField('startDomainEvaluation', (t) =>
++  t.field({
++    type: DomainTrialRunResultRef,
++    args: {
++      domainId: t.arg.id({ required: true }),
++      scopeCategory: t.arg.string({ required: false }),
++      temperature: t.arg.float({ required: false }),
++      maxBudgetUsd: t.arg.float({ required: false }),
++      definitionIds: t.arg.idList({ required: false }),
++      modelIds: t.arg.stringList({ required: false }),
++      samplePercentage: t.arg.int({ required: false }),
++      samplesPerScenario: t.arg.int({ required: false }),
++    },
++    resolve: async (_root, args, ctx) => {
++      if (!ctx.user) {
++        throw new AuthenticationError('Authentication required');
+       }
+ 
+-      await createAuditLog({
+-        action: 'ACTION',
+-        entityType: 'Domain',
+-        entityId: domainId,
+-        userId,
+-        metadata: {
+-          operationType: 'run-trials-for-domain',
+-          domainName: domain.name,
+-          totalDefinitions: definitions.length,
+-          targetedDefinitions: targetedDefinitions.length,
+-          requestedDefinitionIds,
+-          startedRuns,
+-          failedDefinitions,
+-          skippedForBudget,
+-          projectedCostUsd,
+-          blockedByActiveLaunch: false,
+-          models,
+-          temperature: args.temperature ?? null,
+-          maxBudgetUsd: budgetCap,
+-          defaultsOnly: defaultModels.length > 0,
+-        },
++      const requestedScopeCategory = String(args.scopeCategory ?? 'PRODUCTION').trim().toUpperCase();
++      const scopeCategory = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'].includes(requestedScopeCategory)
++        ? (requestedScopeCategory as DomainEvaluationLaunchInput['scopeCategory'])
++        : 'PRODUCTION';
++
++      return launchDomainEvaluation({
++        domainId: String(args.domainId),
++        scopeCategory,
++        temperature: args.temperature ?? null,
++        maxBudgetUsd: args.maxBudgetUsd ?? null,
++        definitionIds: args.definitionIds?.map(String) ?? [],
++        modelIds: args.modelIds?.map(String) ?? [],
++        samplePercentage: args.samplePercentage ?? DOMAIN_TRIAL_DEFAULT_SAMPLE_PERCENTAGE,
++        samplesPerScenario: args.samplesPerScenario ?? DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
++        userId: ctx.user.id,
++        log: ctx.log,
++        auditOperationType: 'start-domain-evaluation',
+       });
+-
+-      return {
+-        success: failedDefinitions === 0,
+-        totalDefinitions: definitions.length,
+-        targetedDefinitions: targetedDefinitions.length,
+-        startedRuns,
+-        failedDefinitions,
+-        skippedForBudget,
+-        projectedCostUsd,
+-        blockedByActiveLaunch: false,
+-        runs,
+-      };
+     },
+-  })
++  }),
+ );
+ 
+ builder.mutationField('setDomainDefaultLevelPreset', (t) =>
+@@ -739,6 +937,7 @@ builder.mutationField('retryDomainTrialCell', (t) =>
+         samplesPerScenario: DOMAIN_TRIAL_DEFAULT_SAMPLES_PER_SCENARIO,
+         temperature: args.temperature ?? undefined,
+         priority: 'NORMAL',
++        runCategory: 'PRODUCTION',
+         userId,
+         finalTrial: false,
+       });
+
+... [narrowed diff slice: middle omitted] ...
+
+diff --git a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+index 9142ae9..6c403ce 100644
+--- a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
++++ b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+@@ -1,70 +1,70 @@
+ import { describe, it, expect } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
+ import { MemoryRouter } from 'react-router-dom';
+ import { MobileNav } from '../../../src/components/layout/MobileNav';
+ 
+-function renderMobileNav(initialRoute: string) {
+-  return render(
++async function renderMobileNav(initialRoute: string) {
++  const result = render(
+     <MemoryRouter initialEntries={[initialRoute]}>
+       <MobileNav />
+     </MemoryRouter>
+   );
++
++  await userEvent.click(screen.getByRole('button', { name: /open navigation menu/i }));
++  return result;
+ }
+ 
+ describe('MobileNav Component', () => {
+-  it('highlights only the nested coverage item for the coverage route', () => {
+-    renderMobileNav('/domains/coverage');
+-
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
++  it('renders the new top-level navigation items', async () => {
++    await renderMobileNav('/domains');
+ 
+-    expect(domainsLink.className).not.toContain('border-teal-500');
+-    expect(coverageLink.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
++    expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
++    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+   });
+ 
+-  it('keeps the top-level domains item active on the domains list route', () => {
+-    renderMobileNav('/domains');
+-
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const coverageLink = screen.getByRole('link', { name: 'Coverage' });
++  it('keeps the domain compatibility links nested under Domains', async () => {
++    await renderMobileNav('/domains');
+ 
+-    expect(domainsLink.className).toContain('border-teal-500');
+-    expect(coverageLink.className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
++    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
++    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+   });
+ 
+-  it('renders Domains before Vignettes in the mobile nav list', () => {
+-    renderMobileNav('/domains');
+-    const domainsLink = screen.getByRole('link', { name: 'Domains' });
+-    const vignettesLink = screen.getByRole('link', { name: 'Vignettes' });
+-    expect(domainsLink.compareDocumentPosition(vignettesLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++  it('keeps the validation compatibility links nested under Validation', async () => {
++    await renderMobileNav('/assumptions/analysis');
++
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
++    expect(screen.getByRole('link', { name: 'Validation Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
++    expect(screen.getByRole('link', { name: 'Validation (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+   });
+ 
+-  it('includes the new analysis and analysis-v1 assumption routes', () => {
+-    renderMobileNav('/assumptions/analysis');
++  it('keeps the archive compatibility links nested under Archive', async () => {
++    await renderMobileNav('/survey');
+ 
+-    expect(screen.getByRole('link', { name: 'Assumptions' })).toHaveAttribute('href', '/assumptions');
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+-    ).toBe(true);
+-    expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Survey Work' })).toHaveAttribute('href', '/survey');
++    expect(screen.getByRole('link', { name: 'Survey Results' })).toHaveAttribute('href', '/survey-results');
+   });
+ 
+-  it('includes only the unified vignette analysis route', () => {
+-    renderMobileNav('/analysis');
++  it('highlights the validation item on validation compatibility routes', async () => {
++    await renderMobileNav('/assumptions/analysis');
+ 
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+-    ).toBe(true);
+-    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
++    expect(screen.getByRole('link', { name: 'Validation' }).className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Validation Analysis' }).className).toContain('border-teal-500');
+   });
+ 
+-  it('activates the unified analysis item on transcript routes', () => {
+-    renderMobileNav('/analysis/run-1/transcripts');
+-
+-    const currentAnalysisLink = screen
+-      .getAllByRole('link', { name: 'Analysis' })
+-      .find((link) => link.getAttribute('href') === '/analysis');
++  it('highlights the archive item on archive compatibility routes', async () => {
++    await renderMobileNav('/survey');
+ 
+-    expect(currentAnalysisLink?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Archive' }).className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Survey Work' }).className).toContain('border-teal-500');
+   });
+ });
+diff --git a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+index 9bbe0e1..6ef4a7e 100644
+--- a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
++++ b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+@@ -12,72 +12,73 @@ function renderNavTabs(initialRoute = '/') {
+ }
+ 
+ describe('NavTabs Component', () => {
+-  it('should render all navigation tabs', () => {
++  it('renders the new top-level navigation tabs', () => {
+     renderNavTabs();
+-    expect(screen.getByRole('link', { name: /vignettes/i })).toBeInTheDocument();
+-    expect(screen.getByRole('link', { name: /trials/i })).toBeInTheDocument();
+-    expect(screen.getAllByRole('link', { name: /^survey$/i }).length).toBeGreaterThan(0);
+-    expect(screen.getByRole('link', { name: /survey results/i })).toBeInTheDocument();
+-    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
+-  });
+ 
+-  it('should link to correct paths', () => {
+-    renderNavTabs();
+-    expect(screen.getByRole('link', { name: /vignettes/i })).toHaveAttribute('href', '/definitions');
+-    expect(screen.getByRole('link', { name: /trials/i })).toHaveAttribute('href', '/runs');
+-    expect(
+-      screen.getAllByRole('link', { name: /^survey$/i }).every((link) => link.getAttribute('href') === '/survey')
+-    ).toBe(true);
+-    expect(screen.getByRole('link', { name: /survey results/i })).toHaveAttribute('href', '/survey-results');
+-    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute('href', '/settings');
++    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
++    expect(screen.getByRole('link', { name: 'Domains' })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', '/archive');
++    expect(screen.getByRole('link', { name: 'Compare' })).toHaveAttribute('href', '/compare');
++    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+   });
+ 
+-  it('shows only the unified vignette analysis route in the menu', () => {
+-    renderNavTabs('/analysis');
++  it('keeps the domain compatibility links available from the domains menu', () => {
++    renderNavTabs('/domains');
+ 
+-    expect(
+-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/analysis')
+-    ).toBe(true);
+-    expect(screen.queryByRole('link', { name: 'Analysis (Old V1)' })).not.toBeInTheDocument();
++    expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
++    expect(screen.getByRole('link', { name: 'New Pair' })).toHaveAttribute('href', '/job-choice/new');
++    expect(screen.getByRole('link', { name: 'Preambles' })).toHaveAttribute('href', '/preambles');
++    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
++    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
++    expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+   });
+ 
+-  it('shows the new assumptions analysis routes in the menu', () => {
++  it('keeps the validation compatibility links available from the validation menu', () => {
+     renderNavTabs('/assumptions/analysis');
+ 
++    expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
+     expect(
+       screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+     ).toBe(true);
+     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+-    expect(screen.getByRole('link', { name: /assumptions/i })).toHaveAttribute('href', '/assumptions');
+   });
+ 
+-  it('keeps the unified analysis menu item active on transcript routes', () => {
+-    renderNavTabs('/analysis/run-1/transcripts');
++  it('keeps the archive compatibility links available from the archive menu', () => {
++    renderNavTabs('/archive');
++
++    expect(screen.getByRole('link', { name: 'Survey Work' })).toHaveAttribute('href', '/survey');
++    expect(screen.getByRole('link', { name: 'Survey Results' })).toHaveAttribute('href', '/survey-results');
++  });
+ 
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    const currentAnalysisLink = screen
+-      .getAllByRole('link', { name: 'Analysis' })
+-      .find((link) => link.getAttribute('href') === '/analysis');
++  it('highlights Validation on validation compatibility routes', () => {
++    renderNavTabs('/assumptions/analysis');
+ 
+-    expect(currentAnalysisLink?.className).toContain('bg-teal-600/20');
+-    expect(vignettesLink.parentElement?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Validation' }).parentElement?.className).toContain('border-teal-500');
++    expect(
++      screen.getAllByRole('link', { name: 'Analysis' }).some(
++        (link) => link.getAttribute('href') === '/assumptions/analysis' && link.className.includes('bg-teal-600/20')
++      )
++    ).toBe(true);
+   });
+ 
+-  it('should highlight active tab', () => {
+-    renderNavTabs('/definitions');
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    const vignettesTrigger = vignettesLink.parentElement;
+-    expect(vignettesTrigger).not.toBeNull();
+-    expect(vignettesTrigger?.className).toContain('text-white');
+-    expect(vignettesTrigger?.className).toContain('border-teal-500');
++  it('highlights Archive on archive compatibility routes', () => {
++    renderNavTabs('/survey');
++
++    expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Survey Work' }).className).toContain('bg-teal-600/20');
+   });
+ 
+-  it('renders Domains before Vignettes in the top-level tab order', () => {
++  it('renders Domains before Validation and Archive in the top-level order', () => {
+     renderNavTabs();
+-    const domainsLink = screen.getByRole('link', { name: /domains/i });
+-    const vignettesLink = screen.getByRole('link', { name: /vignettes/i });
+-    // Domains must precede Vignettes in the DOM (no longer uses CSS flex order tricks)
+-    const position = domainsLink.compareDocumentPosition(vignettesLink);
+-    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++
++    const domainsLink = screen.getByRole('link', { name: 'Domains' });
++    const validationLink = screen.getByRole('link', { name: 'Validation' });
++    const archiveLink = screen.getByRole('link', { name: 'Archive' });
++
++    expect(domainsLink.compareDocumentPosition(validationLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++    expect(validationLink.compareDocumentPosition(archiveLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+   });
+ });
+diff --git a/cloud/apps/web/tests/pages/Dashboard.test.tsx b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+index d919863..123aecf 100644
+--- a/cloud/apps/web/tests/pages/Dashboard.test.tsx
++++ b/cloud/apps/web/tests/pages/Dashboard.test.tsx
+@@ -1,15 +1,19 @@
+-import { describe, it, expect } from 'vitest';
++import { describe, expect, it } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
+ import { Dashboard } from '../../src/pages/Dashboard';
+ 
+-describe('Dashboard Page', () => {
+-  it('should render dashboard heading', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument();
+-  });
++describe('Dashboard', () => {
++  it('renders the home framing and primary quick links', () => {
++    render(
++      <MemoryRouter>
++        <Dashboard />
++      </MemoryRouter>
++    );
+ 
+-  it('should render welcome message', () => {
+-    render(<Dashboard />);
+-    expect(screen.getByText(/welcome to valuerank/i)).toBeInTheDocument();
++    expect(screen.getByRole('heading', { name: /domain-first workspace/i })).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: /domains/i })).toHaveAttribute('href', '/domains');
++    expect(screen.getByRole('link', { name: /validation/i })).toHaveAttribute('href', '/validation');
++    expect(screen.getByRole('link', { name: /archive/i })).toHaveAttribute('href', '/archive');
+   });
+ });
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index 2c3dbb2..f06ab6b 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -31,6 +31,7 @@ model User {
+   createdDefinitions Definition[] @relation("DefinitionCreator")
+   deletedDefinitions Definition[] @relation("DefinitionDeleter")
+   createdRuns        Run[]        @relation("RunCreator")
++  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+   deletedRuns        Run[]        @relation("RunDeleter")
+   createdTags        Tag[]        @relation("TagCreator")
+   createdLlmModels   LlmModel[]   @relation("LlmModelCreator")
+@@ -163,6 +164,7 @@ model Domain {
+   definitions     Definition[]
+   contexts        DomainContext[]
+   valueStatements ValueStatement[]
++  evaluations     DomainEvaluation[]
+ 
+   @@index([defaultLevelPresetVersionId])
+   @@map("domains")
+@@ -306,6 +308,7 @@ model Run {
+   definitionId       String    @map("definition_id")
+   experimentId       String?   @map("experiment_id")
+   status             RunStatus @default(PENDING)
++  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+   config             Json      @db.JsonB
+   progress           Json?     @db.JsonB
+   summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+@@ -329,6 +332,7 @@ model Run {
+ 
+   transcripts     Transcript[]
+   analysisResults AnalysisResult[]
++  domainEvaluationMembership DomainEvaluationRun?
+   baselineFor     RunComparison[]  @relation("BaselineRun")
+   comparisonFor   RunComparison[]  @relation("ComparisonRun")
+   scenarioSelections RunScenarioSelection[]
+@@ -341,9 +345,51 @@ model Run {
+   @@index([definitionId])
+   @@index([experimentId])
+   @@index([status])
++  @@index([runCategory])
+   @@map("runs")
+ }
+ 
++model DomainEvaluation {
++  id               String                        @id @default(cuid())
++  domainId         String                        @map("domain_id")
++  domainNameAtLaunch String                      @map("domain_name_at_launch")
++  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
++  status           DomainEvaluationStatus        @default(PENDING)
++  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
++  createdAt        DateTime                      @default(now()) @map("created_at")
++  startedAt        DateTime?                     @map("started_at")
++  completedAt      DateTime?                     @map("completed_at")
++  createdByUserId  String?                       @map("created_by_user_id")
++
++  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
++  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
++  members   DomainEvaluationRun[]
++
++  @@index([domainId])
++  @@index([scopeCategory])
++  @@index([status])
++  @@index([createdByUserId])
++  @@map("domain_evaluations")
++}
++
++model DomainEvaluationRun {
++  id                    String   @id @default(cuid())
++  domainEvaluationId    String   @map("domain_evaluation_id")
++  runId                 String   @unique @map("run_id")
++  definitionIdAtLaunch  String   @map("definition_id_at_launch")
++  definitionNameAtLaunch String  @map("definition_name_at_launch")
++  domainIdAtLaunch      String   @map("domain_id_at_launch")
++  createdAt             DateTime @default(now()) @map("created_at")
++
++  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
++  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
++
++  @@index([domainEvaluationId])
++  @@index([definitionIdAtLaunch])
++  @@index([domainIdAtLaunch])
++  @@map("domain_evaluation_runs")
++}
++
+ enum RunStatus {
+   PENDING
+   RUNNING
+@@ -354,6 +400,29 @@ enum RunStatus {
+   CANCELLED
+ }
+ 
++enum DomainEvaluationScopeCategory {
++  PILOT
++  PRODUCTION
++  REPLICATION
++  VALIDATION
++}
++
++enum DomainEvaluationStatus {
++  PENDING
++  RUNNING
++  COMPLETED
++  FAILED
++  CANCELLED
++}
++
++enum RunCategory {
++  PILOT
++  PRODUCTION
++  REPLICATION
++  VALIDATION
++  UNKNOWN_LEGACY
++}
++
+ model Transcript {
+   id                 String    @id @default(cuid())
+   runId              String    @map("run_id")
+diff --git a/cloud/packages/db/src/index.ts b/cloud/packages/db/src/index.ts
+index ac6d5b1..6093f36 100644
+--- a/cloud/packages/db/src/index.ts
++++ b/cloud/packages/db/src/index.ts
+@@ -9,6 +9,7 @@ export type {
+   ApiKey,
+   Definition,
+   Run,
++  RunCategory,
+   RunStatus,
+   Transcript,
+   Scenario,
+@@ -25,6 +26,10 @@ export type {
+   Cohort,
+   Tag,
+   Domain,
++  DomainEvaluation,
++  DomainEvaluationRun,
++  DomainEvaluationScopeCategory,
++  DomainEvaluationStatus,
+   DefinitionTag,
+   LlmProvider,
+   LlmModel,
+diff --git a/docs/canonical-glossary.md b/docs/canonical-glossary.md
+index eda3f0a..d9bd534 100644
+--- a/docs/canonical-glossary.md
++++ b/docs/canonical-glossary.md
+@@ -113,11 +113,50 @@ Avoid confusion:
+ 
+ ### `Run`
+ 
+-A run is a task you start in ValueRank that sends one or more vignettes to one or more models for testing.
++A run is one persisted execution record for one vignette.
+ 
+ Example:
+ 
+-- “This run sends the five locked vignettes to GPT-4o at temperature 0.”
++- “This run sends one vignette to GPT-4o at temperature 0.”
++
++Avoid confusion:
++
++- a run is not the same thing as a domain-wide launch action
++- one domain-wide launch can create many runs
++
++### `Domain Evaluation`
++
++A domain evaluation is the user-facing domain-wide launch action that starts a coordinated set of vignette runs for one domain.
++
++Example:
++
++- “This domain evaluation starts the full Professional domain against the default model set.”
++
++Avoid confusion:
++
++- use `domain evaluation` for the domain-wide action and summary surface
++- use `run` for one vignette-scoped execution record
++
++### `Run Category`
++
++A run category is the workflow label attached to a run so the product can distinguish pilot, production, replication, validation, and legacy work.
++
++Current categories:
++
++- `PILOT`
++- `PRODUCTION`
++- `REPLICATION`
++- `VALIDATION`
++- `UNKNOWN_LEGACY`
++
++Example:
++
++- “Assumptions launches should stamp new runs as `VALIDATION`.”
++
++Avoid confusion:
++
++- a run category is not the same thing as survey versus non-survey classification
++- `UNKNOWN_LEGACY` means the run predates explicit categorization or has not been backfilled yet
+ 
+ ### `Trial`
+ 
+@@ -258,35 +297,3 @@ Example:
+ Preferred replacement:
+ 
+ - use `vignette`, `condition`, or `narrative`, depending on what is actually meant
+-
+-## Mapping Table
+-
+-| Legacy term | Canonical term | Notes |
+-| --- | --- | --- |
+-| `definition` | `vignette` | Main Vignettes tab object |
+-| `dimension` | `attribute` | User-facing axis |
+-| `scenario` | `condition` or `narrative` | Resolve by meaning, not blind rename |
+-
+-## Relationship To Other Docs
+-
+-### `docs/features/definitions.md`
+-
+-This is an implementation and feature doc for the current Vignettes/Definitions area.
+-
+-It is not the canonical glossary.
+-
+-Its job should be:
+-
+-- describe current system behavior
+-- document current schema/API details
+-- note where current implementation uses legacy names
+-
+-This glossary's job is different:
+-
+-- define the preferred terminology the product should converge toward
+-
+-### PRD terminology section
+-
+-The PRD should eventually contain a concise version of this glossary.
+-
+-The PRD can be shorter, but it should not conflict with this document.

@@ -1,6 +1,6 @@
 import { assembleTemplate } from '@valuerank/shared';
-import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { gql, useMutation, useQuery } from 'urql';
 import {
   DOMAINS_QUERY,
@@ -52,6 +52,7 @@ const PREAMBLES_QUERY = gql`
 
 export function JobChoiceNew() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [selectedDomainId, setSelectedDomainId] = useState('');
   const [selectedPreambleVersionId, setSelectedPreambleVersionId] = useState('');
@@ -106,6 +107,7 @@ export function JobChoiceNew() {
   const preambles = preamblesData?.preambles ?? [];
   const contexts = contextsData?.domainContexts ?? [];
   const valueStatements = valueStatementsData?.valueStatements ?? [];
+  const requestedDomainId = searchParams.get('domainId') ?? '';
 
   const valueFirst = valueStatements.find((v) => v.id === selectedValueFirstId) ?? null;
   const valueSecond = valueStatements.find((v) => v.id === selectedValueSecondId) ?? null;
@@ -128,6 +130,13 @@ export function JobChoiceNew() {
     contextsError?.message ??
     valueStatementsError?.message ??
     null;
+
+  useEffect(() => {
+    if (selectedDomainId !== '') return;
+    if (requestedDomainId === '') return;
+    if (!domains.some((domain) => domain.id === requestedDomainId)) return;
+    handleDomainChange(requestedDomainId);
+  }, [domains, requestedDomainId, selectedDomainId]);
 
   function handleDomainChange(domainId: string) {
     setSelectedDomainId(domainId);

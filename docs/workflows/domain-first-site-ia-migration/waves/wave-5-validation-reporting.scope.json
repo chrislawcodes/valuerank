@@ -1,0 +1,55 @@
+{
+  "paths": [
+    "cloud/apps/web/src/hooks/useInfiniteRuns.ts",
+    "cloud/apps/web/src/pages/Runs.tsx",
+    "cloud/apps/web/src/pages/ValidationHome.tsx",
+    "cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx",
+    "cloud/apps/web/src/pages/AnalysisAssumptions.tsx",
+    "cloud/apps/web/src/pages/OrderEffectAssumptions.tsx",
+    "cloud/apps/web/tests/pages/Runs.test.tsx",
+    "cloud/apps/web/tests/pages/ValidationHome.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md",
+    "docs/workflows/domain-first-site-ia-migration/waves/wave-5-validation-reporting.scope.json",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.codex.correctness.review.md",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.gemini.regression.review.md",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.gemini.quality.review.md"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/hooks/useInfiniteRuns.ts",
+    "cloud/apps/web/src/pages/Runs.tsx",
+    "cloud/apps/web/src/pages/ValidationHome.tsx",
+    "cloud/apps/web/src/pages/TempZeroEffectAssumptions.tsx",
+    "cloud/apps/web/src/pages/AnalysisAssumptions.tsx",
+    "cloud/apps/web/src/pages/OrderEffectAssumptions.tsx",
+    "cloud/apps/web/tests/pages/Runs.test.tsx",
+    "cloud/apps/web/tests/pages/ValidationHome.test.tsx",
+    "docs/workflows/domain-first-site-ia-migration/plan.md",
+    "docs/workflows/domain-first-site-ia-migration/tasks.md",
+    "docs/workflows/domain-first-site-ia-migration/waves/wave-5-validation-reporting.scope.json",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.codex.correctness.review.md",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.gemini.regression.review.md",
+    "docs/workflows/domain-first-site-ia-migration/reviews/wave-5-validation-reporting.gemini.quality.review.md"
+  ],
+  "prerequisite_paths": [
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/api/operations/temp-zero-verification.ts",
+    "cloud/apps/web/src/api/operations/order-invariance.ts",
+    "cloud/apps/web/src/components/ui/TransitionNotice.tsx"
+  ],
+  "review_context": {
+    "summary": "This wave turns Validation into a live reporting home and uses URL-driven runCategory filtering to link that reporting into the existing Runs surface.",
+    "assumed_present": [
+      "The VALIDATION run category, assumptions launches, and the validation-focused query operations from earlier waves are already landed."
+    ],
+    "out_of_scope": [
+      "This wave does not add new backend schema or GraphQL fields.",
+      "This wave does not move validation launches out of the existing assumptions/domain run flows.",
+      "This wave does not implement archive retirement."
+    ]
+  },
+  "verification_commands": [
+    "npm run typecheck --workspace=@valuerank/web",
+    "npm test --workspace=@valuerank/web -- tests/pages/ValidationHome.test.tsx tests/pages/Runs.test.tsx"
+  ]
+}

@@ -12,6 +12,7 @@ import { db } from '@valuerank/db';
 import {
   buildRunWhere,
   parseAnalysisStatus,
+  parseRunCategory,
   parseRunStatus,
   parseRunType,
 } from '../../../src/services/run/query.js';
@@ -24,12 +25,14 @@ describe('run query filters', () => {
   it('parses valid statuses', () => {
     expect(parseRunStatus('COMPLETED')).toBe('COMPLETED');
     expect(parseAnalysisStatus('CURRENT')).toBe('CURRENT');
+    expect(parseRunCategory('PRODUCTION')).toBe('PRODUCTION');
     expect(parseRunType('SURVEY')).toBe('SURVEY');
   });
 
   it('returns undefined/default for invalid statuses', () => {
     expect(parseRunStatus('BOGUS')).toBeUndefined();
     expect(parseAnalysisStatus('BOGUS')).toBeUndefined();
+    expect(parseRunCategory('BOGUS')).toBeUndefined();
     expect(parseRunType('BOGUS')).toBe('ALL');
   });
 
@@ -38,6 +41,7 @@ describe('run query filters', () => {
       definitionId: 'def-1',
       experimentId: 'exp-1',
       status: 'RUNNING',
+      runCategory: 'PRODUCTION',
       runType: 'ALL',
     });
 
@@ -47,6 +51,7 @@ describe('run query filters', () => {
       definitionId: 'def-1',
       experimentId: 'exp-1',
       status: 'RUNNING',
+      runCategory: 'PRODUCTION',
     });
   });
 

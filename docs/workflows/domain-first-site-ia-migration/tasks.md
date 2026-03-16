@@ -1,0 +1,222 @@
+# Domain-First Site IA Tasks
+
+## Current Status
+
+The migration plan is effectively locked and the implementation waves are now complete through the usability-hardening slice. Waves 1 through 8 are implemented and reconciled in the app-facing workflow: top-level IA is reframed around `Domains`, `Validation`, and `Archive`; the domain workspace exposes `Overview / Vignettes / Setup / Runs / Findings`; backend foundation work now covers `runCategory`, `DomainEvaluation`, grouped domain queries, and domain-level cost preview; Wave 3 added the scoped domain-evaluation runs experience; Wave 4 added the findings eligibility contract; Wave 5 turned `Validation` into a live reporting hub; Wave 6 canonicalized archive-prefixed legacy survey routes while keeping `/survey` and `/survey-results` as compatibility aliases; Wave 7 captures resolved findings snapshots at launch so auditable findings eligibility can rely on real persisted inputs rather than placeholder gates; and Wave 8 tightens the day-to-day usability seams with exact resume links, stronger configuration review before launch, and clearer diagnostics-versus-findings messaging. What remains is feature closeout plus any optional deeper archive classification work documented in the engineering spec.
+
+## Task List
+
+- [x] Lock the migration plan enough to stop using it as the implementation doc
+- [x] Create the workflow `spec.md`
+- [x] Create the workflow `plan.md`
+- [x] Create the workflow `tasks.md`
+- [x] Create the backend engineering spec for backend-blocked waves
+- [x] Add workflow metadata with Gemini review policy
+- [x] Restore or replace `docs/canonical-glossary.md`
+- [x] Create the route compatibility matrix
+- [x] Create the terminology decision table
+- [x] Create the file and route inventory
+- [x] Document immutable launch provenance
+- [x] Document legacy run categorization
+- [x] Document the domain-evaluation summary data contract
+- [x] Document the status-center scope decision
+- [x] Document the snapshot-boundary decision
+- [x] Save spec review records:
+  - `reviews/spec.codex.architecture.review.md`
+  - `reviews/spec.gemini.requirements.review.md`
+  - `reviews/spec.gemini.risk.review.md`
+- [x] Reconcile spec review findings in `plan.md`
+- [x] Save plan review records:
+  - `reviews/plan.codex.architecture.review.md`
+  - `reviews/plan.gemini.testability.review.md`
+  - `reviews/plan.gemini.risk.review.md`
+- [x] Reconcile plan review findings in `plan.md`
+- [x] Start Wave 1 only after the plan checkpoint is reconciled
+- [x] Implement Wave 1 top-level shell changes:
+  - `Home`, `Validation`, and `Archive` entry surfaces
+  - transitional nav rewrite for desktop and mobile
+  - compatibility framing on legacy validation and survey pages
+  - focused page tests for the new entry surfaces
+- [x] Push the existing `Domains` page toward the workspace model:
+  - `Overview / Vignettes / Setup` framing
+  - consolidated setup sub-tabs
+  - domain quick-link workspace panel
+- [x] Extend the transitional domain workspace with:
+  - `Runs` and `Findings` tabs
+  - guided `Create Vignette Pair` flow from the domain workspace
+  - richer overview readiness and next-action cards
+  - vignette-level `Open` and `Re-run` actions
+- [x] Preserve domain context when creating a vignette pair from a domain workspace
+- [x] Add focused automated coverage for:
+  - `Domains` workspace behavior
+  - `JobChoiceNew` domain preselection
+- [x] Add compatibility coverage for the migrated shell:
+  - desktop top-level navigation expectations
+  - mobile top-level navigation expectations
+  - redirect aliases for `/assumptions` -> `/validation`
+  - redirect aliases for `/experiments` -> `/archive`
+- [x] Save diff review records for the latest workspace implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the latest diff checkpoint before moving to the next wave
+- [x] Save diff review records for the current implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the current diff checkpoint before moving to the next wave
+- [x] Save backend engineering spec review records:
+  - Codex architecture
+  - Gemini requirements
+  - Gemini risk
+- [x] Reconcile backend engineering spec reviews in `plan.md`
+- [x] Implement backend run categorization foundation:
+  - Prisma `RunCategory` enum and `Run.runCategory`
+  - `runs`, `runCount`, and `analysisFolderCounts` filtering by `runCategory`
+  - GraphQL `startRun` input support for explicit `runCategory`
+  - `startRun` persistence with `UNKNOWN_LEGACY` default
+  - explicit `VALIDATION` categorization for assumptions launches
+  - typed web run operation support for `runCategory`
+- [x] Add targeted automated coverage for backend run categorization:
+  - service-level `parseRunCategory` and `buildRunWhere` coverage
+  - `startRun` persistence coverage for default and explicit categories
+  - GraphQL query and mutation coverage for `runCategory`
+- [x] Add a migration file for `RunCategory`
+- [x] Implement backend domain-evaluation provenance foundation:
+  - Prisma `DomainEvaluation` and `DomainEvaluationRun` models
+  - `runTrialsForDomain` persistence of evaluation cohorts and immutable membership rows
+  - `domainEvaluationId` returned from domain trial launches
+  - GraphQL `domainEvaluations`, `domainEvaluation`, and `domainEvaluationStatus` queries
+  - typed web operations for domain evaluation history and status
+- [x] Add targeted automated coverage for backend domain-evaluation provenance:
+  - mutation coverage for persisted evaluation creation and membership rows
+  - query registration coverage for domain evaluation fields
+  - query behavior coverage for list, detail, and derived status
+- [x] Add a migration file for `DomainEvaluation`
+- [x] Implement backend domain-level cost preview foundation:
+  - shared domain estimate builder reused by `domainTrialsPlan`
+  - GraphQL `estimateDomainEvaluationCost` query with per-domain, per-model, and per-definition totals
+  - fallback metadata and confidence labeling for launch-cost previews
+  - typed web domain operations for the new estimate contract
+- [x] Add targeted automated coverage for backend domain-level cost preview:
+  - query registration coverage for `estimateDomainEvaluationCost`
+  - query behavior coverage for totals, fallback metadata, and confidence labeling
+- [x] Implement backend domain-evaluation launch contract:
+  - add first-class `startDomainEvaluation`
+  - keep `runTrialsForDomain` as a compatibility wrapper over the shared launch helper
+  - allow explicit scope category, model selection, and sampling settings
+  - persist launch scope to cohort and member run records consistently
+- [x] Add targeted automated coverage for backend domain-evaluation launch contract:
+  - mutation coverage for `startDomainEvaluation`
+  - compatibility coverage proving `runTrialsForDomain` still launches through the shared contract
+  - assertions for run-category, scope-category, and sampling propagation
+- [x] Implement backend grouped domain query surface foundation:
+  - add `domainEvaluationMembers` for cohort-member reads without forcing the full detail payload
+  - add `domainRunSummary` for domain-level evaluation and member-run aggregates
+  - expose typed web domain operations for the new grouped query surfaces
+- [x] Add targeted automated coverage for grouped domain query surfaces:
+  - query registration coverage for `domainEvaluationMembers` and `domainRunSummary`
+  - query behavior coverage for summary aggregation, latest cohort identity, and scope filtering
+- [x] Implement Wave 3 `Runs` experience on top of the backend foundation:
+  - rework `DomainTrialsDashboard` around `Domain Evaluation Summary`
+  - use `startDomainEvaluation`, `domainEvaluations`, `domainEvaluation`, and `domainRunSummary`
+  - add scope-aware launch controls with setup summary, estimate confidence, fallback notes, and exclusions
+  - make the launch confirmation open a cohort-level summary and preserve `evaluationId` / `scopeCategory` in the URL
+  - distinguish domain evaluation summary, member run links, and the launch status panel
+- [x] Add focused automated coverage for Wave 3:
+  - web coverage for scoped launch wording and cohort-level summary rendering
+  - web coverage for estimate exclusion messaging in the confirmation flow
+- [x] Implement Wave 4 findings-eligibility gate:
+  - add GraphQL `domainFindingsEligibility(domainId)` with conservative auditable-snapshot checks
+  - wire `DomainAnalysis` to show diagnostics-only guidance until findings are truly auditable
+  - keep the findings CTA pointed back to `Runs` for production evaluations rather than overstating current backend support
+- [x] Add focused automated coverage for Wave 4:
+  - API coverage for the conservative findings-eligibility contract
+  - web coverage for the explicit diagnostics-only findings state
+- [x] Save diff review records for the Wave 3 and 4 implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the Wave 3 and 4 diff checkpoint before moving to the next wave
+- [x] Implement Wave 5 validation reporting slice:
+  - turn `ValidationHome` into a live reporting hub with recent validation runs plus temp=0 and order-invariance summaries
+  - teach `Runs` to honor URL-driven `runCategory` filtering so validation reporting links land in the correct operational view
+  - keep compatibility validation pages live while pointing people toward Validation reporting and validation run history
+- [x] Add focused automated coverage for Wave 5:
+  - `ValidationHome` reporting and linking coverage
+  - `Runs` validation-filter coverage
+- [x] Save diff review records for the Wave 5 implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the Wave 5 diff checkpoint before moving to the next wave
+- [x] Implement Wave 6 archive retirement slice:
+  - make archive-prefixed legacy survey routes canonical
+  - keep `/survey` and `/survey-results` as compatibility aliases that preserve search params
+  - relabel archive survey surfaces as explicit legacy/historical work
+  - keep Archive navigation and home cards pointed at the canonical archive-prefixed routes
+- [x] Add focused automated coverage for Wave 6:
+  - archive route redirect coverage
+  - archive navigation href coverage
+  - layout/archive-home coverage for the legacy archive labels
+- [x] Save diff review records for the Wave 6 implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the Wave 6 diff checkpoint
+- [x] Change diff checkpoints to default to wave-scoped artifacts:
+  - document wave-scoped diff policy in the workflow docs
+  - add a wave manifest folder and example manifest
+  - keep the feature-wide diff only for closeout and cross-wave fallback
+- [x] Improve the workflow after Waves 3 and 4:
+  - require prerequisite-path and review-context fields in future wave manifests
+  - require wave-level verification commands in the manifest
+  - record the reconciliation rule for scope-context false blockers from Gemini
+  - record the accessibility/testability rule for new modal and status surfaces
+- [x] Improve the workflow after Wave 5:
+  - require wave diff generation to include untracked manifest files as no-index patches
+- [x] Implement Wave 7 findings snapshot completeness slice:
+  - extend launch-time run snapshots with resolved preamble, context, value statements, level words, target model configs, and evaluator/summarizer metadata
+  - make the findings-eligibility contract depend on those persisted launch snapshot fields instead of UI optimism
+  - keep the implementation additive by using `Run.config` rather than introducing new version tables in this slice
+- [x] Add focused automated coverage for Wave 7:
+  - `startRun` service coverage for persisted findings snapshot fields
+  - API coverage proving `domainFindingsEligibility` returns `ELIGIBLE` when completed production runs carry the required snapshot boundary
+- [x] Save diff review records for the Wave 7 implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the Wave 7 diff checkpoint
+- [x] Implement Wave 8 usability hardening slice:
+  - add exact resume links from `Home` into active domain flows
+  - make domain overview next-step actions concrete instead of generic workspace jumps
+  - surface configuration review and override reminders directly in the domain-evaluation launch flow
+  - strengthen `Findings` trust-state messaging and domain-evaluation versus run diagnostics labeling
+- [x] Add focused automated coverage for Wave 8:
+  - `Dashboard` exact resume-link coverage
+  - `Domains` query-string restore coverage
+  - `DomainTrialsDashboard` configuration-review and diagnostics-label coverage
+  - `DomainAnalysis` diagnostics-only trust-state coverage
+- [x] Save diff review records for the Wave 8 implementation wave:
+  - Codex correctness
+  - Gemini regression
+  - Gemini quality
+- [x] Reconcile the Wave 8 diff checkpoint
+- [ ] Run final feature closeout:
+  - generate the feature-scoped closeout diff from `scope.json`
+  - save final Codex and Gemini closeout reviews
+  - reconcile the closeout checkpoint in `plan.md`
+
+## Execution Notes
+
+1. Gemini review is required at spec, plan, and diff checkpoints.
+2. Human review is not required after every wave.
+3. Human input is only needed if a checkpoint exposes a true unresolved product decision or an unreconciled high-severity conflict.
+4. The repo-local feature-workflow wrapper and verifier scripts are still absent in this checkout, so the workflow continues through wave manifests, saved diff artifacts, direct `gemini` CLI reviews, and saved reconciliation records.
+5. Because the scripted verifier path is unavailable in this checkout, checkpoint reconciliation is tracked in the saved review files plus `plan.md`.
+6. Diff checkpoints should default to a wave-scoped manifest and a wave-specific patch artifact; the feature-scoped diff is now a closeout and cross-wave fallback, not the default review input.
+7. Each new implementation wave should add a scope manifest under [waves/](/Users/chrislaw/valuerank/docs/workflows/domain-first-site-ia-migration/waves) before generating the diff checkpoint.
+8. Each new wave manifest should list prerequisite files from earlier accepted waves plus a short `review_context` note so Gemini can distinguish missing context from a real blocker.
+9. Each new wave manifest should record the exact verification commands run for that slice.
+10. If Gemini reports a blocker caused by an omitted prerequisite file that is already landed in an earlier accepted wave, reject that finding explicitly in reconciliation and tighten the next wave manifest instead of widening every diff by default.
+11. New modal, dialog, and status surfaces should expose accessible roles or labels and the tests for those surfaces should use them directly.

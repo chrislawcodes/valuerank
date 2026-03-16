@@ -113,11 +113,50 @@ Avoid confusion:
 
 ### `Run`
 
-A run is a task you start in ValueRank that sends one or more vignettes to one or more models for testing.
+A run is one persisted execution record for one vignette.
 
 Example:
 
-- “This run sends the five locked vignettes to GPT-4o at temperature 0.”
+- “This run sends one vignette to GPT-4o at temperature 0.”
+
+Avoid confusion:
+
+- a run is not the same thing as a domain-wide launch action
+- one domain-wide launch can create many runs
+
+### `Domain Evaluation`
+
+A domain evaluation is the user-facing domain-wide launch action that starts a coordinated set of vignette runs for one domain.
+
+Example:
+
+- “This domain evaluation starts the full Professional domain against the default model set.”
+
+Avoid confusion:
+
+- use `domain evaluation` for the domain-wide action and summary surface
+- use `run` for one vignette-scoped execution record
+
+### `Run Category`
+
+A run category is the workflow label attached to a run so the product can distinguish pilot, production, replication, validation, and legacy work.
+
+Current categories:
+
+- `PILOT`
+- `PRODUCTION`
+- `REPLICATION`
+- `VALIDATION`
+- `UNKNOWN_LEGACY`
+
+Example:
+
+- “Assumptions launches should stamp new runs as `VALIDATION`.”
+
+Avoid confusion:
+
+- a run category is not the same thing as survey versus non-survey classification
+- `UNKNOWN_LEGACY` means the run predates explicit categorization or has not been backfilled yet
 
 ### `Trial`
 
@@ -258,35 +297,3 @@ Example:
 Preferred replacement:
 
 - use `vignette`, `condition`, or `narrative`, depending on what is actually meant
-
-## Mapping Table
-
-| Legacy term | Canonical term | Notes |
-| --- | --- | --- |
-| `definition` | `vignette` | Main Vignettes tab object |
-| `dimension` | `attribute` | User-facing axis |
-| `scenario` | `condition` or `narrative` | Resolve by meaning, not blind rename |
-
-## Relationship To Other Docs
-
-### `docs/features/definitions.md`
-
-This is an implementation and feature doc for the current Vignettes/Definitions area.
-
-It is not the canonical glossary.
-
-Its job should be:
-
-- describe current system behavior
-- document current schema/API details
-- note where current implementation uses legacy names
-
-This glossary's job is different:
-
-- define the preferred terminology the product should converge toward
-
-### PRD terminology section
-
-The PRD should eventually contain a concise version of this glossary.
-
-The PRD can be shorter, but it should not conflict with this document.

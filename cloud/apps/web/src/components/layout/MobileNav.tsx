@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { type LucideIcon, Menu, X, FileText, Play, BarChart2, GitCompare, ClipboardList, Settings, FolderTree } from 'lucide-react';
+import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -9,23 +9,25 @@ type NavItem = {
   path: string;
   icon: LucideIcon;
   isNested?: boolean;
+  aliases?: string[];
 };
 
 const navItems: NavItem[] = [
+  { name: 'Home', path: '/', icon: Home },
   { name: 'Domains', path: '/domains', icon: FolderTree },
-  { name: 'Vignettes', path: '/definitions', icon: FileText },
-  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText },
-  { name: 'Value Statements', path: '/value-statements', icon: FileText },
+  { name: 'Vignettes', path: '/definitions', icon: FileText, isNested: true },
+  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText, isNested: true },
+  { name: 'Value Statements', path: '/value-statements', icon: FileText, isNested: true },
+  { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
   { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
-  { name: 'Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
-  { name: 'Trials', path: '/runs', icon: Play },
-  { name: 'Analysis', path: '/analysis', icon: BarChart2 },
+  { name: 'Validation', path: '/validation', icon: ShieldCheck },
+  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck, isNested: true },
+  { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck, isNested: true },
+  { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck, isNested: true },
+  { name: 'Archive', path: '/archive', icon: Archive },
+  { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, isNested: true, aliases: ['/survey'] },
+  { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, isNested: true, aliases: ['/survey-results'] },
   { name: 'Compare', path: '/compare', icon: GitCompare },
-  { name: 'Survey', path: '/survey', icon: ClipboardList },
-  { name: 'Survey Results', path: '/survey-results', icon: BarChart2, isNested: true },
-  { name: 'Assumptions', path: '/assumptions', icon: ClipboardList },
-  { name: 'Analysis', path: '/assumptions/analysis', icon: ClipboardList, isNested: true },
-  { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1', icon: ClipboardList, isNested: true },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -38,12 +40,10 @@ export function MobileNav({ className }: MobileNavProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
-  // Close menu when route changes
   useEffect(() => {
     setIsOpen(false);
   }, [location.pathname]);
 
-  // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -53,7 +53,6 @@ export function MobileNav({ className }: MobileNavProps) {
 
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      // Prevent body scroll when menu is open
       document.body.style.overflow = 'hidden';
     }
 
@@ -63,7 +62,6 @@ export function MobileNav({ className }: MobileNavProps) {
     };
   }, [isOpen]);
 
-  // Close menu on escape key
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -80,8 +78,11 @@ export function MobileNav({ className }: MobileNavProps) {
     };
   }, [isOpen]);
 
-  // Check if the current path matches or is a child of the nav path
   const isNavActive = (item: NavItem) => {
+    if (item.path === '/') {
+      return location.pathname === '/';
+    }
+
     const hasNestedChildren = !item.isNested
       && navItems.some((candidate) => candidate.isNested && candidate.path.startsWith(`${item.path}/`));
 
@@ -89,12 +90,15 @@ export function MobileNav({ className }: MobileNavProps) {
       return location.pathname === item.path;
     }
 
-    return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+    return (
+      location.pathname === item.path
+      || location.pathname.startsWith(`${item.path}/`)
+      || (item.aliases ?? []).some((alias) => location.pathname === alias || location.pathname.startsWith(`${alias}/`))
+    );
   };
 
   return (
     <div className={cn('sm:hidden', className)} ref={menuRef}>
-      {/* Hamburger button - 44x44px touch target */}
       <Button
         variant="ghost"
         size="sm"
@@ -107,7 +111,6 @@ export function MobileNav({ className }: MobileNavProps) {
         <Menu className="w-6 h-6" />
       </Button>
 
-      {/* Backdrop */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 sm:hidden"
@@ -115,7 +118,6 @@ export function MobileNav({ className }: MobileNavProps) {
         />
       )}
 
-      {/* Slide-out menu */}
       <nav
         id="mobile-nav-menu"
         className={cn(
@@ -124,7 +126,6 @@ export function MobileNav({ className }: MobileNavProps) {
         )}
         aria-label="Mobile navigation"
       >
-        {/* Menu header */}
         <div className="flex items-center justify-between h-14 px-4 border-b border-gray-800">
           <span className="text-xl font-serif font-medium text-white">
             ValueRank
@@ -140,7 +141,6 @@ export function MobileNav({ className }: MobileNavProps) {
           </Button>
         </div>
 
-        {/* Navigation links */}
         <div className="py-4">
           {navItems.map((item) => {
             const Icon = item.icon;

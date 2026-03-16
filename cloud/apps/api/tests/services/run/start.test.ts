@@ -34,6 +34,13 @@ describe('startRun service', () => {
   const createdDefinitionIds: string[] = [];
   const createdExperimentIds: string[] = [];
   const createdRunIds: string[] = [];
+  const createdDomainIds: string[] = [];
+  const createdPreambleIds: string[] = [];
+  const createdPreambleVersionIds: string[] = [];
+  const createdLevelPresetIds: string[] = [];
+  const createdLevelPresetVersionIds: string[] = [];
+  const createdContextIds: string[] = [];
+  const createdSystemSettingKeys: string[] = [];
 
   // Ensure test user and required models exist before all tests
   beforeAll(async () => {
@@ -53,7 +60,7 @@ describe('startRun service', () => {
       create: { name: 'test-provider-start-run', displayName: 'Test Provider (Start Run)' },
       update: {},
     });
-    for (const modelId of ['gpt-4', 'claude-3', 'gemini-pro']) {
+    for (const modelId of ['gpt-4', 'claude-3', 'gemini-pro', 'judge-model', 'summarizer-model']) {
       await db.llmModel.upsert({
         where: { providerId_modelId: { providerId: testProvider.id, modelId } },
         create: { modelId, displayName: modelId, providerId: testProvider.id, status: 'ACTIVE', costInputPerMillion: 1.0, costOutputPerMillion: 2.0 },
@@ -88,6 +95,13 @@ describe('startRun service', () => {
       createdExperimentIds.length = 0;
     }
 
+    if (createdSystemSettingKeys.length > 0) {
+      await db.systemSetting.deleteMany({
+        where: { key: { in: createdSystemSettingKeys } },
+      });
+      createdSystemSettingKeys.length = 0;
+    }
+
     // Clean up definitions (cascades scenarios)
     if (createdDefinitionIds.length > 0) {
       await db.scenario.deleteMany({
@@ -97,6 +111,48 @@ describe('startRun service', () => {
         where: { id: { in: createdDefinitionIds } },
       });
       createdDefinitionIds.length = 0;
+    }
+
+    if (createdContextIds.length > 0) {
+      await db.domainContext.deleteMany({
+        where: { id: { in: createdContextIds } },
+      });
+      createdContextIds.length = 0;
+    }
+
+    if (createdPreambleVersionIds.length > 0) {
+      await db.preambleVersion.deleteMany({
+        where: { id: { in: createdPreambleVersionIds } },
+      });
+      createdPreambleVersionIds.length = 0;
+    }
+
+    if (createdPreambleIds.length > 0) {
+      await db.preamble.deleteMany({
+        where: { id: { in: createdPreambleIds } },
+      });
+      createdPreambleIds.length = 0;
+    }
+
+    if (createdLevelPresetVersionIds.length > 0) {
+      await db.levelPresetVersion.deleteMany({
+        where: { id: { in: createdLevelPresetVersionIds } },
+      });
+      createdLevelPresetVersionIds.length = 0;
+    }
+
+    if (createdLevelPresetIds.length > 0) {
+      await db.levelPreset.deleteMany({
+        where: { id: { in: createdLevelPresetIds } },
+      });
+      createdLevelPresetIds.length = 0;
+    }
+
+    if (createdDomainIds.length > 0) {
+      await db.domain.deleteMany({
+        where: { id: { in: createdDomainIds } },
+      });
+      createdDomainIds.length = 0;
     }
   });
 
@@ -166,6 +222,239 @@ describe('startRun service', () => {
       // 10 scenarios × 1 model = 10 jobs
       expect(result.jobCount).toBe(10);
       expect(result.run.progress.total).toBe(10);
+    });
+
+    it('defaults new runs to UNKNOWN_LEGACY category', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Default Category Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const persistedRun = await db.run.findUnique({
+        where: { id: result.run.id },
+        select: { runCategory: true },
+      });
+
+      expect(persistedRun?.runCategory).toBe('UNKNOWN_LEGACY');
+    });
+
+    it('persists an explicit runCategory on new runs', async () => {
+      const definition = await db.definition.create({
+        data: {
+          name: 'Explicit Category Definition',
+          content: { schema_version: 1, preamble: 'Test' },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { test: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        runCategory: 'PILOT',
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const persistedRun = await db.run.findUnique({
+        where: { id: result.run.id },
+        select: { runCategory: true },
+      });
+
+      expect(persistedRun?.runCategory).toBe('PILOT');
+    });
+
+    it('captures a findings snapshot with resolved launch inputs', async () => {
+      const domain = await db.domain.create({
+        data: {
+          name: `Snapshot Domain ${Date.now()}`,
+          normalizedName: `snapshot-domain-${Date.now()}`,
+        },
+      });
+      createdDomainIds.push(domain.id);
+
+      const context = await db.domainContext.create({
+        data: {
+          domainId: domain.id,
+          text: 'You are choosing between two jobs.',
+        },
+      });
+      createdContextIds.push(context.id);
+
+      await db.valueStatement.createMany({
+        data: [
+          { domainId: domain.id, token: 'autonomy', body: '[level] autonomy at work' },
+          { domainId: domain.id, token: 'money', body: '[level] compensation' },
+        ],
+      });
+
+      const preamble = await db.preamble.create({
+        data: { name: `Snapshot Preamble ${Date.now()}` },
+      });
+      createdPreambleIds.push(preamble.id);
+
+      const preambleVersion = await db.preambleVersion.create({
+        data: {
+          preambleId: preamble.id,
+          version: 'snapshot-v1',
+          content: 'Please reason carefully before answering.',
+        },
+      });
+      createdPreambleVersionIds.push(preambleVersion.id);
+
+      const levelPreset = await db.levelPreset.create({
+        data: { name: `Snapshot Levels ${Date.now()}` },
+      });
+      createdLevelPresetIds.push(levelPreset.id);
+
+      const levelPresetVersion = await db.levelPresetVersion.create({
+        data: {
+          levelPresetId: levelPreset.id,
+          version: 'v1',
+          l1: 'very low',
+          l2: 'low',
+          l3: 'medium',
+          l4: 'high',
+          l5: 'very high',
+        },
+      });
+      createdLevelPresetVersionIds.push(levelPresetVersion.id);
+
+      const provider = await db.llmProvider.findUnique({
+        where: { name: 'test-provider-start-run' },
+      });
+      expect(provider).not.toBeNull();
+
+      await db.systemSetting.upsert({
+        where: { key: 'infra_model_judge' },
+        create: {
+          key: 'infra_model_judge',
+          value: { modelId: 'judge-model', providerId: 'test-provider-start-run' },
+        },
+        update: {
+          value: { modelId: 'judge-model', providerId: 'test-provider-start-run' },
+        },
+      });
+      createdSystemSettingKeys.push('infra_model_judge');
+
+      await db.systemSetting.upsert({
+        where: { key: 'infra_model_summarizer' },
+        create: {
+          key: 'infra_model_summarizer',
+          value: { modelId: 'summarizer-model', providerId: 'test-provider-start-run' },
+        },
+        update: {
+          value: { modelId: 'summarizer-model', providerId: 'test-provider-start-run' },
+        },
+      });
+      createdSystemSettingKeys.push('infra_model_summarizer');
+
+      const definition = await db.definition.create({
+        data: {
+          name: 'Snapshot Definition',
+          domainId: domain.id,
+          domainContextId: context.id,
+          preambleVersionId: preambleVersion.id,
+          levelPresetVersionId: levelPresetVersion.id,
+          content: {
+            schema_version: 1,
+            template: 'template',
+            dimensions: [{ name: 'autonomy' }, { name: 'money' }],
+            components: {
+              context_id: context.id,
+              value_first: { token: 'autonomy', body: '[level] autonomy at work' },
+              value_second: { token: 'money', body: '[level] compensation' },
+            },
+          },
+        },
+      });
+      createdDefinitionIds.push(definition.id);
+
+      await db.scenario.create({
+        data: {
+          definitionId: definition.id,
+          name: 'Scenario 1',
+          content: { prompt: 'Choose one', schema_version: 1 },
+        },
+      });
+
+      const result = await startRun({
+        definitionId: definition.id,
+        models: ['gpt-4'],
+        runCategory: 'PRODUCTION',
+        userId: testUserId,
+      });
+
+      createdRunIds.push(result.run.id);
+
+      const persistedRun = await db.run.findUnique({
+        where: { id: result.run.id },
+        select: { config: true },
+      });
+
+      const config = persistedRun?.config as Record<string, unknown> | null;
+      expect(config?.findingsSnapshotVersion).toBe('v1');
+      expect(config?.resolvedPreamble).toMatchObject({
+        id: preambleVersion.id,
+        version: 'snapshot-v1',
+        content: 'Please reason carefully before answering.',
+      });
+      expect(config?.resolvedContext).toMatchObject({
+        id: context.id,
+        text: 'You are choosing between two jobs.',
+        version: 1,
+      });
+      expect(config?.resolvedValueStatements).toEqual([
+        expect.objectContaining({ token: 'autonomy', body: '[level] autonomy at work' }),
+        expect.objectContaining({ token: 'money', body: '[level] compensation' }),
+      ]);
+      expect(config?.resolvedLevelWords).toMatchObject({
+        id: levelPresetVersion.id,
+        version: 'v1',
+        words: ['very low', 'low', 'medium', 'high', 'very high'],
+      });
+      expect(config?.targetModelConfigs).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          modelId: 'gpt-4',
+          providerName: provider?.name,
+          displayName: 'gpt-4',
+        }),
+      ]));
+      expect(config?.evaluatorConfig).toMatchObject({
+        modelId: 'judge-model',
+        providerName: 'test-provider-start-run',
+      });
+      expect(config?.summarizerConfig).toMatchObject({
+        modelId: 'summarizer-model',
+        providerName: 'test-provider-start-run',
+      });
     });
 
     it('retries dropped jobs and still succeeds when retry enqueues them', async () => {

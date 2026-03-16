@@ -31,6 +31,7 @@ model User {
   createdDefinitions Definition[] @relation("DefinitionCreator")
   deletedDefinitions Definition[] @relation("DefinitionDeleter")
   createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
   deletedRuns        Run[]        @relation("RunDeleter")
   createdTags        Tag[]        @relation("TagCreator")
   createdLlmModels   LlmModel[]   @relation("LlmModelCreator")
@@ -163,6 +164,7 @@ model Domain {
   definitions     Definition[]
   contexts        DomainContext[]
   valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
 
   @@index([defaultLevelPresetVersionId])
   @@map("domains")
@@ -306,6 +308,7 @@ model Run {
   definitionId       String    @map("definition_id")
   experimentId       String?   @map("experiment_id")
   status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
   config             Json      @db.JsonB
   progress           Json?     @db.JsonB
   summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
@@ -329,6 +332,7 @@ model Run {
 
   transcripts     Transcript[]
   analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
   baselineFor     RunComparison[]  @relation("BaselineRun")
   comparisonFor   RunComparison[]  @relation("ComparisonRun")
   scenarioSelections RunScenarioSelection[]
@@ -341,7 +345,49 @@ model Run {
   @@index([definitionId])
   @@index([experimentId])
   @@index([status])
+  @@index([runCategory])
   @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
 }
 
 enum RunStatus {
@@ -352,6 +398,29 @@ enum RunStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
 }
 
 model Transcript {

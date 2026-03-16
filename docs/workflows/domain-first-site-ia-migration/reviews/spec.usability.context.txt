@@ -1,0 +1,10 @@
+Review this as a usability and day-2 workflow critique for the completed domain-first migration.
+
+Focus on:
+- information scent of top-level and workspace labels
+- workflow clarity for habitual internal users
+- whether the canonical entry points actually reduce navigation ambiguity
+- return-state and resume-work behavior
+- whether setup, runs, findings, validation, and archive are understandable in practice
+
+Do not spend time on backend architecture or migration mechanics unless they create a direct usability issue.

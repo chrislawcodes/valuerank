@@ -1,0 +1,89 @@
+{
+  "session_id": "d0aebcd3-951f-49d5-8630-f8e149fbe265",
+  "response": "## Findings\n\nThe provided diff contains a significant **blocker**: the file `cloud/apps/web/src/api/operations/domains.ts` is missing from the change set. While `DomainTrialsDashboard.tsx` has been updated to import several new GraphQL operations (e.g., `START_DOMAIN_EVALUATION_MUTATION`, `ESTIMATE_DOMAIN_EVALUATION_COST_QUERY`, `DOMAIN_EVALUATION_QUERY`), the definitions for these exports were not included in the diff. This will result in compilation failures in the web application.\n\nAdditionally, the transition from the `runTrialsForDomain` mutation to `startDomainEvaluation` represents a breaking change in the launch contract. While the UI has been updated to accommodate this, any external callers or cached versions of the frontend still attempting to use the legacy mutation will fail if the backend has removed it.\n\n## Residual Risks\n\n*   **Data Orphanage:** Existing runs created before this IA migration do not belong to a `DomainEvaluation` cohort. The new `DomainTrialsDashboard` prioritizes displaying evaluation-linked runs. Users with extensive history may find their previous work missing from the \"Recent evaluations\" list, though individual runs may still be accessible via direct links.\n*   **Findings Gating:** The new `domainFindingsEligibility` logic introduces a conservative \"Diagnostics only\" gate. As seen in the test additions, a domain might be marked ineligible if the \"snapshot boundary is not complete.\" This creates a stricter requirement for seeing auditable findings than existed previously, which may be perceived as a regression in data availability by users.\n*   **Polling Load:** The dashboard now polls multiple endpoints (`refetchStatus`, `refetchCurrentEvaluationStatus`, `refetchCurrentEvaluation`, `refetchSummary`, `refetchEvaluations`) every 3 seconds during active runs. This may increase database load during high-concurrency evaluation periods.\n\n## Resolution\n\n1.  **Add Missing Operations:** Immediately include the updates for `cloud/apps/web/src/api/operations/domains.ts` to define the new GQL constants.\n2.  **Verify Backend Compatibility:** Ensure the backend still supports the legacy `runTrialsForDomain` mutation if a staggered rollout of the frontend is expected, or confirm its intentional removal.\n3.  **Backfill Strategy:** Consider a migration script to wrap existing \"Production\" category runs into retroactive `DomainEvaluation` cohorts so they appear in the new history UI.\n4.  **Refine Findings Eligibility:** Ensure the \"reasons\" provided by the `domainFindingsEligibility` query are actionable and clearly explain to the user what specific metadata or snapshot is missing to achieve \"Auditable\" status.",
+  "stats": {
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 3073
+        },
+        "tokens": {
+          "input": 21219,
+          "prompt": 21219,
+          "candidates": 129,
+          "total": 21729,
+          "cached": 0,
+          "thoughts": 381,
+          "tool": 0
+        },
+        "roles": {
+          "utility_router": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 3073,
+            "tokens": {
+              "input": 21219,
+              "prompt": 21219,
+              "candidates": 129,
+              "total": 21729,
+              "cached": 0,
+              "thoughts": 381,
+              "tool": 0
+            }
+          }
+        }
+      },
+      "gemini-3-flash-preview": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 19942
+        },
+        "tokens": {
+          "input": 29635,
+          "prompt": 29635,
+          "candidates": 560,
+          "total": 32142,
+          "cached": 0,
+          "thoughts": 1947,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 19942,
+            "tokens": {
+              "input": 29635,
+              "prompt": 29635,
+              "candidates": 560,
+              "total": 32142,
+              "cached": 0,
+              "thoughts": 1947,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

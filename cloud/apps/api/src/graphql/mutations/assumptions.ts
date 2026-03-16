@@ -350,6 +350,7 @@ builder.mutationField('launchAssumptionsTempZero', (t) =>
             samplesPerScenario: definition.samplesPerScenario,
             temperature: 0,
             priority: 'NORMAL',
+            runCategory: 'VALIDATION',
             userId,
             finalTrial: false,
             configExtras: {
@@ -662,6 +663,7 @@ builder.mutationField('launchOrderInvariance', (t) =>
             scenarioIds: launch.scenarioIds,
             temperature: 0,
             priority: 'NORMAL',
+            runCategory: 'VALIDATION',
             userId,
             finalTrial: false,
             configExtras: {

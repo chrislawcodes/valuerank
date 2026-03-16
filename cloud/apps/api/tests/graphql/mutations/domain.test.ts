@@ -6,7 +6,7 @@ import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 import { startRun } from '../../../src/services/run/index.js';
 
 vi.mock('../../../src/services/run/index.js', () => ({
-  startRun: vi.fn().mockResolvedValue({ run: { id: 'mock-run-id' }, jobCount: 1 }),
+  startRun: vi.fn(),
 }));
 
 const app = createServer();
@@ -14,11 +14,68 @@ const app = createServer();
 const RUN_TRIALS_FOR_DOMAIN_MUTATION = `
   mutation RunTrialsForDomain($domainId: ID!) {
     runTrialsForDomain(domainId: $domainId) {
+      domainEvaluationId
+      scopeCategory
       success
       totalDefinitions
       targetedDefinitions
       startedRuns
       failedDefinitions
+    }
+  }
+`;
+
+const START_DOMAIN_EVALUATION_MUTATION = `
+  mutation StartDomainEvaluation(
+    $domainId: ID!
+    $scopeCategory: String
+    $definitionIds: [ID!]
+    $modelIds: [String!]
+    $samplePercentage: Int
+    $samplesPerScenario: Int
+  ) {
+    startDomainEvaluation(
+      domainId: $domainId
+      scopeCategory: $scopeCategory
+      definitionIds: $definitionIds
+      modelIds: $modelIds
+      samplePercentage: $samplePercentage
+      samplesPerScenario: $samplesPerScenario
+    ) {
+      domainEvaluationId
+      scopeCategory
+      success
+      targetedDefinitions
+      startedRuns
+      runs {
+        definitionId
+        runId
+        modelIds
+      }
+    }
+  }
+`;
+
+const RETRY_DOMAIN_TRIAL_CELL_MUTATION = `
+  mutation RetryDomainTrialCell(
+    $domainId: ID!
+    $definitionId: ID!
+    $modelId: String!
+    $temperature: Float
+    $scopeCategory: String
+  ) {
+    retryDomainTrialCell(
+      domainId: $domainId
+      definitionId: $definitionId
+      modelId: $modelId
+      temperature: $temperature
+      scopeCategory: $scopeCategory
+    ) {
+      success
+      definitionId
+      modelId
+      runId
+      message
     }
   }
 `;
@@ -30,6 +87,16 @@ describe('GraphQL Domain Mutations', () => {
   const startRunMock = vi.mocked(startRun);
 
   beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
+
     const provider = await db.llmProvider.upsert({
       where: { name: 'test-provider-domain-mutation' },
       create: { name: 'test-provider-domain-mutation', displayName: 'Test Provider Domain' },
@@ -47,6 +114,47 @@ describe('GraphQL Domain Mutations', () => {
         costOutputPerMillion: 1,
       },
       update: { status: 'ACTIVE', isDefault: true },
+    });
+
+    startRunMock.mockImplementation(async (input) => {
+      const run = await db.run.create({
+        data: {
+          definitionId: input.definitionId,
+          status: 'PENDING',
+          runCategory: input.runCategory ?? 'UNKNOWN_LEGACY',
+          config: {
+            models: input.models,
+            temperature: input.temperature ?? null,
+            samplePercentage: input.samplePercentage ?? null,
+            samplesPerScenario: input.samplesPerScenario ?? null,
+          },
+          progress: {
+            total: 1,
+            completed: 0,
+            failed: 0,
+          },
+          createdByUserId: input.userId ?? TEST_USER.id,
+        },
+      });
+
+      return {
+        run: {
+          id: run.id,
+          status: run.status,
+          definitionId: run.definitionId,
+          experimentId: run.experimentId,
+          config: run.config,
+          progress: { total: 1, completed: 0, failed: 0 },
+          createdAt: run.createdAt,
+        },
+        jobCount: 1,
+        estimatedCosts: {
+          total: 0,
+          byModel: {},
+          grandTotal: 0,
+          warnings: [],
+        },
+      };
     });
   });
 
@@ -128,6 +236,8 @@ describe('GraphQL Domain Mutations', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.runTrialsForDomain.domainEvaluationId).toBeTruthy();
+    expect(response.body.data.runTrialsForDomain.scopeCategory).toBe('PRODUCTION');
     expect(response.body.data.runTrialsForDomain.targetedDefinitions).toBe(2);
     expect(response.body.data.runTrialsForDomain.startedRuns).toBe(2);
     expect(startRunMock).toHaveBeenCalledTimes(2);
@@ -137,6 +247,20 @@ describe('GraphQL Domain Mutations', () => {
     expect(startedDefinitionIds).toContain(secondLineage.id);
     expect(startedDefinitionIds).not.toContain(root.id);
     expect(startedDefinitionIds).not.toContain(mid.id);
+
+    const domainEvaluationId = response.body.data.runTrialsForDomain.domainEvaluationId as string;
+    const evaluation = await db.domainEvaluation.findUnique({
+      where: { id: domainEvaluationId },
+      include: { members: true },
+    });
+
+    expect(evaluation).not.toBeNull();
+    expect(evaluation?.domainId).toBe(domain.id);
+    expect(evaluation?.scopeCategory).toBe('PRODUCTION');
+    expect(evaluation?.members).toHaveLength(2);
+    expect(evaluation?.members.map((member) => member.definitionIdAtLaunch).sort()).toEqual(
+      [latest.id, secondLineage.id].sort(),
+    );
   });
 
   it('allows domain trial execution when domain definitions are owned by another user', async () => {
@@ -175,9 +299,193 @@ describe('GraphQL Domain Mutations', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.runTrialsForDomain.domainEvaluationId).toBeTruthy();
+    expect(response.body.data.runTrialsForDomain.scopeCategory).toBe('PRODUCTION');
     expect(response.body.data.runTrialsForDomain.targetedDefinitions).toBe(1);
     expect(response.body.data.runTrialsForDomain.startedRuns).toBe(1);
     expect(startRunMock).toHaveBeenCalledTimes(1);
     expect(startRunMock.mock.calls[0]?.[0]?.definitionId).toBe(foreignDefinition.id);
+
+    const domainEvaluationId = response.body.data.runTrialsForDomain.domainEvaluationId as string;
+    const evaluation = await db.domainEvaluation.findUnique({
+      where: { id: domainEvaluationId },
+      include: { members: true },
+    });
+
+    expect(evaluation).not.toBeNull();
+    expect(evaluation?.createdByUserId).toBe(TEST_USER.id);
+    expect(evaluation?.members).toHaveLength(1);
+    expect(evaluation?.members[0]?.definitionIdAtLaunch).toBe(foreignDefinition.id);
+  });
+
+  it('starts a scoped domain evaluation with explicit run parameters', async () => {
+    const domain = await db.domain.create({
+      data: { name: 'Domain Pilot Launch', normalizedName: `domain-pilot-launch-${Date.now()}` },
+    });
+    createdDomainIds.push(domain.id);
+
+    const definition = await db.definition.create({
+      data: {
+        name: 'Pilot Definition',
+        domainId: domain.id,
+        version: 1,
+        content: { schema_version: 1, preamble: 'pilot' },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+    createdDefinitionIds.push(definition.id);
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: START_DOMAIN_EVALUATION_MUTATION,
+        variables: {
+          domainId: domain.id,
+          scopeCategory: 'PILOT',
+          definitionIds: [definition.id],
+          modelIds: ['test-domain-model'],
+          samplePercentage: 50,
+          samplesPerScenario: 2,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.startDomainEvaluation.domainEvaluationId).toBeTruthy();
+    expect(response.body.data.startDomainEvaluation.scopeCategory).toBe('PILOT');
+    expect(response.body.data.startDomainEvaluation.targetedDefinitions).toBe(1);
+    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(1);
+    expect(startRunMock).toHaveBeenCalledTimes(1);
+
+    const startArgs = startRunMock.mock.calls[0]?.[0];
+    expect(startArgs?.runCategory).toBe('PILOT');
+    expect(startArgs?.models).toEqual(['test-domain-model']);
+    expect(startArgs?.samplePercentage).toBe(50);
+    expect(startArgs?.samplesPerScenario).toBe(2);
+
+    const domainEvaluationId = response.body.data.startDomainEvaluation.domainEvaluationId as string;
+    const evaluation = await db.domainEvaluation.findUnique({
+      where: { id: domainEvaluationId },
+      include: { members: { include: { run: true } } },
+    });
+
+    expect(evaluation).not.toBeNull();
+    expect(evaluation?.scopeCategory).toBe('PILOT');
+    expect(evaluation?.members).toHaveLength(1);
+    expect(evaluation?.members[0]?.run.runCategory).toBe('PILOT');
+    expect(evaluation?.configSnapshot).toMatchObject({
+      samplePercentage: 50,
+      samplesPerScenario: 2,
+      runCategory: 'PILOT',
+      models: ['test-domain-model'],
+    });
+  });
+
+  it('does not let an active production run block a pilot launch for the same vignette set', async () => {
+    const domain = await db.domain.create({
+      data: { name: 'Domain Scope Dedupe', normalizedName: `domain-scope-dedupe-${Date.now()}` },
+    });
+    createdDomainIds.push(domain.id);
+
+    const definition = await db.definition.create({
+      data: {
+        name: 'Scope Sensitive Definition',
+        domainId: domain.id,
+        version: 1,
+        content: { schema_version: 1, preamble: 'pilot' },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+    createdDefinitionIds.push(definition.id);
+
+    await db.run.create({
+      data: {
+        definitionId: definition.id,
+        status: 'RUNNING',
+        runCategory: 'PRODUCTION',
+        config: {
+          models: ['test-domain-model'],
+          temperature: null,
+          samplePercentage: 100,
+          samplesPerScenario: 1,
+        },
+        progress: { total: 1, completed: 0, failed: 0 },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: START_DOMAIN_EVALUATION_MUTATION,
+        variables: {
+          domainId: domain.id,
+          scopeCategory: 'PILOT',
+          definitionIds: [definition.id],
+          modelIds: ['test-domain-model'],
+          samplePercentage: 100,
+          samplesPerScenario: 1,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.startDomainEvaluation.startedRuns).toBe(1);
+    expect(startRunMock).toHaveBeenCalledTimes(1);
+    expect(startRunMock.mock.calls[0]?.[0]?.runCategory).toBe('PILOT');
+  });
+
+  it('preserves the selected scope category when retrying a domain trial cell', async () => {
+    const domain = await db.domain.create({
+      data: { name: 'Domain Retry Scope', normalizedName: `domain-retry-scope-${Date.now()}` },
+    });
+    createdDomainIds.push(domain.id);
+
+    const definition = await db.definition.create({
+      data: {
+        name: 'Retry Scope Definition',
+        domainId: domain.id,
+        version: 1,
+        content: { schema_version: 1, preamble: 'retry' },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+    createdDefinitionIds.push(definition.id);
+
+    await db.run.create({
+      data: {
+        definitionId: definition.id,
+        status: 'RUNNING',
+        runCategory: 'PRODUCTION',
+        config: {
+          models: ['test-domain-model'],
+          temperature: 0.4,
+        },
+        progress: { total: 1, completed: 0, failed: 0 },
+        createdByUserId: TEST_USER.id,
+      },
+    });
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: RETRY_DOMAIN_TRIAL_CELL_MUTATION,
+        variables: {
+          domainId: domain.id,
+          definitionId: definition.id,
+          modelId: 'test-domain-model',
+          temperature: 0.4,
+          scopeCategory: 'VALIDATION',
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.retryDomainTrialCell.success).toBe(true);
+    expect(startRunMock).toHaveBeenCalledTimes(1);
+    expect(startRunMock.mock.calls[0]?.[0]?.runCategory).toBe('VALIDATION');
   });
 });

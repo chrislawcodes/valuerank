@@ -5,6 +5,7 @@ import { Copy, Edit2, Plus, Play, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Loading } from '../components/ui/Loading';
+import { TransitionNotice } from '../components/ui/TransitionNotice';
 import { ModelSelector } from '../components/runs/ModelSelector';
 import { CostBreakdown } from '../components/runs/CostBreakdown';
 import { useAvailableModels } from '../hooks/useAvailableModels';
@@ -399,7 +400,7 @@ export function Survey() {
         experimentId: runningSurvey.id,
       });
       closeRunModal();
-      navigate(`/survey-results?surveyId=${runningSurvey.id}`);
+      navigate(`/archive/survey-results?surveyId=${runningSurvey.id}`);
     } catch (startError) {
       setRunError(getErrorMessage(startError));
     }
@@ -407,8 +408,20 @@ export function Survey() {
 
   return (
     <div className="space-y-6">
+        <TransitionNotice
+          eyebrow="Archive Compatibility"
+        title="Legacy survey work now lives under Archive"
+        description="Use this surface for historical or secondary survey programs. New active comparative research should start from Domains."
+        links={[
+          { label: 'Open Archive home', to: '/archive' },
+          { label: 'Open legacy survey results', to: '/archive/survey-results' },
+        ]}
+      />
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Survey</h1>
+        <div>
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Legacy Survey Work</h1>
+          <p className="mt-2 text-sm text-gray-600">Compatibility surface for historical attitudinal survey programs.</p>
+        </div>
         <Button onClick={openCreateModal}>
           <Plus className="w-4 h-4 mr-2" />
           New Survey
@@ -472,7 +485,7 @@ export function Survey() {
                             <Play className="mr-1 h-4 w-4" />
                             Run
                           </Button>
-                          <Button variant="secondary" size="sm" onClick={() => navigate(`/survey-results?surveyId=${survey.id}`)}>
+                          <Button variant="secondary" size="sm" onClick={() => navigate(`/archive/survey-results?surveyId=${survey.id}`)}>
                             Results
                           </Button>
                         </div>

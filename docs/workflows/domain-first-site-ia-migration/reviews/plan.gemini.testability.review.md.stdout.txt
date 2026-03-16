@@ -1,0 +1,57 @@
+{
+  "session_id": "7855eb71-d4e4-4eef-99b5-8082c47a0b58",
+  "response": "## Findings\n\n*   **Explicit Test Coverage Mandate:** The plan mandates that \"Each wave must still add or update the tests needed to prove its behavior,\" establishing a clear expectation for test creation alongside implementation.\n*   **Wave-Specific Verification Work:** Each proposed wave includes an \"Expected verification work\" section, detailing specific areas for testing, such as route coverage, rendering coverage, state consistency, and deep-link behavior.\n*   **Code Anchors Identified:** Specific files and components are listed as \"Current Code Anchors,\" providing clear targets for test development and focus.\n*   **AI Review as a Gate (with Caveat):** The workflow designates AI review as a checkpoint, but critically notes, \"AI review is a workflow gate, not a substitute for implementation verification,\" reinforcing the need for robust automated tests.\n*   **Dedicated \"Verification Expectations\" Section:** A final section outlines minimum verification requirements for the overall workflow, emphasizing the importance of verifying route compatibility, deep links, state consistency, and diagnostic scope.\n\n## Residual Risks\n\n*   **Missing Analytics Instrumentation Plan:** The plan explicitly states that \"This workflow still needs an analytics instrumentation plan, but that lives separately from this document.\" This is a significant risk, as analytics are crucial for verifying real-world usage, identifying production bugs, and understanding user behavior, which constitutes a vital form of ongoing verification.\n*   **\"Blocked on\" Dependencies:** Several waves have items listed under \"Blocked on:\" (e.g., \"domain-grouped run query strategy,\" \"immutable launch provenance,\" \"domain-level cost preview contract\"). These dependencies directly impact the ability to implement and, consequently, test certain features or entire waves, creating potential delays and integration challenges for comprehensive testing.\n*   **Vagueness in Some Verification Items:** While specific verification points are listed, some remain high-level (e.g., \"return-state smoke coverage for `Home`,\" \"readiness state is visible and consistent\"). The precise depth and type of automated tests required for these are not detailed, potentially leading to superficial test coverage.\n*   **Ambiguity in AI Review Thresholds:** The \"Review Policy\" outlines checkpoints for AI review with specific AI roles. However, it does not specify the criteria or depth of automated tests that would satisfy these AI reviews, potentially leading to subjective interpretations of test readiness and reconciliation.\n*   **Testability of Phase 0 Deliverables:** The \"Phase 0 Deliverables\" list includes items like \"create route compatibility matrix\" and \"document immutable launch provenance approach.\" While these are documentation tasks, their testability—how their accuracy and completeness will be verified against the implementation—is not explicitly addressed within this plan.",
+  "stats": {
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 14129
+        },
+        "tokens": {
+          "input": 3663,
+          "prompt": 16330,
+          "candidates": 554,
+          "total": 18952,
+          "cached": 12667,
+          "thoughts": 2068,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 14129,
+            "tokens": {
+              "input": 3663,
+              "prompt": 16330,
+              "candidates": 554,
+              "total": 18952,
+              "cached": 12667,
+              "thoughts": 2068,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "session_id": "921453ce-d6b1-4632-a3e7-052e60f2707e",
+  "response": "## Findings\n1.  **Phase 0 Deliverables Pending:** Critical foundational items like the route compatibility matrix, terminology decision table, and file/route inventory are listed as \"still pending.\"\n2.  **Review Checkpoints Unreconciled:** Spec and plan review checkpoints are also marked as \"still pending reconciliation.\"\n3.  **Wave Dependencies:** Waves 3, 4, and 5 are explicitly blocked on critical items such as \"immutable launch provenance,\" \"domain-level cost preview contract,\" and \"findings eligibility contract.\"\n4.  **AI-Centric Review Process:** The workflow mandates AI (Codex, Gemini) reviews as primary gates, with human intervention reserved only for critical conflicts or missing decisions.\n5.  **Missing Migration Artifacts:** Several mandatory artifacts from the \"Migration Appendix Requirements\" (e.g., canonical edit vs. attach vs. fork contract) are not explicitly confirmed as completed.\n6.  **Analytics Instrumentation Gap:** The plan acknowledges the need for an analytics instrumentation plan but states it \"lives separately from this document\" and is not yet defined.\n\n## Residual Risks\n1.  **High Risk: Incomplete Foundational Elements:** The absence of completed Phase 0 deliverables (e.g., route compatibility matrix, terminology decision table) poses a significant risk. Without these, subsequent waves may be built on incorrect assumptions, leading to costly rework, misaligned architecture, and potential product inconsistencies.\n2.  **High Risk: Over-reliance on AI Review & Insufficient Human Oversight:** The heavy reliance on AI (Codex, Gemini) for critical review checkpoints, with limited human intervention, introduces a risk of subtle regressions, architectural drift, or incomplete verification. The effectiveness of AI in identifying \"high-severity conflict\" or reconciling complex decisions is a key uncertainty. The \"repo-compatible repair\" path for unresolved reviews could also prove insufficient.\n3.  **High Risk: Critical Dependency Blockages:** Waves 3, 4, and 5 are explicitly blocked on foundational backend contracts and provenance strategies. Failure to resolve these dependencies will directly halt progress on significant feature areas, delaying the entire migration timeline and potentially leading to scope creep or abandonment of subsequent waves.\n4.  **Medium Risk: Unspecified Migration Contracts:** Missing or unconfirmed \"Migration Appendix Requirements\" (e.g., canonical edit vs. attach vs. fork contract) indicate gaps in defining clear boundaries and rules for implementation, potentially leading to inconsistencies in how different parts of the system are migrated.\n5.  **Medium Risk: Lack of Observability and Verification:** The absence of a defined analytics instrumentation plan means the success and impact of the migration waves will be difficult to quantify. The current verification expectations, while broad, may not fully capture the nuances of a \"large_structural\" change without defined analytics to measure adoption and identify issues.\n6.  **Low Risk: Potential for Unforeseen Regressions:** The inherent complexity of a \"large_structural\" migration involving \"route, wording, and category changes\" carries a general risk of regressions that might be missed by automated checks or AI reviews. While the plan attempts to mitigate this with structured checkpoints and test coverage, the sheer scale could still hide issues.",
+  "stats": {
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 13178
+        },
+        "tokens": {
+          "input": 3662,
+          "prompt": 16329,
+          "candidates": 662,
+          "total": 18891,
+          "cached": 12667,
+          "thoughts": 1900,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 13178,
+            "tokens": {
+              "input": 3662,
+              "prompt": 16329,
+              "candidates": 662,
+              "total": 18891,
+              "cached": 12667,
+              "thoughts": 1900,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

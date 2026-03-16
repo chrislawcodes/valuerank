@@ -1,0 +1,57 @@
+{
+  "session_id": "afd8c0ec-240f-4b15-834e-0e12406e384c",
+  "response": "## Findings\n- The `LaunchConfirmModal.tsx` and `LaunchControlsPanel.tsx` components have been updated to include more comprehensive information regarding the launch configuration. This includes new fields such as `estimateConfidence`, `fallbackReason`, and `knownExclusions`, along with dedicated sections and links for \"Review setup coverage\" and \"Review vignette overrides.\" These changes directly enhance \"Launch-time configuration review and pre-confirmation safety language.\"\n- The `Dashboard.tsx` component has been refactored to introduce a \"Resume active domain work\" section. This section provides explicit, deep links that navigate to specific pages for continuing domain research, including evaluation launchers, findings, and setup surfaces. The test file `cloud/apps/web/tests/pages/Dashboard.test.tsx` verifies these links and their query parameters, addressing the \"Exact resume links from Home\" and \"Domain workspace query-string restoration for setup surfaces\" requirements.\n- Terminology has been updated across components to clarify the distinction between diagnostic information and interpreted findings. For instance, the status panel now distinguishes between \"Evaluation\" and \"Member runs,\" and the modal titles have been refined, which addresses the \"Findings trust-state and diagnostics-versus-findings wording\" requirement.\n\n## Residual Risks\n- While the \"Resume active domain work\" section in the Dashboard provides deep links with query parameters, the actual functionality of these links and the correct restoration of query-string parameters on the target pages are not fully verified by this diff alone and would require end-to-end testing.\n- The successful integration and usage of new props such as `scopeCategory`, `estimateConfidence`, `fallbackReason`, and `knownExclusions` depend on upstream data sources and state management, which are not included in this diff.",
+  "stats": {
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 172125
+        },
+        "tokens": {
+          "input": 7102,
+          "prompt": 20210,
+          "candidates": 365,
+          "total": 23239,
+          "cached": 13108,
+          "thoughts": 2664,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 172125,
+            "tokens": {
+              "input": 7102,
+              "prompt": 20210,
+              "candidates": 365,
+              "total": 23239,
+              "cached": 13108,
+              "thoughts": 2664,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}
