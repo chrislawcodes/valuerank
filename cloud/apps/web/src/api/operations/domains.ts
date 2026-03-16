@@ -1,18 +1,11 @@
 import { gql } from 'urql';
 
-export type DomainDefaultLevelPresetVersion = {
-  id: string;
-  version: string;
-  levelPreset: { name: string };
-};
-
 export type Domain = {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
   definitionCount: number;
-  defaultLevelPresetVersion: DomainDefaultLevelPresetVersion | null;
 };
 
 export const DOMAINS_QUERY = gql`
@@ -23,28 +16,6 @@ export const DOMAINS_QUERY = gql`
       createdAt
       updatedAt
       definitionCount
-      defaultLevelPresetVersion {
-        id
-        version
-        levelPreset {
-          name
-        }
-      }
-    }
-  }
-`;
-
-export const SET_DOMAIN_DEFAULT_LEVEL_PRESET_MUTATION = gql`
-  mutation SetDomainDefaultLevelPreset($domainId: ID!, $levelPresetVersionId: ID) {
-    setDomainDefaultLevelPreset(domainId: $domainId, levelPresetVersionId: $levelPresetVersionId) {
-      id
-      defaultLevelPresetVersion {
-        id
-        version
-        levelPreset {
-          name
-        }
-      }
     }
   }
 `;

@@ -283,8 +283,7 @@ async function resolveJobChoicePairInputs(input: {
   }
   if (domain == null) throw new Error(`Domain not found: ${domainId}`);
 
-  const resolvedLevelPresetVersionId =
-    inputLevelPresetVersionId ?? domain.defaultLevelPresetVersionId ?? null;
+  const resolvedLevelPresetVersionId = inputLevelPresetVersionId ?? null;
 
   let levelPresetVersion: ResolvedPairInputs['levelPresetVersion'] = null;
 

@@ -24,7 +24,6 @@ import {
   DOMAIN_TRIAL_RUNS_STATUS_QUERY,
   DOMAIN_TRIALS_PLAN_QUERY,
   ESTIMATE_DOMAIN_EVALUATION_COST_QUERY,
-  RETRY_DOMAIN_TRIAL_CELL_MUTATION,
   START_DOMAIN_EVALUATION_MUTATION,
   type DomainEvaluationQueryResult,
   type DomainEvaluationQueryVariables,
@@ -40,8 +39,6 @@ import {
   type DomainTrialsPlanQueryVariables,
   type EstimateDomainEvaluationCostQueryResult,
   type EstimateDomainEvaluationCostQueryVariables,
-  type RetryDomainTrialCellMutationResult,
-  type RetryDomainTrialCellMutationVariables,
   type StartDomainEvaluationMutationResult,
   type StartDomainEvaluationMutationVariables,
 } from '../api/operations/domains';
@@ -49,7 +46,6 @@ import {
 const POLL_MS = 3000;
 const EVALUATION_SCOPE_VALUES = ['PILOT', 'PRODUCTION', 'REPLICATION', 'VALIDATION'] as const;
 type EvaluationScopeCategory = (typeof EVALUATION_SCOPE_VALUES)[number];
-type CellRunMap = Record<string, string>;
 
 function isEvaluationScopeCategory(value: string | null): value is EvaluationScopeCategory {
   return value != null && EVALUATION_SCOPE_VALUES.includes(value as EvaluationScopeCategory);
@@ -75,15 +71,12 @@ export function DomainTrialsDashboard() {
   const [temperatureInput, setTemperatureInput] = useState(hasInitialTemperature ? String(initialParsedTemperature) : '0.7');
   const [started, setStarted] = useState(false);
   const [definitionRunIds, setDefinitionRunIds] = useState<Record<string, string>>({});
-  const [cellOverrideRunIds, setCellOverrideRunIds] = useState<CellRunMap>({});
-  const [pendingRetryCell, setPendingRetryCell] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [launchSummary, setLaunchSummary] = useState<DomainTrialLaunchSummary | null>(null);
   const [lastStatusUpdatedAt, setLastStatusUpdatedAt] = useState<number | null>(null);
   const [planNoContentRetries, setPlanNoContentRetries] = useState(0);
   const [statusNoContentRetries, setStatusNoContentRetries] = useState(0);
   const [showLaunchConfirm, setShowLaunchConfirm] = useState(false);
-  const [safeMode, setSafeMode] = useState(false);
   const [maxBudgetEnabled, setMaxBudgetEnabled] = useState(false);
   const [maxBudgetInput, setMaxBudgetInput] = useState('');
   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(searchParams.get('evaluationId'));
@@ -153,10 +146,6 @@ export function DomainTrialsDashboard() {
     StartDomainEvaluationMutationResult,
     StartDomainEvaluationMutationVariables
   >(START_DOMAIN_EVALUATION_MUTATION);
-  const [retryResult, retryCell] = useMutation<RetryDomainTrialCellMutationResult, RetryDomainTrialCellMutationVariables>(
-    RETRY_DOMAIN_TRIAL_CELL_MUTATION
-  );
-
   useEffect(() => {
     const existingScope = searchParams.get('scopeCategory');
     const existingEvaluationId = searchParams.get('evaluationId');
@@ -200,9 +189,8 @@ export function DomainTrialsDashboard() {
   const runIds = useMemo(() => {
     const ids = new Set<string>();
     Object.values(definitionRunIds).forEach((id) => ids.add(id));
-    Object.values(cellOverrideRunIds).forEach((id) => ids.add(id));
     return Array.from(ids);
-  }, [definitionRunIds, cellOverrideRunIds]);
+  }, [definitionRunIds]);
 
   const [statusResult, refetchStatus] = useQuery<DomainTrialRunsStatusQueryResult, DomainTrialRunsStatusQueryVariables>({
     query: DOMAIN_TRIAL_RUNS_STATUS_QUERY,
@@ -235,8 +223,6 @@ export function DomainTrialsDashboard() {
   const allRunsTerminal = statusSummary.total > 0 && statusSummary.active === 0 && statusSummary.known === statusSummary.total;
   const completionWithFailures = allRunsTerminal && statusSummary.failed > 0;
   const completionClean = allRunsTerminal && statusSummary.failed === 0;
-  const failureRate = statusSummary.total > 0 ? statusSummary.failed / statusSummary.total : 0;
-  const retryAutoPaused = started && statusSummary.total >= 3 && failureRate >= 0.3;
 
   useEffect(() => {
     if (!started || runIds.length === 0 || allRunsTerminal) return;
@@ -293,6 +279,8 @@ export function DomainTrialsDashboard() {
   const models = plan?.models ?? [];
   const vignettes = plan?.vignettes ?? [];
   const excludedRequestedDefinitionCount = filteredDefinitionIdCount - vignettes.length;
+  const hasNonTemperatureModels = models.some((model) => !model.supportsTemperature);
+  const disableTemperatureInput = hasNonTemperatureModels;
   const cellEstimates = useMemo(() => {
     const next = new Map<string, number>();
     for (const cell of plan?.cellEstimates ?? []) {
@@ -308,16 +296,12 @@ export function DomainTrialsDashboard() {
     return map;
   }, [statusResult.data?.domainTrialRunsStatus]);
 
-  const hasNonTemperatureModels = models.some((model) => !model.supportsTemperature);
-  const disableTemperatureInput = hasNonTemperatureModels;
-
   useEffect(() => {
     if (!disableTemperatureInput) return;
     setUseDefaultTemperature(true);
   }, [disableTemperatureInput]);
 
   const isStarting = startDomainEvaluationResult.fetching;
-  const isRetrying = retryResult.fetching;
 
   const handleStart = async () => {
     if (!domainId) return;
@@ -368,7 +352,6 @@ export function DomainTrialsDashboard() {
       byDefinition[run.definitionId] = run.runId;
     }
     setDefinitionRunIds(byDefinition);
-    setCellOverrideRunIds({});
     setStarted(true);
     setShowLaunchConfirm(false);
     setCurrentEvaluationId(payload.domainEvaluationId);
@@ -383,38 +366,9 @@ export function DomainTrialsDashboard() {
     }
   };
 
-  const handleRetryCell = async (definitionId: string, modelId: string) => {
-    if (!domainId) return;
-    const key = cellKey(definitionId, modelId);
-    setPendingRetryCell(key);
-    setRunError(null);
-    const result = await retryCell({
-      domainId,
-      definitionId,
-      modelId,
-      temperature: useDefaultTemperature || disableTemperatureInput ? undefined : parsedTemperature,
-      scopeCategory: currentEvaluation?.scopeCategory ?? scopeCategory,
-    });
-    setPendingRetryCell(null);
-    if (result.error) {
-      setRunError(result.error.message);
-      return;
-    }
-    const payload = result.data?.retryDomainTrialCell;
-    if (!payload?.success || !payload.runId) {
-      setRunError(payload?.message ?? 'Failed to retry this model/vignette cell.');
-      return;
-    }
-    setCellOverrideRunIds((prev) => ({ ...prev, [key]: payload.runId! }));
-    setStarted(true);
-    refetchStatus({ requestPolicy: 'network-only' });
-    refetchCurrentEvaluationStatus({ requestPolicy: 'network-only' });
-  };
-
   const getCellStatus = (definitionId: string, modelId: string): DomainTrialCellStatus => {
-    const overridden = cellOverrideRunIds[cellKey(definitionId, modelId)];
     const baseRunId = definitionRunIds[definitionId];
-    const runId = overridden ?? baseRunId;
+    const runId = baseRunId;
     if (!runId) return { runId: null, runStatus: null, modelStatus: null };
 
     const runStatus = runStatusById.get(runId) ?? null;
@@ -469,6 +423,9 @@ export function DomainTrialsDashboard() {
   const summary = summaryResult.data?.domainRunSummary;
   const reviewSetupHref = `/domains?domainId=${domainId}&tab=setup&setupTab=contexts`;
   const reviewVignettesHref = `/domains?domainId=${domainId}&tab=vignettes`;
+  const temperatureLabel = useDefaultTemperature || disableTemperatureInput
+    ? 'Provider default'
+    : String(parsedTemperature);
 
   return (
     <div className="space-y-6">
@@ -607,23 +564,18 @@ export function DomainTrialsDashboard() {
         temperatureInput={temperatureInput}
         maxBudgetEnabled={maxBudgetEnabled}
         maxBudgetInput={maxBudgetInput}
-        safeMode={safeMode}
         hasValidBudget={hasValidBudget}
-        retryAutoPaused={retryAutoPaused}
-        failureRate={failureRate}
         isStarting={isStarting}
         planFetching={planResult.fetching || estimateResult.fetching}
         temperatureWarning={estimate?.temperatureWarning ?? plan?.temperatureWarning}
         reviewSetupHref={reviewSetupHref}
         reviewVignettesHref={reviewVignettesHref}
-        selectedDefinitionCount={filteredDefinitionIds.length > 0 ? filteredDefinitionIds.length : undefined}
         excludedRequestedDefinitionCount={Math.max(0, excludedRequestedDefinitionCount)}
         onSetScopeCategory={setScopeCategory}
         onSetUseDefaultTemperature={setUseDefaultTemperature}
         onSetTemperatureInput={setTemperatureInput}
         onSetMaxBudgetEnabled={setMaxBudgetEnabled}
         onSetMaxBudgetInput={setMaxBudgetInput}
-        onSetSafeMode={setSafeMode}
         onOpenConfirm={() => setShowLaunchConfirm(true)}
       />
 
@@ -699,25 +651,27 @@ export function DomainTrialsDashboard() {
         </section>
       )}
 
-      <TrialGridTable
-        loading={planResult.fetching}
-        models={models.map((model) => ({ modelId: model.modelId, label: model.label }))}
-        vignettes={vignettes.map((v) => ({
-          definitionId: v.definitionId,
-          definitionName: v.definitionName,
-          definitionVersion: v.definitionVersion,
-          signature: v.signature,
-          scenarioCount: v.scenarioCount,
-        }))}
-        cellEstimates={cellEstimates}
-        started={started}
-        pendingRetryCell={pendingRetryCell}
-        isRetrying={isRetrying}
-        safeMode={safeMode}
-        retryAutoPaused={retryAutoPaused}
-        getCellStatus={getCellStatus}
-        onRetryCell={(definitionId, modelId) => void handleRetryCell(definitionId, modelId)}
-      />
+      <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-medium text-[#1A1A1A]">Planned batches</h2>
+          <p className="text-sm text-gray-600">
+            Each batch runs every configured condition for a vignette across the selected models.
+          </p>
+        </div>
+        <TrialGridTable
+          loading={planResult.fetching}
+          models={models.map((model) => ({ modelId: model.modelId, label: model.label }))}
+          vignettes={vignettes.map((v) => ({
+            definitionId: v.definitionId,
+            definitionName: v.definitionName,
+            definitionVersion: v.definitionVersion,
+            signature: v.signature,
+            scenarioCount: v.scenarioCount,
+          }))}
+          cellEstimates={cellEstimates}
+          getCellStatus={getCellStatus}
+        />
+      </section>
 
       <LaunchConfirmModal
         open={showLaunchConfirm}
@@ -729,7 +683,7 @@ export function DomainTrialsDashboard() {
         estimateConfidence={estimate?.estimateConfidence}
         fallbackReason={estimate?.fallbackReason}
         knownExclusions={estimate?.knownExclusions}
-        temperatureLabel={useDefaultTemperature || disableTemperatureInput ? 'Provider default' : String(parsedTemperature)}
+        temperatureLabel={temperatureLabel}
         budgetCap={maxBudgetEnabled && hasValidBudget ? parsedBudget : null}
         reviewSetupHref={reviewSetupHref}
         reviewVignettesHref={reviewVignettesHref}

@@ -85,11 +85,6 @@ function createUseQueryImplementation() {
             {
               id: 'domain-a',
               name: 'Domain A',
-              defaultLevelPresetVersion: {
-                id: 'preset-v1',
-                version: '1',
-                levelPreset: { name: 'Standard' },
-              },
             },
           ],
         },
@@ -179,6 +174,23 @@ describe('JobChoiceNew', () => {
 
     await waitFor(() => {
       expect(container.querySelector('select')).toHaveValue('domain-a');
+    });
+  });
+
+  it('does not auto-select a level preset when creating a new vignette', async () => {
+    mockMutationHooks();
+
+    render(
+      <MemoryRouter initialEntries={['/job-choice/new?domainId=domain-a']}>
+        <JobChoiceNew />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const levelPresetHelp = screen.getByText(/choose this explicitly for the vignette/i);
+      const levelPresetSelect = levelPresetHelp.parentElement?.querySelector('select');
+      expect(levelPresetSelect).not.toBeNull();
+      expect(levelPresetSelect).toHaveValue('');
     });
   });
 

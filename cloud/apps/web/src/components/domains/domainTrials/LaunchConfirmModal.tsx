@@ -72,7 +72,7 @@ export function LaunchConfirmModal({
         <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 space-y-2">
           <p className="font-medium text-gray-900">Review before confirming</p>
           <p>
-            This starts one domain evaluation cohort. Use these links if you need to double-check defaults or per-vignette overrides before member runs begin.
+            This starts one domain evaluation cohort. Use these links if you want to inspect setup coverage or vignette configuration before member runs begin.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
