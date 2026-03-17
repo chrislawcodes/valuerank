@@ -294,20 +294,22 @@ export function DefinitionList({
               </div>
               <PopoverContent align="end" className="w-48 p-1">
                 {onCreateNew != null && (
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={onCreateNew}
-                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 text-gray-700"
+                    className="w-full justify-start px-3 py-2 text-sm text-gray-700"
                   >
                     Single Vignette
-                  </button>
+                  </Button>
                 )}
                 {onCreateNewPair != null && (
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={onCreateNewPair}
-                    className="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 text-gray-700"
+                    className="w-full justify-start px-3 py-2 text-sm text-gray-700"
                   >
                     Paired Vignette
-                  </button>
+                  </Button>
                 )}
               </PopoverContent>
             </Popover>
