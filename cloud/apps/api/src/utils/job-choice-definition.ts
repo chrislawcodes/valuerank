@@ -6,14 +6,13 @@ type JobChoiceContentLike = Pick<DefinitionContent, 'template' | 'components' | 
 const ROLE_SENTENCE_PREFIX = 'In one role, this job offers ';
 
 function extractJobChoiceIntro(template: string): string | null {
-  if (template.startsWith(ROLE_SENTENCE_PREFIX)) {
-    return '';
-  }
-
-  const marker = `\n\n${ROLE_SENTENCE_PREFIX}`;
-  const markerIndex = template.indexOf(marker);
+  const markerIndex = template.indexOf(ROLE_SENTENCE_PREFIX);
   if (markerIndex < 0) {
     return null;
+  }
+
+  if (markerIndex === 0) {
+    return '';
   }
 
   return template.slice(0, markerIndex).trimEnd();
