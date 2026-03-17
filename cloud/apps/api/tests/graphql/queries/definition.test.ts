@@ -145,9 +145,9 @@ describe('GraphQL Definition Query', () => {
           template: [
             'A mid-level professional has been offered two distinct roles.',
             '',
-            'In one role, this job offers trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
+            'One job offers trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
             '',
-            'In the other role, this job offers recognition of their expertise because of how it relates to success through strong performance.',
+            'One job offers recognition of their expertise because of how it relates to success through strong performance.',
             '',
             'Give me your judgment on the following scale:',
           ].join('\n'),
@@ -482,10 +482,10 @@ describe('GraphQL Definition Query', () => {
       };
 
       expect(content.template).toContain(
-        'In one role, this job offers [level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
+        'One job offers [level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
       );
       expect(content.template).toContain(
-        'In the other role, this job offers [level] recognition of their expertise because of how it relates to success through strong performance.',
+        'One job offers [level] recognition of their expertise because of how it relates to success through strong performance.',
       );
       expect(content.components.value_first.body).toBe(
         '[level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
