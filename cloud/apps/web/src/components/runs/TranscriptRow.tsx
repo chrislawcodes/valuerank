@@ -36,6 +36,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * Maps standard job-choice level words to their numeric tier (1-5).
+ * Used to display attribute levels as e.g. "5 - Full" in the transcript table.
+ */
+const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
+  full: 5,
+  substantial: 4,
+  moderate: 3,
+  minimal: 2,
+  negligible: 1,
+};
+
+/**
+ * Extracts the short direction phrase from a full scale label.
+ * "Strongly support taking the job with..." → "Strongly support"
+ * "Neutral / Unsure" → "Neutral / Unsure" (no truncation)
+ */
+function extractShortDirection(fullLabel: string): string {
+  const idx = fullLabel.toLowerCase().indexOf(' taking ');
+  return idx !== -1 ? fullLabel.slice(0, idx) : fullLabel;
+}
+
 function extractDecision(content: unknown): string {
   if (!isRecord(content)) return '-';
 
@@ -65,7 +87,7 @@ export function TranscriptRow({
   compact = false,
   dimensions,
   dimensionKeys = [],
-  dimensionLabels,
+  dimensionLabels: _dimensionLabels,
   gridTemplateColumns,
   showModelColumn = true,
   onDecisionChange,
@@ -75,8 +97,17 @@ export function TranscriptRow({
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
-  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+
+  // Build enriched decision label: "{code} - {Short direction} {primary_dim_key}"
+  // e.g. "2 - Somewhat oppose benevolence_dependability"
+  const decisionScaleEntry = decisionScaleLabels.find((e) => e.code === String(decision));
+  const shortDirection = decisionScaleEntry != null ? extractShortDirection(decisionScaleEntry.label) : null;
+  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+  const decisionCore = shortDirection != null
+    ? (primaryDimKey != null ? `${decision} - ${shortDirection} ${primaryDimKey}` : `${decision} - ${shortDirection}`)
+    : String(decision);
+  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decisionCore}*` : decisionCore;
   const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
   const isDecisionOverrideAllowed = Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
@@ -146,9 +177,24 @@ export function TranscriptRow({
           {showModelColumn && <div className="truncate text-gray-900">{transcript.modelId}</div>}
           {dimensionKeys.map((key) => {
             const rawValue = dimensions?.[key];
-            const displayValue = rawValue === undefined
-              ? '-'
-              : dimensionLabels?.[String(rawValue)] ?? String(rawValue);
+            let displayValue: string;
+            if (rawValue === undefined) {
+              displayValue = '-';
+            } else {
+              const wordStr = typeof rawValue === 'string' ? rawValue : null;
+              const wordLower = wordStr?.toLowerCase() ?? null;
+              const numericLevel = typeof rawValue === 'number'
+                ? rawValue
+                : wordLower != null ? (LEVEL_WORD_TO_NUMBER[wordLower] ?? null) : null;
+              const wordDisplay = wordStr != null
+                ? wordStr.charAt(0).toUpperCase() + wordStr.slice(1)
+                : null;
+              displayValue = numericLevel != null && wordDisplay != null
+                ? `${numericLevel} - ${wordDisplay}`
+                : numericLevel != null
+                  ? String(numericLevel)
+                  : String(rawValue);
+            }
             return (
               <div key={key} className="truncate">
                 {displayValue}

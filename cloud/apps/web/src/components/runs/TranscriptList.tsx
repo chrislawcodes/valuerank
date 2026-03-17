@@ -464,7 +464,7 @@ export function TranscriptList({
       'minmax(140px, 1.2fr)',
       'minmax(160px, 1.4fr)',
       ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
-      'minmax(150px, 0.9fr)',
+      'minmax(220px, 1.4fr)',
       'minmax(90px, 0.7fr)',
       'minmax(90px, 0.7fr)',
     ].join(' ');
@@ -558,7 +558,7 @@ export function TranscriptList({
   const groupedGridTemplateColumns = [
     'minmax(140px, 1.2fr)',
     ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
-    'minmax(150px, 0.9fr)',
+    'minmax(220px, 1.4fr)',
     'minmax(90px, 0.7fr)',
     'minmax(90px, 0.7fr)',
   ].join(' ');
