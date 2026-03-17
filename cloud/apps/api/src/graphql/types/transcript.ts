@@ -61,6 +61,22 @@ builder.objectType(TranscriptRef, {
       },
     }),
 
+    // Derived: dimension values from scenario content (e.g. attribute levels for job-choice vignettes)
+    dimensionValues: t.field({
+      type: 'JSON',
+      nullable: true,
+      description: "Dimension values for this transcript's scenario (e.g. attribute levels for job-choice vignettes)",
+      resolve: async (transcript, _args, ctx) => {
+        if (transcript.scenarioId === null || transcript.scenarioId === undefined || transcript.scenarioId === '') return null;
+        const scenario = await ctx.loaders.scenario.load(transcript.scenarioId);
+        if (!scenario) return null;
+        const content = scenario.content as { dimension_values?: Record<string, string | number> } | null;
+        const dv = content?.dimension_values;
+        if (!dv || typeof dv !== 'object' || Object.keys(dv).length === 0) return null;
+        return dv;
+      },
+    }),
+
     // Computed: estimated cost from transcript content
     estimatedCost: t.float({
       nullable: true,
