@@ -1,0 +1,12 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "624b0f433b3bde215339f6a95d865f7163a2cc2a",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "ad7e0c4060f149412a4100117981a45704a5c3c0",
+  "paths": [
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py"
+  ],
+  "artifact_path": "docs/workflows/top-of-response-decision-parser/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}
