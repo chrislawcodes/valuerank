@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function extractJobChoiceIntro(template: string): string {
-  const marker = '\n\nIn one role, this job offers ';
+  const marker = '\n\nOne job offers ';
   const markerIndex = template.indexOf(marker);
   if (markerIndex >= 0) {
     return template.slice(0, markerIndex).trimEnd();

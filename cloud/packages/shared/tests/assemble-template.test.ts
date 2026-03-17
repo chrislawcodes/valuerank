@@ -34,8 +34,8 @@ describe('assembleTemplate', () => {
 
   it('produces the correct sentence structure', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS_NO_LEVEL);
-    expect(result).toContain('In one role, this job offers recognition of their expertise');
-    expect(result).toContain('In the other role, this job offers enjoyment in their daily experience');
+    expect(result).toContain('One job offers recognition of their expertise');
+    expect(result).toContain('One job offers enjoyment in their daily experience');
     expect(result).not.toContain('[achievement]');
     expect(result).not.toContain('[hedonism]');
   });
@@ -95,7 +95,7 @@ describe('assembleTemplate', () => {
   it('leaves [level] in narrative when levelWords not provided (base template mode)', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS_WITH_LEVEL);
     // [level] remains in narrative — base template used for storage
-    expect(result).toContain('In one role, this job offers [level] recognition of their expertise');
+    expect(result).toContain('One job offers [level] recognition of their expertise');
     expect(result).not.toContain('[achievement]');
     // Scale labels still have [level] stripped
     expect(result).toContain(

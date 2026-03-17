@@ -18,8 +18,8 @@ const COMPONENTS = {
 describe('assembleTemplate', () => {
   it('produces the correct sentence structure', () => {
     const result = assembleTemplate(CONTEXT, COMPONENTS);
-    expect(result).toContain('In one role, this job offers recognition of their expertise');
-    expect(result).toContain('In the other role, this job offers enjoyment in their daily experience');
+    expect(result).toContain('One job offers recognition of their expertise');
+    expect(result).toContain('One job offers enjoyment in their daily experience');
     expect(result).not.toContain('[achievement]');
     expect(result).not.toContain('[hedonism]');
   });

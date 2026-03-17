@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, List, FolderTree, Upload } from 'lucide-react';
+import { FileText, Plus, List, FolderTree, Upload, ChevronDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { DefinitionCard } from './DefinitionCard';
 import { DefinitionFilters, type DefinitionFilterState } from './DefinitionFilters';
 import { DefinitionFolderView } from './DefinitionFolderView';
@@ -17,6 +18,7 @@ type DefinitionListProps = {
   loading: boolean;
   error: Error | null;
   onCreateNew?: () => void;
+  onCreateNewPair?: () => void;
   filters?: DefinitionFilterState;
   onFiltersChange?: (filters: DefinitionFilterState) => void;
 };
@@ -56,6 +58,7 @@ export function DefinitionList({
   loading,
   error,
   onCreateNew,
+  onCreateNewPair,
   filters: externalFilters,
   onFiltersChange: externalOnFiltersChange,
 }: DefinitionListProps) {
@@ -266,11 +269,50 @@ export function DefinitionList({
               {isImporting ? 'Importing...' : isDragging ? 'Drop here' : 'Import'}
             </Button>
           </div>
-          {onCreateNew && (
-            <Button onClick={onCreateNew} variant="primary" size="sm">
-              <Plus className="w-4 h-4 mr-1" />
-              New Vignette
-            </Button>
+          {(onCreateNew != null || onCreateNewPair != null) && (
+            <Popover>
+              <div className="flex">
+                <Button
+                  onClick={onCreateNew ?? onCreateNewPair}
+                  variant="primary"
+                  size="sm"
+                  className="rounded-r-none border-r border-teal-700 pr-2.5"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  New Vignette
+                </Button>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="rounded-l-none px-1.5"
+                    aria-label="More vignette types"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+                </PopoverTrigger>
+              </div>
+              <PopoverContent align="end" className="w-48 p-1">
+                {onCreateNew != null && (
+                  <Button
+                    variant="ghost"
+                    onClick={onCreateNew}
+                    className="w-full justify-start px-3 py-2 text-sm text-gray-700"
+                  >
+                    Single Vignette
+                  </Button>
+                )}
+                {onCreateNewPair != null && (
+                  <Button
+                    variant="ghost"
+                    onClick={onCreateNewPair}
+                    className="w-full justify-start px-3 py-2 text-sm text-gray-700"
+                  >
+                    Paired Vignette
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       </div>

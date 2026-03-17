@@ -27,6 +27,10 @@ export function Definitions() {
     navigate('/definitions/new');
   };
 
+  const handleCreateNewPair = () => {
+    navigate('/job-choice/new');
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Vignettes</h1>
@@ -35,6 +39,7 @@ export function Definitions() {
         loading={loading}
         error={error}
         onCreateNew={handleCreateNew}
+        onCreateNewPair={handleCreateNewPair}
         filters={filters}
         onFiltersChange={setFilters}
       />
