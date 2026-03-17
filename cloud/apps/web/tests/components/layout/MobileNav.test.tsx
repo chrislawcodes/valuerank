@@ -31,10 +31,15 @@ describe('MobileNav Component', () => {
     await renderMobileNav('/domains');
 
     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
-    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
-    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
     expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
+    expect(screen.getByRole('link', { name: 'Trials' })).toHaveAttribute('href', '/runs');
+    expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
+    expect(screen.getByText('Domain Setup')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Preamble' })).toHaveAttribute('href', '/preambles');
+    expect(screen.getByRole('link', { name: 'Context' })).toHaveAttribute('href', '/domain-contexts');
+    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
+    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
   });
 
   it('keeps the validation compatibility links nested under Validation', async () => {
@@ -66,5 +71,12 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Archive' }).className).not.toContain('border-teal-500');
     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('border-teal-500');
+  });
+
+  it('highlights the nested domain setup route on domain setup compatibility routes', async () => {
+    await renderMobileNav('/domain-contexts');
+
+    expect(screen.getByRole('link', { name: 'Domains' }).className).not.toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Context' }).className).toContain('border-teal-500');
   });
 });
