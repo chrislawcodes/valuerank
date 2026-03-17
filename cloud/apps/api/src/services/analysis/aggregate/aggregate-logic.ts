@@ -1,4 +1,3 @@
-import { createLogger } from '@valuerank/shared';
 import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
 import { normalizeScenarioAnalysisMetadata } from '../scenario-metadata.js';
 import {
@@ -15,7 +14,6 @@ import {
 } from './contracts.js';
 import { computeVarianceAnalysis } from './variance.js';
 
-const log = createLogger('analysis:aggregate');
 
 export function aggregateAnalysesLogic(
   analyses: AnalysisOutput[],
