@@ -106,7 +106,17 @@ REFUSAL_PATTERN = re.compile(
 # Default summary model if none specified
 DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
 LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
-PARSER_VERSION = "job-choice-v1"
+PARSER_VERSION = "job-choice-v2"
+
+# Choice-context inline pattern: label must be immediately preceded by a choice-indicating word/phrase.
+# Used as a second phase in extract_text_label_decision() to handle preamble-on-same-line responses.
+CHOICE_CONTEXT_INLINE_PATTERN = re.compile(
+    r"\b(?:choose|chose|choosing|select(?:ing|ed)?|pick(?:ing|ed)?|"
+    r"recommend(?:ing)?|preferr?(?:ing|ed)?|go\s+with|"
+    r"answer\s*(?:is|:)|choice\s*(?:is|:)?|my\s+(?:choice|selection|recommendation)|"
+    r"i(?:'d|\s+would)?\s+say)\s*:?\s*",
+    re.IGNORECASE,
+)
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -202,13 +212,13 @@ def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, s
     return []
 
 
-def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str]]:
+def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str], str]:
     if not text or not scale_labels:
-        return None, None
+        return None, None, "text_label_exact"
 
     segments = response_segments(text)
     if not segments:
-        return None, None
+        return None, None, "text_label_exact"
 
     normalized_labels = [
         {
@@ -238,11 +248,25 @@ def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -
         unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
         if len(unique_prefix_matches) == 1:
             match = unique_prefix_matches[0]
-            return match["code"], match["label"]
+            return match["code"], match["label"], "text_label_exact"
         if len(unique_prefix_matches) > 1:
-            return None, None
+            return None, None, "text_label_exact"
 
-    return None, None
+    # Phase 2: choice-context substring matching.
+    # Check if any scale label appears immediately after a choice-indicating word in the full response.
+    normalized_full = normalize_for_match(text)
+    choice_context_matches = []
+    for entry in normalized_labels:
+        if not entry["normalized"]:
+            continue
+        combined = CHOICE_CONTEXT_INLINE_PATTERN.pattern + re.escape(entry["normalized"])
+        if re.search(combined, normalized_full, re.IGNORECASE):
+            choice_context_matches.append(entry)
+    if len(choice_context_matches) == 1:
+        match = choice_context_matches[0]
+        return match["code"], match["label"], "text_label_choice_context"
+
+    return None, None, "text_label_exact"
 
 
 def extract_decision_code_from_text(text: str) -> Optional[str]:
@@ -306,8 +330,6 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
         return None
 
     return unique_values[0]
-
-    return None
 
 
 def extract_decision_code(transcript_content: dict[str, Any]) -> str:
@@ -407,10 +429,10 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
     matched_label = None
 
     if decision_code == "other" and scale_labels:
-        text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
+        text_label_code, matched_label, text_label_parse_path = extract_text_label_decision(response_text, scale_labels)
         if text_label_code is not None:
             decision_code = text_label_code
-            parse_path = "text_label_exact"
+            parse_path = text_label_parse_path
         else:
             llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
             if llm_decision_code != "other":
@@ -476,7 +498,7 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
         decision_metadata = decision_result["decisionMetadata"]
 
         # Log appropriate message based on what we found (or didn't find)
-        if decision_metadata["parsePath"] == "text_label_exact":
+        if decision_metadata["parsePath"] in ("text_label_exact", "text_label_choice_context"):
             log.info(
                 "Resolved decision code from text scale label",
                 transcriptId=transcript_id,

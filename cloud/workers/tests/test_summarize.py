@@ -737,6 +737,108 @@ class TestRunSummarize:
         assert "error" in result
 
 
+class TestChoiceContextParsing:
+    """Tests for the choice-context substring matching phase in extract_text_label_decision."""
+
+    NUMBERED_PROBE_PROMPT = (
+        "Give me your judgment on the following scale:\n"
+        "5 - Strongly support taking the job with substantial recognition for expertise\n"
+        "4 - Somewhat support taking the job with substantial recognition for expertise\n"
+        "3 - Neutral / Unsure\n"
+        "2 - Somewhat support taking the job with moderate personal enjoyment\n"
+        "1 - Strongly support taking the job with moderate personal enjoyment"
+    )
+
+    def test_choice_context_preamble_same_line(self) -> None:
+        """'I choose: <label>' on one line resolves deterministically via choice-context phase."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": self.NUMBERED_PROBE_PROMPT,
+                    "targetResponse": (
+                        "Given the career considerations described, I choose: "
+                        "Somewhat support taking the job with substantial recognition for expertise "
+                        "because the performance expectations are clearer."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_choice_context"
+
+    def test_id_go_with_preamble(self) -> None:
+        """\"I'd go with: <label>\" resolves deterministically via choice-context phase."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": self.NUMBERED_PROBE_PROMPT,
+                    "targetResponse": (
+                        "I'd go with: Strongly support taking the job with moderate personal enjoyment "
+                        "because day-to-day happiness matters."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "1"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_choice_context"
+
+    def test_my_answer_is_preamble(self) -> None:
+        """\"My answer is: <label>\" resolves deterministically via choice-context phase."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": self.NUMBERED_PROBE_PROMPT,
+                    "targetResponse": "My answer is: Neutral / Unsure because both options have merit.",
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "3"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_choice_context"
+
+    @patch("summarize.generate")
+    def test_late_quoted_scale_text_still_falls_back_to_llm(self, mock_generate: MagicMock) -> None:
+        """Label appearing after non-choice context word must NOT match choice-context phase."""
+        from summarize import extract_decision_result
+
+        mock_generate.return_value = LLMResponse(content="3")
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": self.NUMBERED_PROBE_PROMPT,
+                    "targetResponse": (
+                        "I am torn here. The scale phrase 'Neutral / Unsure' comes closest, "
+                        "but I would want to explain the tradeoff first."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "3"
+        assert result["decisionSource"] == "llm"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
+
+
 class TestMain:
     """Tests for main entry point."""
 
