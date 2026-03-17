@@ -453,8 +453,8 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       },
       visualizationData: {
         scenarioDimensions: {
-          [scenarioIds[0]!]: { stakes: 1 },
-          [scenarioIds[1]!]: { stakes: 2 },
+          [scenarioIds[0]!]: { stakes: '1' },
+          [scenarioIds[1]!]: { stakes: '2' },
         },
       },
       varianceAnalysis: {

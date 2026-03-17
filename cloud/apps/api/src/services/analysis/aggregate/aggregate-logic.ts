@@ -1,5 +1,5 @@
-import { createLogger } from '@valuerank/shared';
 import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
+import { normalizeScenarioAnalysisMetadata } from '../scenario-metadata.js';
 import {
   type AggregatedResult,
   type AggregateScenarioInput,
@@ -14,7 +14,6 @@ import {
 } from './contracts.js';
 import { computeVarianceAnalysis } from './variance.js';
 
-const log = createLogger('analysis:aggregate');
 
 export function aggregateAnalysesLogic(
   analyses: AnalysisOutput[],
@@ -221,36 +220,10 @@ export function aggregateAnalysesLogic(
     .slice(0, 20);
 
   const dimensionsMap: Record<string, Record<string, number | string>> = {};
-  const isDimensionValue = (value: unknown): value is number | string =>
-    typeof value === 'number' || typeof value === 'string';
-  const toDimensionRecord = (
-    value: unknown,
-    scenarioId: string
-  ): Record<string, number | string> | null => {
-    if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
-    const entries = Object.entries(value);
-    const sanitized: Record<string, number | string> = {};
-    let dropped = 0;
-    for (const [key, entry] of entries) {
-      if (!isDimensionValue(entry)) {
-        dropped += 1;
-        continue;
-      }
-      sanitized[key] = entry;
-    }
-    if (dropped > 0) {
-      log.warn({ scenarioId, dropped }, 'Dropped invalid dimension values');
-    }
-    return Object.keys(sanitized).length > 0 ? sanitized : null;
-  };
-
   scenarios.forEach((scenario) => {
-    if (scenario.content == null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) return;
-    const content = scenario.content as Record<string, unknown>;
-    const dimensions = content.dimensions;
-    const validated = toDimensionRecord(dimensions, scenario.id);
-    if (validated) {
-      dimensionsMap[scenario.id] = validated;
+    const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+    if (normalized) {
+      dimensionsMap[scenario.id] = normalized.groupingDimensions;
     }
   });
   mergedVizData.scenarioDimensions = dimensionsMap;

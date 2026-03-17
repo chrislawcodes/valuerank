@@ -224,16 +224,25 @@ def generate_warnings(
                 "recommendation": "Consider using bootstrap confidence intervals",
             })
 
-    # Check for missing dimension data
-    has_dimensions = any(
-        t.get("scenario", {}).get("dimensions")
+    transcripts_with_dimensions = sum(
+        1
         for t in transcripts
+        if t.get("scenario", {}).get("dimensions")
     )
-    if not has_dimensions:
+    if transcripts_with_dimensions == 0:
         warnings.append({
             "code": "NO_DIMENSIONS",
             "message": "No scenario dimensions found in transcripts",
             "recommendation": "Variable impact analysis will be empty",
+        })
+    elif transcripts_with_dimensions < len(transcripts):
+        warnings.append({
+            "code": "PARTIAL_DIMENSIONS",
+            "message": (
+                f"Only {transcripts_with_dimensions} of {len(transcripts)} transcripts "
+                "include scenario dimensions"
+            ),
+            "recommendation": "Condition grouping and variable impact may exclude uncovered scenarios",
         })
 
     return warnings

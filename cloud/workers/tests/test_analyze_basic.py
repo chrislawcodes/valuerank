@@ -152,6 +152,52 @@ class TestAnalyzeBasicIntegration:
         warning_codes = [w["code"] for w in warnings]
         assert "SMALL_SAMPLE" in warning_codes
 
+    def test_string_dimensions_do_not_trigger_no_dimensions_warning(self):
+        """String-valued dimensions should count as valid scenario metadata."""
+        input_data = {
+            "runId": "test-run-string-dimensions",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 3},
+                    "scenario": {"dimensions": {"power": "2", "conformity": "1"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        warning_codes = [w["code"] for w in result["analysis"]["warnings"]]
+        assert "NO_DIMENSIONS" not in warning_codes
+
+    def test_partial_dimensions_warning_when_only_some_transcripts_have_metadata(self):
+        """Warn when dimension coverage is partial instead of claiming none exist."""
+        input_data = {
+            "runId": "test-run-partial-dimensions",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 4},
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}, "score": 2},
+                    "scenario": {},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        warning_codes = [w["code"] for w in result["analysis"]["warnings"]]
+        assert "PARTIAL_DIMENSIONS" in warning_codes
+        assert "NO_DIMENSIONS" not in warning_codes
+
     def test_methods_documented(self):
         """Test that statistical methods are documented in output."""
         input_data = {
