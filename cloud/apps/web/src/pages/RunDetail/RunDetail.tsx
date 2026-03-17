@@ -159,6 +159,21 @@ export function RunDetail() {
     analysisStatus: run?.analysisStatus ?? null,
   });
 
+  // Build scenarioDimensions from transcript dimensionValues as a fallback when analysis is not yet available.
+  const scenarioDimensionsFromTranscripts = (() => {
+    const transcripts = run?.transcripts;
+    if (!transcripts) return undefined;
+    const result: Record<string, Record<string, string | number>> = {};
+    let hasAny = false;
+    for (const t of transcripts) {
+      if (t.scenarioId && t.dimensionValues && Object.keys(t.dimensionValues).length > 0) {
+        result[t.scenarioId] = t.dimensionValues;
+        hasAny = true;
+      }
+    }
+    return hasAny ? result : undefined;
+  })();
+
   const {
     pauseRun,
     resumeRun,
@@ -481,7 +496,12 @@ export function RunDetail() {
 
         {/* Progress */}
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">Progress</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-sm font-medium text-gray-700">Progress</h3>
+            {isJobChoiceRun && run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH' && (
+              <span className="text-xs font-medium text-teal-600">· 1 of 2 vignettes</span>
+            )}
+          </div>
           <RunProgress run={run} showPerModel={true} />
         </div>
 
@@ -530,7 +550,7 @@ export function RunDetail() {
               isExportingAdjudication={isExportingAdjudication}
               onExportTranscripts={() => void handleExportTranscripts()}
               isExportingTranscripts={isExportingTranscripts}
-              scenarioDimensions={analysis?.visualizationData?.scenarioDimensions}
+              scenarioDimensions={analysis?.visualizationData?.scenarioDimensions ?? scenarioDimensionsFromTranscripts}
               onUpdateTranscriptDecision={handleUpdateTranscriptDecision}
             />
           </div>
