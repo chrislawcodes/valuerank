@@ -9,6 +9,8 @@ const app = createServer();
 describe('GraphQL Domain Query Registration', () => {
   const createdDomainIds: string[] = [];
   const createdDefinitionIds: string[] = [];
+  const createdLevelPresetIds: string[] = [];
+  const createdLevelPresetVersionIds: string[] = [];
   const createdProviderIds: string[] = [];
   const createdModelIds: string[] = [];
   const createdStatsIds: string[] = [];
@@ -33,6 +35,14 @@ describe('GraphQL Domain Query Registration', () => {
     if (createdDefinitionIds.length > 0) {
       await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
       createdDefinitionIds.length = 0;
+    }
+    if (createdLevelPresetVersionIds.length > 0) {
+      await db.levelPresetVersion.deleteMany({ where: { id: { in: createdLevelPresetVersionIds } } });
+      createdLevelPresetVersionIds.length = 0;
+    }
+    if (createdLevelPresetIds.length > 0) {
+      await db.levelPreset.deleteMany({ where: { id: { in: createdLevelPresetIds } } });
+      createdLevelPresetIds.length = 0;
     }
     if (createdDomainIds.length > 0) {
       await db.domain.deleteMany({ where: { id: { in: createdDomainIds } } });
@@ -123,6 +133,83 @@ describe('GraphQL Domain Query Registration', () => {
     expect(clusterFields.has('clusters')).toBe(true);
     expect(clusterFields.has('faultLinesByPair')).toBe(true);
     expect(clusterFields.has('defaultPair')).toBe(true);
+  });
+
+  it('returns defaultLevelPresetVersion on domains for older clients', async () => {
+    const levelPreset = await db.levelPreset.create({
+      data: {
+        name: `Compatibility Preset ${Date.now()}`,
+      },
+    });
+    createdLevelPresetIds.push(levelPreset.id);
+
+    const levelPresetVersion = await db.levelPresetVersion.create({
+      data: {
+        levelPresetId: levelPreset.id,
+        version: '1',
+        l1: 'low',
+        l2: 'modest',
+        l3: 'medium',
+        l4: 'high',
+        l5: 'extreme',
+      },
+    });
+    createdLevelPresetVersionIds.push(levelPresetVersion.id);
+
+    const domain = await db.domain.create({
+      data: {
+        name: 'Domain Default Preset Query Test',
+        normalizedName: `domain-default-preset-query-${Date.now()}`,
+        defaultLevelPresetVersionId: levelPresetVersion.id,
+      },
+    });
+    createdDomainIds.push(domain.id);
+
+    const query = `
+      query DomainsWithDefaultPreset {
+        domains {
+          id
+          name
+          defaultLevelPresetVersionId
+          defaultLevelPresetVersion {
+            id
+            version
+            levelPreset {
+              id
+              name
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({ query })
+      .expect(200);
+
+    expect(response.body.errors).toBeUndefined();
+
+    const matchingDomain = (response.body.data.domains as Array<Record<string, unknown>>).find(
+      (entry) => entry.id === domain.id,
+    );
+
+    expect(matchingDomain).toEqual(
+      expect.objectContaining({
+        id: domain.id,
+        name: domain.name,
+        defaultLevelPresetVersionId: levelPresetVersion.id,
+        defaultLevelPresetVersion: {
+          id: levelPresetVersion.id,
+          version: '1',
+          levelPreset: {
+            id: levelPreset.id,
+            name: levelPreset.name,
+          },
+        },
+      }),
+    );
   });
 
   it('returns domain evaluation history, detail, and derived status', async () => {

@@ -6,11 +6,12 @@ import {
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
-import { assembleTemplate } from '@valuerank/shared';
+import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
 import { createAuditLog } from '../../services/audit/index.js';
+import { applyLevelPresetToDefinitionContent } from '../../utils/definition-level-preset.js';
 
 type JobChoiceDefinitionContent = DefinitionContentV1 & {
   components: DefinitionComponents;
@@ -73,6 +74,7 @@ function buildJobChoicePairContent(
   contextId: string,
   valueFirst: { token: string; body: string },
   valueSecond: { token: string; body: string },
+  levelPresetVersion: ResolvedPairInputs['levelPresetVersion'],
 ) {
   const componentsAFirst: DefinitionComponents = {
     context_id: contextId,
@@ -89,7 +91,7 @@ function buildJobChoicePairContent(
   const templateBFirst = assembleTemplate(contextText, componentsBFirst);
   const dimensions = [{ name: valueFirst.token }, { name: valueSecond.token }];
 
-  const contentAFirst: JobChoiceDefinitionContent = {
+  const contentAFirst: JobChoiceDefinitionContent = applyLevelPresetToDefinitionContent({
     schema_version: 1,
     template: templateAFirst,
     dimensions,
@@ -100,8 +102,8 @@ function buildJobChoicePairContent(
       pair_key: pairKey,
     },
     components: componentsAFirst,
-  };
-  const contentBFirst: JobChoiceDefinitionContent = {
+  }, levelPresetVersion);
+  const contentBFirst: JobChoiceDefinitionContent = applyLevelPresetToDefinitionContent({
     schema_version: 1,
     template: templateBFirst,
     dimensions,
@@ -112,7 +114,7 @@ function buildJobChoicePairContent(
       pair_key: pairKey,
     },
     components: componentsBFirst,
-  };
+  }, levelPresetVersion);
 
   return {
     contentAFirst,
@@ -297,6 +299,15 @@ async function resolveJobChoicePairInputs(input: {
     }
   }
 
+  const normalizedValueFirst = {
+    ...valueFirst,
+    body: getJobChoiceValueStatementBody(valueFirst.token) ?? valueFirst.body,
+  };
+  const normalizedValueSecond = {
+    ...valueSecond,
+    body: getJobChoiceValueStatementBody(valueSecond.token) ?? valueSecond.body,
+  };
+
   return {
     domainId,
     contextId,
@@ -306,8 +317,8 @@ async function resolveJobChoicePairInputs(input: {
     resolvedLevelPresetVersionId,
     levelPresetVersion,
     context,
-    valueFirst,
-    valueSecond,
+    valueFirst: normalizedValueFirst,
+    valueSecond: normalizedValueSecond,
   } satisfies ResolvedPairInputs;
 }
 
@@ -427,6 +438,7 @@ builder.mutationField('createJobChoicePair', (t) =>
         resolvedInputs.contextId,
         resolvedInputs.valueFirst,
         resolvedInputs.valueSecond,
+        resolvedInputs.levelPresetVersion,
       );
 
       const [defA, defB] = await db.$transaction(async (tx) => {
@@ -546,6 +558,7 @@ builder.mutationField('updateJobChoicePair', (t) =>
         resolvedInputs.contextId,
         resolvedInputs.valueFirst,
         resolvedInputs.valueSecond,
+        resolvedInputs.levelPresetVersion,
       );
 
       const [updatedA, updatedB] = await db.$transaction(async (tx) => {

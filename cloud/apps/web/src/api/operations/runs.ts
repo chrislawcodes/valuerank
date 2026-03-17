@@ -63,6 +63,7 @@ export type Transcript = {
   estimatedCost: number | null;
   createdAt: string;
   lastAccessedAt: string | null;
+  dimensionValues?: Record<string, string | number> | null;
 };
 
 export type RunConfig = {
@@ -242,6 +243,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       estimatedCost
       createdAt
       lastAccessedAt
+      dimensionValues
     }
     analysis {
       actualCost {

@@ -1,3 +1,5 @@
+import { normalizeScenarioAnalysisMetadata } from './scenario-metadata.js';
+
 type ScenarioRecord = {
   id: string;
   name: string;
@@ -17,15 +19,11 @@ function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }
 
-function isDimensionValue(value: unknown): value is number | string {
-  return typeof value === 'number' || typeof value === 'string';
-}
-
 function toDimensionRecord(value: unknown): Record<string, number | string> | null {
   if (!isPlainObject(value)) return null;
   const sanitized: Record<string, number | string> = {};
   for (const [key, entry] of Object.entries(value)) {
-    if (!isDimensionValue(entry)) continue;
+    if (typeof entry !== 'number' && typeof entry !== 'string') continue;
     sanitized[key] = entry;
   }
   return Object.keys(sanitized).length > 0 ? sanitized : null;
@@ -46,11 +44,9 @@ function normalizeScenarioDimensions(
 ): Record<string, Record<string, number | string>> {
   const canonical: Record<string, Record<string, number | string>> = {};
   for (const scenario of scenarios) {
-    const content = scenario.content;
-    if (!isPlainObject(content)) continue;
-    const dims = toDimensionRecord(content.dimensions);
-    if (dims !== null) {
-      canonical[scenario.id] = dims;
+    const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
+    if (normalized !== null) {
+      canonical[scenario.id] = normalized.groupingDimensions;
     }
   }
 

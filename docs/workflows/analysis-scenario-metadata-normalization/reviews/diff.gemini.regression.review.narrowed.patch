@@ -1,0 +1,238 @@
+diff --git a/cloud/apps/api/src/queue/handlers/analyze-basic.ts b/cloud/apps/api/src/queue/handlers/analyze-basic.ts
+index 5c2d6d8..879b5c4 100644
+--- a/cloud/apps/api/src/queue/handlers/analyze-basic.ts
++++ b/cloud/apps/api/src/queue/handlers/analyze-basic.ts
+@@ -14,6 +14,10 @@ import { createLogger } from '@valuerank/shared';
+ import type { AnalyzeBasicJobData } from '../types.js';
+ import { spawnPython } from '../spawn.js';
+ import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
++import {
++  buildScenarioAnalysisDimensionRecord,
++  normalizeScenarioAnalysisMetadata,
++} from '../../services/analysis/scenario-metadata.js';
+ import { parseTemperature } from '../../utils/temperature.js';
+ 
+ const log = createLogger('queue:analyze-basic');
+@@ -41,24 +45,10 @@ type TranscriptData = {
+   };
+   scenario: {
+     name: string;
+-    dimensions: Record<string, number>; // Numeric dimension scores (matches CSV variable columns)
++    dimensions: Record<string, number | string>; // Canonical analysis dimensions for grouping/effects
+   };
+ };
+ 
+-function isDimensionValue(value: unknown): value is number | string {
+-  return typeof value === 'number' || typeof value === 'string';
+-}
+-
+-function toDimensionRecord(value: unknown): Record<string, number | string> | null {
+-  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+-  const sanitized: Record<string, number | string> = {};
+-  for (const [key, entry] of Object.entries(value)) {
+-    if (!isDimensionValue(entry)) continue;
+-    sanitized[key] = entry;
+-  }
+-  return Object.keys(sanitized).length > 0 ? sanitized : null;
+-}
+-
+ function buildValueOutcomes(
+   score: number | null,
+   orientationFlipped: boolean,
+@@ -253,20 +243,12 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
+             if (scenario === null) {
+               throw new Error(`Scenario not found for transcript ${t.id}`);
+             }
+-            // Extract numeric dimensions from scenario content (matches CSV variable columns)
+             const scenarioContent = scenario.content as Record<string, unknown> | null;
+-            const rawDimensions = (scenarioContent?.dimensions as Record<string, unknown>) ?? {};
+-            const dimensions: Record<string, number> = {};
+-            for (const [key, value] of Object.entries(rawDimensions)) {
+-              if (typeof value === 'number') {
+-                dimensions[key] = value;
+-              }
+-            }
++            const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(scenarioContent);
++            const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
+ 
+-            // Preserve raw scenario dimensions (string/number) for UI pivot tables.
+-            const validatedDimensions = toDimensionRecord(rawDimensions);
+-            if (validatedDimensions) {
+-              scenarioDimensions[scenario.id] = validatedDimensions;
++            if (normalizedScenarioMetadata) {
++              scenarioDimensions[scenario.id] = normalizedScenarioMetadata.groupingDimensions;
+             }
+ 
+             // Convert decisionCode string to numeric score (matches CSV "Decision Code")
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts b/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
+index 0b0b151..62f2a01 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/aggregate-logic.ts
+@@ -1,5 +1,6 @@
+ import { createLogger } from '@valuerank/shared';
+ import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
++import { normalizeScenarioAnalysisMetadata } from '../scenario-metadata.js';
+ import {
+   type AggregatedResult,
+   type AggregateScenarioInput,
+@@ -221,36 +222,10 @@ export function aggregateAnalysesLogic(
+     .slice(0, 20);
+ 
+   const dimensionsMap: Record<string, Record<string, number | string>> = {};
+-  const isDimensionValue = (value: unknown): value is number | string =>
+-    typeof value === 'number' || typeof value === 'string';
+-  const toDimensionRecord = (
+-    value: unknown,
+-    scenarioId: string
+-  ): Record<string, number | string> | null => {
+-    if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
+-    const entries = Object.entries(value);
+-    const sanitized: Record<string, number | string> = {};
+-    let dropped = 0;
+-    for (const [key, entry] of entries) {
+-      if (!isDimensionValue(entry)) {
+-        dropped += 1;
+-        continue;
+-      }
+-      sanitized[key] = entry;
+-    }
+-    if (dropped > 0) {
+-      log.warn({ scenarioId, dropped }, 'Dropped invalid dimension values');
+-    }
+-    return Object.keys(sanitized).length > 0 ? sanitized : null;
+-  };
+-
+   scenarios.forEach((scenario) => {
+-    if (scenario.content == null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) return;
+-    const content = scenario.content as Record<string, unknown>;
+-    const dimensions = content.dimensions;
+-    const validated = toDimensionRecord(dimensions, scenario.id);
+-    if (validated) {
+-      dimensionsMap[scenario.id] = validated;
++    const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
++    if (normalized) {
++      dimensionsMap[scenario.id] = normalized.groupingDimensions;
+     }
+   });
+   mergedVizData.scenarioDimensions = dimensionsMap;
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+index ce56aaf..683f7cc 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/contracts.ts
+@@ -173,7 +173,7 @@ export type AggregateWorkerTranscript = {
+   };
+   scenario: {
+     name: string;
+-    dimensions: Record<string, number>;
++    dimensions: Record<string, number | string>;
+   };
+ };
+ 
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts b/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts
+index f80e572..80bc440 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts
+@@ -27,6 +27,10 @@ import {
+   isBaselineCompatibleRun,
+ } from './config.js';
+ import { aggregateAnalysesLogic } from './aggregate-logic.js';
++import {
++  buildScenarioAnalysisDimensionRecord,
++  normalizeScenarioAnalysisMetadata,
++} from '../scenario-metadata.js';
+ 
+ const log = createLogger('analysis:aggregate');
+ 
+@@ -303,13 +307,8 @@ export async function updateAggregateRun(
+ 
+     const aggregateWorkerTranscripts: AggregateWorkerTranscript[] = validAggregateTranscripts.map((transcript) => {
+       const score = transcript.decisionCode == null ? null : Number.parseInt(transcript.decisionCode, 10);
+-      const rawDimensions = (transcript.scenario?.content as Record<string, unknown> | null)?.dimensions as Record<string, unknown> | undefined;
+-      const dimensions: Record<string, number> = {};
+-      for (const [key, value] of Object.entries(rawDimensions ?? {})) {
+-        if (typeof value === 'number') {
+-          dimensions[key] = value;
+-        }
+-      }
++      const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(transcript.scenario?.content ?? null);
++      const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
+       const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
+       const values = buildValueOutcomes(
+         Number.isFinite(score) ? score : null,
+diff --git a/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts b/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts
+index fff6b7e..a2b49d5 100644
+--- a/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts
++++ b/cloud/apps/api/src/services/analysis/normalize-analysis-output.ts
+@@ -1,3 +1,5 @@
++import { normalizeScenarioAnalysisMetadata } from './scenario-metadata.js';
++
+ type ScenarioRecord = {
+   id: string;
+   name: string;
+@@ -17,15 +19,11 @@ function isUnknownArray(value: unknown): value is unknown[] {
+   return Array.isArray(value);
+ }
+ 
+-function isDimensionValue(value: unknown): value is number | string {
+-  return typeof value === 'number' || typeof value === 'string';
+-}
+-
+ function toDimensionRecord(value: unknown): Record<string, number | string> | null {
+   if (!isPlainObject(value)) return null;
+   const sanitized: Record<string, number | string> = {};
+   for (const [key, entry] of Object.entries(value)) {
+-    if (!isDimensionValue(entry)) continue;
++    if (typeof entry !== 'number' && typeof entry !== 'string') continue;
+     sanitized[key] = entry;
+   }
+   return Object.keys(sanitized).length > 0 ? sanitized : null;
+@@ -46,11 +44,9 @@ function normalizeScenarioDimensions(
+ ): Record<string, Record<string, number | string>> {
+   const canonical: Record<string, Record<string, number | string>> = {};
+   for (const scenario of scenarios) {
+-    const content = scenario.content;
+-    if (!isPlainObject(content)) continue;
+-    const dims = toDimensionRecord(content.dimensions);
+-    if (dims !== null) {
+-      canonical[scenario.id] = dims;
++    const normalized = normalizeScenarioAnalysisMetadata(scenario.content);
++    if (normalized !== null) {
++      canonical[scenario.id] = normalized.groupingDimensions;
+     }
+   }
+ 
+diff --git a/cloud/workers/analyze_basic.py b/cloud/workers/analyze_basic.py
+index b77d9c2..fd5f724 100644
+--- a/cloud/workers/analyze_basic.py
++++ b/cloud/workers/analyze_basic.py
+@@ -224,17 +224,26 @@ def generate_warnings(
+                 "recommendation": "Consider using bootstrap confidence intervals",
+             })
+ 
+-    # Check for missing dimension data
+-    has_dimensions = any(
+-        t.get("scenario", {}).get("dimensions")
++    transcripts_with_dimensions = sum(
++        1
+         for t in transcripts
++        if t.get("scenario", {}).get("dimensions")
+     )
+-    if not has_dimensions:
++    if transcripts_with_dimensions == 0:
+         warnings.append({
+             "code": "NO_DIMENSIONS",
+             "message": "No scenario dimensions found in transcripts",
+             "recommendation": "Variable impact analysis will be empty",
+         })
++    elif transcripts_with_dimensions < len(transcripts):
++        warnings.append({
++            "code": "PARTIAL_DIMENSIONS",
++            "message": (
++                f"Only {transcripts_with_dimensions} of {len(transcripts)} transcripts "
++                "include scenario dimensions"
++            ),
++            "recommendation": "Condition grouping and variable impact may exclude uncovered scenarios",
++        })
+ 
+     return warnings
+ 

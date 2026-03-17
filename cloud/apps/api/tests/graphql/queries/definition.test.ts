@@ -15,8 +15,12 @@ describe('GraphQL Definition Query', () => {
   let searchableDefinition: Definition;
   let taggedDefinition: Definition;
   let definitionWithRuns: Definition;
+  let levelPresetDefinition: Definition;
+  let legacyJobChoiceDefinition: Definition;
   let testTag: Tag;
   let testRun: Run;
+  let testLevelPresetId: string;
+  let testLevelPresetVersionId: string;
 
   beforeAll(async () => {
     // Create test definitions with parent-child relationship
@@ -92,6 +96,85 @@ describe('GraphQL Definition Query', () => {
         config: {},
       },
     });
+
+    const levelPreset = await db.levelPreset.create({
+      data: { name: `Definition Query Preset ${Date.now()}` },
+    });
+    testLevelPresetId = levelPreset.id;
+
+    const levelPresetVersion = await db.levelPresetVersion.create({
+      data: {
+        levelPresetId: levelPreset.id,
+        version: 'v1',
+        l1: 'negligible',
+        l2: 'low',
+        l3: 'moderate',
+        l4: 'high',
+        l5: 'full',
+      },
+    });
+    testLevelPresetVersionId = levelPresetVersion.id;
+
+    levelPresetDefinition = await db.definition.create({
+      data: {
+        name: 'Level Preset Definition',
+        levelPresetVersionId: levelPresetVersion.id,
+        content: {
+          schema_version: 1,
+          template: 'Choose between [care] and [freedom].',
+          methodology: {
+            family: 'job-choice',
+            response_scale: 'option_text',
+            presentation_order: 'A_first',
+            pair_key: 'test-pair',
+          },
+          dimensions: [
+            { name: 'care' },
+            { name: 'freedom' },
+          ],
+        },
+      },
+    });
+
+    legacyJobChoiceDefinition = await db.definition.create({
+      data: {
+        name: 'Legacy Job Choice Definition',
+        levelPresetVersionId: levelPresetVersion.id,
+        content: {
+          schema_version: 1,
+          template: [
+            'A mid-level professional has been offered two distinct roles.',
+            '',
+            'In one role, this job offers trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
+            '',
+            'In the other role, this job offers recognition of their expertise because of how it relates to success through strong performance.',
+            '',
+            'Give me your judgment on the following scale:',
+          ].join('\n'),
+          methodology: {
+            family: 'job-choice',
+            response_scale: 'option_text',
+            presentation_order: 'A_first',
+            pair_key: 'legacy-pair',
+          },
+          components: {
+            context_id: 'ctx-legacy',
+            value_first: {
+              token: 'benevolence_dependability',
+              body: 'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+            },
+            value_second: {
+              token: 'achievement',
+              body: 'recognition of their expertise because of how it relates to success through strong performance',
+            },
+          },
+          dimensions: [
+            { name: 'benevolence_dependability' },
+            { name: 'achievement' },
+          ],
+        },
+      },
+    });
   });
 
   afterAll(async () => {
@@ -105,6 +188,12 @@ describe('GraphQL Definition Query', () => {
     await db.tag.deleteMany({
       where: { id: testTag.id },
     });
+    await db.levelPresetVersion.deleteMany({
+      where: { id: testLevelPresetVersionId },
+    });
+    await db.levelPreset.deleteMany({
+      where: { id: testLevelPresetId },
+    });
     await db.definition.deleteMany({
       where: {
         id: {
@@ -116,6 +205,8 @@ describe('GraphQL Definition Query', () => {
             searchableDefinition.id,
             taggedDefinition.id,
             definitionWithRuns.id,
+            levelPresetDefinition.id,
+            legacyJobChoiceDefinition.id,
           ],
         },
       },
@@ -316,6 +407,94 @@ describe('GraphQL Definition Query', () => {
           },
         },
       });
+    });
+
+    it('hydrates missing dimension levels from the saved level preset on content and resolvedContent', async () => {
+      const query = `
+        query GetDefinitionWithPresetLevels($id: ID!) {
+          definition(id: $id) {
+            id
+            content
+            resolvedContent
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: levelPresetDefinition.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const content = response.body.data.definition.content as {
+        dimensions: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+      };
+      const resolvedContent = response.body.data.definition.resolvedContent as {
+        dimensions: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+      };
+
+      expect(content.dimensions[0]?.levels).toEqual([
+        { score: 1, label: 'negligible' },
+        { score: 2, label: 'low' },
+        { score: 3, label: 'moderate' },
+        { score: 4, label: 'high' },
+        { score: 5, label: 'full' },
+      ]);
+      expect(resolvedContent.dimensions[1]?.levels).toEqual([
+        { score: 1, label: 'negligible' },
+        { score: 2, label: 'low' },
+        { score: 3, label: 'moderate' },
+        { score: 4, label: 'high' },
+        { score: 5, label: 'full' },
+      ]);
+    });
+
+    it('normalizes legacy job-choice narratives back to shared [level] placeholders on content and resolvedContent', async () => {
+      const query = `
+        query GetLegacyJobChoiceDefinition($id: ID!) {
+          definition(id: $id) {
+            id
+            content
+            resolvedContent
+          }
+        }
+      `;
+
+      const response = await request(app)
+        .post('/graphql')
+        .set('Authorization', getAuthHeader())
+        .send({ query, variables: { id: legacyJobChoiceDefinition.id } })
+        .expect(200);
+
+      expect(response.body.errors).toBeUndefined();
+
+      const content = response.body.data.definition.content as {
+        template: string;
+        components: {
+          value_first: { body: string };
+          value_second: { body: string };
+        };
+      };
+      const resolvedContent = response.body.data.definition.resolvedContent as {
+        template: string;
+      };
+
+      expect(content.template).toContain(
+        'In one role, this job offers [level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
+      );
+      expect(content.template).toContain(
+        'In the other role, this job offers [level] recognition of their expertise because of how it relates to success through strong performance.',
+      );
+      expect(content.components.value_first.body).toBe(
+        '[level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+      );
+      expect(content.components.value_second.body).toBe(
+        '[level] recognition of their expertise because of how it relates to success through strong performance',
+      );
+      expect(resolvedContent.template).toContain('[level] trust from other people');
+      expect(resolvedContent.template).toContain('[level] recognition of their expertise');
     });
   });
 

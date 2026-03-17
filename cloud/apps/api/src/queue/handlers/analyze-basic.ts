@@ -14,6 +14,10 @@ import { createLogger } from '@valuerank/shared';
 import type { AnalyzeBasicJobData } from '../types.js';
 import { spawnPython } from '../spawn.js';
 import { computeInputHash, getCachedAnalysis, invalidateCache } from '../../services/analysis/cache.js';
+import {
+  buildScenarioAnalysisDimensionRecord,
+  normalizeScenarioAnalysisMetadata,
+} from '../../services/analysis/scenario-metadata.js';
 import { parseTemperature } from '../../utils/temperature.js';
 
 const log = createLogger('queue:analyze-basic');
@@ -41,23 +45,9 @@ type TranscriptData = {
   };
   scenario: {
     name: string;
-    dimensions: Record<string, number>; // Numeric dimension scores (matches CSV variable columns)
+    dimensions: Record<string, number | string>; // Canonical analysis dimensions for grouping/effects
   };
 };
-
-function isDimensionValue(value: unknown): value is number | string {
-  return typeof value === 'number' || typeof value === 'string';
-}
-
-function toDimensionRecord(value: unknown): Record<string, number | string> | null {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null;
-  const sanitized: Record<string, number | string> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (!isDimensionValue(entry)) continue;
-    sanitized[key] = entry;
-  }
-  return Object.keys(sanitized).length > 0 ? sanitized : null;
-}
 
 function buildValueOutcomes(
   score: number | null,
@@ -253,20 +243,12 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
             if (scenario === null) {
               throw new Error(`Scenario not found for transcript ${t.id}`);
             }
-            // Extract numeric dimensions from scenario content (matches CSV variable columns)
             const scenarioContent = scenario.content as Record<string, unknown> | null;
-            const rawDimensions = (scenarioContent?.dimensions as Record<string, unknown>) ?? {};
-            const dimensions: Record<string, number> = {};
-            for (const [key, value] of Object.entries(rawDimensions)) {
-              if (typeof value === 'number') {
-                dimensions[key] = value;
-              }
-            }
+            const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(scenarioContent);
+            const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
 
-            // Preserve raw scenario dimensions (string/number) for UI pivot tables.
-            const validatedDimensions = toDimensionRecord(rawDimensions);
-            if (validatedDimensions) {
-              scenarioDimensions[scenario.id] = validatedDimensions;
+            if (normalizedScenarioMetadata) {
+              scenarioDimensions[scenario.id] = normalizedScenarioMetadata.groupingDimensions;
             }
 
             // Convert decisionCode string to numeric score (matches CSV "Decision Code")

@@ -121,6 +121,12 @@ class TestExtractDecisionCodeFromText:
         assert extract_decision_code_from_text("Rating:  3") == "3"
         assert extract_decision_code_from_text("Rating: 5") == "5"
 
+    def test_structured_rating_marks_multiple_choices_ambiguous(self) -> None:
+        """Structured rating should not accept multiple competing values."""
+        from summarize import extract_decision_code_from_text
+
+        assert extract_decision_code_from_text("Rating: 4 or 5") is None
+
     def test_structured_preferred_over_fallback(self) -> None:
         """Test that structured format is preferred over fallback."""
         from summarize import extract_decision_code_from_text
@@ -242,6 +248,67 @@ class TestExtractDecisionCodeFromText:
 
         assert extract_decision_code_from_text("") is None
         assert extract_decision_code_from_text(None) is None  # type: ignore
+
+
+class TestLeadingDecisionHelpers:
+    """Tests for top-of-response deterministic helpers."""
+
+    def test_extracts_leading_numeric_before_later_numbers(self) -> None:
+        """The opening judgment should win before later explanatory numbers muddy the scan."""
+        from summarize import extract_leading_decision_code
+
+        text = (
+            "4\n\n"
+            "I considered 2 or 1 for a different person, but for me the first role still fits better."
+        )
+
+        assert extract_leading_decision_code(text) == "4"
+
+    def test_ignores_contextual_leading_numbers_without_explicit_decision_signal(self) -> None:
+        """Contextual numbers in the opening line should not be treated as the decision."""
+        from summarize import extract_leading_decision_code
+
+        text = "This scenario is similar to the last 2 I saw today."
+
+        assert extract_leading_decision_code(text) is None
+
+    def test_leading_structured_rating_marks_multiple_choices_ambiguous(self) -> None:
+        """Leading structured ratings should keep ambiguity detection."""
+        from summarize import extract_leading_decision_code
+
+        assert extract_leading_decision_code("Rating: 4 or 5") is None
+
+    def test_strips_leading_judgment_prefix_for_text_labels(self) -> None:
+        """Common lead-ins should not block an otherwise exact opening scale label."""
+        from summarize import extract_leading_text_label_decision
+
+        scale_labels = [
+            {"code": "5", "label": "Strongly support taking the job with substantial recognition for expertise"},
+            {"code": "4", "label": "Somewhat support taking the job with substantial recognition for expertise"},
+            {"code": "3", "label": "Neutral / Unsure"},
+            {"code": "2", "label": "Somewhat support taking the job with moderate personal enjoyment"},
+            {"code": "1", "label": "Strongly support taking the job with moderate personal enjoyment"},
+        ]
+
+        text = (
+            "My judgment: Somewhat support taking the job with substantial recognition for expertise "
+            "because the expectations are clearer.\n\n"
+            "Later on I discuss tradeoffs."
+        )
+
+        assert extract_leading_text_label_decision(text, scale_labels) == (
+            "4",
+            "Somewhat support taking the job with substantial recognition for expertise",
+            "text_label_leading",
+        )
+
+    def test_leading_ambiguity_stays_unresolved(self) -> None:
+        """Conflicting opening codes should not become exact deterministic matches."""
+        from summarize import extract_leading_decision_code
+
+        text = "I choose 4 or 2 depending on which value matters more."
+
+        assert extract_leading_decision_code(text) is None
 
 
 class TestExtractDecisionCode:
@@ -609,6 +676,131 @@ class TestRunSummarize:
         assert result["decisionMetadata"]["matchedLabel"] == (
             "Somewhat support taking the job with substantial recognition for expertise"
         )
+
+    def test_extracts_leading_numeric_decision_before_later_explanatory_numbers(self) -> None:
+        """A clear top-line numeric judgment should stay deterministic."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": "Give me your judgment on the scale from 1 to 5.",
+                    "targetResponse": (
+                        "4\n\n"
+                        "I also considered 2 or 1 for someone who values leisure more, "
+                        "but my answer remains 4."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "numeric_leading"
+
+    def test_extracts_leading_text_label_with_judgment_prefix(self) -> None:
+        """Opening label judgments with a wrapper should not need LLM fallback."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n"
+                        "- Strongly support taking the job with substantial recognition for expertise\n"
+                        "- Somewhat support taking the job with substantial recognition for expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with moderate personal enjoyment\n"
+                        "- Strongly support taking the job with moderate personal enjoyment"
+                    ),
+                    "targetResponse": (
+                        "My judgment: Somewhat support taking the job with substantial recognition for expertise "
+                        "because the expectations are clearer.\n\n"
+                        "I can imagine someone else quoting 'Neutral / Unsure', but that is not my choice."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_leading"
+        assert result["decisionMetadata"]["matchedLabel"] == (
+            "Somewhat support taking the job with substantial recognition for expertise"
+        )
+
+    def test_prefers_leading_numeric_when_top_line_contains_number_and_label(self) -> None:
+        """A leading numeric judgment should take precedence over label parsing."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n"
+                        "- Strongly support taking the job with substantial recognition for expertise\n"
+                        "- Somewhat support taking the job with substantial recognition for expertise\n"
+                        "- Neutral / Unsure\n"
+                        "- Somewhat support taking the job with moderate personal enjoyment\n"
+                        "- Strongly support taking the job with moderate personal enjoyment"
+                    ),
+                    "targetResponse": (
+                        "My judgment is 4 - Somewhat support taking the job with substantial recognition for expertise.\n\n"
+                        "The clearer performance expectations tip it for me."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "numeric_leading"
+
+    def test_ignores_scenario_number_when_leading_decision_appears_later_in_same_line(self) -> None:
+        """The parser should not mistake scenario numbering for the final decision."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": "Give me your judgment on the scale from 1 to 9.",
+                    "targetResponse": "Scenario #4 is difficult. My decision is 7.",
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "7"
+        assert result["decisionSource"] == "deterministic"
+
+    def test_falls_back_to_full_response_when_first_line_has_only_contextual_number(self) -> None:
+        """A contextual first-line number should not block a later explicit decision."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": "Give me your judgment on the scale from 1 to 9.",
+                    "targetResponse": (
+                        "This scenario is similar to the last 2 I saw today.\n"
+                        "My decision is 4."
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "numeric_deterministic"
 
     @patch("summarize.generate")
     def test_does_not_treat_late_quoted_scale_text_as_exact_match(self, mock_generate: MagicMock) -> None:

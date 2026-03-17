@@ -1,0 +1,456 @@
+diff --git a/cloud/apps/web/src/components/layout/MobileNav.tsx b/cloud/apps/web/src/components/layout/MobileNav.tsx
+index 925e320..b5b3592 100644
+--- a/cloud/apps/web/src/components/layout/MobileNav.tsx
++++ b/cloud/apps/web/src/components/layout/MobileNav.tsx
+@@ -6,31 +6,74 @@ import { cn } from '../../lib/utils';
+ 
+ type NavItem = {
+   name: string;
+-  path: string;
+   icon: LucideIcon;
+-  isNested?: boolean;
++  path?: string;
+   aliases?: string[];
++  children?: NavItem[];
+ };
+ 
+ const navItems: NavItem[] = [
+   { name: 'Home', path: '/', icon: Home },
+-  { name: 'Domains', path: '/domains', icon: FolderTree },
+-  { name: 'Vignettes', path: '/definitions', icon: FileText, isNested: true },
+-  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText, isNested: true },
+-  { name: 'Value Statements', path: '/value-statements', icon: FileText, isNested: true },
+-  { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
+-  { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
+-  { name: 'Validation', path: '/validation', icon: ShieldCheck },
+-  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck, isNested: true },
+-  { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck, isNested: true },
+-  { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck, isNested: true },
+-  { name: 'Archive', path: '/archive', icon: Archive },
+-  { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, isNested: true, aliases: ['/survey'] },
+-  { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, isNested: true, aliases: ['/survey-results'] },
++  {
++    name: 'Domains',
++    path: '/domains',
++    icon: FolderTree,
++    children: [
++      { name: 'Vignettes', path: '/definitions', icon: FileText },
++      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
++      { name: 'Coverage', path: '/domains/coverage', icon: BarChart2 },
++      { name: 'Trials', path: '/runs', icon: BarChart2 },
++      {
++        name: 'Domain Setup',
++        icon: FileText,
++        children: [
++          { name: 'Preamble', path: '/preambles', icon: FileText },
++          { name: 'Context', path: '/domain-contexts', icon: FileText },
++          { name: 'Value Statements', path: '/value-statements', icon: FileText },
++          { name: 'Level Presets', path: '/level-presets', icon: FileText },
++        ],
++      },
++    ],
++  },
++  {
++    name: 'Validation',
++    path: '/validation',
++    icon: ShieldCheck,
++    children: [
++      { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck },
++      { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck },
++      { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck },
++    ],
++  },
++  {
++    name: 'Archive',
++    path: '/archive',
++    icon: Archive,
++    children: [
++      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, aliases: ['/survey'] },
++      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, aliases: ['/survey-results'] },
++    ],
++  },
+   { name: 'Compare', path: '/compare', icon: GitCompare },
+   { name: 'Settings', path: '/settings', icon: Settings },
+ ];
+ 
++function matchesNavPath(pathname: string, item: NavItem) {
++  if (!item.path) {
++    return false;
++  }
++
++  if (item.path === '/') {
++    return pathname === '/';
++  }
++
++  return (
++    pathname === item.path
++    || pathname.startsWith(`${item.path}/`)
++    || (item.aliases ?? []).some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))
++  );
++}
++
+ type MobileNavProps = {
+   className?: string;
+ };
+@@ -78,24 +121,63 @@ export function MobileNav({ className }: MobileNavProps) {
+     };
+   }, [isOpen]);
+ 
+-  const isNavActive = (item: NavItem) => {
+-    if (item.path === '/') {
+-      return location.pathname === '/';
++  const isNavActive = (item: NavItem, includeChildren = true): boolean => {
++    const itemMatches = (!includeChildren && item.children && item.path)
++      ? (
++        item.path === '/'
++          ? location.pathname === '/'
++          : location.pathname === item.path || (item.aliases ?? []).some((alias) => location.pathname === alias)
++      )
++      : matchesNavPath(location.pathname, item);
++
++    if (includeChildren && item.children) {
++      return item.children.some((child) => isNavActive(child, true)) || itemMatches;
+     }
+ 
+-    const hasNestedChildren = !item.isNested
+-      && navItems.some((candidate) => candidate.isNested && candidate.path.startsWith(`${item.path}/`));
++    return itemMatches;
++  };
+ 
+-    if (hasNestedChildren) {
+-      return location.pathname === item.path;
++  const renderNavItems = (items: NavItem[], depth = 0) => items.map((item) => {
++    const Icon = item.icon;
++    const isActive = isNavActive(item, depth > 0 || !item.children);
++    const indentClass = depth === 0 ? '' : depth === 1 ? 'pl-10 text-sm' : 'pl-16 text-sm';
++
++    if (item.path) {
++      return (
++        <div key={item.path}>
++          <NavLink
++            to={item.path}
++            className={cn(
++              'flex items-center gap-3 px-4 py-3 min-h-[44px] text-base font-medium transition-colors',
++              indentClass,
++              isActive
++                ? 'text-white bg-teal-600/20 border-l-2 border-teal-500'
++                : 'text-white/70 hover:text-white hover:bg-white/5'
++            )}
++          >
++            <Icon className="w-5 h-5" />
++            {item.name}
++          </NavLink>
++          {item.children ? renderNavItems(item.children, depth + 1) : null}
++        </div>
++      );
+     }
+ 
+     return (
+-      location.pathname === item.path
+-      || location.pathname.startsWith(`${item.path}/`)
+-      || (item.aliases ?? []).some((alias) => location.pathname === alias || location.pathname.startsWith(`${alias}/`))
++      <div key={`${depth}-${item.name}`}>
++        <div
++          className={cn(
++            'flex items-center gap-3 px-4 py-2 min-h-[44px] text-base font-medium text-white/60',
++            indentClass
++          )}
++        >
++          <Icon className="w-5 h-5" />
++          {item.name}
++        </div>
++        {item.children ? renderNavItems(item.children, depth + 1) : null}
++      </div>
+     );
+-  };
++  });
+ 
+   return (
+     <div className={cn('sm:hidden', className)} ref={menuRef}>
+@@ -142,26 +224,7 @@ export function MobileNav({ className }: MobileNavProps) {
+         </div>
+ 
+         <div className="py-4">
+-          {navItems.map((item) => {
+-            const Icon = item.icon;
+-            const isActive = isNavActive(item);
+-            return (
+-              <NavLink
+-                key={item.path}
+-                to={item.path}
+-                className={cn(
+-                  'flex items-center gap-3 px-4 py-3 min-h-[44px] text-base font-medium transition-colors',
+-                  item.isNested ? 'pl-10 text-sm' : '',
+-                  isActive
+-                    ? 'text-white bg-teal-600/20 border-l-2 border-teal-500'
+-                    : 'text-white/70 hover:text-white hover:bg-white/5'
+-                )}
+-              >
+-                <Icon className="w-5 h-5" />
+-                {item.name}
+-              </NavLink>
+-            );
+-          })}
++          {renderNavItems(navItems)}
+         </div>
+       </nav>
+     </div>
+diff --git a/cloud/apps/web/src/components/layout/NavTabs.tsx b/cloud/apps/web/src/components/layout/NavTabs.tsx
+index 74a82ed..2077cef 100644
+--- a/cloud/apps/web/src/components/layout/NavTabs.tsx
++++ b/cloud/apps/web/src/components/layout/NavTabs.tsx
+@@ -9,16 +9,34 @@ const utilityTabs = [
+   { name: 'Settings', path: '/settings', icon: Settings },
+ ];
+ 
+-const domainMenuItems = [
++type MenuLinkItem = {
++  name: string;
++  path: string;
++  aliases?: string[];
++};
++
++type MenuGroupItem = {
++  name: string;
++  children: MenuLinkItem[];
++};
++
++type MenuItem = MenuLinkItem | MenuGroupItem;
++
++const domainMenuItems: MenuItem[] = [
+   { name: 'Overview', path: '/domains' },
+   { name: 'Vignettes', path: '/definitions' },
+-  { name: 'New Vignette', path: '/job-choice/new' },
+-  { name: 'Preambles', path: '/preambles' },
+-  { name: 'Level Presets', path: '/level-presets' },
+-  { name: 'Domain Contexts', path: '/domain-contexts' },
+-  { name: 'Value Statements', path: '/value-statements' },
+   { name: 'Domain Analysis', path: '/domains/analysis' },
+   { name: 'Coverage', path: '/domains/coverage' },
++  { name: 'Trials', path: '/runs' },
++  {
++    name: 'Domain Setup',
++    children: [
++      { name: 'Preamble', path: '/preambles' },
++      { name: 'Context', path: '/domain-contexts' },
++      { name: 'Value Statements', path: '/value-statements' },
++      { name: 'Level Presets', path: '/level-presets' },
++    ],
++  },
+ ];
+ 
+ const validationMenuItems = [
+@@ -34,11 +52,16 @@ const archiveMenuItems = [
+   { name: 'Legacy Survey Results', path: '/archive/survey-results', aliases: ['/survey-results'] },
+ ];
+ 
++function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
++  return 'children' in item;
++}
++
+ export function NavTabs() {
+   const location = useLocation();
+   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
+   const [isValidationMenuOpen, setIsValidationMenuOpen] = useState(false);
+   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
++  const [openDomainSubmenu, setOpenDomainSubmenu] = useState<string | null>(null);
+   const domainMenuRef = useRef<HTMLDivElement>(null);
+   const validationMenuRef = useRef<HTMLDivElement>(null);
+   const archiveMenuRef = useRef<HTMLDivElement>(null);
+@@ -49,15 +72,23 @@ export function NavTabs() {
+     isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
+   );
+ 
++  const isMenuItemActive = (item: MenuItem) => (
++    isMenuGroupItem(item)
++      ? item.children.some((child) => isTabActive(child.path, child.aliases ?? []))
++      : isTabActive(item.path, item.aliases ?? [])
++  );
++
+   const isHomeActive = location.pathname === '/';
+-  const isDomainsActive = domainMenuItems.some((item) => isTabActive(item.path));
++  const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
+   const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
+   const isArchiveActive = archiveMenuItems.some((item) => isTabActive(item.path, item.aliases));
+ 
+   useEffect(() => {
++    const activeDomainSubmenu = domainMenuItems.find((item) => isMenuGroupItem(item) && isMenuItemActive(item));
+     setIsDomainsMenuOpen(false);
+     setIsValidationMenuOpen(false);
+     setIsArchiveMenuOpen(false);
++    setOpenDomainSubmenu(activeDomainSubmenu && isMenuGroupItem(activeDomainSubmenu) ? activeDomainSubmenu.name : null);
+   }, [location.pathname]);
+ 
+   useClickOutside(domainMenuRef, () => {
+@@ -89,7 +120,7 @@ export function NavTabs() {
+     label: string,
+     path: string,
+     icon: React.ComponentType<{ className?: string }>,
+-    items: Array<{ name: string; path: string; aliases?: string[] }>,
++    items: MenuItem[],
+     isActive: boolean,
+     isOpen: boolean,
+     setOpen: (value: boolean | ((prev: boolean) => boolean)) => void,
+@@ -130,6 +161,40 @@ export function NavTabs() {
+         <div className={`absolute left-0 top-full z-50 min-w-[200px] pt-1 transition-all duration-150 ${isOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}>
+           <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
+             {items.map((item) => {
++              if (isMenuGroupItem(item)) {
++                const isSubmenuOpen = openDomainSubmenu === item.name || isMenuItemActive(item);
++                return (
++                  <div key={item.name} className="border-t border-gray-800/80 mt-1 pt-1">
++                    <button
++                      type="button"
++                      onClick={() => {
++                        setOpenDomainSubmenu((prev) => (prev === item.name ? null : item.name));
++                      }}
++                      className={`flex w-full items-center justify-between px-3 py-2 text-sm ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
++                    >
++                      <span>{item.name}</span>
++                      <ChevronDown className={`w-4 h-4 transition-transform ${isSubmenuOpen ? 'rotate-180' : ''}`} />
++                    </button>
++                    {isSubmenuOpen ? (
++                      <div className="pb-1">
++                        {item.children.map((child) => {
++                          const childActive = isTabActive(child.path, child.aliases ?? []);
++                          return (
++                            <NavLink
++                              key={child.path}
++                              to={child.path}
++                              className={`block px-6 py-2 text-sm ${childActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/70 hover:bg-gray-800 hover:text-white'}`}
++                            >
++                              {child.name}
++                            </NavLink>
++                          );
++                        })}
++                      </div>
++                    ) : null}
++                  </div>
++                );
++              }
++
+               const itemActive = isTabActive(item.path, item.aliases ?? []);
+               return (
+                 <NavLink
+diff --git a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+index 4a8d4d9..1eb1fa7 100644
+--- a/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
++++ b/cloud/apps/web/tests/components/layout/MobileNav.test.tsx
+@@ -31,10 +31,15 @@ describe('MobileNav Component', () => {
+     await renderMobileNav('/domains');
+ 
+     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
+-    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
+-    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
+     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
+     expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
++    expect(screen.getByRole('link', { name: 'Trials' })).toHaveAttribute('href', '/runs');
++    expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
++    expect(screen.getByText('Domain Setup')).toBeInTheDocument();
++    expect(screen.getByRole('link', { name: 'Preamble' })).toHaveAttribute('href', '/preambles');
++    expect(screen.getByRole('link', { name: 'Context' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
+   });
+ 
+   it('keeps the validation compatibility links nested under Validation', async () => {
+@@ -67,4 +72,11 @@ describe('MobileNav Component', () => {
+     expect(screen.getByRole('link', { name: 'Archive' }).className).not.toContain('border-teal-500');
+     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('border-teal-500');
+   });
++
++  it('highlights the nested domain setup route on domain setup compatibility routes', async () => {
++    await renderMobileNav('/domain-contexts');
++
++    expect(screen.getByRole('link', { name: 'Domains' }).className).not.toContain('border-teal-500');
++    expect(screen.getByRole('link', { name: 'Context' }).className).toContain('border-teal-500');
++  });
+ });
+diff --git a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+index 7ce2efb..c474211 100644
+--- a/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
++++ b/cloud/apps/web/tests/components/layout/NavTabs.test.tsx
+@@ -1,5 +1,6 @@
+ import { describe, it, expect } from 'vitest';
+ import { render, screen } from '@testing-library/react';
++import userEvent from '@testing-library/user-event';
+ import { MemoryRouter } from 'react-router-dom';
+ import { NavTabs } from '../../../src/components/layout/NavTabs';
+ 
+@@ -11,6 +12,10 @@ function renderNavTabs(initialRoute = '/') {
+   );
+ }
+ 
++async function openMenu(label: string) {
++  await userEvent.click(screen.getByRole('button', { name: `Toggle ${label} menu` }));
++}
++
+ describe('NavTabs Component', () => {
+   it('renders the new top-level navigation tabs', () => {
+     renderNavTabs();
+@@ -23,21 +28,27 @@ describe('NavTabs Component', () => {
+     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+   });
+ 
+-  it('keeps the domain compatibility links available from the domains menu', () => {
++  it('keeps the domain compatibility links available from the domains menu', async () => {
+     renderNavTabs('/domains');
++    await openMenu('Domains');
+ 
+     expect(screen.getByRole('link', { name: 'Vignettes' })).toHaveAttribute('href', '/definitions');
+-    expect(screen.getByRole('link', { name: 'New Vignette' })).toHaveAttribute('href', '/job-choice/new');
+-    expect(screen.getByRole('link', { name: 'Preambles' })).toHaveAttribute('href', '/preambles');
+-    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
+-    expect(screen.getByRole('link', { name: 'Domain Contexts' })).toHaveAttribute('href', '/domain-contexts');
+-    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
+     expect(screen.getByRole('link', { name: 'Domain Analysis' })).toHaveAttribute('href', '/domains/analysis');
+     expect(screen.getByRole('link', { name: 'Coverage' })).toHaveAttribute('href', '/domains/coverage');
++    expect(screen.getByRole('link', { name: 'Trials' })).toHaveAttribute('href', '/runs');
++    expect(screen.queryByRole('link', { name: 'New Vignette' })).not.toBeInTheDocument();
++
++    await userEvent.click(screen.getByRole('button', { name: 'Domain Setup' }));
++
++    expect(screen.getByRole('link', { name: 'Preamble' })).toHaveAttribute('href', '/preambles');
++    expect(screen.getByRole('link', { name: 'Context' })).toHaveAttribute('href', '/domain-contexts');
++    expect(screen.getByRole('link', { name: 'Value Statements' })).toHaveAttribute('href', '/value-statements');
++    expect(screen.getByRole('link', { name: 'Level Presets' })).toHaveAttribute('href', '/level-presets');
+   });
+ 
+-  it('keeps the validation compatibility links available from the validation menu', () => {
++  it('keeps the validation compatibility links available from the validation menu', async () => {
+     renderNavTabs('/assumptions/analysis');
++    await openMenu('Validation');
+ 
+     expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
+     expect(
+@@ -46,15 +57,17 @@ describe('NavTabs Component', () => {
+     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
+   });
+ 
+-  it('keeps the archive compatibility links available from the archive menu', () => {
++  it('keeps the archive compatibility links available from the archive menu', async () => {
+     renderNavTabs('/archive');
++    await openMenu('Archive');
+ 
+     expect(screen.getByRole('link', { name: 'Legacy Survey Work' })).toHaveAttribute('href', '/archive/surveys');
+     expect(screen.getByRole('link', { name: 'Legacy Survey Results' })).toHaveAttribute('href', '/archive/survey-results');
+   });
+ 
+-  it('highlights Validation on validation compatibility routes', () => {
++  it('highlights Validation on validation compatibility routes', async () => {
+     renderNavTabs('/assumptions/analysis');
++    await openMenu('Validation');
+ 
+     expect(screen.getByRole('link', { name: 'Validation' }).parentElement?.className).toContain('border-teal-500');
+     expect(
+@@ -64,8 +77,9 @@ describe('NavTabs Component', () => {
+     ).toBe(true);
+   });
+ 
+-  it('highlights Archive on archive compatibility routes', () => {
++  it('highlights Archive on archive compatibility routes', async () => {
+     renderNavTabs('/archive/surveys');
++    await openMenu('Archive');
+ 
+     expect(screen.getByRole('link', { name: 'Archive' }).parentElement?.className).toContain('border-teal-500');
+     expect(screen.getByRole('link', { name: 'Legacy Survey Work' }).className).toContain('bg-teal-600/20');

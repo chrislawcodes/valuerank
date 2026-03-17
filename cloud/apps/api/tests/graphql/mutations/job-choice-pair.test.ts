@@ -261,6 +261,9 @@ describe('GraphQL Job Choice Pair Mutations', () => {
     const updatedB = definitions.find((definition) => definition.id === bFirstId)!;
     const firstScenarioA = updatedA.scenarios[0]!.content as Record<string, unknown>;
     const firstScenarioB = updatedB.scenarios[0]!.content as Record<string, unknown>;
+    const updatedAContent = updatedA.content as {
+      dimensions?: Array<{ name: string; levels?: Array<{ score: number; label: string }> }>;
+    };
 
     expect(firstScenarioA.prompt).not.toContain('[level]');
     expect(firstScenarioB.prompt).not.toContain('[level]');
@@ -272,5 +275,115 @@ describe('GraphQL Job Choice Pair Mutations', () => {
       care: expect.any(String),
       freedom: expect.any(String),
     });
+    expect(updatedAContent.dimensions?.[0]?.levels).toEqual([
+      { score: 1, label: 'very low' },
+      { score: 2, label: 'low' },
+      { score: 3, label: 'medium' },
+      { score: 4, label: 'high' },
+      { score: 5, label: 'very high' },
+    ]);
+    expect(updatedAContent.dimensions?.[1]?.levels).toEqual([
+      { score: 1, label: 'very low' },
+      { score: 2, label: 'low' },
+      { score: 3, label: 'medium' },
+      { score: 4, label: 'high' },
+      { score: 5, label: 'very high' },
+    ]);
+  });
+
+  it('normalizes legacy DB value-statement bodies to canonical [level] narratives when creating a pair', async () => {
+    const domain = await db.domain.create({
+      data: { name: 'Legacy Narrative Domain', normalizedName: `legacy-narrative-domain-${Date.now()}` },
+    });
+    createdDomainIds.push(domain.id);
+
+    const context = await db.domainContext.create({
+      data: { domainId: domain.id, text: 'A mid-level professional has been offered two distinct roles.' },
+    });
+    createdContextIds.push(context.id);
+
+    const dependability = await db.valueStatement.create({
+      data: {
+        domainId: domain.id,
+        token: 'benevolence_dependability',
+        body: 'trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities',
+      },
+    });
+    const achievement = await db.valueStatement.create({
+      data: {
+        domainId: domain.id,
+        token: 'achievement',
+        body: 'recognition of their expertise because of how it relates to success through strong performance',
+      },
+    });
+    createdValueIds.push(dependability.id, achievement.id);
+
+    const levelPreset = await db.levelPreset.create({
+      data: { name: `Legacy Narrative Levels ${Date.now()}` },
+    });
+    createdLevelPresetIds.push(levelPreset.id);
+
+    const levelPresetVersion = await db.levelPresetVersion.create({
+      data: {
+        levelPresetId: levelPreset.id,
+        version: 'v1',
+        l1: 'negligible',
+        l2: 'low',
+        l3: 'moderate',
+        l4: 'high',
+        l5: 'full',
+      },
+    });
+    createdLevelPresetVersionIds.push(levelPresetVersion.id);
+
+    const createResponse = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: CREATE_JOB_CHOICE_PAIR_MUTATION,
+        variables: {
+          input: {
+            name: 'Dependability vs Achievement',
+            domainId: domain.id,
+            contextId: context.id,
+            valueFirstId: dependability.id,
+            valueSecondId: achievement.id,
+            levelPresetVersionId: levelPresetVersion.id,
+          },
+        },
+      });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+
+    const aFirstId = createResponse.body.data.createJobChoicePair.aFirst.id as string;
+    const bFirstId = createResponse.body.data.createJobChoicePair.bFirst.id as string;
+    createdDefinitionIds.push(aFirstId, bFirstId);
+
+    const definitions = await db.definition.findMany({
+      where: { id: { in: [aFirstId, bFirstId] } },
+      include: { scenarios: { orderBy: { name: 'asc' } } },
+      orderBy: { id: 'asc' },
+    });
+
+    const contentA = definitions[0]!.content as {
+      template: string;
+      components: {
+        value_first: { body: string };
+        value_second: { body: string };
+      };
+    };
+    const scenarioA = definitions[0]!.scenarios[0]!.content as {
+      prompt: string;
+      dimension_values: Record<string, string>;
+    };
+
+    expect(contentA.template).toContain('[level] trust from other people');
+    expect(contentA.template).toContain('[level] recognition of their expertise');
+    expect(contentA.components.value_first.body).toContain('[level] trust from other people');
+    expect(contentA.components.value_second.body).toContain('[level] recognition of their expertise');
+    expect(scenarioA.prompt).not.toContain('[level]');
+    expect(scenarioA.prompt).toContain(String(scenarioA.dimension_values.benevolence_dependability));
+    expect(scenarioA.prompt).toContain(String(scenarioA.dimension_values.achievement));
   });
 });
