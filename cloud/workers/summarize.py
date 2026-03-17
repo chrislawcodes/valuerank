@@ -80,6 +80,9 @@ STRUCTURED_DECISION_PATTERNS = [
 # Fallback pattern to find positive integer ratings - less reliable
 FALLBACK_RATING_PATTERN = re.compile(r"\b([1-9]\d*)\b")
 RANGE_PATTERN = re.compile(r"([1-9]\d*)\s*(?:-|–|—|to)\s*([1-9]\d*)", re.IGNORECASE)
+# Word-count parentheticals appended by some models, e.g. "(5 words)" or "(152 words)".
+# Must be stripped before fallback numeric scanning to avoid false code matches.
+WORD_COUNT_SUFFIX_PATTERN = re.compile(r"\(\s*\d+\s+words?\s*\)", re.IGNORECASE)
 AMBIGUOUS_SUFFIX_PATTERN = re.compile(r"^\s*(?:and|or|/|,)\s*([1-9]\d*)\b", re.IGNORECASE)
 LEADING_BARE_NUMBER_PATTERN = re.compile(r"^\s*([1-9]\d*)\s*(?:[.!?])?\s*$", re.IGNORECASE)
 
@@ -355,6 +358,10 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
 
     # Remove numeric ranges (e.g., "1-6", "1 to 6") before fallback scanning.
     sanitized_text = RANGE_PATTERN.sub(" ", sanitized_markdown_text)
+    # Strip word-count parentheticals like "(5 words)" before fallback scanning.
+    # Some models append these as metadata; a coincidentally valid code would cause
+    # a false positive that the out-of-range guard cannot catch.
+    sanitized_text = WORD_COUNT_SUFFIX_PATTERN.sub(" ", sanitized_text)
 
     fallback_matches = [m.group(1) for m in FALLBACK_RATING_PATTERN.finditer(sanitized_text)]
     if not fallback_matches:

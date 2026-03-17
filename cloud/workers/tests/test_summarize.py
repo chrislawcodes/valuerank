@@ -960,6 +960,40 @@ class TestRunSummarize:
         # Must NOT be 152
         assert result["decisionCode"] != "152"
 
+    def test_word_count_suffix_with_valid_code_does_not_produce_false_positive(self) -> None:
+        """(N words) where N coincidentally equals a valid scale code must not be returned."""
+        from summarize import extract_decision_result
+
+        # Response has no explicit decision + "(5 words)" trailer where 5 is a valid code.
+        # Before the strip fix, the fallback scan would match 5 from the trailer
+        # and the out-of-range guard would pass it (5 IS valid), producing a wrong result.
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "5 - Strongly support taking the job with recognition of their expertise\n"
+                        "4 - Somewhat support taking the job with recognition of their expertise\n"
+                        "3 - Neutral / Unsure\n"
+                        "2 - Somewhat support taking the job with trust from other people\n"
+                        "1 - Strongly support taking the job with trust from other people"
+                    ),
+                    "targetResponse": (
+                        "Level of Support: Somewhat support taking the job with trust from other people\n\n"
+                        "Trust fosters collaboration. (5 words)"
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        # Should resolve via label match ("...trust from other people" → code 2),
+        # NOT return 5 from the word-count trailer.
+        assert result["decisionCode"] == "2"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionCode"] != "5"
+
     @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
     def test_uses_default_model(
