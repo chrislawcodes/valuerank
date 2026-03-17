@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/tests/components/layout/NavTabs.test.tsx",
+    "cloud/apps/web/tests/components/layout/MobileNav.test.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/layout/NavTabs.tsx",
+    "cloud/apps/web/src/components/layout/MobileNav.tsx",
+    "cloud/apps/web/tests/components/layout/NavTabs.test.tsx",
+    "cloud/apps/web/tests/components/layout/MobileNav.test.tsx",
+    "docs/workflows/domain-dropdown-cleanup"
+  ]
+}
