@@ -1,0 +1,70 @@
+import type { DefinitionComponents, DefinitionContent } from '@valuerank/db';
+import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/shared';
+
+type JobChoiceContentLike = Pick<DefinitionContent, 'template' | 'components' | 'methodology'>;
+
+const ROLE_SENTENCE_PREFIX = 'In one role, this job offers ';
+
+function extractJobChoiceIntro(template: string): string | null {
+  if (template.startsWith(ROLE_SENTENCE_PREFIX)) {
+    return '';
+  }
+
+  const marker = `\n\n${ROLE_SENTENCE_PREFIX}`;
+  const markerIndex = template.indexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  return template.slice(0, markerIndex).trimEnd();
+}
+
+export function normalizeJobChoiceComponents(components: DefinitionComponents): DefinitionComponents {
+  const normalizedFirstBody =
+    getJobChoiceValueStatementBody(components.value_first.token) ?? components.value_first.body;
+  const normalizedSecondBody =
+    getJobChoiceValueStatementBody(components.value_second.token) ?? components.value_second.body;
+
+  return {
+    ...components,
+    value_first: {
+      ...components.value_first,
+      body: normalizedFirstBody,
+    },
+    value_second: {
+      ...components.value_second,
+      body: normalizedSecondBody,
+    },
+  };
+}
+
+function isJobChoiceContentLike(content: unknown): content is JobChoiceContentLike {
+  return typeof content === 'object' && content !== null;
+}
+
+export function normalizeJobChoiceDefinitionContent<T>(content: T): T {
+  if (!isJobChoiceContentLike(content)) {
+    return content;
+  }
+
+  if (content.methodology?.family !== 'job-choice' || content.components == null) {
+    return content;
+  }
+
+  const intro = extractJobChoiceIntro(content.template);
+  if (intro == null) {
+    return {
+      ...content,
+      components: normalizeJobChoiceComponents(content.components),
+    } as T;
+  }
+
+  const normalizedComponents = normalizeJobChoiceComponents(content.components);
+  const normalizedTemplate = assembleTemplate(intro, normalizedComponents);
+
+  return {
+    ...content,
+    template: normalizedTemplate,
+    components: normalizedComponents,
+  } as T;
+}

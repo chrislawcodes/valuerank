@@ -6,7 +6,7 @@ import {
   type Prisma,
   type ScenarioContent,
 } from '@valuerank/db';
-import { assembleTemplate } from '@valuerank/shared';
+import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/shared';
 import { builder } from '../builder.js';
 import { DefinitionRef } from '../types/refs.js';
 import type { DefinitionShape } from '../types/refs.js';
@@ -299,6 +299,15 @@ async function resolveJobChoicePairInputs(input: {
     }
   }
 
+  const normalizedValueFirst = {
+    ...valueFirst,
+    body: getJobChoiceValueStatementBody(valueFirst.token) ?? valueFirst.body,
+  };
+  const normalizedValueSecond = {
+    ...valueSecond,
+    body: getJobChoiceValueStatementBody(valueSecond.token) ?? valueSecond.body,
+  };
+
   return {
     domainId,
     contextId,
@@ -308,8 +317,8 @@ async function resolveJobChoicePairInputs(input: {
     resolvedLevelPresetVersionId,
     levelPresetVersion,
     context,
-    valueFirst,
-    valueSecond,
+    valueFirst: normalizedValueFirst,
+    valueSecond: normalizedValueSecond,
   } satisfies ResolvedPairInputs;
 }
 
