@@ -81,6 +81,7 @@ STRUCTURED_DECISION_PATTERNS = [
 FALLBACK_RATING_PATTERN = re.compile(r"\b([1-9]\d*)\b")
 RANGE_PATTERN = re.compile(r"([1-9]\d*)\s*(?:-|–|—|to)\s*([1-9]\d*)", re.IGNORECASE)
 AMBIGUOUS_SUFFIX_PATTERN = re.compile(r"^\s*(?:and|or|/|,)\s*([1-9]\d*)\b", re.IGNORECASE)
+LEADING_BARE_NUMBER_PATTERN = re.compile(r"^\s*([1-9]\d*)\s*(?:[.!?])?\s*$", re.IGNORECASE)
 
 # Heuristics for detecting responses that are about the user ("you/your")
 # rather than a self-rating from the target AI.
@@ -102,21 +103,20 @@ REFUSAL_PATTERN = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+LEADING_DECISION_PREFIX_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)"
+    r"(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*"
+    r"|in\s+short\s*[:,-]?\s*"
+    r"|overall\s*[:,-]?\s*"
+    r")",
+    re.IGNORECASE,
+)
 
 # Default summary model if none specified
 DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
 LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
 PARSER_VERSION = "job-choice-v2"
-
-# Choice-context inline pattern: label must be immediately preceded by a choice-indicating word/phrase.
-# Used as a second phase in extract_text_label_decision() to handle preamble-on-same-line responses.
-CHOICE_CONTEXT_INLINE_PATTERN = re.compile(
-    r"\b(?:choose|chose|choosing|select(?:ing|ed)?|pick(?:ing|ed)?|"
-    r"recommend(?:ing)?|preferr?(?:ing|ed)?|go\s+with|"
-    r"answer\s*(?:is|:)|choice\s*(?:is|:)?|my\s+(?:choice|selection|recommendation)|"
-    r"i(?:'d|\s+would)?\s+say)\s*:?\s*",
-    re.IGNORECASE,
-)
 
 
 def validate_input(data: dict[str, Any]) -> None:
@@ -172,6 +172,43 @@ def response_segments(text: str) -> list[str]:
     return segments
 
 
+def strip_leading_decision_prefix(text: str) -> str:
+    if not text:
+        return ""
+
+    stripped = text.replace("**", "").replace("__", "").replace("`", "").strip()
+    previous = None
+    while stripped and stripped != previous:
+        previous = stripped
+        stripped = LEADING_DECISION_PREFIX_PATTERN.sub("", stripped, count=1).strip()
+    return stripped
+
+
+def leading_response_candidates(text: str) -> list[tuple[str, bool]]:
+    if not text:
+        return []
+
+    candidates: list[tuple[str, bool]] = []
+    lines = [line.strip() for line in re.split(r"[\n\r]+", text) if line.strip()]
+    segments = response_segments(text)
+
+    for candidate in [
+        lines[0] if lines else "",
+        segments[0] if segments else "",
+    ]:
+        if not candidate:
+            continue
+        stripped = strip_leading_decision_prefix(candidate)
+        for value, used_prefix_stripping in [
+            (candidate, False),
+            (stripped, stripped != candidate),
+        ]:
+            if value and not any(existing == value for existing, _ in candidates):
+                candidates.append((value, used_prefix_stripping))
+
+    return candidates
+
+
 def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, str]]:
     turns = transcript_content.get("turns", [])
     for turn in turns:
@@ -212,13 +249,13 @@ def collect_scale_labels(transcript_content: dict[str, Any]) -> list[dict[str, s
     return []
 
 
-def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str], str]:
+def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -> tuple[Optional[str], Optional[str]]:
     if not text or not scale_labels:
-        return None, None, "text_label_exact"
+        return None, None
 
     segments = response_segments(text)
     if not segments:
-        return None, None, "text_label_exact"
+        return None, None
 
     normalized_labels = [
         {
@@ -248,25 +285,30 @@ def extract_text_label_decision(text: str, scale_labels: list[dict[str, str]]) -
         unique_prefix_matches = list({entry["code"]: entry for entry in prefix_matches}.values())
         if len(unique_prefix_matches) == 1:
             match = unique_prefix_matches[0]
-            return match["code"], match["label"], "text_label_exact"
+            return match["code"], match["label"]
         if len(unique_prefix_matches) > 1:
-            return None, None, "text_label_exact"
+            return None, None
 
-    # Phase 2: choice-context substring matching.
-    # Check if any scale label appears immediately after a choice-indicating word in the full response.
-    normalized_full = normalize_for_match(text)
-    choice_context_matches = []
-    for entry in normalized_labels:
-        if not entry["normalized"]:
-            continue
-        combined = CHOICE_CONTEXT_INLINE_PATTERN.pattern + re.escape(entry["normalized"])
-        if re.search(combined, normalized_full, re.IGNORECASE):
-            choice_context_matches.append(entry)
-    if len(choice_context_matches) == 1:
-        match = choice_context_matches[0]
-        return match["code"], match["label"], "text_label_choice_context"
+    return None, None
 
-    return None, None, "text_label_exact"
+
+def extract_leading_decision_code(text: str) -> Optional[str]:
+    for candidate, _used_prefix_stripping in leading_response_candidates(text):
+        decision_code = extract_explicit_leading_decision_code(candidate)
+        if decision_code is not None:
+            return decision_code
+    return None
+
+
+def extract_leading_text_label_decision(
+    text: str, scale_labels: list[dict[str, str]]
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    for candidate, used_prefix_stripping in leading_response_candidates(text):
+        decision_code, matched_label = extract_text_label_decision(candidate, scale_labels)
+        if decision_code is not None:
+            parse_path = "text_label_leading" if used_prefix_stripping else "text_label_exact"
+            return decision_code, matched_label, parse_path
+    return None, None, None
 
 
 def extract_decision_code_from_text(text: str) -> Optional[str]:
@@ -287,6 +329,9 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
     # First, try structured "Rating: X" format (most reliable)
     structured_match = STRUCTURED_RATING_PATTERN.search(sanitized_markdown_text)
     if structured_match:
+        suffix = sanitized_markdown_text[structured_match.end():structured_match.end() + 24]
+        if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+            return None
         return structured_match.group(1)
 
     # Next, look for common explicit decision formats.
@@ -330,6 +375,53 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
         return None
 
     return unique_values[0]
+
+    return None
+
+
+def extract_explicit_leading_decision_code(text: str) -> Optional[str]:
+    """
+    Extract a decision from a leading candidate only when the candidate contains
+    an explicit decision signal.
+
+    This intentionally avoids the broad fallback number scan used for whole-response
+    parsing, because opening lines often contain contextual numbers that are not
+    the final decision.
+    """
+    if not text:
+        return None
+
+    sanitized_markdown_text = text.replace("**", "").replace("__", "").replace("`", "")
+
+    structured_match = STRUCTURED_RATING_PATTERN.search(sanitized_markdown_text)
+    if structured_match:
+        suffix = sanitized_markdown_text[structured_match.end():structured_match.end() + 24]
+        if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+            return None
+        return structured_match.group(1)
+
+    for pattern in STRUCTURED_DECISION_PATTERNS:
+        matches = []
+        for match in pattern.finditer(sanitized_markdown_text):
+            suffix = sanitized_markdown_text[match.end():match.end() + 24]
+            if AMBIGUOUS_SUFFIX_PATTERN.search(suffix):
+                return None
+            matches.append(match.group(1))
+        if not matches:
+            continue
+        unique_values = list(dict.fromkeys(matches))
+        if len(unique_values) == 1:
+            return unique_values[0]
+        return None
+
+    bare_number_match = LEADING_BARE_NUMBER_PATTERN.match(sanitized_markdown_text)
+    if bare_number_match:
+        return bare_number_match.group(1)
+
+    if REFUSAL_PATTERN.search(text):
+        return "refusal"
+
+    return None
 
 
 def extract_decision_code(transcript_content: dict[str, Any]) -> str:
@@ -422,27 +514,33 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
     response_hash = hashlib.sha256(response_text.encode("utf-8")).hexdigest() if response_text else None
     scale_labels = collect_scale_labels(transcript_content)
 
-    decision_code = extract_decision_code(transcript_content)
+    leading_decision_code = extract_leading_decision_code(response_text)
+    decision_code = leading_decision_code or extract_decision_code(transcript_content)
     decision_source = "deterministic"
     parse_class = "exact"
-    parse_path = "numeric_deterministic"
+    parse_path = "numeric_leading" if leading_decision_code is not None else "numeric_deterministic"
     matched_label = None
 
     if decision_code == "other" and scale_labels:
-        text_label_code, matched_label, text_label_parse_path = extract_text_label_decision(response_text, scale_labels)
+        text_label_code, matched_label, leading_text_label_path = extract_leading_text_label_decision(response_text, scale_labels)
         if text_label_code is not None:
             decision_code = text_label_code
-            parse_path = text_label_parse_path
+            parse_path = leading_text_label_path or "text_label_exact"
         else:
-            llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
-            if llm_decision_code != "other":
-                decision_code = llm_decision_code
-                decision_source = "llm"
-                parse_class = "fallback_resolved"
-                parse_path = "text_label_llm"
+            text_label_code, matched_label = extract_text_label_decision(response_text, scale_labels)
+            if text_label_code is not None:
+                decision_code = text_label_code
+                parse_path = "text_label_exact"
             else:
-                parse_class = "ambiguous"
-                parse_path = "text_label_ambiguous"
+                llm_decision_code = classify_decision_with_llm(transcript_content, scale_labels)
+                if llm_decision_code != "other":
+                    decision_code = llm_decision_code
+                    decision_source = "llm"
+                    parse_class = "fallback_resolved"
+                    parse_path = "text_label_llm"
+                else:
+                    parse_class = "ambiguous"
+                    parse_path = "text_label_ambiguous"
     elif decision_code == "other":
         llm_decision_code = classify_decision_with_llm(transcript_content)
         if llm_decision_code != "other":
@@ -498,7 +596,7 @@ def run_summarize(data: dict[str, Any]) -> dict[str, Any]:
         decision_metadata = decision_result["decisionMetadata"]
 
         # Log appropriate message based on what we found (or didn't find)
-        if decision_metadata["parsePath"] in ("text_label_exact", "text_label_choice_context"):
+        if decision_metadata["parsePath"] in {"text_label_exact", "text_label_leading"}:
             log.info(
                 "Resolved decision code from text scale label",
                 transcriptId=transcript_id,

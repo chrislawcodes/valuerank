@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py",
+    "docs/workflows/top-of-response-decision-parser"
+  ]
+}
