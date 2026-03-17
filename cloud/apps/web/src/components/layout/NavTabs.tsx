@@ -165,16 +165,17 @@ export function NavTabs() {
                 const isSubmenuOpen = openDomainSubmenu === item.name || isMenuItemActive(item);
                 return (
                   <div key={item.name} className="border-t border-gray-800/80 mt-1 pt-1">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       onClick={() => {
                         setOpenDomainSubmenu((prev) => (prev === item.name ? null : item.name));
                       }}
-                      className={`flex w-full items-center justify-between px-3 py-2 text-sm ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+                      className={`flex w-full h-auto min-h-0 items-center justify-between rounded-none px-3 py-2 font-normal text-sm ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300 hover:bg-teal-600/20 hover:text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
                     >
                       <span>{item.name}</span>
                       <ChevronDown className={`w-4 h-4 transition-transform ${isSubmenuOpen ? 'rotate-180' : ''}`} />
-                    </button>
+                    </Button>
                     {isSubmenuOpen ? (
                       <div className="pb-1">
                         {item.children.map((child) => {
