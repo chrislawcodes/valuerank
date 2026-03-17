@@ -235,6 +235,74 @@ describe('DefinitionDetail', () => {
         expect(screen.getByText(/Test template/)).toBeInTheDocument();
       });
     });
+
+    it('shows a shared level scale for job-choice definitions with identical preset levels', async () => {
+      const client = createMockClient({
+        definition: {
+          id: 'job-choice-scale',
+          name: 'Dependability vs Achievement',
+          levelPresetVersionId: 'preset-1',
+          content: {
+            schema_version: 1,
+            template: [
+              'A mid-level professional has been offered two distinct roles.',
+              '',
+              'In one role, this job offers [level] trust from other people because of how it relates to being someone others can rely on to carry through on shared responsibilities.',
+              '',
+              'In the other role, this job offers [level] recognition of their expertise because of how it relates to success through strong performance.',
+            ].join('\n'),
+            dimensions: [
+              {
+                name: 'benevolence_dependability',
+                levels: [
+                  { score: 1, label: 'negligible' },
+                  { score: 2, label: 'low' },
+                  { score: 3, label: 'moderate' },
+                  { score: 4, label: 'high' },
+                  { score: 5, label: 'full' },
+                ],
+              },
+              {
+                name: 'achievement',
+                levels: [
+                  { score: 1, label: 'negligible' },
+                  { score: 2, label: 'low' },
+                  { score: 3, label: 'moderate' },
+                  { score: 4, label: 'high' },
+                  { score: 5, label: 'full' },
+                ],
+              },
+            ],
+            methodology: {
+              family: 'job-choice',
+              presentation_order: 'A_first',
+              pair_key: 'pair-1',
+            },
+          },
+          parentId: null,
+          runCount: 0,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-15T10:00:00Z',
+          tags: [],
+          parent: null,
+          children: [],
+        },
+      });
+
+      renderDefinitionDetail('job-choice-scale', client);
+
+      await waitFor(() => {
+        expect(screen.getByText(/In one role, this job offers \[level\] trust from other people/)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Level Scale')).toBeInTheDocument();
+      expect(screen.getByText('Applies to all values in this vignette')).toBeInTheDocument();
+      expect(screen.queryByText('Attributes (2)')).not.toBeInTheDocument();
+      expect(screen.queryByText('[benevolence_dependability]')).not.toBeInTheDocument();
+      expect(screen.queryByText('[achievement]')).not.toBeInTheDocument();
+      expect(screen.getAllByText('negligible')).toHaveLength(1);
+      expect(screen.getAllByText('full')).toHaveLength(1);
+    });
   });
 
   describe('edit mode', () => {

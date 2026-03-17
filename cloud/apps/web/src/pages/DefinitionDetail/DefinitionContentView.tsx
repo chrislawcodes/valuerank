@@ -19,6 +19,34 @@ export function DefinitionContentView({ content, preambleVersion }: DefinitionCo
   }
 
   const { preamble = '', template = '', dimensions = [] } = content;
+  const isJobChoice = content.methodology?.family === 'job-choice';
+  const sharedScaleSignature = dimensions[0] == null
+    ? null
+    : JSON.stringify({
+        levels: dimensions[0].levels?.map((level) => ({
+          score: level.score,
+          label: level.label,
+          description: level.description,
+          options: level.options,
+        })) ?? null,
+        values: dimensions[0].values ?? null,
+      });
+  const hasSharedScale =
+    isJobChoice &&
+    dimensions.length > 0 &&
+    sharedScaleSignature != null &&
+    dimensions.every((dimension) =>
+      JSON.stringify({
+        levels: dimension.levels?.map((level) => ({
+          score: level.score,
+          label: level.label,
+          description: level.description,
+          options: level.options,
+        })) ?? null,
+        values: dimension.values ?? null,
+      }) === sharedScaleSignature,
+    );
+  const sharedScale = hasSharedScale ? dimensions[0] : null;
 
   return (
     <div className="space-y-6">
@@ -47,7 +75,55 @@ export function DefinitionContentView({ content, preambleVersion }: DefinitionCo
       </div>
 
       {/* Dimensions */}
-      {dimensions.length > 0 && (
+      {sharedScale != null && (
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Level Scale</h3>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs uppercase tracking-wide text-gray-500 mb-3">
+              Applies to all values in this vignette
+            </p>
+            <div className="space-y-2">
+              {sharedScale.levels &&
+                sharedScale.levels.length > 0 &&
+                sharedScale.levels.map((level, levelIndex) => (
+                  <div key={levelIndex} className="flex items-start gap-3 text-sm">
+                    <span className="inline-flex px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-medium">
+                      {level.score}
+                    </span>
+                    <div>
+                      <span className="font-medium text-gray-900">{level.label}</span>
+                      {level.description && (
+                        <p className="text-gray-500">{level.description}</p>
+                      )}
+                      {level.options && level.options.length > 0 && (
+                        <p className="text-gray-400 text-xs">
+                          Options: {level.options.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              {(!sharedScale.levels || sharedScale.levels.length === 0) &&
+                sharedScale.values &&
+                sharedScale.values.length > 0 &&
+                sharedScale.values.map((value: string, valueIndex: number) => (
+                  <div key={valueIndex} className="flex items-start gap-3 text-sm">
+                    <span className="inline-flex px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-medium">
+                      {valueIndex + 1}
+                    </span>
+                    <span className="text-gray-900">{value}</span>
+                  </div>
+                ))}
+              {(!sharedScale.levels || sharedScale.levels.length === 0) &&
+                (!sharedScale.values || sharedScale.values.length === 0) && (
+                  <p className="text-gray-400 text-sm italic">No levels defined</p>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dimensions.length > 0 && sharedScale == null && (
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-2">
             Attributes ({dimensions.length})

@@ -18,6 +18,7 @@ import type { TrialConfigSummary, TrialSignatureBreakdown } from '../dataloaders
 import {
   applyLevelPresetToDefinitionContent,
 } from '../../utils/definition-level-preset.js';
+import { normalizeJobChoiceDefinitionContent } from '../../utils/job-choice-definition.js';
 
 // Re-export for backward compatibility
 export { DefinitionRef };
@@ -218,9 +219,10 @@ builder.objectType(DefinitionRef, {
       type: 'JSON',
       description: 'JSONB content with scenario configuration',
       resolve: async (definition, _args, ctx) => {
-        if (definition.levelPresetVersionId == null) return definition.content;
+        const normalizedContent = normalizeJobChoiceDefinitionContent(definition.content);
+        if (definition.levelPresetVersionId == null) return normalizedContent;
         const levelPresetVersion = await ctx.loaders.levelPresetVersion.load(definition.levelPresetVersionId);
-        return applyLevelPresetToDefinitionContent(definition.content, levelPresetVersion);
+        return applyLevelPresetToDefinitionContent(normalizedContent, levelPresetVersion);
       },
     }),
     updatedAt: t.expose('updatedAt', {
@@ -461,9 +463,10 @@ builder.objectType(DefinitionRef, {
       description: 'Fully resolved content after walking ancestor chain. All fields are guaranteed present.',
       resolve: async (definition, _args, ctx) => {
         const resolved = await resolveDefinitionContent(definition.id);
-        if (definition.levelPresetVersionId == null) return resolved.resolvedContent;
+        const normalizedContent = normalizeJobChoiceDefinitionContent(resolved.resolvedContent);
+        if (definition.levelPresetVersionId == null) return normalizedContent;
         const levelPresetVersion = await ctx.loaders.levelPresetVersion.load(definition.levelPresetVersionId);
-        return applyLevelPresetToDefinitionContent(resolved.resolvedContent, levelPresetVersion);
+        return applyLevelPresetToDefinitionContent(normalizedContent, levelPresetVersion);
       },
     }),
 
