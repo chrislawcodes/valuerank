@@ -252,7 +252,8 @@ export function JobChoiceNew() {
     setName('');
     setNameWasAutoSet(false);
     setErrorMessage(null);
-    setSelectedLevelPresetVersionId('');
+    const domain = domains.find((d) => d.id === domainId);
+    setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersionId ?? '');
   }
 
   function handleValueFirstChange(valueId: string) {

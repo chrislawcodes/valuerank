@@ -244,6 +244,7 @@ async function resolveJobChoicePairInputs(input: {
   valueSecondId: string;
   preambleVersionId: string | null;
   levelPresetVersionId: string | null;
+  applyDomainDefault?: boolean;
 }) {
   const {
     domainId,
@@ -252,6 +253,7 @@ async function resolveJobChoicePairInputs(input: {
     valueSecondId,
     preambleVersionId,
     levelPresetVersionId: inputLevelPresetVersionId,
+    applyDomainDefault = false,
   } = input;
 
   if (valueFirstId === valueSecondId) {
@@ -265,7 +267,7 @@ async function resolveJobChoicePairInputs(input: {
     preambleVersionId == null
       ? Promise.resolve(null)
       : db.preambleVersion.findUnique({ where: { id: preambleVersionId } }),
-    db.domain.findUnique({ where: { id: domainId } }),
+    db.domain.findUnique({ where: { id: domainId }, select: { id: true, defaultLevelPresetVersionId: true } }),
   ]);
 
   if (context == null) throw new Error(`DomainContext not found: ${contextId}`);
@@ -285,7 +287,8 @@ async function resolveJobChoicePairInputs(input: {
   }
   if (domain == null) throw new Error(`Domain not found: ${domainId}`);
 
-  const resolvedLevelPresetVersionId = inputLevelPresetVersionId ?? null;
+  const resolvedLevelPresetVersionId =
+    inputLevelPresetVersionId ?? (applyDomainDefault ? (domain.defaultLevelPresetVersionId ?? null) : null);
 
   let levelPresetVersion: ResolvedPairInputs['levelPresetVersion'] = null;
 
@@ -424,6 +427,7 @@ builder.mutationField('createJobChoicePair', (t) =>
         valueSecondId,
         preambleVersionId,
         levelPresetVersionId: inputLevelPresetVersionId,
+        applyDomainDefault: true,
       });
 
       const pairKey = randomUUID();

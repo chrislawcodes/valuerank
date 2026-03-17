@@ -6,6 +6,7 @@ export type Domain = {
   createdAt: string;
   updatedAt: string;
   definitionCount: number;
+  defaultLevelPresetVersionId: string | null;
 };
 
 export const DOMAINS_QUERY = gql`
@@ -16,6 +17,7 @@ export const DOMAINS_QUERY = gql`
       createdAt
       updatedAt
       definitionCount
+      defaultLevelPresetVersionId
     }
   }
 `;
