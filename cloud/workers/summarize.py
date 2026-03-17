@@ -107,6 +107,7 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
     r"^\s*(?:"
     r"(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)"
     r"(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*"
+    r"|level\s+of\s+support\s*[:=]?\s*"
     r"|in\s+short\s*[:,-]?\s*"
     r"|overall\s*[:,-]?\s*"
     r")",
@@ -520,6 +521,14 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
     parse_class = "exact"
     parse_path = "numeric_leading" if leading_decision_code is not None else "numeric_deterministic"
     matched_label = None
+
+    # If scale labels are present and the numeric result is not a valid scale code,
+    # treat it as unresolved so label matching and LLM fallback can run.
+    # This catches false positives like "(152 words)" appended by some models.
+    if scale_labels and decision_code not in {"other", "refusal"}:
+        valid_codes = {entry["code"] for entry in scale_labels if entry.get("code")}
+        if decision_code not in valid_codes:
+            decision_code = "other"
 
     if decision_code == "other" and scale_labels:
         text_label_code, matched_label, leading_text_label_path = extract_leading_text_label_decision(response_text, scale_labels)

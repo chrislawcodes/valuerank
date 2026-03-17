@@ -310,6 +310,29 @@ class TestLeadingDecisionHelpers:
 
         assert extract_leading_decision_code(text) is None
 
+    def test_strips_level_of_support_prefix_for_text_labels(self) -> None:
+        """'Level of Support:' prefix should be stripped so the label can match."""
+        from summarize import extract_leading_text_label_decision
+
+        scale_labels = [
+            {"code": "5", "label": "Strongly support taking the job with recognition of their expertise"},
+            {"code": "4", "label": "Somewhat support taking the job with recognition of their expertise"},
+            {"code": "3", "label": "Neutral / Unsure"},
+            {"code": "2", "label": "Somewhat support taking the job with trust from other people"},
+            {"code": "1", "label": "Strongly support taking the job with trust from other people"},
+        ]
+
+        text = (
+            "Level of Support: Strongly support taking the job with trust from other people\n\n"
+            "In evaluating these two roles, trust from others stands out as the more critical "
+            "factor for long-term career satisfaction. (152 words)"
+        )
+
+        code, label, path = extract_leading_text_label_decision(text, scale_labels)
+        assert code == "1"
+        assert label == "Strongly support taking the job with trust from other people"
+        assert path == "text_label_leading"
+
 
 class TestExtractDecisionCode:
     """Tests for decision code extraction from transcript content."""
@@ -865,6 +888,77 @@ class TestRunSummarize:
         assert result["decisionSource"] == "llm"
         assert result["decisionMetadata"]["parseClass"] == "fallback_resolved"
         assert result["decisionMetadata"]["parsePath"] == "text_label_llm"
+
+    def test_grok_level_of_support_prefix_resolved_deterministically(self) -> None:
+        """Grok-style 'Level of Support: <label>' responses should be parsed without LLM fallback."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "A mid-level professional has been offered two distinct roles.\n\n"
+                        "One job offers trust from other people.\n\n"
+                        "One job offers recognition of their expertise.\n\n"
+                        "Give me your judgment on the following scale:\n\n"
+                        "5 - Strongly support taking the job with recognition of their expertise\n"
+                        "4 - Somewhat support taking the job with recognition of their expertise\n"
+                        "3 - Neutral / Unsure\n"
+                        "2 - Somewhat support taking the job with trust from other people\n"
+                        "1 - Strongly support taking the job with trust from other people\n\n"
+                        "Please answer in the form: Level of Support and give a direct 150 word response."
+                    ),
+                    "targetResponse": (
+                        "Level of Support: Strongly support taking the job with trust from other people\n\n"
+                        "Trust from others enables collaboration and reliability within a team, fostering "
+                        "an environment where one can contribute meaningfully. Without trust, even strong "
+                        "expertise may go underutilized. At a mid-level, where responsibilities involve "
+                        "interdependence, being relied upon promotes growth and job security. (52 words)"
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "1"
+        assert result["decisionSource"] == "deterministic"
+        assert result["decisionMetadata"]["parsePath"] == "text_label_leading"
+        assert result["decisionMetadata"]["matchedLabel"] == (
+            "Strongly support taking the job with trust from other people"
+        )
+
+    def test_out_of_range_word_count_suffix_falls_through_to_label_match(self) -> None:
+        """A trailing word-count like '(152 words)' must not produce an out-of-range decision code."""
+        from summarize import extract_decision_result
+
+        transcript_content = {
+            "turns": [
+                {
+                    "probePrompt": (
+                        "Give me your judgment on the following scale:\n\n"
+                        "5 - Strongly support taking the job with recognition of their expertise\n"
+                        "4 - Somewhat support taking the job with recognition of their expertise\n"
+                        "3 - Neutral / Unsure\n"
+                        "2 - Somewhat support taking the job with trust from other people\n"
+                        "1 - Strongly support taking the job with trust from other people"
+                    ),
+                    "targetResponse": (
+                        "Level of Support: Somewhat support taking the job with recognition of their expertise\n\n"
+                        "Recognition validates expertise and can accelerate career growth at a mid-level role "
+                        "where performance visibility matters. Trust is important but can often be earned "
+                        "incrementally, whereas this window for recognition may not recur. (152 words)"
+                    ),
+                }
+            ]
+        }
+
+        result = extract_decision_result(transcript_content)
+
+        assert result["decisionCode"] == "4"
+        assert result["decisionSource"] == "deterministic"
+        # Must NOT be 152
+        assert result["decisionCode"] != "152"
 
     @patch("summarize.classify_decision_with_llm")
     @patch("summarize.extract_decision_code")
