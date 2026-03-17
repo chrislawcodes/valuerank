@@ -274,6 +274,8 @@ export function TranscriptList({
     });
   }, [dimensionKeys, hasUserChosenSort, sortKeys]);
 
+  const hasDimensionKeys = dimensionKeys.length > 0;
+
   const compareByColumn = useCallback((a: Transcript, b: Transcript, column: SortColumn): number => {
     switch (column.type) {
       case 'scenario':
@@ -358,6 +360,16 @@ export function TranscriptList({
     }
     return sortedGroups;
   }, [transcripts, sortTranscripts]);
+
+  // Auto-expand all model groups when dimension columns are present so users see level data.
+  useEffect(() => {
+    if (!hasDimensionKeys) return;
+    setExpandedModels((prev) => {
+      const next = new Set(Object.keys(groupedTranscripts).sort());
+      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
+      return next;
+    });
+  }, [hasDimensionKeys, groupedTranscripts]);
 
   const scenarioHighlights = useMemo(() => {
     const orderedScenarioIds: string[] = [];
@@ -452,7 +464,7 @@ export function TranscriptList({
       'minmax(140px, 1.2fr)',
       'minmax(160px, 1.4fr)',
       ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
-      'minmax(150px, 0.9fr)',
+      'minmax(220px, 1.4fr)',
       'minmax(90px, 0.7fr)',
       'minmax(90px, 0.7fr)',
     ].join(' ');
@@ -546,7 +558,7 @@ export function TranscriptList({
   const groupedGridTemplateColumns = [
     'minmax(140px, 1.2fr)',
     ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
-    'minmax(150px, 0.9fr)',
+    'minmax(220px, 1.4fr)',
     'minmax(90px, 0.7fr)',
     'minmax(90px, 0.7fr)',
   ].join(' ');
