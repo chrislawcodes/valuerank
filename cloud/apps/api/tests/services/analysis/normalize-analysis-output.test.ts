@@ -119,5 +119,36 @@ describe('normalizeAnalysisArtifacts', () => {
     };
     expect(Object.keys(variance.perModel['gemini-2.5-pro'].perScenario)).toEqual(['scenario-1']);
   });
-});
 
+  it('backfills scenarioDimensions from dimension_values when raw dimensions are absent', () => {
+    const result = normalizeAnalysisArtifacts({
+      visualizationData: {
+        modelScenarioMatrix: {
+          'gemini-2.5-pro': {
+            'Scenario One': 4,
+          },
+        },
+      },
+      varianceAnalysis: null,
+      scenarios: [
+        {
+          id: 'scenario-1',
+          name: 'Scenario One',
+          content: {
+            dimension_values: {
+              Achievement: 'very high',
+              Hedonism: 'low',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(result.visualizationData?.scenarioDimensions).toEqual({
+      'scenario-1': {
+        Achievement: 'very high',
+        Hedonism: 'low',
+      },
+    });
+  });
+});

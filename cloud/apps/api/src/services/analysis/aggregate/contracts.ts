@@ -173,7 +173,7 @@ export type AggregateWorkerTranscript = {
   };
   scenario: {
     name: string;
-    dimensions: Record<string, number>;
+    dimensions: Record<string, number | string>;
   };
 };
 

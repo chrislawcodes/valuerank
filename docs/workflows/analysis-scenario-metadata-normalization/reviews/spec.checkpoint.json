@@ -1,0 +1,25 @@
+{
+  "feature_slug": "analysis-scenario-metadata-normalization",
+  "stage": "spec",
+  "artifact_path": "docs/workflows/analysis-scenario-metadata-normalization/spec.md",
+  "git_base_ref": "origin/main",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "architecture",
+      "stage": "spec",
+      "path": "docs/workflows/analysis-scenario-metadata-normalization/reviews/spec.codex.architecture.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "requirements",
+      "stage": "spec",
+      "path": "docs/workflows/analysis-scenario-metadata-normalization/reviews/spec.gemini.requirements.review.md",
+      "context_paths": []
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

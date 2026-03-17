@@ -488,7 +488,7 @@ describe('analyze-basic integration', () => {
       await handler([createMockJob()]);
 
       const callArgs = vi.mocked(spawnPython).mock.calls[0];
-      const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, number> } }> };
+      const input = callArgs?.[1] as { transcripts: Array<{ scenario: { dimensions: Record<string, number | string> } }> };
 
       // Verify numeric dimensions were extracted from scenario content
       // Both scenario 1 (dimension=1) and scenario 2 (dimension=2) should be present
@@ -500,6 +500,141 @@ describe('analyze-basic integration', () => {
       const dimensionValues = transcriptsWithDimension.map((t) => t.scenario.dimensions['test-dimension']);
       expect(dimensionValues).toContain(1);
       expect(dimensionValues).toContain(2);
+    });
+
+    it('passes string-valued legacy dimensions through to the worker and visualization data', async () => {
+      const scenarioId = 'test-scenario-string-dims-' + Date.now();
+      const transcriptId = 'test-transcript-string-dims-' + Date.now();
+
+      await db.scenario.create({
+        data: {
+          id: scenarioId,
+          definitionId: TEST_IDS.definition,
+          name: 'String Dimensions Scenario',
+          content: { dimensions: { power: '2', conformity: '1' } },
+        },
+      });
+
+      await db.transcript.create({
+        data: {
+          id: transcriptId,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId,
+          decisionCode: '3',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob({ transcriptIds: [transcriptId] })]);
+
+      const callArgs = vi.mocked(spawnPython).mock.calls[0];
+      const input = callArgs?.[1] as {
+        transcripts: Array<{ id: string; scenario: { dimensions: Record<string, number | string> } }>;
+      };
+
+      expect(input.transcripts[0]).toMatchObject({
+        id: transcriptId,
+        scenario: {
+          dimensions: {
+            power: 2,
+            conformity: 1,
+          },
+        },
+      });
+
+      const result = await db.analysisResult.findFirstOrThrow({
+        where: { runId: TEST_IDS.run },
+        orderBy: { createdAt: 'desc' },
+      });
+      const output = result.output as {
+        visualizationData?: {
+          scenarioDimensions?: Record<string, Record<string, string | number>>;
+        };
+      };
+
+      expect(output.visualizationData?.scenarioDimensions?.[scenarioId]).toEqual({
+        power: '2',
+        conformity: '1',
+      });
+
+      await db.analysisResult.deleteMany({ where: { runId: TEST_IDS.run } });
+      await db.transcript.delete({ where: { id: transcriptId } });
+      await db.scenario.delete({ where: { id: scenarioId } });
+    });
+
+    it('uses dimension_values when raw dimensions are absent', async () => {
+      const scenarioId = 'test-scenario-dimension-values-' + Date.now();
+      const transcriptId = 'test-transcript-dimension-values-' + Date.now();
+
+      await db.scenario.create({
+        data: {
+          id: scenarioId,
+          definitionId: TEST_IDS.definition,
+          name: 'Dimension Values Scenario',
+          content: {
+            dimension_values: {
+              autonomy: 'very high',
+              risk: 'low',
+            },
+          },
+        },
+      });
+
+      await db.transcript.create({
+        data: {
+          id: transcriptId,
+          runId: TEST_IDS.run,
+          modelId: 'gpt-4',
+          scenarioId,
+          decisionCode: '4',
+          content: { turns: [] },
+          turnCount: 1,
+          tokenCount: 100,
+          durationMs: 1000,
+        },
+      });
+
+      const handler = createAnalyzeBasicHandler();
+      await handler([createMockJob({ transcriptIds: [transcriptId] })]);
+
+      const callArgs = vi.mocked(spawnPython).mock.calls[0];
+      const input = callArgs?.[1] as {
+        transcripts: Array<{ id: string; scenario: { dimensions: Record<string, number | string> } }>;
+      };
+
+      expect(input.transcripts[0]).toMatchObject({
+        id: transcriptId,
+        scenario: {
+          dimensions: {
+            autonomy: 'very high',
+            risk: 'low',
+          },
+        },
+      });
+
+      const result = await db.analysisResult.findFirstOrThrow({
+        where: { runId: TEST_IDS.run },
+        orderBy: { createdAt: 'desc' },
+      });
+      const output = result.output as {
+        visualizationData?: {
+          scenarioDimensions?: Record<string, Record<string, string | number>>;
+        };
+      };
+
+      expect(output.visualizationData?.scenarioDimensions?.[scenarioId]).toEqual({
+        autonomy: 'very high',
+        risk: 'low',
+      });
+
+      await db.analysisResult.deleteMany({ where: { runId: TEST_IDS.run } });
+      await db.transcript.delete({ where: { id: transcriptId } });
+      await db.scenario.delete({ where: { id: scenarioId } });
     });
 
     it('normalizes value outcomes for flipped orientations before sending to the worker', async () => {

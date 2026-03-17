@@ -27,6 +27,10 @@ import {
   isBaselineCompatibleRun,
 } from './config.js';
 import { aggregateAnalysesLogic } from './aggregate-logic.js';
+import {
+  buildScenarioAnalysisDimensionRecord,
+  normalizeScenarioAnalysisMetadata,
+} from '../scenario-metadata.js';
 
 const log = createLogger('analysis:aggregate');
 
@@ -303,13 +307,8 @@ export async function updateAggregateRun(
 
     const aggregateWorkerTranscripts: AggregateWorkerTranscript[] = validAggregateTranscripts.map((transcript) => {
       const score = transcript.decisionCode == null ? null : Number.parseInt(transcript.decisionCode, 10);
-      const rawDimensions = (transcript.scenario?.content as Record<string, unknown> | null)?.dimensions as Record<string, unknown> | undefined;
-      const dimensions: Record<string, number> = {};
-      for (const [key, value] of Object.entries(rawDimensions ?? {})) {
-        if (typeof value === 'number') {
-          dimensions[key] = value;
-        }
-      }
+      const normalizedScenarioMetadata = normalizeScenarioAnalysisMetadata(transcript.scenario?.content ?? null);
+      const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
       const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
       const values = buildValueOutcomes(
         Number.isFinite(score) ? score : null,
