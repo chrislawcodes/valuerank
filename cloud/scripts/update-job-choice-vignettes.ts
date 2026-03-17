@@ -56,10 +56,11 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function extractJobChoiceIntro(template: string): string {
-  const marker = '\n\nIn one role, this job offers ';
-  const markerIndex = template.indexOf(marker);
-  if (markerIndex >= 0) {
-    return template.slice(0, markerIndex).trimEnd();
+  for (const marker of ['\n\nOne job offers ', '\n\nIn one role, this job offers ']) {
+    const markerIndex = template.indexOf(marker);
+    if (markerIndex >= 0) {
+      return template.slice(0, markerIndex).trimEnd();
+    }
   }
   throw new Error('Template does not contain the expected job-choice sentence structure');
 }

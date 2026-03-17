@@ -3,19 +3,17 @@ import { assembleTemplate, getJobChoiceValueStatementBody } from '@valuerank/sha
 
 type JobChoiceContentLike = Pick<DefinitionContent, 'template' | 'components' | 'methodology'>;
 
-const ROLE_SENTENCE_PREFIX = 'In one role, this job offers ';
+// New wording checked first; old wording retained for backwards-compat with stored templates.
+const ROLE_SENTENCE_PREFIXES = ['One job offers ', 'In one role, this job offers '] as const;
 
 function extractJobChoiceIntro(template: string): string | null {
-  const markerIndex = template.indexOf(ROLE_SENTENCE_PREFIX);
-  if (markerIndex < 0) {
-    return null;
+  for (const prefix of ROLE_SENTENCE_PREFIXES) {
+    const markerIndex = template.indexOf(prefix);
+    if (markerIndex >= 0) {
+      return markerIndex === 0 ? '' : template.slice(0, markerIndex).trimEnd();
+    }
   }
-
-  if (markerIndex === 0) {
-    return '';
-  }
-
-  return template.slice(0, markerIndex).trimEnd();
+  return null;
 }
 
 export function normalizeJobChoiceComponents(components: DefinitionComponents): DefinitionComponents {
