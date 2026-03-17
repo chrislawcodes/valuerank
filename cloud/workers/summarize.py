@@ -80,6 +80,9 @@ STRUCTURED_DECISION_PATTERNS = [
 # Fallback pattern to find positive integer ratings - less reliable
 FALLBACK_RATING_PATTERN = re.compile(r"\b([1-9]\d*)\b")
 RANGE_PATTERN = re.compile(r"([1-9]\d*)\s*(?:-|–|—|to)\s*([1-9]\d*)", re.IGNORECASE)
+# Word-count parentheticals appended by some models, e.g. "(5 words)" or "(152 words)".
+# Must be stripped before fallback numeric scanning to avoid false code matches.
+WORD_COUNT_SUFFIX_PATTERN = re.compile(r"\(\s*\d+\s+words?\s*\)", re.IGNORECASE)
 AMBIGUOUS_SUFFIX_PATTERN = re.compile(r"^\s*(?:and|or|/|,)\s*([1-9]\d*)\b", re.IGNORECASE)
 LEADING_BARE_NUMBER_PATTERN = re.compile(r"^\s*([1-9]\d*)\s*(?:[.!?])?\s*$", re.IGNORECASE)
 
@@ -107,6 +110,7 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
     r"^\s*(?:"
     r"(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)"
     r"(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*"
+    r"|level\s+of\s+support\s*[:=]?\s*"
     r"|in\s+short\s*[:,-]?\s*"
     r"|overall\s*[:,-]?\s*"
     r")",
@@ -354,6 +358,10 @@ def extract_decision_code_from_text(text: str) -> Optional[str]:
 
     # Remove numeric ranges (e.g., "1-6", "1 to 6") before fallback scanning.
     sanitized_text = RANGE_PATTERN.sub(" ", sanitized_markdown_text)
+    # Strip word-count parentheticals like "(5 words)" before fallback scanning.
+    # Some models append these as metadata; a coincidentally valid code would cause
+    # a false positive that the out-of-range guard cannot catch.
+    sanitized_text = WORD_COUNT_SUFFIX_PATTERN.sub(" ", sanitized_text)
 
     fallback_matches = [m.group(1) for m in FALLBACK_RATING_PATTERN.finditer(sanitized_text)]
     if not fallback_matches:
@@ -520,6 +528,14 @@ def extract_decision_result(transcript_content: dict[str, Any]) -> dict[str, Any
     parse_class = "exact"
     parse_path = "numeric_leading" if leading_decision_code is not None else "numeric_deterministic"
     matched_label = None
+
+    # If scale labels are present and the numeric result is not a valid scale code,
+    # treat it as unresolved so label matching and LLM fallback can run.
+    # This catches false positives like "(152 words)" appended by some models.
+    if scale_labels and decision_code not in {"other", "refusal"}:
+        valid_codes = {entry["code"] for entry in scale_labels if entry.get("code")}
+        if decision_code not in valid_codes:
+            decision_code = "other"
 
     if decision_code == "other" and scale_labels:
         text_label_code, matched_label, leading_text_label_path = extract_leading_text_label_decision(response_text, scale_labels)
