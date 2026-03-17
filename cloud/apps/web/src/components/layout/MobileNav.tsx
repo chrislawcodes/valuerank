@@ -6,30 +6,73 @@ import { cn } from '../../lib/utils';
 
 type NavItem = {
   name: string;
-  path: string;
   icon: LucideIcon;
-  isNested?: boolean;
+  path?: string;
   aliases?: string[];
+  children?: NavItem[];
 };
 
 const navItems: NavItem[] = [
   { name: 'Home', path: '/', icon: Home },
-  { name: 'Domains', path: '/domains', icon: FolderTree },
-  { name: 'Vignettes', path: '/definitions', icon: FileText, isNested: true },
-  { name: 'Domain Contexts', path: '/domain-contexts', icon: FileText, isNested: true },
-  { name: 'Value Statements', path: '/value-statements', icon: FileText, isNested: true },
-  { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2, isNested: true },
-  { name: 'Coverage', path: '/domains/coverage', icon: BarChart2, isNested: true },
-  { name: 'Validation', path: '/validation', icon: ShieldCheck },
-  { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck, isNested: true },
-  { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck, isNested: true },
-  { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck, isNested: true },
-  { name: 'Archive', path: '/archive', icon: Archive },
-  { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, isNested: true, aliases: ['/survey'] },
-  { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, isNested: true, aliases: ['/survey-results'] },
+  {
+    name: 'Domains',
+    path: '/domains',
+    icon: FolderTree,
+    children: [
+      { name: 'Vignettes', path: '/definitions', icon: FileText },
+      { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
+      { name: 'Coverage', path: '/domains/coverage', icon: BarChart2 },
+      { name: 'Trials', path: '/runs', icon: BarChart2 },
+      {
+        name: 'Domain Setup',
+        icon: FileText,
+        children: [
+          { name: 'Preamble', path: '/preambles', icon: FileText },
+          { name: 'Context', path: '/domain-contexts', icon: FileText },
+          { name: 'Value Statements', path: '/value-statements', icon: FileText },
+          { name: 'Level Presets', path: '/level-presets', icon: FileText },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Validation',
+    path: '/validation',
+    icon: ShieldCheck,
+    children: [
+      { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck },
+      { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck },
+      { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck },
+    ],
+  },
+  {
+    name: 'Archive',
+    path: '/archive',
+    icon: Archive,
+    children: [
+      { name: 'Legacy Survey Work', path: '/archive/surveys', icon: Archive, aliases: ['/survey'] },
+      { name: 'Legacy Survey Results', path: '/archive/survey-results', icon: Archive, aliases: ['/survey-results'] },
+    ],
+  },
   { name: 'Compare', path: '/compare', icon: GitCompare },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
+
+function matchesNavPath(pathname: string, item: NavItem) {
+  if (!item.path) {
+    return false;
+  }
+
+  if (item.path === '/') {
+    return pathname === '/';
+  }
+
+  return (
+    pathname === item.path
+    || pathname.startsWith(`${item.path}/`)
+    || (item.aliases ?? []).some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))
+  );
+}
 
 type MobileNavProps = {
   className?: string;
@@ -78,24 +121,63 @@ export function MobileNav({ className }: MobileNavProps) {
     };
   }, [isOpen]);
 
-  const isNavActive = (item: NavItem) => {
-    if (item.path === '/') {
-      return location.pathname === '/';
+  const isNavActive = (item: NavItem, includeChildren = true): boolean => {
+    const itemMatches = (!includeChildren && item.children && item.path)
+      ? (
+        item.path === '/'
+          ? location.pathname === '/'
+          : location.pathname === item.path || (item.aliases ?? []).some((alias) => location.pathname === alias)
+      )
+      : matchesNavPath(location.pathname, item);
+
+    if (includeChildren && item.children) {
+      return item.children.some((child) => isNavActive(child, true)) || itemMatches;
     }
 
-    const hasNestedChildren = !item.isNested
-      && navItems.some((candidate) => candidate.isNested && candidate.path.startsWith(`${item.path}/`));
+    return itemMatches;
+  };
 
-    if (hasNestedChildren) {
-      return location.pathname === item.path;
+  const renderNavItems = (items: NavItem[], depth = 0) => items.map((item) => {
+    const Icon = item.icon;
+    const isActive = isNavActive(item, depth > 0 || !item.children);
+    const indentClass = depth === 0 ? '' : depth === 1 ? 'pl-10 text-sm' : 'pl-16 text-sm';
+
+    if (item.path) {
+      return (
+        <div key={item.path}>
+          <NavLink
+            to={item.path}
+            className={cn(
+              'flex items-center gap-3 px-4 py-3 min-h-[44px] text-base font-medium transition-colors',
+              indentClass,
+              isActive
+                ? 'text-white bg-teal-600/20 border-l-2 border-teal-500'
+                : 'text-white/70 hover:text-white hover:bg-white/5'
+            )}
+          >
+            <Icon className="w-5 h-5" />
+            {item.name}
+          </NavLink>
+          {item.children ? renderNavItems(item.children, depth + 1) : null}
+        </div>
+      );
     }
 
     return (
-      location.pathname === item.path
-      || location.pathname.startsWith(`${item.path}/`)
-      || (item.aliases ?? []).some((alias) => location.pathname === alias || location.pathname.startsWith(`${alias}/`))
+      <div key={`${depth}-${item.name}`}>
+        <div
+          className={cn(
+            'flex items-center gap-3 px-4 py-2 min-h-[44px] text-base font-medium text-white/60',
+            indentClass
+          )}
+        >
+          <Icon className="w-5 h-5" />
+          {item.name}
+        </div>
+        {item.children ? renderNavItems(item.children, depth + 1) : null}
+      </div>
     );
-  };
+  });
 
   return (
     <div className={cn('sm:hidden', className)} ref={menuRef}>
@@ -142,26 +224,7 @@ export function MobileNav({ className }: MobileNavProps) {
         </div>
 
         <div className="py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = isNavActive(item);
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 min-h-[44px] text-base font-medium transition-colors',
-                  item.isNested ? 'pl-10 text-sm' : '',
-                  isActive
-                    ? 'text-white bg-teal-600/20 border-l-2 border-teal-500'
-                    : 'text-white/70 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                {item.name}
-              </NavLink>
-            );
-          })}
+          {renderNavItems(navItems)}
         </div>
       </nav>
     </div>

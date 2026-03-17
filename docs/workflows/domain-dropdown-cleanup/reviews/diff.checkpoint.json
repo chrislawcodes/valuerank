@@ -1,0 +1,25 @@
+{
+  "feature_slug": "domain-dropdown-cleanup",
+  "stage": "diff",
+  "artifact_path": "/private/tmp/valuerank-domain-dropdown-cleanup-11093/docs/workflows/domain-dropdown-cleanup/reviews/implementation.diff.patch",
+  "git_base_ref": "origin/main",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "correctness",
+      "stage": "diff",
+      "path": "/private/tmp/valuerank-domain-dropdown-cleanup-11093/docs/workflows/domain-dropdown-cleanup/reviews/diff.codex.correctness.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "regression",
+      "stage": "diff",
+      "path": "/private/tmp/valuerank-domain-dropdown-cleanup-11093/docs/workflows/domain-dropdown-cleanup/reviews/diff.gemini.regression.review.md",
+      "context_paths": []
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}
