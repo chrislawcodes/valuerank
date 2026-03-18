@@ -4,13 +4,17 @@
 
 Stage 1 shell work, Stage 2 pair-aware loading, and Stage 3 pooled summary cards are implemented. The single/paired mode toggle now lives in the analysis panel header on the `/analysis/:id` run detail page, the older assumptions page no longer exposes that control, and the header export actions have been removed. Stage 5 cleanup has started with direct-link and transcript drilldown coverage in both modes, while the deeper scoped-data adapter work remains in progress. Gemini review completed with follow-up refinements folded into the spec and plan.
 
-Stage 4 is complete: the `buildPairedScopeContext` adapter derives `PairedScopeContext` from `varianceAnalysis.orientationCorrectedCount`. In paired mode, the panel shows an "Orientation Pairs" stat card and an `AnalysisScopeBanner`. OverviewTab shows a scope note; StabilityTab shows an orientation-pooling banner when `hasOrientationPairing` is true. All transcript drilldown calls in OverviewTab and StabilityTab now propagate `analysisSearchParams` to preserve `?mode=paired`.
+Stage 4 is complete in its cleaned-up form: the `buildPairedScopeContext` adapter still derives `PairedScopeContext` from `varianceAnalysis.orientationCorrectedCount`, but the top-of-page paired framing has been simplified. The old "Orientation Pairs" stat card, `AnalysisScopeBanner`, and paired scope note have been removed from the main surface. Instead, AnalysisPanel now keeps only a lightweight `Details` toggle that reveals decision coverage plus evidence/batch context on demand, while StabilityTab continues to use the paired scope context where it actually affects interpretation.
 
 Stage 6 is shipped for the first split-inspection slice: paired mode now keeps pooled summary behavior by default, while Overview and Stability expose a split inspection path and transcript drilldown preserves the chosen orientation bucket. The user-facing labels now come from the actual value order shown in the vignette instead of abstract `A-first` / `B-first` names.
 
-Stage 7 is shipped for the Overview Decision Frequency slice: paired mode now uses both companion runs for that table, pooled count drilldown opens a merged transcript view across both orders, and split rows route to the correct order-specific run instead of pretending one run contains the whole pair.
+Stage 7 evolved during implementation: the Overview Decision Frequency table was made pair-aware first, then removed once the top paired comparison table became the clearer paired inspection surface.
 
-The paired comparison table refinement is shipped too: it now surfaces blended sensitivity instead of a delta column, and the shared sensitivity helper gives both the top comparison table and the lower Decision Frequency table the same fallback behavior when condition axes are categorical labels instead of raw numbers.
+The paired comparison table refinement is shipped too: it now surfaces blended sensitivity instead of a delta column, and the shared sensitivity helper gives the paired summary surfaces the same fallback behavior when condition axes are categorical labels instead of raw numbers.
+
+Stage 8 is shipped for the Overview Summary slice: paired mode now truly pools the overview summary across both companion runs. The overview table uses pooled paired semantics for preferred value, preference strength, and value agreement, and it merges repeat-pattern percentages across both companion runs instead of silently reading just the current run. Pooled repeat-pattern cells are summary-only for now until a merged repeat-pattern transcript drilldown is added.
+
+The next overview cleanup slice is shipped too: the paired run comparison now lives underneath the Overview Summary table inside the same card, so paired mode behaves more like the single-vignette page with extra inspection detail folded into the summary surface. The Condition Decisions table now uses a real merged paired condition scope in pooled mode, and pooled/split condition clickthrough routes carry enough context to open the correct blended or order-specific transcript list.
 
 ## Task List
 
@@ -40,3 +44,11 @@ The paired comparison table refinement is shipped too: it now surfaces blended s
 - [x] Route split Decision Frequency clickthrough to the correct order-specific run
 - [x] Replace the paired comparison delta column with blended sensitivity columns
 - [x] Share sensitivity calculation logic between the paired comparison table and Decision Frequency
+- [x] Make the Overview Summary table respect single vs paired mode
+- [x] Pool paired overview repeat-pattern percentages across both companion runs
+- [x] Disable misleading repeat-pattern clickthrough from pooled overview summary cells until merged drilldown exists
+- [x] Replace the old analysis header cards with a compact `Details` panel for decision coverage and evidence
+- [x] Remove paired scope copy from the main overview surface
+- [x] Move the paired run comparison underneath the Overview Summary table inside the same card
+- [x] Make pooled Condition Decisions merge both companion runs before calculating mean cells
+- [x] Route pooled and split Condition Decisions clickthrough to the correct blended or order-specific transcript sets

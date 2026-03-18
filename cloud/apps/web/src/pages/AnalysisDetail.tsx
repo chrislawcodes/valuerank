@@ -11,7 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
-import { PairedRunComparisonCard, findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
+import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
@@ -196,16 +196,6 @@ export function AnalysisDetail() {
         </div>
       ) : (
         <div className="space-y-4">
-          {analysisMode === 'paired' && launchModeLabel === 'Paired Batch' && (
-            <PairedRunComparisonCard
-              currentRun={run}
-              currentAnalysis={analysis}
-              companionRun={companionRun}
-              companionAnalysis={companionAnalysis}
-              analysisBasePath={ANALYSIS_BASE_PATH}
-              analysisSearch={searchParams.toString()}
-            />
-          )}
           <AnalysisPanel
             runId={run.id}
             analysisStatus={run.analysisStatus}
@@ -213,6 +203,9 @@ export function AnalysisDetail() {
             analysisSearchParams={searchParams}
             analysisMode={analysisMode}
             onAnalysisModeChange={handleModeChange}
+            companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
+            currentRun={run}
+            companionRun={analysisMode === 'paired' && launchModeLabel === 'Paired Batch' ? companionRun : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}

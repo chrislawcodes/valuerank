@@ -366,6 +366,83 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
   });
 
+  it('filters blended paired condition clickthrough across both companion runs', () => {
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: createRun('run-2', 1, {
+            definition: {
+              id: 'def-2',
+              name: 'Harmony -> Freedom',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  presentation_order: 'B_first',
+                },
+                components: {
+                  value_first: { token: 'harmony' },
+                  value_second: { token: 'freedom' },
+                },
+                dimensions: [
+                  { name: 'Freedom' },
+                  { name: 'Harmony' },
+                ],
+              },
+            },
+            transcripts: [
+              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+            ],
+          }),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: createRun('run-1', 1, {
+          transcripts: [
+            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createPairedAnalysis([
+            { id: 's4', row: 'High', col: 'Low', score: 5 },
+          ], ['s4']),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's1', row: 'High', col: 'Low', score: 1 },
+        ]),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&pairView=condition-blended&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1');
+
+    expect(screen.getByText(/Blended paired inspection is active for this condition cell/i)).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
+  });
+
   it('filters pooled paired decision-bucket clickthrough across both orders', () => {
     mockUseRun.mockImplementation((args?: { id?: string }) => {
       if (args?.id === 'run-2') {

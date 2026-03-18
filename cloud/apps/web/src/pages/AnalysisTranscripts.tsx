@@ -77,6 +77,28 @@ function normalizePairedValueKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, '_');
 }
 
+type JobChoicePresentationOrder = 'A_first' | 'B_first';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getPresentationOrderForContent(content: unknown): JobChoicePresentationOrder | null {
+  if (!isRecord(content) || !isRecord(content.methodology)) {
+    return null;
+  }
+
+  const value = content.methodology.presentation_order;
+  return value === 'A_first' || value === 'B_first' ? value : null;
+}
+
+function getOrientationBucketForContent(content: unknown): OrientationBucket | null {
+  const presentationOrder = getPresentationOrderForContent(content);
+  if (presentationOrder === 'A_first') return 'canonical';
+  if (presentationOrder === 'B_first') return 'flipped';
+  return null;
+}
+
 function filterTranscriptsForConditionIds(
   transcripts: Transcript[],
   modelId: string,
@@ -308,6 +330,16 @@ export function AnalysisTranscripts() {
     && (pairedValueKey || pairedDecisionBucketParam === 'a' || pairedDecisionBucketParam === 'neutral' || pairedDecisionBucketParam === 'b')
     && pairView === 'blended'
   );
+  const hasPairedConditionFilterParams = Boolean(
+    analysisMode === 'paired'
+    && companionRunId
+    && selectedModel
+    && activeRowDim
+    && activeColDim
+    && row
+    && col
+    && (pairView === 'condition-blended' || pairView === 'condition-split')
+  );
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
     [definitionContent]
@@ -420,6 +452,38 @@ export function AnalysisTranscripts() {
       ).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
     }
 
+    if (hasPairedConditionFilterParams) {
+      const runEntries = [
+        {
+          run,
+          content: definitionContent,
+          scenarioDims: scenarioDimensions,
+        },
+        {
+          run: companionRun,
+          content: companionDefinitionContent,
+          scenarioDims: companionScenarioDimensions,
+        },
+      ];
+
+      return runEntries.flatMap((entry) => {
+        const entryOrientation = getOrientationBucketForContent(entry.content);
+        if (pairView === 'condition-split' && orientationBucket && entryOrientation !== orientationBucket) {
+          return [];
+        }
+
+        return filterTranscriptsForPivotCell({
+          transcripts: entry.run?.transcripts ?? [],
+          scenarioDimensions: entry.scenarioDims,
+          rowDim: activeRowDim,
+          colDim: activeColDim,
+          row,
+          col,
+          selectedModel,
+        });
+      });
+    }
+
     if (hasPairedValueFilterParams) {
       const runEntries = [
         {
@@ -507,6 +571,7 @@ export function AnalysisTranscripts() {
     decisionCode,
     decisionBucket,
     hasRepeatPatternParams,
+    hasPairedConditionFilterParams,
     hasPairedValueFilterParams,
     hasBucketFilterParams,
     hasDirectTranscriptParam,
@@ -520,6 +585,8 @@ export function AnalysisTranscripts() {
     definitionContent,
     pairedValueKey,
     pairedDecisionBucketParam,
+    pairView,
+    orientationBucket,
     resolveDecisionBucketForValue,
   ]);
 
@@ -715,7 +782,23 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && (
+      {hasPairedConditionFilterParams && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+          {pairView === 'condition-split' && orientationBucket
+            ? (
+              <>
+                Order-detail paired inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of this condition cell.
+              </>
+            )
+            : (
+              <>
+                Blended paired inspection is active for this condition cell. This list merges transcripts from both companion runs for the selected model.
+              </>
+            )}
+        </div>
+      )}
+
+      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
           Scenario dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
@@ -747,7 +830,7 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>

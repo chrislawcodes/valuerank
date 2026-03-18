@@ -118,7 +118,7 @@ We will ship this in small stages so a user can verify the direction at each ste
 
 Stage 1, Stage 2, and Stage 3 are implemented in the analysis shell page. The primary single/paired toggle now lives in the analysis panel header on the `/analysis/:id` run detail page, and the selected mode is preserved in the URL. The older assumptions-page entry point is now legacy-only, and the analysis header no longer includes the Excel/OData export actions. The remaining stages are planned only.
 
-Stage 4 is complete: `buildPairedScopeContext` in `utils/pairedScopeAdapter.ts` derives a `PairedScopeContext` from `varianceAnalysis.orientationCorrectedCount`. AnalysisPanel computes this via `useMemo` and drives: (1) a 6th "Orientation Pairs" stat card when `hasOrientationPairing`, (2) `AnalysisScopeBanner` below the header in any mode, (3) propagation of `analysisSearchParams` to all transcript drilldown navigate() calls in OverviewTab and StabilityTab. OverviewTab shows a paired scope note; StabilityTab shows an orientation-pooling banner explaining the canonical value order.
+Stage 4 is complete in its refined form: `buildPairedScopeContext` in `utils/pairedScopeAdapter.ts` still derives paired-orientation metadata from `varianceAnalysis.orientationCorrectedCount`, but the top-of-page UI no longer surfaces that as a dedicated scope banner or stat card. Instead, AnalysisPanel keeps the paired plumbing in the shared adapter and transcript routing, while the visible header is trimmed down to a `Details` toggle that reveals decision coverage plus evidence context only when the user asks for it. The explicit paired explanation now lives in the places where it affects interpretation, such as the Stability tab and the paired comparison surfaces, rather than as a permanent banner above the whole page.
 
 Stage 5 cleanup has started: paired-mode direct links now preserve mode into the overview repeat-pattern drilldown and transcript viewer routes, and the legacy validation entry points stay visible but clearly labeled during rollout.
 
@@ -126,9 +126,15 @@ Stage 6 is complete for the first split-inspection slice: paired mode now keeps 
 
 Stage 6 label clarity is now implemented too: split inspection, transcript drilldown, run-launch messaging, and stored job-choice vignette names now derive orientation labels from the definition content so users see concrete value-order labels like `Freedom -> Harmony` instead of abstract `A-first` / `B-first` wording.
 
-Stage 7 is complete for the next paired-mode slice: the Overview tab's Decision Frequency table now becomes genuinely pair-aware when the companion run is available. In paired mode, pooled counts combine both runs, split rows target the correct run for each value order, and pooled count drilldown routes into a merged transcript view that uses the same bucket logic as the table itself.
+Stage 7 evolved during implementation: the old Overview Decision Frequency table was made pair-aware first, then removed once the top paired comparison table took over that role more cleanly.
 
-The paired comparison table has also been refined: the redundant delta column has been removed, blended sensitivity columns now appear alongside the pooled counts, and sensitivity calculations share a single helper with the Decision Frequency table so both surfaces stay aligned.
+The paired comparison table has also been refined: the redundant delta column has been removed, blended sensitivity columns now appear alongside the pooled counts, and sensitivity calculations now share a single helper with the remaining paired summary surfaces so the numbers stay aligned.
+
+Stage 8 is complete for the Overview Summary slice: in paired mode, the Overview Summary table now truly pools both companion analyses instead of only changing its framing text. Preferred value, preference strength, and value agreement now come from a pooled paired semantics builder, the repeat-pattern percentages are merged across both companion runs, and the helper text now says when the summary is pooled across companion runs. Pooled repeat-pattern cells are summary-only for now, because a true merged repeat-pattern transcript drilldown has not shipped yet.
+
+The analysis header cleanup is now shipped too: the always-visible cards for models, total trials, status, orientation pairs, and paired vignette scope have been removed. Decision coverage now lives behind the `Details` control beside `Analysis`, and the same panel includes the batch/source-run evidence summary so the debugging context is available without crowding the main view.
+
+The paired overview integration slice is now shipped as well: the paired run comparison is embedded beneath the Overview Summary table inside the same card, and the Condition Decisions table now uses a real merged paired condition scope in pooled mode instead of reading just the current run. That means paired mode behaves more like single-vignette mode with an expanded summary surface, while the transcript drilldown now distinguishes between blended condition clicks and split-by-order condition clicks.
 
 ## Verification Expectations
 

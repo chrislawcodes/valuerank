@@ -23,6 +23,7 @@ type PairedRunComparisonCardProps = {
   companionAnalysis: AnalysisResult | null;
   analysisBasePath: AnalysisBasePath;
   analysisSearch: string;
+  embedded?: boolean;
 };
 
 type JobChoicePresentationOrder = 'A_first' | 'B_first';
@@ -469,6 +470,7 @@ export function PairedRunComparisonCard({
   companionAnalysis,
   analysisBasePath,
   analysisSearch,
+  embedded = false,
 }: PairedRunComparisonCardProps) {
   const currentOrder = getRunPresentationOrder(currentRun);
   const companionOrder = companionRun ? getRunPresentationOrder(companionRun) : null;
@@ -505,13 +507,16 @@ export function PairedRunComparisonCard({
   const canonicalOrientationBucket = 'canonical';
   const flippedOrientationBucket = 'flipped';
   const [showOrderDetail, setShowOrderDetail] = useState(false);
+  const containerClass = embedded
+    ? 'space-y-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4'
+    : 'space-y-4 rounded-xl border border-teal-200 bg-teal-50/60 p-4';
 
   return (
-    <section className="rounded-xl border border-teal-200 bg-teal-50/60 p-4 space-y-4" data-testid="paired-run-comparison">
+    <section className={containerClass} data-testid="paired-run-comparison">
       <div className="space-y-1">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Paired Run Comparison</h2>
         <p className="text-sm text-teal-900/80">
-          Paired mode now shows both value orders side by side so we can compare them directly before trusting the blended story.
+          Paired mode keeps the blended summary first and lets you open the two value orders underneath when you want to compare them directly.
         </p>
       </div>
 

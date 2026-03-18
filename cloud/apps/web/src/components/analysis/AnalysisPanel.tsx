@@ -6,13 +6,10 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
-import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2 } from 'lucide-react';
+import { BarChart2, BarChart3, AlertCircle, ChevronDown, ChevronUp, Clock, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
-import { StatCard } from './StatCard';
-import { DecisionCoverageBanner } from './DecisionCoverageBanner';
-import { AnalysisScopeBanner } from './AnalysisScopeBanner';
 import {
   OverviewTab,
   DecisionsTab,
@@ -22,8 +19,8 @@ import {
   type AnalysisTab,
 } from './tabs';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
-import type { Transcript } from '../../api/operations/runs';
+import type { PerModelStats, AnalysisResult, AnalysisWarning } from '../../api/operations/analysis';
+import type { Run, Transcript } from '../../api/operations/runs';
 import {
   deriveDecisionDimensionLabels,
   deriveScenarioAttributesFromDefinition,
@@ -31,6 +28,7 @@ import {
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../utils/analysisRouting';
 import {
   buildAnalysisSemanticsView,
+  buildPairedAnalysisSemanticsView,
 } from '../analysis-v2/analysisSemantics';
 import {
   summarizeDecisionCoverage,
@@ -54,6 +52,9 @@ type AnalysisPanelProps = {
   analysisSearchParams?: URLSearchParams | string;
   analysisMode?: 'single' | 'paired';
   onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
+  companionAnalysis?: AnalysisResult | null;
+  currentRun?: Run | null;
+  companionRun?: Run | null;
 };
 
 /**
@@ -80,20 +81,6 @@ function formatDuration(ms: number | null): string {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ${seconds % 60}s`;
-}
-
-/**
- * Get count of models from perModel data.
- */
-function getModelCount(perModel: Record<string, PerModelStats>): number {
-  return Object.keys(perModel).length;
-}
-
-/**
- * Calculate total trial count across all models.
- */
-function getTotalTrialCount(perModel: Record<string, PerModelStats>): number {
-  return Object.values(perModel).reduce((sum, model) => sum + model.sampleSize, 0);
 }
 
 /**
@@ -130,6 +117,10 @@ function getBatchStats(
     batches: completedBatches,
     detail: `${conditionCount} conditions per batch • uneven model coverage`,
   };
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 /**
@@ -277,13 +268,16 @@ export function AnalysisPanel({
   analysisStatus,
   definitionContent,
   transcripts = [],
-  isOldVersion = false,
+  isOldVersion: _isOldVersion = false,
   isAggregate,
   pendingSince,
   initialTab = 'overview',
   analysisSearchParams,
   analysisMode,
   onAnalysisModeChange,
+  companionAnalysis,
+  currentRun,
+  companionRun,
 }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
@@ -306,6 +300,7 @@ export function AnalysisPanel({
   );
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
+  const [showDetails, setShowDetails] = useState(false);
   const semantics = useMemo(() => {
     if (!analysis) {
       return null;
@@ -313,6 +308,17 @@ export function AnalysisPanel({
 
     return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
   }, [analysis, isAggregateAnalysis]);
+  const overviewSemantics = useMemo(() => {
+    if (!analysis) {
+      return null;
+    }
+
+    if (analysisMode === 'paired' && companionAnalysis) {
+      return buildPairedAnalysisSemanticsView(analysis, companionAnalysis, isAggregateAnalysis);
+    }
+
+    return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
+  }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis]);
   const decisionCoverage = useMemo(
     () => summarizeDecisionCoverage(transcripts),
     [transcripts],
@@ -378,13 +384,26 @@ export function AnalysisPanel({
     );
   }
 
-  const modelCount = getModelCount(analysis.perModel);
-  const totalTrials = getTotalTrialCount(analysis.perModel);
   const { batches, detail: batchDetail } = getBatchStats(
     analysis.perModel,
     analysis.visualizationData?.modelScenarioMatrix,
   );
   const aggregateSourceRunCount = analysis.aggregateMetadata?.sourceRunCount ?? null;
+  const coverageContextLabel = analysisMode === 'paired' ? 'Paired vignette summaries' : 'Numeric summaries';
+  const decisionCoverageMessage = decisionCoverage.totalTranscripts > 0
+    ? `${coverageContextLabel} include ${decisionCoverage.scoredTranscripts} of ${decisionCoverage.totalTranscripts} transcripts.${decisionCoverage.unresolvedTranscripts > 0
+      ? ` ${pluralize(decisionCoverage.unresolvedTranscripts, 'unresolved transcript')} ${decisionCoverage.unresolvedTranscripts === 1 ? 'is' : 'are'} currently excluded until manually adjudicated.`
+      : ' All transcripts are represented in the current numeric summary.'
+    }`
+    : `${coverageContextLabel} do not have transcript coverage available yet.`;
+  const coverageEvidenceMessage = isAggregateAnalysis
+    ? aggregateSourceRunCount === null
+      ? 'Evidence: contributing source-run count unavailable'
+      : `Evidence: ${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'} pooled`
+    : batches === '-'
+      ? `Evidence: ${batchDetail}`
+      : `Evidence: ${batches} completed batch${batches === 1 ? '' : 'es'} • ${batchDetail}`;
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
       {/* Header */}
@@ -394,7 +413,25 @@ export function AnalysisPanel({
             <BarChart2 className="w-5 h-5 text-purple-600" />
           </div>
           <div>
-            <h2 className="text-lg font-medium text-gray-900">Analysis</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-medium text-gray-900">Analysis</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDetails((current) => !current)}
+                aria-expanded={showDetails}
+                aria-controls="analysis-details-panel"
+                className="px-2 py-0.5 text-sm"
+              >
+                {showDetails ? 'Hide details' : 'Details'}
+                {showDetails ? (
+                  <ChevronUp className="ml-1 h-4 w-4" />
+                ) : (
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                )}
+              </Button>
+            </div>
             <p className="text-sm text-gray-500">
               Computed {formatTimestamp(analysis.computedAt)} • {formatDuration(analysis.durationMs)}
             </p>
@@ -438,16 +475,6 @@ export function AnalysisPanel({
         </div>
       </div>
 
-      {analysisMode ? (
-        <div className="mb-6">
-          <AnalysisScopeBanner
-            analysisMode={analysisMode}
-            orientationCorrectedCount={pairedScopeContext.orientationCorrectedCount}
-            compact
-          />
-        </div>
-      ) : null}
-
       {/* Warnings */}
       {displayWarnings.length > 0 && (
         <div className="space-y-2 mb-6">
@@ -457,56 +484,23 @@ export function AnalysisPanel({
         </div>
       )}
 
-      {showDecisionCoverage && (
-        <div className="mb-6">
-          <DecisionCoverageBanner
-            coverage={decisionCoverage}
-            contextLabel={analysisMode === 'paired' ? 'paired vignette summaries' : 'numeric summaries'}
-          />
+      {showDetails && (
+        <div
+          id="analysis-details-panel"
+          className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4"
+        >
+          <p className="text-sm font-medium text-gray-900">Decision Coverage</p>
+          <p className="mt-2 text-sm text-gray-700">{decisionCoverageMessage}</p>
+          <p className="mt-1 text-xs text-gray-600">
+            Parser-scored: {decisionCoverage.parserScoredTranscripts} ({decisionCoverage.exactMatchTranscripts} exact, {decisionCoverage.fallbackResolvedTranscripts} fallback)
+            {' • '}
+            Manually adjudicated: {decisionCoverage.manuallyAdjudicatedTranscripts}
+            {' • '}
+            Legacy numeric: {decisionCoverage.legacyNumericTranscripts}
+          </p>
+          <p className="mt-1 text-xs text-gray-600">{coverageEvidenceMessage}</p>
         </div>
       )}
-
-      {/* Summary stats */}
-      <div className={`grid grid-cols-2 gap-4 mb-6 ${pairedScopeContext.hasOrientationPairing ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
-        <StatCard
-          label="Models"
-          value={modelCount}
-          detail={`${modelCount} model${modelCount !== 1 ? 's' : ''} analyzed`}
-        />
-        <StatCard
-          label={isAggregateAnalysis ? 'Source Runs' : 'Batches'}
-          value={isAggregateAnalysis ? (aggregateSourceRunCount ?? '-') : batches}
-          detail={isAggregateAnalysis
-            ? aggregateSourceRunCount === null
-              ? 'Contributing source-run count unavailable'
-              : `${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'} pooled`
-            : batchDetail}
-        />
-        <StatCard
-          label="Total Trials"
-          value={totalTrials}
-          detail={modelCount > 0 ? `${Math.round(totalTrials / modelCount)} per model avg` : 'No models'}
-        />
-        <StatCard label="Analysis Type" value={analysis.analysisType} detail={`v${analysis.codeVersion}`} />
-        <StatCard
-          label="Status"
-          value={isOldVersion && analysis.status === 'CURRENT' ? 'OLD VERSION' : analysis.status}
-          variant={
-            isOldVersion && analysis.status === 'CURRENT'
-              ? 'error'
-              : analysis.status === 'CURRENT'
-                ? 'success'
-                : 'default'
-          }
-        />
-        {pairedScopeContext.hasOrientationPairing && (
-          <StatCard
-            label="Orientation Pairs"
-            value={pairedScopeContext.orientationCorrectedCount}
-            detail={`${pairedScopeContext.orientationCorrectedCount} scenario${pairedScopeContext.orientationCorrectedCount === 1 ? '' : 's'} orientation-normalized`}
-          />
-        )}
-      </div>
 
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-4 -mb-px">
@@ -537,11 +531,15 @@ export function AnalysisPanel({
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
             expectedAttributes={expectedScenarioAttributes}
-            semantics={semantics}
+            semantics={overviewSemantics ?? semantics}
             completedBatches={batches}
             aggregateSourceRunCount={aggregateSourceRunCount}
             isAggregate={isAggregateAnalysis}
             analysisMode={analysisMode}
+            companionAnalysis={companionAnalysis}
+            currentRun={currentRun}
+            currentAnalysis={analysis}
+            companionRun={companionRun}
           />
         )}
         {activeTab === 'decisions' && semantics && (

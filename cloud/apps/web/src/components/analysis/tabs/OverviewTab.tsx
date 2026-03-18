@@ -8,10 +8,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
-import type { VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
+import type { AnalysisResult, VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
+import type { Run } from '../../../api/operations/runs';
 import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
 import { Tooltip } from '../../ui/Tooltip';
+import { PairedRunComparisonCard } from '../PairedRunComparisonCard';
 import {
   resolveScenarioAttributes,
 } from '../../../utils/decisionLabels';
@@ -47,6 +49,10 @@ type OverviewTabProps = {
   aggregateSourceRunCount: number | null;
   isAggregate: boolean;
   analysisMode?: 'single' | 'paired';
+  companionAnalysis?: AnalysisResult | null;
+  currentRun?: Run | null;
+  currentAnalysis?: AnalysisResult | null;
+  companionRun?: Run | null;
 };
 
 type ConditionRow = {
@@ -68,7 +74,14 @@ type ConditionRepeatStats = {
   maxRange: number | null;
 };
 
+type RepeatPatternSource = {
+  runId: string;
+  varianceAnalysis: VarianceAnalysis | null | undefined;
+  conditionRows: ConditionRow[];
+};
+
 type RepeatPattern = 'stable' | 'softLean' | 'torn' | 'noisy';
+type JobChoicePresentationOrder = 'A_first' | 'B_first';
 
 const REPEAT_PATTERN_LABELS: Record<RepeatPattern, string> = {
   stable: 'Stable',
@@ -96,12 +109,14 @@ type RepeatPatternMetrics =
       classifiedCount: number;
       repeatedCount: number;
       strongerConfidenceCount: number;
+      sourceCount: number;
     }
   | {
       status: 'unavailable';
       reason: string;
       repeatedCount: number;
       strongerConfidenceCount: number;
+      sourceCount: number;
     };
 
 function buildConditionRows(
@@ -138,6 +153,146 @@ function buildConditionRows(
     }
     return left.attributeALevel.localeCompare(right.attributeALevel);
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresentationOrder | null {
+  const fromConfig = run?.config?.jobChoicePresentationOrder;
+  if (fromConfig === 'A_first' || fromConfig === 'B_first') {
+    return fromConfig;
+  }
+
+  const content = run?.definition?.content;
+  if (!isRecord(content) || !isRecord(content.methodology)) {
+    return null;
+  }
+
+  const value = content.methodology.presentation_order;
+  return value === 'A_first' || value === 'B_first' ? value : null;
+}
+
+function prefixScenarioId(prefix: string, scenarioId: string): string {
+  return `${prefix}:${scenarioId}`;
+}
+
+function mergePairedVisualizationData(
+  canonicalAnalysis: AnalysisResult | null | undefined,
+  flippedAnalysis: AnalysisResult | null | undefined,
+): VisualizationData | null {
+  const entries = [
+    { prefix: 'canonical', analysis: canonicalAnalysis },
+    { prefix: 'flipped', analysis: flippedAnalysis },
+  ].filter((entry) => entry.analysis?.visualizationData != null);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const scenarioDimensions: Record<string, Record<string, string | number>> = {};
+  const modelScenarioMatrix: Record<string, Record<string, number>> = {};
+
+  entries.forEach(({ prefix, analysis }) => {
+    Object.entries(analysis?.visualizationData?.scenarioDimensions ?? {}).forEach(([scenarioId, dimensions]) => {
+      scenarioDimensions[prefixScenarioId(prefix, scenarioId)] = dimensions;
+    });
+
+    Object.entries(analysis?.visualizationData?.modelScenarioMatrix ?? {}).forEach(([modelId, scores]) => {
+      const currentScores = modelScenarioMatrix[modelId] ?? {};
+      Object.entries(scores ?? {}).forEach(([scenarioId, score]) => {
+        currentScores[prefixScenarioId(prefix, scenarioId)] = score;
+      });
+      modelScenarioMatrix[modelId] = currentScores;
+    });
+  });
+
+  return {
+    decisionDistribution: {},
+    scenarioDimensions,
+    modelScenarioMatrix,
+  };
+}
+
+function mergePairedVarianceAnalysis(
+  canonicalAnalysis: AnalysisResult | null | undefined,
+  flippedAnalysis: AnalysisResult | null | undefined,
+): VarianceAnalysis | null {
+  const entries = [
+    { prefix: 'canonical', analysis: canonicalAnalysis, orientationCorrected: false },
+    { prefix: 'flipped', analysis: flippedAnalysis, orientationCorrected: true },
+  ].filter((entry) => entry.analysis?.varianceAnalysis != null);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const modelIds = new Set<string>();
+  entries.forEach(({ analysis }) => {
+    Object.keys(analysis?.varianceAnalysis?.perModel ?? {}).forEach((modelId) => modelIds.add(modelId));
+  });
+
+  const perModel = [...modelIds].reduce<VarianceAnalysis['perModel']>((acc, modelId) => {
+    const perScenario: NonNullable<VarianceAnalysis['perModel'][string]>['perScenario'] = {};
+    let totalSamples = 0;
+    let uniqueScenarios = 0;
+    let samplesPerScenario = 1;
+    let weightedVarianceSum = 0;
+    let weightedConsistencySum = 0;
+    let weight = 0;
+    let maxWithinScenarioVariance = 0;
+
+    entries.forEach(({ prefix, analysis, orientationCorrected }) => {
+      const modelStats = analysis?.varianceAnalysis?.perModel?.[modelId];
+      if (!modelStats) {
+        return;
+      }
+
+      totalSamples += modelStats.totalSamples;
+      uniqueScenarios += modelStats.uniqueScenarios;
+      samplesPerScenario = Math.max(samplesPerScenario, modelStats.samplesPerScenario);
+      weightedVarianceSum += modelStats.avgWithinScenarioVariance * Math.max(modelStats.uniqueScenarios, 1);
+      weightedConsistencySum += modelStats.consistencyScore * Math.max(modelStats.uniqueScenarios, 1);
+      weight += Math.max(modelStats.uniqueScenarios, 1);
+      maxWithinScenarioVariance = Math.max(maxWithinScenarioVariance, modelStats.maxWithinScenarioVariance);
+
+      Object.entries(modelStats.perScenario ?? {}).forEach(([scenarioId, stats]) => {
+        perScenario[prefixScenarioId(prefix, scenarioId)] = {
+          ...stats,
+          orientationCorrected,
+        };
+      });
+    });
+
+    acc[modelId] = {
+      totalSamples,
+      uniqueScenarios,
+      samplesPerScenario,
+      avgWithinScenarioVariance: weight > 0 ? weightedVarianceSum / weight : 0,
+      maxWithinScenarioVariance,
+      consistencyScore: weight > 0 ? weightedConsistencySum / weight : 0,
+      perScenario,
+    };
+
+    return acc;
+  }, {});
+
+  return {
+    isMultiSample: entries.some(({ analysis }) => analysis?.varianceAnalysis?.isMultiSample === true),
+    samplesPerScenario: Math.max(
+      ...entries.map(({ analysis }) => analysis?.varianceAnalysis?.samplesPerScenario ?? 1),
+    ),
+    perModel,
+    mostVariableScenarios: [],
+    leastVariableScenarios: [],
+    orientationCorrectedCount: Object.values(perModel).reduce(
+      (sum, modelStats) => (
+        sum + Object.values(modelStats.perScenario).filter((stats) => stats.orientationCorrected === true).length
+      ),
+      0,
+    ),
+  };
 }
 
 function formatPercent(value: number): string {
@@ -345,6 +500,7 @@ function getRepeatPatternMetrics(
       reason: 'No repeat data is available for this model.',
       repeatedCount: 0,
       strongerConfidenceCount: 0,
+      sourceCount: 1,
     };
   }
 
@@ -354,6 +510,7 @@ function getRepeatPatternMetrics(
       reason: 'Condition-level grouping is unavailable for this run.',
       repeatedCount: 0,
       strongerConfidenceCount: 0,
+      sourceCount: 1,
     };
   }
 
@@ -404,6 +561,7 @@ function getRepeatPatternMetrics(
       reason: 'Some repeat data is present, but not enough conditions produced a publishable stability classification.',
       repeatedCount,
       strongerConfidenceCount,
+      sourceCount: 1,
     };
   }
 
@@ -414,6 +572,71 @@ function getRepeatPatternMetrics(
     classifiedCount,
     repeatedCount,
     strongerConfidenceCount,
+    sourceCount: 1,
+  };
+}
+
+function mergeRepeatPatternMetrics(
+  metricsList: RepeatPatternMetrics[],
+): RepeatPatternMetrics {
+  if (metricsList.length === 0) {
+    return {
+      status: 'unavailable',
+      reason: 'No repeat data is available for this view.',
+      repeatedCount: 0,
+      strongerConfidenceCount: 0,
+      sourceCount: 0,
+    };
+  }
+
+  const availableMetrics = metricsList.filter(
+    (metrics): metrics is Extract<RepeatPatternMetrics, { status: 'available' }> => metrics.status === 'available',
+  );
+  const repeatedCount = metricsList.reduce((sum, metrics) => sum + metrics.repeatedCount, 0);
+  const strongerConfidenceCount = metricsList.reduce((sum, metrics) => sum + metrics.strongerConfidenceCount, 0);
+  const sourceCount = metricsList.reduce((sum, metrics) => sum + metrics.sourceCount, 0);
+
+  if (availableMetrics.length === 0) {
+    const firstReason = metricsList.find(
+      (metrics): metrics is Extract<RepeatPatternMetrics, { status: 'unavailable' }> => metrics.status === 'unavailable',
+    )?.reason;
+    return {
+      status: 'unavailable',
+      reason: firstReason ?? 'No repeat data is available for this view.',
+      repeatedCount,
+      strongerConfidenceCount,
+      sourceCount,
+    };
+  }
+
+  const counts: Record<RepeatPattern, number> = {
+    stable: 0,
+    softLean: 0,
+    torn: 0,
+    noisy: 0,
+  };
+  const conditionIds: Record<RepeatPattern, string[]> = {
+    stable: [],
+    softLean: [],
+    torn: [],
+    noisy: [],
+  };
+
+  availableMetrics.forEach((metrics) => {
+    (['stable', 'softLean', 'torn', 'noisy'] as const).forEach((pattern) => {
+      counts[pattern] += metrics.counts[pattern];
+      conditionIds[pattern].push(...metrics.conditionIds[pattern]);
+    });
+  });
+
+  return {
+    status: 'available',
+    counts,
+    conditionIds,
+    classifiedCount: availableMetrics.reduce((sum, metrics) => sum + metrics.classifiedCount, 0),
+    repeatedCount,
+    strongerConfidenceCount,
+    sourceCount,
   };
 }
 
@@ -543,10 +766,15 @@ function OverviewSummaryTable({
   semantics,
   varianceAnalysis,
   visualizationData,
+  companionAnalysis,
   expectedAttributes = [],
   completedBatches,
   aggregateSourceRunCount,
   isAggregate,
+  analysisMode,
+  currentRun,
+  currentAnalysis,
+  companionRun,
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
@@ -554,10 +782,15 @@ function OverviewSummaryTable({
   semantics: AnalysisSemanticsView;
   varianceAnalysis?: VarianceAnalysis | null;
   visualizationData: VisualizationData | null | undefined;
+  companionAnalysis?: AnalysisResult | null;
   expectedAttributes?: string[];
   completedBatches: number | '-';
   aggregateSourceRunCount: number | null;
   isAggregate: boolean;
+  analysisMode?: 'single' | 'paired';
+  currentRun?: Run | null;
+  currentAnalysis?: AnalysisResult | null;
+  companionRun?: Run | null;
 }) {
   const models = useMemo(() => {
     return Object.keys(semantics.preference.byModel)
@@ -592,13 +825,37 @@ function OverviewSummaryTable({
     () => buildConditionRows(scenarioDimensions, attributeA, attributeB),
     [attributeA, attributeB, scenarioDimensions],
   );
+  const companionConditionRows = useMemo(
+    () => buildConditionRows(companionAnalysis?.visualizationData?.scenarioDimensions, attributeA, attributeB),
+    [attributeA, attributeB, companionAnalysis?.visualizationData?.scenarioDimensions],
+  );
+  const repeatPatternSources = useMemo<RepeatPatternSource[]>(() => {
+    const sources: RepeatPatternSource[] = [{
+      runId,
+      varianceAnalysis,
+      conditionRows,
+    }];
+
+    if (analysisMode === 'paired' && companionAnalysis) {
+      sources.push({
+        runId: companionAnalysis.runId,
+        varianceAnalysis: companionAnalysis.varianceAnalysis,
+        conditionRows: companionConditionRows,
+      });
+    }
+
+    return sources;
+  }, [analysisMode, companionAnalysis, companionConditionRows, conditionRows, runId, varianceAnalysis]);
+  const isPooledAcrossRuns = repeatPatternSources.length > 1;
   const summaryUnavailableMessage = semantics.preference.rowAvailability.status === 'unavailable'
     ? semantics.preference.rowAvailability.message
     : semantics.reliability.rowAvailability.status === 'unavailable'
       ? semantics.reliability.rowAvailability.message
       : null;
 
-  const helperText = isAggregate
+  const helperText = analysisMode === 'paired' && companionAnalysis
+    ? `Run-level evidence: pooled across ${repeatPatternSources.length} companion runs`
+    : isAggregate
     ? aggregateSourceRunCount === null
       ? 'Run-level evidence: contributing source-run count unavailable'
       : `Run-level evidence: ${aggregateSourceRunCount} contributing source run${aggregateSourceRunCount === 1 ? '' : 's'}`
@@ -652,7 +909,9 @@ function OverviewSummaryTable({
             {models.map(({ modelId, preference, reliability }) => {
               const preferredValue = getPreferredValueName(preference);
               const preferenceStrengthText = formatPreferenceStrength(preference);
-              const repeatMetrics = getRepeatPatternMetrics(modelId, varianceAnalysis, conditionRows);
+              const repeatMetrics = mergeRepeatPatternMetrics(
+                repeatPatternSources.map((source) => getRepeatPatternMetrics(modelId, source.varianceAnalysis, source.conditionRows)),
+              );
               const repeatEvidenceDetail = repeatMetrics.status === 'available'
                 ? `${repeatMetrics.classifiedCount} of ${repeatMetrics.repeatedCount} repeated conditions classified • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`
                 : `${repeatMetrics.reason} • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`;
@@ -688,12 +947,14 @@ function OverviewSummaryTable({
                   {(['stable', 'softLean', 'torn', 'noisy'] as const).map((pattern) => {
                     const label = REPEAT_PATTERN_LABELS[pattern];
                     const title = repeatMetrics.status === 'available'
-                      ? `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`
+                      ? isPooledAcrossRuns
+                        ? `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions across both vignette orders • transcript drilldown is not available from this pooled summary cell yet`
+                        : `${label}: ${repeatMetrics.counts[pattern]} of ${repeatMetrics.classifiedCount} repeated conditions • ${repeatMetrics.strongerConfidenceCount} condition${repeatMetrics.strongerConfidenceCount === 1 ? '' : 's'} with 10+ repeats`
                       : repeatEvidenceDetail;
 
                     return (
                       <td key={pattern} className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
-                        {repeatMetrics.status === 'available' ? (
+                        {repeatMetrics.status === 'available' && !isPooledAcrossRuns ? (
                           <PatternMetricButton
                             runId={runId}
                             analysisBasePath={analysisBasePath}
@@ -706,7 +967,11 @@ function OverviewSummaryTable({
                             colDim={attributeB}
                           />
                         ) : (
-                          <SummaryCell title={title} showInfoIcon>—</SummaryCell>
+                          <SummaryCell title={title} showInfoIcon={repeatMetrics.status === 'unavailable'} align="center">
+                            {repeatMetrics.status === 'available'
+                              ? formatPercent(repeatMetrics.classifiedCount === 0 ? 0 : repeatMetrics.counts[pattern] / repeatMetrics.classifiedCount)
+                              : '—'}
+                          </SummaryCell>
                         )}
                       </td>
                     );
@@ -717,6 +982,20 @@ function OverviewSummaryTable({
           </tbody>
         </table>
       </div>
+
+      {analysisMode === 'paired' && currentRun && currentAnalysis && (
+        <div className="border-t border-gray-200 pt-4">
+          <PairedRunComparisonCard
+            currentRun={currentRun}
+            currentAnalysis={currentAnalysis}
+            companionRun={companionRun ?? null}
+            companionAnalysis={companionAnalysis ?? null}
+            analysisBasePath={analysisBasePath}
+            analysisSearch={typeof analysisSearchParams === 'string' ? analysisSearchParams : analysisSearchParams?.toString() ?? ''}
+            embedded
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -725,6 +1004,7 @@ function ConditionDecisionsTable({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisSearchParams,
+  companionRunId,
   orientationLabels,
   analysisMode,
   perModel,
@@ -735,6 +1015,7 @@ function ConditionDecisionsTable({
   runId: string;
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
+  companionRunId?: string | null;
   orientationLabels: ReturnType<typeof getPairedOrientationLabels>;
   analysisMode?: 'single' | 'paired';
   perModel: Record<string, PerModelStats>;
@@ -746,7 +1027,11 @@ function ConditionDecisionsTable({
   const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = visualizationData?.modelScenarioMatrix;
-  const models = useMemo(() => Object.keys(perModel).sort(), [perModel]);
+  const models = useMemo(() => {
+    const modelIds = new Set<string>(Object.keys(perModel));
+    Object.keys(modelScenarioMatrix ?? {}).forEach((modelId) => modelIds.add(modelId));
+    return [...modelIds].sort();
+  }, [modelScenarioMatrix, perModel]);
 
   const availableAttributes = useMemo(() => {
     return resolveScenarioAttributes(scenarioDimensions, expectedAttributes, modelScenarioMatrix);
@@ -824,6 +1109,10 @@ function ConditionDecisionsTable({
       col: row.attributeBLevel,
       model: modelId,
     });
+    if (analysisMode === 'paired' && companionRunId) {
+      params.set('companionRunId', companionRunId);
+      params.set('pairView', canSplitOrientations && inspectionMode === 'split' ? 'condition-split' : 'condition-blended');
+    }
     if (canSplitOrientations && inspectionMode === 'split') {
       params.set('orientationBucket', row.orientationBucket);
     }
@@ -851,7 +1140,7 @@ function ConditionDecisionsTable({
 
   return (
     <div className="space-y-4 rounded-lg border border-gray-200 p-4">
-      <div className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <label className="mb-1 block text-xs font-medium uppercase text-gray-500">AI Columns</label>
           <details className="relative">
@@ -898,7 +1187,7 @@ function ConditionDecisionsTable({
           </details>
         </div>
         {canSplitOrientations && (
-          <div>
+          <div className="ml-auto">
             <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Inspection View</label>
             <div className="inline-flex rounded-md border border-gray-300 bg-white p-1 shadow-sm">
               <Button
@@ -1026,20 +1315,54 @@ export function OverviewTab({
   aggregateSourceRunCount,
   isAggregate,
   analysisMode,
+  companionAnalysis,
+  currentRun,
+  currentAnalysis,
+  companionRun,
 }: OverviewTabProps) {
   const orientationLabels = useMemo(
     () => getPairedOrientationLabels(definitionContent),
     [definitionContent],
   );
+  const currentOrder = useMemo(
+    () => getRunPresentationOrder(currentRun),
+    [currentRun],
+  );
+  const companionOrder = useMemo(
+    () => getRunPresentationOrder(companionRun),
+    [companionRun],
+  );
+  const canonicalAnalysis = useMemo(() => {
+    if (analysisMode !== 'paired' || !companionAnalysis) {
+      return currentAnalysis ?? null;
+    }
+    if (currentOrder === 'A_first') return currentAnalysis ?? null;
+    if (companionOrder === 'A_first') return companionAnalysis;
+    return currentAnalysis ?? null;
+  }, [analysisMode, companionAnalysis, companionOrder, currentAnalysis, currentOrder]);
+  const flippedAnalysis = useMemo(() => {
+    if (analysisMode !== 'paired' || !companionAnalysis) {
+      return null;
+    }
+    if (currentOrder === 'B_first') return currentAnalysis ?? null;
+    if (companionOrder === 'B_first') return companionAnalysis;
+    return companionAnalysis;
+  }, [analysisMode, companionAnalysis, companionOrder, currentAnalysis, currentOrder]);
+  const pooledConditionVisualization = useMemo(() => {
+    if (analysisMode !== 'paired' || !companionAnalysis) {
+      return visualizationData;
+    }
+    return mergePairedVisualizationData(canonicalAnalysis, flippedAnalysis);
+  }, [analysisMode, canonicalAnalysis, companionAnalysis, flippedAnalysis, visualizationData]);
+  const pooledConditionVariance = useMemo(() => {
+    if (analysisMode !== 'paired' || !companionAnalysis) {
+      return varianceAnalysis;
+    }
+    return mergePairedVarianceAnalysis(canonicalAnalysis, flippedAnalysis);
+  }, [analysisMode, canonicalAnalysis, companionAnalysis, flippedAnalysis, varianceAnalysis]);
 
   return (
     <div className="space-y-6">
-      {analysisMode === 'paired' && (
-        <p className="text-xs text-teal-700 rounded-md border border-teal-200 bg-teal-50 px-3 py-2">
-          Paired vignette scope — this summary pools both vignette orientations. Direction labels
-          (Favors A / Favors B) follow the canonical order: <span className="font-medium">{orientationLabels.canonical}</span>.
-        </p>
-      )}
       <OverviewSummaryTable
         runId={runId}
         analysisBasePath={analysisBasePath}
@@ -1047,20 +1370,26 @@ export function OverviewTab({
         semantics={semantics}
         varianceAnalysis={varianceAnalysis}
         visualizationData={visualizationData}
+        companionAnalysis={companionAnalysis}
         expectedAttributes={expectedAttributes}
         completedBatches={completedBatches}
         aggregateSourceRunCount={aggregateSourceRunCount}
         isAggregate={isAggregate}
+        analysisMode={analysisMode}
+        currentRun={currentRun}
+        currentAnalysis={currentAnalysis}
+        companionRun={companionRun}
       />
       <ConditionDecisionsTable
         runId={runId}
         analysisBasePath={analysisBasePath}
         analysisSearchParams={analysisSearchParams}
+        companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
         orientationLabels={orientationLabels}
         analysisMode={analysisMode}
         perModel={perModel}
-        visualizationData={visualizationData}
-        varianceAnalysis={varianceAnalysis}
+        visualizationData={pooledConditionVisualization}
+        varianceAnalysis={pooledConditionVariance}
         expectedAttributes={expectedAttributes}
       />
     </div>
