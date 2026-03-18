@@ -200,6 +200,7 @@ async function createJobChoiceScenarios(
               definitionId: definitionBId,
               name: `${secondWord} / ${firstWord}`,
               content: scenarioContentB as unknown as Prisma.InputJsonValue,
+              orientationFlipped: true,
             },
           }),
         );
@@ -233,6 +234,7 @@ async function createJobChoiceScenarios(
       definitionId: definitionBId,
       name: 'Default Scenario',
       content: scenarioBFirst as unknown as Prisma.InputJsonValue,
+      orientationFlipped: true,
     },
   });
 }
