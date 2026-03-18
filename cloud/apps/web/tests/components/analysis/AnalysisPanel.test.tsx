@@ -547,7 +547,6 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Decision Frequency')).toBeInTheDocument();
     expect(screen.getByText('Condition Decisions')).toBeInTheDocument();
   });
 

@@ -1,11 +1,10 @@
 /**
  * Overview Tab
  *
- * Displays a semantics-backed summary table above the existing V1 decision
- * frequency drilldowns.
+ * Displays a semantics-backed summary table above condition-level drilldowns.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
@@ -14,8 +13,6 @@ import { Button } from '../../ui/Button';
 import { CopyVisualButton } from '../../ui/CopyVisualButton';
 import { Tooltip } from '../../ui/Tooltip';
 import {
-  getDecisionSideNames,
-  mapDecisionSidesToScenarioAttributes,
   resolveScenarioAttributes,
 } from '../../../utils/decisionLabels';
 import {
@@ -23,6 +20,13 @@ import {
   type AnalysisBasePath,
   buildAnalysisTranscriptsPath,
 } from '../../../utils/analysisRouting';
+import {
+  buildOrientedConditionRows,
+  getOrientationBucketLabel,
+  type OrientationInspectionMode,
+  type OrientedConditionRow,
+} from '../../../utils/pairedScopeAdapter';
+import { getPairedOrientationLabels } from '../../../utils/methodology';
 import type {
   AnalysisSemanticsView,
   PreferenceViewModel,
@@ -33,10 +37,10 @@ type OverviewTabProps = {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
+  definitionContent?: unknown;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   varianceAnalysis?: VarianceAnalysis | null;
-  dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
   semantics: AnalysisSemanticsView;
   completedBatches: number | '-';
@@ -717,26 +721,27 @@ function OverviewSummaryTable({
   );
 }
 
-function ConditionDecisionMatrix({
+function ConditionDecisionsTable({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisSearchParams,
+  orientationLabels,
+  analysisMode,
   perModel,
   visualizationData,
   varianceAnalysis,
-  dimensionLabels,
   expectedAttributes = [],
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
+  orientationLabels: ReturnType<typeof getPairedOrientationLabels>;
+  analysisMode?: 'single' | 'paired';
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   varianceAnalysis?: VarianceAnalysis | null;
-  dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
 }) {
-  const countsTableRef = useRef<HTMLDivElement>(null);
   const meanTableRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const scenarioDimensions = visualizationData?.scenarioDimensions;
@@ -750,6 +755,10 @@ function ConditionDecisionMatrix({
   const attributeA = availableAttributes[0] ?? '';
   const attributeB = availableAttributes[1] ?? availableAttributes[0] ?? '';
   const [selectedModels, setSelectedModels] = useState<string[]>(models);
+  const canSplitOrientations = analysisMode === 'paired' && (varianceAnalysis?.orientationCorrectedCount ?? 0) > 0;
+  const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
+  const canonicalOrientationLabel = orientationLabels.canonical;
+  const flippedOrientationLabel = orientationLabels.flipped;
 
   useEffect(() => {
     setSelectedModels((current) => {
@@ -757,6 +766,12 @@ function ConditionDecisionMatrix({
       return next.length > 0 ? next : models;
     });
   }, [models]);
+
+  useEffect(() => {
+    if (!canSplitOrientations && inspectionMode !== 'pooled') {
+      setInspectionMode('pooled');
+    }
+  }, [canSplitOrientations, inspectionMode]);
 
   const visibleModels = useMemo(
     () => models.filter((modelId) => selectedModels.includes(modelId)),
@@ -772,147 +787,36 @@ function ConditionDecisionMatrix({
     });
   };
 
-  const conditionRows = useMemo<ConditionRow[]>(() => {
-    if (!scenarioDimensions || !attributeA || !attributeB) return [];
+  const conditionRows = useMemo<OrientedConditionRow[]>(() => {
+    return buildOrientedConditionRows(
+      scenarioDimensions,
+      attributeA,
+      attributeB,
+      varianceAnalysis,
+      canSplitOrientations && inspectionMode === 'split' ? 'split' : 'pooled',
+    );
+  }, [attributeA, attributeB, canSplitOrientations, inspectionMode, scenarioDimensions, varianceAnalysis]);
 
-    const grouped = new Map<string, ConditionRow>();
-    Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
-      const aLevel = String(dimensions[attributeA] ?? 'N/A');
-      const bLevel = String(dimensions[attributeB] ?? 'N/A');
-      const id = `${aLevel}||${bLevel}`;
-      const current = grouped.get(id);
-      if (current) {
-        current.scenarioIds.push(scenarioId);
-        return;
-      }
-      grouped.set(id, {
-        id,
-        attributeALevel: aLevel,
-        attributeBLevel: bLevel,
-        scenarioIds: [scenarioId],
-      });
-    });
+  const getMeanDecision = (modelId: string, scenarioIds: string[]): ConditionStats | null => {
+    const varianceStats = calculateConditionStatsFromVariance(modelId, scenarioIds, varianceAnalysis);
+    if (varianceStats) return varianceStats;
 
-    return [...grouped.values()].sort((left, right) => {
-      if (left.attributeALevel === right.attributeALevel) {
-        return left.attributeBLevel.localeCompare(right.attributeBLevel);
-      }
-      return left.attributeALevel.localeCompare(right.attributeALevel);
-    });
-  }, [scenarioDimensions, attributeA, attributeB]);
-
-  const getMeanDecision = useCallback(
-    (modelId: string, scenarioIds: string[]): ConditionStats | null => {
-      const varianceStats = calculateConditionStatsFromVariance(modelId, scenarioIds, varianceAnalysis);
-      if (varianceStats) return varianceStats;
-
-      const byScenario = modelScenarioMatrix?.[modelId];
-      if (!byScenario) return null;
-
-      const values: number[] = [];
-      scenarioIds.forEach((scenarioId) => {
-        const score = byScenario[scenarioId];
-        if (typeof score === 'number' && Number.isFinite(score)) {
-          values.push(score);
-        }
-      });
-
-      if (values.length === 0) return null;
-      return { mean: values.reduce((sum, v) => sum + v, 0) / values.length };
-    },
-    [modelScenarioMatrix, varianceAnalysis]
-  );
-
-  const sideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
-  const sideAttributeMap = useMemo(
-    () => mapDecisionSidesToScenarioAttributes(sideNames.aName, sideNames.bName, availableAttributes),
-    [availableAttributes, sideNames.aName, sideNames.bName]
-  );
-  const lowSideAttribute = sideAttributeMap.lowAttribute;
-  const highSideAttribute = sideAttributeMap.highAttribute;
-
-  const getSensitivity = useCallback((modelId: string, attribute: string, side: 'low' | 'high'): number | null => {
-    if (!scenarioDimensions || !modelScenarioMatrix) return null;
-    const byScenario = modelScenarioMatrix[modelId];
+    const byScenario = modelScenarioMatrix?.[modelId];
     if (!byScenario) return null;
 
-    const pairs: Array<{ x: number; y: number }> = [];
-    Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
-      const xRaw = dimensions[attribute];
-      const yRaw = byScenario[scenarioId];
-      const x = typeof xRaw === 'number' ? xRaw : Number.parseFloat(String(xRaw));
-      if (!Number.isFinite(x) || typeof yRaw !== 'number' || !Number.isFinite(yRaw)) {
-        return;
+    const values: number[] = [];
+    scenarioIds.forEach((scenarioId) => {
+      const score = byScenario[scenarioId];
+      if (typeof score === 'number' && Number.isFinite(score)) {
+        values.push(score);
       }
-      pairs.push({ x, y: yRaw });
     });
 
-    if (pairs.length < 2) return null;
-    const meanX = pairs.reduce((sum, pair) => sum + pair.x, 0) / pairs.length;
-    const meanY = pairs.reduce((sum, pair) => sum + pair.y, 0) / pairs.length;
-    let numerator = 0;
-    let denominator = 0;
-    pairs.forEach(({ x, y }) => {
-      const centeredX = x - meanX;
-      numerator += centeredX * (y - meanY);
-      denominator += centeredX * centeredX;
-    });
-    if (denominator === 0) return null;
-    const rawSlope = numerator / denominator;
-    return side === 'low' ? -rawSlope : rawSlope;
-  }, [modelScenarioMatrix, scenarioDimensions]);
+    if (values.length === 0) return null;
+    return { mean: values.reduce((sum, v) => sum + v, 0) / values.length };
+  };
 
-  const countsByModel = useMemo(() => {
-    const result: Record<string, {
-      a: number;
-      neutral: number;
-      b: number;
-      total: number;
-      aSensitivity: number | null;
-      bSensitivity: number | null;
-    }> = {};
-    if (!modelScenarioMatrix || conditionRows.length === 0) return result;
-
-    visibleModels.forEach((modelId) => {
-      let a = 0;
-      let neutral = 0;
-      let b = 0;
-      let total = 0;
-
-      conditionRows.forEach((row) => {
-        const stats = getMeanDecision(modelId, row.scenarioIds);
-        if (stats === null) return;
-        const rounded = Math.round(stats.mean);
-        if (rounded < 1 || rounded > 5) return;
-
-        total += 1;
-        if (rounded <= 2) a += 1;
-        else if (rounded === 3) neutral += 1;
-        else b += 1;
-      });
-
-      result[modelId] = {
-        a,
-        neutral,
-        b,
-        total,
-        aSensitivity: getSensitivity(modelId, lowSideAttribute, 'low'),
-        bSensitivity: getSensitivity(modelId, highSideAttribute, 'high'),
-      };
-    });
-
-    return result;
-  }, [
-    conditionRows,
-    getMeanDecision,
-    getSensitivity,
-    highSideAttribute,
-    lowSideAttribute,
-    modelScenarioMatrix,
-    visibleModels,
-  ]);
-
-  const handleCellClick = (modelId: string, row: ConditionRow, options?: { decisionCode?: string }) => {
+  const handleCellClick = (modelId: string, row: OrientedConditionRow, options?: { decisionCode?: string }) => {
     const params = new URLSearchParams({
       rowDim: attributeA,
       colDim: attributeB,
@@ -920,19 +824,12 @@ function ConditionDecisionMatrix({
       col: row.attributeBLevel,
       model: modelId,
     });
+    if (canSplitOrientations && inspectionMode === 'split') {
+      params.set('orientationBucket', row.orientationBucket);
+    }
     if (options?.decisionCode) {
       params.set('decisionCode', options.decisionCode);
     }
-    navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
-  };
-
-  const handleCountsCellClick = (modelId: string, decisionBucket: 'a' | 'neutral' | 'b') => {
-    const params = new URLSearchParams({
-      rowDim: attributeA,
-      colDim: attributeB,
-      model: modelId,
-      decisionBucket,
-    });
     navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
   };
 
@@ -1000,118 +897,40 @@ function ConditionDecisionMatrix({
             </div>
           </details>
         </div>
+        {canSplitOrientations && (
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Inspection View</label>
+            <div className="inline-flex rounded-md border border-gray-300 bg-white p-1 shadow-sm">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`min-h-0 rounded px-3 py-1.5 text-sm ${inspectionMode === 'pooled' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                aria-pressed={inspectionMode === 'pooled'}
+                onClick={() => setInspectionMode('pooled')}
+              >
+                Pooled
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`min-h-0 rounded px-3 py-1.5 text-sm ${inspectionMode === 'split' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                aria-pressed={inspectionMode === 'split'}
+                onClick={() => setInspectionMode('split')}
+              >
+                Split by order
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
-
-      <div ref={countsTableRef} className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="text-xs font-semibold uppercase text-gray-500">Decision Frequency</h4>
-          <CopyVisualButton targetRef={countsTableRef} label="condition bucket counts table" />
+      {canSplitOrientations && inspectionMode === 'split' && (
+        <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+          Split inspection keeps the pooled paired summary above, but breaks these tables into
+          separate <span className="font-medium">{canonicalOrientationLabel}</span> and <span className="font-medium">{flippedOrientationLabel}</span> buckets so you can verify the pair directly.
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                  AI
-                </th>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                  {lowSideAttribute}
-                </th>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                  Neutral
-                </th>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                  {highSideAttribute}
-                </th>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                  {lowSideAttribute} Sensitivity
-                </th>
-                <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-700">
-                  {highSideAttribute} Sensitivity
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleModels.map((modelId) => {
-                const counts = countsByModel[modelId] ?? {
-                  a: 0,
-                  neutral: 0,
-                  b: 0,
-                  total: 0,
-                  aSensitivity: null,
-                  bSensitivity: null,
-                };
-                const maxCount = Math.max(counts.a, counts.neutral, counts.b);
-                const highlightA = maxCount > 0 && counts.a === maxCount;
-                const highlightNeutral = maxCount > 0 && counts.neutral === maxCount;
-                const highlightB = maxCount > 0 && counts.b === maxCount;
-
-                return (
-                  <tr key={modelId}>
-                    <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
-                      <span className="truncate" title={modelId}>
-                        {modelId}
-                      </span>
-                      <span className="ml-2 text-xs text-gray-400">({counts.total})</span>
-                    </td>
-                    <td className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-blue-700 ${highlightA ? 'bg-blue-50' : ''}`}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                        title={`View transcripts for ${modelId} where condition mean rounds to ${lowSideAttribute}`}
-                        onClick={() => handleCountsCellClick(modelId, 'a')}
-                      >
-                        {counts.a}
-                      </Button>
-                    </td>
-                    <td className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-gray-700 ${highlightNeutral ? 'bg-gray-100' : ''}`}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                        title={`View neutral transcripts for ${modelId}`}
-                        onClick={() => handleCountsCellClick(modelId, 'neutral')}
-                      >
-                        {counts.neutral}
-                      </Button>
-                    </td>
-                    <td className={`border border-gray-200 px-3 py-2 text-center text-sm font-medium text-orange-700 ${highlightB ? 'bg-orange-50' : ''}`}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                        title={`View transcripts for ${modelId} where condition mean rounds to ${highSideAttribute}`}
-                        onClick={() => handleCountsCellClick(modelId, 'b')}
-                      >
-                        {counts.b}
-                      </Button>
-                    </td>
-                    <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
-                      {counts.aSensitivity == null ? '-' : counts.aSensitivity.toFixed(3)}
-                    </td>
-                    <td className="border border-gray-200 px-3 py-2 text-center text-sm text-gray-700">
-                      {counts.bSensitivity == null ? '-' : counts.bSensitivity.toFixed(3)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {visibleModels.length === 0 && (
-            <div className="mt-2 text-xs text-amber-700">Select at least one AI column to display data.</div>
-          )}
-        </div>
-        <div className="text-xs text-gray-500">
-          Counts are per condition cell, based on each cell&apos;s mean decision rounded to the nearest 1-5.
-        </div>
-        <div className="text-xs text-gray-500">
-          Sensitivity: positive means decisions move toward that attribute&apos;s side; negative means away.
-        </div>
-      </div>
+      )}
 
       <div ref={meanTableRef} className="space-y-2">
         <div className="flex items-center justify-between gap-3">
@@ -1140,7 +959,16 @@ function ConditionDecisionMatrix({
               {conditionRows.map((row) => (
                 <tr key={row.id}>
                   <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
-                    {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>
+                        {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
+                      </span>
+                      {canSplitOrientations && inspectionMode === 'split' && (
+                        <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                          {getOrientationBucketLabel(row.orientationBucket, orientationLabels)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   {visibleModels.map((modelId) => {
                     const stats = getMeanDecision(modelId, row.scenarioIds);
@@ -1157,7 +985,7 @@ function ConditionDecisionMatrix({
                           variant="ghost"
                           size="sm"
                           className="h-full min-h-0 w-full rounded-sm bg-transparent px-0 py-0 text-inherit hover:bg-transparent hover:ring-1 hover:ring-teal-300 focus:ring-teal-400 focus:ring-offset-0"
-                          title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${isOtherCell ? ' | Decision: other' : ''}`}
+                          title={`View transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${canSplitOrientations && inspectionMode === 'split' ? ` | ${getOrientationBucketLabel(row.orientationBucket, orientationLabels)}` : ''}${isOtherCell ? ' | Decision: other' : ''}`}
                           onClick={() => handleCellClick(modelId, row, isOtherCell ? { decisionCode: 'other' } : undefined)}
                         >
                           {stats === null ? (
@@ -1188,10 +1016,10 @@ export function OverviewTab({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisSearchParams,
+  definitionContent,
   perModel,
   visualizationData,
   varianceAnalysis,
-  dimensionLabels,
   expectedAttributes = [],
   semantics,
   completedBatches,
@@ -1199,12 +1027,17 @@ export function OverviewTab({
   isAggregate,
   analysisMode,
 }: OverviewTabProps) {
+  const orientationLabels = useMemo(
+    () => getPairedOrientationLabels(definitionContent),
+    [definitionContent],
+  );
+
   return (
     <div className="space-y-6">
       {analysisMode === 'paired' && (
         <p className="text-xs text-teal-700 rounded-md border border-teal-200 bg-teal-50 px-3 py-2">
           Paired vignette scope — this summary pools both vignette orientations. Direction labels
-          (Favors A / Favors B) follow the canonical A-first order.
+          (Favors A / Favors B) follow the canonical order: <span className="font-medium">{orientationLabels.canonical}</span>.
         </p>
       )}
       <OverviewSummaryTable
@@ -1219,14 +1052,15 @@ export function OverviewTab({
         aggregateSourceRunCount={aggregateSourceRunCount}
         isAggregate={isAggregate}
       />
-      <ConditionDecisionMatrix
+      <ConditionDecisionsTable
         runId={runId}
         analysisBasePath={analysisBasePath}
         analysisSearchParams={analysisSearchParams}
+        orientationLabels={orientationLabels}
+        analysisMode={analysisMode}
         perModel={perModel}
         visualizationData={visualizationData}
         varianceAnalysis={varianceAnalysis}
-        dimensionLabels={dimensionLabels}
         expectedAttributes={expectedAttributes}
       />
     </div>

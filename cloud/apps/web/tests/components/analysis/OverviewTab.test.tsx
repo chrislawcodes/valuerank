@@ -66,6 +66,7 @@ function createVarianceAnalysis(): VarianceAnalysis {
   return {
     isMultiSample: true,
     samplesPerScenario: 12,
+    orientationCorrectedCount: 1,
     perModel: {
       model1: {
         totalSamples: 60,
@@ -134,6 +135,7 @@ function createVarianceAnalysis(): VarianceAnalysis {
             directionalAgreement: 0.85,
             medianSignedDistance: 1,
             neutralShare: 0,
+            orientationCorrected: true,
           },
         },
       },
@@ -143,12 +145,27 @@ function createVarianceAnalysis(): VarianceAnalysis {
   };
 }
 
+const pairedDefinitionContent = {
+  methodology: {
+    family: 'job-choice',
+    presentation_order: 'A_first' as const,
+  },
+  components: {
+    value_first: { token: 'freedom' },
+    value_second: { token: 'harmony' },
+  },
+  dimensions: [
+    { name: 'Freedom' },
+    { name: 'Harmony' },
+  ],
+};
+
 describe('OverviewTab', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
   });
 
-  it('renders the summary table above Decision Frequency', () => {
+  it('renders the summary table above Condition Decisions', () => {
     render(
       <MemoryRouter>
         <OverviewTab
@@ -194,8 +211,8 @@ describe('OverviewTab', () => {
     expect(screen.getByText('88%')).toBeInTheDocument();
 
     const summaryHeading = screen.getByText('Overview Summary');
-    const decisionFrequencyHeading = screen.getByText('Decision Frequency');
-    expect(summaryHeading.compareDocumentPosition(decisionFrequencyHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const conditionDecisionsHeading = screen.getByText('Condition Decisions');
+    expect(summaryHeading.compareDocumentPosition(conditionDecisionsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps one decimal for non-integer summary percentages', () => {
@@ -280,6 +297,7 @@ describe('OverviewTab', () => {
           runId="run-1"
           analysisBasePath="/analysis"
           analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+          definitionContent={pairedDefinitionContent}
           semantics={createSemantics()}
           completedBatches={3}
           aggregateSourceRunCount={null}
@@ -449,7 +467,7 @@ describe('OverviewTab', () => {
     );
 
     expect(screen.getByText('Aggregate summary unavailable for this run.')).toBeInTheDocument();
-    expect(screen.getByText('Decision Frequency')).toBeInTheDocument();
+    expect(screen.getByText('Condition Decisions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
   });
 
@@ -458,6 +476,7 @@ describe('OverviewTab', () => {
       <MemoryRouter>
         <OverviewTab
           runId="run-1"
+          definitionContent={pairedDefinitionContent}
           semantics={createSemantics()}
           completedBatches={3}
           aggregateSourceRunCount={null}
@@ -539,5 +558,56 @@ describe('OverviewTab', () => {
     );
 
     expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
+  });
+
+  it('supports split inspection in paired mode and preserves orientation bucket in drilldown links', () => {
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          analysisBasePath="/analysis"
+          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+          definitionContent={pairedDefinitionContent}
+          semantics={createSemantics()}
+          completedBatches={3}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="paired"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
+              s4: { Freedom: 'a2', Harmony: 'b1' },
+              s5: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 5, s2: 3, s3: 1, s4: 2, s5: 4 },
+            },
+          }}
+          varianceAnalysis={createVarianceAnalysis()}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Split by order' }));
+
+    expect(screen.getByText(/Split inspection keeps the pooled paired summary above/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Freedom -> Harmony').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Harmony -> Freedom').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTitle('View transcripts for model1 | Freedom: a1, Harmony: b1 | Freedom -> Harmony'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&orientationBucket=canonical&mode=paired'
+    );
   });
 });

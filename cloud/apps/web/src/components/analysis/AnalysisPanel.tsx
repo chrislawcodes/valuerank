@@ -532,10 +532,10 @@ export function AnalysisPanel({
             runId={runId}
             analysisBasePath={analysisBasePath}
             analysisSearchParams={analysisSearchParams}
+            definitionContent={definitionContent}
             perModel={perModel}
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
-            dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
             semantics={semantics}
             completedBatches={batches}
@@ -570,6 +570,7 @@ export function AnalysisPanel({
             analysisBasePath={analysisBasePath}
             analysisSearchParams={analysisSearchParams}
             analysisMode={analysisMode}
+            definitionContent={definitionContent}
             pairedScopeContext={pairedScopeContext}
             perModel={perModel}
             visualizationData={loading ? null : analysis.visualizationData}

@@ -25,6 +25,7 @@ import {
   normalizeModelId,
   normalizeScenarioId,
 } from '../utils/scenarioUtils';
+import { collectScenarioIdsForDecisionBucket } from '../utils/decisionBuckets';
 import {
   deriveScenarioAttributesFromDefinition,
   deriveDecisionDimensionLabels,
@@ -39,7 +40,12 @@ import {
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
-import { getDecisionMetadata } from '../utils/methodology';
+import { getDecisionMetadata, getPairedOrientationLabels } from '../utils/methodology';
+import {
+  getOrientationBucketLabel,
+  getOrientationCorrectedScenarioIds,
+  type OrientationBucket,
+} from '../utils/pairedScopeAdapter';
 
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
@@ -65,6 +71,10 @@ function formatRepeatPatternLabel(value: string): string {
     default:
       return value;
   }
+}
+
+function normalizePairedValueKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, '_');
 }
 
 function filterTranscriptsForConditionIds(
@@ -134,6 +144,15 @@ export function AnalysisTranscripts() {
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
   const repeatPattern = searchParams.get('repeatPattern') ?? '';
   const selectedTranscriptId = searchParams.get('transcriptId') ?? '';
+  const companionRunId = searchParams.get('companionRunId') ?? '';
+  const pairedValueKey = searchParams.get('pairedValueKey') ?? '';
+  const pairedDecisionBucketParam = searchParams.get('pairedDecisionBucket') ?? '';
+  const pairedValueLabel = searchParams.get('pairedValueLabel') ?? '';
+  const pairView = searchParams.get('pairView') ?? '';
+  const orientationBucketParam = searchParams.get('orientationBucket');
+  const orientationBucket: OrientationBucket | null = orientationBucketParam === 'canonical' || orientationBucketParam === 'flipped'
+    ? orientationBucketParam
+    : null;
   const analysisMode = searchParams.get('mode') === 'paired'
     ? 'paired'
     : searchParams.get('mode') === 'single'
@@ -157,6 +176,17 @@ export function AnalysisTranscripts() {
     pause: !id,
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
+  });
+  const { run: companionRun } = useRun({
+    id: companionRunId,
+    pause: companionRunId === '',
+    enablePolling: false,
+  });
+  const { analysis: companionAnalysis } = useAnalysis({
+    runId: companionRunId,
+    pause: companionRunId === '' || !companionRun?.analysisStatus,
+    enablePolling: false,
+    analysisStatus: companionRun?.analysisStatus ?? null,
   });
 
   const isAggregate = isAggregateAnalysis(
@@ -230,7 +260,18 @@ export function AnalysisTranscripts() {
 
   const scenarioDimensions = analysis?.visualizationData?.scenarioDimensions;
   const modelScenarioMatrix = analysis?.visualizationData?.modelScenarioMatrix;
+  const companionScenarioDimensions = companionAnalysis?.visualizationData?.scenarioDimensions;
+  const companionModelScenarioMatrix = companionAnalysis?.visualizationData?.modelScenarioMatrix;
+  const correctedScenarioIds = useMemo(
+    () => getOrientationCorrectedScenarioIds(analysis?.varianceAnalysis),
+    [analysis?.varianceAnalysis]
+  );
   const definitionContent = useMemo(() => getRunDefinitionContent(run), [run]);
+  const companionDefinitionContent = useMemo(() => getRunDefinitionContent(companionRun), [companionRun]);
+  const orientationLabels = useMemo(
+    () => getPairedOrientationLabels(definitionContent),
+    [definitionContent],
+  );
   const preferredAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(definitionContent),
     [definitionContent]
@@ -238,6 +279,13 @@ export function AnalysisTranscripts() {
   const availableAttributes = useMemo(() => {
     return resolveScenarioAttributes(scenarioDimensions, preferredAttributes, modelScenarioMatrix);
   }, [scenarioDimensions, preferredAttributes, modelScenarioMatrix]);
+  const mergedScenarioDimensions = useMemo(
+    () => ({
+      ...(scenarioDimensions ?? {}),
+      ...(companionScenarioDimensions ?? {}),
+    }),
+    [scenarioDimensions, companionScenarioDimensions],
+  );
   const resolvedAxes = useMemo(
     () => resolveScenarioAxisDimensions(availableAttributes, rowDim, colDim),
     [availableAttributes, colDim, rowDim]
@@ -252,6 +300,13 @@ export function AnalysisTranscripts() {
     && activeColDim
     && selectedModel
     && (decisionBucket === 'a' || decisionBucket === 'neutral' || decisionBucket === 'b')
+  );
+  const hasPairedValueFilterParams = Boolean(
+    analysisMode === 'paired'
+    && companionRunId
+    && selectedModel
+    && (pairedValueKey || pairedDecisionBucketParam === 'a' || pairedDecisionBucketParam === 'neutral' || pairedDecisionBucketParam === 'b')
+    && pairView === 'blended'
   );
   const dimensionLabels = useMemo(
     () => deriveDecisionDimensionLabels(definitionContent),
@@ -273,6 +328,34 @@ export function AnalysisTranscripts() {
     if (decisionBucket === 'neutral') return 'Neutral';
     return '';
   }, [bucketAttributes.highAttribute, bucketAttributes.lowAttribute, decisionBucket]);
+
+  const matchesOrientationBucket = useCallback((scenarioId: string | null | undefined) => {
+    if (!orientationBucket || !scenarioId) {
+      return true;
+    }
+
+    const isFlipped = correctedScenarioIds.has(String(scenarioId));
+    return orientationBucket === 'flipped' ? isFlipped : !isFlipped;
+  }, [correctedScenarioIds, orientationBucket]);
+
+  const resolveDecisionBucketForValue = useCallback((
+    content: unknown,
+    rowDimension: string,
+    colDimension: string,
+    targetValueKey: string,
+  ): 'a' | 'b' | null => {
+    const labels = deriveDecisionDimensionLabels(content);
+    const sideNames = getDecisionSideNames(labels);
+    const mapped = mapDecisionSidesToScenarioAttributes(
+      sideNames.aName,
+      sideNames.bName,
+      [rowDimension, colDimension].filter((value) => value !== ''),
+    );
+    const normalizedTarget = normalizePairedValueKey(targetValueKey);
+    if (normalizePairedValueKey(mapped.lowAttribute) === normalizedTarget) return 'a';
+    if (normalizePairedValueKey(mapped.highAttribute) === normalizedTarget) return 'b';
+    return null;
+  }, []);
 
   useEffect(() => {
     if (!scenarioDimensions) return;
@@ -323,7 +406,7 @@ export function AnalysisTranscripts() {
   const filteredTranscripts = useMemo(() => {
     if (hasDirectTranscriptParam) {
       const matched = (run?.transcripts ?? []).find((transcript) => transcript.id === selectedTranscriptId);
-      return matched ? [matched] : [];
+      return matched && matchesOrientationBucket(matched.scenarioId) ? [matched] : [];
     }
 
     if (hasRepeatPatternParams) {
@@ -334,58 +417,71 @@ export function AnalysisTranscripts() {
         scenarioDimensions,
         activeRowDim,
         activeColDim,
-      );
+      ).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
+    }
+
+    if (hasPairedValueFilterParams) {
+      const runEntries = [
+        {
+          run,
+          content: definitionContent,
+          scenarioDims: scenarioDimensions,
+          modelMatrix: modelScenarioMatrix,
+        },
+        {
+          run: companionRun,
+          content: companionDefinitionContent,
+          scenarioDims: companionScenarioDimensions,
+          modelMatrix: companionModelScenarioMatrix,
+        },
+      ];
+
+      return runEntries.flatMap((entry) => {
+        const transcripts = entry.run?.transcripts ?? [];
+        const attributes = deriveScenarioAttributesFromDefinition(entry.content);
+        const rowDimension = attributes[0] ?? '';
+        const colDimension = attributes[1] ?? attributes[0] ?? '';
+        const bucket = pairedDecisionBucketParam === 'a' || pairedDecisionBucketParam === 'neutral' || pairedDecisionBucketParam === 'b'
+          ? pairedDecisionBucketParam
+          : resolveDecisionBucketForValue(entry.content, rowDimension, colDimension, pairedValueKey);
+        if (!bucket) {
+          return [];
+        }
+
+        const matchingScenarioIds = collectScenarioIdsForDecisionBucket(
+          entry.scenarioDims,
+          entry.modelMatrix,
+          selectedModel,
+          bucket,
+          rowDimension,
+          colDimension,
+        );
+
+        return transcripts.filter((transcript) => (
+          transcript.modelId === selectedModel
+          && transcript.scenarioId !== null
+          && matchingScenarioIds.has(transcript.scenarioId)
+        ));
+      });
     }
 
     if (hasBucketFilterParams) {
       const transcripts = run?.transcripts ?? [];
       if (!scenarioDimensions || !modelScenarioMatrix) return [];
-      const modelScores = modelScenarioMatrix[selectedModel];
-      if (!modelScores) return [];
-
-      // Group scenarios by selected row/col dimensions.
-      const grouped = new Map<string, string[]>();
-      Object.entries(scenarioDimensions).forEach(([scenarioId, dims]) => {
-        const r = String(dims[activeRowDim] ?? 'N/A');
-        const c = String(dims[activeColDim] ?? 'N/A');
-        const key = `${r}||${c}`;
-        const current = grouped.get(key);
-        if (current) {
-          current.push(scenarioId);
-        } else {
-          grouped.set(key, [scenarioId]);
-        }
-      });
-
-      // Keep scenarios from conditions whose mean rounds into the selected bucket.
-      const matchingScenarioIds = new Set<string>();
-      grouped.forEach((scenarioIds) => {
-        let sum = 0;
-        let count = 0;
-        scenarioIds.forEach((scenarioId) => {
-          const score = modelScores[scenarioId];
-          if (typeof score === 'number' && Number.isFinite(score)) {
-            sum += score;
-            count += 1;
-          }
-        });
-        if (count === 0) return;
-
-        const rounded = Math.round(sum / count);
-        const matchesBucket = (
-          (decisionBucket === 'a' && rounded <= 2)
-          || (decisionBucket === 'neutral' && rounded === 3)
-          || (decisionBucket === 'b' && rounded >= 4)
-        );
-        if (!matchesBucket) return;
-
-        scenarioIds.forEach((scenarioId) => matchingScenarioIds.add(scenarioId));
-      });
+      const matchingScenarioIds = collectScenarioIdsForDecisionBucket(
+        scenarioDimensions,
+        modelScenarioMatrix,
+        selectedModel,
+        decisionBucket as 'a' | 'neutral' | 'b',
+        activeRowDim,
+        activeColDim,
+      );
 
       return transcripts.filter((transcript) => (
         transcript.modelId === selectedModel
         && transcript.scenarioId !== null
         && matchingScenarioIds.has(transcript.scenarioId)
+        && matchesOrientationBucket(transcript.scenarioId)
       ));
     }
 
@@ -398,9 +494,8 @@ export function AnalysisTranscripts() {
       col,
       selectedModel,
       decisionCode: decisionCode || undefined,
-    });
+    }).filter((transcript) => matchesOrientationBucket(transcript.scenarioId));
   }, [
-    run?.transcripts,
     scenarioDimensions,
     modelScenarioMatrix,
     activeRowDim,
@@ -412,9 +507,20 @@ export function AnalysisTranscripts() {
     decisionCode,
     decisionBucket,
     hasRepeatPatternParams,
+    hasPairedValueFilterParams,
     hasBucketFilterParams,
     hasDirectTranscriptParam,
+    matchesOrientationBucket,
     selectedTranscriptId,
+    companionRun,
+    run,
+    companionDefinitionContent,
+    companionScenarioDimensions,
+    companionModelScenarioMatrix,
+    definitionContent,
+    pairedValueKey,
+    pairedDecisionBucketParam,
+    resolveDecisionBucketForValue,
   ]);
 
   useEffect(() => {
@@ -567,6 +673,18 @@ export function AnalysisTranscripts() {
                   Favors: <span className="font-medium text-gray-900">{decisionBucketLabel}</span>
                 </>
               )}
+              {orientationBucket && (
+                <>
+                  <span className="mx-2">•</span>
+                  Orientation: <span className="font-medium text-gray-900">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span>
+                </>
+              )}
+              {pairedValueLabel && (
+                <>
+                  <span className="mx-2">•</span>
+                  Paired Value: <span className="font-medium text-gray-900">{pairedValueLabel}</span>
+                </>
+              )}
               {decisionCode && (
                 <>
                   <span className="mx-2">•</span>
@@ -585,7 +703,19 @@ export function AnalysisTranscripts() {
         <AnalysisScopeBanner analysisMode={analysisMode} compact />
       )}
 
-      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && (
+      {orientationBucket && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+          Split inspection is active for the <span className="font-medium">{getOrientationBucketLabel(orientationBucket, orientationLabels)}</span> side of the paired vignette.
+        </div>
+      )}
+
+      {hasPairedValueFilterParams && pairedValueLabel && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+          Blended paired inspection is active for <span className="font-medium">{pairedValueLabel}</span>. This list merges transcripts from both companion runs for the selected model.
+        </div>
+      )}
+
+      {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
           Scenario dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
@@ -617,7 +747,7 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {!hasDirectTranscriptParam && !hasRepeatPatternParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
@@ -630,7 +760,7 @@ export function AnalysisTranscripts() {
           transcripts={filteredTranscripts}
           onSelect={setSelectedTranscript}
           groupByModel={false}
-          scenarioDimensions={scenarioDimensions}
+          scenarioDimensions={mergedScenarioDimensions}
           onDecisionChange={handleDecisionChange}
           updatingTranscriptIds={updatingTranscriptIds}
         />

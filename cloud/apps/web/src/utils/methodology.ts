@@ -12,6 +12,15 @@ type DecisionScaleLabel = {
   label: string;
 };
 
+type DefinitionDimension = {
+  name?: string;
+};
+
+type JobChoiceComponents = {
+  value_first?: { token?: string };
+  value_second?: { token?: string };
+};
+
 export type DecisionMetadata = {
   parserVersion?: string;
   parseClass?: 'exact' | 'fallback_resolved' | 'ambiguous';
@@ -30,6 +39,73 @@ export type DecisionMetadata = {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
+function toNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function formatValueOrderName(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return trimmed;
+  }
+
+  const normalized = trimmed.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const looksLikeToken = /^[a-z0-9 ]+$/.test(normalized);
+  return looksLikeToken ? toTitleCase(normalized) : normalized;
+}
+
+function readJobChoiceComponents(content: unknown): JobChoiceComponents | null {
+  if (!isRecord(content)) return null;
+  const raw = content.components;
+  if (!isRecord(raw)) return null;
+
+  return {
+    value_first: isRecord(raw.value_first) ? { token: toNonEmptyString(raw.value_first.token) ?? undefined } : undefined,
+    value_second: isRecord(raw.value_second) ? { token: toNonEmptyString(raw.value_second.token) ?? undefined } : undefined,
+  };
+}
+
+function readDefinitionDimensions(content: unknown): DefinitionDimension[] {
+  if (!isRecord(content) || !Array.isArray(content.dimensions)) {
+    return [];
+  }
+
+  return content.dimensions.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const name = toNonEmptyString(entry.name);
+    return name ? [{ name }] : [];
+  });
+}
+
+function formatValueOrder(values: [string, string] | null): string | null {
+  if (!values) return null;
+  return `${values[0]} -> ${values[1]}`;
+}
+
+function reverseValueOrder(values: [string, string] | null): [string, string] | null {
+  if (!values) return null;
+  return [values[1], values[0]];
+}
+
+export type PairedOrientationLabels = {
+  canonicalValues: [string, string] | null;
+  flippedValues: [string, string] | null;
+  currentValues: [string, string] | null;
+  canonical: string;
+  flipped: string;
+  current: string;
+};
 
 export function getDefinitionMethodology(content: unknown): DefinitionMethodology | null {
   if (!isRecord(content)) return null;
@@ -115,6 +191,57 @@ export function getDecisionMetadata(value: unknown): DecisionMetadata | null {
 
 export function isJobChoiceMethodology(content: unknown): boolean {
   return getDefinitionMethodology(content)?.family === 'job-choice';
+}
+
+export function getPairedOrientationLabels(content: unknown): PairedOrientationLabels {
+  const methodology = getDefinitionMethodology(content);
+  const components = readJobChoiceComponents(content);
+  const dimensions = readDefinitionDimensions(content);
+
+  const componentOrder = (() => {
+    const first = toNonEmptyString(components?.value_first?.token);
+    const second = toNonEmptyString(components?.value_second?.token);
+    if (!first || !second) return null;
+    return [formatValueOrderName(first), formatValueOrderName(second)] as [string, string];
+  })();
+
+  const canonicalOrderFromMethodology = (() => {
+    const raw = methodology?.canonical_value_order;
+    if (!raw || raw.length < 2) return null;
+    const first = toNonEmptyString(raw[0]);
+    const second = toNonEmptyString(raw[1]);
+    if (!first || !second) return null;
+    return [formatValueOrderName(first), formatValueOrderName(second)] as [string, string];
+  })();
+
+  const canonicalOrderFromDimensions = (() => {
+    const first = toNonEmptyString(dimensions[0]?.name);
+    const second = toNonEmptyString(dimensions[1]?.name);
+    if (!first || !second) return null;
+    return [formatValueOrderName(first), formatValueOrderName(second)] as [string, string];
+  })();
+
+  const canonicalValues = canonicalOrderFromMethodology
+    ?? (componentOrder && methodology?.presentation_order === 'B_first'
+      ? reverseValueOrder(componentOrder)
+      : componentOrder)
+    ?? canonicalOrderFromDimensions;
+
+  const currentValues = componentOrder
+    ?? (methodology?.presentation_order === 'B_first'
+      ? reverseValueOrder(canonicalValues)
+      : canonicalValues);
+
+  const flippedValues = reverseValueOrder(canonicalValues);
+
+  return {
+    canonicalValues,
+    flippedValues,
+    currentValues,
+    canonical: formatValueOrder(canonicalValues) ?? 'Canonical order',
+    flipped: formatValueOrder(flippedValues) ?? 'Flipped order',
+    current: formatValueOrder(currentValues) ?? 'Current order',
+  };
 }
 
 export function getDefinitionMethodologyLabel(

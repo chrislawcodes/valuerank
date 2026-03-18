@@ -325,7 +325,7 @@ describe('DefinitionDetail', () => {
       const client = createMockClient({
         definition: {
           id: 'job-choice-1',
-          name: 'Care vs Freedom (A)',
+          name: 'Care -> Freedom',
           domainId: 'domain-a',
           domainContextId: 'context-1',
           levelPresetVersionId: null,

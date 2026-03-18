@@ -316,6 +316,32 @@ describe('TranscriptList', () => {
     expect(rowIds).toEqual(['t1', 't3', 't2']);
   });
 
+  it('sorts dimension columns by numeric tier when values are stored as words', async () => {
+    const transcripts = [
+      createMockTranscript({ id: 't1', scenarioId: 'scenario-1' }),
+      createMockTranscript({ id: 't2', scenarioId: 'scenario-2' }),
+      createMockTranscript({ id: 't3', scenarioId: 'scenario-3' }),
+    ];
+
+    const { container } = render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        scenarioDimensions={{
+          'scenario-1': { AttributeA: 'full' },
+          'scenario-2': { AttributeA: 'minimal' },
+          'scenario-3': { AttributeA: 'substantial' },
+        }}
+      />
+    );
+
+    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
+      .map((element) => element.getAttribute('data-transcript-id'));
+
+    expect(rowIds).toEqual(['t2', 't3', 't1']);
+  });
+
   it('renders decision override dropdown for transcripts with decisionCode "other"', async () => {
     const user = userEvent.setup();
     const onDecisionChange = vi.fn();

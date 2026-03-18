@@ -1,5 +1,5 @@
 import { assembleTemplate } from '@valuerank/shared';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { gql, useMutation, useQuery } from 'urql';
 import {
@@ -70,7 +70,35 @@ const PREAMBLES_QUERY = gql`
 `;
 
 function stripPairSuffix(name: string): string {
-  return name.replace(/\s+\((A|B)\)$/, '');
+  return name.replace(/\s+\((A|B|[^)]+ -> [^)]+)\)$/, '');
+}
+
+function formatValueOrderToken(value: string): string {
+  const normalized = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  if (normalized.length === 0) {
+    return value;
+  }
+
+  if (!/^[a-z0-9 ]+$/i.test(normalized)) {
+    return normalized;
+  }
+
+  return normalized
+    .split(' ')
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function buildGeneratedTitle(
+  firstToken?: string,
+  secondToken?: string,
+): string {
+  if (firstToken == null || secondToken == null || firstToken === '' || secondToken === '') {
+    return '';
+  }
+
+  return `${formatValueOrderToken(firstToken)} -> ${formatValueOrderToken(secondToken)}`;
 }
 
 function getJobChoiceComponents(content: unknown): JobChoiceComponents | null {
@@ -99,8 +127,6 @@ export function JobChoiceNew() {
   const [selectedContextId, setSelectedContextId] = useState('');
   const [selectedValueFirstId, setSelectedValueFirstId] = useState('');
   const [selectedValueSecondId, setSelectedValueSecondId] = useState('');
-  const [name, setName] = useState('');
-  const [nameWasAutoSet, setNameWasAutoSet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [initializedEditState, setInitializedEditState] = useState(false);
@@ -155,10 +181,16 @@ export function JobChoiceNew() {
     UPDATE_JOB_CHOICE_PAIR_MUTATION,
   );
 
-  const domains = domainsData?.domains ?? [];
+  const domains = useMemo(
+    () => domainsData?.domains ?? [],
+    [domainsData?.domains],
+  );
   const preambles = preamblesData?.preambles ?? [];
   const contexts = contextsData?.domainContexts ?? [];
-  const valueStatements = valueStatementsData?.valueStatements ?? [];
+  const valueStatements = useMemo(
+    () => valueStatementsData?.valueStatements ?? [],
+    [valueStatementsData?.valueStatements],
+  );
   const requestedDomainId = searchParams.get('domainId') ?? '';
   const editingDefinition = definitionData?.definition ?? null;
   const editingContent = editingDefinition?.resolvedContent ?? editingDefinition?.content ?? null;
@@ -180,6 +212,13 @@ export function JobChoiceNew() {
   const valueFirst = valueStatements.find((v) => v.id === selectedValueFirstId) ?? null;
   const valueSecond = valueStatements.find((v) => v.id === selectedValueSecondId) ?? null;
   const selectedContext = contexts.find((c) => c.id === selectedContextId) ?? null;
+  const generatedTitle = useMemo(
+    () => buildGeneratedTitle(valueFirst?.token, valueSecond?.token),
+    [valueFirst?.token, valueSecond?.token],
+  );
+  const displayedTitle = generatedTitle !== ''
+    ? generatedTitle
+    : (editingDefinition != null ? stripPairSuffix(editingDefinition.name) : '');
 
   const secondValueOptions = valueStatements.filter((v) => v.id !== selectedValueFirstId);
 
@@ -200,13 +239,23 @@ export function JobChoiceNew() {
     valueStatementsError?.message ??
     null;
 
+  const handleDomainChange = useCallback((domainId: string) => {
+    setSelectedDomainId(domainId);
+    setSelectedContextId('');
+    setSelectedValueFirstId('');
+    setSelectedValueSecondId('');
+    setErrorMessage(null);
+    const domain = domains.find((d) => d.id === domainId);
+    setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersionId ?? '');
+  }, [domains]);
+
   useEffect(() => {
     if (isEditing) return;
     if (selectedDomainId !== '') return;
     if (requestedDomainId === '') return;
     if (!domains.some((domain) => domain.id === requestedDomainId)) return;
     handleDomainChange(requestedDomainId);
-  }, [domains, isEditing, requestedDomainId, selectedDomainId]);
+  }, [domains, handleDomainChange, isEditing, requestedDomainId, selectedDomainId]);
 
   useEffect(() => {
     if (!isEditing || initializedEditState || editingDefinition == null) return;
@@ -215,8 +264,6 @@ export function JobChoiceNew() {
     setSelectedPreambleVersionId(editingDefinition.preambleVersionId ?? '');
     setSelectedLevelPresetVersionId(editingDefinition.levelPresetVersionId ?? '');
     setSelectedContextId(editingDefinition.domainContextId ?? canonicalComponents?.context_id ?? '');
-    setName(stripPairSuffix(editingDefinition.name));
-    setNameWasAutoSet(false);
     setInitializedEditState(true);
   }, [canonicalComponents?.context_id, editingDefinition, initializedEditState, isEditing]);
 
@@ -244,42 +291,15 @@ export function JobChoiceNew() {
     valueStatements,
   ]);
 
-  function handleDomainChange(domainId: string) {
-    setSelectedDomainId(domainId);
-    setSelectedContextId('');
-    setSelectedValueFirstId('');
-    setSelectedValueSecondId('');
-    setName('');
-    setNameWasAutoSet(false);
-    setErrorMessage(null);
-    const domain = domains.find((d) => d.id === domainId);
-    setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersionId ?? '');
-  }
-
   function handleValueFirstChange(valueId: string) {
-    const nextFirst = valueStatements.find((v) => v.id === valueId) ?? null;
     setSelectedValueFirstId(valueId);
     setSelectedValueSecondId('');
     setErrorMessage(null);
-    if (nextFirst != null && (name === '' || nameWasAutoSet)) {
-      setName(`${nextFirst.token} vs ...`);
-      setNameWasAutoSet(true);
-    }
   }
 
   function handleValueSecondChange(valueId: string) {
-    const nextSecond = valueStatements.find((v) => v.id === valueId) ?? null;
     setSelectedValueSecondId(valueId);
     setErrorMessage(null);
-    if (nextSecond != null && valueFirst != null && (name === '' || nameWasAutoSet)) {
-      setName(`${valueFirst.token} vs ${nextSecond.token}`);
-      setNameWasAutoSet(true);
-    }
-  }
-
-  function handleNameChange(nextName: string) {
-    setName(nextName);
-    setNameWasAutoSet(false);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -289,7 +309,7 @@ export function JobChoiceNew() {
       selectedContextId === '' ||
       selectedValueFirstId === '' ||
       selectedValueSecondId === '' ||
-      name.trim() === ''
+      generatedTitle === ''
     ) {
       return;
     }
@@ -301,7 +321,7 @@ export function JobChoiceNew() {
       const result = await updatePair({
         input: {
           definitionId: editDefinitionId,
-          name: name.trim(),
+          name: generatedTitle,
           contextId: selectedContextId,
           valueFirstId: selectedValueFirstId,
           valueSecondId: selectedValueSecondId,
@@ -323,7 +343,7 @@ export function JobChoiceNew() {
 
     const result = await createPair({
       input: {
-        name: name.trim(),
+        name: generatedTitle,
         domainId: selectedDomainId,
         contextId: selectedContextId,
         valueFirstId: selectedValueFirstId,
@@ -350,7 +370,7 @@ export function JobChoiceNew() {
     selectedContextId !== '' &&
     selectedValueFirstId !== '' &&
     selectedValueSecondId !== '' &&
-    name.trim() !== '' &&
+    generatedTitle !== '' &&
     !isSubmitting;
 
   return (
@@ -500,16 +520,16 @@ export function JobChoiceNew() {
           </div>
 
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-white/70">Vignette Name</label>
+            <label className="block text-sm font-medium text-white/70">Generated Title</label>
             <p className="text-xs text-white/40">
-              Display name for this vignette set — auto-filled from values. Both generated vignettes share this name with &quot;(A)&quot; or &quot;(B)&quot; appended.
+              Stored automatically from the selected value order. Changing the values changes the title.
             </p>
             <input
               type="text"
-              value={name}
-              onChange={(event) => handleNameChange(event.target.value)}
-              placeholder="e.g. achievement vs hedonism"
-              className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white outline-none focus:border-teal-500"
+              value={displayedTitle}
+              readOnly
+              placeholder="Select both values to generate a title"
+              className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white/80 outline-none"
             />
           </div>
 

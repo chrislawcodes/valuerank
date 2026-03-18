@@ -69,7 +69,7 @@ The selected scope should be representable in the URL so the view can be shared 
 
 - Treat the matched vignette versions as one analysis question.
 - Pool the evidence for summary metrics and visualization defaults.
-- Preserve the per-version provenance so users can still inspect the A-first and B-first answers.
+- Preserve the per-version provenance so users can still inspect the two value orders separately.
 - Make it obvious which evidence came from which version.
 - When a chart cannot cleanly show pooled and versioned data together, prefer the pooled summary plus a hover or drilldown path for version-specific detail rather than duplicating the full chart twice.
 

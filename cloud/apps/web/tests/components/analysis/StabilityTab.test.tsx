@@ -24,7 +24,7 @@ function createVarianceAnalysis(): VarianceAnalysis {
   return {
     isMultiSample: true,
     samplesPerScenario: 3,
-    orientationCorrectedCount: 2,
+    orientationCorrectedCount: 1,
     perModel: {
       model1: {
         totalSamples: 5,
@@ -61,6 +61,7 @@ function createVarianceAnalysis(): VarianceAnalysis {
             medianSignedDistance: 0.4,
             iqr: 0.6,
             neutralShare: 0.25,
+            orientationCorrected: true,
           },
         },
       },
@@ -69,6 +70,21 @@ function createVarianceAnalysis(): VarianceAnalysis {
     leastVariableScenarios: [],
   };
 }
+
+const pairedDefinitionContent = {
+  methodology: {
+    family: 'job-choice',
+    presentation_order: 'A_first' as const,
+  },
+  components: {
+    value_first: { token: 'freedom' },
+    value_second: { token: 'harmony' },
+  },
+  dimensions: [
+    { name: 'Freedom' },
+    { name: 'Harmony' },
+  ],
+};
 
 const decisionCoverage: DecisionCoverageSummary = {
   totalTranscripts: 6,
@@ -336,6 +352,7 @@ describe('StabilityTab', () => {
       <StabilityTab
         runId="run-1"
         analysisMode="paired"
+        definitionContent={pairedDefinitionContent}
         pairedScopeContext={{ orientationCorrectedCount: 3, hasOrientationPairing: true }}
         perModel={{
           model1: {
@@ -374,5 +391,51 @@ describe('StabilityTab', () => {
     expect(screen.queryByText(/Paired orientation pooling/i)).not.toBeInTheDocument();
     // Footnote still shows in single mode
     expect(screen.getByText(/normalized before computing direction/i)).toBeInTheDocument();
+  });
+
+  it('supports split inspection in paired mode and preserves orientation bucket in transcript links', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisBasePath="/analysis"
+        analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+        analysisMode="paired"
+        definitionContent={pairedDefinitionContent}
+        pairedScopeContext={{ orientationCorrectedCount: 1, hasOrientationPairing: true }}
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={{
+          decisionDistribution: {},
+          modelScenarioMatrix: {
+            model1: {
+              s1: 1.2,
+              s2: 1.1,
+            },
+          },
+          scenarioDimensions: {
+            s1: { Freedom: 'High', Harmony: 'Low' },
+            s2: { Freedom: 'High', Harmony: 'Low' },
+          },
+        }}
+        varianceAnalysis={createVarianceAnalysis()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Split by order' }));
+
+    expect(screen.getByText(/Split inspection keeps the pooled paired summary intact/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Freedom -> Harmony').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Harmony -> Freedom').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTitle('View 3 transcripts for model1 | Freedom: High, Harmony: Low | Freedom -> Harmony'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&orientationBucket=canonical&mode=paired',
+    );
   });
 });

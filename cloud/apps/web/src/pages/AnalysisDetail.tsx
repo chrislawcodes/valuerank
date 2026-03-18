@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
+import { PairedRunComparisonCard, findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
@@ -67,6 +68,19 @@ export function AnalysisDetail() {
     pause: !id || !run?.analysisStatus,
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
+  });
+  const { runs: candidatePairedRuns } = useRuns({
+    limit: 1000,
+    pause: analysisMode !== 'paired' || !run,
+  });
+  const companionRun = run == null
+    ? null
+    : findCompanionPairedRun(run, candidatePairedRuns);
+  const { analysis: companionAnalysis } = useAnalysis({
+    runId: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null || !companionRun.analysisStatus,
+    enablePolling: false,
+    analysisStatus: companionRun?.analysisStatus ?? null,
   });
 
   // Loading state
@@ -181,20 +195,32 @@ export function AnalysisDetail() {
           </p>
         </div>
       ) : (
-        <AnalysisPanel
-          runId={run.id}
-          analysisStatus={run.analysisStatus}
-          analysisBasePath={ANALYSIS_BASE_PATH}
-          analysisSearchParams={searchParams}
-          analysisMode={analysisMode}
-          onAnalysisModeChange={handleModeChange}
-          definitionContent={definitionContent}
-          transcripts={run.transcripts}
-          isOldVersion={isOldVersion}
-          isAggregate={isAggregate}
-          pendingSince={run.completedAt}
-          initialTab={initialTab}
-        />
+        <div className="space-y-4">
+          {analysisMode === 'paired' && launchModeLabel === 'Paired Batch' && (
+            <PairedRunComparisonCard
+              currentRun={run}
+              currentAnalysis={analysis}
+              companionRun={companionRun}
+              companionAnalysis={companionAnalysis}
+              analysisBasePath={ANALYSIS_BASE_PATH}
+              analysisSearch={searchParams.toString()}
+            />
+          )}
+          <AnalysisPanel
+            runId={run.id}
+            analysisStatus={run.analysisStatus}
+            analysisBasePath={ANALYSIS_BASE_PATH}
+            analysisSearchParams={searchParams}
+            analysisMode={analysisMode}
+            onAnalysisModeChange={handleModeChange}
+            definitionContent={definitionContent}
+            transcripts={run.transcripts}
+            isOldVersion={isOldVersion}
+            isAggregate={isAggregate}
+            pendingSince={run.completedAt}
+            initialTab={initialTab}
+          />
+        </div>
       )}
     </div>
   );

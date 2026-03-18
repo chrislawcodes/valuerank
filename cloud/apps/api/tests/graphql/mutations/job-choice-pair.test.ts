@@ -137,8 +137,8 @@ describe('GraphQL Job Choice Pair Mutations', () => {
 
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.errors).toBeUndefined();
-    expect(updateResponse.body.data.updateJobChoicePair.aFirst.name).toBe('Care vs Fairness (A)');
-    expect(updateResponse.body.data.updateJobChoicePair.bFirst.name).toBe('Care vs Fairness (B)');
+    expect(updateResponse.body.data.updateJobChoicePair.aFirst.name).toBe('Care -> Fairness');
+    expect(updateResponse.body.data.updateJobChoicePair.bFirst.name).toBe('Fairness -> Care');
 
     const definitions = await db.definition.findMany({
       where: { id: { in: [aFirstId, bFirstId] } },

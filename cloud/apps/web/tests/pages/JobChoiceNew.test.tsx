@@ -37,7 +37,7 @@ function createUseQueryImplementation() {
         data: {
           definition: {
             id: 'def-1',
-            name: 'care vs freedom (A)',
+            name: 'Care -> Freedom',
             domainId: 'domain-a',
             domainContextId: 'context-1',
             preambleVersionId: null,
@@ -207,7 +207,7 @@ describe('JobChoiceNew', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Edit Vignette' })).toBeInTheDocument();
-      expect(screen.getByDisplayValue('care vs freedom')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Care -> Freedom')).toBeInTheDocument();
     });
   });
 
@@ -217,8 +217,8 @@ describe('JobChoiceNew', () => {
       vi.fn().mockResolvedValue({
       data: {
         updateJobChoicePair: {
-          aFirst: { id: 'def-1', name: 'care vs freedom (A)' },
-          bFirst: { id: 'def-2', name: 'care vs freedom (B)' },
+          aFirst: { id: 'def-1', name: 'Care -> Freedom' },
+          bFirst: { id: 'def-2', name: 'Freedom -> Care' },
         },
       },
       }),
@@ -236,9 +236,6 @@ describe('JobChoiceNew', () => {
       expect(screen.getByRole('heading', { name: 'Edit Vignette' })).toBeInTheDocument();
     });
 
-    const nameInput = screen.getByDisplayValue('care vs freedom');
-    fireEvent.change(nameInput, { target: { value: 'care vs freedom revised' } });
-
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save Vignette Changes' }));
       await Promise.resolve();
@@ -248,7 +245,7 @@ describe('JobChoiceNew', () => {
       expect(mutationMocks.updatePairMock).toHaveBeenCalledWith({
         input: {
           definitionId: 'def-1',
-          name: 'care vs freedom revised',
+          name: 'Care -> Freedom',
           contextId: 'context-1',
           valueFirstId: 'value-1',
           valueSecondId: 'value-2',
