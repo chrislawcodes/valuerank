@@ -99,13 +99,27 @@ export function TranscriptRow({
   const decision = transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
 
-  // Build enriched decision label: "{code} - {Short direction} {primary_dim_key}"
-  // e.g. "2 - Somewhat oppose benevolence_dependability"
+  // Build enriched decision label: "{code} - {Short direction} ({job subject})"
+  // e.g. "2 - Somewhat support (trust from other people)"
+  // For non-job-choice labels, falls back to "{code} - {Short direction} {primary_dim_key}"
   const decisionScaleEntry = decisionScaleLabels.find((e) => e.code === String(decision));
-  const shortDirection = decisionScaleEntry != null ? extractShortDirection(decisionScaleEntry.label) : null;
+  const labelText = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null
+    ?? decisionScaleEntry?.label
+    ?? null;
+  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
   const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+  // For job-choice scale labels ("... taking the job with X"), extract the subject X.
+  // This correctly reflects orientation (A-first vs B-first) unlike primaryDimKey which is
+  // always the alphabetically-first dimension key due to PostgreSQL JSONB key ordering.
+  const jobWithMarker = ' taking the job with ';
+  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
+  const jobSubject = jobWithIdx >= 0 && labelText != null
+    ? labelText.slice(jobWithIdx + jobWithMarker.length)
+    : null;
   const decisionCore = shortDirection != null
-    ? (primaryDimKey != null ? `${decision} - ${shortDirection} ${primaryDimKey}` : `${decision} - ${shortDirection}`)
+    ? (jobSubject != null
+        ? `${decision} - ${shortDirection} (${jobSubject})`
+        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${primaryDimKey}` : `${decision} - ${shortDirection}`))
     : String(decision);
   const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decisionCore}*` : decisionCore;
   const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
