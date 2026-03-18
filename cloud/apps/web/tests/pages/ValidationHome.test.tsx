@@ -124,6 +124,6 @@ describe('ValidationHome', () => {
     expect(screen.getByText(/transcripts analyzed/i)).toBeInTheDocument();
     expect(screen.getByText(/launch readiness/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open temp=0 effect/i })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
-    expect(screen.getByRole('link', { name: /open validation analysis/i })).toHaveAttribute('href', '/assumptions/analysis');
+    expect(screen.getByRole('link', { name: /open legacy analysis/i })).toHaveAttribute('href', '/assumptions/analysis');
   });
 });

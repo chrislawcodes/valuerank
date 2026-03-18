@@ -13,6 +13,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 
 type ModelConsistencyChartProps = {
   reliability: AnalysisSemanticsView['reliability'];
+  analysisMode?: 'single' | 'paired';
 };
 
 type ChartDataPoint = {
@@ -141,7 +142,7 @@ function ReliabilityTooltip({ active, payload }: {
   );
 }
 
-export function ModelConsistencyChart({ reliability }: ModelConsistencyChartProps) {
+export function ModelConsistencyChart({ reliability, analysisMode }: ModelConsistencyChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   const availableModels = Object.values(reliability.byModel)
@@ -207,9 +208,15 @@ export function ModelConsistencyChart({ reliability }: ModelConsistencyChartProp
     <div ref={chartRef} className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-medium text-gray-700">Baseline Reliability by Model</h3>
+          <h3 className="text-sm font-medium text-gray-700">
+            Baseline Reliability by Model
+            {analysisMode === 'paired' ? ' (paired scope)' : ''}
+          </h3>
           <p className="mt-1 text-xs text-gray-500">
             Higher values mean more repeatable baseline decisions across repeated scenario judgments.
+            {analysisMode === 'paired'
+              ? ' Paired mode keeps the matched vignette context visible while you review the current results.'
+              : ' Single mode keeps the current results scoped to one vignette at a time.'}
           </p>
         </div>
         <CopyVisualButton targetRef={chartRef} label="baseline reliability chart" />

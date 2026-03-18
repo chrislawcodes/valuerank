@@ -273,12 +273,13 @@ describe('OverviewTab', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent(/How often repeated judgments stay on the same value side/i);
   });
 
-  it('navigates repeat-pattern cells with condition-level ids', () => {
+  it('navigates repeat-pattern cells with condition-level ids in paired mode', () => {
     render(
       <MemoryRouter>
         <OverviewTab
           runId="run-1"
           analysisBasePath="/analysis"
+          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
           semantics={createSemantics()}
           completedBatches={3}
           aggregateSourceRunCount={null}
@@ -311,7 +312,7 @@ describe('OverviewTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=a1%7C%7Cb1'
+      '/analysis/run-1/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=a1%7C%7Cb1&mode=paired'
     );
   });
 
@@ -488,5 +489,55 @@ describe('OverviewTab', () => {
 
     expect(screen.getByRole('button', { name: /^Torn: 1 of 4 repeated conditions/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Stable: 2 of 4 repeated conditions/i })).not.toBeInTheDocument();
+  });
+
+  it('shows paired scope note when analysisMode is paired', () => {
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={createSemantics()}
+          completedBatches={2}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="paired"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={null}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Paired vignette scope/i)).toBeInTheDocument();
+  });
+
+  it('does not show paired scope note when analysisMode is single', () => {
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={createSemantics()}
+          completedBatches={2}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="single"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={null}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
   });
 });

@@ -5,13 +5,14 @@
  * Shows per-model statistics, win rates, and warnings.
  */
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
-import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2, FileSpreadsheet, Link2, Check } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { BarChart2, BarChart3, AlertCircle, Clock, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Loading } from '../ui/Loading';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import { StatCard } from './StatCard';
 import { DecisionCoverageBanner } from './DecisionCoverageBanner';
+import { AnalysisScopeBanner } from './AnalysisScopeBanner';
 import {
   OverviewTab,
   DecisionsTab,
@@ -21,7 +22,6 @@ import {
   type AnalysisTab,
 } from './tabs';
 import { useAnalysis } from '../../hooks/useAnalysis';
-import { exportRunAsXLSX, getODataFeedUrl, getCSVFeedUrl } from '../../api/export';
 import type { PerModelStats, AnalysisWarning } from '../../api/operations/analysis';
 import type { Transcript } from '../../api/operations/runs';
 import {
@@ -36,6 +36,10 @@ import {
   summarizeDecisionCoverage,
   shouldShowDecisionCoverage,
 } from '../../utils/analysisCoverage';
+import {
+  buildPairedScopeContext,
+  type PairedScopeContext,
+} from '../../utils/pairedScopeAdapter';
 
 type AnalysisPanelProps = {
   runId: string;
@@ -47,6 +51,9 @@ type AnalysisPanelProps = {
   isAggregate?: boolean;
   pendingSince?: string | null;
   initialTab?: AnalysisTab;
+  analysisSearchParams?: URLSearchParams | string;
+  analysisMode?: 'single' | 'paired';
+  onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
 };
 
 /**
@@ -274,6 +281,9 @@ export function AnalysisPanel({
   isAggregate,
   pendingSince,
   initialTab = 'overview',
+  analysisSearchParams,
+  analysisMode,
+  onAnalysisModeChange,
 }: AnalysisPanelProps) {
   const { analysis, loading, error, recompute, recomputing } = useAnalysis({
     runId,
@@ -290,11 +300,12 @@ export function AnalysisPanel({
     [definitionContent]
   );
 
+  const pairedScopeContext = useMemo<PairedScopeContext>(
+    () => buildPairedScopeContext(analysisMode, analysis?.varianceAnalysis),
+    [analysisMode, analysis?.varianceAnalysis],
+  );
+
   const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [odataLinkCopied, setOdataLinkCopied] = useState(false);
-  const [csvLinkCopied, setCsvLinkCopied] = useState(false);
   const semantics = useMemo(() => {
     if (!analysis) {
       return null;
@@ -307,42 +318,6 @@ export function AnalysisPanel({
     [transcripts],
   );
   const showDecisionCoverage = shouldShowDecisionCoverage(decisionCoverage);
-
-  const handleExportExcel = useCallback(async () => {
-    setIsExporting(true);
-    setExportError(null);
-    try {
-      await exportRunAsXLSX(runId);
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : 'Export failed');
-    } finally {
-      setIsExporting(false);
-    }
-  }, [runId]);
-
-  const handleCopyODataLink = useCallback(async () => {
-    const url = getODataFeedUrl(runId);
-    try {
-      await navigator.clipboard.writeText(url);
-      setOdataLinkCopied(true);
-      setTimeout(() => setOdataLinkCopied(false), 2000);
-    } catch {
-      // Fallback: show the URL in an alert if clipboard fails
-      window.prompt('Copy this OData URL for Excel:', url);
-    }
-  }, [runId]);
-
-  const handleCopyCSVLink = useCallback(async () => {
-    const url = getCSVFeedUrl(runId) + '?apiKey=YOUR_API_KEY_HERE';
-    try {
-      await navigator.clipboard.writeText(url);
-      setCsvLinkCopied(true);
-      setTimeout(() => setCsvLinkCopied(false), 2000);
-      // Optional: Could toast here to remind user to replace key
-    } catch {
-      window.prompt('Copy this CSV URL for Google Sheets IMPORTDATA (Replace YOUR_API_KEY_HERE):', url);
-    }
-  }, [runId]);
 
   const perModel = useMemo(
     () => analysis?.perModel ?? {},
@@ -426,42 +401,30 @@ export function AnalysisPanel({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {analysisMode && onAnalysisModeChange ? (
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <Button
+                type="button"
+                variant={analysisMode === 'single' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => onAnalysisModeChange('single')}
+                aria-pressed={analysisMode === 'single'}
+              >
+                Single vignette
+              </Button>
+              <Button
+                type="button"
+                variant={analysisMode === 'paired' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => onAnalysisModeChange('paired')}
+                aria-pressed={analysisMode === 'paired'}
+              >
+                Paired vignettes
+              </Button>
+            </div>
+          ) : null}
           {!isAggregateAnalysis && (
             <>
-              <Button variant="secondary" size="sm" onClick={() => void handleExportExcel()} disabled={isExporting}>
-                {isExporting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                )}
-                Export Excel
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleCopyODataLink()}
-                title="Copy OData URL for Excel's 'From OData Feed' feature"
-              >
-                {odataLinkCopied ? (
-                  <Check className="w-4 h-4 mr-2 text-green-600" />
-                ) : (
-                  <Link2 className="w-4 h-4 mr-2" />
-                )}
-                {odataLinkCopied ? 'Copied!' : 'OData Link'}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleCopyCSVLink()}
-                title="Copy CSV URL for Google Sheets IMPORTDATA"
-              >
-                {csvLinkCopied ? (
-                  <Check className="w-4 h-4 mr-2 text-green-600" />
-                ) : (
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                )}
-                {csvLinkCopied ? 'Copied!' : 'CSV Feed'}
-              </Button>
               <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
                 {recomputing ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -475,16 +438,15 @@ export function AnalysisPanel({
         </div>
       </div>
 
-      {/* Export Error */}
-      {exportError && (
-        <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg mb-6">
-          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-800">Export failed</p>
-            <p className="text-xs text-red-600 mt-1">{exportError}</p>
-          </div>
+      {analysisMode ? (
+        <div className="mb-6">
+          <AnalysisScopeBanner
+            analysisMode={analysisMode}
+            orientationCorrectedCount={pairedScopeContext.orientationCorrectedCount}
+            compact
+          />
         </div>
-      )}
+      ) : null}
 
       {/* Warnings */}
       {displayWarnings.length > 0 && (
@@ -499,13 +461,13 @@ export function AnalysisPanel({
         <div className="mb-6">
           <DecisionCoverageBanner
             coverage={decisionCoverage}
-            contextLabel="numeric summaries"
+            contextLabel={analysisMode === 'paired' ? 'paired vignette summaries' : 'numeric summaries'}
           />
         </div>
       )}
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className={`grid grid-cols-2 gap-4 mb-6 ${pairedScopeContext.hasOrientationPairing ? 'md:grid-cols-6' : 'md:grid-cols-5'}`}>
         <StatCard
           label="Models"
           value={modelCount}
@@ -537,6 +499,13 @@ export function AnalysisPanel({
                 : 'default'
           }
         />
+        {pairedScopeContext.hasOrientationPairing && (
+          <StatCard
+            label="Orientation Pairs"
+            value={pairedScopeContext.orientationCorrectedCount}
+            detail={`${pairedScopeContext.orientationCorrectedCount} scenario${pairedScopeContext.orientationCorrectedCount === 1 ? '' : 's'} orientation-normalized`}
+          />
+        )}
       </div>
 
       <div className="border-b border-gray-200 mb-6">
@@ -562,6 +531,7 @@ export function AnalysisPanel({
           <OverviewTab
             runId={runId}
             analysisBasePath={analysisBasePath}
+            analysisSearchParams={analysisSearchParams}
             perModel={perModel}
             visualizationData={analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}
@@ -571,6 +541,7 @@ export function AnalysisPanel({
             completedBatches={batches}
             aggregateSourceRunCount={aggregateSourceRunCount}
             isAggregate={isAggregateAnalysis}
+            analysisMode={analysisMode}
           />
         )}
         {activeTab === 'decisions' && semantics && (
@@ -578,12 +549,15 @@ export function AnalysisPanel({
             visualizationData={analysis.visualizationData}
             dimensionLabels={dimensionLabels}
             semantics={semantics}
+            analysisMode={analysisMode}
           />
         )}
         {activeTab === 'scenarios' && (
           <ScenariosTab
             runId={runId}
             analysisBasePath={analysisBasePath}
+            analysisSearchParams={analysisSearchParams}
+            analysisMode={analysisMode}
             visualizationData={analysis.visualizationData}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}
@@ -594,6 +568,9 @@ export function AnalysisPanel({
           <StabilityTab
             runId={runId}
             analysisBasePath={analysisBasePath}
+            analysisSearchParams={analysisSearchParams}
+            analysisMode={analysisMode}
+            pairedScopeContext={pairedScopeContext}
             perModel={perModel}
             visualizationData={loading ? null : analysis.visualizationData}
             varianceAnalysis={analysis.varianceAnalysis}

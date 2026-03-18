@@ -98,11 +98,15 @@ async function main() {
 
   const devUser = await prisma.user.upsert({
     where: { email: 'dev@valuerank.ai' },
-    update: {},
+    update: {
+      // Keep the local dev credential stable so localhost testing always works.
+      passwordHash: '$2b$10$qdI5n2GaY.nu4R5MC5Cur.oNuek5ksX9B4WUgJVER.VqNuF.kBgbe',
+      name: 'Development User',
+    },
     create: {
       email: 'dev@valuerank.ai',
       // Password: "development" - hashed with bcrypt
-      passwordHash: '$2b$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSsvqNu.1u',
+      passwordHash: '$2b$10$qdI5n2GaY.nu4R5MC5Cur.oNuek5ksX9B4WUgJVER.VqNuF.kBgbe',
       name: 'Development User',
     },
   });

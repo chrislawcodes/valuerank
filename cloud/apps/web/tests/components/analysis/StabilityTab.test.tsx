@@ -200,6 +200,80 @@ describe('StabilityTab', () => {
       <StabilityTab
         runId="run-1"
         analysisBasePath="/analysis"
+        analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={{
+          decisionDistribution: {},
+          modelScenarioMatrix: {
+            model1: {
+              s1: 1.2,
+              s2: 1.1,
+            },
+          },
+          scenarioDimensions: {
+            s1: { Freedom: 'High', Harmony: 'Low' },
+            s2: { Freedom: 'High', Harmony: 'Low' },
+          },
+        }}
+        varianceAnalysis={createVarianceAnalysis()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('View 5 transcripts for model1 | Freedom: High, Harmony: Low'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&mode=paired',
+    );
+  });
+
+  it('supports string analysisSearchParams when building stability transcript links', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisBasePath="/analysis"
+        analysisSearchParams="?mode=paired"
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={{
+          decisionDistribution: {},
+          modelScenarioMatrix: {
+            model1: {
+              s1: 1.2,
+              s2: 1.1,
+            },
+          },
+          scenarioDimensions: {
+            s1: { Freedom: 'High', Harmony: 'Low' },
+            s2: { Freedom: 'High', Harmony: 'Low' },
+          },
+        }}
+        varianceAnalysis={createVarianceAnalysis()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('View 5 transcripts for model1 | Freedom: High, Harmony: Low'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&mode=paired',
+    );
+  });
+
+  it('keeps stability transcript routes clean when no extra search params are provided', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisBasePath="/analysis"
         perModel={{
           model1: {
             sampleSize: 5,
@@ -255,5 +329,50 @@ describe('StabilityTab', () => {
     expect(banner).toHaveTextContent('Parser-scored: 3 (2 exact, 1 fallback)');
     expect(screen.getByText('model1')).toBeInTheDocument();
     expect(screen.getByText('4/6')).toBeInTheDocument();
+  });
+
+  it('shows paired orientation banner when pairedScopeContext.hasOrientationPairing is true', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisMode="paired"
+        pairedScopeContext={{ orientationCorrectedCount: 3, hasOrientationPairing: true }}
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={null}
+        varianceAnalysis={createVarianceAnalysis()}
+      />,
+    );
+
+    expect(screen.getByText(/Paired orientation pooling/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 scenarios had/i)).toBeInTheDocument();
+  });
+
+  it('does not show paired orientation banner in single mode even if corrections occurred', () => {
+    render(
+      <StabilityTab
+        runId="run-1"
+        analysisMode="single"
+        pairedScopeContext={{ orientationCorrectedCount: 3, hasOrientationPairing: false }}
+        perModel={{
+          model1: {
+            sampleSize: 5,
+            values: {},
+            overall: { mean: 1.1, stdDev: 0.2, min: 1, max: 2 },
+          },
+        }}
+        visualizationData={null}
+        varianceAnalysis={createVarianceAnalysis()}
+      />,
+    );
+
+    expect(screen.queryByText(/Paired orientation pooling/i)).not.toBeInTheDocument();
+    // Footnote still shows in single mode
+    expect(screen.getByText(/normalized before computing direction/i)).toBeInTheDocument();
   });
 });

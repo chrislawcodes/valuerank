@@ -57,6 +57,72 @@ describe('PivotAnalysisTable', () => {
         <PivotAnalysisTable
           runId="run-1"
           analysisBasePath="/analysis"
+          analysisSearchParams={new URLSearchParams({ mode: 'paired' })}
+          dimensionLabels={{
+            '1': 'Strongly Support Freedom',
+            '5': 'Strongly Support Harmony',
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1, s2: 3, s3: 5 },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByText('1.00'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&mode=paired'
+    );
+  });
+
+  it('supports string analysisSearchParams when building pivot transcript links', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          analysisBasePath="/analysis"
+          analysisSearchParams="?mode=paired"
+          dimensionLabels={{
+            '1': 'Strongly Support Freedom',
+            '5': 'Strongly Support Harmony',
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+              s2: { Freedom: 'a1', Harmony: 'b2' },
+              s3: { Freedom: 'a2', Harmony: 'b2' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1, s2: 3, s3: 5 },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByText('1.00'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&mode=paired'
+    );
+  });
+
+  it('does not add extra query params when no analysis search params are provided', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          analysisBasePath="/analysis"
           dimensionLabels={{
             '1': 'Strongly Support Freedom',
             '5': 'Strongly Support Harmony',

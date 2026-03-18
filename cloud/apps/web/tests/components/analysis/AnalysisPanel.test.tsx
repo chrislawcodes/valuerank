@@ -226,6 +226,127 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText(/Computed/)).toBeInTheDocument();
   });
 
+  it('renders the mode toggle in the header and hides removed export actions', async () => {
+    const analysis = createMockAnalysis();
+    const onModeChange = vi.fn();
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel
+          runId="run-1"
+          analysisMode="single"
+          onAnalysisModeChange={onModeChange}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: /csv feed/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
+    expect(onModeChange).toHaveBeenCalledWith('paired');
+
+    await userEvent.click(screen.getByRole('button', { name: /single vignette/i }));
+    expect(onModeChange).toHaveBeenNthCalledWith(2, 'single');
+  });
+
+  it('renders the paired scope banner when paired mode is active', () => {
+    const analysis = createMockAnalysis();
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
+    expect(screen.getByText(/Paired mode keeps the matched vignette context visible/i)).toBeInTheDocument();
+  });
+
+  it('shows paired scope copy in the scenarios tab', () => {
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+        },
+      },
+      mostContestedScenarios: [],
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" initialTab="scenarios" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while you inspect the current pivot summary\./i)).toBeInTheDocument();
+  });
+
+  it('shows paired scope copy in the stability tab', () => {
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+        },
+      },
+      varianceAnalysis: {
+        orientationCorrectedCount: 0,
+        perModel: {},
+      } as any,
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" initialTab="stability" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while you review these stability metrics\./i)).toBeInTheDocument();
+  });
+
   it('renders model count stat', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
@@ -636,5 +757,122 @@ describe('AnalysisPanel', () => {
     // We expect "N<2" to be displayed for the cell with insufficient data,
     // OR at least the component shouldn't crash.
     // In the current broken state, this test might fail with the error observed in production.
+  });
+
+  it('shows orientation stat card in paired mode when orientationCorrectedCount > 0', () => {
+    const analysis = createMockAnalysis({
+      varianceAnalysis: {
+        isMultiSample: true,
+        samplesPerScenario: 2,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+        orientationCorrectedCount: 4,
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Orientation Pairs')).toBeInTheDocument();
+    expect(screen.getByText('4 scenarios orientation-normalized')).toBeInTheDocument();
+  });
+
+  it('does not show orientation stat card in single mode even when orientationCorrectedCount > 0', () => {
+    const analysis = createMockAnalysis({
+      varianceAnalysis: {
+        isMultiSample: true,
+        samplesPerScenario: 2,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+        orientationCorrectedCount: 4,
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="single" />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText('Orientation Pairs')).not.toBeInTheDocument();
+  });
+
+  it('does not show orientation stat card in paired mode when orientationCorrectedCount is 0', () => {
+    const analysis = createMockAnalysis({
+      varianceAnalysis: {
+        isMultiSample: false,
+        samplesPerScenario: 1,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+        orientationCorrectedCount: 0,
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText('Orientation Pairs')).not.toBeInTheDocument();
+  });
+
+  it('shows orientation details in scope banner in paired mode when orientationCorrectedCount > 0', () => {
+    const analysis = createMockAnalysis({
+      varianceAnalysis: {
+        isMultiSample: true,
+        samplesPerScenario: 2,
+        perModel: {},
+        mostVariableScenarios: [],
+        leastVariableScenarios: [],
+        orientationCorrectedCount: 3,
+      },
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" analysisMode="paired" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/3 scenarios had/i)).toBeInTheDocument();
   });
 });

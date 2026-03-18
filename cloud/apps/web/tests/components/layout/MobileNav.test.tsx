@@ -47,7 +47,7 @@ describe('MobileNav Component', () => {
 
     expect(screen.getByRole('link', { name: 'Validation' })).toHaveAttribute('href', '/validation');
     expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
-    expect(screen.getByRole('link', { name: 'Validation Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
+    expect(screen.getByRole('link', { name: 'Legacy Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
     expect(screen.getByRole('link', { name: 'Validation (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
   });
 
@@ -63,7 +63,7 @@ describe('MobileNav Component', () => {
     await renderMobileNav('/assumptions/analysis');
 
     expect(screen.getByRole('link', { name: 'Validation' }).className).not.toContain('border-teal-500');
-    expect(screen.getByRole('link', { name: 'Validation Analysis' }).className).toContain('border-teal-500');
+    expect(screen.getByRole('link', { name: 'Legacy Analysis' }).className).toContain('border-teal-500');
   });
 
   it('highlights the archive item on archive compatibility routes', async () => {

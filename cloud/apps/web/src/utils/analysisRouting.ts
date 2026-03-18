@@ -10,10 +10,23 @@ export function buildAnalysisTranscriptsPath(
   basePath: AnalysisBasePath,
   runId: string,
   search: URLSearchParams | string,
+  extraSearch?: URLSearchParams | string,
 ): string {
   const serialized = typeof search === 'string' ? search : search.toString();
-  return serialized.length > 0
-    ? `${basePath}/${runId}/transcripts?${serialized}`
+  const params = new URLSearchParams(serialized.startsWith('?') ? serialized.slice(1) : serialized);
+
+  if (extraSearch) {
+    const extra = typeof extraSearch === 'string'
+      ? new URLSearchParams(extraSearch.startsWith('?') ? extraSearch.slice(1) : extraSearch)
+      : extraSearch;
+    extra.forEach((value, key) => {
+      params.set(key, value);
+    });
+  }
+
+  const merged = params.toString();
+  return merged.length > 0
+    ? `${basePath}/${runId}/transcripts?${merged}`
     : `${basePath}/${runId}/transcripts`;
 }
 

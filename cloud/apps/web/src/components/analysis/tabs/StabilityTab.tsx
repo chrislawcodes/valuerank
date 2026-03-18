@@ -17,10 +17,14 @@ import {
     getCoverageForModel,
     type DecisionCoverageSummary,
 } from '../../../utils/analysisCoverage';
+import type { PairedScopeContext } from '../../../utils/pairedScopeAdapter';
 
 type StabilityTabProps = {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
+    pairedScopeContext?: PairedScopeContext;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
@@ -165,12 +169,14 @@ export function getDirectionTextColor(direction: 'A' | 'B' | 'NEUTRAL' | null): 
 function ConditionStabilityMatrix({
     runId,
     analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
     perModel,
     visualizationData,
     varianceAnalysis,
 }: {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
@@ -263,8 +269,8 @@ function ConditionStabilityMatrix({
             col: row.attributeBLevel,
             model: modelId,
         });
-        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
-    };
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
+      };
 
     if (!scenarioDimensions) {
         return (
@@ -458,12 +464,16 @@ function ConditionStabilityMatrix({
 export function StabilityTab({
     runId,
     analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
+    analysisMode,
+    pairedScopeContext,
     perModel,
     visualizationData,
     varianceAnalysis,
     decisionCoverage,
 }: StabilityTabProps) {
     const orientationCorrectedCount = varianceAnalysis?.orientationCorrectedCount ?? 0;
+    const showPairedOrientationBanner = pairedScopeContext?.hasOrientationPairing ?? false;
     const visibleCoverageRows = useMemo(
         () => Object.keys(perModel)
             .sort()
@@ -483,12 +493,27 @@ export function StabilityTab({
                     Rows are condition combinations (attribute A level + attribute B level). Columns are target AIs.
                     Each cell shows the predominant direction (Favors A / Favors B / Neutral) and the fraction of
                     replicates that agree. High stability means all replicates pointed the same direction.
+                    {analysisMode === 'paired'
+                        ? ' Paired mode keeps the matched vignette context visible while you review these stability metrics.'
+                        : analysisMode === 'single'
+                        ? ' Single mode keeps the analysis focused on one vignette at a time.'
+                        : null}
                 </p>
+                {showPairedOrientationBanner && pairedScopeContext != null && (
+                    <div className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+                        <span className="font-medium">Paired orientation pooling: </span>
+                        {pairedScopeContext.orientationCorrectedCount} scenario{pairedScopeContext.orientationCorrectedCount === 1 ? '' : 's'} had
+                        their presentation order reversed for the B-first vignette. Scores were normalized to
+                        the canonical A-first orientation before computing direction.{' '}
+                        <span className="font-medium">Favors A</span> and{' '}
+                        <span className="font-medium">Favors B</span> refer to the A-first value order.
+                    </div>
+                )}
                 {decisionCoverage && (
                     <div className="space-y-3">
                         <DecisionCoverageBanner
                             coverage={decisionCoverage}
-                            contextLabel="stability metrics"
+                            contextLabel={analysisMode === 'paired' ? 'paired vignette stability metrics' : 'stability metrics'}
                             compact
                         />
                         {visibleCoverageRows.length > 0 && (
@@ -542,11 +567,12 @@ export function StabilityTab({
             <ConditionStabilityMatrix
                 runId={runId}
                 analysisBasePath={analysisBasePath}
+                analysisSearchParams={analysisSearchParams}
                 perModel={perModel}
                 visualizationData={visualizationData}
                 varianceAnalysis={varianceAnalysis}
             />
-                {orientationCorrectedCount > 0 && (
+                {orientationCorrectedCount > 0 && !showPairedOrientationBanner && (
                     <p className="mt-1 text-xs text-gray-400">
                         * Scores for {orientationCorrectedCount} scenario(s) with reversed presentation order were
                         normalized before computing direction.

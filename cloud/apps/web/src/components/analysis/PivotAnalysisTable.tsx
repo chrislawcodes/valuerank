@@ -13,6 +13,7 @@ import { ANALYSIS_BASE_PATH, type AnalysisBasePath, buildAnalysisTranscriptsPath
 type PivotAnalysisTableProps = {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
     visualizationData: VisualizationData;
     dimensionLabels?: Record<string, string>;
     expectedAttributes?: string[];
@@ -75,6 +76,7 @@ function Legend({ lowName, highName, counts }: { lowName: string; highName: stri
 export function PivotAnalysisTable({
     runId,
     analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
     visualizationData,
     dimensionLabels,
     expectedAttributes = [],
@@ -206,7 +208,7 @@ export function PivotAnalysisTable({
         if (options?.decisionCode) {
             params.set('decisionCode', options.decisionCode);
         }
-        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
     };
 
     if (!scenarioDimensions || availableDimensions.length === 0) {
@@ -263,7 +265,6 @@ export function PivotAnalysisTable({
                     />
                 </div>
             </div>
-
             {/* Grid */}
             {pivotData && (
                 <div className="overflow-x-auto">

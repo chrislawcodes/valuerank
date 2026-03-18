@@ -52,8 +52,9 @@ describe('NavTabs Component', () => {
 
     expect(screen.getByRole('link', { name: 'Temp=0 Effect' })).toHaveAttribute('href', '/assumptions/temp-zero-effect');
     expect(
-      screen.getAllByRole('link', { name: 'Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
+      screen.getAllByRole('link', { name: 'Legacy Analysis' }).some((link) => link.getAttribute('href') === '/assumptions/analysis')
     ).toBe(true);
+    expect(screen.getByRole('link', { name: 'Legacy Analysis' })).toHaveAttribute('href', '/assumptions/analysis');
     expect(screen.getByRole('link', { name: 'Analysis (old v1)' })).toHaveAttribute('href', '/assumptions/analysis-v1');
   });
 
@@ -71,7 +72,7 @@ describe('NavTabs Component', () => {
 
     expect(screen.getByRole('link', { name: 'Validation' }).parentElement?.className).toContain('border-teal-500');
     expect(
-      screen.getAllByRole('link', { name: 'Analysis' }).some(
+      screen.getAllByRole('link', { name: 'Legacy Analysis' }).some(
         (link) => link.getAttribute('href') === '/assumptions/analysis' && link.className.includes('bg-teal-600/20')
       )
     ).toBe(true);

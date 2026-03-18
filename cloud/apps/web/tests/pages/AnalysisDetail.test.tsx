@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Provider, createClient } from 'urql';
 import { AnalysisDetail } from '../../src/pages/AnalysisDetail';
 
@@ -20,6 +20,12 @@ const mockClient = createClient({
 const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
 const mockUseAnalysis = vi.fn();
+
+function LocationProbe() {
+  const location = useLocation();
+
+  return <div data-testid="location-search">{location.search}</div>;
+}
 
 vi.mock('../../src/hooks/useRun', () => ({
   useRun: () => mockUseRun(),
@@ -39,10 +45,14 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     runId,
     isAggregate,
     transcripts,
+    analysisMode,
+    onAnalysisModeChange,
   }: {
     runId: string;
     isAggregate?: boolean;
     transcripts?: Array<unknown>;
+    analysisMode?: 'single' | 'paired';
+    onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
   }) => (
     <div
       data-testid="analysis-panel"
@@ -50,14 +60,23 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
       data-transcript-count={String(transcripts?.length ?? 0)}
     >
       Analysis Panel for {runId}
+      <button type="button" aria-pressed={analysisMode === 'single'} onClick={() => onAnalysisModeChange?.('single')}>
+        Single vignette
+      </button>
+      <button type="button" aria-pressed={analysisMode === 'paired'} onClick={() => onAnalysisModeChange?.('paired')}>
+        Paired vignettes
+      </button>
     </div>
   ),
 }));
 
-function renderWithRouter(runId: string) {
+function renderWithRouter(runIdOrEntry: string) {
+  const initialEntry = runIdOrEntry.startsWith('/') ? runIdOrEntry : `/analysis/${runIdOrEntry}`;
+
   return render(
     <Provider value={mockClient}>
-      <MemoryRouter initialEntries={[`/analysis/${runId}`]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <LocationProbe />
         <Routes>
           <Route path="/analysis/:id" element={<AnalysisDetail />} />
           <Route path="/analysis" element={<div>Analysis List</div>} />
@@ -202,6 +221,30 @@ describe('AnalysisDetail', () => {
       renderWithRouter('run-123');
 
       expect(screen.getByTestId('analysis-panel')).toBeInTheDocument();
+    });
+
+    it('shows the analysis mode toggle and updates the URL when switched', () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('/analysis/run-123');
+
+      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('');
+
+      fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
+
+      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?mode=paired');
     });
   });
 

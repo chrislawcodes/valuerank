@@ -171,12 +171,20 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByText('No transcripts found for these conditions.')).toBeInTheDocument();
   });
 
-  it('opens a direct transcript exemplar link without cell filter params', () => {
-    renderPage('/analysis/run-1/transcripts?transcriptId=tx-2');
+  it('opens a direct transcript exemplar link in paired mode without cell filter params', () => {
+    renderPage('/analysis/run-1/transcripts?transcriptId=tx-2&mode=paired');
 
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
     expect(screen.queryByText('Missing filter parameters. Return to the pivot table and click a cell to view transcripts.')).not.toBeInTheDocument();
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
     expect(screen.getByTestId('transcript-viewer')).toHaveTextContent('Viewer transcript: tx-2');
+  });
+
+  it('shows the paired scope banner when the mode query param is present', () => {
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1');
+
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
+    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while the analysis surface is adapted\./i)).toBeInTheDocument();
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

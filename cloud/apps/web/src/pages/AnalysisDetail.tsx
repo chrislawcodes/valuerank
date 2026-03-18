@@ -26,6 +26,18 @@ function parseAnalysisTab(value: string | null): AnalysisTab {
   return 'overview';
 }
 
+type AnalysisDetailMode = 'single' | 'paired';
+
+function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
+  return value === 'paired' ? 'paired' : 'single';
+}
+
+function buildAnalysisDetailParams(searchParams: URLSearchParams, mode: AnalysisDetailMode): URLSearchParams {
+  const next = new URLSearchParams(searchParams);
+  next.set('mode', mode);
+  return next;
+}
+
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
 }
@@ -35,6 +47,14 @@ export function AnalysisDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const initialTab = parseAnalysisTab(searchParams.get('tab'));
+  const analysisMode = parseAnalysisDetailMode(searchParams.get('mode'));
+  const handleModeChange = (mode: AnalysisDetailMode) => {
+    const next = buildAnalysisDetailParams(searchParams, mode);
+    navigate({
+      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
+      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+    }, { replace: true });
+  };
 
   const { run, loading, error } = useRun({
     id: id || '',
@@ -165,6 +185,9 @@ export function AnalysisDetail() {
           runId={run.id}
           analysisStatus={run.analysisStatus}
           analysisBasePath={ANALYSIS_BASE_PATH}
+          analysisSearchParams={searchParams}
+          analysisMode={analysisMode}
+          onAnalysisModeChange={handleModeChange}
           definitionContent={definitionContent}
           transcripts={run.transcripts}
           isOldVersion={isOldVersion}
@@ -198,6 +221,7 @@ function Header({
   currentSignature?: string | null;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const { runs } = useRuns({
     definitionId: isAggregate ? (definitionId || undefined) : undefined,
@@ -234,9 +258,10 @@ function Header({
   }, []);
 
   const selectedAggregateSignature = aggregateRuns.find((run) => run.id === runId)?.signature ?? currentSignature ?? 'v?td';
+  const currentSearch = searchParams.toString();
 
   return (
-    <div className="flex items-center justify-between flex-1 mr-4">
+    <div className="flex items-start justify-between flex-1 mr-4 gap-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/analysis')}>
           <ArrowLeft className="w-4 h-4 mr-1" />
@@ -275,7 +300,10 @@ function Header({
                     onChange={(e) => {
                       const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
                       if (nextRun) {
-                        navigate(buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id));
+                        navigate({
+                          pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id),
+                          search: currentSearch.length > 0 ? `?${currentSearch}` : '',
+                        });
                       }
                     }}
                   >

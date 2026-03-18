@@ -32,6 +32,7 @@ import type {
 type OverviewTabProps = {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   varianceAnalysis?: VarianceAnalysis | null;
@@ -41,6 +42,7 @@ type OverviewTabProps = {
   completedBatches: number | '-';
   aggregateSourceRunCount: number | null;
   isAggregate: boolean;
+  analysisMode?: 'single' | 'paired';
 };
 
 type ConditionRow = {
@@ -480,6 +482,7 @@ function SummaryCell({
 function PatternMetricButton({
   runId,
   analysisBasePath,
+  analysisSearchParams,
   modelId,
   pattern,
   metrics,
@@ -489,6 +492,7 @@ function PatternMetricButton({
 }: {
   runId: string;
   analysisBasePath: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
   modelId: string;
   pattern: RepeatPattern;
   metrics: Extract<RepeatPatternMetrics, { status: 'available' }>;
@@ -520,7 +524,7 @@ function PatternMetricButton({
           colDim,
           conditionIds: metrics.conditionIds[pattern].join(','),
         });
-        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
       }}
     >
       {formatPercent(value)}
@@ -531,6 +535,7 @@ function PatternMetricButton({
 function OverviewSummaryTable({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
+  analysisSearchParams,
   semantics,
   varianceAnalysis,
   visualizationData,
@@ -541,6 +546,7 @@ function OverviewSummaryTable({
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
   semantics: AnalysisSemanticsView;
   varianceAnalysis?: VarianceAnalysis | null;
   visualizationData: VisualizationData | null | undefined;
@@ -595,7 +601,6 @@ function OverviewSummaryTable({
     : completedBatches === '-'
       ? 'Run-level evidence: completed batch count unavailable'
       : `Run-level evidence: ${completedBatches} completed batch${completedBatches === 1 ? '' : 'es'}`;
-
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 p-4">
       <div>
@@ -688,6 +693,7 @@ function OverviewSummaryTable({
                           <PatternMetricButton
                             runId={runId}
                             analysisBasePath={analysisBasePath}
+                            analysisSearchParams={analysisSearchParams}
                             modelId={modelId}
                             pattern={pattern}
                             metrics={repeatMetrics}
@@ -714,6 +720,7 @@ function OverviewSummaryTable({
 function ConditionDecisionMatrix({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
+  analysisSearchParams,
   perModel,
   visualizationData,
   varianceAnalysis,
@@ -722,6 +729,7 @@ function ConditionDecisionMatrix({
 }: {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;
   varianceAnalysis?: VarianceAnalysis | null;
@@ -915,7 +923,7 @@ function ConditionDecisionMatrix({
     if (options?.decisionCode) {
       params.set('decisionCode', options.decisionCode);
     }
-    navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
+    navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
   };
 
   const handleCountsCellClick = (modelId: string, decisionBucket: 'a' | 'neutral' | 'b') => {
@@ -925,7 +933,7 @@ function ConditionDecisionMatrix({
       model: modelId,
       decisionBucket,
     });
-    navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
+    navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
   };
 
   if (!scenarioDimensions || !modelScenarioMatrix) {
@@ -1179,6 +1187,7 @@ function ConditionDecisionMatrix({
 export function OverviewTab({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
+  analysisSearchParams,
   perModel,
   visualizationData,
   varianceAnalysis,
@@ -1188,12 +1197,20 @@ export function OverviewTab({
   completedBatches,
   aggregateSourceRunCount,
   isAggregate,
+  analysisMode,
 }: OverviewTabProps) {
   return (
     <div className="space-y-6">
+      {analysisMode === 'paired' && (
+        <p className="text-xs text-teal-700 rounded-md border border-teal-200 bg-teal-50 px-3 py-2">
+          Paired vignette scope — this summary pools both vignette orientations. Direction labels
+          (Favors A / Favors B) follow the canonical A-first order.
+        </p>
+      )}
       <OverviewSummaryTable
         runId={runId}
         analysisBasePath={analysisBasePath}
+        analysisSearchParams={analysisSearchParams}
         semantics={semantics}
         varianceAnalysis={varianceAnalysis}
         visualizationData={visualizationData}
@@ -1205,6 +1222,7 @@ export function OverviewTab({
       <ConditionDecisionMatrix
         runId={runId}
         analysisBasePath={analysisBasePath}
+        analysisSearchParams={analysisSearchParams}
         perModel={perModel}
         visualizationData={visualizationData}
         varianceAnalysis={varianceAnalysis}

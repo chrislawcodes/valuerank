@@ -51,8 +51,8 @@ const resourceCards = [
     icon: FlaskConical,
   },
   {
-    title: 'Validation Analysis',
-    description: 'Backend-driven order invariance analysis for the current review set.',
+    title: 'Legacy Analysis',
+    description: 'Legacy order-invariance analysis for the older assumptions workflow.',
     to: '/assumptions/analysis',
     icon: BarChart3,
   },
@@ -268,7 +268,7 @@ export function ValidationHome() {
               )}
               <div className="flex flex-wrap gap-3">
                 <Link to="/assumptions/analysis" className="inline-flex items-center gap-1 text-sm font-medium text-teal-800 hover:text-teal-900">
-                  Open Validation Analysis
+                  Open Legacy Analysis
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link to="/assumptions/analysis-v1" className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900">

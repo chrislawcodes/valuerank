@@ -13,6 +13,7 @@ import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { TranscriptList } from '../components/runs/TranscriptList';
 import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+import { AnalysisScopeBanner } from '../components/analysis/AnalysisScopeBanner';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
 import { useAnalysis } from '../hooks/useAnalysis';
@@ -133,6 +134,11 @@ export function AnalysisTranscripts() {
   const decisionBucket = searchParams.get('decisionBucket') ?? '';
   const repeatPattern = searchParams.get('repeatPattern') ?? '';
   const selectedTranscriptId = searchParams.get('transcriptId') ?? '';
+  const analysisMode = searchParams.get('mode') === 'paired'
+    ? 'paired'
+    : searchParams.get('mode') === 'single'
+      ? 'single'
+      : null;
   const conditionIds = useMemo(
     () => parseConditionIds(searchParams.get('conditionIds') ?? ''),
     [searchParams]
@@ -402,7 +408,6 @@ export function AnalysisTranscripts() {
     row,
     col,
     selectedModel,
-    repeatPattern,
     conditionIds,
     decisionCode,
     decisionBucket,
@@ -575,6 +580,10 @@ export function AnalysisTranscripts() {
           </div>
         </div>
       </div>
+
+      {analysisMode && (
+        <AnalysisScopeBanner analysisMode={analysisMode} compact />
+      )}
 
       {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
