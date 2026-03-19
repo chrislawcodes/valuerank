@@ -7,7 +7,7 @@
 import type { PerModelStats, AnalysisWarning, MethodsUsed } from '../../../api/operations/analysis';
 import type { FilterState } from '../AnalysisFilters';
 
-export type AnalysisTab = 'overview' | 'decisions' | 'scenarios' | 'stability';
+export type AnalysisTab = 'overview' | 'decisions' | 'scenarios';
 
 export type TabDefinition = {
   id: AnalysisTab;
@@ -19,8 +19,7 @@ export type TabDefinition = {
 export const TABS: TabDefinition[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'decisions', label: 'Decisions' },
-  { id: 'scenarios', label: 'Scenarios' },
-  { id: 'stability', label: 'Stability' },
+  { id: 'scenarios', label: 'Conditions' },
 ];
 
 /**

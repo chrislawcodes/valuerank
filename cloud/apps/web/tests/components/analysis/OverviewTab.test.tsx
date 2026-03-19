@@ -288,7 +288,7 @@ describe('OverviewTab', () => {
     mockNavigate.mockReset();
   });
 
-  it('renders the summary table above Condition Decisions', () => {
+  it('renders the overview summary without duplicating Condition Decisions', () => {
     render(
       <MemoryRouter>
         <OverviewTab
@@ -333,9 +333,7 @@ describe('OverviewTab', () => {
     expect(screen.queryByText('Decision Consistency')).not.toBeInTheDocument();
     expect(screen.getByText('88%')).toBeInTheDocument();
 
-    const summaryHeading = screen.getByText('Overview Summary');
-    const conditionDecisionsHeading = screen.getByText('Condition Decisions');
-    expect(summaryHeading.compareDocumentPosition(conditionDecisionsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
   });
 
   it('keeps one decimal for non-integer summary percentages', () => {
@@ -590,7 +588,7 @@ describe('OverviewTab', () => {
     );
 
     expect(screen.getByText('Aggregate summary unavailable for this run.')).toBeInTheDocument();
-    expect(screen.getByText('Condition Decisions')).toBeInTheDocument();
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Stable: 1 of 4 repeated conditions/i })).toBeInTheDocument();
   });
 
@@ -701,7 +699,7 @@ describe('OverviewTab', () => {
     expect(screen.queryByText(/Paired vignette scope/i)).not.toBeInTheDocument();
   });
 
-  it('pools condition decision means across both companion runs in paired mode', () => {
+  it('shows pooled paired summary context without duplicating the condition table', () => {
     const currentAnalysis: AnalysisResult = {
       ...createCompanionAnalysis(),
       runId: 'run-b',
@@ -836,15 +834,12 @@ describe('OverviewTab', () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
     expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('View transcripts for model1 | Freedom: a1, Harmony: b1'));
-    expect(screen.getByText('3.00')).toBeInTheDocument();
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-b/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&companionRunId=run-a&pairView=condition-blended&mode=paired'
-    );
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
   });
 
-  it('keeps companion-only models visible in pooled paired condition decisions', () => {
+  it('does not surface companion-only condition rows on overview', () => {
     const currentAnalysis: AnalysisResult = {
       ...createCompanionAnalysis(),
       runId: 'run-b',
@@ -979,10 +974,11 @@ describe('OverviewTab', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getAllByText('model2').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+    expect(screen.queryByText('model2')).not.toBeInTheDocument();
   });
 
-  it('supports split inspection in paired mode and preserves orientation bucket in drilldown links', () => {
+  it('does not render split inspection controls on overview', () => {
     render(
       <MemoryRouter>
         <OverviewTab
@@ -1020,16 +1016,8 @@ describe('OverviewTab', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Split by order' }));
-
-    expect(screen.getByText(/Split inspection keeps the pooled paired summary above/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Freedom -> Harmony').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Harmony -> Freedom').length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByTitle('View transcripts for model1 | Freedom: a1, Harmony: b1 | Freedom -> Harmony'));
-
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&orientationBucket=canonical&mode=paired'
-    );
+    expect(screen.queryByRole('button', { name: 'Split by order' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Split inspection keeps the pooled paired summary above/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
   });
 });

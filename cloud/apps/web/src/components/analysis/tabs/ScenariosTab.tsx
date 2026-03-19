@@ -6,19 +6,24 @@
 
 import { ScenarioHeatmap } from '../ScenarioHeatmap';
 import { ContestedScenariosList } from '../ContestedScenariosList';
-import { ConditionAnalysisTable } from '../ConditionAnalysisTable';
+import { ConditionDecisionsTable } from '../ConditionDecisionsTable';
 import { PivotAnalysisTable } from '../PivotAnalysisTable';
-import type { VisualizationData, ContestedScenario } from '../../../api/operations/analysis';
+import type { VisualizationData, ContestedScenario, PerModelStats } from '../../../api/operations/analysis';
 import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analysisRouting';
+import { getPairedOrientationLabels } from '../../../utils/methodology';
+
 type ScenariosTabProps = {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
   analysisMode?: 'single' | 'paired';
   visualizationData: VisualizationData | null | undefined;
+  perModel: Record<string, PerModelStats>;
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
   expectedAttributes?: string[];
+  definitionContent?: unknown;
+  companionRunId?: string | null;
 };
 
 export function ScenariosTab({
@@ -27,9 +32,12 @@ export function ScenariosTab({
   analysisSearchParams,
   analysisMode,
   visualizationData,
+  perModel,
   contestedScenarios,
   dimensionLabels,
   expectedAttributes = [],
+  definitionContent,
+  companionRunId,
 }: ScenariosTabProps) {
   const hasScenarioDimensions = Boolean(
     visualizationData?.scenarioDimensions
@@ -39,21 +47,13 @@ export function ScenariosTab({
     visualizationData?.modelScenarioMatrix
     && Object.keys(visualizationData.modelScenarioMatrix).length > 0
   );
+  const orientationLabels = getPairedOrientationLabels(definitionContent);
 
   return (
     <div className="space-y-8">
       {visualizationData ? (
         <>
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-medium text-gray-700">Pivot Analysis</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                Explore how AI decisions change based on variable interactions (e.g. Conformity vs Power).
-                {analysisMode === 'paired'
-                  ? ' Paired mode keeps the matched vignette context visible while you inspect the current pivot summary.'
-                  : ' Single mode keeps the current pivot summary focused on one vignette.'}
-              </p>
-            </div>
             {hasScenarioDimensions ? (
               <PivotAnalysisTable
                 runId={runId}
@@ -73,9 +73,18 @@ export function ScenariosTab({
 
           <div className="border-t border-gray-200 pt-6">
             {hasModelScenarioMatrix ? (
-              <ConditionAnalysisTable
+              <ConditionDecisionsTable
+                runId={runId}
+                analysisBasePath={analysisBasePath}
+                analysisSearchParams={analysisSearchParams}
+                companionRunId={analysisMode === 'paired' ? companionRunId ?? null : null}
+                orientationLabels={orientationLabels}
+                analysisMode={analysisMode}
+                perModel={perModel}
                 visualizationData={visualizationData}
-                contestedScenarios={contestedScenarios}
+                expectedAttributes={expectedAttributes}
+                title="Condition Decisions"
+                description="Detailed breakdown of how each model scored each condition."
               />
             ) : (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">

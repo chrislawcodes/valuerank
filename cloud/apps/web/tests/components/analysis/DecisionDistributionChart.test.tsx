@@ -8,6 +8,7 @@ import {
   DecisionDistributionChart,
   CustomTooltip,
   buildDecisionDistributionChartData,
+  formatDecisionDistributionScopeNote,
 } from '../../../src/components/analysis/DecisionDistributionChart';
 import type { VisualizationData } from '../../../src/api/operations/analysis';
 
@@ -84,6 +85,16 @@ describe('DecisionDistributionChart', () => {
     expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
   });
 
+  it('formats the scope note when model totals vary', () => {
+    const chartData = buildDecisionDistributionChartData({
+      'model-a': { '1': 5, '2': 5, '3': 5, '4': 3, '5': 2 },
+      'model-b': { '1': 5, '2': 5, '3': 4, '4': 2, '5': 2 },
+    });
+
+    expect(formatDecisionDistributionScopeNote(chartData)).toBe(
+      'Total decisions in scope varies by model: n=18-20. Hover bars for raw counts.'
+    );
+  });
   it('shows percentages and raw counts in the tooltip', () => {
     const chartData = buildDecisionDistributionChartData({
       'gpt-4': { '1': 10, '2': 15, '3': 20, '4': 8, '5': 7 },

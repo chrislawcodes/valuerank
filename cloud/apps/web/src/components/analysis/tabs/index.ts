@@ -1,7 +1,6 @@
 export { OverviewTab } from './OverviewTab';
 export { DecisionsTab } from './DecisionsTab';
 export { ScenariosTab } from './ScenariosTab';
-export { StabilityTab } from './StabilityTab';
 export { AgreementTab } from './AgreementTab';
 export { MethodsTab } from './MethodsTab';
 export { TABS, formatPercent } from './types';

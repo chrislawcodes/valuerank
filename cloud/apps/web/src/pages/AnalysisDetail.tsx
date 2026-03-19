@@ -21,7 +21,7 @@ import { ANALYSIS_BASE_PATH, buildAnalysisDetailPath, isAggregateAnalysis } from
 import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../utils/methodology';
 
 function parseAnalysisTab(value: string | null): AnalysisTab {
-  if (value === 'overview' || value === 'decisions' || value === 'scenarios' || value === 'stability') {
+  if (value === 'overview' || value === 'decisions' || value === 'scenarios') {
     return value;
   }
   return 'overview';
@@ -71,14 +71,14 @@ export function AnalysisDetail() {
   });
   const { runs: candidatePairedRuns } = useRuns({
     limit: 1000,
-    pause: analysisMode !== 'paired' || !run,
+    pause: !run,
   });
   const companionRun = run == null
     ? null
     : findCompanionPairedRun(run, candidatePairedRuns);
   const { analysis: companionAnalysis } = useAnalysis({
     runId: companionRun?.id ?? '',
-    pause: analysisMode !== 'paired' || companionRun == null || !companionRun.analysisStatus,
+    pause: analysisMode !== 'paired' || companionRun == null,
     enablePolling: false,
     analysisStatus: companionRun?.analysisStatus ?? null,
   });
@@ -163,13 +163,26 @@ export function AnalysisDetail() {
     run.definition?.domain?.name ?? null,
   );
   const methodology = getDefinitionMethodology(definitionContent);
+  const runLaunchMode = run.config?.jobChoiceLaunchMode;
+  const isPairedBatch = runLaunchMode === 'PAIRED_BATCH';
   const launchModeLabel = methodology?.family === 'job-choice'
-    ? run.config?.jobChoiceLaunchMode === 'AD_HOC_BATCH'
+    ? runLaunchMode === 'AD_HOC_BATCH'
       ? 'Ad Hoc Batch'
-      : run.config?.jobChoiceLaunchMode === 'PAIRED_BATCH'
+      : runLaunchMode === 'PAIRED_BATCH'
         ? 'Paired Batch'
         : null
     : null;
+  const handleSingleVignetteChange = (nextRunId: string) => {
+    if (!nextRunId || nextRunId === run.id) {
+      return;
+    }
+
+    const next = buildAnalysisDetailParams(searchParams, 'single');
+    navigate({
+      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRunId),
+      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -203,9 +216,10 @@ export function AnalysisDetail() {
             analysisSearchParams={searchParams}
             analysisMode={analysisMode}
             onAnalysisModeChange={handleModeChange}
+            onSingleVignetteChange={handleSingleVignetteChange}
             companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
             currentRun={run}
-            companionRun={analysisMode === 'paired' && launchModeLabel === 'Paired Batch' ? companionRun : null}
+            companionRun={isPairedBatch ? companionRun : null}
             definitionContent={definitionContent}
             transcripts={run.transcripts}
             isOldVersion={isOldVersion}
@@ -249,7 +263,7 @@ function Header({
     pause: !isAggregate || !definitionId,
   });
 
-  const aggregateRuns = runs.filter(r => r.tags.some(t => t.name === 'Aggregate')).map(r => {
+  const aggregateRuns = runs.filter(r => (r.tags ?? []).some(t => t.name === 'Aggregate')).map(r => {
     const config = r.config as {
       definitionSnapshot?: { _meta?: { definitionVersion?: unknown }, version?: unknown };
       temperature?: unknown;

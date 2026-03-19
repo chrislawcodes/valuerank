@@ -14,7 +14,6 @@ import {
   OverviewTab,
   DecisionsTab,
   ScenariosTab,
-  StabilityTab,
   TABS,
   type AnalysisTab,
 } from './tabs';
@@ -32,12 +31,9 @@ import {
 } from '../analysis-v2/analysisSemantics';
 import {
   summarizeDecisionCoverage,
-  shouldShowDecisionCoverage,
 } from '../../utils/analysisCoverage';
 import {
-  buildPairedScopeContext,
   mergePairedVisualizationData,
-  type PairedScopeContext,
 } from '../../utils/pairedScopeAdapter';
 
 type AnalysisPanelProps = {
@@ -53,6 +49,7 @@ type AnalysisPanelProps = {
   analysisSearchParams?: URLSearchParams | string;
   analysisMode?: 'single' | 'paired';
   onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
+  onSingleVignetteChange?: (runId: string) => void;
   companionAnalysis?: AnalysisResult | null;
   currentRun?: Run | null;
   companionRun?: Run | null;
@@ -276,6 +273,7 @@ export function AnalysisPanel({
   analysisSearchParams,
   analysisMode,
   onAnalysisModeChange,
+  onSingleVignetteChange,
   companionAnalysis,
   currentRun,
   companionRun,
@@ -293,11 +291,6 @@ export function AnalysisPanel({
   const expectedScenarioAttributes = useMemo(
     () => deriveScenarioAttributesFromDefinition(definitionContent),
     [definitionContent]
-  );
-
-  const pairedScopeContext = useMemo<PairedScopeContext>(
-    () => buildPairedScopeContext(analysisMode, analysis?.varianceAnalysis),
-    [analysisMode, analysis?.varianceAnalysis],
   );
 
   const [activeTab, setActiveTab] = useState<AnalysisTab>(initialTab);
@@ -335,12 +328,26 @@ export function AnalysisPanel({
     () => summarizeDecisionCoverage(transcripts),
     [transcripts],
   );
-  const showDecisionCoverage = shouldShowDecisionCoverage(decisionCoverage);
 
   const perModel = useMemo(
     () => analysis?.perModel ?? {},
     [analysis]
   );
+  const singleVignetteOptions = useMemo(() => {
+    const runs = [currentRun, companionRun].filter((candidate): candidate is Run => candidate != null);
+    const seen = new Set<string>();
+
+    return runs.filter((candidate) => {
+      if (seen.has(candidate.id)) {
+        return false;
+      }
+      seen.add(candidate.id);
+      return true;
+    }).map((candidate) => ({
+      id: candidate.id,
+      label: candidate.definition?.name?.trim() || `Trial ${candidate.id.slice(0, 8)}...`,
+    }));
+  }, [companionRun, currentRun]);
 
   const displayWarnings = useMemo<AnalysisWarning[]>(() => {
     if (!analysis) return [];
@@ -448,39 +455,46 @@ export function AnalysisPanel({
         </div>
         <div className="flex items-center gap-2">
           {analysisMode && onAnalysisModeChange ? (
-            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-              <Button
-                type="button"
-                variant={analysisMode === 'single' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => onAnalysisModeChange('single')}
-                aria-pressed={analysisMode === 'single'}
-              >
-                Single vignette
-              </Button>
-              <Button
-                type="button"
-                variant={analysisMode === 'paired' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => onAnalysisModeChange('paired')}
-                aria-pressed={analysisMode === 'paired'}
-              >
-                Paired vignettes
-              </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+                <Button
+                  type="button"
+                  variant={analysisMode === 'single' ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => onAnalysisModeChange('single')}
+                  aria-pressed={analysisMode === 'single'}
+                >
+                  Single vignette
+                </Button>
+                <Button
+                  type="button"
+                  variant={analysisMode === 'paired' ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => onAnalysisModeChange('paired')}
+                  aria-pressed={analysisMode === 'paired'}
+                >
+                  Paired vignettes
+                </Button>
+              </div>
+              {analysisMode === 'single' && singleVignetteOptions.length > 1 && onSingleVignetteChange ? (
+                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                  <span>Vignette</span>
+                  <select
+                    aria-label="Vignette"
+                    value={runId}
+                    onChange={(event) => onSingleVignetteChange(event.target.value)}
+                    className="block max-w-[20rem] rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  >
+                    {singleVignetteOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
           ) : null}
-          {!isAggregateAnalysis && (
-            <>
-              <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
-                {recomputing ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                )}
-                Recompute
-              </Button>
-            </>
-          )}
         </div>
       </div>
 
@@ -511,6 +525,18 @@ export function AnalysisPanel({
             Legacy numeric: {decisionCoverage.legacyNumericTranscripts}
           </p>
           <p className="mt-1 text-xs text-gray-600">{coverageEvidenceMessage}</p>
+          {!isAggregateAnalysis && (
+            <div className="mt-4">
+              <Button variant="secondary" size="sm" onClick={() => void recompute()} disabled={recomputing}>
+                {recomputing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Recompute
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -569,24 +595,13 @@ export function AnalysisPanel({
             analysisBasePath={analysisBasePath}
             analysisSearchParams={analysisSearchParams}
             analysisMode={analysisMode}
-            visualizationData={analysis.visualizationData}
+            visualizationData={decisionsVisualizationData}
+            perModel={perModel}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
-          />
-        )}
-        {activeTab === 'stability' && (
-          <StabilityTab
-            runId={runId}
-            analysisBasePath={analysisBasePath}
-            analysisSearchParams={analysisSearchParams}
-            analysisMode={analysisMode}
             definitionContent={definitionContent}
-            pairedScopeContext={pairedScopeContext}
-            perModel={perModel}
-            visualizationData={loading ? null : analysis.visualizationData}
-            varianceAnalysis={analysis.varianceAnalysis}
-            decisionCoverage={showDecisionCoverage ? decisionCoverage : null}
+            companionRunId={analysisMode === 'paired' ? companionRun?.id ?? null : null}
           />
         )}
       </div>

@@ -3,12 +3,18 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { VisualizationData } from '../../api/operations/analysis';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
+import { Button } from '../ui/Button';
 import {
     getDecisionSideNames,
     mapDecisionSidesToScenarioAttributes,
     resolveScenarioAttributes,
 } from '../../utils/decisionLabels';
-import { ANALYSIS_BASE_PATH, type AnalysisBasePath, buildAnalysisTranscriptsPath } from '../../utils/analysisRouting';
+import {
+    ANALYSIS_BASE_PATH,
+    type AnalysisBasePath,
+    buildAnalysisConditionDetailPath,
+    buildConditionKey,
+} from '../../utils/analysisRouting';
 
 type PivotAnalysisTableProps = {
     runId: string;
@@ -98,6 +104,7 @@ export function PivotAnalysisTable({
     const [colDim, setColDim] = useState<string>(availableDimensions[1] || availableDimensions[0] || '');
     // Default to first alphabetical model if available
     const [selectedModel, setSelectedModel] = useState<string>(models[0] || '');
+    const [showDetails, setShowDetails] = useState<boolean>(false);
     const decisionSideNames = useMemo(() => getDecisionSideNames(dimensionLabels), [dimensionLabels]);
     const sideAttributeMap = useMemo(
         () => mapDecisionSidesToScenarioAttributes(decisionSideNames.aName, decisionSideNames.bName, [rowDim, colDim].filter((d) => d !== '')),
@@ -197,18 +204,21 @@ export function PivotAnalysisTable({
         return { low, neutral, high };
     }, [scenarioDimensions, modelScenarioMatrix, selectedModel]);
 
-    const handleCellClick = (row: string, col: string, options?: { decisionCode?: string }) => {
+    const handleCellClick = (row: string, col: string) => {
         const params = new URLSearchParams({
             rowDim,
             colDim,
-            row,
-            col,
-            model: selectedModel || '',
+            modelId: selectedModel || '',
         });
-        if (options?.decisionCode) {
-            params.set('decisionCode', options.decisionCode);
-        }
-        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
+        navigate(
+            buildAnalysisConditionDetailPath(
+                analysisBasePath,
+                runId,
+                buildConditionKey(row, col),
+                params,
+                analysisSearchParams,
+            )
+        );
     };
 
     if (!scenarioDimensions || availableDimensions.length === 0) {
@@ -221,42 +231,22 @@ export function PivotAnalysisTable({
 
     return (
         <div ref={tableRef} className="space-y-4 bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex flex-wrap gap-6 items-end border-b border-gray-100 pb-4">
-                {/* Selectors */}
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Row Dimension (Y-Axis)</label>
-                    <select
-                        value={rowDim}
-                        onChange={e => setRowDim(e.target.value)}
-                        className="block w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900">Pivot Analysis</h3>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowDetails((current) => !current)}
+                        className="min-h-0 px-2 py-1 text-xs"
+                        aria-expanded={showDetails}
                     >
-                        {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
+                        {showDetails ? 'Hide Details' : 'Details'}
+                    </Button>
                 </div>
 
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Column Dimension (X-Axis)</label>
-                    <select
-                        value={colDim}
-                        onChange={e => setColDim(e.target.value)}
-                        className="block w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    >
-                        {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Model</label>
-                    <select
-                        value={selectedModel}
-                        onChange={e => setSelectedModel(e.target.value)}
-                        className="block w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    >
-                        {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                </div>
-
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
                     <Legend
                         lowName={sideAttributeMap.lowAttribute}
@@ -264,6 +254,51 @@ export function PivotAnalysisTable({
                         counts={legendCounts}
                     />
                 </div>
+            </div>
+            {showDetails && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">
+                        Pick the two condition axes you want to compare. Each box in the table shows the model&apos;s average score for that pair of condition levels.
+                    </p>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Row</span>
+                            <select
+                                aria-label="Row Dimension (Y-Axis)"
+                                value={rowDim}
+                                onChange={e => setRowDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                            <span>Column</span>
+                            <select
+                                aria-label="Column Dimension (X-Axis)"
+                                value={colDim}
+                                onChange={e => setColDim(e.target.value)}
+                                className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            )}
+            <div className="flex flex-wrap items-end gap-4">
+                <label className="flex items-center gap-2 text-xs font-medium uppercase text-gray-500">
+                    <span>Model</span>
+                    <select
+                        aria-label="Model"
+                        value={selectedModel}
+                        onChange={e => setSelectedModel(e.target.value)}
+                        className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                </label>
             </div>
             {/* Grid */}
             {pivotData && (
@@ -295,13 +330,12 @@ export function PivotAnalysisTable({
                         <tbody className="bg-white">
                             {pivotData.rows.map(row => (
                                 <tr key={row}>
-                                    <td className="p-3 bg-gray-50 border border-gray-200 text-sm font-bold text-gray-900 font-mono whitespace-nowrap">
+                                    <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
                                         {row}
                                     </td>
                                     {pivotData.cols.map(col => {
                                         const cell = pivotData.grid[row]?.[col];
                                         const mean = cell && cell.count > 0 ? cell.sum / cell.count : null;
-                                        const isOtherCell = mean === null;
                                         const canOpen = true;
 
                                         return (
@@ -309,7 +343,7 @@ export function PivotAnalysisTable({
                                                 key={`${row}-${col}`}
                                                 className={`p-4 border border-gray-100 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''}`}
                                                 style={{ backgroundColor: mean ? getHeatmapColor(mean) : undefined }}
-                                                onClick={() => handleCellClick(row, col, isOtherCell ? { decisionCode: 'other' } : undefined)}
+                                                onClick={() => handleCellClick(row, col)}
                                             >
                                                 {mean ? (
                                                     <span className={`font-semibold ${getScoreTextColor(mean)}`}>
@@ -324,7 +358,7 @@ export function PivotAnalysisTable({
                         </tbody>
                     </table>
                     <div className="mt-2 text-xs text-gray-500">
-                        Click a cell to view transcripts for that condition.
+                        Click a cell to view pooled condition details.
                     </div>
                 </div>
             )}

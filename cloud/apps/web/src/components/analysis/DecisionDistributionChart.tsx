@@ -80,6 +80,21 @@ export function buildDecisionDistributionChartData(
   return chartData;
 }
 
+export function formatDecisionDistributionScopeNote(chartData: ChartDataPoint[]): string {
+  if (chartData.length === 0) {
+    return 'Total decisions in scope unavailable.';
+  }
+
+  const totals = chartData.map((entry) => entry.totalCount);
+  const minTotal = Math.min(...totals);
+  const maxTotal = Math.max(...totals);
+
+  if (minTotal === maxTotal) {
+    return `Total decisions in scope: n=${minTotal} per model. Hover bars for raw counts.`;
+  }
+
+  return `Total decisions in scope varies by model: n=${minTotal}-${maxTotal}. Hover bars for raw counts.`;
+}
 /**
  * Custom tooltip component.
  */

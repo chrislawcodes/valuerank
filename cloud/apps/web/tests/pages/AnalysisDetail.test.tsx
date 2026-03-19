@@ -47,12 +47,18 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     transcripts,
     analysisMode,
     onAnalysisModeChange,
+    onSingleVignetteChange,
+    currentRun,
+    companionRun,
   }: {
     runId: string;
     isAggregate?: boolean;
     transcripts?: Array<unknown>;
     analysisMode?: 'single' | 'paired';
     onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
+    onSingleVignetteChange?: (runId: string) => void;
+    currentRun?: { id: string; definition?: { name?: string | null } | null } | null;
+    companionRun?: { id: string; definition?: { name?: string | null } | null } | null;
   }) => (
     <div
       data-testid="analysis-panel"
@@ -66,6 +72,19 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
       <button type="button" aria-pressed={analysisMode === 'paired'} onClick={() => onAnalysisModeChange?.('paired')}>
         Paired vignettes
       </button>
+      {analysisMode === 'single' && companionRun ? (
+        <label>
+          Vignette
+          <select
+            aria-label="Vignette"
+            value={runId}
+            onChange={(event) => onSingleVignetteChange?.(event.target.value)}
+          >
+            <option value={currentRun?.id ?? runId}>{currentRun?.definition?.name ?? currentRun?.id ?? runId}</option>
+            <option value={companionRun.id}>{companionRun.definition?.name ?? companionRun.id}</option>
+          </select>
+        </label>
+      ) : null}
     </div>
   ),
 }));
@@ -245,6 +264,64 @@ describe('AnalysisDetail', () => {
       expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByTestId('location-search')).toHaveTextContent('?mode=paired');
+    });
+
+    it('switches to the selected single vignette run and preserves single mode', () => {
+      mockUseRun.mockImplementation(({ id }: { id: string }) => ({
+        run: {
+          id,
+          analysisStatus: 'completed',
+          config: {
+            jobChoiceLaunchMode: 'PAIRED_BATCH',
+            jobChoiceBatchGroupId: 'batch-1',
+            jobChoicePresentationOrder: id === 'run-123' ? 'A_first' : 'B_first',
+          },
+          definition: {
+            name: id === 'run-123' ? 'Achievement -> Benevolence' : 'Benevolence -> Achievement',
+          },
+          createdAt: id === 'run-123' ? '2024-01-01T00:00:00Z' : '2024-01-01T00:01:00Z',
+        },
+        loading: false,
+        error: null,
+      }));
+      mockUseRuns.mockReturnValue({
+        runs: [
+          {
+            id: 'run-123',
+            createdAt: '2024-01-01T00:00:00Z',
+            config: {
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'A_first',
+            },
+            definition: {
+              name: 'Achievement -> Benevolence',
+              content: { methodology: { pair_key: 'pair-1', presentation_order: 'A_first' } },
+            },
+          },
+          {
+            id: 'run-456',
+            createdAt: '2024-01-01T00:01:00Z',
+            config: {
+              jobChoiceBatchGroupId: 'batch-1',
+              jobChoicePresentationOrder: 'B_first',
+            },
+            definition: {
+              name: 'Benevolence -> Achievement',
+              content: { methodology: { pair_key: 'pair-1', presentation_order: 'B_first' } },
+            },
+          },
+        ],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      renderWithRouter('/analysis/run-123?tab=scenarios');
+
+      fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
+
+      expect(screen.getByText('Analysis Panel for run-456')).toBeInTheDocument();
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
     });
 
   });
