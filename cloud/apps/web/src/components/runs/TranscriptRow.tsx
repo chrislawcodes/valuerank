@@ -21,6 +21,8 @@ type TranscriptRowProps = {
   onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
   decisionUpdating?: boolean;
   scenarioHighlight?: TranscriptScenarioHighlight | null;
+  normalizeDecision?: boolean;
+  normalizationBadgeTitle?: string;
 };
 
 function formatDate(dateString: string): string {
@@ -81,6 +83,18 @@ function extractDecision(content: unknown): string {
   return '-';
 }
 
+function normalizeDecisionCode(decision: string, normalizeDecision: boolean): string {
+  if (!normalizeDecision) {
+    return decision;
+  }
+
+  if (!['1', '2', '3', '4', '5'].includes(decision)) {
+    return decision;
+  }
+
+  return String(6 - Number(decision));
+}
+
 export function TranscriptRow({
   transcript,
   onSelect,
@@ -93,19 +107,23 @@ export function TranscriptRow({
   onDecisionChange,
   decisionUpdating = false,
   scenarioHighlight = null,
+  normalizeDecision = false,
+  normalizationBadgeTitle,
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
-  const decision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
+  const decision = normalizeDecisionCode(rawDecision, normalizeDecision);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
 
   // Build enriched decision label: "{code} - {Short direction} ({job subject})"
   // e.g. "2 - Somewhat support (trust from other people)"
   // For non-job-choice labels, falls back to "{code} - {Short direction} {primary_dim_key}"
   const decisionScaleEntry = decisionScaleLabels.find((e) => e.code === String(decision));
-  const labelText = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null
-    ?? decisionScaleEntry?.label
-    ?? null;
+  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
+  const labelText = normalizeDecision
+    ? (decisionScaleEntry?.label ?? null)
+    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
   const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
   const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
   // For job-choice scale labels ("... taking the job with X"), extract the subject X.
@@ -219,6 +237,14 @@ export function TranscriptRow({
             {isDecisionOverrideAllowed ? (
               <div className="flex items-center gap-2">
                 <span className="text-gray-700">{decisionDisplay}</span>
+                {normalizeDecision && (
+                  <span
+                    className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                    title={normalizationBadgeTitle}
+                  >
+                    Norm
+                  </span>
+                )}
                 <select
                   aria-label={`Set decision for transcript ${transcript.id}`}
                   className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
@@ -240,6 +266,14 @@ export function TranscriptRow({
             ) : (
               <div className="flex items-center gap-2">
                 <span>{decisionDisplay}</span>
+                {normalizeDecision && (
+                  <span
+                    className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                    title={normalizationBadgeTitle}
+                  >
+                    Norm
+                  </span>
+                )}
                 {decisionMetadata?.parseClass === 'ambiguous' && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                     Ambiguous
@@ -297,6 +331,14 @@ export function TranscriptRow({
               title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}
             >
               <span>{decisionDisplay}</span>
+              {normalizeDecision && (
+                <span
+                  className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                  title={normalizationBadgeTitle}
+                >
+                  Norm
+                </span>
+              )}
               {decisionMetadata?.parseClass === 'ambiguous' && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                   Ambiguous

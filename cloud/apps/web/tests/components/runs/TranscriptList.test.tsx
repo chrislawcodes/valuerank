@@ -242,6 +242,56 @@ describe('TranscriptList', () => {
     expect(screen.getByText('Decision')).toBeInTheDocument();
   });
 
+  it('shows a normalized decision score header tooltip when configured', async () => {
+    const user = userEvent.setup();
+    const tooltipText = 'In this paired view, some prompts showed the two options in a different order.';
+
+    render(
+      <TranscriptList
+        transcripts={[createMockTranscript()]}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        decisionColumnLabel="Normalized decision score"
+        decisionColumnTooltip={tooltipText}
+      />
+    );
+
+    expect(screen.getByText('Normalized decision score')).toBeInTheDocument();
+
+    await user.hover(screen.getByRole('button', { name: /Normalized decision score:/i }));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(tooltipText);
+  });
+
+  it('shows normalized decision labels and a Norm badge for adjusted rows', () => {
+    const transcript = createMockTranscript({
+      decisionCode: '5',
+      decisionMetadata: {
+        scaleLabels: [
+          { code: '1', label: 'Strongly support taking the job with Achievement' },
+          { code: '2', label: 'Somewhat support taking the job with Achievement' },
+          { code: '3', label: 'Neutral / Unsure' },
+          { code: '4', label: 'Somewhat support taking the job with Benevolence' },
+          { code: '5', label: 'Strongly support taking the job with Benevolence' },
+        ],
+      },
+    });
+
+    render(
+      <TranscriptList
+        transcripts={[transcript]}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        decisionColumnLabel="Normalized decision score"
+        normalizedDecisionTranscriptIds={new Set([transcript.id])}
+        normalizationBadgeTitle="This score was adjusted because this transcript showed the options in the opposite order."
+      />
+    );
+
+    expect(screen.getByText('1 - Strongly support (Achievement)')).toBeInTheDocument();
+    expect(screen.getByText('Norm')).toBeInTheDocument();
+  });
+
   it('applies the same condition marker to rows from the same scenario', () => {
     const transcripts = [
       createMockTranscript({ id: 't1', scenarioId: 'scenario-1', modelId: 'gpt-4' }),

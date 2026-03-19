@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 import type { Transcript } from '../../api/operations/runs';
 import type { VisualizationData } from '../../api/operations/analysis';
 import {
@@ -13,6 +13,7 @@ import {
   getScenarioDimensionsForId,
   normalizeScenarioId,
 } from '../../utils/scenarioUtils';
+import { Tooltip } from '../ui/Tooltip';
 import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
 
 type TranscriptListProps = {
@@ -23,6 +24,10 @@ type TranscriptListProps = {
   dimensionLabels?: Record<string, string>;
   onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
   updatingTranscriptIds?: Set<string>;
+  decisionColumnLabel?: string;
+  decisionColumnTooltip?: string;
+  normalizedDecisionTranscriptIds?: Set<string>;
+  normalizationBadgeTitle?: string;
 };
 
 type GroupedTranscripts = Record<string, Transcript[]>;
@@ -180,7 +185,10 @@ function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
   return true;
 }
 
-function getTranscriptDecisionValue(transcript: Transcript): string | number {
+function getTranscriptDecisionValue(
+  transcript: Transcript,
+  normalizedDecisionTranscriptIds?: Set<string>,
+): string | number {
   const fallbackCandidates = [
     transcript.decisionCode,
     (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
@@ -193,6 +201,12 @@ function getTranscriptDecisionValue(transcript: Transcript): string | number {
 
   for (const candidate of fallbackCandidates) {
     if (typeof candidate === 'number' || typeof candidate === 'string') {
+      if (
+        normalizedDecisionTranscriptIds?.has(transcript.id)
+        && ['1', '2', '3', '4', '5'].includes(String(candidate))
+      ) {
+        return 6 - Number(candidate);
+      }
       return candidate;
     }
   }
@@ -202,30 +216,67 @@ function getTranscriptDecisionValue(transcript: Transcript): string | number {
 
 function SortHeaderButton({
   label,
+  ariaLabel,
+  tooltip,
   onClick,
   active,
   direction,
 }: {
   label: string;
+  ariaLabel: string;
+  tooltip?: string;
   onClick: () => void;
   active: boolean;
   direction: SortDirection;
 }) {
   return (
-    /* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 text-left transition-colors ${
-        active ? 'text-gray-700' : 'text-gray-400 hover:text-gray-600'
-      }`}
-      aria-label={`Sort by ${label}${active ? ` (${direction === 'asc' ? 'ascending' : 'descending'})` : ''}`}
+    <div className="inline-flex items-center gap-1">
+      {/* eslint-disable-next-line react/forbid-elements -- Sortable table headers need a semantic inline button control */}
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 text-left transition-colors ${
+          active ? 'text-gray-700' : 'text-gray-400 hover:text-gray-600'
+        }`}
+        aria-label={`Sort by ${ariaLabel}${active ? ` (${direction === 'asc' ? 'ascending' : 'descending'})` : ''}`}
+      >
+        <span>{label}</span>
+        <span aria-hidden="true" className={`text-[11px] leading-none ${active ? 'text-gray-700' : 'text-gray-300'}`}>
+          {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </button>
+      {tooltip ? <HeaderTooltipTrigger label={label} tooltip={tooltip} /> : null}
+    </div>
+  );
+}
+
+function HeaderTooltipTrigger({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip?: string;
+}) {
+  if (!tooltip) {
+    return null;
+  }
+
+  return (
+    <Tooltip
+      content={<div className="max-w-xs whitespace-normal text-xs leading-5">{tooltip}</div>}
+      position="top"
+      variant="light"
+      className="max-w-xs whitespace-normal"
     >
-      <span>{label}</span>
-      <span aria-hidden="true" className={`text-[11px] leading-none ${active ? 'text-gray-700' : 'text-gray-300'}`}>
-        {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
-      </span>
-    </button>
+      {/* eslint-disable-next-line react/forbid-elements -- Lightweight tooltip trigger requires a custom inline button */}
+      <button
+        type="button"
+        className="inline-flex cursor-help text-gray-400 transition-colors hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded-sm"
+        aria-label={`${label}: ${tooltip}`}
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -237,6 +288,10 @@ export function TranscriptList({
   dimensionLabels,
   onDecisionChange,
   updatingTranscriptIds,
+  decisionColumnLabel = 'Decision',
+  decisionColumnTooltip,
+  normalizedDecisionTranscriptIds,
+  normalizationBadgeTitle,
 }: TranscriptListProps) {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -310,7 +365,10 @@ export function TranscriptList({
         return compareDimensionValues(aDimensions?.[column.key], bDimensions?.[column.key]);
       }
       case 'decision':
-        return compareDimensionValues(getTranscriptDecisionValue(a), getTranscriptDecisionValue(b));
+        return compareDimensionValues(
+          getTranscriptDecisionValue(a, normalizedDecisionTranscriptIds),
+          getTranscriptDecisionValue(b, normalizedDecisionTranscriptIds),
+        );
       case 'tokens':
         return a.tokenCount - b.tokenCount;
       case 'created':
@@ -318,7 +376,7 @@ export function TranscriptList({
       default:
         return 0;
     }
-  }, [getScenarioDimensions]);
+  }, [getScenarioDimensions, normalizedDecisionTranscriptIds]);
 
   const sortTranscripts = useCallback((items: Transcript[]): Transcript[] => {
     const fallbackColumns: SortColumn[] = [];
@@ -518,12 +576,14 @@ export function TranscriptList({
           >
             <SortHeaderButton
               label="Scenario"
+              ariaLabel="Scenario"
               onClick={() => handleSortChange({ type: 'scenario' })}
               active={isActiveSort({ type: 'scenario' })}
               direction={sortState.direction}
             />
             <SortHeaderButton
               label="Model"
+              ariaLabel="Model"
               onClick={() => handleSortChange({ type: 'model' })}
               active={isActiveSort({ type: 'model' })}
               direction={sortState.direction}
@@ -532,25 +592,30 @@ export function TranscriptList({
               <SortHeaderButton
                 key={key}
                 label={dimensionLabels?.[key] ?? key}
+                ariaLabel={dimensionLabels?.[key] ?? key}
                 onClick={() => handleSortChange({ type: 'dimension', key })}
                 active={isActiveSort({ type: 'dimension', key })}
                 direction={sortState.direction}
               />
             ))}
             <SortHeaderButton
-              label="Decision"
+              label={decisionColumnLabel}
+              ariaLabel={decisionColumnLabel}
+              tooltip={decisionColumnTooltip}
               onClick={() => handleSortChange({ type: 'decision' })}
               active={isActiveSort({ type: 'decision' })}
               direction={sortState.direction}
             />
             <SortHeaderButton
               label="Tokens"
+              ariaLabel="Tokens"
               onClick={() => handleSortChange({ type: 'tokens' })}
               active={isActiveSort({ type: 'tokens' })}
               direction={sortState.direction}
             />
             <SortHeaderButton
               label="Created"
+              ariaLabel="Created"
               onClick={() => handleSortChange({ type: 'created' })}
               active={isActiveSort({ type: 'created' })}
               direction={sortState.direction}
@@ -569,6 +634,8 @@ export function TranscriptList({
               onDecisionChange={onDecisionChange}
               decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
               scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
+              normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
+              normalizationBadgeTitle={normalizationBadgeTitle}
             />
           ))}
         </div>
@@ -627,6 +694,7 @@ export function TranscriptList({
                 >
                   <SortHeaderButton
                     label="Scenario"
+                    ariaLabel="Scenario"
                     onClick={() => handleSortChange({ type: 'scenario' })}
                     active={isActiveSort({ type: 'scenario' })}
                     direction={sortState.direction}
@@ -635,25 +703,30 @@ export function TranscriptList({
                     <SortHeaderButton
                       key={key}
                       label={dimensionLabels?.[key] ?? key}
+                      ariaLabel={dimensionLabels?.[key] ?? key}
                       onClick={() => handleSortChange({ type: 'dimension', key })}
                       active={isActiveSort({ type: 'dimension', key })}
                       direction={sortState.direction}
                     />
                   ))}
                   <SortHeaderButton
-                    label="Decision"
+                    label={decisionColumnLabel}
+                    ariaLabel={decisionColumnLabel}
+                    tooltip={decisionColumnTooltip}
                     onClick={() => handleSortChange({ type: 'decision' })}
                     active={isActiveSort({ type: 'decision' })}
                     direction={sortState.direction}
                   />
                   <SortHeaderButton
                     label="Tokens"
+                    ariaLabel="Tokens"
                     onClick={() => handleSortChange({ type: 'tokens' })}
                     active={isActiveSort({ type: 'tokens' })}
                     direction={sortState.direction}
                   />
                   <SortHeaderButton
                     label="Created"
+                    ariaLabel="Created"
                     onClick={() => handleSortChange({ type: 'created' })}
                     active={isActiveSort({ type: 'created' })}
                     direction={sortState.direction}
@@ -673,6 +746,8 @@ export function TranscriptList({
                     onDecisionChange={onDecisionChange}
                     decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
                     scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
+                    normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
+                    normalizationBadgeTitle={normalizationBadgeTitle}
                   />
                 ))}
               </div>
