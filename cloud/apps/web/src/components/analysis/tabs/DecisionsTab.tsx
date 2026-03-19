@@ -72,7 +72,7 @@ export function DecisionsTab({
       <div className="space-y-3">
         <UnavailableCallout message={unavailableState.message} />
         {unavailableState.reason !== 'aggregate-analysis' && (
-          <p className="text-xs text-gray-500">Repeatability details live in Stability.</p>
+          <p className="text-xs text-gray-500">Repeatability summary lives in Overview.</p>
         )}
       </div>
     );
@@ -93,7 +93,7 @@ export function DecisionsTab({
           analysisMode={analysisMode}
           isPooledAcrossCompanionRuns={isPooledAcrossCompanionRuns}
         />
-        <p className="mt-3 text-xs text-gray-500">Repeatability details live in Stability.</p>
+        <p className="mt-3 text-xs text-gray-500">Repeatability summary lives in Overview.</p>
       </div>
     </div>
   );

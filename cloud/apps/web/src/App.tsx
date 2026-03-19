@@ -23,6 +23,7 @@ import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
 import { Analysis } from './pages/Analysis';
 import { AnalysisDetail } from './pages/AnalysisDetail';
+import { AnalysisConditionDetail } from './pages/AnalysisConditionDetail';
 import { AnalysisTranscripts } from './pages/AnalysisTranscripts';
 import { Compare } from './pages/Compare';
 import { Survey } from './pages/Survey';
@@ -213,6 +214,14 @@ function App() {
               element={
                 <ProtectedLayout fullWidth>
                   <AnalysisTranscripts />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/analysis/:id/conditions/:conditionKey"
+              element={
+                <ProtectedLayout fullWidth>
+                  <AnalysisConditionDetail />
                 </ProtectedLayout>
               }
             />

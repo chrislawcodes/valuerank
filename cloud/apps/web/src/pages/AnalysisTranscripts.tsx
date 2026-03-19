@@ -480,6 +480,7 @@ export function AnalysisTranscripts() {
           row,
           col,
           selectedModel,
+          decisionCode: decisionCode || undefined,
         });
       });
     }

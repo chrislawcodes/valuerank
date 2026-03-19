@@ -51,7 +51,34 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
   });
 
-  it('opens pivot-cell transcripts on the unified analysis route', () => {
+  it('keeps dimension selectors hidden until details are opened', () => {
+    render(
+      <MemoryRouter>
+        <PivotAnalysisTable
+          runId="run-1"
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 1 },
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByLabelText('Row Dimension (Y-Axis)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Model')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(screen.getByLabelText('Row Dimension (Y-Axis)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Column Dimension (X-Axis)')).toBeInTheDocument();
+  });
+
+  it('opens pivot-cell condition details on the unified analysis route', () => {
     render(
       <MemoryRouter>
         <PivotAnalysisTable
@@ -80,7 +107,7 @@ describe('PivotAnalysisTable', () => {
     fireEvent.click(screen.getByText('1.00'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&mode=paired'
+      '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
     );
   });
 
@@ -113,7 +140,7 @@ describe('PivotAnalysisTable', () => {
     fireEvent.click(screen.getByText('1.00'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1&mode=paired'
+      '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired'
     );
   });
 
@@ -145,7 +172,7 @@ describe('PivotAnalysisTable', () => {
     fireEvent.click(screen.getByText('1.00'));
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/analysis/run-1/transcripts?rowDim=Freedom&colDim=Harmony&row=a1&col=b1&model=model1'
+      '/analysis/run-1/conditions/a1%7C%7Cb1?rowDim=Freedom&colDim=Harmony&modelId=model1'
     );
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildAnalysisTranscriptsPath } from '../../src/utils/analysisRouting';
+import {
+  buildAnalysisConditionDetailPath,
+  buildAnalysisTranscriptsPath,
+  buildConditionKey,
+  parseConditionKey,
+} from '../../src/utils/analysisRouting';
 
 describe('analysisRouting', () => {
   it('preserves extra search params when building transcript paths', () => {
@@ -28,5 +33,25 @@ describe('analysisRouting', () => {
     );
 
     expect(result).toBe('/analysis/run-1/transcripts?model=model-b&tab=overview');
+  });
+
+  it('builds a condition detail path while preserving extra search params', () => {
+    const result = buildAnalysisConditionDetailPath(
+      '/analysis',
+      'run-1',
+      buildConditionKey('High', 'Low'),
+      new URLSearchParams('rowDim=Freedom&colDim=Harmony&modelId=model-a'),
+      new URLSearchParams('mode=paired'),
+    );
+
+    expect(result).toBe(
+      '/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model-a&mode=paired'
+    );
+  });
+
+  it('round-trips encoded condition keys', () => {
+    const key = buildConditionKey('High', 'Low');
+
+    expect(parseConditionKey(key)).toEqual({ row: 'High', col: 'Low' });
   });
 });

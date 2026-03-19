@@ -262,6 +262,43 @@ describe('AnalysisPanel', () => {
     expect(onModeChange).toHaveBeenNthCalledWith(2, 'single');
   });
 
+  it('shows a single-vignette selector when a paired companion run is available', async () => {
+    const analysis = createMockAnalysis();
+    const onSingleVignetteChange = vi.fn();
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel
+          runId="run-1"
+          analysisMode="single"
+          onAnalysisModeChange={vi.fn()}
+          onSingleVignetteChange={onSingleVignetteChange}
+          currentRun={{
+            id: 'run-1',
+            definition: { name: 'Achievement -> Benevolence' },
+          } as any}
+          companionRun={{
+            id: 'run-2',
+            definition: { name: 'Benevolence -> Achievement' },
+          } as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('Vignette')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Vignette'), 'run-2');
+    expect(onSingleVignetteChange).toHaveBeenCalledWith('run-2');
+  });
+
   it('pools overview summary semantics across the companion run in paired mode', () => {
     const analysis = createMockAnalysis({
       codeVersion: '1.1.1',
@@ -628,7 +665,7 @@ describe('AnalysisPanel', () => {
     expect(screen.getByText('Evidence: 25 completed batches • 2 conditions per batch')).toBeInTheDocument();
   });
 
-  it('shows paired scope copy in the scenarios tab', () => {
+  it('renders the conditions tab in paired mode', () => {
     const analysis = createMockAnalysis({
       visualizationData: {
         decisionDistribution: {},
@@ -657,42 +694,8 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while you inspect the current pivot summary\./i)).toBeInTheDocument();
-  });
-
-  it('shows paired scope copy in the stability tab', () => {
-    const analysis = createMockAnalysis({
-      visualizationData: {
-        decisionDistribution: {},
-        scenarioDimensions: {
-          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
-          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
-        },
-        modelScenarioMatrix: {
-          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
-        },
-      },
-      varianceAnalysis: {
-        orientationCorrectedCount: 0,
-        perModel: {},
-      } as any,
-    });
-    mockUseAnalysis.mockReturnValue({
-      analysis,
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-      recompute: vi.fn(),
-      recomputing: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <AnalysisPanel runId="run-1" analysisMode="paired" initialTab="stability" />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while you review these stability metrics\./i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
+    expect(screen.getByText('Pivot Analysis')).toBeInTheDocument();
   });
 
   it('shows aggregate evidence details when expanded', async () => {
@@ -820,10 +823,8 @@ describe('AnalysisPanel', () => {
     );
 
     expect(screen.getByText('This aggregate mixes in assumption or manipulated runs.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Scenarios' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Stability' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
+    expect(screen.getByRole('button', { name: 'Conditions' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Conditions' }));
     expect(screen.queryByText('Overview Summary')).not.toBeInTheDocument();
   });
 
@@ -856,7 +857,44 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Condition Decisions')).toBeInTheDocument();
+    expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+  });
+
+  it('uses Condition Decisions on the Conditions tab', async () => {
+    const user = userEvent.setup();
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          'scenario-1': { 'Dim A': '1', 'Dim B': '1' },
+          'scenario-2': { 'Dim A': '2', 'Dim B': '2' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { 'scenario-1': 2, 'scenario-2': 4 },
+          'claude-3': { 'scenario-1': 2, 'scenario-2': 3 },
+        },
+      },
+      mostContestedScenarios: [],
+    });
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel runId="run-1" />
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Conditions' }));
+
+    expect(screen.getAllByText('Condition Decisions').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Condition Analysis')).not.toBeInTheDocument();
   });
 
   it('does not render removed tabs', () => {
@@ -878,6 +916,7 @@ describe('AnalysisPanel', () => {
 
     expect(screen.queryByRole('button', { name: /^Agreement$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Methods$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Stability$/i })).not.toBeInTheDocument();
   });
 
   it('renders warnings when present', () => {
@@ -935,7 +974,7 @@ describe('AnalysisPanel', () => {
     expect(screen.queryByText(/Model b has 20 samples/)).not.toBeInTheDocument();
   });
 
-  it('renders recompute button', () => {
+  it('keeps recompute hidden until details are expanded', () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -952,10 +991,10 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Recompute')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Recompute$/ })).not.toBeInTheDocument();
   });
 
-  it('shows loading state for recompute button when recomputing', () => {
+  it('shows recompute inside details and disables it while recomputing', async () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -972,99 +1011,10 @@ describe('AnalysisPanel', () => {
       </MemoryRouter>
     );
 
+    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
+
     const button = screen.getByRole('button', { name: /^Recompute$/ });
     expect(button).toBeDisabled();
-  });
-
-  it('renders stability tab', async () => {
-    const analysis = createMockAnalysis();
-    mockUseAnalysis.mockReturnValue({
-      analysis,
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-      recompute: vi.fn(),
-      recomputing: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
-      </MemoryRouter>
-    );
-
-    // Navigate to Stability tab
-    const stabilityTab = screen.getByRole('button', { name: /Stability/i });
-    await userEvent.click(stabilityTab);
-
-    // Check for stability content (SEM)
-    expect(screen.getByText(/Condition x AI Directional Stability/i)).toBeInTheDocument();
-  });
-
-  it('handles N<2 samples without crashing', async () => {
-    // Mock analysis where one model has only 1 sample (N=1)
-    // This causes calculateSEM to return null, which previously crashed the component
-    const analysis = createMockAnalysis({
-      visualizationData: {
-        decisionDistribution: {},
-        scenarioDimensions: {
-          'scenario-1': { 'Dim A': 'Value 1', 'Dim B': 'Value 1' },
-          'scenario-2': { 'Dim A': 'Value 1', 'Dim B': 'Value 1' }
-        },
-        modelScenarioMatrix: {
-          'gpt-4': { 'scenario-1': 0.8, 'scenario-2': 0.9 }, // Valid model
-          'claude-3': { 'scenario-1': 0.5, 'scenario-2': 0.6 } // Target model
-        },
-      }
-    });
-
-    // Force a scenario to have only 1 score (simulated by having only 1 scenario in the list for a condition)
-    // Actually, calculateSEM takes an array of scores.
-    // In StabilityTab logic (Lines 216-222), it collects scores for all scenarioIds matching the condition.
-    // If we have only 1 scenario matching 'Dim A: Value 1' && 'Dim B: Value 1', then scores array has length 1.
-    // calculateSEM([score]) returns null.
-
-    // The mock data above has 'scenario-1' and 'scenario-2' both mapping to 'Dim A: Value 1', 'Dim B: Value 1'.
-    // So for that condition, it will see 2 scenarios.
-    // I need to make it so there is ONLY 1 scenario for a specific condition.
-
-    if (analysis.visualizationData && analysis.visualizationData.scenarioDimensions) {
-      // scenario-1: A=1, B=1
-      analysis.visualizationData.scenarioDimensions['scenario-1'] = { 'Dim A': '1', 'Dim B': '1' };
-      // scenario-2: A=2, B=2
-      analysis.visualizationData.scenarioDimensions['scenario-2'] = { 'Dim A': '2', 'Dim B': '2' };
-    }
-
-    // Now for condition A=1, B=1, there is only scenario-1.
-    // Scores for 'claude-3' will be [0.5]. Length = 1.
-    // calculateSEM returns null.
-    // getModelSEM returns { sem: null, count: 1 }.
-    // Rendering: sem is null. getSEMTextColor(sem!) -> CRASH.
-
-    mockUseAnalysis.mockReturnValue({
-      analysis,
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-      recompute: vi.fn(),
-      recomputing: false,
-    });
-
-    render(
-      <MemoryRouter>
-        <AnalysisPanel runId="run-1" />
-      </MemoryRouter>
-    );
-
-    // Navigate to Stability tab
-    const stabilityTab = screen.getByRole('button', { name: /Stability/i });
-    await userEvent.click(stabilityTab);
-
-    // Should render without error and show N<2 or placeholder
-    expect(screen.getAllByText(/Condition x AI Directional Stability/i).length).toBeGreaterThan(0);
-    // We expect "N<2" to be displayed for the cell with insufficient data,
-    // OR at least the component shouldn't crash.
-    // In the current broken state, this test might fail with the error observed in production.
   });
 
 });
