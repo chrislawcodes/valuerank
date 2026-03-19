@@ -333,6 +333,21 @@ export function AnalysisPanel({
     () => analysis?.perModel ?? {},
     [analysis]
   );
+  const singleVignetteOptions = useMemo(() => {
+    const runs = [currentRun, companionRun].filter((candidate): candidate is Run => candidate != null);
+    const seen = new Set<string>();
+
+    return runs.filter((candidate) => {
+      if (seen.has(candidate.id)) {
+        return false;
+      }
+      seen.add(candidate.id);
+      return true;
+    }).map((candidate) => ({
+      id: candidate.id,
+      label: candidate.definition?.name?.trim() || `Trial ${candidate.id.slice(0, 8)}...`,
+    }));
+  }, [companionRun, currentRun]);
 
   const displayWarnings = useMemo<AnalysisWarning[]>(() => {
     if (!analysis) return [];
@@ -394,21 +409,6 @@ export function AnalysisPanel({
   );
   const aggregateSourceRunCount = analysis.aggregateMetadata?.sourceRunCount ?? null;
   const coverageContextLabel = analysisMode === 'paired' ? 'Paired vignette summaries' : 'Numeric summaries';
-  const singleVignetteOptions = useMemo(() => {
-    const runs = [currentRun, companionRun].filter((candidate): candidate is Run => candidate != null);
-    const seen = new Set<string>();
-
-    return runs.filter((candidate) => {
-      if (seen.has(candidate.id)) {
-        return false;
-      }
-      seen.add(candidate.id);
-      return true;
-    }).map((candidate) => ({
-      id: candidate.id,
-      label: candidate.definition?.name?.trim() || `Trial ${candidate.id.slice(0, 8)}...`,
-    }));
-  }, [companionRun, currentRun]);
   const decisionCoverageMessage = decisionCoverage.totalTranscripts > 0
     ? `${coverageContextLabel} include ${decisionCoverage.scoredTranscripts} of ${decisionCoverage.totalTranscripts} transcripts.${decisionCoverage.unresolvedTranscripts > 0
       ? ` ${pluralize(decisionCoverage.unresolvedTranscripts, 'unresolved transcript')} ${decisionCoverage.unresolvedTranscripts === 1 ? 'is' : 'are'} currently excluded until manually adjudicated.`

@@ -10,10 +10,9 @@ import {
 import {
   buildOrientedConditionRows,
   getOrientationBucketLabel,
-  type OrientationInspectionMode,
-  type OrientedConditionRow,
 } from '../../utils/pairedScopeAdapter';
-import { getPairedOrientationLabels } from '../../utils/methodology';
+import type { OrientationInspectionMode, OrientedConditionRow } from '../../utils/pairedScopeAdapter';
+import type { PairedOrientationLabels } from '../../utils/methodology';
 import { Button } from '../ui/Button';
 import { CopyVisualButton } from '../ui/CopyVisualButton';
 
@@ -26,7 +25,7 @@ type ConditionDecisionsTableProps = {
   analysisBasePath?: AnalysisBasePath;
   analysisSearchParams?: URLSearchParams | string;
   companionRunId?: string | null;
-  orientationLabels: ReturnType<typeof getPairedOrientationLabels>;
+  orientationLabels: PairedOrientationLabels;
   analysisMode?: 'single' | 'paired';
   perModel: Record<string, PerModelStats>;
   visualizationData: VisualizationData | null | undefined;

@@ -11,7 +11,6 @@ import type { PerModelStats } from './types';
 import type { AnalysisResult, VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
 import type { Run } from '../../../api/operations/runs';
 import { Button } from '../../ui/Button';
-import { CopyVisualButton } from '../../ui/CopyVisualButton';
 import { Tooltip } from '../../ui/Tooltip';
 import { PairedRunComparisonCard } from '../PairedRunComparisonCard';
 import {
@@ -806,8 +805,8 @@ export function OverviewTab({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
   analysisSearchParams,
-  definitionContent,
-  perModel,
+  definitionContent: _definitionContent,
+  perModel: _perModel,
   visualizationData,
   varianceAnalysis,
   expectedAttributes = [],
