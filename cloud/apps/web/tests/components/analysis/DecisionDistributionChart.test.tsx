@@ -4,7 +4,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DecisionDistributionChart } from '../../../src/components/analysis/DecisionDistributionChart';
+import {
+  DecisionDistributionChart,
+  CustomTooltip,
+  buildDecisionDistributionChartData,
+} from '../../../src/components/analysis/DecisionDistributionChart';
 import type { VisualizationData } from '../../../src/api/operations/analysis';
 
 function createMockVisualizationData(): VisualizationData {
@@ -24,7 +28,8 @@ describe('DecisionDistributionChart', () => {
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
     expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
-    expect(screen.getByText(/Shows how each model distributes its decisions/)).toBeInTheDocument();
+    expect(screen.queryByText(/Shows how each model distributes its decisions.*percentages/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Total decisions in scope:/)).not.toBeInTheDocument();
   });
 
   it('renders empty state when no decision distribution data', () => {
@@ -47,12 +52,12 @@ describe('DecisionDistributionChart', () => {
     expect(screen.getByText('No decision distribution data available')).toBeInTheDocument();
   });
 
-  it('displays legend text explaining the scale', () => {
+  it('does not render the old scale explainer footer', () => {
     const visualizationData = createMockVisualizationData();
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
-    expect(screen.getByText(/1 = strongly agree with option A/)).toBeInTheDocument();
-    expect(screen.getByText(/5 = strongly agree with option B/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 = strongly agree with option A/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/5 = strongly agree with option B/i)).not.toBeInTheDocument();
   });
 
   it('handles single model data', () => {
@@ -77,6 +82,26 @@ describe('DecisionDistributionChart', () => {
     render(<DecisionDistributionChart visualizationData={visualizationData} />);
 
     expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
+  });
+
+  it('shows percentages and raw counts in the tooltip', () => {
+    const chartData = buildDecisionDistributionChartData({
+      'gpt-4': { '1': 10, '2': 15, '3': 20, '4': 8, '5': 7 },
+    });
+
+    render(
+      <CustomTooltip
+        active
+        payload={[{ payload: chartData[0] }]}
+        dimensionLabels={{ '1': 'Strongly support A' }}
+      />
+    );
+
+    expect(screen.getByText('gpt-4')).toBeInTheDocument();
+    expect(screen.getByText('Total decisions: n=60')).toBeInTheDocument();
+    expect(screen.getByText('Strongly support A:')).toBeInTheDocument();
+    expect(screen.getByText('17% (10)')).toBeInTheDocument();
+    expect(screen.getByText('33% (20)')).toBeInTheDocument();
   });
 
   it('truncates long model names', () => {

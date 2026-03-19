@@ -14,6 +14,7 @@ import { CopyVisualButton } from '../ui/CopyVisualButton';
 type ModelConsistencyChartProps = {
   reliability: AnalysisSemanticsView['reliability'];
   analysisMode?: 'single' | 'paired';
+  isPooledAcrossCompanionRuns?: boolean;
 };
 
 type ChartDataPoint = {
@@ -142,7 +143,11 @@ function ReliabilityTooltip({ active, payload }: {
   );
 }
 
-export function ModelConsistencyChart({ reliability, analysisMode }: ModelConsistencyChartProps) {
+export function ModelConsistencyChart({
+  reliability,
+  analysisMode,
+  isPooledAcrossCompanionRuns = false,
+}: ModelConsistencyChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   const availableModels = Object.values(reliability.byModel)
@@ -215,7 +220,9 @@ export function ModelConsistencyChart({ reliability, analysisMode }: ModelConsis
           <p className="mt-1 text-xs text-gray-500">
             Higher values mean more repeatable baseline decisions across repeated scenario judgments.
             {analysisMode === 'paired'
-              ? ' Paired mode keeps the matched vignette context visible while you review the current results.'
+              ? isPooledAcrossCompanionRuns
+                ? ' Paired mode uses pooled companion reliability data when that data is available.'
+                : ' Paired mode is selected. This summary updates once the companion run is available.'
               : ' Single mode keeps the current results scoped to one vignette at a time.'}
           </p>
         </div>

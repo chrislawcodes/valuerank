@@ -15,6 +15,7 @@ type DecisionsTabProps = {
   dimensionLabels?: Record<string, string>;
   semantics: AnalysisSemanticsView;
   analysisMode?: 'single' | 'paired';
+  isPooledAcrossCompanionRuns?: boolean;
 };
 
 function UnavailableCallout({ message }: { message: string }) {
@@ -60,6 +61,7 @@ export function DecisionsTab({
   dimensionLabels,
   semantics,
   analysisMode,
+  isPooledAcrossCompanionRuns = false,
 }: DecisionsTabProps) {
   const showDistribution = visualizationData != null;
   const showReliability = semantics.reliability.rowAvailability.status === 'available' && semantics.reliability.hasAnyAvailableModel;
@@ -78,11 +80,6 @@ export function DecisionsTab({
 
   return (
     <div className="space-y-8">
-      <p className="text-xs text-gray-500">
-        {analysisMode === 'paired'
-          ? 'Paired mode keeps the matched vignette context visible while this tab still reads from the current analysis result.'
-          : 'Single mode keeps this tab focused on one vignette at a time.'}
-      </p>
       {showDistribution && (
         <DecisionDistributionChart
           visualizationData={visualizationData}
@@ -91,7 +88,11 @@ export function DecisionsTab({
       )}
 
       <div className={showDistribution ? 'border-t border-gray-200 pt-6' : ''}>
-        <ModelConsistencyChart reliability={semantics.reliability} analysisMode={analysisMode} />
+        <ModelConsistencyChart
+          reliability={semantics.reliability}
+          analysisMode={analysisMode}
+          isPooledAcrossCompanionRuns={isPooledAcrossCompanionRuns}
+        />
         <p className="mt-3 text-xs text-gray-500">Repeatability details live in Stability.</p>
       </div>
     </div>

@@ -36,6 +36,7 @@ import {
 } from '../../utils/analysisCoverage';
 import {
   buildPairedScopeContext,
+  mergePairedVisualizationData,
   type PairedScopeContext,
 } from '../../utils/pairedScopeAdapter';
 
@@ -319,6 +320,17 @@ export function AnalysisPanel({
 
     return buildAnalysisSemanticsView(analysis, isAggregateAnalysis);
   }, [analysis, analysisMode, companionAnalysis, isAggregateAnalysis]);
+  const decisionsVisualizationData = useMemo(() => {
+    if (!analysis) {
+      return null;
+    }
+
+    if (analysisMode !== 'paired' || !companionAnalysis) {
+      return analysis.visualizationData;
+    }
+
+    return mergePairedVisualizationData(analysis, companionAnalysis);
+  }, [analysis, analysisMode, companionAnalysis]);
   const decisionCoverage = useMemo(
     () => summarizeDecisionCoverage(transcripts),
     [transcripts],
@@ -432,9 +444,6 @@ export function AnalysisPanel({
                 )}
               </Button>
             </div>
-            <p className="text-sm text-gray-500">
-              Computed {formatTimestamp(analysis.computedAt)} • {formatDuration(analysis.durationMs)}
-            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -489,7 +498,10 @@ export function AnalysisPanel({
           id="analysis-details-panel"
           className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4"
         >
-          <p className="text-sm font-medium text-gray-900">Decision Coverage</p>
+          <p className="text-sm text-gray-700">
+            Computed {formatTimestamp(analysis.computedAt)} • {formatDuration(analysis.durationMs)}
+          </p>
+          <p className="mt-3 text-sm font-medium text-gray-900">Decision Coverage</p>
           <p className="mt-2 text-sm text-gray-700">{decisionCoverageMessage}</p>
           <p className="mt-1 text-xs text-gray-600">
             Parser-scored: {decisionCoverage.parserScoredTranscripts} ({decisionCoverage.exactMatchTranscripts} exact, {decisionCoverage.fallbackResolvedTranscripts} fallback)
@@ -544,10 +556,11 @@ export function AnalysisPanel({
         )}
         {activeTab === 'decisions' && semantics && (
           <DecisionsTab
-            visualizationData={analysis.visualizationData}
+            visualizationData={decisionsVisualizationData}
             dimensionLabels={dimensionLabels}
-            semantics={semantics}
+            semantics={overviewSemantics ?? semantics}
             analysisMode={analysisMode}
+            isPooledAcrossCompanionRuns={analysisMode === 'paired' && companionAnalysis != null}
           />
         )}
         {activeTab === 'scenarios' && (
