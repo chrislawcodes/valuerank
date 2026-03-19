@@ -136,6 +136,10 @@ The analysis header cleanup is now shipped too: the always-visible cards for mod
 
 The paired overview integration slice is now shipped as well: the paired run comparison is embedded beneath the Overview Summary table inside the same card, and the Condition Decisions table now uses a real merged paired condition scope in pooled mode instead of reading just the current run. That means paired mode behaves more like single-vignette mode with an expanded summary surface, while the transcript drilldown now distinguishes between blended condition clicks and split-by-order condition clicks.
 
+The next Decisions slice is now shipped too: paired mode no longer leaves the Decisions tab on current-run data. The tab now pools decision-distribution counts across both companion runs, reuses the merged paired semantics for baseline reliability, and uses the same shared paired visualization adapter as the Overview condition tables so the single-vs-paired scope story stays consistent across the analysis surface.
+
+The follow-up Decisions presentation tweak is now shipped as well: the decision-distribution chart now uses a percentage axis instead of raw totals so the scale no longer jumps between single and paired scope. Raw counts remain available on hover, while the surrounding copy has been pared back so the chart reads more cleanly.
+
 ## Verification Expectations
 
 - single mode should behave like the current vignette analysis experience
@@ -153,3 +157,18 @@ The paired overview integration slice is now shipped as well: the paired run com
 - Should paired mode default to pooled summaries with separate version drilldown, or should it show both versions side by side by default?
 - Should the shared shell replace the legacy validation page entirely, or sit alongside it during the transition?
 - Which charts should remain pooled-only in paired mode, and which need explicit version-level overlays or drilldowns?
+
+## Review Reconciliation
+
+- review: reviews/spec.gemini.requirements-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/spec.gemini.risk-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/spec.codex.feasibility-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/plan.gemini.architecture-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/plan.gemini.risk-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/plan.codex.implementation-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/tasks.gemini.dependency-order-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/tasks.gemini.risk-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/tasks.codex.execution-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/diff.gemini.regression-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/diff.gemini.security-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.
+- review: reviews/diff.codex.correctness-adversarial.review.md | status: deferred | note: Deferred: these paired-vignette implementation findings remain outside this workflow-state repair pass and should be handled in a dedicated feature follow-up.

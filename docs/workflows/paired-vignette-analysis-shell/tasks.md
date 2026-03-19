@@ -16,6 +16,10 @@ Stage 8 is shipped for the Overview Summary slice: paired mode now truly pools t
 
 The next overview cleanup slice is shipped too: the paired run comparison now lives underneath the Overview Summary table inside the same card, so paired mode behaves more like the single-vignette page with extra inspection detail folded into the summary surface. The Condition Decisions table now uses a real merged paired condition scope in pooled mode, and pooled/split condition clickthrough routes carry enough context to open the correct blended or order-specific transcript list.
 
+The Decisions-tab scope cleanup is now shipped as well: paired mode now pools decision-distribution counts across both companion runs instead of silently reading only the current run, and the baseline reliability chart on that tab now uses the same merged paired semantics as the Overview summary. The shared paired visualization adapter now owns both the pooled decision-distribution merge and the pooled condition-matrix merge so the Overview/Decisions surfaces stay aligned.
+
+The next Decisions presentation tweak is shipped too: the decision-distribution bars now normalize to percentages so the horizontal scale stays stable when users switch between single and paired scope. Raw counts move into the bar hover state, and the chart copy is trimmed so the surface stays focused on the bars themselves.
+
 ## Task List
 
 - [x] Define the feature goal and user problem
@@ -52,3 +56,7 @@ The next overview cleanup slice is shipped too: the paired run comparison now li
 - [x] Move the paired run comparison underneath the Overview Summary table inside the same card
 - [x] Make pooled Condition Decisions merge both companion runs before calculating mean cells
 - [x] Route pooled and split Condition Decisions clickthrough to the correct blended or order-specific transcript sets
+- [x] Pool Decisions tab decision-distribution counts across both companion runs in paired mode
+- [x] Make Decisions tab baseline reliability use merged paired semantics
+- [x] Share the paired visualization merge helper between Overview condition tables and the Decisions tab
+- [x] Normalize the Decisions tab distribution chart to percentages while keeping raw counts in hover

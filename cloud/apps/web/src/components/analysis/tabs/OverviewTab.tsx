@@ -25,6 +25,8 @@ import {
 import {
   buildOrientedConditionRows,
   getOrientationBucketLabel,
+  mergePairedVarianceAnalysis,
+  mergePairedVisualizationData,
   type OrientationInspectionMode,
   type OrientedConditionRow,
 } from '../../../utils/pairedScopeAdapter';
@@ -172,127 +174,6 @@ function getRunPresentationOrder(run: Run | null | undefined): JobChoicePresenta
 
   const value = content.methodology.presentation_order;
   return value === 'A_first' || value === 'B_first' ? value : null;
-}
-
-function prefixScenarioId(prefix: string, scenarioId: string): string {
-  return `${prefix}:${scenarioId}`;
-}
-
-function mergePairedVisualizationData(
-  canonicalAnalysis: AnalysisResult | null | undefined,
-  flippedAnalysis: AnalysisResult | null | undefined,
-): VisualizationData | null {
-  const entries = [
-    { prefix: 'canonical', analysis: canonicalAnalysis },
-    { prefix: 'flipped', analysis: flippedAnalysis },
-  ].filter((entry) => entry.analysis?.visualizationData != null);
-
-  if (entries.length === 0) {
-    return null;
-  }
-
-  const scenarioDimensions: Record<string, Record<string, string | number>> = {};
-  const modelScenarioMatrix: Record<string, Record<string, number>> = {};
-
-  entries.forEach(({ prefix, analysis }) => {
-    Object.entries(analysis?.visualizationData?.scenarioDimensions ?? {}).forEach(([scenarioId, dimensions]) => {
-      scenarioDimensions[prefixScenarioId(prefix, scenarioId)] = dimensions;
-    });
-
-    Object.entries(analysis?.visualizationData?.modelScenarioMatrix ?? {}).forEach(([modelId, scores]) => {
-      const currentScores = modelScenarioMatrix[modelId] ?? {};
-      Object.entries(scores ?? {}).forEach(([scenarioId, score]) => {
-        currentScores[prefixScenarioId(prefix, scenarioId)] = score;
-      });
-      modelScenarioMatrix[modelId] = currentScores;
-    });
-  });
-
-  return {
-    decisionDistribution: {},
-    scenarioDimensions,
-    modelScenarioMatrix,
-  };
-}
-
-function mergePairedVarianceAnalysis(
-  canonicalAnalysis: AnalysisResult | null | undefined,
-  flippedAnalysis: AnalysisResult | null | undefined,
-): VarianceAnalysis | null {
-  const entries = [
-    { prefix: 'canonical', analysis: canonicalAnalysis, orientationCorrected: false },
-    { prefix: 'flipped', analysis: flippedAnalysis, orientationCorrected: true },
-  ].filter((entry) => entry.analysis?.varianceAnalysis != null);
-
-  if (entries.length === 0) {
-    return null;
-  }
-
-  const modelIds = new Set<string>();
-  entries.forEach(({ analysis }) => {
-    Object.keys(analysis?.varianceAnalysis?.perModel ?? {}).forEach((modelId) => modelIds.add(modelId));
-  });
-
-  const perModel = [...modelIds].reduce<VarianceAnalysis['perModel']>((acc, modelId) => {
-    const perScenario: NonNullable<VarianceAnalysis['perModel'][string]>['perScenario'] = {};
-    let totalSamples = 0;
-    let uniqueScenarios = 0;
-    let samplesPerScenario = 1;
-    let weightedVarianceSum = 0;
-    let weightedConsistencySum = 0;
-    let weight = 0;
-    let maxWithinScenarioVariance = 0;
-
-    entries.forEach(({ prefix, analysis, orientationCorrected }) => {
-      const modelStats = analysis?.varianceAnalysis?.perModel?.[modelId];
-      if (!modelStats) {
-        return;
-      }
-
-      totalSamples += modelStats.totalSamples;
-      uniqueScenarios += modelStats.uniqueScenarios;
-      samplesPerScenario = Math.max(samplesPerScenario, modelStats.samplesPerScenario);
-      weightedVarianceSum += modelStats.avgWithinScenarioVariance * Math.max(modelStats.uniqueScenarios, 1);
-      weightedConsistencySum += modelStats.consistencyScore * Math.max(modelStats.uniqueScenarios, 1);
-      weight += Math.max(modelStats.uniqueScenarios, 1);
-      maxWithinScenarioVariance = Math.max(maxWithinScenarioVariance, modelStats.maxWithinScenarioVariance);
-
-      Object.entries(modelStats.perScenario ?? {}).forEach(([scenarioId, stats]) => {
-        perScenario[prefixScenarioId(prefix, scenarioId)] = {
-          ...stats,
-          orientationCorrected,
-        };
-      });
-    });
-
-    acc[modelId] = {
-      totalSamples,
-      uniqueScenarios,
-      samplesPerScenario,
-      avgWithinScenarioVariance: weight > 0 ? weightedVarianceSum / weight : 0,
-      maxWithinScenarioVariance,
-      consistencyScore: weight > 0 ? weightedConsistencySum / weight : 0,
-      perScenario,
-    };
-
-    return acc;
-  }, {});
-
-  return {
-    isMultiSample: entries.some(({ analysis }) => analysis?.varianceAnalysis?.isMultiSample === true),
-    samplesPerScenario: Math.max(
-      ...entries.map(({ analysis }) => analysis?.varianceAnalysis?.samplesPerScenario ?? 1),
-    ),
-    perModel,
-    mostVariableScenarios: [],
-    leastVariableScenarios: [],
-    orientationCorrectedCount: Object.values(perModel).reduce(
-      (sum, modelStats) => (
-        sum + Object.values(modelStats.perScenario).filter((stats) => stats.orientationCorrected === true).length
-      ),
-      0,
-    ),
-  };
 }
 
 function formatPercent(value: number): string {

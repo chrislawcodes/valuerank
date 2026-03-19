@@ -205,7 +205,7 @@ describe('AnalysisPanel', () => {
     expect(recompute).toHaveBeenCalled();
   });
 
-  it('renders analysis header with computed time', () => {
+  it('shows computed time in details instead of the header', async () => {
     const analysis = createMockAnalysis();
     mockUseAnalysis.mockReturnValue({
       analysis,
@@ -223,6 +223,9 @@ describe('AnalysisPanel', () => {
     );
 
     expect(screen.getByText('Analysis')).toBeInTheDocument();
+    expect(screen.queryByText(/Computed/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^details$/i }));
     expect(screen.getByText(/Computed/)).toBeInTheDocument();
   });
 
@@ -474,6 +477,61 @@ describe('AnalysisPanel', () => {
     expect(within(claudeRow as HTMLTableRowElement).getByText('Moderate (+0.05)')).toBeInTheDocument();
     expect(within(gptRow as HTMLTableRowElement).getByText('Moderate (−0.10)')).toBeInTheDocument();
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
+  });
+
+  it('pools Decisions tab distribution data across the companion run in paired mode', async () => {
+    const analysis = createMockAnalysis({
+      visualizationData: {
+        decisionDistribution: {},
+        scenarioDimensions: {
+          s1: { Freedom: 'high', Harmony: 'low' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { s1: 5 },
+        },
+      },
+    });
+
+    const companionAnalysis = createMockAnalysis({
+      id: 'analysis-2',
+      runId: 'run-2',
+      visualizationData: {
+        decisionDistribution: {
+          'gpt-4': { '1': 3, '5': 1 },
+        },
+        scenarioDimensions: {
+          s2: { Freedom: 'high', Harmony: 'low' },
+        },
+        modelScenarioMatrix: {
+          'gpt-4': { s2: 1 },
+        },
+      },
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AnalysisPanel
+          runId="run-1"
+          analysisMode="paired"
+          companionAnalysis={companionAnalysis}
+        />
+      </MemoryRouter>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Decisions' }));
+
+    expect(screen.queryByText(/uses pooled companion data for decision mix and baseline reliability when that data is available/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Decision Distribution by Model')).toBeInTheDocument();
+    expect(screen.queryByText('No decision distribution data available')).not.toBeInTheDocument();
   });
 
   it('keeps decision coverage details hidden until expanded', () => {
