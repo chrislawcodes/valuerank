@@ -66,6 +66,14 @@ const SCENARIO_HIGHLIGHT_VARIANTS: Array<Pick<TranscriptScenarioHighlight, 'cont
   },
 ];
 
+const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
+  full: 5,
+  substantial: 4,
+  moderate: 3,
+  minimal: 2,
+  negligible: 1,
+};
+
 function groupTranscriptsByModel(transcripts: Transcript[]): GroupedTranscripts {
   const groups: GroupedTranscripts = {};
   for (const transcript of transcripts) {
@@ -115,8 +123,22 @@ function compareDimensionValues(a: string | number | undefined, b: string | numb
   if (a === undefined) return 1;
   if (b === undefined) return -1;
 
-  const aNum = typeof a === 'number' ? a : Number(a);
-  const bNum = typeof b === 'number' ? b : Number(b);
+  const toComparableNumber = (value: string | number): number => {
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    const mappedLevel = LEVEL_WORD_TO_NUMBER[trimmed.toLowerCase()];
+    if (mappedLevel !== undefined) {
+      return mappedLevel;
+    }
+
+    return Number(trimmed);
+  };
+
+  const aNum = toComparableNumber(a);
+  const bNum = toComparableNumber(b);
   const aNumValid = Number.isFinite(aNum);
   const bNumValid = Number.isFinite(bNum);
 

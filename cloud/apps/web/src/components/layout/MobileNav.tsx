@@ -41,7 +41,7 @@ const navItems: NavItem[] = [
     icon: ShieldCheck,
     children: [
       { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect', icon: ShieldCheck },
-      { name: 'Validation Analysis', path: '/assumptions/analysis', icon: ShieldCheck },
+      { name: 'Legacy Analysis', path: '/assumptions/analysis', icon: ShieldCheck },
       { name: 'Validation (old v1)', path: '/assumptions/analysis-v1', icon: ShieldCheck },
     ],
   },

@@ -9,7 +9,7 @@ vi.mock('@valuerank/shared', () => ({
   createLogger: () => ({ warn }),
 }));
 
-import { buildAnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
+import { buildAnalysisSemanticsView, buildPairedAnalysisSemanticsView } from '../../../src/components/analysis-v2/analysisSemantics';
 
 function createPreferenceSummary(overrides?: Record<string, unknown>): RawPreferenceSummary {
   return {
@@ -17,9 +17,18 @@ function createPreferenceSummary(overrides?: Record<string, unknown>): RawPrefer
       'claude-3': {
         preferenceDirection: {
           byValue: {
-            Compassion: { winRate: 0.7 },
-            Discipline: { winRate: 0.2 },
-            Balance: { winRate: 0.5 },
+            Compassion: {
+              winRate: 0.7,
+              count: { prioritized: 7, deprioritized: 3, neutral: 0 },
+            },
+            Discipline: {
+              winRate: 0.2,
+              count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+            },
+            Balance: {
+              winRate: 0.5,
+              count: { prioritized: 5, deprioritized: 5, neutral: 0 },
+            },
           },
           overallLean: 'A',
           overallSignedCenter: 0.45,
@@ -29,8 +38,14 @@ function createPreferenceSummary(overrides?: Record<string, unknown>): RawPrefer
       'gpt-4': {
         preferenceDirection: {
           byValue: {
-            Compassion: { winRate: 0.8 },
-            Discipline: { winRate: 0.1 },
+            Compassion: {
+              winRate: 0.8,
+              count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+            },
+            Discipline: {
+              winRate: 0.1,
+              count: { prioritized: 1, deprioritized: 9, neutral: 0 },
+            },
           },
           overallLean: 'B',
           overallSignedCenter: -0.4,
@@ -381,5 +396,175 @@ describe('buildAnalysisSemanticsView', () => {
 
     expect(semantics.preference.rowAvailability).toMatchObject({ reason: 'unknown-analysis-version' });
     expect(semantics.reliability.rowAvailability).toMatchObject({ reason: 'unknown-analysis-version' });
+  });
+});
+
+describe('buildPairedAnalysisSemanticsView', () => {
+  beforeEach(() => {
+    warn.mockClear();
+  });
+
+  it('pools preference and reliability summaries across companion analyses', () => {
+    const current = createAnalysis({
+      perModel: {
+        'claude-3': {
+          sampleSize: 10,
+          values: {},
+          overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+        },
+      },
+      preferenceSummary: {
+        perModel: {
+          'claude-3': {
+            preferenceDirection: {
+              byValue: {
+                Achievement: {
+                  winRate: 0.8,
+                  count: { prioritized: 8, deprioritized: 2, neutral: 0 },
+                },
+                Care: {
+                  winRate: 0.3,
+                  count: { prioritized: 3, deprioritized: 7, neutral: 0 },
+                },
+              },
+              overallLean: 'A',
+              overallSignedCenter: 0.4,
+            },
+            preferenceStrength: 0.8,
+          },
+        },
+      },
+      reliabilitySummary: {
+        perModel: {
+          'claude-3': {
+            baselineNoise: 0.2,
+            baselineReliability: 0.8,
+            directionalAgreement: 0.7,
+            neutralShare: 0.1,
+            coverageCount: 4,
+            uniqueScenarios: 4,
+          },
+        },
+      },
+      aggregateMetadata: {
+        aggregateEligibility: 'eligible_same_signature_baseline',
+        aggregateIneligibilityReason: null,
+        sourceRunCount: 1,
+        sourceRunIds: ['run-1'],
+        conditionCoverage: {
+          plannedConditionCount: 4,
+          observedConditionCount: 4,
+          complete: true,
+        },
+        perModelRepeatCoverage: {
+          'claude-3': {
+            repeatCoverageCount: 4,
+            repeatCoverageShare: 0.8,
+            contributingRunCount: 1,
+          },
+        },
+        perModelDrift: {
+          'claude-3': {
+            weightedOverallSignedCenterSd: 0.2,
+            exceedsWarningThreshold: false,
+          },
+        },
+      },
+    });
+    const companion = createAnalysis({
+      runId: 'run-2',
+      perModel: {
+        'claude-3': {
+          sampleSize: 30,
+          values: {},
+          overall: { mean: 3, stdDev: 0.4, min: 2, max: 4 },
+        },
+      },
+      preferenceSummary: {
+        perModel: {
+          'claude-3': {
+            preferenceDirection: {
+              byValue: {
+                Achievement: {
+                  winRate: 0.2,
+                  count: { prioritized: 2, deprioritized: 8, neutral: 0 },
+                },
+                Care: {
+                  winRate: 0.9,
+                  count: { prioritized: 9, deprioritized: 1, neutral: 0 },
+                },
+              },
+              overallLean: 'B',
+              overallSignedCenter: -0.2,
+            },
+            preferenceStrength: 1.2,
+          },
+        },
+      },
+      reliabilitySummary: {
+        perModel: {
+          'claude-3': {
+            baselineNoise: 0.1,
+            baselineReliability: 0.9,
+            directionalAgreement: 0.9,
+            neutralShare: 0.2,
+            coverageCount: 6,
+            uniqueScenarios: 6,
+          },
+        },
+      },
+      aggregateMetadata: {
+        aggregateEligibility: 'eligible_same_signature_baseline',
+        aggregateIneligibilityReason: null,
+        sourceRunCount: 1,
+        sourceRunIds: ['run-2'],
+        conditionCoverage: {
+          plannedConditionCount: 4,
+          observedConditionCount: 4,
+          complete: true,
+        },
+        perModelRepeatCoverage: {
+          'claude-3': {
+            repeatCoverageCount: 4,
+            repeatCoverageShare: 0.6,
+            contributingRunCount: 1,
+          },
+        },
+        perModelDrift: {
+          'claude-3': {
+            weightedOverallSignedCenterSd: 0.4,
+            exceedsWarningThreshold: true,
+          },
+        },
+      },
+    });
+
+    const semantics = buildPairedAnalysisSemanticsView(current, companion, false);
+
+    expect(semantics.preference.rowAvailability).toEqual({ status: 'available' });
+    expect(semantics.reliability.rowAvailability).toEqual({ status: 'available' });
+    expect(semantics.preference.byModel['claude-3']).toMatchObject({
+      topPrioritizedValues: ['Care'],
+      topDeprioritizedValues: [],
+      overallLean: 'B',
+    });
+    expect(semantics.preference.byModel['claude-3']?.overallSignedCenter).toBeCloseTo(-0.05, 6);
+    expect(semantics.preference.byModel['claude-3']?.preferenceStrength).toBeCloseTo(1.1, 6);
+    expect(semantics.reliability.byModel['claude-3']).toMatchObject({
+      coverageCount: 10,
+      uniqueScenarios: 10,
+      contributingRunCount: 2,
+      repeatCoverageShare: 0.7,
+      hasLowCoverageWarning: true,
+      hasHighDriftWarning: true,
+    });
+    expect(semantics.reliability.byModel['claude-3']?.weightedOverallSignedCenterSd).toBeCloseTo(0.3, 6);
+    expect(semantics.reliability.byModel['claude-3']?.directionalAgreement).toBeCloseTo(0.82, 6);
+    expect(semantics.reliability.byModel['claude-3']?.baselineReliability).toBeCloseTo(0.86, 6);
+    expect(semantics.reliability.aggregateWarnings).toEqual({
+      isEligibleAggregate: true,
+      lowCoverageModels: ['claude-3'],
+      highDriftModels: ['claude-3'],
+    });
   });
 });

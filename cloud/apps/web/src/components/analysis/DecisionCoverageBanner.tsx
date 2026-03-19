@@ -3,7 +3,7 @@ import type { DecisionCoverageSummary } from '../../utils/analysisCoverage';
 
 type DecisionCoverageBannerProps = {
   coverage: DecisionCoverageSummary;
-  contextLabel: 'numeric summaries' | 'stability metrics';
+  contextLabel: string;
   compact?: boolean;
 };
 

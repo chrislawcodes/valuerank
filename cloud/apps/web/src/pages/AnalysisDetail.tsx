@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
+import { findCompanionPairedRun } from '../components/analysis/PairedRunComparisonCard';
 import { useAnalysis } from '../hooks/useAnalysis';
 import { useRun } from '../hooks/useRun';
 import { useRuns } from '../hooks/useRuns';
@@ -26,6 +27,18 @@ function parseAnalysisTab(value: string | null): AnalysisTab {
   return 'overview';
 }
 
+type AnalysisDetailMode = 'single' | 'paired';
+
+function parseAnalysisDetailMode(value: string | null): AnalysisDetailMode {
+  return value === 'paired' ? 'paired' : 'single';
+}
+
+function buildAnalysisDetailParams(searchParams: URLSearchParams, mode: AnalysisDetailMode): URLSearchParams {
+  const next = new URLSearchParams(searchParams);
+  next.set('mode', mode);
+  return next;
+}
+
 function getDisplaySignature(signature: string | null | undefined): string {
   return signature && signature !== 'v?td' ? signature : 'Unknown Signature';
 }
@@ -35,6 +48,14 @@ export function AnalysisDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const initialTab = parseAnalysisTab(searchParams.get('tab'));
+  const analysisMode = parseAnalysisDetailMode(searchParams.get('mode'));
+  const handleModeChange = (mode: AnalysisDetailMode) => {
+    const next = buildAnalysisDetailParams(searchParams, mode);
+    navigate({
+      pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, id || ''),
+      search: next.toString().length > 0 ? `?${next.toString()}` : '',
+    }, { replace: true });
+  };
 
   const { run, loading, error } = useRun({
     id: id || '',
@@ -47,6 +68,19 @@ export function AnalysisDetail() {
     pause: !id || !run?.analysisStatus,
     enablePolling: false,
     analysisStatus: run?.analysisStatus ?? null,
+  });
+  const { runs: candidatePairedRuns } = useRuns({
+    limit: 1000,
+    pause: analysisMode !== 'paired' || !run,
+  });
+  const companionRun = run == null
+    ? null
+    : findCompanionPairedRun(run, candidatePairedRuns);
+  const { analysis: companionAnalysis } = useAnalysis({
+    runId: companionRun?.id ?? '',
+    pause: analysisMode !== 'paired' || companionRun == null || !companionRun.analysisStatus,
+    enablePolling: false,
+    analysisStatus: companionRun?.analysisStatus ?? null,
   });
 
   // Loading state
@@ -161,17 +195,25 @@ export function AnalysisDetail() {
           </p>
         </div>
       ) : (
-        <AnalysisPanel
-          runId={run.id}
-          analysisStatus={run.analysisStatus}
-          analysisBasePath={ANALYSIS_BASE_PATH}
-          definitionContent={definitionContent}
-          transcripts={run.transcripts}
-          isOldVersion={isOldVersion}
-          isAggregate={isAggregate}
-          pendingSince={run.completedAt}
-          initialTab={initialTab}
-        />
+        <div className="space-y-4">
+          <AnalysisPanel
+            runId={run.id}
+            analysisStatus={run.analysisStatus}
+            analysisBasePath={ANALYSIS_BASE_PATH}
+            analysisSearchParams={searchParams}
+            analysisMode={analysisMode}
+            onAnalysisModeChange={handleModeChange}
+            companionAnalysis={analysisMode === 'paired' ? companionAnalysis : null}
+            currentRun={run}
+            companionRun={analysisMode === 'paired' && launchModeLabel === 'Paired Batch' ? companionRun : null}
+            definitionContent={definitionContent}
+            transcripts={run.transcripts}
+            isOldVersion={isOldVersion}
+            isAggregate={isAggregate}
+            pendingSince={run.completedAt}
+            initialTab={initialTab}
+          />
+        </div>
       )}
     </div>
   );
@@ -198,6 +240,7 @@ function Header({
   currentSignature?: string | null;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const { runs } = useRuns({
     definitionId: isAggregate ? (definitionId || undefined) : undefined,
@@ -234,9 +277,10 @@ function Header({
   }, []);
 
   const selectedAggregateSignature = aggregateRuns.find((run) => run.id === runId)?.signature ?? currentSignature ?? 'v?td';
+  const currentSearch = searchParams.toString();
 
   return (
-    <div className="flex items-center justify-between flex-1 mr-4">
+    <div className="flex items-start justify-between flex-1 mr-4 gap-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/analysis')}>
           <ArrowLeft className="w-4 h-4 mr-1" />
@@ -275,7 +319,10 @@ function Header({
                     onChange={(e) => {
                       const nextRun = aggregateRuns.find((run) => run.signature === e.target.value);
                       if (nextRun) {
-                        navigate(buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id));
+                        navigate({
+                          pathname: buildAnalysisDetailPath(ANALYSIS_BASE_PATH, nextRun.id),
+                          search: currentSearch.length > 0 ? `?${currentSearch}` : '',
+                        });
                       }
                     }}
                   >

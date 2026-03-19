@@ -71,6 +71,11 @@ export type AnalysisSemanticsView = {
 
 type RawPreferenceValueStats = {
   winRate: number;
+  count?: {
+    prioritized: number;
+    deprioritized: number;
+    neutral: number;
+  };
 };
 
 type RawModelPreferenceSummary = {
@@ -240,7 +245,16 @@ function parseRawPreferenceValueStats(value: unknown): RawPreferenceValueStats |
     }
   }
 
-  return { winRate };
+  return {
+    winRate,
+    count: count === undefined
+      ? undefined
+      : {
+          prioritized: Number(count.prioritized),
+          deprioritized: Number(count.deprioritized),
+          neutral: Number(count.neutral),
+        },
+  };
 }
 
 function parseRawPreferenceSummaryEntry(value: unknown): RawModelPreferenceSummary | null {
@@ -417,6 +431,257 @@ function deriveValueLists(byValue: Record<string, RawPreferenceValueStats>) {
     topPrioritizedValues: prioritized,
     topDeprioritizedValues: deprioritized,
     neutralValues: neutral,
+  };
+}
+
+function buildInvalidSummaryView(): AnalysisSemanticsView {
+  return {
+    preference: {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: {},
+    },
+    reliability: {
+      rowAvailability: unavailableState('invalid-summary-shape'),
+      byModel: {},
+      hasAnyAvailableModel: false,
+      hasMixedAvailability: false,
+      aggregateWarnings: {
+        isEligibleAggregate: false,
+        lowCoverageModels: [],
+        highDriftModels: [],
+      },
+    },
+  };
+}
+
+function unionModelIds(...analyses: Array<AnalysisResult | null | undefined>): string[] {
+  return Array.from(new Set(
+    analyses.flatMap((analysis) => Object.keys(analysis?.perModel ?? {})),
+  )).sort((left, right) => left.localeCompare(right));
+}
+
+function averageWeighted(values: Array<{ value: number; weight: number }>): number | null {
+  const populated = values.filter((entry) => Number.isFinite(entry.value) && entry.weight > 0);
+  if (populated.length === 0) {
+    return null;
+  }
+
+  const totalWeight = populated.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight <= 0) {
+    return null;
+  }
+
+  const total = populated.reduce((sum, entry) => sum + (entry.value * entry.weight), 0);
+  return total / totalWeight;
+}
+
+function combineOverallLean(overallSignedCenter: number | null): 'A' | 'B' | 'NEUTRAL' | null {
+  if (overallSignedCenter === null) {
+    return null;
+  }
+
+  if (overallSignedCenter > EPSILON) {
+    return 'A';
+  }
+  if (overallSignedCenter < -EPSILON) {
+    return 'B';
+  }
+  return 'NEUTRAL';
+}
+
+function buildMergedPreferenceModel(
+  modelId: string,
+  analyses: AnalysisResult[],
+): PreferenceViewModel {
+  const parsedModels = analyses
+    .map((analysis) => {
+      const perModel = isRecord(analysis.preferenceSummary?.perModel)
+        ? analysis.preferenceSummary.perModel
+        : null;
+      return {
+        analysis,
+        parsed: parseRawPreferenceSummaryEntry(perModel?.[modelId]),
+      };
+    })
+    .filter((entry): entry is { analysis: AnalysisResult; parsed: RawModelPreferenceSummary } => entry.parsed !== null);
+
+  if (parsedModels.length === 0) {
+    return buildPreferenceUnavailableModel(modelId, 'invalid-summary-shape');
+  }
+
+  const mergedByValue: Record<string, RawPreferenceValueStats> = {};
+  const valueIds = new Set(parsedModels.flatMap(({ parsed }) => Object.keys(parsed.preferenceDirection.byValue)));
+
+  valueIds.forEach((valueId) => {
+    const stats = parsedModels
+      .map(({ parsed }) => parsed.preferenceDirection.byValue[valueId])
+      .filter((entry): entry is RawPreferenceValueStats => entry != null);
+
+    if (stats.length === 0) {
+      return;
+    }
+
+    const allHaveCounts = stats.every((entry) => entry.count !== undefined);
+    if (allHaveCounts) {
+      const prioritized = stats.reduce((sum, entry) => sum + (entry.count?.prioritized ?? 0), 0);
+      const deprioritized = stats.reduce((sum, entry) => sum + (entry.count?.deprioritized ?? 0), 0);
+      const neutral = stats.reduce((sum, entry) => sum + (entry.count?.neutral ?? 0), 0);
+      const totalBattles = prioritized + deprioritized;
+      mergedByValue[valueId] = {
+        winRate: totalBattles > 0 ? prioritized / totalBattles : 0.5,
+        count: {
+          prioritized,
+          deprioritized,
+          neutral,
+        },
+      };
+      return;
+    }
+
+    const averagedWinRate = averageWeighted(
+      parsedModels
+        .map(({ analysis, parsed }) => {
+          const entry = parsed.preferenceDirection.byValue[valueId];
+          if (!entry) {
+            return null;
+          }
+          return {
+            value: entry.winRate,
+            weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+          };
+        })
+        .filter((entry): entry is { value: number; weight: number } => entry !== null),
+    );
+
+    if (averagedWinRate !== null) {
+      mergedByValue[valueId] = { winRate: averagedWinRate };
+    }
+  });
+
+  const overallSignedCenter = averageWeighted(
+    parsedModels
+      .filter(({ parsed }) => parsed.preferenceDirection.overallSignedCenter !== null)
+      .map(({ analysis, parsed }) => ({
+        value: parsed.preferenceDirection.overallSignedCenter ?? 0,
+        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+      })),
+  );
+  const preferenceStrength = averageWeighted(
+    parsedModels
+      .filter(({ parsed }) => parsed.preferenceStrength !== null)
+      .map(({ analysis, parsed }) => ({
+        value: parsed.preferenceStrength ?? 0,
+        weight: analysis.perModel[modelId]?.sampleSize ?? 0,
+      })),
+  );
+  const valueLists = deriveValueLists(mergedByValue);
+
+  return {
+    modelId,
+    overallLean: combineOverallLean(overallSignedCenter),
+    overallSignedCenter,
+    preferenceStrength,
+    topPrioritizedValues: valueLists.topPrioritizedValues,
+    topDeprioritizedValues: valueLists.topDeprioritizedValues,
+    neutralValues: valueLists.neutralValues,
+    availability: preferenceStrength === null
+      ? unavailableState('insufficient-preference-data')
+      : availableState(),
+  };
+}
+
+function buildMergedReliabilityModel(
+  modelId: string,
+  analyses: AnalysisResult[],
+): ReliabilityViewModel {
+  const parsedModels = analyses
+    .map((analysis) => {
+      const perModel = isRecord(analysis.reliabilitySummary?.perModel)
+        ? analysis.reliabilitySummary.perModel
+        : null;
+      return parseRawReliabilitySummaryEntry(perModel?.[modelId]);
+    })
+    .filter((entry): entry is RawModelReliabilitySummary => entry !== null);
+
+  if (parsedModels.length === 0) {
+    return buildReliabilityUnavailableModel(modelId, 'invalid-summary-shape');
+  }
+
+  const coverageCount = parsedModels.reduce((sum, entry) => sum + entry.coverageCount, 0);
+  const uniqueScenarios = parsedModels.reduce((sum, entry) => sum + entry.uniqueScenarios, 0);
+  const weightedEntries = parsedModels.map((entry) => ({
+    weight: entry.coverageCount,
+    baselineNoise: entry.baselineNoise,
+    baselineReliability: entry.baselineReliability,
+    directionalAgreement: entry.directionalAgreement,
+    neutralShare: entry.neutralShare,
+  }));
+  const aggregateEntries = analyses
+    .map((analysis) => parseAggregateMetadata(analysis.aggregateMetadata))
+    .filter((entry): entry is ParsedAggregateMetadata => entry !== null);
+  const repeatCoverageEntries = aggregateEntries
+    .map((entry) => entry.perModelRepeatCoverage[modelId])
+    .filter((entry): entry is ParsedAggregateMetadata['perModelRepeatCoverage'][string] => isRecord(entry)
+      && isNonNegativeInteger(entry.repeatCoverageCount)
+      && isRate(entry.repeatCoverageShare)
+      && isNonNegativeInteger(entry.contributingRunCount));
+  const driftEntries = aggregateEntries
+    .map((entry) => entry.perModelDrift[modelId])
+    .filter((entry): entry is ParsedAggregateMetadata['perModelDrift'][string] => isRecord(entry)
+      && (entry.weightedOverallSignedCenterSd === null || isNonNegativeNumber(entry.weightedOverallSignedCenterSd))
+      && typeof entry.exceedsWarningThreshold === 'boolean');
+
+  const availability = coverageCount === 0 || parsedModels.every((entry) => entry.baselineReliability === null)
+    ? unavailableState('no-repeat-coverage')
+    : availableState();
+  const repeatCoverageShare = averageWeighted(
+    repeatCoverageEntries.map((entry) => ({
+      value: entry.repeatCoverageShare,
+      weight: Math.max(entry.contributingRunCount, 1),
+    })),
+  );
+  const contributingRunCount = repeatCoverageEntries.reduce((sum, entry) => sum + entry.contributingRunCount, 0);
+  const weightedOverallSignedCenterSd = averageWeighted(
+    driftEntries
+      .filter((entry) => entry.weightedOverallSignedCenterSd !== null)
+      .map((entry) => ({
+        value: entry.weightedOverallSignedCenterSd ?? 0,
+        weight: 1,
+      })),
+  );
+  const hasLowCoverageWarning = repeatCoverageEntries.some((entry) => entry.repeatCoverageCount >= 3 && entry.repeatCoverageCount < 5);
+  const hasHighDriftWarning = driftEntries.some((entry) => entry.exceedsWarningThreshold);
+
+  return {
+    modelId,
+    baselineNoise: averageWeighted(
+      weightedEntries
+        .filter((entry) => entry.baselineNoise !== null)
+        .map((entry) => ({ value: entry.baselineNoise ?? 0, weight: entry.weight })),
+    ),
+    baselineReliability: averageWeighted(
+      weightedEntries
+        .filter((entry) => entry.baselineReliability !== null)
+        .map((entry) => ({ value: entry.baselineReliability ?? 0, weight: entry.weight })),
+    ),
+    directionalAgreement: averageWeighted(
+      weightedEntries
+        .filter((entry) => entry.directionalAgreement !== null)
+        .map((entry) => ({ value: entry.directionalAgreement ?? 0, weight: entry.weight })),
+    ),
+    neutralShare: averageWeighted(
+      weightedEntries
+        .filter((entry) => entry.neutralShare !== null)
+        .map((entry) => ({ value: entry.neutralShare ?? 0, weight: entry.weight })),
+    ),
+    coverageCount,
+    uniqueScenarios,
+    repeatCoverageShare,
+    contributingRunCount: contributingRunCount > 0 ? contributingRunCount : null,
+    weightedOverallSignedCenterSd,
+    hasLowCoverageWarning,
+    hasHighDriftWarning,
+    availability,
   };
 }
 
@@ -758,23 +1023,7 @@ export function buildAnalysisSemanticsView(
   if (modelIds.length === 0) {
     sanitizeLog(analysis, { section: 'preference', reason: 'invalid-summary-shape' });
     sanitizeLog(analysis, { section: 'reliability', reason: 'invalid-summary-shape' });
-    return {
-      preference: {
-        rowAvailability: unavailableState('invalid-summary-shape'),
-        byModel: {},
-      },
-      reliability: {
-        rowAvailability: unavailableState('invalid-summary-shape'),
-        byModel: {},
-        hasAnyAvailableModel: false,
-        hasMixedAvailability: false,
-        aggregateWarnings: {
-          isEligibleAggregate: false,
-          lowCoverageModels: [],
-          highDriftModels: [],
-        },
-      },
-    };
+    return buildInvalidSummaryView();
   }
 
   const parsedAggregateMetadata = parseAggregateMetadata(analysis.aggregateMetadata);
@@ -786,5 +1035,79 @@ export function buildAnalysisSemanticsView(
   return {
     preference: buildPreferenceSection(analysis, modelIds, analysis.preferenceSummary),
     reliability: buildReliabilitySection(analysis, modelIds, analysis.reliabilitySummary, parsedAggregateMetadata),
+  };
+}
+
+export function buildPairedAnalysisSemanticsView(
+  currentAnalysis: AnalysisResult,
+  companionAnalysis: AnalysisResult | null | undefined,
+  isAggregate: boolean,
+): AnalysisSemanticsView {
+  if (!companionAnalysis) {
+    return buildAnalysisSemanticsView(currentAnalysis, isAggregate);
+  }
+
+  const analyses = [currentAnalysis, companionAnalysis];
+  const modelIds = unionModelIds(currentAnalysis, companionAnalysis);
+  if (modelIds.length === 0) {
+    sanitizeLog(currentAnalysis, { section: 'preference', reason: 'invalid-summary-shape' });
+    sanitizeLog(currentAnalysis, { section: 'reliability', reason: 'invalid-summary-shape' });
+    return buildInvalidSummaryView();
+  }
+
+  const preferenceByModel: Record<string, PreferenceViewModel> = {};
+  const reliabilityByModel: Record<string, ReliabilityViewModel> = {};
+  let hasAvailablePreferenceModel = false;
+  let hasAvailableReliabilityModel = false;
+  let hasUnavailableReliabilityModel = false;
+  const lowCoverageModels: string[] = [];
+  const highDriftModels: string[] = [];
+
+  for (const modelId of modelIds) {
+    const mergedPreference = buildMergedPreferenceModel(modelId, analyses);
+    const mergedReliability = buildMergedReliabilityModel(modelId, analyses);
+    preferenceByModel[modelId] = mergedPreference;
+    reliabilityByModel[modelId] = mergedReliability;
+
+    if (mergedPreference.availability.status === 'available') {
+      hasAvailablePreferenceModel = true;
+    }
+    if (mergedReliability.availability.status === 'available') {
+      hasAvailableReliabilityModel = true;
+      if (mergedReliability.hasLowCoverageWarning) {
+        lowCoverageModels.push(modelId);
+      }
+      if (mergedReliability.hasHighDriftWarning) {
+        highDriftModels.push(modelId);
+      }
+    } else {
+      hasUnavailableReliabilityModel = true;
+    }
+  }
+  const aggregateEntries = analyses
+    .map((analysis) => parseAggregateMetadata(analysis.aggregateMetadata))
+    .filter((entry): entry is ParsedAggregateMetadata => entry !== null);
+
+  return {
+    preference: {
+      rowAvailability: hasAvailablePreferenceModel
+        ? availableState()
+        : unavailableState('invalid-summary-shape'),
+      byModel: preferenceByModel,
+    },
+    reliability: {
+      rowAvailability: hasAvailableReliabilityModel
+        ? availableState()
+        : unavailableState('no-repeat-coverage'),
+      byModel: reliabilityByModel,
+      hasAnyAvailableModel: hasAvailableReliabilityModel,
+      hasMixedAvailability: hasAvailableReliabilityModel && hasUnavailableReliabilityModel,
+      aggregateWarnings: {
+        isEligibleAggregate: aggregateEntries.length > 0
+          && aggregateEntries.every((entry) => entry.aggregateEligibility === 'eligible_same_signature_baseline'),
+        lowCoverageModels,
+        highDriftModels,
+      },
+    },
   };
 }

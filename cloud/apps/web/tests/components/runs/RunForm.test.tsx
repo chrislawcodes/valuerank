@@ -371,6 +371,14 @@ describe('RunForm', () => {
             family: 'job-choice',
             presentation_order: 'A_first',
           },
+          components: {
+            value_first: { token: 'freedom' },
+            value_second: { token: 'harmony' },
+          },
+          dimensions: [
+            { name: 'Freedom' },
+            { name: 'Harmony' },
+          ],
         }}
         scenarioCount={10}
         onSubmit={mockOnSubmit}
@@ -379,11 +387,11 @@ describe('RunForm', () => {
 
     expect(screen.getByText('Batch Type')).toBeInTheDocument();
     const pairedModeButton = screen
-      .getByText('Methodology-safe default. Launches both the A-first and B-first Job Choice companions when both are available.')
+      .getByText('Methodology-safe default. Launches both value-order companions when both are available.')
       .closest('button');
     expect(pairedModeButton).not.toBeNull();
     expect(pairedModeButton).toHaveClass('border-teal-500');
-    expect(screen.getByText(/currently configured as/i)).toHaveTextContent('A-first');
+    expect(screen.getByText(/currently configured as/i)).toHaveTextContent('Freedom -> Harmony');
 
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));

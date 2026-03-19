@@ -17,21 +17,26 @@ import {
     getCoverageForModel,
     type DecisionCoverageSummary,
 } from '../../../utils/analysisCoverage';
+import {
+    buildOrientedConditionRows,
+    getOrientationBucketLabel,
+    type OrientationInspectionMode,
+    type OrientedConditionRow,
+    type PairedScopeContext,
+} from '../../../utils/pairedScopeAdapter';
+import { getPairedOrientationLabels } from '../../../utils/methodology';
 
 type StabilityTabProps = {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
+    definitionContent?: unknown;
+    pairedScopeContext?: PairedScopeContext;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
     decisionCoverage?: DecisionCoverageSummary | null;
-};
-
-type ConditionRow = {
-    id: string;
-    attributeALevel: string;
-    attributeBLevel: string;
-    scenarioIds: string[];
 };
 
 export type CellStabilityMetrics = {
@@ -165,12 +170,20 @@ export function getDirectionTextColor(direction: 'A' | 'B' | 'NEUTRAL' | null): 
 function ConditionStabilityMatrix({
     runId,
     analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
+    analysisMode,
+    orientationLabels,
+    pairedScopeContext,
     perModel,
     visualizationData,
     varianceAnalysis,
 }: {
     runId: string;
     analysisBasePath?: AnalysisBasePath;
+    analysisSearchParams?: URLSearchParams | string;
+    analysisMode?: 'single' | 'paired';
+    orientationLabels: ReturnType<typeof getPairedOrientationLabels>;
+    pairedScopeContext?: PairedScopeContext;
     perModel: Record<string, PerModelStats>;
     visualizationData: VisualizationData | null | undefined;
     varianceAnalysis?: VarianceAnalysis | null;
@@ -192,6 +205,10 @@ function ConditionStabilityMatrix({
     const [attributeA, setAttributeA] = useState<string>(availableAttributes[0] ?? '');
     const [attributeB, setAttributeB] = useState<string>(availableAttributes[1] ?? availableAttributes[0] ?? '');
     const [selectedModels, setSelectedModels] = useState<string[]>(models);
+    const canSplitOrientations = analysisMode === 'paired' && (pairedScopeContext?.hasOrientationPairing ?? false);
+    const [inspectionMode, setInspectionMode] = useState<OrientationInspectionMode>('pooled');
+    const canonicalOrientationLabel = orientationLabels.canonical;
+    const flippedOrientationLabel = orientationLabels.flipped;
 
     useEffect(() => {
         const nextA = availableAttributes[0] ?? '';
@@ -212,6 +229,12 @@ function ConditionStabilityMatrix({
         });
     }, [models]);
 
+    useEffect(() => {
+        if (!canSplitOrientations && inspectionMode !== 'pooled') {
+            setInspectionMode('pooled');
+        }
+    }, [canSplitOrientations, inspectionMode]);
+
     const visibleModels = useMemo(
         () => models.filter((modelId) => selectedModels.includes(modelId)),
         [models, selectedModels]
@@ -226,36 +249,17 @@ function ConditionStabilityMatrix({
         });
     };
 
-    const conditionRows = useMemo<ConditionRow[]>(() => {
-        if (!scenarioDimensions || !attributeA || !attributeB) return [];
+    const conditionRows = useMemo<OrientedConditionRow[]>(() => {
+        return buildOrientedConditionRows(
+            scenarioDimensions,
+            attributeA,
+            attributeB,
+            varianceAnalysis,
+            canSplitOrientations && inspectionMode === 'split' ? 'split' : 'pooled',
+        );
+    }, [attributeA, attributeB, canSplitOrientations, inspectionMode, scenarioDimensions, varianceAnalysis]);
 
-        const grouped = new Map<string, ConditionRow>();
-        Object.entries(scenarioDimensions).forEach(([scenarioId, dimensions]) => {
-            const aLevel = String(dimensions[attributeA] ?? 'N/A');
-            const bLevel = String(dimensions[attributeB] ?? 'N/A');
-            const id = `${aLevel}||${bLevel}`;
-            const current = grouped.get(id);
-            if (current) {
-                current.scenarioIds.push(scenarioId);
-                return;
-            }
-            grouped.set(id, {
-                id,
-                attributeALevel: aLevel,
-                attributeBLevel: bLevel,
-                scenarioIds: [scenarioId],
-            });
-        });
-
-        return [...grouped.values()].sort((left, right) => {
-            if (left.attributeALevel === right.attributeALevel) {
-                return left.attributeBLevel.localeCompare(right.attributeBLevel);
-            }
-            return left.attributeALevel.localeCompare(right.attributeALevel);
-        });
-    }, [scenarioDimensions, attributeA, attributeB]);
-
-    const handleCellClick = (modelId: string, row: ConditionRow) => {
+    const handleCellClick = (modelId: string, row: OrientedConditionRow) => {
         const params = new URLSearchParams({
             rowDim: attributeA,
             colDim: attributeB,
@@ -263,8 +267,11 @@ function ConditionStabilityMatrix({
             col: row.attributeBLevel,
             model: modelId,
         });
-        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params));
-    };
+        if (canSplitOrientations && inspectionMode === 'split') {
+            params.set('orientationBucket', row.orientationBucket);
+        }
+        navigate(buildAnalysisTranscriptsPath(analysisBasePath, runId, params, analysisSearchParams));
+      };
 
     if (!scenarioDimensions) {
         return (
@@ -358,7 +365,41 @@ function ConditionStabilityMatrix({
                         </div>
                     </details>
                 </div>
+                {canSplitOrientations && (
+                    <div>
+                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Inspection View</label>
+                        <div className="inline-flex rounded-md border border-gray-300 bg-white p-1 shadow-sm">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={`min-h-0 rounded px-3 py-1.5 text-sm ${inspectionMode === 'pooled' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                                aria-pressed={inspectionMode === 'pooled'}
+                                onClick={() => setInspectionMode('pooled')}
+                            >
+                                Pooled
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={`min-h-0 rounded px-3 py-1.5 text-sm ${inspectionMode === 'split' ? 'bg-teal-600 text-white hover:bg-teal-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                                aria-pressed={inspectionMode === 'split'}
+                                onClick={() => setInspectionMode('split')}
+                            >
+                                Split by order
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {canSplitOrientations && inspectionMode === 'split' && (
+                <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-800">
+                    Split inspection keeps the pooled paired summary intact while breaking stability rows into
+                    separate <span className="font-medium">{canonicalOrientationLabel}</span> and <span className="font-medium">{flippedOrientationLabel}</span> buckets.
+                </div>
+            )}
 
             <div className="flex items-center justify-between gap-3">
                 <h4 className="text-xs font-semibold uppercase text-gray-500">Condition x AI Directional Stability</h4>
@@ -387,7 +428,16 @@ function ConditionStabilityMatrix({
                         {conditionRows.map((row) => (
                             <tr key={row.id}>
                                 <td className="border border-gray-200 px-3 py-2 text-sm text-gray-700">
-                                    {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span>
+                                            {attributeA}: {row.attributeALevel}, {attributeB}: {row.attributeBLevel}
+                                        </span>
+                                        {canSplitOrientations && inspectionMode === 'split' && (
+                                            <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                                                {getOrientationBucketLabel(row.orientationBucket, orientationLabels)}
+                                            </span>
+                                        )}
+                                    </div>
                                 </td>
                                 {visibleModels.map((modelId) => {
                                     const metrics = getModelStabilityMetrics(modelId, row.scenarioIds, varianceAnalysis);
@@ -402,7 +452,7 @@ function ConditionStabilityMatrix({
                                             className={`relative border border-gray-200 px-2 py-2 text-center text-sm transition-colors ${canOpen ? 'cursor-pointer hover:ring-1 hover:ring-teal-300' : ''} ${metrics?.direction != null ? getDirectionBgColor(metrics.direction) : ''}`}
                                             title={
                                                 metrics !== null
-                                                    ? `View ${metrics.totalCount} transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}`
+                                                    ? `View ${metrics.totalCount} transcripts for ${modelId} | ${attributeA}: ${row.attributeALevel}, ${attributeB}: ${row.attributeBLevel}${canSplitOrientations && inspectionMode === 'split' ? ` | ${getOrientationBucketLabel(row.orientationBucket, orientationLabels)}` : ''}`
                                                     : 'No score available'
                                             }
                                             onClick={canOpen ? () => handleCellClick(modelId, row) : undefined}
@@ -458,12 +508,21 @@ function ConditionStabilityMatrix({
 export function StabilityTab({
     runId,
     analysisBasePath = ANALYSIS_BASE_PATH,
+    analysisSearchParams,
+    analysisMode,
+    definitionContent,
+    pairedScopeContext,
     perModel,
     visualizationData,
     varianceAnalysis,
     decisionCoverage,
 }: StabilityTabProps) {
+    const orientationLabels = useMemo(
+        () => getPairedOrientationLabels(definitionContent),
+        [definitionContent],
+    );
     const orientationCorrectedCount = varianceAnalysis?.orientationCorrectedCount ?? 0;
+    const showPairedOrientationBanner = pairedScopeContext?.hasOrientationPairing ?? false;
     const visibleCoverageRows = useMemo(
         () => Object.keys(perModel)
             .sort()
@@ -483,12 +542,27 @@ export function StabilityTab({
                     Rows are condition combinations (attribute A level + attribute B level). Columns are target AIs.
                     Each cell shows the predominant direction (Favors A / Favors B / Neutral) and the fraction of
                     replicates that agree. High stability means all replicates pointed the same direction.
+                    {analysisMode === 'paired'
+                        ? ' Paired mode keeps the matched vignette context visible while you review these stability metrics.'
+                        : analysisMode === 'single'
+                        ? ' Single mode keeps the analysis focused on one vignette at a time.'
+                        : null}
                 </p>
+                {showPairedOrientationBanner && pairedScopeContext != null && (
+                    <div className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
+                        <span className="font-medium">Paired orientation pooling: </span>
+                        {pairedScopeContext.orientationCorrectedCount} scenario{pairedScopeContext.orientationCorrectedCount === 1 ? '' : 's'} had
+                        their presentation order reversed for the <span className="font-medium">{orientationLabels.flipped}</span> vignette. Scores were normalized to
+                        the canonical <span className="font-medium">{orientationLabels.canonical}</span> orientation before computing direction.{' '}
+                        <span className="font-medium">Favors A</span> and{' '}
+                        <span className="font-medium">Favors B</span> refer to the canonical order above.
+                    </div>
+                )}
                 {decisionCoverage && (
                     <div className="space-y-3">
                         <DecisionCoverageBanner
                             coverage={decisionCoverage}
-                            contextLabel="stability metrics"
+                            contextLabel={analysisMode === 'paired' ? 'paired vignette stability metrics' : 'stability metrics'}
                             compact
                         />
                         {visibleCoverageRows.length > 0 && (
@@ -542,11 +616,15 @@ export function StabilityTab({
             <ConditionStabilityMatrix
                 runId={runId}
                 analysisBasePath={analysisBasePath}
+                analysisSearchParams={analysisSearchParams}
+                analysisMode={analysisMode}
+                orientationLabels={orientationLabels}
+                pairedScopeContext={pairedScopeContext}
                 perModel={perModel}
                 visualizationData={visualizationData}
                 varianceAnalysis={varianceAnalysis}
             />
-                {orientationCorrectedCount > 0 && (
+                {orientationCorrectedCount > 0 && !showPairedOrientationBanner && (
                     <p className="mt-1 text-xs text-gray-400">
                         * Scores for {orientationCorrectedCount} scenario(s) with reversed presentation order were
                         normalized before computing direction.

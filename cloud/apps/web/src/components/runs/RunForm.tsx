@@ -10,7 +10,7 @@ import { useCostEstimate } from '../../hooks/useCostEstimate';
 import { useFinalTrialPlan } from '../../hooks/useFinalTrialPlan';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
-import { getDefinitionMethodology } from '../../utils/methodology';
+import { getDefinitionMethodology, getPairedOrientationLabels } from '../../utils/methodology';
 
 type RunFormProps = {
   definitionId: string;
@@ -32,6 +32,7 @@ export function RunForm({
   isSubmitting = false,
 }: RunFormProps) {
   const methodology = getDefinitionMethodology(definitionContent);
+  const orientationLabels = getPairedOrientationLabels(definitionContent);
   const isJobChoiceDefinition = methodology?.family === 'job-choice';
   const { models, loading: loadingModels, error: modelsError } = useAvailableModels({
     onlyAvailable: false,
@@ -172,7 +173,7 @@ export function RunForm({
                   value: 'PAIRED_BATCH' as const,
                   title: 'Start Paired Batch',
                   description:
-                    'Methodology-safe default. Launches both the A-first and B-first Job Choice companions when both are available.',
+                    'Methodology-safe default. Launches both value-order companions when both are available.',
                 },
                 {
                   value: 'AD_HOC_BATCH' as const,
@@ -206,7 +207,7 @@ export function RunForm({
             <p className="text-xs text-gray-500">
               This vignette is currently configured as{' '}
               <span className="font-medium">
-                {methodology.presentation_order === 'A_first' ? 'A-first' : 'B-first'}
+                {orientationLabels.current}
               </span>
               . Paired batches use the matching companion definition to balance the order.
             </p>

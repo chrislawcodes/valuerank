@@ -1,4 +1,4 @@
-import { type FocusEvent, type RefObject, useEffect, useRef, useState } from 'react';
+import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Archive, FolderTree, GitCompare, Home, Settings, ShieldCheck, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -42,7 +42,7 @@ const domainMenuItems: MenuItem[] = [
 const validationMenuItems = [
   { name: 'Overview', path: '/validation' },
   { name: 'Temp=0 Effect', path: '/assumptions/temp-zero-effect' },
-  { name: 'Analysis', path: '/assumptions/analysis' },
+  { name: 'Legacy Analysis', path: '/assumptions/analysis' },
   { name: 'Analysis (old v1)', path: '/assumptions/analysis-v1' },
 ];
 
@@ -66,17 +66,19 @@ export function NavTabs() {
   const validationMenuRef = useRef<HTMLDivElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
 
-  const isPathActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+  const isPathActive = useCallback((path: string) => (
+    location.pathname === path || location.pathname.startsWith(`${path}/`)
+  ), [location.pathname]);
 
-  const isTabActive = (tabPath: string, aliases: string[] = []) => (
+  const isTabActive = useCallback((tabPath: string, aliases: string[] = []) => (
     isPathActive(tabPath) || aliases.some((alias) => isPathActive(alias))
-  );
+  ), [isPathActive]);
 
-  const isMenuItemActive = (item: MenuItem) => (
+  const isMenuItemActive = useCallback((item: MenuItem) => (
     isMenuGroupItem(item)
       ? item.children.some((child) => isTabActive(child.path, child.aliases ?? []))
       : isTabActive(item.path, item.aliases ?? [])
-  );
+  ), [isTabActive]);
 
   const isHomeActive = location.pathname === '/';
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
@@ -89,7 +91,7 @@ export function NavTabs() {
     setIsValidationMenuOpen(false);
     setIsArchiveMenuOpen(false);
     setOpenDomainSubmenu(activeDomainSubmenu && isMenuGroupItem(activeDomainSubmenu) ? activeDomainSubmenu.name : null);
-  }, [location.pathname]);
+  }, [location.pathname, isMenuItemActive]);
 
   useClickOutside(domainMenuRef, () => {
     if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);

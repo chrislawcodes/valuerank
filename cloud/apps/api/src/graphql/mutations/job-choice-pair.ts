@@ -68,6 +68,31 @@ const UpdateJobChoicePairInput = builder.inputType('UpdateJobChoicePairInput', {
   }),
 });
 
+function formatValueOrderToken(value: string): string {
+  const normalized = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  if (normalized.length === 0) {
+    return value;
+  }
+
+  if (!/^[a-z0-9 ]+$/i.test(normalized)) {
+    return normalized;
+  }
+
+  return normalized
+    .split(' ')
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function buildValueOrderLabel(firstToken: string, secondToken: string): string {
+  return `${formatValueOrderToken(firstToken)} -> ${formatValueOrderToken(secondToken)}`;
+}
+
+function buildJobChoiceDefinitionName(_baseName: string, firstToken: string, secondToken: string): string {
+  return buildValueOrderLabel(firstToken, secondToken);
+}
+
 function buildJobChoicePairContent(
   pairKey: string,
   contextText: string,
@@ -450,7 +475,11 @@ builder.mutationField('createJobChoicePair', (t) =>
       const [defA, defB] = await db.$transaction(async (tx) => {
         const a = await tx.definition.create({
           data: {
-            name: `${input.name} (A)`,
+            name: buildJobChoiceDefinitionName(
+              input.name,
+              resolvedInputs.valueFirst.token,
+              resolvedInputs.valueSecond.token,
+            ),
             content: contentAFirst as unknown as Prisma.InputJsonValue,
             domainId,
             domainContextId: resolvedInputs.contextId,
@@ -461,7 +490,11 @@ builder.mutationField('createJobChoicePair', (t) =>
         });
         const b = await tx.definition.create({
           data: {
-            name: `${input.name} (B)`,
+            name: buildJobChoiceDefinitionName(
+              input.name,
+              resolvedInputs.valueSecond.token,
+              resolvedInputs.valueFirst.token,
+            ),
             content: contentBFirst as unknown as Prisma.InputJsonValue,
             domainId,
             domainContextId: resolvedInputs.contextId,
@@ -576,7 +609,11 @@ builder.mutationField('updateJobChoicePair', (t) =>
           tx.definition.update({
             where: { id: existingPair.aFirst.id },
             data: {
-              name: `${input.name} (A)`,
+              name: buildJobChoiceDefinitionName(
+                input.name,
+                resolvedInputs.valueFirst.token,
+                resolvedInputs.valueSecond.token,
+              ),
               content: contentAFirst as unknown as Prisma.InputJsonValue,
               domainContextId: resolvedInputs.contextId,
               preambleVersionId,
@@ -586,7 +623,11 @@ builder.mutationField('updateJobChoicePair', (t) =>
           tx.definition.update({
             where: { id: existingPair.bFirst.id },
             data: {
-              name: `${input.name} (B)`,
+              name: buildJobChoiceDefinitionName(
+                input.name,
+                resolvedInputs.valueSecond.token,
+                resolvedInputs.valueFirst.token,
+              ),
               content: contentBFirst as unknown as Prisma.InputJsonValue,
               domainContextId: resolvedInputs.contextId,
               preambleVersionId,

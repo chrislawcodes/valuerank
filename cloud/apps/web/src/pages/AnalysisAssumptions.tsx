@@ -5,19 +5,18 @@ export function AnalysisAssumptions() {
   return (
     <div className="space-y-6">
       <TransitionNotice
-        eyebrow="Validation Compatibility"
-        title="This page remains live during the Validation migration"
-        description="Validation is now the top-level home for methodology reporting. This detailed analysis view remains live, but execution should stay domain-scoped in Runs and reporting should start from Validation."
-        links={[
-          { label: 'Open Validation home', to: '/validation' },
-          { label: 'Open validation run history', to: '/runs?runCategory=VALIDATION' },
-        ]}
+        eyebrow="Legacy Analysis"
+        title="This page keeps the legacy assumptions analysis view"
+        description="The paired-vignette single/paired toggle now lives on the run analysis page. This screen remains available for the older assumptions workflow."
       />
-      <div>
-        <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Analysis</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Backend-driven order-effect analysis for the locked assumption vignette set.
-        </p>
+
+      <div className="rounded-lg border border-gray-200 bg-white p-5">
+        <div className="max-w-3xl">
+          <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Vignette Analysis</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Review the legacy assumptions analysis view here. For the new single/paired mode switch, use the run analysis page.
+          </p>
+        </div>
       </div>
 
       <AnalysisPanel />

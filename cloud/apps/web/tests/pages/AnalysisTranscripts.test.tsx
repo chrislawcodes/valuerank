@@ -63,6 +63,20 @@ function createRun(id: string, definitionVersion: number, overrides: Record<stri
     definition: {
       id: 'def-1',
       name: 'Test Definition',
+      content: {
+        methodology: {
+          family: 'job-choice',
+          presentation_order: 'A_first',
+        },
+        components: {
+          value_first: { token: 'freedom' },
+          value_second: { token: 'harmony' },
+        },
+        dimensions: [
+          { name: 'Freedom' },
+          { name: 'Harmony' },
+        ],
+      },
     },
     transcripts: [
       {
@@ -104,6 +118,61 @@ function renderPage(initialEntry: string) {
   );
 }
 
+function createPairedAnalysis(
+  scenarios: Array<{ id: string; row: string; col: string; score: number }>,
+  orientationCorrectedIds: string[] = [],
+) {
+  const perScenario = Object.fromEntries(
+    scenarios.map((scenario) => [
+      scenario.id,
+      {
+        sampleCount: 1,
+        mean: scenario.score,
+        stdDev: 0,
+        variance: 0,
+        min: scenario.score,
+        max: scenario.score,
+        range: 0,
+        ...(orientationCorrectedIds.includes(scenario.id) ? { orientationCorrected: true } : {}),
+      },
+    ]),
+  );
+
+  return {
+    analysisType: 'basic',
+    varianceAnalysis: {
+      isMultiSample: true,
+      samplesPerScenario: 1,
+      orientationCorrectedCount: orientationCorrectedIds.length,
+      perModel: {
+        model1: {
+          totalSamples: scenarios.length,
+          uniqueScenarios: scenarios.length,
+          samplesPerScenario: 1,
+          avgWithinScenarioVariance: 0,
+          maxWithinScenarioVariance: 0,
+          consistencyScore: 1,
+          perScenario,
+        },
+      },
+      mostVariableScenarios: [],
+      leastVariableScenarios: [],
+    },
+    visualizationData: {
+      decisionDistribution: {},
+      modelScenarioMatrix: {
+        model1: Object.fromEntries(scenarios.map((scenario) => [scenario.id, scenario.score])),
+      },
+      scenarioDimensions: Object.fromEntries(
+        scenarios.map((scenario) => [
+          scenario.id,
+          { Freedom: scenario.row, Harmony: scenario.col },
+        ]),
+      ),
+    },
+  };
+}
+
 describe('AnalysisTranscripts', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
@@ -127,6 +196,27 @@ describe('AnalysisTranscripts', () => {
     mockUseAnalysis.mockReturnValue({
       analysis: {
         analysisType: 'basic',
+        varianceAnalysis: {
+          isMultiSample: true,
+          samplesPerScenario: 1,
+          orientationCorrectedCount: 1,
+          perModel: {
+            model1: {
+              totalSamples: 2,
+              uniqueScenarios: 2,
+              samplesPerScenario: 1,
+              avgWithinScenarioVariance: 0,
+              maxWithinScenarioVariance: 0,
+              consistencyScore: 1,
+              perScenario: {
+                s1: { sampleCount: 1, mean: 1, stdDev: 0, variance: 0, min: 1, max: 1, range: 0 },
+                s2: { sampleCount: 1, mean: 2, stdDev: 0, variance: 0, min: 2, max: 2, range: 0, orientationCorrected: true },
+              },
+            },
+          },
+          mostVariableScenarios: [],
+          leastVariableScenarios: [],
+        },
         visualizationData: {
           decisionDistribution: {},
           modelScenarioMatrix: {
@@ -171,12 +261,317 @@ describe('AnalysisTranscripts', () => {
     expect(screen.getByText('No transcripts found for these conditions.')).toBeInTheDocument();
   });
 
-  it('opens a direct transcript exemplar link without cell filter params', () => {
-    renderPage('/analysis/run-1/transcripts?transcriptId=tx-2');
+  it('opens a direct transcript exemplar link in paired mode without cell filter params', () => {
+    renderPage('/analysis/run-1/transcripts?transcriptId=tx-2&mode=paired');
 
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
     expect(screen.queryByText('Missing filter parameters. Return to the pivot table and click a cell to view transcripts.')).not.toBeInTheDocument();
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
     expect(screen.getByTestId('transcript-viewer')).toHaveTextContent('Viewer transcript: tx-2');
+  });
+
+  it('shows the paired scope banner when the mode query param is present', () => {
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1');
+
+    expect(screen.getByText('Paired vignette scope')).toBeInTheDocument();
+    expect(screen.getByText(/Paired mode keeps the matched vignette context visible while the analysis surface is adapted\./i)).toBeInTheDocument();
+  });
+
+  it('filters transcript drilldown by orientation bucket in paired split inspection', () => {
+    renderPage('/analysis/run-1/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1&orientationBucket=canonical');
+
+    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === 'Split inspection is active for the Freedom -> Harmony side of the paired vignette.')).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+  });
+
+  it('filters blended paired clickthrough to matching transcripts across both orders', () => {
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: createRun('run-2', 1, {
+            definition: {
+              id: 'def-2',
+              name: 'Harmony -> Freedom',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  presentation_order: 'B_first',
+                },
+                template: 'Choose between [Harmony] and [Freedom].',
+                components: {
+                  value_first: { token: 'harmony' },
+                  value_second: { token: 'freedom' },
+                },
+                dimensions: [
+                  { name: 'Freedom' },
+                  { name: 'Harmony' },
+                ],
+              },
+            },
+            transcripts: [
+              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+            ],
+          }),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: createRun('run-1', 1, {
+          transcripts: [
+            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createPairedAnalysis([
+            { id: 's4', row: 'High', col: 'Low', score: 1 },
+            { id: 's5', row: 'Low', col: 'High', score: 5 },
+          ], ['s4', 's5']),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's1', row: 'High', col: 'Low', score: 5 },
+          { id: 's2', row: 'Low', col: 'High', score: 1 },
+        ]),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&modelId=model1&pairedValueKey=freedom&pairedValueLabel=Freedom&pairView=blended');
+
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
+  });
+
+  it('filters blended paired condition clickthrough across both companion runs', () => {
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: createRun('run-2', 1, {
+            definition: {
+              id: 'def-2',
+              name: 'Harmony -> Freedom',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  presentation_order: 'B_first',
+                },
+                components: {
+                  value_first: { token: 'harmony' },
+                  value_second: { token: 'freedom' },
+                },
+                dimensions: [
+                  { name: 'Freedom' },
+                  { name: 'Harmony' },
+                ],
+              },
+            },
+            transcripts: [
+              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+            ],
+          }),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: createRun('run-1', 1, {
+          transcripts: [
+            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createPairedAnalysis([
+            { id: 's4', row: 'High', col: 'Low', score: 5 },
+          ], ['s4']),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's1', row: 'High', col: 'Low', score: 1 },
+        ]),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&pairView=condition-blended&rowDim=Freedom&colDim=Harmony&row=High&col=Low&model=model1');
+
+    expect(screen.getByText(/Blended paired inspection is active for this condition cell/i)).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
+  });
+
+  it('filters pooled paired decision-bucket clickthrough across both orders', () => {
+    mockUseRun.mockImplementation((args?: { id?: string }) => {
+      if (args?.id === 'run-2') {
+        return {
+          run: createRun('run-2', 1, {
+            definition: {
+              id: 'def-2',
+              name: 'Harmony -> Freedom',
+              content: {
+                methodology: {
+                  family: 'job-choice',
+                  presentation_order: 'B_first',
+                },
+                template: 'Choose between [Harmony] and [Freedom].',
+                components: {
+                  value_first: { token: 'harmony' },
+                  value_second: { token: 'freedom' },
+                },
+                dimensions: [
+                  { name: 'Freedom' },
+                  { name: 'Harmony' },
+                ],
+              },
+            },
+            transcripts: [
+              { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+              { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+            ],
+          }),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+
+      return {
+        run: createRun('run-1', 1, {
+          transcripts: [
+            { id: 'tx-1', modelId: 'model1', scenarioId: 's1', decisionCode: 'A' },
+            { id: 'tx-2', modelId: 'model1', scenarioId: 's2', decisionCode: 'A' },
+          ],
+        }),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    mockUseAnalysis.mockImplementation((args?: { runId?: string }) => {
+      if (args?.runId === 'run-2') {
+        return {
+          analysis: createPairedAnalysis([
+            { id: 's4', row: 'High', col: 'Low', score: 5 },
+            { id: 's5', row: 'Low', col: 'High', score: 1 },
+          ], ['s4', 's5']),
+          loading: false,
+          error: null,
+          refetch: vi.fn(),
+          recompute: vi.fn(),
+          recomputing: false,
+        };
+      }
+
+      return {
+        analysis: createPairedAnalysis([
+          { id: 's1', row: 'High', col: 'Low', score: 5 },
+          { id: 's2', row: 'Low', col: 'High', score: 1 },
+        ]),
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+        recompute: vi.fn(),
+        recomputing: false,
+      };
+    });
+
+    renderPage('/analysis/run-1/transcripts?mode=paired&companionRunId=run-2&modelId=model1&pairedDecisionBucket=b&pairedValueLabel=Harmony&pairView=blended');
+
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 2');
+  });
+
+  it('filters reversed-order clickthrough to the flipped companion transcripts', () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-2', 1, {
+        definition: {
+          id: 'def-2',
+          name: 'Harmony -> Freedom',
+          content: {
+            methodology: {
+              family: 'job-choice',
+              presentation_order: 'B_first',
+            },
+            template: 'Choose between [Harmony] and [Freedom].',
+            components: {
+              value_first: { token: 'harmony' },
+              value_second: { token: 'freedom' },
+            },
+            dimensions: [
+              { name: 'Freedom' },
+              { name: 'Harmony' },
+            ],
+          },
+        },
+        transcripts: [
+          { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+          { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis: createPairedAnalysis([
+        { id: 's4', row: 'High', col: 'Low', score: 1 },
+        { id: 's5', row: 'Low', col: 'High', score: 5 },
+      ], ['s4', 's5']),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    renderPage('/analysis/run-2/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&decisionBucket=a&orientationBucket=flipped');
+
+    expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
+    expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

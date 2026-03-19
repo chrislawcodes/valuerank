@@ -1,0 +1,32 @@
+{
+  "feature_slug": "paired-vignette-analysis-shell",
+  "stage": "diff",
+  "artifact_path": "docs/workflows/paired-vignette-analysis-shell/reviews/implementation.diff.patch",
+  "git_base_ref": "origin/fix/job-choice-b-orientation",
+  "required_reviews": [
+    {
+      "reviewer": "codex",
+      "lens": "correctness",
+      "stage": "diff",
+      "path": "docs/workflows/paired-vignette-analysis-shell/reviews/diff.codex.correctness.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "regression",
+      "stage": "diff",
+      "path": "docs/workflows/paired-vignette-analysis-shell/reviews/diff.gemini.regression.review.md",
+      "context_paths": []
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "security",
+      "stage": "diff",
+      "path": "docs/workflows/paired-vignette-analysis-shell/reviews/diff.gemini.security.review.md",
+      "context_paths": []
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

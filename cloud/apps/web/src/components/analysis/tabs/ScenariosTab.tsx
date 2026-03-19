@@ -13,6 +13,8 @@ import { ANALYSIS_BASE_PATH, type AnalysisBasePath } from '../../../utils/analys
 type ScenariosTabProps = {
   runId: string;
   analysisBasePath?: AnalysisBasePath;
+  analysisSearchParams?: URLSearchParams | string;
+  analysisMode?: 'single' | 'paired';
   visualizationData: VisualizationData | null | undefined;
   contestedScenarios: ContestedScenario[];
   dimensionLabels?: Record<string, string>;
@@ -22,6 +24,8 @@ type ScenariosTabProps = {
 export function ScenariosTab({
   runId,
   analysisBasePath = ANALYSIS_BASE_PATH,
+  analysisSearchParams,
+  analysisMode,
   visualizationData,
   contestedScenarios,
   dimensionLabels,
@@ -45,12 +49,16 @@ export function ScenariosTab({
               <h3 className="text-sm font-medium text-gray-700">Pivot Analysis</h3>
               <p className="text-xs text-gray-500 mt-1">
                 Explore how AI decisions change based on variable interactions (e.g. Conformity vs Power).
+                {analysisMode === 'paired'
+                  ? ' Paired mode keeps the matched vignette context visible while you inspect the current pivot summary.'
+                  : ' Single mode keeps the current pivot summary focused on one vignette.'}
               </p>
             </div>
             {hasScenarioDimensions ? (
               <PivotAnalysisTable
                 runId={runId}
                 analysisBasePath={analysisBasePath}
+                analysisSearchParams={analysisSearchParams}
                 visualizationData={visualizationData}
                 dimensionLabels={dimensionLabels}
                 expectedAttributes={expectedAttributes}
