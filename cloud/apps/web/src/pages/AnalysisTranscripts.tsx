@@ -590,6 +590,52 @@ export function AnalysisTranscripts() {
     resolveDecisionBucketForValue,
   ]);
 
+  const normalizedDecisionTranscriptIds = useMemo(() => {
+    const shouldNormalizePairedScores = analysisMode === 'paired'
+      && (
+        (hasPairedConditionFilterParams && pairView === 'condition-blended')
+        || hasPairedValueFilterParams
+      );
+
+    if (!shouldNormalizePairedScores) {
+      return new Set<string>();
+    }
+
+    const normalizedRunIds = new Set<string>();
+    if (getOrientationBucketForContent(definitionContent) === 'flipped' && run?.id) {
+      normalizedRunIds.add(run.id);
+    }
+    if (getOrientationBucketForContent(companionDefinitionContent) === 'flipped' && companionRun?.id) {
+      normalizedRunIds.add(companionRun.id);
+    }
+
+    return new Set(
+      filteredTranscripts
+        .filter((transcript) => normalizedRunIds.has(transcript.runId))
+        .map((transcript) => transcript.id),
+    );
+  }, [
+    analysisMode,
+    companionDefinitionContent,
+    companionRun?.id,
+    definitionContent,
+    filteredTranscripts,
+    hasPairedConditionFilterParams,
+    hasPairedValueFilterParams,
+    pairView,
+    run?.id,
+  ]);
+
+  const decisionColumnLabel = normalizedDecisionTranscriptIds.size > 0
+    ? 'Normalized decision score'
+    : 'Decision';
+  const decisionColumnTooltip = normalizedDecisionTranscriptIds.size > 0
+    ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
+    : undefined;
+  const normalizationBadgeTitle = normalizedDecisionTranscriptIds.size > 0
+    ? 'This score was adjusted because this transcript showed the options in the opposite order.'
+    : undefined;
+
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -846,6 +892,10 @@ export function AnalysisTranscripts() {
           scenarioDimensions={mergedScenarioDimensions}
           onDecisionChange={handleDecisionChange}
           updatingTranscriptIds={updatingTranscriptIds}
+          decisionColumnLabel={decisionColumnLabel}
+          decisionColumnTooltip={decisionColumnTooltip}
+          normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
+          normalizationBadgeTitle={normalizationBadgeTitle}
         />
       )}
 
