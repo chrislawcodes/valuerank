@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { AlertCircle } from 'lucide-react';
 import type { DimensionAnalysis, DimensionStats } from '../../api/operations/analysis';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 
 type VariableImpactChartProps = {
   dimensionAnalysis: DimensionAnalysis | null;
@@ -52,8 +53,7 @@ function getChartData(dimensionAnalysis: DimensionAnalysis): ChartDataPoint[] {
   return Object.entries(dimensionAnalysis.dimensions)
     .map(([dimension, stats]: [string, DimensionStats]) => {
       // Format display name
-      const displayName = dimension
-        .replace(/_/g, ' ')
+      const displayName = formatDisplayLabel(dimension)
         .split(' ')
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
@@ -99,7 +99,7 @@ function CustomTooltip({ active, payload }: {
 
   return (
     <div className="bg-white p-3 shadow-lg rounded-lg border border-gray-200">
-      <p className="font-medium text-gray-900">{data.dimension.replace(/_/g, ' ')}</p>
+      <p className="font-medium text-gray-900">{formatDisplayLabel(data.dimension)}</p>
       <div className="text-sm text-gray-600 mt-1 space-y-1">
         <p>Effect Size: <span className="font-medium">{formatEffectSize(data.effectSize)}</span></p>
         <p>{formatPValue(data.pValue)}</p>
@@ -191,7 +191,7 @@ export function VariableImpactChart({ dimensionAnalysis }: VariableImpactChartPr
           {(dimensionAnalysis.varianceExplained * 100).toFixed(1)}%
         </div>
         <div className="text-gray-500">
-          Method: {dimensionAnalysis.method.replace(/_/g, ' ')}
+          Method: {formatDisplayLabel(dimensionAnalysis.method)}
         </div>
       </div>
 

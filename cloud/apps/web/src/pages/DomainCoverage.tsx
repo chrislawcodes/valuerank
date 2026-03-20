@@ -20,6 +20,7 @@ import {
   type DomainAvailableSignaturesQueryVariables,
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS } from '../data/domainAnalysisData';
+import { formatDisplayLabel } from '../utils/displayLabels';
 import { ChevronRight, FileSearch } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getCanonicalDimension } from '@valuerank/shared';
@@ -631,7 +632,7 @@ export function DomainCoverage() {
                       )}
                     >
                       <div className="mx-auto max-w-[6.5rem]">
-                        {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? val.replace(/_/g, ' ')}
+                        {VALUE_LABELS[val as keyof typeof VALUE_LABELS] ?? formatDisplayLabel(val)}
                       </div>
                     </th>
                   ))
@@ -662,7 +663,7 @@ export function DomainCoverage() {
                       )}
                     >
                       {VALUE_LABELS[rowVal as keyof typeof VALUE_LABELS] ??
-                        rowVal.replace(/_/g, ' ')}
+                        formatDisplayLabel(rowVal)}
                     </th>
 
                     {/* Data cells */}

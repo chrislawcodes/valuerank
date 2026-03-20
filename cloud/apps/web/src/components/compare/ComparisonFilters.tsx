@@ -9,6 +9,7 @@
  */
 
 import { LayoutGrid, Layers, X } from 'lucide-react';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import { Button } from '../ui/Button';
 import { CollapsibleFilters } from '../ui/CollapsibleFilters';
 import type { ComparisonFilters as FilterState, DisplayMode, RunWithAnalysis } from './types';
@@ -88,7 +89,7 @@ function formatModel(modelId: string): string {
  * Format value name for display
  */
 function formatValueName(value: string): string {
-  return value.replace(/_/g, ' ');
+  return formatDisplayLabel(value);
 }
 
 export function ComparisonFilters({

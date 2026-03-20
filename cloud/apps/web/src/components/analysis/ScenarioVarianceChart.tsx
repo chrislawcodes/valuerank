@@ -132,13 +132,13 @@ export function ScenarioVarianceChart({ varianceAnalysis, maxScenarios = 15 }: S
     <div ref={chartRef} className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-medium text-gray-700">Scenario Response Variance</h3>
+          <h3 className="text-sm font-medium text-gray-700">Condition Response Variance</h3>
           <p className="text-xs text-gray-500 mt-1">
-            Standard deviation of responses across {varianceAnalysis.samplesPerScenario} samples per scenario.
+            Standard deviation of responses across {varianceAnalysis.samplesPerScenario} samples per condition.
             Higher bars indicate more variable (less consistent) responses.
           </p>
         </div>
-        <CopyVisualButton targetRef={chartRef} label="scenario variance chart" />
+        <CopyVisualButton targetRef={chartRef} label="condition variance chart" />
       </div>
 
       <div style={{ height: chartHeight }}>

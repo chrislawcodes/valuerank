@@ -6,6 +6,7 @@
  */
 
 import { TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { formatDisplayLabel } from '../../../utils/displayLabels';
 import type { ValueComparison } from '../types';
 
 export type ChartDataPoint = {
@@ -76,7 +77,7 @@ export function ValueTooltip({ active, payload, label, runNames }: ValueTooltipP
  * Format value name for display
  */
 export function formatValueName(value: string): string {
-  return value.replace(/_/g, ' ');
+  return formatDisplayLabel(value);
 }
 
 type SignificantChangesProps = {

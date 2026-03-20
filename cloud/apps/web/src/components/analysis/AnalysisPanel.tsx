@@ -455,7 +455,7 @@ export function AnalysisPanel({
         </div>
         <div className="flex items-center gap-2">
           {analysisMode && onAnalysisModeChange ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-col items-end gap-2">
               <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
                 <Button
                   type="button"

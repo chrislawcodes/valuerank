@@ -45,7 +45,7 @@ function getUnifiedUnavailableState(semantics: AnalysisSemanticsView): Unavailab
     return {
       status: 'unavailable',
       reason: 'no-repeat-coverage',
-      message: 'This model has one sample per scenario, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
+      message: 'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
     };
   }
 

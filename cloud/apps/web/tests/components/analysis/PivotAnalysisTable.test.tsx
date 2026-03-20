@@ -49,6 +49,7 @@ describe('PivotAnalysisTable', () => {
     expect(screen.getByText('Freedom 1')).toBeInTheDocument();
     expect(screen.getByText('Neutral 1')).toBeInTheDocument();
     expect(screen.getByText('Harmony 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy pivot analysis table as image/i })).toBeInTheDocument();
   });
 
   it('keeps dimension selectors hidden until details are opened', () => {

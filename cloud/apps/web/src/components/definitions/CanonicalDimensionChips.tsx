@@ -3,6 +3,7 @@ import {
   CANONICAL_DIMENSIONS,
   type CanonicalDimension,
 } from '@valuerank/shared/canonical-dimensions';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 
 type CanonicalDimensionChipsProps = {
   /** Names of dimensions already added to the definition */
@@ -67,7 +68,7 @@ export function CanonicalDimensionChips({
               ) : (
                 <Plus className="w-3.5 h-3.5" />
               )}
-              <span>{dim.name.replace(/_/g, ' ')}</span>
+              <span>{formatDisplayLabel(dim.name)}</span>
             </button>
           );
         })}

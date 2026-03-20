@@ -1,3 +1,5 @@
+import { formatDisplayLabel } from './displayLabels';
+
 type DefinitionContentShape = {
   template?: string;
   dimensions?: Array<{
@@ -270,24 +272,24 @@ export function deriveDecisionDimensionLabels(
     const inferredDirection = inferTemplateScoreDirection(content, optionAName, optionBName);
     if (inferredDirection) {
       return {
-        '1': `Strongly Support ${inferredDirection['1']}`,
-        '2': `Somewhat Support ${inferredDirection['2']}`,
+        '1': `Strongly Support ${formatDisplayLabel(inferredDirection['1'])}`,
+        '2': `Somewhat Support ${formatDisplayLabel(inferredDirection['2'])}`,
         '3': 'Neutral',
-        '4': `Somewhat Support ${inferredDirection['4']}`,
-        '5': `Strongly Support ${inferredDirection['5']}`,
+        '4': `Somewhat Support ${formatDisplayLabel(inferredDirection['4'])}`,
+        '5': `Strongly Support ${formatDisplayLabel(inferredDirection['5'])}`,
       };
     }
     return {
-      '1': `Strongly Support ${optionBName}`,
-      '2': `Somewhat Support ${optionBName}`,
+      '1': `Strongly Support ${formatDisplayLabel(optionBName)}`,
+      '2': `Somewhat Support ${formatDisplayLabel(optionBName)}`,
       '3': 'Neutral',
-      '4': `Somewhat Support ${optionAName}`,
-      '5': `Strongly Support ${optionAName}`,
+      '4': `Somewhat Support ${formatDisplayLabel(optionAName)}`,
+      '5': `Strongly Support ${formatDisplayLabel(optionAName)}`,
     };
   }
 
   if (content.dimensions.length === 1) {
-    const dimName = content.dimensions[0]?.name ?? 'Attribute';
+    const dimName = formatDisplayLabel(content.dimensions[0]?.name ?? 'Attribute');
     return {
       '1': `Strongly Support ${dimName}`,
       '2': `Somewhat Support ${dimName}`,

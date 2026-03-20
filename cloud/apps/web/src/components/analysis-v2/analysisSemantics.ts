@@ -107,8 +107,8 @@ const UNAVAILABLE_MESSAGES: Record<SemanticUnavailableReason, string> = {
   'aggregate-analysis': 'This aggregate cannot be shown on the new Analysis page because the source runs do not match the pooling rules.',
   'suppressed-run-type': 'This run type does not publish vignette preference or reliability summaries. Recomputing the same run will not populate these views.',
   'unknown-analysis-version': 'This analysis does not expose enough version metadata to classify summary availability.',
-  'no-repeat-coverage': 'This model has one sample per scenario, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
-  'insufficient-preference-data': 'Not enough usable scenario means are available to compute preference strength.',
+  'no-repeat-coverage': 'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
+  'insufficient-preference-data': 'Not enough usable condition means are available to compute preference strength.',
   'invalid-summary-shape': 'Stored analysis summaries are invalid for this UI version.',
 };
 

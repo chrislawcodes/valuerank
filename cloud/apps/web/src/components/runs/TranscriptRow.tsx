@@ -1,6 +1,7 @@
 import { FileText, Zap } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
 
 export type TranscriptScenarioHighlight = {
@@ -132,12 +133,12 @@ export function TranscriptRow({
   const jobWithMarker = ' taking the job with ';
   const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
   const jobSubject = jobWithIdx >= 0 && labelText != null
-    ? labelText.slice(jobWithIdx + jobWithMarker.length)
+    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
     : null;
   const decisionCore = shortDirection != null
     ? (jobSubject != null
         ? `${decision} - ${shortDirection} (${jobSubject})`
-        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${primaryDimKey}` : `${decision} - ${shortDirection}`))
+        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${decision} - ${shortDirection}`))
     : String(decision);
   const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decisionCore}*` : decisionCore;
   const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
@@ -219,13 +220,13 @@ export function TranscriptRow({
                 ? rawValue
                 : wordLower != null ? (LEVEL_WORD_TO_NUMBER[wordLower] ?? null) : null;
               const wordDisplay = wordStr != null
-                ? wordStr.charAt(0).toUpperCase() + wordStr.slice(1)
+                ? formatDisplayLabel(wordStr.charAt(0).toUpperCase() + wordStr.slice(1))
                 : null;
               displayValue = numericLevel != null && wordDisplay != null
                 ? `${numericLevel} - ${wordDisplay}`
                 : numericLevel != null
                   ? String(numericLevel)
-                  : String(rawValue);
+                  : formatDisplayLabel(String(rawValue));
             }
             return (
               <div key={key} className="truncate">

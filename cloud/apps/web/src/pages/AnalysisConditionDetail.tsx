@@ -18,6 +18,7 @@ import {
   parseConditionKey,
 } from '../utils/analysisRouting';
 import { deriveDecisionDimensionLabels } from '../utils/decisionLabels';
+import { formatDisplayLabel } from '../utils/displayLabels';
 import { getPairedOrientationLabels } from '../utils/methodology';
 import { filterTranscriptsForPivotCell } from '../utils/scenarioUtils';
 
@@ -425,16 +426,16 @@ export function AnalysisConditionDetail() {
             Conditions
           </Link>
           <ChevronRight className="h-4 w-4" />
-          <span className="text-gray-700">{`${rowDim} = ${parsedCondition.row}, ${colDim} = ${parsedCondition.col}`}</span>
+          <span className="text-gray-700">{`${formatDisplayLabel(rowDim)} = ${formatDisplayLabel(parsedCondition.row)}, ${formatDisplayLabel(colDim)} = ${formatDisplayLabel(parsedCondition.col)}`}</span>
         </div>
 
         <div className="space-y-1">
           <h1 className="text-xl font-medium text-gray-900">Condition Detail</h1>
           <p className="text-sm text-gray-600">
-            Condition: <span className="font-medium text-gray-900">{rowDim}</span> ={' '}
-            <span className="font-medium text-gray-900">{parsedCondition.row}</span>,{' '}
-            <span className="font-medium text-gray-900">{colDim}</span> ={' '}
-            <span className="font-medium text-gray-900">{parsedCondition.col}</span>
+            Condition: <span className="font-medium text-gray-900">{formatDisplayLabel(rowDim)}</span> ={' '}
+            <span className="font-medium text-gray-900">{formatDisplayLabel(parsedCondition.row)}</span>,{' '}
+            <span className="font-medium text-gray-900">{formatDisplayLabel(colDim)}</span> ={' '}
+            <span className="font-medium text-gray-900">{formatDisplayLabel(parsedCondition.col)}</span>
           </p>
           <p className="text-sm text-gray-600">
             Model: <span className="font-medium text-gray-900">{selectedModel}</span>

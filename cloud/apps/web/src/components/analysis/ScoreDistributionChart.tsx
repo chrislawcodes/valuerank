@@ -17,6 +17,7 @@ import {
   ErrorBar,
 } from 'recharts';
 import type { PerModelStats, ValueStats } from '../../api/operations/analysis';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 
 type ScoreDistributionChartProps = {
   perModel: Record<string, PerModelStats>;
@@ -183,7 +184,7 @@ export function ScoreDistributionChart({
         >
           {allValues.map((value) => (
             <option key={value} value={value}>
-              {value.replace(/_/g, ' ')}
+              {formatDisplayLabel(value)}
             </option>
           ))}
         </select>
