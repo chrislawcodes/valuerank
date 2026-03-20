@@ -1410,6 +1410,96 @@ class RepairCloseoutTests(unittest.TestCase):
         self.assertEqual(result, 1, "expected repair to fail when closeout is unhealthy but not repairable")
         self.assertEqual(len(checkpoint_calls), 0, "command_checkpoint should not be called when closeout is not repairable")
 
+    def test_repair_blocks_when_checkpoint_succeeds_but_closeout_remains_unhealthy(self) -> None:
+        """command_checkpoint returns 0 but refreshed closeout is still unhealthy: repair must return 1."""
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        closeout_initial = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+        closeout_still_unhealthy = stage_state(
+            artifact_exists=True,
+            artifact_meaningful=True,
+            manifest_exists=True,
+            healthy=False,
+            detail="still broken after repair",
+        )
+        call_count: list[int] = [0]
+
+        def fake_manifest_state(slug: str, stage: str) -> dict:
+            if stage == "closeout":
+                call_count[0] += 1
+                # First call: initial state for the repair loop.
+                # Second call: after checkpoint, refreshed state still unhealthy.
+                return closeout_initial if call_count[0] == 1 else closeout_still_unhealthy
+            return healthy
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "command_checkpoint", return_value=0),  # checkpoint "succeeds"
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(MODULE, "stage_status_label", return_value="ok"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(io.StringIO()),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 1, "expected repair to fail when closeout remains unhealthy even after checkpoint returns 0")
+
+    def test_repair_skips_closeout_when_earlier_stage_blocked(self) -> None:
+        """When an earlier stage (diff) fails and sets blocked_reason, the closeout repair must not run.
+
+        This exercises the `if not blocked_reason:` guard that wraps the closeout block.
+        """
+        checkpoint_calls: list[object] = []
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+
+        # diff is unhealthy + not repairable → will set blocked_reason during the main repair loop
+        diff_unhealthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+        closeout_unhealthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+
+        def fake_manifest_state(slug: str, stage: str) -> dict:
+            if stage == "diff":
+                return diff_unhealthy
+            if stage == "closeout":
+                return closeout_unhealthy
+            return healthy
+
+        def fake_drift(stage: str, state: object) -> str:
+            if stage in {"diff", "closeout"}:
+                return "unhealthy-manifest"
+            return "healthy"
+
+        def fake_repairable(slug: str, stage: str, state: object) -> bool:
+            return False  # neither diff nor closeout is repairable
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(MODULE, "stage_drift_class", side_effect=fake_drift),
+            patch.object(MODULE, "stage_repairable", side_effect=fake_repairable),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "later_progress_exists", return_value=(False, "")),
+            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(MODULE, "stage_status_label", return_value="ok"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(io.StringIO()),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 1, "expected repair to fail due to diff being blocked")
+        self.assertEqual(len(checkpoint_calls), 0, "command_checkpoint should not be called for closeout when earlier stage is blocked")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "architecture-adversarial"
 stage: "plan"
 artifact_path: "docs/workflows/workflow-runner-hardening/plan.md"
-artifact_sha256: "5450ff7b0e93e369ccff3b05b6d9eb6d735205fae01006ff69c72d18bc501e8c"
+artifact_sha256: "385e6f25e4b1421e889a0627fcc8c4b297aa034af333f08aeec0f37d9505bb04"
 repo_root: "."
-git_head_sha: "c526eec446cdaf814b7c52e69e385dd4fe47894f"
+git_head_sha: "e38b1c0df568c1a8c86cfafa9f505060741e65a5"
 git_base_ref: "origin/main"
-git_base_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
+git_base_sha: "b44a76cad358741fabfa4776f45752606980d56a"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "F1 (special-cased closeout architectural smell): REJECTED — targeted fix scope; refactoring the repair loop abstraction is out of scope per spec. F2 (fragile blacklist): ACCEPTED — subsumes Codex F1 fix; the unhealthy-manifest-not-repairable case now explicitly sets blocked_reason, making the remaining elif semantically correct for the status-print cases. F3 (implicit dependency on preferred_diff_base_ref): REJECTED — tested and documented in plan rationale. F4 (narrow grep pattern): ACCEPTED — broaden scan instruction to include gemini-, mistral-, and other model-name patterns."
+resolution_note: "F1 (brittle not-reachable assumption): REJECTED — plan documents the reasoning; scope doesn't include changing recommended_next_action behavior. F2 (incomplete hardening for model constants): REJECTED — already rejected in prior round; automated linting is out of scope. F3 (mutation timing risk): REJECTED — update_workflow_state raises on failure, cannot silently continue."
 raw_output_path: "docs/workflows/workflow-runner-hardening/reviews/plan.gemini.architecture-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,29 +22,30 @@ coverage_note: ""
 
 ## Findings
 
-1.  **`base_ref` Reset Logic is Bypassed by User Input:** In Patch 2, the logic to reset a stale `base_ref` is placed inside a condition that checks `not args.base_ref`. This means if a user provides a `--base_ref` argument on the command line, the entire reset mechanism is skipped. If the user-provided `base_ref` is stale (e.g., pointing to a `recorded_head_sha` from a previous failed run), the tool will trust it, even when internal checks for "index overflow" or "markers-sha mismatch" indicate the state is inconsistent. This could lead to incorrect diffs being generated, defeating the purpose of the patch.
+1.  **Medium Severity: Implicit State Machine Assumptions in `command_repair`**
+    The proposed logic for repairing the `closeout` stage in Patch 3 silently ignores several states (`not-checkpointed`, `missing-artifact`, `stub-artifact`) based on the assumption that they are "not reachable via the repair flow." This is a brittle design. It tightly couples the `command_repair` function to the current behavior of `recommended_next_action`. If a future change allows the repair command to be invoked on a workflow in one of these states, the repair will silently do nothing, potentially leaving the workflow in an inconsistent state while appearing to succeed. The check should be more explicit, either by handling these states with a clear error or by verifying the assumption is formally encoded elsewhere.
 
-2.  **`repair` Command Can Falsely Succeed:** In Patch 3, the proposed logic for `command_repair` will silently skip fixing the `closeout` stage if its state is `not-checkpointed`, `missing-artifact`, or `stub-artifact`. The rationale acknowledges this is by design. However, a `repair` command that exits successfully (exit code 0) while knowingly leaving a critical final stage incomplete gives a false impression of a healthy workflow. This can lead to subsequent processes operating on an incomplete feature branch without any warning.
+2.  **Medium Severity: Incomplete Hardening for Model Constants**
+    In Patch 1, the plan relies on a manual `grep` to find and replace other hardcoded model strings. This is error-prone and insufficient for preventing future regressions. The associated test plan only validates that `required_reviews` uses the new constant; it does not include a test to enforce that *no other* hardcoded model strings exist in the file. Without a linting rule or a more comprehensive test that scans for model name patterns, the goal of centralizing model definitions will likely degrade over time as new hardcoded values are introduced.
 
-3.  **Model Constant Scope is Insufficiently Constrained:** Patch 1 confines its search for hardcoded model strings to a single file. Feature workflows often involve multiple scripts (e.g., for review, analysis, or summarization). There is no guarantee that model names are not hardcoded in other parts of the system. Relying on a manual `grep` of one file is brittle and risks creating inconsistencies where different parts of the workflow call different models for the same conceptual task.
-
-4.  **`closeout` Repair Assumes a Single Failure Mode:** The logic in Patch 3 assumes that any `unhealthy-manifest` state for the `closeout` stage can be fixed simply by re-running `command_checkpoint`. It does not account for scenarios where the manifest is unhealthy due to an external factor that `command_checkpoint` cannot resolve (e.g., a corrupt artifact file, filesystem errors, or a bug in the manifest generation itself). The repair may repeatedly fail without addressing the root cause.
+3.  **Low Severity: State Mutation Timing in `command_checkpoint`**
+    In Patch 2, the `args.base_ref = None` mutation occurs *after* the `update_workflow_state(...)` call. If this state update were to fail in a non-terminating manner (e.g., via a `try...except` block that logs but continues), the `base_ref` would not be cleared. The subsequent call to `preferred_diff_base_ref` would then be made with the stale value this patch is intended to prevent. While error handling is likely to terminate the process, relying on that implicit behavior introduces a minor architectural weakness.
 
 ## Residual Risks
 
-1.  **Incomplete Test Coverage for `base_ref` Reset:** The test plan for Patch 2 focuses on verifying the reset logic when `args.base_ref` is `None`. It lacks a test case for the critical flaw identified above: when a stale `args.base_ref` is provided by the user. The riskiest path is therefore left untested.
+1.  **Sequential Repair Flow May Mask or Defer Fixable Issues**
+    The proposed `command_repair` logic is sequential and blocking, as a failure in an early stage (like `diff`) prevents the `closeout` repair from being attempted. This architecture was not challenged. This creates a risk where an easily fixable issue in a later stage (e.g., a stale `closeout` manifest) cannot be resolved because of an unrelated, more complex failure in a preceding stage. This may force manual intervention where the system could have partially recovered.
 
-2.  **Repair Logic Depends on a Manual Process:** The success of the model name refactoring in Patch 1 depends entirely on the developer performing a thorough manual search. This is not enforced by any automated check or test. The risk of missing a hardcoded string remains, and the proposed tests only validate that one specific usage is updated, not that all usages are.
-
-3.  **Fallback State is a Single Point of Failure:** The entire `base_ref` reset strategy in Patch 2 depends on the `recorded_base_ref` from diff metadata being the correct fallback. If this metadata is itself corrupt, stale, or incorrect, the reset will simply swap one invalid reference for another, leading to continued incorrect behavior.
+2.  **Model String Management Remains A Convention, Not a Contract**
+    The introduction of a `DEFAULT_CODEX_MODEL` constant improves the code but does not fundamentally solve the underlying issue: the system lacks a centralized, authoritative registry for model identifiers. Developers can still introduce new hardcoded strings elsewhere in the codebase. Without a more robust architectural pattern (e.g., a model registry or enum that all parts of the code must use), the system remains exposed to the risk of inconsistent model references and the maintenance overhead they create.
 
 ## Token Stats
 
-- total_input=14279
-- total_output=719
-- total_tokens=17197
-- `gemini-2.5-pro`: input=14279, output=719, total=17197
+- total_input=14311
+- total_output=674
+- total_tokens=17073
+- `gemini-2.5-pro`: input=14311, output=674, total=17073
 
 ## Resolution
 - status: accepted
-- note: F1 (special-cased closeout architectural smell): REJECTED — targeted fix scope; refactoring the repair loop abstraction is out of scope per spec. F2 (fragile blacklist): ACCEPTED — subsumes Codex F1 fix; the unhealthy-manifest-not-repairable case now explicitly sets blocked_reason, making the remaining elif semantically correct for the status-print cases. F3 (implicit dependency on preferred_diff_base_ref): REJECTED — tested and documented in plan rationale. F4 (narrow grep pattern): ACCEPTED — broaden scan instruction to include gemini-, mistral-, and other model-name patterns.
+- note: F1 (brittle not-reachable assumption): REJECTED — plan documents the reasoning; scope doesn't include changing recommended_next_action behavior. F2 (incomplete hardening for model constants): REJECTED — already rejected in prior round; automated linting is out of scope. F3 (mutation timing risk): REJECTED — update_workflow_state raises on failure, cannot silently continue.

@@ -32,6 +32,7 @@
   - `test_repair_fixes_stale_closeout` — drift=`unhealthy-manifest`, repairable=True; `command_checkpoint` called; closeout added to repaired list
   - `test_repair_blocks_on_closeout_failure` — drift=`unhealthy-manifest`, repairable=True; `command_checkpoint` returns 1; `command_repair` returns 1 with blocked reason
   - `test_repair_blocks_when_closeout_unhealthy_not_repairable` — drift=`unhealthy-manifest`, `stage_repairable` returns False; `command_checkpoint` not called; returns 1 with "not repairable" in blocked reason
+  - `test_repair_blocks_when_checkpoint_succeeds_but_closeout_remains_unhealthy` — drift=`unhealthy-manifest`, repairable=True, `command_checkpoint` returns 0, but refreshed `stage_manifest_state` returns `healthy=False`; repair must return 1
 
 ## Story 2: Base-ref reset in `command_checkpoint`
 

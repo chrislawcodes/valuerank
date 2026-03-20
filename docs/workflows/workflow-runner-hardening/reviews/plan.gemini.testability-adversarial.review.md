@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "testability-adversarial"
 stage: "plan"
 artifact_path: "docs/workflows/workflow-runner-hardening/plan.md"
-artifact_sha256: "5450ff7b0e93e369ccff3b05b6d9eb6d735205fae01006ff69c72d18bc501e8c"
+artifact_sha256: "385e6f25e4b1421e889a0627fcc8c4b297aa034af333f08aeec0f37d9505bb04"
 repo_root: "."
-git_head_sha: "c526eec446cdaf814b7c52e69e385dd4fe47894f"
+git_head_sha: "e38b1c0df568c1a8c86cfafa9f505060741e65a5"
 git_base_ref: "origin/main"
-git_base_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
+git_base_sha: "b44a76cad358741fabfa4776f45752606980d56a"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "F1 (no automated guardrail for hardcoded model strings): REJECTED — adding regex-based tests scanning source for model strings is beyond scope; the constant + test_default_codex_model_constant_exists is sufficient. F2 (Patch 3 assumption not tested): REJECTED — test_repair_skips_closeout_when_not_checkpointed already covers not-checkpointed; stub-artifact/missing-artifact follow same skip logic. F3 (Patch 2 base_ref already None edge): REJECTED — trivial; the outer guard 'if marker_count > 0 and not args.base_ref' means base_ref cannot be None when entering reset branches without user-supplied value."
+resolution_note: "F1 (stage_repairable undefined in plan): REJECTED — stage_repairable is an existing function; plan correctly documents its usage. F2 (missing partial-success test): ACCEPTED — added test_repair_blocks_when_checkpoint_succeeds_but_closeout_remains_unhealthy to cover checkpoint returns 0 but manifest still unhealthy. F3 (unverified fallback for recorded_base_ref): REJECTED — documented in plan; preferred_diff_base_ref behavior tested."
 raw_output_path: "docs/workflows/workflow-runner-hardening/reviews/plan.gemini.testability-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,27 +22,62 @@ coverage_note: ""
 
 ## Findings
 
-1.  **Patch 1 Test Scope Is Too Narrow:** The plan proposes adding a `DEFAULT_CODEX_MODEL` constant and replacing one hardcoded value in `required_reviews()` for the `"diff"` stage. The manual instruction to "Grep the entire file" is untestable and insufficient. The proposed tests only validate that the `"diff"` stage uses the constant. If other stages (e.g., `"plan"`, `"tasks"`) have hardcoded model strings, they will be missed by both the implementation and the tests, negating the benefit of the new constant.
+### 1. Undefined `stage_repairable` Function Creates Critical Ambiguity
 
-2.  **Patch 3 Skip Logic Is Brittle:** The proposed `command_repair` logic for the closeout stage skips repair for a hardcoded list of drift states (`"not-checkpointed"`, `"missing-artifact"`, `"stub-artifact"`). This is a "blacklist" approach. If a new, non-repairable drift state is introduced in the future, this logic will fail open, silently skipping the stage and potentially reporting a successful repair incorrectly. A "whitelist" approach (explicitly handling only `unhealthy-manifest`) would be more robust.
+**Severity:** High
 
-3.  **Patch 2 Tests Verify Mocks, Not Outcomes:** The first three proposed tests for `BaseRefResetTests` (`test_index_overflow_clears_base_ref`, etc.) verify that a mock (`preferred_diff_base_ref`) is called with `None`. This is a test of implementation detail. These tests would be significantly stronger if they followed the pattern of the fourth test: initialize `args.base_ref` with a stale SHA, trigger the reset condition, and assert that the *final calculated base ref* is the correct one from the diff metadata, not the initial stale one.
+The entire logic for Patch 3 hinges on the `stage_repairable(args.slug, "closeout", closeout_state)` function, yet its behavior, inputs, and definition are completely omitted from the plan. This makes the proposed change untestable and unverifiable. An adversarial implementation of `stage_repairable` could always return `True`, causing the repair to run inappropriately, or always `False`, preventing a necessary repair. The plan is critically incomplete without defining what makes a closeout stage "repairable".
 
-4.  **Patch 3 Test Plan Misses a Failure Case:** The implementation correctly handles the case where `command_checkpoint` returns a success code (`0`) but the manifest remains unhealthy. However, the test plan for `RepairCloseoutTests` does not include a test for this specific scenario. Without a dedicated test, this important check could be broken by a future regression.
+### 2. Closeout Repair Logic Fails to Test a Key Failure Path
+
+**Severity:** High
+
+The plan includes logic to handle a scenario where `command_checkpoint` for a closeout repair *succeeds* (returns 0), but the stage remains unhealthy.
+
+```python
+# from patch 3
+else:
+    refreshed = stage_manifest_state(args.slug, "closeout")
+    stages["closeout"] = refreshed
+    if not refreshed["healthy"]:
+        blocked_reason = f"closeout remains unhealthy: {trim_detail(str(refreshed.get('detail', '')))}"
+```
+
+However, the test plan for `RepairCloseoutTests` completely omits a test case for this branch. A test is needed where a mocked `command_checkpoint` returns 0, but the subsequent mock of `stage_manifest_state` returns `{"healthy": False, "detail": "..."}`. Without this test, a silent failure that appears to succeed but leaves the system in a broken state could go undetected.
+
+### 3. `base-ref` Reset Logic Relies on an Unverified Fallback
+
+**Severity:** Medium
+
+In Patch 2, the three reset scenarios force `args.base_ref` to `None`. The rationale states this causes `preferred_diff_base_ref` to "fall through to the `recorded_base_ref` from diff metadata". The plan assumes this `recorded_base_ref` is always correct or valid.
+
+This assumption is weak. What if the `recorded_base_ref` is also stale, invalid, or points to a non-existent ref (`origin/deleted-branch`)? The tests verify that the stale `head_sha` is discarded, but they do not adversarially test what happens if the fallback ref itself is bad. This could lead to a secondary, uncaught failure in `git diff` execution.
+
+### 4. "Grep and Replace" Directive is Ambiguous and Untested
+
+**Severity:** Low
+
+The "Additional" task in Patch 1 instructs the implementer to "Grep the entire file for other hardcoded model strings... replace with constants as appropriate." This is too vague for a technical plan.
+
+*   **Ambiguity:** It doesn't define what is "appropriate". What if other, weaker models are used intentionally for specific, non-critical tasks within the file? This could lead to an incorrect replacement.
+*   **Untestability:** The test plan includes no mechanism to verify this step was performed correctly or at all. A test would need to pre-seed the file with other hardcoded model strings and assert they are handled correctly, which is not proposed.
 
 ## Residual Risks
 
-1.  **Mock Drift in Base-Ref Tests:** The tests for Patch 2 rely heavily on mocking core workflow components like `parse_checkpoint_markers` and `update_workflow_state`. If the behavior or return contracts of these real functions change, the tests may continue to pass while the actual `command_checkpoint` function breaks, as the mocks will not have been updated to reflect the new reality.
+If this plan is implemented as-is, the following risks will remain:
 
-2.  **Coupling of Repair and Recommendation Logic:** The rationale for Patch 3 notes that certain drift states are "not reachable via the repair flow" because the `recommended_next_action` function that triggers `repair` doesn't produce them. This creates a tight, implicit coupling between the two functions. If `recommended_next_action` is changed in the future to recommend repair for a `missing-artifact`, the `command_repair` function will silently fail to perform the action, as it's designed to skip that state.
+1.  **Incorrect Repair Execution:** The `closeout` repair logic could trigger on the wrong conditions or fail to trigger when needed because its dependency (`stage_repairable`) is a black box.
+2.  **Silent Repair Failures:** The system may report that a `closeout` repair was successful when it actually failed to make the stage healthy, leading to downstream errors that are harder to diagnose. This is a direct result of the missing test case.
+3.  **Cascading `diff` Failures:** A `base-ref` reset during a `diff` could successfully avoid using a stale `HEAD` SHA, only to fail in a subsequent step because the fallback `recorded_base_ref` is also invalid. The failure would be misattributed to the `git diff` command itself, not the incomplete reset logic.
+4.  **Inconsistent Model Usage:** Hardcoded, non-standard model names may persist elsewhere in the `run_feature_workflow.py` script, undermining the goal of centralization and easy maintenance.
 
 ## Token Stats
 
-- total_input=2539
-- total_output=658
-- total_tokens=16529
-- `gemini-2.5-pro`: input=2539, output=658, total=16529
+- total_input=2566
+- total_output=944
+- total_tokens=16690
+- `gemini-2.5-pro`: input=2566, output=944, total=16690
 
 ## Resolution
 - status: accepted
-- note: F1 (no automated guardrail for hardcoded model strings): REJECTED — adding regex-based tests scanning source for model strings is beyond scope; the constant + test_default_codex_model_constant_exists is sufficient. F2 (Patch 3 assumption not tested): REJECTED — test_repair_skips_closeout_when_not_checkpointed already covers not-checkpointed; stub-artifact/missing-artifact follow same skip logic. F3 (Patch 2 base_ref already None edge): REJECTED — trivial; the outer guard 'if marker_count > 0 and not args.base_ref' means base_ref cannot be None when entering reset branches without user-supplied value.
+- note: F1 (stage_repairable undefined in plan): REJECTED — stage_repairable is an existing function; plan correctly documents its usage. F2 (missing partial-success test): ACCEPTED — added test_repair_blocks_when_checkpoint_succeeds_but_closeout_remains_unhealthy to cover checkpoint returns 0 but manifest still unhealthy. F3 (unverified fallback for recorded_base_ref): REJECTED — documented in plan; preferred_diff_base_ref behavior tested.

@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "dependency-order-adversarial"
 stage: "tasks"
 artifact_path: "docs/workflows/workflow-runner-hardening/tasks.md"
-artifact_sha256: "a27116d7fdcf8d298511038c9ac6e0ee5de9ac6a1b643cbae8ad3040c6b2e116"
+artifact_sha256: "cea5100faa6104cb9e92f8351172df7f74b6969eadb5a6cba495c2dc77dcc597"
 repo_root: "."
-git_head_sha: "c526eec446cdaf814b7c52e69e385dd4fe47894f"
+git_head_sha: "e38b1c0df568c1a8c86cfafa9f505060741e65a5"
 git_base_ref: "origin/main"
-git_base_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
+git_base_sha: "b44a76cad358741fabfa4776f45752606980d56a"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "F1 (repaired appended optimistically): REJECTED — wrong reading; repaired.append is inside 'else' of 'if not refreshed[healthy]' so only fires when healthy. F2 (grep only run_feature_workflow.py): REJECTED — spec explicitly limits scope to this file. F3 (indirect base-ref test): REJECTED — behavioral correctness test is appropriate; direct call-with-None tests also exist."
+resolution_note: "F1 (no test for grep verification): REJECTED — automated grep verification out of scope. F2 (no multi-stage repair integration test): ACCEPTED — added test_repair_skips_closeout_when_earlier_stage_blocked to verify blocked_reason guard. F3 (complex elif logic): REJECTED — structure is clear; implicit condition documented. F4 (ambiguous base-ref test): REJECTED — test clearly documents intent."
 raw_output_path: "docs/workflows/workflow-runner-hardening/reviews/tasks.gemini.dependency-order-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,27 +22,29 @@ coverage_note: ""
 
 ## Findings
 
-1.  **(High Severity) Incorrect State in `command_repair`:** In Story 1 (T1.2), the proposed logic adds `"closeout"` to the `repaired` list optimistically, before the repair is fully validated. If the subsequent `if not refreshed["healthy"]:` check fails, the function blocks as intended, but it returns with a state where `"closeout"` is incorrectly listed as `repaired`. This provides a misleading success signal to any downstream consumer of the `repaired` list. The append should only happen *after* the `healthy` check passes.
+1.  **Incomplete Verification for Model Name Refactoring.** The tests in T3.4 only validate that the new `DEFAULT_CODEX_MODEL` constant exists and is used in the `required_reviews` function. They do **not** verify the success of the manual `grep` task (T3.3), which is intended to find and replace *all* other hardcoded model strings. A developer could easily miss a hardcoded string, but all tests would still pass, defeating the purpose of the refactoring and leaving technical debt.
 
-2.  **(Medium Severity) Narrow Scope of Model Constant Refactoring:** In Story 3 (T3.3), the `grep` for hardcoded model names is scoped only to the `run_feature_workflow.py` file. The problem of magic strings for model names is unlikely to be confined to a single file. Other scripts or configuration files within the `docs/operations/codex-skills/feature-workflow/` directory could contain the same hardcoded values. The task as written risks creating a false sense of security by only partially eliminating the hardcoded strings, leading to inconsistent model usage across different entry points of the workflow.
+2.  **No Integration Test for Multi-Stage Repairs.** Story 1's tests (`RepairCloseoutTests`) validate the `closeout` repair logic in isolation. However, the `command_repair` function is designed to iterate through multiple stages. There is no test case defined for a scenario where a preceding stage (e.g., `diff`) is repaired first, and then the logic correctly proceeds to attempt a `closeout` repair. This misses a test of the state handoff (`blocked_reason`) between iterations of the repair loop.
 
-3.  **(Low Severity) Brittle and Indirect Test in `BaseRefResetTests`:** In Story 2 (T2.3), the final test case (`test_reset_uses_recorded_base_not_stale_head`) does not directly test the specified change (`args.base_ref = None`). Instead, it tests the downstream consequences of that change within a separate, complex helper function (`preferred_diff_base_ref`). This couples the test to an unrelated implementation. If the logic of `preferred_diff_base_ref` changes in the future, this test could fail, even if the `base_ref` reset logic in `command_checkpoint` remains correct. The test suite is missing a simpler, more direct test that asserts `args.base_ref` is `None` after the reset branches are taken.
+3.  **Complex and Opaque Conditional Logic in `closeout` Repair.** The proposed code block for T1.2 uses a conditional structure that is difficult to reason about. The `elif closeout_drift == "unhealthy-manifest":` branch is only reachable if `stage_repairable(...)` is `False`, but this dependency is not explicit, making the code's intent obscure. A nested `if/else` would be clearer and less prone to implementation error.
+
+4.  **Test for `base_ref` Reset Has Ambiguous Goal.** The test `test_reset_uses_recorded_base_not_stale_head` (T2.3) seems to conflate two different behaviors: the clearing of `args.base_ref` during a reset, and the subsequent logic for selecting a *new* base ref. Its name and description do not clearly state whether it's validating the reset action itself or the recovery logic that follows, potentially causing confusion.
 
 ## Residual Risks
 
-1.  **Flawed Workflow Resumption:** The incorrect state from Finding #1 could cause a calling process to believe the `closeout` stage is fixed when it is not. This could lead it to incorrectly attempt to proceed in a workflow that should remain blocked, potentially causing data corruption or failed execution in a later step that depends on a healthy `closeout` artifact.
+1.  **Hardcoded Model Names Will Persist.** The most significant risk is that the refactoring in Story 3 will be incomplete. The lack of automated verification for T3.3 means hardcoded model strings are likely to remain in the codebase, creating ongoing maintenance friction and potential for error when model versions change.
 
-2.  **Inconsistent System Behavior:** Due to the narrow scope in Finding #2, the system's behavior may become dependent on which script is executed. Running `run_feature_workflow.py` might use the new `DEFAULT_CODEX_MODEL`, while another forgotten script could still be using the old hardcoded `gpt-5.4-mini`, leading to subtle, hard-to-debug inconsistencies in output, performance, and cost.
+2.  **Repair Sequences are Brittle.** Without a test for multi-stage repairs, a bug in the loop's state management could cause `command_repair` to fail unexpectedly or, worse, report success after only partially completing its work. For example, a failed `diff` repair might not correctly block a subsequent `closeout` repair attempt.
 
-3.  **Increased Test Maintenance Overhead:** The indirect test design in Finding #3 makes the test suite more brittle. Future refactoring of helper functions may trigger unrelated test failures, increasing the effort required to maintain and evolve the codebase and obscuring the true source of regressions.
+3.  **High Risk of Flawed Implementation.** The convoluted logic for the `closeout` repair block (T1.2) increases the likelihood of bugs. An engineer might misinterpret the `if/elif/elif` structure and implement logic that fails to block an unrepairable stage or skips a repairable one.
 
 ## Token Stats
 
-- total_input=2351
-- total_output=668
-- total_tokens=16561
-- `gemini-2.5-pro`: input=2351, output=668, total=16561
+- total_input=2433
+- total_output=651
+- total_tokens=17279
+- `gemini-2.5-pro`: input=2433, output=651, total=17279
 
 ## Resolution
 - status: accepted
-- note: F1 (repaired appended optimistically): REJECTED — wrong reading; repaired.append is inside 'else' of 'if not refreshed[healthy]' so only fires when healthy. F2 (grep only run_feature_workflow.py): REJECTED — spec explicitly limits scope to this file. F3 (indirect base-ref test): REJECTED — behavioral correctness test is appropriate; direct call-with-None tests also exist.
+- note: F1 (no test for grep verification): REJECTED — automated grep verification out of scope. F2 (no multi-stage repair integration test): ACCEPTED — added test_repair_skips_closeout_when_earlier_stage_blocked to verify blocked_reason guard. F3 (complex elif logic): REJECTED — structure is clear; implicit condition documented. F4 (ambiguous base-ref test): REJECTED — test clearly documents intent.

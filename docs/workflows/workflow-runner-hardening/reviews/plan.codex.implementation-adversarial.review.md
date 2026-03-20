@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "implementation-adversarial"
 stage: "plan"
 artifact_path: "docs/workflows/workflow-runner-hardening/plan.md"
-artifact_sha256: "5450ff7b0e93e369ccff3b05b6d9eb6d735205fae01006ff69c72d18bc501e8c"
+artifact_sha256: "385e6f25e4b1421e889a0627fcc8c4b297aa034af333f08aeec0f37d9505bb04"
 repo_root: "."
-git_head_sha: "c526eec446cdaf814b7c52e69e385dd4fe47894f"
+git_head_sha: "e38b1c0df568c1a8c86cfafa9f505060741e65a5"
 git_base_ref: "origin/main"
-git_base_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
+git_base_sha: "b44a76cad358741fabfa4776f45752606980d56a"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "F1 (unhealthy-manifest not repairable): ACCEPTED — when closeout_drift==unhealthy-manifest but stage_repairable returns False, plan falls through to elif which just prints, never setting blocked_reason; repair returns success with broken closeout. Fix: add elif closeout_drift == unhealthy-manifest branch setting blocked_reason. F2 (args mutation): REJECTED — consistent with existing codebase pattern, bounded by function scope. F3 (grep sweep): REJECTED — implementer guidance, acceptable risk for targeted fix."
+resolution_note: "F1 (update_workflow_state reads args.base_ref): REJECTED — update_workflow_state takes slug and lambda, doesn't accept or read args.base_ref. F2 (stages[closeout] might not exist): REJECTED — stages is populated by {stage: stage_manifest_state for stage in CHECKPOINT_STAGES} and CHECKPOINT_STAGES includes closeout, so always present. F3 (grep instruction too broad): REJECTED — already addressed; instruction says be conservative and not modify prompt text. F4 (partial-success test missing): ACCEPTED — same as gemini testability F2; test added."
 raw_output_path: "docs/workflows/workflow-runner-hardening/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,14 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- High: Patch 2 may not actually clear the stale base ref from persisted state. The plan mutates `args.base_ref` only after `update_workflow_state(...)`; if that helper snapshots `args` or writes the checkpoint before the mutation is observed, the bad value survives and the same wrong base can be restored on the next run. The plan needs to prove the persistence layer never sees the old ref, or clear it in the persisted state explicitly.
-- Medium: Patch 3 relies on an unproven reachability assumption: that `command_repair` only ever sees closeout through the `recommended_next_action` path. If that assumption is wrong, `missing-artifact`, `stub-artifact`, and `not-checkpointed` will be silently skipped and the command can still report success while closeout remains broken. The plan should define behavior for those states instead of assuming they cannot occur.
-- Medium: Patch 1 changes a model literal without validating consumer compatibility, and the proposed file-wide grep is too blunt. It can over-replace intentional literals or comments, and it still will not catch dynamically constructed model names. That makes the change both risky and likely incomplete unless the exact call sites and allowed model families are enumerated.
+- High: In Patch 2, `args.base_ref = None` is set only after `update_workflow_state(...)`. If that helper reads or persists `args.base_ref` or the derived ref before the reset, the stale `recorded_head_sha` is still baked into state and the proposed fix does not actually remove the bad base selection.
+- High: Patch 3 assumes `stages["closeout"]` always exists in `command_repair`. The new block adds an unconditional map lookup with no fallback, so any workflow variant that omits closeout from `stages` will raise instead of repairing or reporting a clean failure.
+- Medium: Patch 1's "grep the entire file" instruction is too broad and under-specified. Rewriting every string that looks like a model name can accidentally touch fixtures, logging, or other provider defaults outside `required_reviews`, and the plan does not define a precise allowlist to prevent that.
+- Medium: The closeout test plan misses the partial-success case where `command_checkpoint` returns `0` but the refreshed closeout manifest is still unhealthy. That is the exact failure mode the new block is meant to defend against, so the suite can still pass while shipping a broken repair path.
 
 ## Residual Risks
 
-- The base-ref fix still depends on `recorded_base_ref` being accurate in the diff metadata; if that metadata is stale or malformed, the fallback can still choose the wrong ancestor.
-- The new tests cover the targeted reset and closeout repair paths, but they do not prove the normal no-reset diff path or other `command_repair` stage interactions remain unchanged.
+- The plan still depends on the exact semantics of `preferred_diff_base_ref` and `stage_drift_class`; if either treats missing metadata differently than assumed, the new branches may choose the wrong base or skip repair.
+- There is no end-to-end coverage showing that the model constant change, base-ref reset, and closeout repair all work together in one workflow run, so interaction bugs can still slip through.
+- If `codex-5.4-mini` is not accepted by the surrounding tooling or provider allowlist, Patch 1 will fail at runtime even if the code edits are syntactically correct.
 
 ## Runner Stats
 - total_input=0
@@ -38,4 +40,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: F1 (unhealthy-manifest not repairable): ACCEPTED — when closeout_drift==unhealthy-manifest but stage_repairable returns False, plan falls through to elif which just prints, never setting blocked_reason; repair returns success with broken closeout. Fix: add elif closeout_drift == unhealthy-manifest branch setting blocked_reason. F2 (args mutation): REJECTED — consistent with existing codebase pattern, bounded by function scope. F3 (grep sweep): REJECTED — implementer guidance, acceptable risk for targeted fix.
+- note: F1 (update_workflow_state reads args.base_ref): REJECTED — update_workflow_state takes slug and lambda, doesn't accept or read args.base_ref. F2 (stages[closeout] might not exist): REJECTED — stages is populated by {stage: stage_manifest_state for stage in CHECKPOINT_STAGES} and CHECKPOINT_STAGES includes closeout, so always present. F3 (grep instruction too broad): REJECTED — already addressed; instruction says be conservative and not modify prompt text. F4 (partial-success test missing): ACCEPTED — same as gemini testability F2; test added.
