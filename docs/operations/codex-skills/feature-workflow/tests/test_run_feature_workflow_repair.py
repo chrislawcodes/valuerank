@@ -1034,7 +1034,7 @@ class CheckpointMarkerTests(unittest.TestCase):
 
 class DefaultCodexModelTests(unittest.TestCase):
     def test_default_codex_model_constant_exists(self) -> None:
-        self.assertEqual(MODULE.DEFAULT_CODEX_MODEL, "codex-5.4-mini")
+        self.assertEqual(MODULE.DEFAULT_CODEX_MODEL, "gpt-5.4-mini")
 
     def test_required_reviews_codex_entry_uses_constant(self) -> None:
         reviews = MODULE.required_reviews(
