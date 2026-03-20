@@ -608,6 +608,7 @@ describe('GraphQL Run Mutations', () => {
           startRun(input: $input) {
             run {
               id
+              runCategory
               config
               definition {
                 id
@@ -640,6 +641,7 @@ describe('GraphQL Run Mutations', () => {
       createdRunIds.push(result.run.id, ...result.pairedRunIds);
 
       expect(result.run.definition.id).toBe(aFirstDefinition.id);
+      expect(result.run.runCategory).toBe('PRODUCTION');
       expect(result.jobCount).toBe(4);
       expect(result.pairedRunIds).toHaveLength(1);
 
@@ -652,6 +654,7 @@ describe('GraphQL Run Mutations', () => {
         select: {
           id: true,
           definitionId: true,
+          runCategory: true,
           config: true,
         },
       });
@@ -663,6 +666,8 @@ describe('GraphQL Run Mutations', () => {
 
       expect(aRun).toBeDefined();
       expect(bRun).toBeDefined();
+      expect(aRun?.runCategory).toBe('PRODUCTION');
+      expect(bRun?.runCategory).toBe('PRODUCTION');
       expect((aRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect((bRun?.config as Record<string, unknown>).jobChoiceLaunchMode).toBe('PAIRED_BATCH');
       expect((aRun?.config as Record<string, unknown>).methodologySafe).toBe(true);

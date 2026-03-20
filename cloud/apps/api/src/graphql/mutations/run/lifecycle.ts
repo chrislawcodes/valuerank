@@ -194,7 +194,7 @@ builder.mutationField('startRun', (t) =>
         samplesPerScenario: input.samplesPerScenario ?? undefined,
         temperature: input.temperature ?? undefined,
         priority: input.priority ?? 'NORMAL',
-        runCategory: parsedRunCategory,
+        runCategory: parsedRunCategory ?? (launchMode === 'PAIRED_BATCH' ? 'PRODUCTION' : undefined),
         experimentId:
           input.experimentId !== undefined && input.experimentId !== null && input.experimentId !== ''
             ? String(input.experimentId)

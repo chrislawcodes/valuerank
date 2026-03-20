@@ -63,8 +63,6 @@ export function DefinitionDetail() {
     limit: 1,
   });
 
-  const { startRun, loading: isStartingRun } = useRunMutations();
-
   // Poll for definition updates while expansion is in progress
   const isExpanding =
     definition?.expansionStatus?.status === 'PENDING' ||
@@ -93,6 +91,7 @@ export function DefinitionDetail() {
     isUnforking,
     isDeleting,
   } = useDefinitionMutations();
+  const { startRun, loading: isStartingRun } = useRunMutations();
 
   // Tag mutations
   const [, executeAddTag] = useMutation<AddTagToDefinitionResult>(ADD_TAG_TO_DEFINITION_MUTATION);
@@ -184,7 +183,16 @@ export function DefinitionDetail() {
     }
   };
 
-  const handleStartRun = async (input: StartRunInput) => {
+  const handleStartRun = () => {
+    if (!definition) return;
+    if (methodology?.family === 'job-choice') {
+      navigate(`/definitions/${definition.id}/start-paired-batch`);
+      return;
+    }
+    setShowRunForm(true);
+  };
+
+  const handleStartRunSubmit = async (input: StartRunInput) => {
     setRunError(null);
     try {
       const result = await startRun(input);
@@ -326,7 +334,7 @@ export function DefinitionDetail() {
         onFork={() => setShowForkDialog(true)}
         onUnfork={() => setShowUnforkConfirm(true)}
         onDelete={() => setShowDeleteConfirm(true)}
-        onStartRun={() => setShowRunForm(true)}
+        onStartRun={handleStartRun}
         startLabel={startLabel}
       />
 
@@ -441,12 +449,13 @@ export function DefinitionDetail() {
         scenarioCount={scenarioCount}
         error={runError}
         isSubmitting={isStartingRun}
-        onSubmit={handleStartRun}
+        onSubmit={handleStartRunSubmit}
         onClose={() => {
           setShowRunForm(false);
           setRunError(null);
         }}
       />
+
     </div>
   );
 }

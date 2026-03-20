@@ -1,0 +1,8 @@
+## Findings
+1. [`cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx) now redirects `job-choice` runs to a new paired-batch route, but this patch does not add any route registration for [`cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx). Unless that wiring exists elsewhere, the new start action will navigate to an unmapped URL and fail at runtime.
+
+2. [`cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx) treats missing `resolvedContent`/`content` as a hard "Paired batch unavailable" state and never waits for the definition’s expansion lifecycle. That is a correctness bug for definitions still transitioning through expansion: the page can reject an otherwise eligible vignette simply because the content has not resolved yet, rather than showing a loading state or rechecking once expansion completes.
+
+## Residual Risks
+- The paired-batch flow still reuses the same `RunForm`/`StartRunInput` path as trial launches. If paired batches need different validation or server-side semantics beyond label changes, this patch does not enforce them.
+- The new `copyMode` only changes visible copy. Any other trial-specific wording or assumptions elsewhere in the form will remain unchanged and can still confuse users of the paired-batch flow.

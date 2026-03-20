@@ -19,6 +19,7 @@ import { AnalysisAssumptions } from './pages/AnalysisAssumptions';
 import { OrderEffectAssumptions } from './pages/OrderEffectAssumptions';
 import { DomainAnalysisValueDetail } from './pages/DomainAnalysisValueDetail';
 import { DefinitionDetail } from './pages/DefinitionDetail';
+import { StartPairedBatchPage } from './pages/DefinitionDetail/StartPairedBatchPage';
 import { Runs } from './pages/Runs';
 import { RunDetail } from './pages/RunDetail';
 import { Analysis } from './pages/Analysis';
@@ -174,6 +175,14 @@ function App() {
               element={
                 <ProtectedLayout>
                   <DefinitionDetail />
+                </ProtectedLayout>
+              }
+            />
+            <Route
+              path="/definitions/:id/start-paired-batch"
+              element={
+                <ProtectedLayout fullWidth>
+                  <StartPairedBatchPage />
                 </ProtectedLayout>
               }
             />

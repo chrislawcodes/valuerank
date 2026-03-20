@@ -16,6 +16,7 @@ type RunFormProps = {
   definitionContent?: unknown;
   scenarioCount?: number;
   initialTemperature?: number | null;
+  copyMode?: 'trial' | 'paired-batch';
   onSubmit: (input: StartRunInput) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
@@ -26,6 +27,7 @@ export function RunForm({
   definitionContent,
   scenarioCount,
   initialTemperature = null,
+  copyMode = 'trial',
   onSubmit,
   onCancel,
   isSubmitting = false,
@@ -158,7 +160,7 @@ export function RunForm({
                   value: 'PAIRED_BATCH' as const,
                   title: 'Start Paired Batch',
                   description:
-                    'Methodology-safe default. Launches both value-order companions when both are available.',
+                    'Methodology-safe default. Launches both order variants together.',
                 },
                 {
                   value: 'AD_HOC_BATCH' as const,
@@ -200,36 +202,43 @@ export function RunForm({
         </div>
       )}
 
-      <DefinitionPicker
-        samplePercentage={formState.samplePercentage}
-        estimatedScenarios={estimatedScenarios}
-        isSpecificConditionTrial={isSpecificConditionTrial}
-        isSubmitting={isSubmitting}
-        selectedConditionRowLevel={selectedConditionRowLevel}
-        selectedConditionColLevel={selectedConditionColLevel}
-        selectedConditionScenarioIds={selectedConditionScenarioIds}
-        conditionSelectionTouched={conditionSelectionTouched}
-        conditionGrid={conditionGrid}
-        loadingConditionGrid={loadingConditionGrid}
-        conditionGridError={conditionGridError}
-        isConditionModalOpen={isConditionModalOpen}
-        modalRowLevel={modalRowLevel}
-        modalColLevel={modalColLevel}
-        onSampleChange={handleSampleChange}
-        onCloseConditionModal={handleCloseConditionModal}
-        onImmediateConditionSelect={handleImmediateConditionSelect}
-      />
+      <div
+        data-testid={copyMode === 'paired-batch' ? 'paired-batch-layout' : undefined}
+        className={copyMode === 'paired-batch' ? 'grid gap-6 lg:grid-cols-2' : 'space-y-6'}
+      >
+        <DefinitionPicker
+          copyMode={copyMode}
+          samplePercentage={formState.samplePercentage}
+          estimatedScenarios={estimatedScenarios}
+          isSpecificConditionTrial={isSpecificConditionTrial}
+          isSubmitting={isSubmitting}
+          selectedConditionRowLevel={selectedConditionRowLevel}
+          selectedConditionColLevel={selectedConditionColLevel}
+          selectedConditionScenarioIds={selectedConditionScenarioIds}
+          conditionSelectionTouched={conditionSelectionTouched}
+          conditionGrid={conditionGrid}
+          loadingConditionGrid={loadingConditionGrid}
+          conditionGridError={conditionGridError}
+          isConditionModalOpen={isConditionModalOpen}
+          modalRowLevel={modalRowLevel}
+          modalColLevel={modalColLevel}
+          onSampleChange={handleSampleChange}
+          onCloseConditionModal={handleCloseConditionModal}
+          onImmediateConditionSelect={handleImmediateConditionSelect}
+        />
 
-      <RunConfigPanel
-        temperatureInput={formState.temperatureInput}
-        samplesPerScenario={formState.samplesPerScenario}
-        estimatedScenarios={estimatedScenarios}
-        selectedModelCount={formState.selectedModels.length}
-        totalJobs={totalJobs}
-        isSubmitting={isSubmitting}
-        onTemperatureChange={handleTemperatureChange}
-        onSamplesPerScenarioChange={handleSamplesPerScenarioChange}
-      />
+        <RunConfigPanel
+          copyMode={copyMode}
+          temperatureInput={formState.temperatureInput}
+          samplesPerScenario={formState.samplesPerScenario}
+          estimatedScenarios={estimatedScenarios}
+          selectedModelCount={formState.selectedModels.length}
+          totalJobs={totalJobs}
+          isSubmitting={isSubmitting}
+          onTemperatureChange={handleTemperatureChange}
+          onSamplesPerScenarioChange={handleSamplesPerScenarioChange}
+        />
+      </div>
 
       {formState.selectedModels.length > 0 && (
         <CostBreakdown

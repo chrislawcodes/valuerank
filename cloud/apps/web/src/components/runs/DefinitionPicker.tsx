@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import type { RunConditionGrid } from '../../api/operations/scenarios';
 
 type DefinitionPickerProps = {
+  copyMode?: 'trial' | 'paired-batch';
   samplePercentage: number;
   estimatedScenarios: number | null;
   isSpecificConditionTrial: boolean;
@@ -173,6 +174,7 @@ function ConditionGridModal({
 }
 
 export function DefinitionPicker({
+  copyMode = 'trial',
   samplePercentage,
   estimatedScenarios,
   isSpecificConditionTrial,
@@ -191,11 +193,13 @@ export function DefinitionPicker({
   onCloseConditionModal,
   onImmediateConditionSelect,
 }: DefinitionPickerProps) {
+  const sizeLabel = copyMode === 'paired-batch' ? 'Batch Size' : 'Trial Size';
+
   return (
     <>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Trial Size
+          {sizeLabel}
         </label>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_OPTIONS.map((option) => (

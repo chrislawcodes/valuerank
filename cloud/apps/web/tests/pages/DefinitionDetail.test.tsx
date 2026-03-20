@@ -33,6 +33,10 @@ vi.mock('../../src/components/definitions/TagSelector', () => ({
   ),
 }));
 
+vi.mock('../../src/pages/DefinitionDetail/RunFormModal', () => ({
+  RunFormModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div>RunFormModal Open</div> : null),
+}));
+
 function createMockClient(options: {
   definition?: {
     id: string;
@@ -91,10 +95,15 @@ function createMockClient(options: {
           delay(0)
         );
       }
-      // Default: definition query (also handles scenarios/count queries gracefully)
+      // Default: definition query (also handles scenario/count queries gracefully)
       return pipe(
         fromValue({
-          data: definition ? { definition } : null,
+          data: definition
+            ? {
+                definition,
+                scenarioCount: definition.scenarioCount ?? 8,
+              }
+            : null,
           fetching: loading,
           error: error ? { message: error.message } : undefined,
         }),
@@ -363,6 +372,89 @@ describe('DefinitionDetail', () => {
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith('/job-choice/job-choice-1/edit');
+    });
+
+    it('routes job-choice vignettes to the paired batch launch page', async () => {
+      const client = createMockClient({
+        definition: {
+          id: 'job-choice-2',
+          name: 'Care -> Freedom',
+          domainId: 'domain-a',
+          domainContextId: 'context-1',
+          levelPresetVersionId: null,
+          preambleVersionId: null,
+          content: {
+            schema_version: 1,
+            template: 'Choose between care and freedom',
+            dimensions: [{ name: 'care' }, { name: 'freedom' }],
+            methodology: {
+              family: 'job-choice',
+              presentation_order: 'A_first',
+              pair_key: 'pair-1',
+            },
+            components: {
+              context_id: 'context-1',
+              value_first: { token: 'care', body: 'show care' },
+              value_second: { token: 'freedom', body: 'protect freedom' },
+            },
+          },
+          parentId: null,
+          runCount: 0,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-15T10:00:00Z',
+          tags: [],
+          parent: null,
+          children: [],
+        },
+      });
+
+      renderDefinitionDetail('job-choice-2', client);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /start paired batch/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /start paired batch/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith('/definitions/job-choice-2/start-paired-batch');
+    });
+
+    it('opens the trial modal for standard vignettes', async () => {
+      const client = createMockClient({
+        definition: {
+          id: 'standard-1',
+          name: 'Standard Definition',
+          domainId: 'domain-b',
+          domainContextId: 'context-2',
+          levelPresetVersionId: null,
+          preambleVersionId: null,
+          content: {
+            schema_version: 1,
+            template: 'Standard vignette',
+            dimensions: [{ name: 'dimension' }],
+          },
+          parentId: null,
+          runCount: 0,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-15T10:00:00Z',
+          tags: [],
+          parent: null,
+          children: [],
+        },
+      });
+
+      renderDefinitionDetail('standard-1', client);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /start trial/i })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /start trial/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('RunFormModal Open')).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalledWith('/definitions/standard-1/start-paired-batch');
     });
   });
 

@@ -1,0 +1,49 @@
+{
+  "feature_slug": "paired-batch-launch-page",
+  "stage": "closeout",
+  "artifact_path": "docs/workflows/paired-batch-launch-page/closeout.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [
+    ".claude/launch.json",
+    "cloud/apps/api/src/graphql/mutations/run/lifecycle.ts",
+    "cloud/apps/api/tests/graphql/mutations/run.test.ts",
+    "cloud/packages/db/prisma/migrations/20260320150000_backfill_paired_batch_run_category",
+    "cloud/apps/web/src/App.tsx",
+    "cloud/apps/web/tests/components/runs/RunForm.test.tsx",
+    "cloud/apps/web/tests/pages/DefinitionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/StartPairedBatchPage.test.tsx",
+    "docs/workflows/coverage-matrix-pair-orientation",
+    "docs/workflows/feature-workflow-discovery-shaping",
+    "docs/workflows/workflow-runner-hardening/reviews",
+    "specs/coverage-matrix-pair-orientation"
+  ],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "completeness-adversarial",
+      "stage": "closeout",
+      "path": "docs/workflows/paired-batch-launch-page/reviews/closeout.gemini.completeness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "residual-risk-adversarial",
+      "stage": "closeout",
+      "path": "docs/workflows/paired-batch-launch-page/reviews/closeout.gemini.residual-risk-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "fidelity-adversarial",
+      "stage": "closeout",
+      "path": "docs/workflows/paired-batch-launch-page/reviews/closeout.codex.fidelity-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}
