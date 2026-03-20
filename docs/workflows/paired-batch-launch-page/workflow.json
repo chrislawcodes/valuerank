@@ -1,0 +1,49 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 1,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "Assuming the user means the DefinitionDetail paired-batch launch modal. Convert it into a dedicated route-driven page, rename copy to glossary terms ('paired batch', 'batch size', 'batches per vignette'), and ensure launches continue to default to PRODUCTION so they do not appear as UNKNOWN_LEGACY.",
+    "updated_at": 1774041098
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      ".claude/launch.json",
+      "cloud/apps/api/src/graphql/mutations/run/lifecycle.ts",
+      "cloud/apps/api/tests/graphql/mutations/run.test.ts",
+      "cloud/packages/db/prisma/migrations/20260320150000_backfill_paired_batch_run_category",
+      "cloud/apps/web/src/App.tsx",
+      "cloud/apps/web/tests/components/runs/RunForm.test.tsx",
+      "cloud/apps/web/tests/pages/DefinitionDetail.test.tsx",
+      "cloud/apps/web/tests/pages/StartPairedBatchPage.test.tsx",
+      "docs/workflows/coverage-matrix-pair-orientation",
+      "docs/workflows/feature-workflow-discovery-shaping",
+      "docs/workflows/workflow-runner-hardening/reviews",
+      "specs/coverage-matrix-pair-orientation"
+    ],
+    "used": true,
+    "updated_at": 1774042591
+  },
+  "checkpoint_fallback": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  }
+}

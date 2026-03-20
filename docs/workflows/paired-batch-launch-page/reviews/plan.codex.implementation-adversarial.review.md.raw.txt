@@ -1,0 +1,11 @@
+## Findings
+1. **High:** The plan only protects against missing or unloadable `:id` values, not against a *valid but ineligible* definition reaching the new route. Because `/definitions/:id/start-paired-batch` is directly addressable, a user can still land on the page for a definition that should not support paired-batch launch unless the page explicitly checks launch eligibility before rendering or submitting. That gap can produce an invalid launch surface even when the ID resolves successfully.
+
+2. **High:** The plan removes the modal entry point without preserving a compatibility path. If any bookmarked links, browser history entries, or external navigation still target the old modal flow, they will break once the modal route is deleted. The artifact needs an explicit redirect or deprecation strategy, not just “delete if unreferenced,” or else this becomes a silent 404 regression.
+
+3. **Medium:** The route-driven page has no explicit loading state in the plan. On direct navigation, the form can mount before the definition data resolves, which risks an empty shell, a flash of incorrect content, or an error state that is shown too early. The plan only covers invalid IDs and fetch failures, not the in-between pending state that a new page surface needs.
+
+## Residual Risks
+- The plan relies on prop-level isolation to keep “Batch Size” and other paired-batch wording out of the regular trial flow. If the shared `RunForm` boundary shifts later, that terminology can leak back into the unrelated consumer path.
+- The side-by-side batch control layout is only specified for “wider screens,” so intermediate breakpoints and long localized labels may still wrap awkwardly or collapse the intended arrangement.
+- The verification list exercises the new page and existing mutation tests, but it does not explicitly protect browser back/cancel navigation or an old-route redirect path, so route regression could slip through despite green unit tests.

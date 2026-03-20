@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "cloud/apps/web/src/components/runs",
+    "cloud/apps/web/src/pages/DefinitionDetail"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/components/runs",
+    "cloud/apps/web/src/pages/DefinitionDetail",
+    "docs/workflows/paired-batch-launch-page"
+  ]
+}

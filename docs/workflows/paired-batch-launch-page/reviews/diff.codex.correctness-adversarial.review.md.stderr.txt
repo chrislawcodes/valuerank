@@ -1,0 +1,482 @@
+2026-03-20T21:38:15.355655Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.356469Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.364410Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0d2f-46b4-7802-8cb0-11d0be6160b8
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/web/src/components/runs/DefinitionPicker.tsx b/cloud/apps/web/src/components/runs/DefinitionPicker.tsx
+index a126796..0474e41 100644
+--- a/cloud/apps/web/src/components/runs/DefinitionPicker.tsx
++++ b/cloud/apps/web/src/components/runs/DefinitionPicker.tsx
+@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
+ import type { RunConditionGrid } from '../../api/operations/scenarios';
+ 
+ type DefinitionPickerProps = {
++  copyMode?: 'trial' | 'paired-batch';
+   samplePercentage: number;
+   estimatedScenarios: number | null;
+   isSpecificConditionTrial: boolean;
+@@ -173,6 +174,7 @@ function ConditionGridModal({
+ }
+ 
+ export function DefinitionPicker({
++  copyMode = 'trial',
+   samplePercentage,
+   estimatedScenarios,
+   isSpecificConditionTrial,
+@@ -191,11 +193,13 @@ export function DefinitionPicker({
+   onCloseConditionModal,
+   onImmediateConditionSelect,
+ }: DefinitionPickerProps) {
++  const sizeLabel = copyMode === 'paired-batch' ? 'Batch Size' : 'Trial Size';
++
+   return (
+     <>
+       <div>
+         <label className="block text-sm font-medium text-gray-700 mb-2">
+-          Trial Size
++          {sizeLabel}
+         </label>
+         <div className="flex flex-wrap gap-2">
+           {SAMPLE_OPTIONS.map((option) => (
+diff --git a/cloud/apps/web/src/components/runs/RunConfigPanel.tsx b/cloud/apps/web/src/components/runs/RunConfigPanel.tsx
+index bcbef41..f1fefd5 100644
+--- a/cloud/apps/web/src/components/runs/RunConfigPanel.tsx
++++ b/cloud/apps/web/src/components/runs/RunConfigPanel.tsx
+@@ -1,4 +1,5 @@
+ type RunConfigPanelProps = {
++  copyMode?: 'trial' | 'paired-batch';
+   temperatureInput: string;
+   samplesPerScenario: number;
+   estimatedScenarios: number | null;
+@@ -17,6 +18,7 @@ const SAMPLES_PER_SCENARIO_OPTIONS = [
+ ];
+ 
+ export function RunConfigPanel({
++  copyMode = 'trial',
+   temperatureInput,
+   samplesPerScenario,
+   estimatedScenarios,
+@@ -26,6 +28,8 @@ export function RunConfigPanel({
+   onTemperatureChange,
+   onSamplesPerScenarioChange,
+ }: RunConfigPanelProps) {
++  const batchesLabel = copyMode === 'paired-batch' ? 'Batches per vignette' : 'Trials per Vignette';
++
+   return (
+     <>
+       <div>
+@@ -50,7 +54,7 @@ export function RunConfigPanel({
+       <div className="p-4 bg-gray-50 rounded-lg space-y-4">
+         <div>
+           <label className="block text-sm font-medium text-gray-700 mb-2">
+-            Trials per Vignette
++            {batchesLabel}
+           </label>
+           <div className="flex flex-wrap gap-2">
+             {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
+diff --git a/cloud/apps/web/src/components/runs/RunForm.tsx b/cloud/apps/web/src/components/runs/RunForm.tsx
+index 67c0db1..2d4b9b0 100644
+--- a/cloud/apps/web/src/components/runs/RunForm.tsx
++++ b/cloud/apps/web/src/components/runs/RunForm.tsx
+@@ -16,6 +16,7 @@ type RunFormProps = {
+   definitionContent?: unknown;
+   scenarioCount?: number;
+   initialTemperature?: number | null;
++  copyMode?: 'trial' | 'paired-batch';
+   onSubmit: (input: StartRunInput) => Promise<void>;
+   onCancel?: () => void;
+   isSubmitting?: boolean;
+@@ -26,6 +27,7 @@ export function RunForm({
+   definitionContent,
+   scenarioCount,
+   initialTemperature = null,
++  copyMode = 'trial',
+   onSubmit,
+   onCancel,
+   isSubmitting = false,
+@@ -200,36 +202,43 @@ export function RunForm({
+         </div>
+       )}
+ 
+-      <DefinitionPicker
+-        samplePercentage={formState.samplePercentage}
+-        estimatedScenarios={estimatedScenarios}
+-        isSpecificConditionTrial={isSpecificConditionTrial}
+-        isSubmitting={isSubmitting}
+-        selectedConditionRowLevel={selectedConditionRowLevel}
+-        selectedConditionColLevel={selectedConditionColLevel}
+-        selectedConditionScenarioIds={selectedConditionScenarioIds}
+-        conditionSelectionTouched={conditionSelectionTouched}
+-        conditionGrid={conditionGrid}
+-        loadingConditionGrid={loadingConditionGrid}
+-        conditionGridError={conditionGridError}
+-        isConditionModalOpen={isConditionModalOpen}
+-        modalRowLevel={modalRowLevel}
+-        modalColLevel={modalColLevel}
+-        onSampleChange={handleSampleChange}
+-        onCloseConditionModal={handleCloseConditionModal}
+-        onImmediateConditionSelect={handleImmediateConditionSelect}
+-      />
++      <div
++        data-testid={copyMode === 'paired-batch' ? 'paired-batch-layout' : undefined}
++        className={copyMode === 'paired-batch' ? 'grid gap-6 lg:grid-cols-2' : 'space-y-6'}
++      >
++        <DefinitionPicker
++          copyMode={copyMode}
++          samplePercentage={formState.samplePercentage}
++          estimatedScenarios={estimatedScenarios}
++          isSpecificConditionTrial={isSpecificConditionTrial}
++          isSubmitting={isSubmitting}
++          selectedConditionRowLevel={selectedConditionRowLevel}
++          selectedConditionColLevel={selectedConditionColLevel}
++          selectedConditionScenarioIds={selectedConditionScenarioIds}
++          conditionSelectionTouched={conditionSelectionTouched}
++          conditionGrid={conditionGrid}
++          loadingConditionGrid={loadingConditionGrid}
++          conditionGridError={conditionGridError}
++          isConditionModalOpen={isConditionModalOpen}
++          modalRowLevel={modalRowLevel}
++          modalColLevel={modalColLevel}
++          onSampleChange={handleSampleChange}
++          onCloseConditionModal={handleCloseConditionModal}
++          onImmediateConditionSelect={handleImmediateConditionSelect}
++        />
+ 
+-      <RunConfigPanel
+-        temperatureInput={formState.temperatureInput}
+-        samplesPerScenario={formState.samplesPerScenario}
+-        estimatedScenarios={estimatedScenarios}
+-        selectedModelCount={formState.selectedModels.length}
+-        totalJobs={totalJobs}
+-        isSubmitting={isSubmitting}
+-        onTemperatureChange={handleTemperatureChange}
+-        onSamplesPerScenarioChange={handleSamplesPerScenarioChange}
+-      />
++        <RunConfigPanel
++          copyMode={copyMode}
++          temperatureInput={formState.temperatureInput}
++          samplesPerScenario={formState.samplesPerScenario}
++          estimatedScenarios={estimatedScenarios}
++          selectedModelCount={formState.selectedModels.length}
++          totalJobs={totalJobs}
++          isSubmitting={isSubmitting}
++          onTemperatureChange={handleTemperatureChange}
++          onSamplesPerScenarioChange={handleSamplesPerScenarioChange}
++        />
++      </div>
+ 
+       {formState.selectedModels.length > 0 && (
+         <CostBreakdown
+diff --git a/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx b/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
+index 08c3e16..4cefb4f 100644
+--- a/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
++++ b/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx
+@@ -63,8 +63,6 @@ export function DefinitionDetail() {
+     limit: 1,
+   });
+ 
+-  const { startRun, loading: isStartingRun } = useRunMutations();
+-
+   // Poll for definition updates while expansion is in progress
+   const isExpanding =
+     definition?.expansionStatus?.status === 'PENDING' ||
+@@ -93,6 +91,7 @@ export function DefinitionDetail() {
+     isUnforking,
+     isDeleting,
+   } = useDefinitionMutations();
++  const { startRun, loading: isStartingRun } = useRunMutations();
+ 
+   // Tag mutations
+   const [, executeAddTag] = useMutation<AddTagToDefinitionResult>(ADD_TAG_TO_DEFINITION_MUTATION);
+@@ -184,7 +183,16 @@ export function DefinitionDetail() {
+     }
+   };
+ 
+-  const handleStartRun = async (input: StartRunInput) => {
++  const handleStartRun = () => {
++    if (!definition) return;
++    if (methodology?.family === 'job-choice') {
++      navigate(`/definitions/${definition.id}/start-paired-batch`);
++      return;
++    }
++    setShowRunForm(true);
++  };
++
++  const handleStartRunSubmit = async (input: StartRunInput) => {
+     setRunError(null);
+     try {
+       const result = await startRun(input);
+@@ -326,7 +334,7 @@ export function DefinitionDetail() {
+         onFork={() => setShowForkDialog(true)}
+         onUnfork={() => setShowUnforkConfirm(true)}
+         onDelete={() => setShowDeleteConfirm(true)}
+-        onStartRun={() => setShowRunForm(true)}
++        onStartRun={handleStartRun}
+         startLabel={startLabel}
+       />
+ 
+@@ -441,12 +449,13 @@ export function DefinitionDetail() {
+         scenarioCount={scenarioCount}
+         error={runError}
+         isSubmitting={isStartingRun}
+-        onSubmit={handleStartRun}
++        onSubmit={handleStartRunSubmit}
+         onClose={() => {
+           setShowRunForm(false);
+           setRunError(null);
+         }}
+       />
++
+     </div>
+   );
+ }
+
+diff --git acloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx bcloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx
+new file mode 100644
+index 0000000..16fc787
+--- /dev/null
++++ bcloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx
+@@ -0,0 +1,178 @@
++/**
++ * Start Paired Batch Page
++ *
++ * Dedicated page for launching a paired batch from a vignette detail page.
++ */
++
++import { useEffect, useMemo, useState } from 'react';
++import { useNavigate, useParams } from 'react-router-dom';
++import { ArrowLeft } from 'lucide-react';
++import { Button } from '../../components/ui/Button';
++import { ErrorMessage } from '../../components/ui/ErrorMessage';
++import { Loading } from '../../components/ui/Loading';
++import { RunForm } from '../../components/runs/RunForm';
++import { useDefinition } from '../../hooks/useDefinition';
++import { useExpandedScenarios } from '../../hooks/useExpandedScenarios';
++import { useRunMutations } from '../../hooks/useRunMutations';
++import type { StartRunInput } from '../../api/operations/runs';
++import { getDefinitionMethodology, getDefinitionMethodologyLabel } from '../../utils/methodology';
++
++function renderFailure(
++  title: string,
++  message: string,
++  backLabel: string,
++  onBack: () => void,
++) {
++  return (
++    <div className="space-y-6">
++      <div className="flex items-center gap-4">
++        <Button variant="ghost" size="sm" onClick={onBack}>
++          <ArrowLeft className="w-4 h-4 mr-1" />
++          {backLabel}
++        </Button>
++      </div>
++      <ErrorMessage message={`${title}: ${message}`} />
++    </div>
++  );
++}
++
++export function StartPairedBatchPage() {
++  const navigate = useNavigate();
++  const { id } = useParams<{ id?: string }>();
++  const definitionId = id ?? '';
++  const [runError, setRunError] = useState<string | null>(null);
++
++  const isRouteInvalid = definitionId === '' || definitionId === 'new';
++
++  const {
++    definition,
++    loading: definitionLoading,
++    error: definitionError,
++  } = useDefinition({
++    id: definitionId,
++    pause: isRouteInvalid,
++  });
++
++  const resolvedContent = definition?.resolvedContent ?? definition?.content;
++  const methodology = useMemo(
++    () => (resolvedContent ? getDefinitionMethodology(resolvedContent) : null),
++    [resolvedContent]
++  );
++  const methodologyLabel = useMemo(
++    () => getDefinitionMethodologyLabel(resolvedContent, definition?.domain?.name ?? null),
++    [definition?.domain?.name, resolvedContent]
++  );
++  const isPairedBatchEligible = methodology?.family === 'job-choice';
++
++  const {
++    totalCount: scenarioCount,
++    loading: scenarioCountLoading,
++    error: scenarioCountError,
++  } = useExpandedScenarios({
++    definitionId,
++    pause: isRouteInvalid || definitionLoading || definition == null || !isPairedBatchEligible,
++    limit: 1,
++  });
++
++  const { startRun, loading: isSubmitting } = useRunMutations();
++
++  useEffect(() => {
++    setRunError(null);
++  }, [definitionId]);
++
++  const handleStartRun = async (input: StartRunInput) => {
++    setRunError(null);
++    try {
++      const result = await startRun(input);
++      navigate(`/runs/${result.run.id}`);
++    } catch (error) {
++      const message = error instanceof Error ? error.message : 'Failed to start paired batch';
++      setRunError(message);
++      throw error;
++    }
++  };
++
++  if (isRouteInvalid) {
++    return renderFailure(
++      'Invalid vignette',
++      'This route needs a valid vignette ID to start a paired batch.',
++      'Back to Vignettes',
++      () => navigate('/definitions')
++    );
++  }
++
++  if (definitionLoading || (definition == null && definitionError == null)) {
++    return <Loading size="lg" text="Loading vignette..." />;
++  }
++
++  if (definitionError) {
++    return renderFailure(
++      'Failed to load vignette',
++      definitionError.message,
++      'Back to Vignettes',
++      () => navigate('/definitions')
++    );
++  }
++
++  if (!definition) {
++    return renderFailure(
++      'Vignette not found',
++      'The selected vignette could not be loaded.',
++      'Back to Vignettes',
++      () => navigate('/definitions')
++    );
++  }
++
++  if (!isPairedBatchEligible) {
++    return renderFailure(
++      'Paired batch unavailable',
++      'This vignette is not configured for paired-batch launches.',
++      'Back to Vignette',
++      () => navigate(`/definitions/${definition.id}`)
++    );
++  }
++
++  return (
++    <div className="space-y-6">
++      <div className="flex items-center gap-4">
++        <Button variant="ghost" size="sm" onClick={() => navigate(`/definitions/${definition.id}`)}>
++          <ArrowLeft className="w-4 h-4 mr-1" />
++          Back to Vignette
++        </Button>
++      </div>
++
++      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
++        <div className="mb-4 flex items-center gap-3">
++          <h1 className="text-xl font-medium text-gray-900">Start Paired Batch</h1>
++          {methodologyLabel && (
++            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
++              {methodologyLabel}
++            </span>
++          )}
++        </div>
++        <p className="mb-6 text-gray-600">
++          Configure and start a paired batch for &quot;{definition.name}&quot;
++        </p>
++        {scenarioCountError && (
++          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
++            {scenarioCountError.message}
++          </div>
++        )}
++        {runError && (
++          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++            {runError}
++          </div>
++        )}
++        <RunForm
++          definitionId={definition.id}
++          definitionContent={resolvedContent}
++          scenarioCount={scenarioCountLoading ? definition.scenarioCount ?? 0 : scenarioCount}
++          copyMode="paired-batch"
++          onSubmit={handleStartRun}
++          onCancel={() => navigate(`/definitions/${definition.id}`)}
++          isSubmitting={isSubmitting}
++        />
++      </div>
++    </div>
++  );
++}
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-20T21:38:15.389181Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.392797Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.405587Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.406573Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.419603Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d0d2f-46b4-7802-8cb0-11d0be6160b8.tmp-1774042695358178000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-20T21:38:15.430304Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.431365Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.455640Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.456526Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.479647Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.480559Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.503522Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.504424Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.528092Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.529089Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.554081Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.555043Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.580045Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.580925Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.605755Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.606740Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.631060Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.632182Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.657248Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-20T21:38:15.658246Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-20T21:38:15.679922Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. [`cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx) now redirects `job-choice` runs to a new paired-batch route, but this patch does not add any route registration for [`cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx). Unless that wiring exists elsewhere, the new start action will navigate to an unmapped URL and fail at runtime.
+
+2. [`cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DefinitionDetail/StartPairedBatchPage.tsx) treats missing `resolvedContent`/`content` as a hard "Paired batch unavailable" state and never waits for the definition’s expansion lifecycle. That is a correctness bug for definitions still transitioning through expansion: the page can reject an otherwise eligible vignette simply because the content has not resolved yet, rather than showing a loading state or rechecking once expansion completes.
+
+## Residual Risks
+- The paired-batch flow still reuses the same `RunForm`/`StartRunInput` path as trial launches. If paired batches need different validation or server-side semantics beyond label changes, this patch does not enforce them.
+- The new `copyMode` only changes visible copy. Any other trial-specific wording or assumptions elsewhere in the form will remain unchanged and can still confuse users of the paired-batch flow.
+tokens used
+14,491

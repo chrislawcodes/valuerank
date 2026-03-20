@@ -108,6 +108,21 @@ describe('RunForm', () => {
     expect(screen.queryByText('50%')).not.toBeInTheDocument();
   });
 
+  it('renders paired batch labels and side-by-side layout in paired-batch mode', () => {
+    render(
+      <RunForm
+        definitionId="def-1"
+        copyMode="paired-batch"
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    expect(screen.getByText('Batch Size')).toBeInTheDocument();
+    expect(screen.getByText('Batches per vignette')).toBeInTheDocument();
+    expect(screen.getByTestId('paired-batch-layout')).toHaveClass('grid');
+    expect(screen.getByTestId('paired-batch-layout')).toHaveClass('lg:grid-cols-2');
+  });
+
   it('defaults to 100% trial size', () => {
     render(
       <RunForm
@@ -373,7 +388,7 @@ describe('RunForm', () => {
 
     expect(screen.getByText('Batch Type')).toBeInTheDocument();
     const pairedModeButton = screen
-      .getByText('Methodology-safe default. Launches both value-order companions when both are available.')
+      .getByText('Methodology-safe default. Launches both order variants together.')
       .closest('button');
     expect(pairedModeButton).not.toBeNull();
     expect(pairedModeButton).toHaveClass('border-teal-500');

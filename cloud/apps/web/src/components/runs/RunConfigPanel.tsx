@@ -1,4 +1,5 @@
 type RunConfigPanelProps = {
+  copyMode?: 'trial' | 'paired-batch';
   temperatureInput: string;
   samplesPerScenario: number;
   estimatedScenarios: number | null;
@@ -17,6 +18,7 @@ const SAMPLES_PER_SCENARIO_OPTIONS = [
 ];
 
 export function RunConfigPanel({
+  copyMode = 'trial',
   temperatureInput,
   samplesPerScenario,
   estimatedScenarios,
@@ -26,6 +28,8 @@ export function RunConfigPanel({
   onTemperatureChange,
   onSamplesPerScenarioChange,
 }: RunConfigPanelProps) {
+  const batchesLabel = copyMode === 'paired-batch' ? 'Batches per vignette' : 'Trials per Vignette';
+
   return (
     <>
       <div>
@@ -50,7 +54,7 @@ export function RunConfigPanel({
       <div className="p-4 bg-gray-50 rounded-lg space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Trials per Vignette
+            {batchesLabel}
           </label>
           <div className="flex flex-wrap gap-2">
             {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
