@@ -64,16 +64,6 @@ vi.mock('../../../src/hooks/useRunConditionGrid', () => ({
   }),
 }));
 
-// Mock the useFinalTrialPlan hook (used by RunForm)
-vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
-  useFinalTrialPlan: vi.fn().mockReturnValue({
-    plan: null,
-    loading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-}));
-
 function createMockRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',

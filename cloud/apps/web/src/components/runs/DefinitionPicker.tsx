@@ -1,13 +1,10 @@
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
-import type { AvailableModel } from '../../api/operations/models';
-import type { FinalTrialPlan } from '../../api/operations/final-trial';
 import type { RunConditionGrid } from '../../api/operations/scenarios';
 
 type DefinitionPickerProps = {
   samplePercentage: number;
   estimatedScenarios: number | null;
-  isFinalTrial: boolean;
   isSpecificConditionTrial: boolean;
   isSubmitting: boolean;
   selectedConditionRowLevel: string | null;
@@ -20,9 +17,6 @@ type DefinitionPickerProps = {
   isConditionModalOpen: boolean;
   modalRowLevel: string | null;
   modalColLevel: string | null;
-  finalTrialPlan: FinalTrialPlan | null;
-  loadingFinalTrialPlan: boolean;
-  models: AvailableModel[];
   onSampleChange: (value: number) => void;
   onCloseConditionModal: () => void;
   onImmediateConditionSelect: (rowLevel: string, colLevel: string, scenarioIds: string[]) => void;
@@ -30,9 +24,7 @@ type DefinitionPickerProps = {
 
 const SAMPLE_OPTIONS = [
   { value: -2, label: 'Trial specific condition' },
-  { value: 10, label: '10%' },
   { value: 100, label: '100%' },
-  { value: -1, label: 'Final Trial' },
 ];
 
 function sortLevels(levels: string[]): string[] {
@@ -55,117 +47,6 @@ function sortLevels(levels: string[]): string[] {
 
     return left.localeCompare(right);
   });
-}
-
-function FinalTrialInfo({
-  finalTrialPlan,
-  loadingFinalTrialPlan,
-  models,
-}: {
-  finalTrialPlan: FinalTrialPlan | null;
-  loadingFinalTrialPlan: boolean;
-  models: AvailableModel[];
-}) {
-  return (
-    <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm text-blue-800">
-      <p className="font-medium mb-1">Adaptive Trial Strategy</p>
-      <ul className="list-disc pl-4 space-y-1 text-xs text-blue-700">
-        <li>Target: 10 trials per condition per AI.</li>
-        <li>More Investigation: Adds 10 trials if score variability is marginal.</li>
-        <li>Stops automatically if scores are stable or too chaotic.</li>
-      </ul>
-      {loadingFinalTrialPlan ? (
-        <p className="mt-2 text-xs italic text-gray-500">Calculating plan...</p>
-      ) : finalTrialPlan ? (
-        <p className="mt-2 font-medium">
-          Plan: {finalTrialPlan.totalJobs} total new jobs required across {finalTrialPlan.models.length} models.
-        </p>
-      ) : null}
-
-      {finalTrialPlan && (
-        <div className="mt-3 pt-2 border-t border-blue-200">
-          {(() => {
-            const investigations = finalTrialPlan.models.flatMap((modelPlan) =>
-              modelPlan.conditions
-                .filter((condition) => condition.status === 'MORE_INVESTIGATION')
-                .map((condition) => ({
-                  modelName: models.find((model) => model.id === modelPlan.modelId)?.displayName || modelPlan.modelId,
-                  key: condition.conditionKey,
-                  sem: condition.currentSEM,
-                  needed: condition.neededSamples,
-                }))
-            );
-
-            const initials = finalTrialPlan.models.flatMap((modelPlan) =>
-              modelPlan.conditions
-                .filter((condition) => condition.status === 'INSUFFICIENT_DATA')
-                .map((condition) => ({
-                  modelName: models.find((model) => model.id === modelPlan.modelId)?.displayName || modelPlan.modelId,
-                  key: condition.conditionKey,
-                  needed: condition.neededSamples,
-                }))
-            );
-
-            const initialCount = initials.reduce((sum, item) => sum + item.needed, 0);
-            const investCount = investigations.reduce((sum, item) => sum + item.needed, 0);
-
-            return (
-              <div className="space-y-3">
-                {initialCount > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-blue-800 mb-1">
-                      Initial Trials ({initialCount} jobs):
-                    </p>
-                    <p className="text-xs text-blue-600 mb-1">
-                      Collecting baseline trial data (N &lt; 10) for {initials.length} conditions.
-                    </p>
-                    <details className="text-xs text-blue-500">
-                      <summary className="cursor-pointer hover:text-blue-700">Show details</summary>
-                      <div className="mt-1 max-h-20 overflow-y-auto pr-1 pl-2 border-l-2 border-blue-100">
-                        <ul className="space-y-1">
-                          {initials.map((item, index) => (
-                            <li key={index} className="break-all">
-                              <span className="font-medium">{item.modelName}</span>
-                              <span className="mx-1">•</span>
-                              {item.key} (+{item.needed})
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </details>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-xs font-semibold text-blue-800 mb-1">
-                    Extended Investigation ({investCount} jobs):
-                  </p>
-                  {investigations.length === 0 ? (
-                    <p className="text-xs text-blue-600 italic">None (No marginal stability cases found)</p>
-                  ) : (
-                    <div className="max-h-40 overflow-y-auto pr-1">
-                      <ul className="space-y-1">
-                        {investigations.map((item, index) => (
-                          <li key={index} className="text-xs text-blue-700 break-all">
-                            <span className="font-medium">{item.modelName}</span>
-                            <span className="mx-1">•</span>
-                            {item.key}
-                            <span className="ml-1 text-blue-500">
-                              (variability: {item.sem?.toFixed(3)}) → +{item.needed}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function ConditionGridModal({
@@ -294,7 +175,6 @@ function ConditionGridModal({
 export function DefinitionPicker({
   samplePercentage,
   estimatedScenarios,
-  isFinalTrial,
   isSpecificConditionTrial,
   isSubmitting,
   selectedConditionRowLevel,
@@ -307,9 +187,6 @@ export function DefinitionPicker({
   isConditionModalOpen,
   modalRowLevel,
   modalColLevel,
-  finalTrialPlan,
-  loadingFinalTrialPlan,
-  models,
   onSampleChange,
   onCloseConditionModal,
   onImmediateConditionSelect,
@@ -338,9 +215,9 @@ export function DefinitionPicker({
           ))}
         </div>
 
-        {!isFinalTrial && estimatedScenarios !== null && (
+        {estimatedScenarios !== null && (
           <p className="mt-2 text-sm text-gray-500">
-            ~{estimatedScenarios} narrative{estimatedScenarios !== 1 ? 's' : ''} will be probed
+            ~{estimatedScenarios} vignette{estimatedScenarios !== 1 ? 's' : ''} will be probed
           </p>
         )}
 
@@ -373,14 +250,6 @@ export function DefinitionPicker({
               </p>
             )}
           </div>
-        )}
-
-        {isFinalTrial && (
-          <FinalTrialInfo
-            finalTrialPlan={finalTrialPlan}
-            loadingFinalTrialPlan={loadingFinalTrialPlan}
-            models={models}
-          />
         )}
       </div>
 

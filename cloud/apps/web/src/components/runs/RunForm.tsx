@@ -7,7 +7,6 @@ import { RunConfigPanel } from './RunConfigPanel';
 import { useRunForm } from './useRunForm';
 import { useAvailableModels } from '../../hooks/useAvailableModels';
 import { useCostEstimate } from '../../hooks/useCostEstimate';
-import { useFinalTrialPlan } from '../../hooks/useFinalTrialPlan';
 import { useRunConditionGrid } from '../../hooks/useRunConditionGrid';
 import type { StartRunInput } from '../../api/operations/runs';
 import { getDefinitionMethodology, getPairedOrientationLabels } from '../../utils/methodology';
@@ -42,7 +41,6 @@ export function RunForm({
   const {
     formState,
     validationError,
-    isFinalTrial,
     isSpecificConditionTrial,
     estimatedScenarios,
     isConditionModalOpen,
@@ -84,15 +82,6 @@ export function RunForm({
     pause: !isSpecificConditionTrial && !isConditionModalOpen,
   });
 
-  const {
-    plan: finalTrialPlan,
-    loading: loadingFinalTrialPlan,
-  } = useFinalTrialPlan({
-    definitionId,
-    models: formState.selectedModels,
-    pause: !isFinalTrial || formState.selectedModels.length === 0,
-  });
-
   const allAvailableModelIds = models.filter((model) => model.isAvailable).map((model) => model.id);
 
   const {
@@ -102,12 +91,10 @@ export function RunForm({
   } = useCostEstimate({
     definitionId,
     models: allAvailableModelIds,
-    samplePercentage: isFinalTrial
-      ? 100
-      : isSpecificConditionTrial && scenarioCount
-        ? Math.max(1, Math.round((selectedConditionScenarioIds.length / scenarioCount) * 100))
-        : formState.samplePercentage,
-    samplesPerScenario: isFinalTrial ? 10 : formState.samplesPerScenario,
+    samplePercentage: isSpecificConditionTrial && scenarioCount
+      ? Math.max(1, Math.round((selectedConditionScenarioIds.length / scenarioCount) * 100))
+      : formState.samplePercentage,
+    samplesPerScenario: formState.samplesPerScenario,
     pause: allAvailableModelIds.length === 0,
   });
 
@@ -127,11 +114,9 @@ export function RunForm({
       })()
     : null;
 
-  const totalJobs = isFinalTrial
-    ? (finalTrialPlan?.totalJobs ?? null)
-    : estimatedScenarios !== null
-      ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
-      : null;
+  const totalJobs = estimatedScenarios !== null
+    ? estimatedScenarios * formState.selectedModels.length * formState.samplesPerScenario
+    : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -218,7 +203,6 @@ export function RunForm({
       <DefinitionPicker
         samplePercentage={formState.samplePercentage}
         estimatedScenarios={estimatedScenarios}
-        isFinalTrial={isFinalTrial}
         isSpecificConditionTrial={isSpecificConditionTrial}
         isSubmitting={isSubmitting}
         selectedConditionRowLevel={selectedConditionRowLevel}
@@ -231,9 +215,6 @@ export function RunForm({
         isConditionModalOpen={isConditionModalOpen}
         modalRowLevel={modalRowLevel}
         modalColLevel={modalColLevel}
-        finalTrialPlan={finalTrialPlan}
-        loadingFinalTrialPlan={loadingFinalTrialPlan}
-        models={models}
         onSampleChange={handleSampleChange}
         onCloseConditionModal={handleCloseConditionModal}
         onImmediateConditionSelect={handleImmediateConditionSelect}
@@ -245,7 +226,6 @@ export function RunForm({
         estimatedScenarios={estimatedScenarios}
         selectedModelCount={formState.selectedModels.length}
         totalJobs={totalJobs}
-        isFinalTrial={isFinalTrial}
         isSubmitting={isSubmitting}
         onTemperatureChange={handleTemperatureChange}
         onSamplesPerScenarioChange={handleSamplesPerScenarioChange}
@@ -293,7 +273,7 @@ export function RunForm({
                 ? formState.launchMode === 'PAIRED_BATCH'
                   ? 'Start Paired Batch'
                   : 'Start Ad Hoc Batch'
-                : `Start ${isFinalTrial ? 'Final ' : ''}Trial`}
+                : 'Start Trial'}
             </>
           )}
         </Button>

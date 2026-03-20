@@ -25,7 +25,6 @@ type UseRunFormOptions = {
 type UseRunFormResult = {
   formState: RunFormState;
   validationError: string | null;
-  isFinalTrial: boolean;
   isSpecificConditionTrial: boolean;
   estimatedScenarios: number | null;
   isConditionModalOpen: boolean;
@@ -56,7 +55,7 @@ export function useRunForm({
 }: UseRunFormOptions): UseRunFormResult {
   const [formState, setFormState] = useState<RunFormState>({
     selectedModels: [],
-    samplePercentage: 10,
+    samplePercentage: 100,
     samplesPerScenario: 1,
     temperatureInput: initialTemperature === null ? '' : String(initialTemperature),
     launchMode: defaultLaunchMode,
@@ -71,7 +70,6 @@ export function useRunForm({
   const [modalRowLevel, setModalRowLevel] = useState<string | null>(null);
   const [modalColLevel, setModalColLevel] = useState<string | null>(null);
 
-  const isFinalTrial = formState.samplePercentage === -1;
   const isSpecificConditionTrial = formState.samplePercentage === SPECIFIC_CONDITION_TRIAL;
 
   useEffect(() => {
@@ -188,11 +186,11 @@ export function useRunForm({
     const input: StartRunInput = {
       definitionId,
       models: formState.selectedModels,
-      samplePercentage: isFinalTrial || isSpecificConditionTrial ? undefined : formState.samplePercentage,
-      samplesPerScenario: isFinalTrial ? undefined : formState.samplesPerScenario,
+      samplePercentage: isSpecificConditionTrial ? undefined : formState.samplePercentage,
+      samplesPerScenario: formState.samplesPerScenario,
       scenarioIds: isSpecificConditionTrial ? selectedConditionScenarioIds : undefined,
       temperature,
-      finalTrial: isFinalTrial,
+      finalTrial: false,
     };
 
     try {
@@ -200,7 +198,7 @@ export function useRunForm({
     } catch {
       // Error handling is done by the parent.
     }
-  }, [definitionId, formState, isFinalTrial, isSpecificConditionTrial, onSubmit, selectedConditionScenarioIds]);
+  }, [definitionId, formState, isSpecificConditionTrial, onSubmit, selectedConditionScenarioIds]);
 
   const handleCloseConditionModal = useCallback(() => {
     setIsConditionModalOpen(false);
@@ -233,7 +231,6 @@ export function useRunForm({
   return {
     formState,
     validationError,
-    isFinalTrial,
     isSpecificConditionTrial,
     estimatedScenarios,
     isConditionModalOpen,
