@@ -1,0 +1,27 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 1,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [],
+    "summary": "Three improvements to the feature workflow system: (1) Codex Orchestrator guide document, (2) CLAUDE.md handoff protocol, (3) runner support for [CHECKPOINT] markers in tasks.md for scoped diff review. Model notes: codex-5.4-mini, gemini-2.5-pro, serial Gemini calls only.",
+    "updated_at": 1773981349
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {}
+}

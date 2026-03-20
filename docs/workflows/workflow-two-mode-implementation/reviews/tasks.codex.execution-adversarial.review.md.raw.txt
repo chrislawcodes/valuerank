@@ -1,0 +1,13 @@
+## Findings
+1. High: Slice C has no concurrency control around `checkpoint_progress` reads and writes. Two overlapping `command_checkpoint` runs can both read the same `index`, both decide to advance, and whichever write lands last wins. That can skip a checkpoint, duplicate verification, or attach the wrong diff base.
+
+2. High: `parse_checkpoint_markers` is specified to hash raw matched lines, but the task does not normalize line endings or exclude code fences/quoted examples. A cosmetic formatting change, CRLF conversion, trailing whitespace, or a literal `[CHECKPOINT]` inside an example can change `markers_sha` or inflate the count and trigger spurious resets.
+
+3. Medium: The Gemini rule only forbids concurrent calls “in the same session.” That leaves an easy bypass through separate sessions, so the requirement does not actually enforce global serialization if that is the intent.
+
+4. Medium: The handoff steps require an `Open decisions: <list>` payload, but the artifact never defines a source of truth or validation for that list against `workflow.json`. In practice that makes stale or incomplete handoff notes easy to produce, which weakens the transient-state handoff the spec is trying to guarantee.
+
+## Residual Risks
+- The verbatim escalation-protocol copy in `CODEX-ORCHESTRATOR.md` will drift as soon as `SKILL.md` changes, unless a sync rule is added later.
+- Hard-coded model identifiers (`codex-5.4-mini`, `gemini-2.5-pro`) still assume those names are always available in the execution environment.
+- The “all 30 existing + new tests” assertion is brittle if unrelated tests are added or removed before implementation lands.

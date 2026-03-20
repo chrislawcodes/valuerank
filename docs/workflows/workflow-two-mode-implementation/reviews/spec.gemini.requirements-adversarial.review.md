@@ -1,0 +1,52 @@
+---
+reviewer: "gemini"
+lens: "requirements-adversarial"
+stage: "spec"
+artifact_path: "docs/workflows/workflow-two-mode-implementation/spec.md"
+artifact_sha256: "6a9162c44c522b4ba324a736f6fa0cbea04fa1ce681afae46f22ef5b043f0e15"
+repo_root: "."
+git_head_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
+git_base_ref: "origin/main"
+git_base_sha: "c165a36bfd702090296714c081e0deed98c02892"
+generation_method: "gemini-cli"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/workflows/workflow-two-mode-implementation/reviews/spec.gemini.requirements-adversarial.review.md.json"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec requirements-adversarial
+
+## Findings
+
+1.  **High Severity: `[CHECKPOINT]` Logic is Brittle Against Git History Rewrites.** The P1 story assumes a perfectly linear Git history. The `last_diff_head_sha` will become invalid or point to an unrelated commit if a developer uses `git commit --amend` or `git rebase`. This would cause `git diff` to fail or, worse, produce a large, nonsensical diff against an unrelated point in history. The fallback to the branch base is a safety net, but it silently discards the incremental benefit of the checkpoint feature in these common scenarios.
+
+2.  **Medium Severity: Handoff Protocol Lacks Error Handling.** The handoff protocols for both Claude and Codex rely on writing state to `workflow.json` via the `block` command. The spec does not define what should happen if this file write operation fails (e.g., due to file permissions, a lock, or disk space issues). A failed write would result in a "silent" handoff failure, where one agent stops but the next agent has no state to resume from, breaking the workflow. The protocol must include error handling and a defined recovery path for this failure mode.
+
+3.  **Medium Severity: Duplicated Escalation Protocol Creates Risk of Staleness.** The Codex Orchestrator Guide is required to *copy* the escalation protocol from `SKILL.md`. This creates two sources of truth. If `SKILL.md` is updated, the guide will become stale and incorrect, leading to inconsistent agent behavior during escalations. The guide should *reference* the authoritative source, not duplicate it.
+
+4.  **Low Severity: Agent Guidance Contains Ambiguous Triggers.** The Codex guide's instruction for "when to call Gemini" includes "large reads," which is subjective and not machine-measurable. This ambiguity could lead to inconsistent behavior, with the agent failing to use the correct model for a task. A more concrete heuristic (e.g., file size threshold, line count) should be defined.
+
+5.  **Low Severity: "Successful" Checkpoint Completion is Undefined.** The spec states that after a `diff` checkpoint "completes successfully," the index is advanced. It is unclear if "successfully" means the command ran without error, or if it requires an explicit user approval step (e.g., "I have reviewed this diff"). If it's the former, the index could advance automatically before a human or agent has actually validated the changes, defeating the purpose of a review gate.
+
+## Residual Risks
+
+1.  **Subjective Handoff Triggers:** The trigger for the Claude-to-Codex handoff is defined as "human-initiated or milestone-based," which is an improvement over token counting. However, "natural milestones" and "when context feels long" remain subjective for the agent. This could lead to inconsistent or premature handoffs, reducing workflow efficiency. The reliability of this process depends heavily on the Claude model's judgment in interpreting these qualitative guidelines.
+
+2.  **State Desynchronization via Manual Intervention:** The entire checkpoint system is predicated on the runner being the sole mediator of Git operations and state changes. If a user manually runs `git commit` or edits `tasks.md` without using the workflow runner, the `last_diff_head_sha` and `marker_count` will become out of sync with reality. While the spec includes some guardrails (marker count mismatch), it cannot prevent all forms of state desynchronization, which could lead to confusing diffs and undermine the feature's reliability.
+
+3.  **Instructional Adherence:** The workflow's success depends on LLM agents flawlessly adhering to complex instructional documents (`CLAUDE.md`, `CODEX-ORCHESTRATOR.md`). There is an inherent risk that an agent may misinterpret, hallucinate, or fail to follow a step in the protocol, especially in complex or unexpected situations. This could lead to unpredictable errors that are difficult to debug because they stem from a model's behavior rather than deterministic code.
+
+## Token Stats
+
+- total_input=2351
+- total_output=850
+- total_tokens=16519
+- `gemini-2.5-pro`: input=2351, output=850, total=16519
+
+## Resolution
+- status: open
+- note:
