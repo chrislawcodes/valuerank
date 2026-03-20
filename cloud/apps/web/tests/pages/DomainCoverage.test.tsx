@@ -52,20 +52,20 @@ const coverageByDomain = {
         aggregateRunId: null,
       },
       {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Achievement',
-        batchCount: 3,
-        definitionId: 'def-1',
-        definitionName: 'A vs B',
-        aggregateRunId: 'run-1',
-      },
-      {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 3,
         definitionId: 'def-1',
         definitionName: 'A vs B',
         aggregateRunId: 'run-1',
+      },
+      {
+        valueA: 'Self_Direction_Action',
+        valueB: 'Achievement',
+        batchCount: 1,
+        definitionId: 'def-2',
+        definitionName: 'B vs A',
+        aggregateRunId: 'run-2',
       },
       {
         valueA: 'Achievement',
@@ -94,20 +94,20 @@ const coverageByDomain = {
         aggregateRunId: null,
       },
       {
-        valueA: 'Self_Direction_Action',
-        valueB: 'Achievement',
-        batchCount: 4,
-        definitionId: 'def-2',
-        definitionName: 'B vs A',
-        aggregateRunId: 'run-2',
-      },
-      {
         valueA: 'Achievement',
         valueB: 'Self_Direction_Action',
         batchCount: 4,
         definitionId: 'def-2',
         definitionName: 'B vs A',
         aggregateRunId: 'run-2',
+      },
+      {
+        valueA: 'Self_Direction_Action',
+        valueB: 'Achievement',
+        batchCount: 2,
+        definitionId: 'def-3',
+        definitionName: 'A vs B',
+        aggregateRunId: 'run-3',
       },
       {
         valueA: 'Achievement',
@@ -219,7 +219,7 @@ describe('DomainCoverage Page', () => {
     });
 
     await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Trial Signature' }), 'vnewt0.7');
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Batch Signature' }), 'vnewt0.7');
     });
 
     await waitFor(() => {
@@ -303,7 +303,7 @@ describe('DomainCoverage Page', () => {
     });
 
     await act(async () => {
-      await user.selectOptions(screen.getByRole('combobox', { name: 'Trial Signature' }), 'vnewt0.7');
+      await user.selectOptions(screen.getByRole('combobox', { name: 'Batch Signature' }), 'vnewt0.7');
     });
 
     await waitFor(() => {
@@ -332,12 +332,12 @@ describe('DomainCoverage Page', () => {
 
     await act(async () => {
       await user.click(
-        screen.getByRole('button', { name: /self-direction versus achievement: 3 domain trials/i })
+        screen.getByRole('button', { name: /self-direction versus achievement.*1 batch/i })
       );
     });
 
     const vignetteAnalysisLink = await screen.findByRole('link', { name: /view vignette analysis/i });
-    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-1');
+    expect(vignetteAnalysisLink).toHaveAttribute('href', '/analysis/run-2');
     expect(screen.queryByRole('link', { name: /view domain analysis/i })).not.toBeInTheDocument();
   });
 });

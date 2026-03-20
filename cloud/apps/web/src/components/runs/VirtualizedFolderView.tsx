@@ -139,7 +139,7 @@ export function VirtualizedFolderView({
       items.push({
         type: 'folder-header',
         id: '__aggregate__',
-        tag: { id: '__aggregate__', name: 'Aggregated Trials' }, // Mock tag for display
+        tag: { id: '__aggregate__', name: 'Aggregate Runs' }, // Mock tag for display
         runCount: aggregateRuns.length,
       });
 
@@ -247,6 +247,8 @@ export function VirtualizedFolderView({
     setExpandedFolders(new Set());
   }, []);
 
+  const runLabel = runs.length === 1 ? 'run' : 'runs';
+
   if (tagGroups.length === 0 && untaggedRuns.length === 0 && aggregateRuns.length === 0) {
     return null;
   }
@@ -259,9 +261,9 @@ export function VirtualizedFolderView({
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-gray-500">
           {runs.length}
-          {totalCount !== null && runs.length < totalCount && <> of {totalCount}</>} trials
+          {totalCount !== null && runs.length < totalCount && <> of {totalCount}</>} {runLabel}
           {' · '}
-          {tagGroups.length + (untaggedRuns.length > 0 ? 1 : 0)} folders
+          {tagGroups.length + (untaggedRuns.length > 0 ? 1 : 0) + (aggregateRuns.length > 0 ? 1 : 0)} folders
         </div>
 
         {/* Expand/Collapse all controls */}
@@ -382,14 +384,14 @@ export function VirtualizedFolderView({
         {loadingMore && (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="w-5 h-5 animate-spin text-teal-600 mr-2" />
-            <span className="text-sm text-gray-500">Loading more trials...</span>
+            <span className="text-sm text-gray-500">Loading more runs...</span>
           </div>
         )}
 
         {/* End of list indicator */}
         {!hasNextPage && runs.length > 0 && (
           <div className="text-center py-4 text-sm text-gray-400">
-            All trials loaded
+            All runs loaded
           </div>
         )}
       </div>

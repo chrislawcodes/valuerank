@@ -113,29 +113,16 @@ Avoid confusion:
 
 ### `Run`
 
-A run is one persisted execution record for one vignette.
+A run is a saved record of a model evaluation or launch. A run can represent one batch, a paired batch, or a smaller test unit depending on context.
 
 Example:
 
-- “This run sends one vignette to GPT-4o at temperature 0.”
+- “This run records one model evaluation.”
 
 Avoid confusion:
 
-- a run is not the same thing as a domain-wide launch action
-- one domain-wide launch can create many runs
-
-### `Domain Evaluation`
-
-A domain evaluation is the user-facing domain-wide launch action that starts a coordinated set of vignette runs for one domain.
-
-Example:
-
-- “This domain evaluation starts the full Professional domain against the default model set.”
-
-Avoid confusion:
-
-- use `domain evaluation` for the domain-wide action and summary surface
-- use `run` for one vignette-scoped execution record
+- a run is a record, not the same thing as the thing being counted
+- a run can cover different sized units depending on context
 
 ### `Run Category`
 
@@ -183,6 +170,19 @@ Avoid confusion:
 
 - a batch contains many trials
 - use `batch` for the full pass, not as another word for trial
+
+### `Paired Batch`
+
+A paired batch is a set of two batches that use two vignettes in reverse order.
+
+Example:
+
+- “This paired batch contains one A-first batch and one B-first batch.”
+
+Avoid confusion:
+
+- a paired batch is two batches together, not one batch
+- use `paired batch` when you mean the matched set, not either side by itself
 
 ### `Transcript`
 

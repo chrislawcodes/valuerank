@@ -24,7 +24,7 @@ type MenuItem = MenuLinkItem | MenuGroupItem;
 
 const vignettesMenuItems: MenuItem[] = [
   { name: 'Vignette Library', path: '/definitions' },
-  { name: 'Trials', path: '/runs' },
+  { name: 'Runs', path: '/runs' },
   { name: 'Analysis', path: '/analysis' },
 ];
 

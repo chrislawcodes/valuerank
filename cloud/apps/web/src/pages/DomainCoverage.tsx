@@ -31,7 +31,6 @@ function CoverageCell({
   valueB,
   batchCount,
   definitionId,
-  definitionName,
   aggregateRunId,
   domainId,
 }: {
@@ -39,7 +38,6 @@ function CoverageCell({
   valueB: string;
   batchCount: number;
   definitionId: string | null;
-  definitionName: string | null;
   aggregateRunId: string | null;
   domainId: string;
 }) {
@@ -47,6 +45,9 @@ function CoverageCell({
   const isDiagonal = valueA === valueB;
   const hasVignette = definitionId !== null;
   const visibleLabel = isDiagonal || !hasVignette ? '—' : batchCount.toLocaleString();
+  const xLabel = VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB;
+  const yLabel = VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA;
+  const batchLabel = batchCount === 1 ? 'batch' : 'batches';
 
   // Base styling depending on cell state
   let bgColorClass = 'bg-gray-50'; // Diagonal or empty fallback
@@ -74,8 +75,8 @@ function CoverageCell({
             isDiagonal
               ? 'Not applicable'
               : !hasVignette
-                ? `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: no vignette`
-                : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} versus ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}: ${batchCount} domain trials`
+                ? `${xLabel} versus ${yLabel}: no vignette`
+                : `${xLabel} versus ${yLabel}: ${batchCount} ${batchLabel}`
           }
           className={cn(
             'w-full h-full min-h-[48px] p-2 flex flex-col items-center justify-center text-sm font-medium border border-gray-100 rounded-none focus:ring-0 focus:ring-offset-0',
@@ -85,11 +86,6 @@ function CoverageCell({
             hasVignette && batchCount < 3 && 'text-rose-900',
             hasVignette && batchCount >= 3 && batchCount < 10 && 'text-amber-900'
           )}
-          title={
-            isDiagonal
-              ? undefined
-              : `${VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA} vs ${VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}`
-          }
         >
           {visibleLabel}
         </button>
@@ -101,20 +97,6 @@ function CoverageCell({
           sideOffset={5}
         >
           <div className="p-3 border-b border-gray-100 bg-gray-50/50 rounded-t-md">
-            <h4 className="text-xs font-medium text-gray-500 mb-1">
-              {VALUE_LABELS[valueA as keyof typeof VALUE_LABELS] ?? valueA}
-              <span className="mx-1.5 text-gray-300">vs</span>
-              {VALUE_LABELS[valueB as keyof typeof VALUE_LABELS] ?? valueB}
-            </h4>
-            {hasVignette ? (
-              <p className="text-sm font-medium text-gray-900 leading-tight">
-                {definitionName ?? 'Unnamed Vignette'}
-              </p>
-            ) : (
-              <p className="text-sm font-medium text-gray-500 italic">
-                No vignette tests this pair
-              </p>
-            )}
             {hasVignette ? (
               <div className="mt-2 text-xs text-gray-600 flex items-center">
                 <span
@@ -127,10 +109,10 @@ function CoverageCell({
                         : 'bg-emerald-500'
                   )}
                 />
-                {batchCount} domain trials run
+                {batchCount} {batchLabel}
               </div>
             ) : (
-              <div className="mt-2 text-xs text-gray-500">No vignette for this value pair</div>
+              <div className="mt-2 text-xs text-gray-500">No batch for this value pair</div>
             )}
           </div>
 
@@ -157,7 +139,7 @@ function CoverageCell({
               >
                 <span className="flex items-center">
                   <PlayIcon className="w-4 h-4 mr-2 text-teal-600" />
-                  Add Trials for Vignette
+                  Add Batch for Vignette
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </Link>
@@ -169,7 +151,7 @@ function CoverageCell({
   );
 }
 
-// Just a tiny helper icon for Add Trials to keep imports lean
+// Just a tiny helper icon for Add Batch to keep imports lean
 function PlayIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -475,7 +457,7 @@ export function DomainCoverage() {
           <div>
             <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">Value Coverage</h1>
             <p className="mt-1 text-sm text-gray-600">
-              Visualize trial density across the 10 canonical Schwartz value pairs for this domain.
+              Visualize batch density across the 10 canonical Schwartz value pairs for this domain.
             </p>
           </div>
           {canonicalValues.length > 0 && (
@@ -524,9 +506,9 @@ export function DomainCoverage() {
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center pt-3 border-t border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Trial Signature</h2>
+            <h2 className="text-sm font-semibold text-gray-900 min-w-[140px]">Batch Signature</h2>
             <select
-              aria-label="Trial Signature"
+              aria-label="Batch Signature"
               className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 flex-1 max-w-sm"
               value={selectedSignature}
               onChange={(event) => {
@@ -550,7 +532,7 @@ export function DomainCoverage() {
               <div className="min-w-[140px]">
                 <h2 className="text-sm font-semibold text-gray-900">Model Filters</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Filter trial counts by model inclusion.
+                  Filter batch counts by model inclusion.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 flex-1">
@@ -668,8 +650,7 @@ export function DomainCoverage() {
 
                     {/* Data cells */}
                     {displayValues.map((colVal) => {
-                      // Lookup cell prioritizing alphabetical sorting to match backend key format
-                      const keyA = [rowVal, colVal].sort().join('::');
+                      const keyA = `${colVal}::${rowVal}`;
                       const cell = cellLookup.get(keyA);
 
                       return (
@@ -683,7 +664,6 @@ export function DomainCoverage() {
                             domainId={selectedDomainId}
                             batchCount={cell?.batchCount ?? 0}
                             definitionId={cell?.definitionId ?? null}
-                            definitionName={cell?.definitionName ?? null}
                             aggregateRunId={cell?.aggregateRunId ?? null}
                           />
                         </td>
@@ -706,7 +686,7 @@ export function DomainCoverage() {
           <p>
             Cells are <span className="font-medium text-rose-700">red (&lt;3)</span>,{' '}
             <span className="font-medium text-amber-700">yellow (3-9)</span>, or{' '}
-            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add trials.
+            <span className="font-medium text-emerald-700">green (10+)</span>. Click any cell to add a batch.
           </p>
           <p>Use the copy button above to place this table in docs or slides.</p>
           <div className="flex items-center gap-2">

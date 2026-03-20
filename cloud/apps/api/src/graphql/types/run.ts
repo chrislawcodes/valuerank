@@ -31,6 +31,10 @@ type RunConfig = {
   priority?: string;
   definitionSnapshot?: unknown;
   estimatedCosts?: CostEstimateShape;
+  jobChoiceBatchGroupId?: string | null;
+  jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  isAggregate?: boolean;
+  sourceRunIds?: string[];
 };
 
 type AggregateRunConfig = RunConfig & {
@@ -178,7 +182,7 @@ function matchesAggregateJob(jobData: unknown, runDefinitionId: string, runMeta:
 }
 
 builder.objectType(RunRef, {
-  description: 'A run execution against a definition',
+  description: 'A saved record of a model evaluation or launch',
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name', {
@@ -244,6 +248,23 @@ builder.objectType(RunRef, {
       description: 'Workflow category assigned to the run',
     }),
     config: t.expose('config', { type: 'JSON' }),
+    batchCount: t.int({
+      description: 'Number of batches represented by this saved record',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return config?.isAggregate === true ? 0 : 1;
+      },
+    }),
+    pairedBatchGroupId: t.string({
+      nullable: true,
+      description: 'Shared identifier for the paired batch that this run belongs to',
+      resolve: (run) => {
+        const config = run.config as RunConfig | null;
+        return typeof config?.jobChoiceBatchGroupId === 'string' && config.jobChoiceBatchGroupId.trim() !== ''
+          ? config.jobChoiceBatchGroupId
+          : null;
+      },
+    }),
     definitionSnapshot: t.field({
       type: 'JSON',
       nullable: true,

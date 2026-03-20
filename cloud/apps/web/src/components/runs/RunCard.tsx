@@ -78,6 +78,9 @@ export function RunCard({ run, onClick }: RunCardProps) {
   const statusConfig = STATUS_CONFIG[run.status];
   const StatusIcon = statusConfig.icon;
   const progress = run.runProgress;
+  const batchCount = run.batchCount ?? 0;
+  const isAggregateRun = run.config?.isAggregate === true;
+  const batchLabel = batchCount === 1 ? 'Batch' : 'Batches';
   const trialSignature = formatTrialSignature(
     run.definitionVersion ?? run.definition?.version ?? null,
     run.config?.temperature ?? null
@@ -106,7 +109,12 @@ export function RunCard({ run, onClick }: RunCardProps) {
               <Badge variant={statusConfig.badgeVariant} size="count">
                 {getStatusLabel(run)}
               </Badge>
-              {run.tags?.some(t => t.name === 'Aggregate') && (
+              {run.pairedBatchGroupId && (
+                <Badge variant="info" size="count">
+                  Paired batch
+                </Badge>
+              )}
+              {isAggregateRun && (
                 <Badge variant="info" size="count">
                   Aggregate
                 </Badge>
@@ -132,9 +140,17 @@ export function RunCard({ run, onClick }: RunCardProps) {
             </div>
           </div>
 
+          {/* Batches */}
+          <div className="text-right">
+            <div className="text-gray-500 text-xs">{batchLabel}</div>
+            <div className="font-medium text-gray-900">
+              {batchCount}
+            </div>
+          </div>
+
           {/* Progress */}
           {/* Progress or Transcript Count */}
-          {run.tags?.some(t => t.name === 'Aggregate') ? (
+          {isAggregateRun ? (
             <div className="text-right">
               <div className="text-gray-500 text-xs">Transcripts</div>
               <div className="font-medium text-gray-900">
