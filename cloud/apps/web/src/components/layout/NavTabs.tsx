@@ -1,6 +1,6 @@
 import { type FocusEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Archive, FolderTree, GitCompare, Home, Settings, ShieldCheck, ChevronDown } from 'lucide-react';
+import { Archive, ChevronDown, ChevronRight, FolderTree, GitCompare, Home, Library, Settings, ShieldCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useClickOutside } from '../../hooks/useClickOutside';
 
@@ -22,12 +22,16 @@ type MenuGroupItem = {
 
 type MenuItem = MenuLinkItem | MenuGroupItem;
 
+const vignettesMenuItems: MenuItem[] = [
+  { name: 'Vignette Library', path: '/definitions' },
+  { name: 'Trials', path: '/runs' },
+  { name: 'Analysis', path: '/analysis' },
+];
+
 const domainMenuItems: MenuItem[] = [
   { name: 'Overview', path: '/domains' },
-  { name: 'Vignettes', path: '/definitions' },
   { name: 'Domain Analysis', path: '/domains/analysis' },
   { name: 'Coverage', path: '/domains/coverage' },
-  { name: 'Trials', path: '/runs' },
   {
     name: 'Domain Setup',
     children: [
@@ -58,10 +62,11 @@ function isMenuGroupItem(item: MenuItem): item is MenuGroupItem {
 
 export function NavTabs() {
   const location = useLocation();
+  const [isVignettesMenuOpen, setIsVignettesMenuOpen] = useState(false);
   const [isDomainsMenuOpen, setIsDomainsMenuOpen] = useState(false);
   const [isValidationMenuOpen, setIsValidationMenuOpen] = useState(false);
   const [isArchiveMenuOpen, setIsArchiveMenuOpen] = useState(false);
-  const [openDomainSubmenu, setOpenDomainSubmenu] = useState<string | null>(null);
+  const vignettesMenuRef = useRef<HTMLDivElement>(null);
   const domainMenuRef = useRef<HTMLDivElement>(null);
   const validationMenuRef = useRef<HTMLDivElement>(null);
   const archiveMenuRef = useRef<HTMLDivElement>(null);
@@ -81,18 +86,21 @@ export function NavTabs() {
   ), [isTabActive]);
 
   const isHomeActive = location.pathname === '/';
+  const isVignettesActive = vignettesMenuItems.some((item) => isMenuItemActive(item));
   const isDomainsActive = domainMenuItems.some((item) => isMenuItemActive(item));
   const isValidationActive = validationMenuItems.some((item) => isTabActive(item.path));
   const isArchiveActive = archiveMenuItems.some((item) => isTabActive(item.path, item.aliases));
 
   useEffect(() => {
-    const activeDomainSubmenu = domainMenuItems.find((item) => isMenuGroupItem(item) && isMenuItemActive(item));
+    setIsVignettesMenuOpen(false);
     setIsDomainsMenuOpen(false);
     setIsValidationMenuOpen(false);
     setIsArchiveMenuOpen(false);
-    setOpenDomainSubmenu(activeDomainSubmenu && isMenuGroupItem(activeDomainSubmenu) ? activeDomainSubmenu.name : null);
   }, [location.pathname, isMenuItemActive]);
 
+  useClickOutside(vignettesMenuRef, () => {
+    if (isVignettesMenuOpen) setIsVignettesMenuOpen(false);
+  }, isVignettesMenuOpen);
   useClickOutside(domainMenuRef, () => {
     if (isDomainsMenuOpen) setIsDomainsMenuOpen(false);
   }, isDomainsMenuOpen);
@@ -164,36 +172,30 @@ export function NavTabs() {
           <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
             {items.map((item) => {
               if (isMenuGroupItem(item)) {
-                const isSubmenuOpen = openDomainSubmenu === item.name || isMenuItemActive(item);
                 return (
-                  <div key={item.name} className="border-t border-gray-800/80 mt-1 pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        setOpenDomainSubmenu((prev) => (prev === item.name ? null : item.name));
-                      }}
-                      className={`flex w-full h-auto min-h-0 items-center justify-between rounded-none px-3 py-2 font-normal text-sm ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300 hover:bg-teal-600/20 hover:text-teal-300' : 'text-white/80 hover:bg-gray-800 hover:text-white'}`}
+                  <div key={item.name} className="relative border-t border-gray-800/80 mt-1 pt-1 group/submenu">
+                    <div
+                      className={`flex w-full items-center justify-between px-3 py-2 text-sm cursor-default select-none ${isMenuItemActive(item) ? 'bg-teal-600/20 text-teal-300' : 'text-white/80 group-hover/submenu:bg-gray-800 group-hover/submenu:text-white'}`}
                     >
                       <span>{item.name}</span>
-                      <ChevronDown className={`w-4 h-4 transition-transform ${isSubmenuOpen ? 'rotate-180' : ''}`} />
-                    </Button>
-                    {isSubmenuOpen ? (
-                      <div className="pb-1">
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                    <div className="absolute left-full top-0 z-50 min-w-[180px] pl-1 opacity-0 invisible pointer-events-none group-hover/submenu:opacity-100 group-hover/submenu:visible group-hover/submenu:pointer-events-auto transition-all duration-150">
+                      <div className="rounded-md border border-gray-700 bg-[#1A1A1A] shadow-lg py-1">
                         {item.children.map((child) => {
                           const childActive = isTabActive(child.path, child.aliases ?? []);
                           return (
                             <NavLink
                               key={child.path}
                               to={child.path}
-                              className={`block px-6 py-2 text-sm ${childActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/70 hover:bg-gray-800 hover:text-white'}`}
+                              className={`block px-3 py-2 text-sm ${childActive ? 'bg-teal-600/20 text-teal-300' : 'text-white/70 hover:bg-gray-800 hover:text-white'}`}
                             >
                               {child.name}
                             </NavLink>
                           );
                         })}
                       </div>
-                    ) : null}
+                    </div>
                   </div>
                 );
               }
@@ -231,6 +233,7 @@ export function NavTabs() {
             <span className="hidden sm:inline">Home</span>
           </NavLink>
 
+          {renderMenu(vignettesMenuRef, 'Vignettes', '/definitions', Library, vignettesMenuItems, isVignettesActive, isVignettesMenuOpen, setIsVignettesMenuOpen)}
           {renderMenu(domainMenuRef, 'Domains', '/domains', FolderTree, domainMenuItems, isDomainsActive, isDomainsMenuOpen, setIsDomainsMenuOpen)}
           {renderMenu(validationMenuRef, 'Validation', '/validation', ShieldCheck, validationMenuItems, isValidationActive, isValidationMenuOpen, setIsValidationMenuOpen)}
           {renderMenu(archiveMenuRef, 'Archive', '/archive', Archive, archiveMenuItems, isArchiveActive, isArchiveMenuOpen, setIsArchiveMenuOpen)}

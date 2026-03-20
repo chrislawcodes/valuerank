@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Menu, Settings, ShieldCheck, X } from 'lucide-react';
+import { type LucideIcon, Archive, BarChart2, FileText, FolderTree, GitCompare, Home, Library, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -15,14 +15,22 @@ type NavItem = {
 const navItems: NavItem[] = [
   { name: 'Home', path: '/', icon: Home },
   {
+    name: 'Vignettes',
+    path: '/definitions',
+    icon: Library,
+    children: [
+      { name: 'Vignette Library', path: '/definitions', icon: Library },
+      { name: 'Trials', path: '/runs', icon: BarChart2 },
+      { name: 'Analysis', path: '/analysis', icon: BarChart2 },
+    ],
+  },
+  {
     name: 'Domains',
     path: '/domains',
     icon: FolderTree,
     children: [
-      { name: 'Vignettes', path: '/definitions', icon: FileText },
       { name: 'Domain Analysis', path: '/domains/analysis', icon: BarChart2 },
       { name: 'Coverage', path: '/domains/coverage', icon: BarChart2 },
-      { name: 'Trials', path: '/runs', icon: BarChart2 },
       {
         name: 'Domain Setup',
         icon: FileText,
