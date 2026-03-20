@@ -4,7 +4,6 @@ type RunConfigPanelProps = {
   estimatedScenarios: number | null;
   selectedModelCount: number;
   totalJobs: number | null;
-  isFinalTrial: boolean;
   isSubmitting: boolean;
   onTemperatureChange: (value: string) => void;
   onSamplesPerScenarioChange: (value: number) => void;
@@ -23,7 +22,6 @@ export function RunConfigPanel({
   estimatedScenarios,
   selectedModelCount,
   totalJobs,
-  isFinalTrial,
   isSubmitting,
   onTemperatureChange,
   onSamplesPerScenarioChange,
@@ -49,37 +47,35 @@ export function RunConfigPanel({
         <p className="mt-2 text-xs text-gray-500">Leave blank to use provider default.</p>
       </div>
 
-      {!isFinalTrial && (
-        <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Trials per Narrative
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
-                // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onSamplesPerScenarioChange(option.value)}
-                  className={`px-3 py-2 text-sm rounded-md border transition-colors ${samplesPerScenario === option.value
-                    ? 'border-teal-500 bg-teal-50 text-teal-700'
-                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  disabled={isSubmitting}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {samplesPerScenario > 1 && totalJobs !== null && (
-              <p className="mt-2 text-sm text-gray-500">
-                {totalJobs} total probes ({estimatedScenarios} narratives × {selectedModelCount} models × {samplesPerScenario} trials)
-              </p>
-            )}
+      <div className="p-4 bg-gray-50 rounded-lg space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Trials per Vignette
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {SAMPLES_PER_SCENARIO_OPTIONS.map((option) => (
+              // eslint-disable-next-line react/forbid-elements -- Toggle chip requires custom styling
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onSamplesPerScenarioChange(option.value)}
+                className={`px-3 py-2 text-sm rounded-md border transition-colors ${samplesPerScenario === option.value
+                  ? 'border-teal-500 bg-teal-50 text-teal-700'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isSubmitting}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+          {samplesPerScenario > 1 && totalJobs !== null && (
+            <p className="mt-2 text-sm text-gray-500">
+              {totalJobs} total probes ({estimatedScenarios} vignettes × {selectedModelCount} models × {samplesPerScenario} trials)
+            </p>
+          )}
         </div>
-      )}
+      </div>
     </>
   );
 }

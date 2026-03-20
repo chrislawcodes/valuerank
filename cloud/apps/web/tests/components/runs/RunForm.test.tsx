@@ -25,16 +25,6 @@ vi.mock('../../../src/hooks/useCostEstimate', () => ({
   }),
 }));
 
-// Mock the useFinalTrialPlan hook
-vi.mock('../../../src/hooks/useFinalTrialPlan', () => ({
-  useFinalTrialPlan: vi.fn().mockReturnValue({
-    plan: null,
-    loading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-}));
-
 vi.mock('../../../src/hooks/useRunConditionGrid', () => ({
   useRunConditionGrid: vi.fn(),
 }));
@@ -111,14 +101,14 @@ describe('RunForm', () => {
 
     expect(screen.getByText('Trial Size')).toBeInTheDocument();
     expect(screen.getByText('Trial specific condition')).toBeInTheDocument();
-    expect(screen.getByText('10%')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '100%' })).toBeInTheDocument();
+    expect(screen.queryByText('10%')).not.toBeInTheDocument();
     expect(screen.queryByText('1% (test trial)')).not.toBeInTheDocument();
     expect(screen.queryByText('25%')).not.toBeInTheDocument();
     expect(screen.queryByText('50%')).not.toBeInTheDocument();
   });
 
-  it('defaults to 10% trial size', () => {
+  it('defaults to 100% trial size', () => {
     render(
       <RunForm
         definitionId="def-1"
@@ -126,7 +116,7 @@ describe('RunForm', () => {
       />
     );
 
-    const defaultButton = screen.getByText('10%');
+    const defaultButton = screen.getByText('100%');
     expect(defaultButton).toHaveClass('border-teal-500');
   });
 
@@ -139,8 +129,7 @@ describe('RunForm', () => {
       />
     );
 
-    // With 10% default, should show ~10 narratives
-    expect(screen.getByText('~10 narratives will be probed')).toBeInTheDocument();
+    expect(screen.getByText('~100 vignettes will be probed')).toBeInTheDocument();
   });
 
   it('updates estimated count when trial size changes', async () => {
@@ -154,10 +143,10 @@ describe('RunForm', () => {
       />
     );
 
-    // Click 100% option
-    await user.click(screen.getByText('100%'));
+    await user.click(screen.getByText('Trial specific condition'));
+    await user.click(screen.getByRole('button', { name: 'n = 7' }));
 
-    expect(screen.getByText('~100 narratives will be probed')).toBeInTheDocument();
+    expect(screen.getByText('~1 vignette will be probed')).toBeInTheDocument();
   });
 
   it('disables submit button when no models are selected', () => {
@@ -192,16 +181,13 @@ describe('RunForm', () => {
     await user.click(screen.getByText('OpenAI'));
     await user.click(screen.getByText('GPT-4'));
 
-    // Click 10% trial size
-    await user.click(screen.getByText('10%'));
-
     // Submit
     await user.click(screen.getByText('Start Trial'));
 
     expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4'],
-      samplePercentage: 10,
+      samplePercentage: 100,
       samplesPerScenario: 1,
       finalTrial: false,
       launchMode: 'STANDARD',
@@ -256,7 +242,7 @@ describe('RunForm', () => {
     expect(screen.getByText('Starting Trial...')).toBeInTheDocument();
 
     // Sample buttons should be disabled
-    const sampleButton = screen.getByText('10%');
+    const sampleButton = screen.getByText('100%');
     expect(sampleButton).toBeDisabled();
   });
 
@@ -305,7 +291,7 @@ describe('RunForm', () => {
       />
     );
 
-    expect(screen.getByText('Trials per Narrative')).toBeInTheDocument();
+    expect(screen.getByText('Trials per Vignette')).toBeInTheDocument();
     expect(screen.queryByText(/advanced options/i)).not.toBeInTheDocument();
   });
 
@@ -351,7 +337,7 @@ describe('RunForm', () => {
     expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
       definitionId: 'def-1',
       models: ['gpt-4', 'claude-3'],
-      samplePercentage: 10,
+      samplePercentage: 100,
       samplesPerScenario: 1,
       finalTrial: false,
       launchMode: 'STANDARD',
