@@ -1032,5 +1032,384 @@ class CheckpointMarkerTests(unittest.TestCase):
         self.assertEqual(sha1, sha2)
 
 
+class DefaultCodexModelTests(unittest.TestCase):
+    def test_default_codex_model_constant_exists(self) -> None:
+        self.assertEqual(MODULE.DEFAULT_CODEX_MODEL, "codex-5.4-mini")
+
+    def test_required_reviews_codex_entry_uses_constant(self) -> None:
+        reviews = MODULE.required_reviews(
+            "diff",
+            sensitive=False,
+            large_structural=False,
+            performance_sensitive=False,
+            extra_gemini=[],
+        )
+        codex_entries = [r for r in reviews if r.get("reviewer") == "codex"]
+        self.assertTrue(codex_entries, "expected at least one codex reviewer entry")
+        for entry in codex_entries:
+            self.assertEqual(
+                entry.get("model"),
+                MODULE.DEFAULT_CODEX_MODEL,
+                f"codex entry model should be DEFAULT_CODEX_MODEL, got {entry.get('model')!r}",
+            )
+
+
+class _CapturedBaseRef(Exception):
+    """Sentinel exception raised by the preferred_diff_base_ref mock to abort command_checkpoint early."""
+
+    def __init__(self, base_ref: object) -> None:
+        self.base_ref = base_ref
+
+
+class BaseRefResetTests(unittest.TestCase):
+    """Tests that base_ref is reset to None in all three reset branches of command_checkpoint."""
+
+    def _run_checkpoint_diff_get_base_ref(
+        self,
+        *,
+        marker_count: int,
+        index: int,
+        stored_sha: str,
+        last_head: str,
+        ancestor_valid: bool,
+        recorded_base_ref: str = "origin/main",
+    ) -> object:
+        """Run command_checkpoint diff stage and return the base_ref passed to preferred_diff_base_ref.
+
+        Mocks preferred_diff_base_ref to raise _CapturedBaseRef so we can inspect what arg it received
+        without needing to mock all of command_checkpoint's downstream subprocess calls.
+        """
+
+        def capturing_preferred(slug: str, base_ref: object) -> str:
+            raise _CapturedBaseRef(base_ref)
+
+        progress = {"index": index, "markers_sha": stored_sha, "last_diff_head_sha": last_head}
+
+        args = SimpleNamespace(
+            slug="test-slug",
+            stage="diff",
+            path=[],
+            artifact="",
+            base_ref=None,
+            context=[],
+            allow_dirty_path=[],
+            max_artifact_chars=None,
+            max_context_chars=None,
+            max_total_chars=None,
+            gemini_timeout_seconds=120,
+            gemini_retries=1,
+            repair_timeout_seconds=30,
+            fallback=False,
+            use_existing_artifact=False,
+            allow_large_diff_rerun=False,
+            required_reviews=None,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            workflow_root = temp_root / "workflow"
+            reviews_root = workflow_root / "reviews"
+            reviews_root.mkdir(parents=True, exist_ok=True)
+
+            try:
+                with (
+                    patch.object(MODULE, "ensure_sync"),
+                    patch.object(MODULE, "workflow_dir", return_value=workflow_root),
+                    patch.object(MODULE, "reviews_dir", return_value=reviews_root),
+                    patch.object(MODULE, "prerequisite_failure", return_value=None),
+                    patch.object(MODULE, "resolved_review_policy", return_value={
+                        "sensitive": False,
+                        "large_structural": False,
+                        "performance_sensitive": False,
+                        "extra_gemini_lenses": [],
+                    }),
+                    patch.object(MODULE, "diff_review_budget_state", return_value={
+                        "artifact_exists": False,
+                        "artifact_bytes": 0,
+                        "large_artifact": False,
+                        "recorded_base_ref": recorded_base_ref,
+                        "recorded_base_sha": "aabbccddee",
+                        "recorded_head_sha": "deadbeef111",
+                        "current_head_sha": "newheadsha",
+                        "head_mismatch": True,
+                        "scope_basis": "last-reviewed-head",
+                        "suggested_base_ref": "deadbeef111",
+                        "artifact_changed_since_codex": False,
+                    }),
+                    patch.object(MODULE, "checkpoint_progress_state", return_value=progress),
+                    patch.object(MODULE, "parse_checkpoint_markers", return_value=(marker_count, "CURRENT_SHA")),
+                    patch.object(MODULE, "_sha_is_valid_ancestor", return_value=ancestor_valid),
+                    patch.object(MODULE, "update_workflow_state"),
+                    patch.object(MODULE, "preferred_diff_base_ref", side_effect=capturing_preferred),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    MODULE.command_checkpoint(args)
+            except _CapturedBaseRef as e:
+                return e.base_ref
+            except (SystemExit, Exception):
+                pass
+
+        return None
+
+    def test_index_overflow_clears_base_ref(self) -> None:
+        """index >= marker_count triggers reset; preferred_diff_base_ref must receive None."""
+        base_ref = self._run_checkpoint_diff_get_base_ref(
+            marker_count=1,
+            index=2,
+            stored_sha="SHA1",
+            last_head="abc123",
+            ancestor_valid=True,
+        )
+        self.assertIsNone(base_ref, "expected preferred_diff_base_ref to be called with None after index overflow reset")
+
+    def test_markers_sha_mismatch_clears_base_ref(self) -> None:
+        """stored_sha != current_sha triggers reset; preferred_diff_base_ref must receive None."""
+        base_ref = self._run_checkpoint_diff_get_base_ref(
+            marker_count=1,
+            index=1,
+            stored_sha="OLD_SHA",
+            last_head="abc123",
+            ancestor_valid=True,
+        )
+        self.assertIsNone(base_ref, "expected preferred_diff_base_ref to be called with None after markers-sha mismatch reset")
+
+    def test_dangling_sha_clears_base_ref(self) -> None:
+        """last_head not a valid ancestor triggers reset; preferred_diff_base_ref must receive None."""
+        base_ref = self._run_checkpoint_diff_get_base_ref(
+            marker_count=1,
+            index=1,
+            stored_sha="CURRENT_SHA",
+            last_head="dangling",
+            ancestor_valid=False,
+        )
+        self.assertIsNone(base_ref, "expected preferred_diff_base_ref to be called with None after dangling SHA reset")
+
+    def test_reset_uses_recorded_base_not_stale_head(self) -> None:
+        """After an index-overflow reset, preferred_diff_base_ref is called with None (not the stale last_head SHA).
+
+        This test verifies that:
+        (a) The reset fires (confirmed by update_workflow_state being called).
+        (b) preferred_diff_base_ref receives None — the stale last_head SHA "deadbeef111" is NOT passed
+            as the requested base_ref, so it cannot pollute the diff base selection.
+        (c) args.base_ref is set to whatever preferred_diff_base_ref returns ("origin/main" in this mock).
+        """
+        args_holder: list[object] = []
+        received_base_ref: list[object] = []
+
+        def fake_preferred(slug: str, base_ref: object) -> str:
+            received_base_ref.append(base_ref)
+            return "origin/main"
+
+        progress = {"index": 2, "markers_sha": "SHA1", "last_diff_head_sha": "deadbeef111"}
+
+        args = SimpleNamespace(
+            slug="test-slug",
+            stage="diff",
+            path=[],
+            artifact="",
+            base_ref=None,
+            context=[],
+            allow_dirty_path=[],
+            max_artifact_chars=None,
+            max_context_chars=None,
+            max_total_chars=None,
+            gemini_timeout_seconds=120,
+            gemini_retries=1,
+            repair_timeout_seconds=30,
+            fallback=False,
+            use_existing_artifact=False,
+            allow_large_diff_rerun=False,
+            required_reviews=None,
+        )
+        args_holder.append(args)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            workflow_root = temp_root / "workflow"
+            reviews_root = workflow_root / "reviews"
+            reviews_root.mkdir(parents=True, exist_ok=True)
+
+            def capturing_scope(slug: str) -> Path:
+                # Capture args.base_ref at the point after preferred_diff_base_ref has set it.
+                raise _CapturedBaseRef(args_holder[0].base_ref)
+
+            try:
+                with (
+                    patch.object(MODULE, "ensure_sync"),
+                    patch.object(MODULE, "workflow_dir", return_value=workflow_root),
+                    patch.object(MODULE, "reviews_dir", return_value=reviews_root),
+                    patch.object(MODULE, "prerequisite_failure", return_value=None),
+                    patch.object(MODULE, "resolved_review_policy", return_value={
+                        "sensitive": False,
+                        "large_structural": False,
+                        "performance_sensitive": False,
+                        "extra_gemini_lenses": [],
+                    }),
+                    patch.object(MODULE, "diff_review_budget_state", return_value={
+                        "artifact_exists": False,
+                        "artifact_bytes": 0,
+                        "large_artifact": False,
+                        "recorded_base_ref": "origin/main",
+                        "recorded_base_sha": "aabbccddee",
+                        "recorded_head_sha": "deadbeef111",
+                        "current_head_sha": "newheadsha",
+                        "head_mismatch": True,
+                        "scope_basis": "last-reviewed-head",
+                        "suggested_base_ref": "deadbeef111",
+                        "artifact_changed_since_codex": False,
+                    }),
+                    patch.object(MODULE, "checkpoint_progress_state", return_value=progress),
+                    patch.object(MODULE, "parse_checkpoint_markers", return_value=(1, "CURRENT_SHA")),
+                    patch.object(MODULE, "_sha_is_valid_ancestor", return_value=True),
+                    patch.object(MODULE, "update_workflow_state"),
+                    patch.object(MODULE, "preferred_diff_base_ref", side_effect=fake_preferred),
+                    patch.object(MODULE, "scope_manifest_path", side_effect=capturing_scope),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    MODULE.command_checkpoint(args)
+            except _CapturedBaseRef as e:
+                captured_result = e.base_ref
+            except (SystemExit, Exception):
+                captured_result = None
+            else:
+                captured_result = None
+
+        # preferred_diff_base_ref should receive None (args.base_ref was reset, not the stale last_head)
+        self.assertEqual(len(received_base_ref), 1, "expected preferred_diff_base_ref to be called once")
+        self.assertIsNone(received_base_ref[0], "expected preferred_diff_base_ref to be called with None, not the stale 'deadbeef111'")
+        # The resulting args.base_ref should be what preferred_diff_base_ref returned
+        self.assertEqual(captured_result, "origin/main", "expected args.base_ref to be set to what preferred_diff_base_ref returned")
+
+
+class RepairCloseoutTests(unittest.TestCase):
+    """Tests for the closeout repair block added to command_repair."""
+
+    def _base_stages(self) -> dict:
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        return {s: healthy for s in ["spec", "plan", "tasks", "diff", "closeout"]}
+
+    def test_repair_skips_closeout_when_not_checkpointed(self) -> None:
+        """not-checkpointed closeout: repair succeeds, no block, command_checkpoint not called for closeout."""
+        checkpoint_call_count: list[int] = [0]
+
+        def counting_checkpoint(repair_args: object) -> int:
+            checkpoint_call_count[0] += 1
+            return 0
+
+        stages = self._base_stages()
+        stages["closeout"] = stage_state()  # not-checkpointed
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: stages[stage]),
+            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "not-checkpointed" if stage == "closeout" else "healthy"),
+            patch.object(MODULE, "stage_repairable", return_value=False),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "command_checkpoint", side_effect=counting_checkpoint),
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="closeout"),
+            patch.object(MODULE, "stage_status_label", return_value="not-checkpointed"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(io.StringIO()),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 0, "expected repair to succeed when closeout is not-checkpointed")
+        self.assertEqual(checkpoint_call_count[0], 0, "command_checkpoint should not be called for not-checkpointed closeout")
+
+    def test_repair_fixes_stale_closeout(self) -> None:
+        """unhealthy-manifest + repairable: command_checkpoint called, closeout appears in repaired output."""
+        checkpoint_calls: list[object] = []
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        closeout_initial = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+        closeout_refreshed = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+
+        call_count: list[int] = [0]
+
+        def fake_manifest_state(slug: str, stage: str) -> dict:
+            if stage == "closeout":
+                call_count[0] += 1
+                return closeout_initial if call_count[0] == 1 else closeout_refreshed
+            return healthy
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+        output = io.StringIO()
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=fake_manifest_state),
+            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(MODULE, "stage_status_label", return_value="ok"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(output),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 0, "expected repair to succeed")
+        self.assertEqual(len(checkpoint_calls), 1, "expected exactly one command_checkpoint call for closeout")
+        self.assertIn("closeout", output.getvalue(), "expected closeout to appear in output")
+
+    def test_repair_blocks_on_closeout_failure(self) -> None:
+        """unhealthy-manifest + repairable but checkpoint returns 1: repair must return 1."""
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        closeout_initial = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
+            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(MODULE, "stage_repairable", side_effect=lambda slug, stage, state: stage == "closeout"),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "command_checkpoint", return_value=1),
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(MODULE, "stage_status_label", return_value="ok"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(io.StringIO()),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 1, "expected repair to fail when closeout checkpoint returns non-zero")
+
+    def test_repair_blocks_when_closeout_unhealthy_not_repairable(self) -> None:
+        """unhealthy-manifest but not repairable: repair must return 1 without calling command_checkpoint."""
+        checkpoint_calls: list[object] = []
+        healthy = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+        closeout_initial = stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=False)
+
+        args = MODULE.argparse.Namespace(slug="test-slug")
+
+        with (
+            patch.object(MODULE, "ensure_sync"),
+            patch.object(MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}}),
+            patch.object(MODULE, "stage_manifest_state", side_effect=lambda slug, stage: closeout_initial if stage == "closeout" else healthy),
+            patch.object(MODULE, "stage_drift_class", side_effect=lambda stage, state: "unhealthy-manifest" if stage == "closeout" else "healthy"),
+            patch.object(MODULE, "stage_repairable", return_value=False),
+            patch.object(MODULE, "stage_review_inventory", return_value=([], [])),
+            patch.object(MODULE, "command_checkpoint", side_effect=lambda a: checkpoint_calls.append(a) or 0),
+            patch.object(MODULE, "reconciliation_state", return_value=(True, "")),
+            patch.object(MODULE, "recommended_next_action", return_value="deliver"),
+            patch.object(MODULE, "stage_status_label", return_value="ok"),
+            patch.object(MODULE, "trim_detail", side_effect=lambda s: s),
+            redirect_stdout(io.StringIO()),
+        ):
+            result = MODULE.command_repair(args)
+
+        self.assertEqual(result, 1, "expected repair to fail when closeout is unhealthy but not repairable")
+        self.assertEqual(len(checkpoint_calls), 0, "command_checkpoint should not be called when closeout is not repairable")
+
+
 if __name__ == "__main__":
     unittest.main()

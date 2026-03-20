@@ -1,0 +1,8 @@
+## Findings
+- High: Patch 2 may not actually clear the stale base ref from persisted state. The plan mutates `args.base_ref` only after `update_workflow_state(...)`; if that helper snapshots `args` or writes the checkpoint before the mutation is observed, the bad value survives and the same wrong base can be restored on the next run. The plan needs to prove the persistence layer never sees the old ref, or clear it in the persisted state explicitly.
+- Medium: Patch 3 relies on an unproven reachability assumption: that `command_repair` only ever sees closeout through the `recommended_next_action` path. If that assumption is wrong, `missing-artifact`, `stub-artifact`, and `not-checkpointed` will be silently skipped and the command can still report success while closeout remains broken. The plan should define behavior for those states instead of assuming they cannot occur.
+- Medium: Patch 1 changes a model literal without validating consumer compatibility, and the proposed file-wide grep is too blunt. It can over-replace intentional literals or comments, and it still will not catch dynamically constructed model names. That makes the change both risky and likely incomplete unless the exact call sites and allowed model families are enumerated.
+
+## Residual Risks
+- The base-ref fix still depends on `recorded_base_ref` being accurate in the diff metadata; if that metadata is stale or malformed, the fallback can still choose the wrong ancestor.
+- The new tests cover the targeted reset and closeout repair paths, but they do not prove the normal no-reset diff path or other `command_repair` stage interactions remain unchanged.

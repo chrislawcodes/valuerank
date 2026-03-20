@@ -55,6 +55,7 @@ RUN_CODEX_REVIEW = REVIEW_SCRIPTS / "run_codex_review.py"
 HARD_DIFF_ARTIFACT_MAX_CHARS = 150000
 LARGE_DIFF_RERUN_WARN_CHARS = 80000
 DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
+DEFAULT_CODEX_MODEL = "codex-5.4-mini"
 CHECKPOINT_STAGES = ["spec", "plan", "tasks", "diff", "closeout"]
 VERIFY_ON_CLOSEOUT_STAGES = ["spec", "plan", "tasks", "diff"]
 REQUIRED_PREDELIVERY_STAGES = ["spec", "plan", "tasks", "diff"]
@@ -660,7 +661,7 @@ def required_reviews(
         {
             "reviewer": "codex",
             "lens": codex_lens,
-            "model": "gpt-5.4-mini",
+            "model": DEFAULT_CODEX_MODEL,
         },
     ]
 
@@ -1061,6 +1062,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                     args.slug,
                     lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, _default_checkpoint_progress()),
                 )
+                args.base_ref = None
             elif stored_sha != current_markers_sha:
                 print(
                     "warning: [CHECKPOINT] marker lines changed since last checkpoint — "
@@ -1071,6 +1073,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                     args.slug,
                     lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, _default_checkpoint_progress()),
                 )
+                args.base_ref = None
             elif _sha_is_valid_ancestor(last_head):
                 use_checkpoint_base = True
                 args.base_ref = last_head
@@ -1085,6 +1088,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                     args.slug,
                     lambda s: s.__setitem__(CHECKPOINT_PROGRESS_KEY, _default_checkpoint_progress()),
                 )
+                args.base_ref = None
         _ = use_checkpoint_base  # consumed above via args.base_ref
         args.base_ref = preferred_diff_base_ref(args.slug, args.base_ref)
 
@@ -1653,6 +1657,28 @@ def command_repair(args: argparse.Namespace) -> int:
         if drift == "unhealthy-manifest" and not stage_repairable(args.slug, stage, stage_state):
             blocked_reason = f"{stage} checkpoint is not safely repairable: {trim_detail(str(stage_state.get('detail', '')))}"
             break
+
+    if not blocked_reason:
+        # Repair closeout if manifest is stale (only when it exists and is unhealthy)
+        closeout_state = stages["closeout"]
+        closeout_drift = stage_drift_class("closeout", closeout_state)
+        if closeout_drift == "unhealthy-manifest" and stage_repairable(args.slug, "closeout", closeout_state):
+            print("- closeout: repairing unhealthy-manifest")
+            result = command_checkpoint(repair_checkpoint_args(args.slug, "closeout", closeout_state))
+            if result != 0:
+                blocked_reason = "closeout repair failed"
+            else:
+                refreshed = stage_manifest_state(args.slug, "closeout")
+                stages["closeout"] = refreshed
+                if not refreshed["healthy"]:
+                    blocked_reason = f"closeout remains unhealthy: {trim_detail(str(refreshed.get('detail', '')))}"
+                else:
+                    repaired.append("closeout")
+        elif closeout_drift == "unhealthy-manifest":
+            # unhealthy-manifest but not repairable — block so repair doesn't silently succeed
+            blocked_reason = "closeout is unhealthy but not repairable"
+        elif closeout_drift not in {"not-checkpointed", "missing-artifact", "stub-artifact"}:
+            print(f"- closeout: {stage_status_label(args.slug, 'closeout', closeout_state)}")
 
     if blocked_reason:
         print(f"- blocked: {blocked_reason}")
