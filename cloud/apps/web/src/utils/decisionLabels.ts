@@ -70,9 +70,9 @@ export function extractAttributeName(label: string): string {
     'Somewhat Oppose ',
   ];
   for (const prefix of prefixes) {
-    if (label.startsWith(prefix)) return formatDisplayLabel(label.slice(prefix.length).trim());
+    if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
   }
-  return formatDisplayLabel(label.trim());
+  return label.trim();
 }
 
 function normalizeDimensionToken(value: string): string {

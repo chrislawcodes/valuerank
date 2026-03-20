@@ -42,8 +42,8 @@ describe('decisionLabels', () => {
       '1': 'Strongly Support Achievement',
       '2': 'Somewhat Support Achievement',
       '3': 'Neutral',
-      '4': 'Somewhat Support Self_Direction_Action',
-      '5': 'Strongly Support Self_Direction_Action',
+      '4': 'Somewhat Support Self Direction Action',
+      '5': 'Strongly Support Self Direction Action',
     });
   });
 
@@ -63,8 +63,8 @@ describe('decisionLabels', () => {
       '1': 'Strongly Support Achievement',
       '2': 'Somewhat Support Achievement',
       '3': 'Neutral',
-      '4': 'Somewhat Support Self_Direction_Action',
-      '5': 'Strongly Support Self_Direction_Action',
+      '4': 'Somewhat Support Self Direction Action',
+      '5': 'Strongly Support Self Direction Action',
     });
   });
 
@@ -87,8 +87,8 @@ describe('decisionLabels', () => {
     });
 
     expect(labels).toEqual({
-      '1': 'Strongly Support Self_Direction_Action',
-      '2': 'Somewhat Support Self_Direction_Action',
+      '1': 'Strongly Support Self Direction Action',
+      '2': 'Somewhat Support Self Direction Action',
       '3': 'Neutral',
       '4': 'Somewhat Support Achievement',
       '5': 'Strongly Support Achievement',
