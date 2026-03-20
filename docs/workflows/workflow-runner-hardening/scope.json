@@ -1,12 +1,10 @@
 {
   "paths": [
     "docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py",
-    "docs/operations/codex-skills/feature-workflow/scripts/workflow_state.py",
     "docs/operations/codex-skills/feature-workflow/tests/test_run_feature_workflow_repair.py"
   ],
   "allowed_dirty_paths": [
     "docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py",
-    "docs/operations/codex-skills/feature-workflow/scripts/workflow_state.py",
     "docs/operations/codex-skills/feature-workflow/tests/test_run_feature_workflow_repair.py",
     "docs/workflows/workflow-runner-hardening"
   ]

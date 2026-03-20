@@ -1,0 +1,9 @@
+## Findings
+1. **High: The test-success claim is inaccurate as written.** The artifact says “All 53 tests pass” while also admitting one pre-existing failure. That is not a clean pass condition, and the “unrelated” label is not substantiated. The failing test, `test_command_deliver_dry_run_does_not_mutate_delivery_state`, is still about state mutation, which is close enough to this closeout’s `update_workflow_state` and `args.base_ref` changes that the artifact does not establish independence.
+2. **Medium: The new closeout repair path creates a silent blind spot.** The artifact says `not-checkpointed`, `missing-artifact`, and `stub-artifact` are skipped silently. If any of those states can arise from partial corruption or an interrupted run instead of a harmless absence, this logic will suppress both repair and diagnosis with no observable signal. The artifact does not justify that these cases are always safe to ignore.
+3. **Medium: The base-ref fix is described more strongly than the evidence in the artifact supports.** The explanation claims `args.base_ref = None` ensures `preferred_diff_base_ref` falls through to the recorded branch base, but the artifact only cites sentinel-style unit tests. It does not establish that the same behavior holds through the full checkpoint/repair flow under real subprocess execution or repeated resets, so the guarantee is narrower than the wording suggests.
+
+## Residual Risks
+- One known test failure still exists, so the workflow hardening was not validated against a fully green suite.
+- The closeout repair logic still depends on the assumption that the skipped artifact states are truly benign, which may not hold if upstream corruption modes change.
+- The base-ref reset fix remains convention-sensitive: any future caller that reintroduces a stale `base_ref` after the reset could re-open the original bug.
