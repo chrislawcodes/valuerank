@@ -1,0 +1,150 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0c8c-3de6-7a01-9613-e27c28af549c
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: workflow-runner-hardening
+
+## Architecture
+
+Three self-contained patches to `run_feature_workflow.py`, plus corresponding tests. Each patch is independent and can be reviewed/reverted separately.
+
+---
+
+## Patch 1 — `DEFAULT_CODEX_MODEL` constant
+
+**File:** `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`
+
+**Change:** After line 57 (`DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"`), add:
+```python
+DEFAULT_CODEX_MODEL = "codex-5.4-mini"
+```
+
+**Change:** In `required_reviews()`, replace:
+```python
+"model": "gpt-5.4-mini",
+```
+with:
+```python
+"model": DEFAULT_CODEX_MODEL,
+```
+
+**Additional:** Grep the entire file for other hardcoded model strings (e.g., `gpt-`, `claude-`, `gemini-`, `mistral-`, or any other model-name prefix) outside of `DEFAULT_*` constants and inline comments; replace with constants as appropriate. Cast a wide net — don't limit to just the two example prefixes.
+
+---
+
+## Patch 2 — Base-ref reset in `command_checkpoint`
+
+**File:** `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`
+
+**Location:** Inside `if args.stage == "diff":` → `if marker_count > 0 and not args.base_ref:`
+
+The three reset branches — in all three, add `args.base_ref = None` immediately after calling `update_workflow_state(...)`:
+
+1. **Index overflow** (around line 1058–1064)
+2. **Markers-sha mismatch** (around line 1065–1073)
+3. **Dangling SHA** (around line 1074–1087)
+
+After these changes the call `args.base_ref = preferred_diff_base_ref(args.slug, args.base_ref)` receives `None` in all reset scenarios, causing `preferred_diff_base_ref` to fall through to the `recorded_base_ref` from diff metadata (branch base) rather than a stale `recorded_head_sha`.
+
+---
+
+## Patch 3 — Closeout stage in `command_repair`
+
+**File:** `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`
+
+**Location:** In `command_repair`, after the `"diff"` iteration and before the `if blocked_reason:` check.
+
+Add a closeout repair block (guarded by `if not blocked_reason:` to avoid running after an earlier stage has already failed):
+```python
+if not blocked_reason:
+    # Repair closeout if manifest is stale (only when it exists and is unhealthy)
+    closeout_state = stages["closeout"]
+    closeout_drift = stage_drift_class("closeout", closeout_state)
+    if closeout_drift == "unhealthy-manifest" and stage_repairable(args.slug, "closeout", closeout_state):
+        print("- closeout: repairing unhealthy-manifest")
+        result = command_checkpoint(repair_checkpoint_args(args.slug, "closeout", closeout_state))
+        if result != 0:
+            blocked_reason = "closeout repair failed"
+        else:
+            refreshed = stage_manifest_state(args.slug, "closeout")
+            stages["closeout"] = refreshed
+            if not refreshed["healthy"]:
+                blocked_reason = f"closeout remains unhealthy: {trim_detail(str(refreshed.get('detail', '')))}"
+            else:
+                repaired.append("closeout")
+    elif closeout_drift == "unhealthy-manifest":
+        # unhealthy-manifest but not repairable — block so repair doesn't silently succeed
+        blocked_reason = "closeout is unhealthy but not repairable"
+    elif closeout_drift not in {"not-checkpointed", "missing-artifact", "stub-artifact"}:
+        print(f"- closeout: {stage_status_label(args.slug, 'closeout', closeout_state)}")
+```
+
+Rationale: `recommended_next_action` returns `"repair_closeout_checkpoint"` only when the manifest exists but is unhealthy (`unhealthy-manifest`). It returns `"closeout"` when the artifact/manifest doesn't exist. So `missing-artifact`/`stub-artifact`/`not-checkpointed` are silently skipped — they are not reachable via the repair flow.
+
+---
+
+## Tests
+
+**File:** `docs/operations/codex-skills/feature-workflow/tests/test_run_feature_workflow_repair.py`
+
+Add three new test classes after the existing ones.
+
+### `DefaultCodexModelTests`
+
+- `test_default_codex_model_constant_exists` — `MODULE.DEFAULT_CODEX_MODEL == "codex-5.4-mini"`
+- `test_required_reviews_codex_entry_uses_constant` — `required_reviews("diff", ...)` returns codex entry with `model == MODULE.DEFAULT_CODEX_MODEL`
+
+### `BaseRefResetTests`
+
+Use `patch.object(MODULE, ...)` to control `parse_checkpoint_markers`, `checkpoint_progress_state`, `_sha_is_valid_ancestor`, `diff_review_budget_state`, `update_workflow_state`, `preferred_diff_base_ref`.
+
+- `test_index_overflow_clears_base_ref` — index=2, marker_count=1 → `preferred_diff_base_ref` called with `None`
+- `test_markers_sha_mismatch_clears_base_ref` — index=1, stored_sha≠current_sha → same
+- `test_dangling_sha_clears_base_ref` — valid index/sha but `_sha_is_valid_ancestor` returns False → same
+- `test_reset_uses_recorded_base_not_stale_head` — mock `diff_review_budget_state` to return `head_mismatch=True, suggested_base_ref="deadbeef111"` AND `recorded_base_ref="origin/main"`; trigger a reset; assert resulting base ref is `"origin/main"` not `"deadbeef111"`
+
+### `RepairCloseoutTests`
+
+- `test_repair_skips_closeout_when_not_checkpointed` — closeout drift=`not-checkpointed`; repair runs; no block; `command_checkpoint` not called for closeout
+- `test_repair_fixes_stale_closeout` — closeout drift=`unhealthy-manifest`, repairable=True; `command_checkpoint` called with `stage="closeout"`; closeout added to repaired list
+- `test_repair_blocks_on_closeout_failure` — stale closeout; `command_checkpoint` returns 1; `command_repair` returns 1 with blocked reason
+- `test_repair_blocks_when_closeout_unhealthy_not_repairable` — closeout drift=`unhealthy-manifest`, `stage_repairable` returns False; `command_checkpoint` not called; `command_repair` returns 1 with blocked reason containing "not repairable"
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+## Findings
+- High: In Patch 2, `args.base_ref = None` is set only after `update_workflow_state(...)`. If that helper reads or persists `args.base_ref` or the derived ref before the reset, the stale `recorded_head_sha` is still baked into state and the proposed fix does not actually remove the bad base selection.
+- High: Patch 3 assumes `stages["closeout"]` always exists in `command_repair`. The new block adds an unconditional map lookup with no fallback, so any workflow variant that omits closeout from `stages` will raise instead of repairing or reporting a clean failure.
+- Medium: Patch 1's "grep the entire file" instruction is too broad and under-specified. Rewriting every string that looks like a model name can accidentally touch fixtures, logging, or other provider defaults outside `required_reviews`, and the plan does not define a precise allowlist to prevent that.
+- Medium: The closeout test plan misses the partial-success case where `command_checkpoint` returns `0` but the refreshed closeout manifest is still unhealthy. That is the exact failure mode the new block is meant to defend against, so the suite can still pass while shipping a broken repair path.
+
+## Residual Risks
+- The plan still depends on the exact semantics of `preferred_diff_base_ref` and `stage_drift_class`; if either treats missing metadata differently than assumed, the new branches may choose the wrong base or skip repair.
+- There is no end-to-end coverage showing that the model constant change, base-ref reset, and closeout repair all work together in one workflow run, so interaction bugs can still slip through.
+- If `codex-5.4-mini` is not accepted by the surrounding tooling or provider allowlist, Patch 1 will fail at runtime even if the code edits are syntactically correct.
+tokens used
+9,746

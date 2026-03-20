@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "docs/operations/codex-skills/feature-workflow"
+  ],
+  "allowed_dirty_paths": [
+    "docs/operations/codex-skills/feature-workflow",
+    "docs/workflows/workflow-two-mode-implementation"
+  ]
+}

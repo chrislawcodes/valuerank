@@ -1,11 +1,13 @@
 import { builder } from '../builder.js';
-import { db, type LevelPresetVersion } from '@valuerank/db';
-import { DomainRef, DefinitionRef, LevelPresetVersionRef } from './refs.js';
+import { db, type LevelPresetVersion, type PreambleVersion, type DomainContext } from '@valuerank/db';
+import { DomainRef, DefinitionRef, LevelPresetVersionRef, PreambleVersionRef, DomainContextRef } from './refs.js';
 
 export { DomainRef };
 
-type DomainWithDefaultPreset = {
+type DomainWithDefaults = {
   defaultLevelPresetVersion?: LevelPresetVersion | null;
+  defaultPreambleVersion?: PreambleVersion | null;
+  defaultContext?: DomainContext | null;
 };
 
 builder.objectType(DomainRef, {
@@ -20,16 +22,33 @@ builder.objectType(DomainRef, {
     defaultLevelPresetVersion: t.field({
       type: LevelPresetVersionRef,
       nullable: true,
-      description: 'Compatibility field for older clients that still read domain default level presets',
       resolve: async (domain) => {
-        const preloadedDefaultLevelPresetVersion = (domain as DomainWithDefaultPreset).defaultLevelPresetVersion;
-        if (preloadedDefaultLevelPresetVersion !== undefined) {
-          return preloadedDefaultLevelPresetVersion;
-        }
+        const preloaded = (domain as DomainWithDefaults).defaultLevelPresetVersion;
+        if (preloaded !== undefined) return preloaded;
         if (domain.defaultLevelPresetVersionId == null) return null;
-        return db.levelPresetVersion.findUnique({
-          where: { id: domain.defaultLevelPresetVersionId },
-        });
+        return db.levelPresetVersion.findUnique({ where: { id: domain.defaultLevelPresetVersionId } });
+      },
+    }),
+    defaultPreambleVersionId: t.exposeString('defaultPreambleVersionId', { nullable: true }),
+    defaultPreambleVersion: t.field({
+      type: PreambleVersionRef,
+      nullable: true,
+      resolve: async (domain) => {
+        const preloaded = (domain as DomainWithDefaults).defaultPreambleVersion;
+        if (preloaded !== undefined) return preloaded;
+        if (domain.defaultPreambleVersionId == null) return null;
+        return db.preambleVersion.findUnique({ where: { id: domain.defaultPreambleVersionId } });
+      },
+    }),
+    defaultContextId: t.exposeString('defaultContextId', { nullable: true }),
+    defaultContext: t.field({
+      type: DomainContextRef,
+      nullable: true,
+      resolve: async (domain) => {
+        const preloaded = (domain as DomainWithDefaults).defaultContext;
+        if (preloaded !== undefined) return preloaded;
+        if (domain.defaultContextId == null) return null;
+        return db.domainContext.findUnique({ where: { id: domain.defaultContextId } });
       },
     }),
     definitionCount: t.field({

@@ -1,0 +1,10 @@
+## Findings
+- **High** - `T3.3` is under-specified and risky. It says to grep for any model-name prefix and replace “any found” with appropriate constants, but it never defines the mapping from each discovered string to its replacement or the scope of replacement. That can easily lead to accidental substitutions in tests/fixtures/comments or to missed hardcoded model sites.
+- **High** - The new closeout repair path in `T1` is not protected by a test that an earlier failure suppresses it. Since the code is explicitly guarded by `if not blocked_reason`, a regression that still runs closeout repair after a prior stage failure would not be caught by the proposed closeout-only cases.
+- **Medium** - `T2` only asserts the downstream effect on `preferred_diff_base_ref`; it does not verify that `args.base_ref` itself is cleared before later reads on the same code path. If any later logic consults a cached local or another derived base-ref value, these tests can still pass while the reset is ineffective.
+- **Medium** - `T1.3` does not assert the checkpoint-refresh boundary after a successful closeout repair. It checks the final healthy/unhealthy result, but not that `stage_manifest_state` is called with the repaired closeout state, so a stale or wrong refresh input could slip through.
+
+## Residual Risks
+- Unexpected `closeout_drift` values outside the enumerated cases may still be mishandled, because the plan only codifies behavior for `not-checkpointed` and `unhealthy-manifest`.
+- The model-constant cleanup may remain incomplete if other files or fixtures still hardcode old model names; the plan only scopes the grep to `run_feature_workflow.py`.
+- The full pytest run may still miss integration issues that depend on real workflow state or CLI execution rather than the mocked unit paths covered by the new tests.

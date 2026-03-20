@@ -24,7 +24,7 @@ export function Definitions() {
   });
 
   const handleCreateNew = () => {
-    navigate('/definitions/new');
+    navigate('/job-choice/new');
   };
 
   const handleCreateNewPair = () => {

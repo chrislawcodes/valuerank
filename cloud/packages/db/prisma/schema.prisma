@@ -161,12 +161,20 @@ model Domain {
   defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
   defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
 
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
   definitions     Definition[]
-  contexts        DomainContext[]
+  contexts        DomainContext[] @relation("DomainContexts")
   valueStatements ValueStatement[]
   evaluations     DomainEvaluation[]
 
   @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
   @@map("domains")
 }
 
@@ -178,8 +186,9 @@ model DomainContext {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  domain      Domain       @relation(fields: [domainId], references: [id])
-  definitions Definition[]
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
 
   @@map("domain_contexts")
 }
@@ -249,6 +258,7 @@ model PreambleVersion {
 
   preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
   definitions Definition[]
+  domains     Domain[]
 
   @@index([preambleId])
   @@map("preamble_versions")

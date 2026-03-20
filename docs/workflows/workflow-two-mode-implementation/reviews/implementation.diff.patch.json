@@ -1,0 +1,24 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "62666fcfc9d06334e1badbf69c327f26fbe70b25",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "d5d05171abe1c55f411c5ca826872b49c50849cd",
+  "paths": [
+    "docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py",
+    "docs/operations/codex-skills/feature-workflow/scripts/workflow_state.py",
+    "docs/operations/codex-skills/feature-workflow/tests/test_run_feature_workflow_repair.py"
+  ],
+  "allowed_dirty_paths": [
+    ".vite",
+    "cloud",
+    "docs/operations/codex-skills/review-lens",
+    "docs/paired-vignettes-display-plan.md",
+    "docs/plans",
+    "docs/tech-debt.md",
+    "docs/workflows",
+    "scripts"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflows/workflow-two-mode-implementation/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

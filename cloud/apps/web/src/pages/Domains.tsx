@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from 'urql';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { gql, useQuery, useMutation } from 'urql';
 import { Folder, FolderOpen, Plus, Pencil, Trash2, Play } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
@@ -21,6 +21,36 @@ import {
   type ValueStatementsQueryResult,
   type ValueStatementsQueryVariables,
 } from '../api/operations/value-statements';
+import {
+  SET_DOMAIN_DEFAULTS_MUTATION,
+  type SetDomainDefaultsMutationResult,
+  type SetDomainDefaultsMutationVariables,
+} from '../api/operations/domains';
+import {
+  LEVEL_PRESETS_QUERY,
+  type LevelPresetsQueryData,
+} from '../api/operations/level-presets';
+
+type PreambleSummary = {
+  id: string;
+  name: string;
+  latestVersion: { id: string; version: string } | null;
+};
+
+type PreamblesQueryResult = { preambles: PreambleSummary[] };
+
+const PREAMBLES_QUERY = gql`
+  query PreamblesForDomainDefaults {
+    preambles {
+      id
+      name
+      latestVersion {
+        id
+        version
+      }
+    }
+  }
+`;
 
 const defaultFilters: DefinitionFilterState = {
   search: '',
@@ -31,7 +61,7 @@ const defaultFilters: DefinitionFilterState = {
 
 type FolderKey = string;
 type DomainTab = 'overview' | 'vignettes' | 'setup' | 'runs' | 'findings';
-type SetupTab = 'contexts' | 'value-statements';
+type SetupTab = 'contexts' | 'value-statements' | 'defaults';
 
 type MissingSetupRequirement = {
   label: string;
@@ -76,7 +106,7 @@ export function Domains() {
       : 'vignettes',
   );
   const [setupTab, setSetupTab] = useState<SetupTab>(
-    initialSetupTab === 'contexts' || initialSetupTab === 'value-statements'
+    initialSetupTab === 'contexts' || initialSetupTab === 'value-statements' || initialSetupTab === 'defaults'
       ? initialSetupTab
       : 'contexts',
   );
@@ -161,6 +191,59 @@ export function Domains() {
     variables: { domainId: selectedDomain?.id ?? '' },
     pause: selectedDomain == null,
   });
+
+  const [{ data: preamblesData }] = useQuery<PreamblesQueryResult>({
+    query: PREAMBLES_QUERY,
+  });
+  const [{ data: levelPresetsData }] = useQuery<LevelPresetsQueryData>({
+    query: LEVEL_PRESETS_QUERY,
+  });
+  const [, executeSetDomainDefaults] = useMutation<
+    SetDomainDefaultsMutationResult,
+    SetDomainDefaultsMutationVariables
+  >(SET_DOMAIN_DEFAULTS_MUTATION);
+
+  const [formDefaultContextId, setFormDefaultContextId] = useState<string>('');
+  const [formDefaultPreambleVersionId, setFormDefaultPreambleVersionId] = useState<string>('');
+  const [formDefaultLevelPresetVersionId, setFormDefaultLevelPresetVersionId] = useState<string>('');
+  const [defaultsSaving, setDefaultsSaving] = useState(false);
+  const [defaultsSaveError, setDefaultsSaveError] = useState<string | null>(null);
+  const [defaultsSaved, setDefaultsSaved] = useState(false);
+
+  useEffect(() => {
+    if (selectedDomain != null) {
+      setFormDefaultContextId(selectedDomain.defaultContextId ?? '');
+      setFormDefaultPreambleVersionId(selectedDomain.defaultPreambleVersionId ?? '');
+      setFormDefaultLevelPresetVersionId(selectedDomain.defaultLevelPresetVersionId ?? '');
+      setDefaultsSaveError(null);
+      setDefaultsSaved(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDomain?.id]);
+
+  const handleSaveDomainDefaults = useCallback(async () => {
+    if (selectedDomain == null) return;
+    setDefaultsSaving(true);
+    setDefaultsSaveError(null);
+    setDefaultsSaved(false);
+    try {
+      const result = await executeSetDomainDefaults({
+        id: selectedDomain.id,
+        defaultContextId: formDefaultContextId !== '' ? formDefaultContextId : null,
+        defaultPreambleVersionId: formDefaultPreambleVersionId !== '' ? formDefaultPreambleVersionId : null,
+        defaultLevelPresetVersionId: formDefaultLevelPresetVersionId !== '' ? formDefaultLevelPresetVersionId : null,
+      });
+      if (result.error != null) {
+        setDefaultsSaveError(result.error.message);
+      } else {
+        setDefaultsSaved(true);
+      }
+    } catch (error) {
+      setDefaultsSaveError(error instanceof Error ? error.message : 'Failed to save defaults');
+    } finally {
+      setDefaultsSaving(false);
+    }
+  }, [selectedDomain, executeSetDomainDefaults, formDefaultContextId, formDefaultPreambleVersionId, formDefaultLevelPresetVersionId]);
 
   const inconsistentBatchDefinitions = useMemo(
     () => definitions.filter((definition) => definition.trialConfig?.isConsistent === false),
@@ -698,6 +781,7 @@ export function Domains() {
                 {([
                   { key: 'contexts' as const, label: 'Contexts' },
                   { key: 'value-statements' as const, label: 'Value Statements' },
+                  { key: 'defaults' as const, label: 'Defaults' },
                 ]).map((tab) => (
                   <Button
                     key={tab.key}
@@ -716,8 +800,76 @@ export function Domains() {
 
               {setupTab === 'contexts' ? (
                 <DomainContexts key={selectedDomain.id} domainId={selectedDomain.id} />
-              ) : (
+              ) : setupTab === 'value-statements' ? (
                 <ValueStatements key={selectedDomain.id} domainId={selectedDomain.id} />
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-5">
+                  <div>
+                    <h3 className="text-lg font-medium text-[#1A1A1A]">Domain defaults</h3>
+                    <p className="mt-1 text-sm text-gray-600">
+                      When a new vignette is created in this domain, these values pre-populate the form. Each vignette can still override them individually.
+                    </p>
+                  </div>
+                  <div className="space-y-4 max-w-md">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Default context</label>
+                      <select
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                        value={formDefaultContextId}
+                        onChange={(e) => setFormDefaultContextId(e.target.value)}
+                      >
+                        <option value="">— none —</option>
+                        {(selectedDomainContextsData?.domainContexts ?? []).map((ctx) => (
+                          <option key={ctx.id} value={ctx.id}>v{ctx.version}: {ctx.text.slice(0, 60)}{ctx.text.length > 60 ? '…' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Default preamble</label>
+                      <select
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                        value={formDefaultPreambleVersionId}
+                        onChange={(e) => setFormDefaultPreambleVersionId(e.target.value)}
+                      >
+                        <option value="">— none —</option>
+                        {(preamblesData?.preambles ?? []).map((p) => (
+                          p.latestVersion != null && (
+                            <option key={p.latestVersion.id} value={p.latestVersion.id}>{p.name}</option>
+                          )
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Default level preset</label>
+                      <select
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                        value={formDefaultLevelPresetVersionId}
+                        onChange={(e) => setFormDefaultLevelPresetVersionId(e.target.value)}
+                      >
+                        <option value="">— none —</option>
+                        {(levelPresetsData?.levelPresets ?? []).map((lp) => (
+                          lp.latestVersion != null && (
+                            <option key={lp.latestVersion.id} value={lp.latestVersion.id}>{lp.name}</option>
+                          )
+                        ))}
+                      </select>
+                    </div>
+                    {defaultsSaveError != null && (
+                      <p className="text-sm text-red-600">{defaultsSaveError}</p>
+                    )}
+                    {defaultsSaved && (
+                      <p className="text-sm text-teal-700">Defaults saved.</p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={defaultsSaving}
+                      onClick={() => void handleSaveDomainDefaults()}
+                    >
+                      {defaultsSaving ? 'Saving…' : 'Save defaults'}
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           ) : activeTab === 'runs' ? (

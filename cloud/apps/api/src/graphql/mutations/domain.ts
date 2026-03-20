@@ -574,6 +574,53 @@ builder.mutationField('createDomain', (t) =>
   })
 );
 
+builder.mutationField('setDomainDefaults', (t) =>
+  t.field({
+    type: DomainRef,
+    args: {
+      id: t.arg.id({ required: true }),
+      defaultLevelPresetVersionId: t.arg.id({ required: false }),
+      defaultPreambleVersionId: t.arg.id({ required: false }),
+      defaultContextId: t.arg.id({ required: false }),
+    },
+    resolve: async (_root, args, ctx) => {
+      const id = String(args.id);
+      const existing = await db.domain.findUnique({ where: { id } });
+      if (!existing) throw new Error(`Domain not found: ${id}`);
+
+      const updated = await db.domain.update({
+        where: { id },
+        data: {
+          defaultLevelPresetVersionId: args.defaultLevelPresetVersionId !== undefined
+            ? (args.defaultLevelPresetVersionId === null ? null : String(args.defaultLevelPresetVersionId))
+            : undefined,
+          defaultPreambleVersionId: args.defaultPreambleVersionId !== undefined
+            ? (args.defaultPreambleVersionId === null ? null : String(args.defaultPreambleVersionId))
+            : undefined,
+          defaultContextId: args.defaultContextId !== undefined
+            ? (args.defaultContextId === null ? null : String(args.defaultContextId))
+            : undefined,
+        },
+      });
+
+      await createAuditLog({
+        action: 'UPDATE',
+        entityType: 'Domain',
+        entityId: updated.id,
+        userId: ctx.user?.id ?? null,
+        metadata: {
+          operationType: 'set-domain-defaults',
+          defaultLevelPresetVersionId: updated.defaultLevelPresetVersionId,
+          defaultPreambleVersionId: updated.defaultPreambleVersionId,
+          defaultContextId: updated.defaultContextId,
+        },
+      });
+
+      return updated;
+    },
+  })
+);
+
 builder.mutationField('renameDomain', (t) =>
   t.field({
     type: DomainRef,

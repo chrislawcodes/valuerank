@@ -1,0 +1,10 @@
+## Findings
+- **High:** `command_doctor` will crash with a `NameError` because it references `REPAIR`, but no `REPAIR` path constant is defined anywhere in the patch. That makes the new `doctor` subcommand unusable as soon as it hits the tool map in `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`.
+- **High:** The diff checkpoint marker reset path does not actually force a branch-base rerun. In `command_checkpoint`, a `[CHECKPOINT]` marker change or progress reset prints that it is “using branch base,” but the subsequent `preferred_diff_base_ref(...)` call can still substitute the stale recorded base or last-reviewed head from diff metadata. That means a marker edit can silently generate the next diff against the wrong commit, defeating the reset logic.
+- **Medium-High:** `run_checkpoint_fallback` treats an existing review as reusable if the artifact hash matches, but it ignores other inputs that affect review validity: `git_base_ref`, context paths, dirty-path allowances, and model/lens changes. A fallback run can therefore accept a stale review file for a materially different checkpoint configuration and still pass verification.
+- **Medium:** `recommended_next_action` can return `repair_closeout_checkpoint`, but `command_repair` never repairs `closeout` at all. That makes the status output point users at an action the tool cannot execute, leaving unhealthy closeout state effectively unrecoverable through the advertised repair flow.
+
+## Residual Risks
+- The new GH CLI integration is still highly environment-dependent. If `gh pr view`, `gh pr checks`, or `gh pr merge` behave differently across CLI versions, the delivery path can diverge from the code’s assumptions.
+- `compose_closeout_text()` still uses a raw string split on `## Workflow Inventory`, so authored closeout prose containing that heading text could be truncated or rewritten unexpectedly.
+- The fallback and repair flows now rely on several external review scripts honoring the new manifest fields exactly; there is still limited end-to-end coverage for those interactions.

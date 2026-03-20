@@ -192,7 +192,7 @@ describe('Domains workspace', () => {
     expect(screen.getByText(/mock contexts panel/i)).toBeInTheDocument();
   });
 
-  it('does not expose domain defaults in setup', async () => {
+  it('exposes domain defaults in setup', async () => {
     const user = userEvent.setup();
     useQueryMock.mockImplementation(createUseQueryImplementation({
       contexts: [{ id: 'context-1', domainId: 'domain-a', text: 'Context text' }],
@@ -211,7 +211,7 @@ describe('Domains workspace', () => {
 
     await user.click(screen.getByRole('tab', { name: /setup/i }));
 
-    expect(screen.queryByRole('button', { name: /defaults/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /defaults/i })).toBeInTheDocument();
   });
 
   it('simplifies the vignette inventory table and opens details from the vignette name', async () => {

@@ -222,14 +222,27 @@ export function JobChoiceNew() {
 
   const secondValueOptions = valueStatements.filter((v) => v.id !== selectedValueFirstId);
 
+  const selectedLevelPresetVersion = useMemo(() => {
+    if (selectedLevelPresetVersionId === '') return null;
+    for (const preset of (levelPresetsData?.levelPresets ?? [])) {
+      if (preset.latestVersion?.id === selectedLevelPresetVersionId) {
+        return preset.latestVersion;
+      }
+    }
+    return null;
+  }, [selectedLevelPresetVersionId, levelPresetsData]);
+
   const previewText = useMemo(() => {
     if (selectedContext == null || valueFirst == null || valueSecond == null) return null;
+    const levelWords = selectedLevelPresetVersion != null
+      ? { first: selectedLevelPresetVersion.l3, second: selectedLevelPresetVersion.l3 }
+      : undefined;
     return assembleTemplate(selectedContext.text, {
       context_id: selectedContextId,
       value_first: { token: valueFirst.token, body: valueFirst.body },
       value_second: { token: valueSecond.token, body: valueSecond.body },
-    });
-  }, [selectedContext, selectedContextId, valueFirst, valueSecond]);
+    }, levelWords);
+  }, [selectedContext, selectedContextId, valueFirst, valueSecond, selectedLevelPresetVersion]);
 
   const loadingError =
     definitionError?.message ??
@@ -241,12 +254,13 @@ export function JobChoiceNew() {
 
   const handleDomainChange = useCallback((domainId: string) => {
     setSelectedDomainId(domainId);
-    setSelectedContextId('');
     setSelectedValueFirstId('');
     setSelectedValueSecondId('');
     setErrorMessage(null);
     const domain = domains.find((d) => d.id === domainId);
     setSelectedLevelPresetVersionId(domain?.defaultLevelPresetVersionId ?? '');
+    setSelectedPreambleVersionId(domain?.defaultPreambleVersionId ?? '');
+    setSelectedContextId(domain?.defaultContextId ?? '');
   }, [domains]);
 
   useEffect(() => {

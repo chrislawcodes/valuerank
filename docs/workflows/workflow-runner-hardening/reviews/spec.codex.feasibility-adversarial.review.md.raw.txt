@@ -1,0 +1,11 @@
+## Findings
+1. High: The `[CHECKPOINT]` base-ref fix is not testable as written because the acceptance condition contradicts the mechanism it describes. The spec says resetting `args.base_ref` to `None` should make `preferred_diff_base_ref(..., None)` fall through to `recorded_base_ref`, but then tells the test to mock `diff_review_budget_state` with `head_mismatch=True`, which by its own explanation would choose `recorded_head_sha`. That means the test cannot reliably prove the reset worked, and it can pass or fail for the wrong reason.
+
+2. High: The closeout repair change is under-specified. Adding `"closeout"` to the repair loop does not define how `command_repair` should dispatch `repair_closeout_checkpoint`, what it should do when closeout is missing or stubbed, or whether it should continue past a skipped closeout. A patch that only extends the stage list could still leave the closeout repair path non-functional or turn an absent closeout into a silent false success.
+
+3. Medium: The model-name fix is broader than the bug and risks collateral edits. The instruction to search the entire file for any `gpt-`/`claude-`/other model strings is not bounded to the reported hardcode, so it can accidentally rewrite unrelated literals or comments. The spec also introduces a file-local `DEFAULT_CODEX_MODEL` without stating whether this file should be the source of truth or whether a shared constant/config already exists, which creates a potential duplicate-configuration problem.
+
+## Residual Risks
+- Even if the fixes land, the workflow still depends on the exact shape of persisted workflow state; rebased histories and partially written manifests may continue to produce edge-case behavior not covered by the proposed tests.
+- The repair-mode handling for absent closeout artifacts may remain ambiguous unless the implementation defines a clear success/skip signal separate from “repaired.”
+- Test coverage may still miss user-visible CLI behavior if the new assertions only inspect helper return values rather than full command output and exit status.
