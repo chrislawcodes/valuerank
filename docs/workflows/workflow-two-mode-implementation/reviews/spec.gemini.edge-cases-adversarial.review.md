@@ -9,8 +9,8 @@ git_head_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
 git_base_ref: "origin/main"
 git_base_sha: "c165a36bfd702090296714c081e0deed98c02892"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Token handoff trigger: accepted — spec now says milestone/human-initiated. Global config state flaw: rejected — CLAUDE.md holds protocol instructions only; block note (transient state) goes in workflow.json via block command. Undefined checkpoint mechanism and first-checkpoint base: accepted — spec now defines checkpoint_progress struct with SHA and explicit first-run behavior. tasks.md mutability: accepted — marker_count stored for drift detection. Advisory checkpoints and model brittleness: deferred — out of scope."
 raw_output_path: "docs/workflows/workflow-two-mode-implementation/reviews/spec.gemini.edge-cases-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -53,5 +53,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=2353, output=1157, total=16992
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Token handoff trigger: accepted — spec now says milestone/human-initiated. Global config state flaw: rejected — CLAUDE.md holds protocol instructions only; block note (transient state) goes in workflow.json via block command. Undefined checkpoint mechanism and first-checkpoint base: accepted — spec now defines checkpoint_progress struct with SHA and explicit first-run behavior. tasks.md mutability: accepted — marker_count stored for drift detection. Advisory checkpoints and model brittleness: deferred — out of scope.

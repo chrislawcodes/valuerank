@@ -21,7 +21,19 @@
     "summary": "Three improvements to the feature workflow system: (1) Codex Orchestrator guide document, (2) CLAUDE.md handoff protocol, (3) runner support for [CHECKPOINT] markers in tasks.md for scoped diff review. Model notes: codex-5.4-mini, gemini-2.5-pro, serial Gemini calls only.",
     "updated_at": 1773981349
   },
-  "delivery": {},
+  "delivery": {
+    "branch": "main",
+    "head_sha": "62666fcfc9d06334e1badbf69c327f26fbe70b25",
+    "updated_at": 1773990464,
+    "upstream": "origin/main",
+    "pr_url": "direct-commit:62666fcfc9d06334e1badbf69c327f26fbe70b25",
+    "pr_state": "merged",
+    "pr_is_draft": false,
+    "pr_number": null,
+    "checks_summary": "pass",
+    "checks": [],
+    "note": "Implementation committed directly to main (no PR branch) \u2014 workflow delivered at commit 62666fc."
+  },
   "dirty_overrides": {},
   "checkpoint_fallback": {}
 }

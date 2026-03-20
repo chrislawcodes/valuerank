@@ -9,8 +9,8 @@ git_head_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
 git_base_ref: "origin/main"
 git_base_sha: "c165a36bfd702090296714c081e0deed98c02892"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "High findings accepted and reconciled into spec: CLAUDE.md clarified as protocol-only (state stays in workflow.json), checkpoint_index replaced with checkpoint_progress struct with SHA+marker_count, first-run and fallback cases specified. Mode-selection dispatch deferred — agents self-select via SKILL.md."
 raw_output_path: "docs/workflows/workflow-two-mode-implementation/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -42,5 +42,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: High findings accepted and reconciled into spec: CLAUDE.md clarified as protocol-only (state stays in workflow.json), checkpoint_index replaced with checkpoint_progress struct with SHA+marker_count, first-run and fallback cases specified. Mode-selection dispatch deferred — agents self-select via SKILL.md.

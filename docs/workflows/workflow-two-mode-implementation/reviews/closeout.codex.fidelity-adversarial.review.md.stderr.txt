@@ -1,0 +1,146 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0a1a-66b5-7473-b2ed-dddb61e0884f
+--------
+user
+Review this closeout artifact using a fidelity-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: closeout.md
+# Closeout: workflow-two-mode-implementation
+
+## Summary
+
+Implemented three improvements to the feature workflow system:
+
+1. **CODEX-ORCHESTRATOR.md** — A self-contained guide for Codex when running the workflow without Claude. Covers: when Codex Orchestrator mode applies, model selection (codex-5.4-mini / gemini-2.5-pro, Gemini calls serial), phase-by-phase command reference, escalation criteria (what Codex can self-judge vs. must escalate), hard limits (no git push/merge/PR without human), command failure protocol (retry once then block), and handoff back to Claude.
+
+2. **CLAUDE.md handoff section** — Added "Handing Off to Codex Orchestrator" protocol to `~/.claude/CLAUDE.md`. Covers: milestone-triggered handoff, step 1 (status), step 2 (block with open-decisions note), and clarification that CLAUDE.md holds protocol instructions only — the transient block note goes in `workflow.json`.
+
+3. **Runner [CHECKPOINT] support** — Added incremental diff checkpoint capability to `run_feature_workflow.py`:
+   - `parse_checkpoint_markers(slug)` — parses `[CHECKPOINT]` markers in tasks.md, returns `(count, markers_sha)` where sha is computed only over matched marker lines (not full file)
+   - `checkpoint_progress_state(slug)` — reads `checkpoint_progress` from workflow state with full defaults
+   - `_sha_is_valid_ancestor(sha)` — validates a SHA via `git cat-file -t` + `git merge-base --is-ancestor`
+   - `_advance_checkpoint_progress(slug, stage, pending_head_sha)` — advances index after successful diff checkpoint
+   - `command_checkpoint` diff path — selects checkpoint-scoped base_ref when `index > 0` and markers_sha matches; resets to branch base on stale/invalid state
+   - `command_init` — resets checkpoint_progress on reinit
+   - `command_status` — shows checkpoint progress when `index > 0`
+   - Also extracted pure helpers into `workflow_state.py` and added `CHECKPOINT_PROGRESS_KEY` constant
+
+## Key Decisions Made
+
+- **markers_sha hashes only the matched `[CHECKPOINT]` lines**, not the full tasks.md, so routine content edits don't reset incremental progress
+- **`pending_head_sha` captured before reviews launch**, not after verify completes
+- **Reset paths** (index overflow, markers_sha mismatch, dangling sha) all fall back to branch base — conservative by design
+- **Escalation criteria in CODEX-ORCHESTRATOR.md are intentionally qualitative** — machine-parseable rules were considered and rejected; human-language guidance is appropriate for an AI agent
+- **`--dry-run` in Codex Orchestrator delivery** is intentional — Codex prepares the command, human executes it
+- **CLAUDE.md holds protocol instructions only** — transient state (block notes, open decisions) goes in workflow.json, never in CLAUDE.md
+
+## Deferred Items
+
+The following were raised in adversarial reviews and deferred for future iterations:
+
+**Runner correctness:**
+- Codex: After rebase + markers-sha reset, `preferred_diff_base_ref` may return stale `suggested_base_ref` instead of true branch base — fix requires explicit `None` reset in the fallback paths
+- Codex: `command_repair` does not handle `closeout` stage; `recommended_next_action` can suggest `repair_closeout_checkpoint` with no repair path
+
+**Runner design:**
+- Gemini: `workflow.json` state has no file locking — concurrent commands can overwrite each other; file locking is a complex addition
+- Gemini: Hardcoded `--squash` in deliver; should be configurable
+- Gemini: `gpt-5.4-mini` hardcoded in `required_reviews` — should be a named constant (correct value is `codex-5.4-mini`)
+- Gemini: `run_checkpoint_fallback` accepts any review if artifact SHA matches, ignoring context changes
+
+**Documentation gaps:**
+- Gemini: `block` mechanism is overloaded for both handoffs and real escalations — future improvement: separate `handoff_state` key
+- Gemini: CODEX-ORCHESTRATOR.md could be more explicit about where review paths are found (checkpoint output + reviews/ directory)
+
+## What Went Well
+
+- The three-slice design worked cleanly — CODEX-ORCHESTRATOR.md, CLAUDE.md, and runner changes are independent deliverables
+- The `markers_sha` hashing design (marker lines only, normalized) proved robust — routine content edits don't trigger resets
+- The SHA ancestry validation (`git cat-file -t` + `git merge-base --is-ancestor`) catches both dangling refs and rebases correctly
+- Test suite expanded from 30 to 42 tests with full coverage of new marker/progress/SHA helpers
+- Adversarial reviews caught 3 real issues (repair_closeout gap, base_ref reset edge case, model name constant)
+
+## What Didn't Go Well
+
+- **Direct-to-main commit** — the implementation was committed directly to main without a PR branch, which broke the workflow's delivery gate. The workflow requires a PR but none was created. Work around: manually set delivery state in workflow.json. For future workflows, always use a feature branch even for workflow-system changes.
+- **Missing workflow files after branch switch** — `workflow_utils.py`, `run_gemini_review.py`, `run_codex_review.py`, and other review-lens scripts were untracked and lost when the checkout switched branches. These should be committed to the repository (tracked in git).
+- **sync-codex-skills.py missing** — runner calls `ensure_sync()` on every command but `scripts/sync-codex-skills.py` didn't exist. A stub was created. The real sync script should be committed or the ensure_sync() call should be gated on the script's existence.
+- **Large diff requiring split review** — the full implementation diff (docs + code) was 159KB, exceeding the 150K hard cap. Required splitting into two checkpoint runs. The new `[CHECKPOINT]` support makes this better for future implementations.
+- **Context compaction mid-workflow** — the session ran out of context during the diff checkpoint phase, causing a new session to start without the working state. The workflow state (reviews, reconciliation notes) was in stash, not committed. More frequent commits of workflow state files would have prevented loss.
+
+## Post-Mortem: Workflow Improvements to Make
+
+1. **Commit review-lens scripts to git** — `workflow_utils.py`, `run_gemini_review.py`, `run_codex_review.py`, `update_review_resolution.py`, `verify_review_checkpoint.py`, `write_canonical_diff.py`, `append_reconciliation_entry.py` should be tracked files, not left untracked
+2. **Gate ensure_sync() on script existence** — `ensure_sync()` should check if the sync script exists and skip gracefully if not
+3. **Add delivery bypass for direct-to-main** — the workflow should support a `--direct-commit <sha>` flag on `deliver` for cases where implementation goes directly to main (unusual but valid for workflow-system changes)
+4. **command_repair should handle closeout** — the repair command should iterate closeout like the other stages
+5. **Fix base_ref reset in diff checkpoint** — after a markers-sha mismatch or dangling SHA reset, explicitly set `args.base_ref = None` before calling `preferred_diff_base_ref`
+6. **Model name constant** — extract `"gpt-5.4-mini"` to a named constant `DEFAULT_CODEX_MODEL = "codex-5.4-mini"`
+
+## Outputs
+
+- spec: `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/spec.md`
+- plan: `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/plan.md`
+- tasks: `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/tasks.md`
+
+## Reviews
+
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/spec.gemini.requirements-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/spec.gemini.edge-cases-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/spec.codex.feasibility-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/plan.gemini.architecture-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/plan.gemini.testability-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/plan.codex.implementation-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/tasks.gemini.dependency-order-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/tasks.gemini.coverage-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/tasks.codex.execution-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/diff.gemini.regression-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/diff.gemini.quality-adversarial.review.md`
+- `/Users/chrislaw/valuerank/docs/workflows/workflow-two-mode-implementation/reviews/diff.codex.correctness-adversarial.review.md`
+
+## Delivery
+
+- branch: `main`
+- commit: `62666fcfc9d06334e1badbf69c327f26fbe70b25`
+- pr: direct-commit — **WAIVER**: implementation committed directly to main without a PR branch; normal PR gate bypassed; documented as a post-mortem item; code is live and correct
+- checks: `pass` (code is on main; no CI gate required for workflow-system documentation changes)
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+I’m reviewing the closeout artifact itself as evidence, not the underlying code. I’ll look for places where the narrative overclaims, contradicts itself, or omits unresolved correctness risks that should keep the closeout from sounding complete.
+codex
+## Findings
+1. High: The delivery status is internally inconsistent and overstates validity. The artifact says the work was committed directly to `main` without a PR branch, then marks `checks: pass` and states the code is “live and correct.” That is not faithful to the process described in the same document, and the “no CI gate required for workflow-system documentation changes” rationale does not match a closeout that includes substantive runner code changes.
+2. High: The closeout presents completion language that is stronger than the evidence supports. It claims “full coverage” for the new marker/progress/SHA helpers, but the same artifact immediately lists unresolved correctness gaps in Deferred Items and Post-Mortem, including base-ref reset behavior, a missing `closeout` repair path, and acceptance logic concerns. That makes the completeness claim misleading.
+3. Medium: The artifact leaves the provenance of part of the deliverable ambiguous. It says several workflow/review scripts were untracked and “lost when the checkout switched branches,” but then treats them as part of the completed implementation without showing that they were recovered and tracked in the final repository state. From a fidelity standpoint, that means the closeout does not prove the claimed outputs actually survived into the deliverable.
+
+## Residual Risks
+- The known checkpoint bug around stale `suggested_base_ref` after reset can still route future diff checkpoints to the wrong base.
+- `command_repair` still has no closeout-stage path, so some failure states may have no valid repair action.
+- `workflow.json` still has no locking, so concurrent commands can overwrite each other.
+- `run_checkpoint_fallback` can accept a review on artifact SHA alone, which may miss context drift.
+- The `block` state is overloaded for both handoffs and escalations, which can make later workflow recovery ambiguous.
+- The hardcoded delivery/review defaults called out in the artifact can drift from intended behavior unless they are centralized and tested.
+tokens used
+6,072

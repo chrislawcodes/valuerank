@@ -9,8 +9,8 @@ git_head_sha: "d5d05171abe1c55f411c5ca826872b49c50849cd"
 git_base_ref: "origin/main"
 git_base_sha: "c165a36bfd702090296714c081e0deed98c02892"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Escalation criteria: deferred — already defined in SKILL.md, guide will reference them. Handoff trigger: accepted — changed to milestone/human-initiated, not token-detection. HEAD ambiguity: accepted — spec now specifies git commit SHA. Error handling in guide: accepted — added to guide acceptance criteria. Concurrent state and stale lock: deferred — pre-existing concerns outside this feature's scope."
 raw_output_path: "docs/workflows/workflow-two-mode-implementation/reviews/spec.gemini.requirements-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -48,5 +48,5 @@ coverage_note: ""
 - `gemini-2.5-pro`: input=2351, output=850, total=16519
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Escalation criteria: deferred — already defined in SKILL.md, guide will reference them. Handoff trigger: accepted — changed to milestone/human-initiated, not token-detection. HEAD ambiguity: accepted — spec now specifies git commit SHA. Error handling in guide: accepted — added to guide acceptance criteria. Concurrent state and stale lock: deferred — pre-existing concerns outside this feature's scope.
