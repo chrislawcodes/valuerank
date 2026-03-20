@@ -20,7 +20,7 @@ const navItems: NavItem[] = [
     icon: Library,
     children: [
       { name: 'Vignette Library', path: '/definitions', icon: Library },
-      { name: 'Trials', path: '/runs', icon: BarChart2 },
+      { name: 'Runs', path: '/runs', icon: BarChart2 },
       { name: 'Analysis', path: '/analysis', icon: BarChart2 },
     ],
   },

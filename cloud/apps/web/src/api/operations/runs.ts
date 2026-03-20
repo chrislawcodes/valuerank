@@ -75,6 +75,8 @@ export type RunConfig = {
   jobChoiceLaunchMode?: 'PAIRED_BATCH' | 'AD_HOC_BATCH' | 'STANDARD' | null;
   jobChoiceBatchGroupId?: string | null;
   jobChoicePresentationOrder?: 'A_first' | 'B_first' | null;
+  isAggregate?: boolean;
+  sourceRunIds?: string[];
   methodologySafe?: boolean | null;
 };
 
@@ -127,6 +129,8 @@ export type Run = {
   status: RunStatus;
   runCategory: RunCategory;
   config: RunConfig;
+  batchCount?: number;
+  pairedBatchGroupId?: string | null;
   progress: { total: number; completed: number; failed: number } | null;
   runProgress: RunProgress | null;
   summarizeProgress: RunProgress | null;
@@ -178,6 +182,8 @@ export const RUN_FRAGMENT = gql`
     status
     runCategory
     config
+    batchCount
+    pairedBatchGroupId
     progress
     runProgress {
       total

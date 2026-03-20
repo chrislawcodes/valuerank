@@ -55,6 +55,9 @@ function getRunConfigPresentationOrder(run: Run): JobChoicePresentationOrder | n
 }
 
 function getRunConfigBatchGroupId(run: Run): string | null {
+  if (typeof run.pairedBatchGroupId === 'string' && run.pairedBatchGroupId.trim().length > 0) {
+    return run.pairedBatchGroupId;
+  }
   const raw = run.config?.jobChoiceBatchGroupId;
   return typeof raw === 'string' && raw.trim().length > 0 ? raw : null;
 }

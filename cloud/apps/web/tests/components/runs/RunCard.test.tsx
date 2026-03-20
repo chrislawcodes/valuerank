@@ -21,6 +21,8 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
     config: {
       models: ['gpt-4', 'claude-3'],
     },
+    batchCount: 1,
+    pairedBatchGroupId: null,
     progress: { total: 10, completed: 10, failed: 0 },
     runProgress: {
       total: 10,
@@ -78,6 +80,25 @@ describe('RunCard', () => {
 
     expect(screen.getByText('15/20')).toBeInTheDocument();
     expect(screen.getByText('Progress')).toBeInTheDocument();
+  });
+
+  it('shows batch count', () => {
+    const run = createMockRun({
+      batchCount: 3,
+      config: {
+        models: ['gpt-4', 'claude-3'],
+      },
+    });
+    render(<RunCard run={run} />);
+
+    expect(screen.getByText('Batches').parentElement).toHaveTextContent('3');
+  });
+
+  it('shows paired batch badge when the run belongs to a paired batch group', () => {
+    const run = createMockRun({ pairedBatchGroupId: 'group-1' });
+    render(<RunCard run={run} />);
+
+    expect(screen.getByText('Paired batch')).toBeInTheDocument();
   });
 
   it('calls onClick when clicked', async () => {

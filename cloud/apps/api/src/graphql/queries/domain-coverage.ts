@@ -12,10 +12,12 @@ import { formatTrialSignature, isVnewSignature, parseVnewTemperature } from '@va
 import { parseDefinitionVersion } from '../../utils/definition-version.js';
 import { parseTemperature } from '../../utils/temperature.js';
 
-import { DOMAIN_ANALYSIS_VALUE_KEYS } from './domain.js';
-
-export const COVERAGE_VALUE_KEYS = DOMAIN_ANALYSIS_VALUE_KEYS;
-export type CoverageValueKey = (typeof COVERAGE_VALUE_KEYS)[number];
+import {
+  COVERAGE_VALUE_KEYS,
+  type CoverageValueKey,
+  extractValuePair,
+  selectPrimaryDefinitionCount,
+} from './domain-coverage-utils.js';
 
 type DomainValueCoverageCell = {
   valueA: string;
@@ -77,33 +79,6 @@ const DomainValueCoverageResultRef = builder
     }),
   });
 
-function isCoverageValueKey(value: string): value is CoverageValueKey {
-  return (COVERAGE_VALUE_KEYS as readonly string[]).includes(value);
-}
-
-/**
- * Extract the two canonical value dimension names from a definition's resolved content JSON.
- * Returns null if the definition does not have exactly two recognized value dimensions.
- */
-function extractValuePair(
-  content: unknown
-): { valueA: CoverageValueKey; valueB: CoverageValueKey } | null {
-  if (content === null || typeof content !== 'object' || Array.isArray(content)) return null;
-  const dims = (content as { dimensions?: unknown }).dimensions;
-  if (!Array.isArray(dims) || dims.length !== 2) return null;
-  const nameA =
-    typeof (dims[0] as { name?: unknown }).name === 'string'
-      ? (dims[0] as { name: string }).name
-      : null;
-  const nameB =
-    typeof (dims[1] as { name?: unknown }).name === 'string'
-      ? (dims[1] as { name: string }).name
-      : null;
-  if (nameA == null || nameB == null) return null;
-  if (!isCoverageValueKey(nameA) || !isCoverageValueKey(nameB)) return null;
-  return { valueA: nameA, valueB: nameB };
-}
-
 function formatRunSignature(config: unknown): string {
   const runConfig = config as {
     definitionSnapshot?: {
@@ -139,7 +114,7 @@ builder.queryField('domainValueCoverage', (t) =>
       that tests that pair of values in conflict. Optionally filtered to count only
       runs that included the specified model IDs.
 
-      The matrix is symmetric (valueA × valueB = valueB × valueA).
+      The matrix is directional: cell (col=X, row=Y) shows runs where X was presented first.
       Diagonal cells are returned as batchCount=0 with no definitionId.
     `,
     args: {
@@ -178,7 +153,7 @@ builder.queryField('domainValueCoverage', (t) =>
       // Map definition ID -> value pair (only those with recognized canonical pair)
       type DefValuePair = { valueA: CoverageValueKey; valueB: CoverageValueKey; name: string };
       const pairByDefinitionId = new Map<string, DefValuePair>();
-      // Map canonical pair key -> definition IDs (to detect multi-vignette cells)
+      // Map directional pair key -> definition IDs (to detect multi-vignette cells)
       const definitionsByPairKey = new Map<string, string[]>();
 
       // Resolve definition contents in chunks to handle inheritance
@@ -186,12 +161,12 @@ builder.queryField('domainValueCoverage', (t) =>
         const batch = definitions.slice(offset, offset + VALUE_PAIR_RESOLVE_CHUNK_SIZE);
         const settled = await Promise.allSettled(
           batch.map(async (def) => {
-            const resolved = await resolveDefinitionContent(def.id);
-            const pair = extractValuePair(resolved.resolvedContent);
+            const resolvedContent = (await resolveDefinitionContent(def.id) as { resolvedContent: unknown }).resolvedContent;
+            const pair = extractValuePair(resolvedContent);
             if (pair == null) return;
 
             pairByDefinitionId.set(def.id, { ...pair, name: def.name ?? '' });
-            const key = [pair.valueA, pair.valueB].sort().join('::');
+            const key = `${pair.valueA}::${pair.valueB}`;
             const existing = definitionsByPairKey.get(key) ?? [];
             existing.push(def.id);
             definitionsByPairKey.set(key, existing);
@@ -246,9 +221,10 @@ builder.queryField('domainValueCoverage', (t) =>
           existingRuns.push(run);
           signatureScopedRunsByDefinitionId.set(run.definitionId, existingRuns);
 
+          const isAggregateRun = (run.config as { isAggregate?: boolean } | null)?.isAggregate === true;
           const matchesModelFilter = filterModelIds.length === 0
             || run.transcripts.some((transcript) => filterModelIds.includes(transcript.modelId));
-          if (!matchesModelFilter) continue;
+          if (!matchesModelFilter || isAggregateRun) continue;
 
           if (!latestMatchingRunIdByDefinitionId.has(run.definitionId)) {
             latestMatchingRunIdByDefinitionId.set(run.definitionId, run.id);
@@ -283,7 +259,7 @@ builder.queryField('domainValueCoverage', (t) =>
         label: m.displayName,
       }));
 
-      // Build the full symmetric 10×10 matrix
+      // Build the full directional 10×10 matrix
       const values = [...COVERAGE_VALUE_KEYS] as string[];
       const cells: DomainValueCoverageCell[] = [];
 
@@ -302,7 +278,7 @@ builder.queryField('domainValueCoverage', (t) =>
             continue;
           }
 
-          const key = [valueA, valueB].sort().join('::');
+          const key = `${valueA}::${valueB}`;
           const defIdsForPair = definitionsByPairKey.get(key) ?? [];
 
           if (defIdsForPair.length === 0) {
@@ -315,17 +291,13 @@ builder.queryField('domainValueCoverage', (t) =>
               aggregateRunId: null,
             });
           } else {
-            // Aggregate batch counts across all definitions for this pair
-            let totalBatches = 0;
-            for (const defId of defIdsForPair) {
-              totalBatches += batchCountByDefinitionId.get(defId) ?? 0;
-            }
-            // Primary definition: pick the one with most batches (for linking)
-            const primaryDefId = defIdsForPair.reduce((best, defId) => {
-              const bestCount = batchCountByDefinitionId.get(best) ?? 0;
-              const thisCount = batchCountByDefinitionId.get(defId) ?? 0;
-              return thisCount > bestCount ? defId : best;
-            }, defIdsForPair[0] ?? '');
+            // Primary definition: pick the one with most batches for the link target,
+            // but do not sum other definitions into the displayed cell count.
+            const { primaryDefinitionId, batchCount } = selectPrimaryDefinitionCount(
+              defIdsForPair,
+              batchCountByDefinitionId,
+            );
+            const primaryDefId = primaryDefinitionId ?? '';
             const primaryPair = pairByDefinitionId.get(primaryDefId);
             const aggregateRunId = primaryDefId === ''
               ? null
@@ -333,7 +305,7 @@ builder.queryField('domainValueCoverage', (t) =>
             cells.push({
               valueA,
               valueB,
-              batchCount: totalBatches,
+              batchCount,
               definitionId: primaryDefId !== '' ? primaryDefId : null,
               definitionName: primaryPair?.name ?? null,
               aggregateRunId,

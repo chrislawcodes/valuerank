@@ -97,7 +97,7 @@ export function Runs() {
       <div className="flex items-start justify-between mb-6 gap-4">
         <div className="space-y-2">
           <h1 className="text-2xl font-serif font-medium text-[#1A1A1A]">
-            Trials
+            Runs
           </h1>
           {runCategory ? (
             <div className="space-y-2">
@@ -111,7 +111,7 @@ export function Runs() {
             </div>
           ) : (
             <p className="text-sm text-gray-600 max-w-3xl">
-              Review persisted vignette-scoped runs, apply filters, and open individual run details.
+              Review saved runs and their batch counts, apply filters, and open individual run details.
             </p>
           )}
         </div>
@@ -145,9 +145,9 @@ export function Runs() {
       {/* Content - fills remaining height */}
       <div className="flex-1 min-h-0">
         {loading ? (
-          <Loading size="lg" text="Loading trials..." />
+          <Loading size="lg" text="Loading runs..." />
         ) : error ? (
-          <ErrorMessage message={`Failed to load trials: ${error.message}`} />
+          <ErrorMessage message={`Failed to load runs: ${error.message}`} />
         ) : filteredRuns.length === 0 ? (
           <EmptyState status={filters.status} hasTagFilter={filters.tagIds.length > 0} runCategoryLabel={runCategoryLabel} />
         ) : filters.viewMode === 'folder' ? (
@@ -187,10 +187,10 @@ function EmptyState({ status, hasTagFilter, runCategoryLabel }: { status: string
           <Play className="w-8 h-8 text-gray-400" />
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">
-          No trials found
+          No runs found
         </h3>
         <p className="text-gray-500 mb-4">
-          No trials match the selected filters.
+          No runs match the selected filters.
         </p>
       </div>
     );
@@ -202,12 +202,12 @@ function EmptyState({ status, hasTagFilter, runCategoryLabel }: { status: string
         <Play className="w-8 h-8 text-teal-600" />
       </div>
       <h3 className="text-lg font-medium text-gray-900 mb-2">
-        {runCategoryLabel ? `No ${runCategoryLabel.toLowerCase()} runs yet` : 'No trials yet'}
+        {runCategoryLabel ? `No ${runCategoryLabel.toLowerCase()} runs yet` : 'No runs yet'}
       </h3>
       <p className="text-gray-500 mb-4">
         {runCategoryLabel
           ? `${runCategoryLabel} work is launched from domain Runs. Start there, then return here for history and drilldown.`
-          : 'Start your first evaluation trial from a vignette.'}
+          : 'Start your first evaluation run from a vignette.'}
       </p>
       <Button onClick={() => navigate(runCategoryLabel ? '/domains' : '/definitions')}>
         {runCategoryLabel ? 'Go to Domains' : 'Go to Vignettes'}

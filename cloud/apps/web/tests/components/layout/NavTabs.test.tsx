@@ -34,7 +34,7 @@ describe('NavTabs Component', () => {
     await openMenu('Vignettes');
 
     expect(screen.getByRole('link', { name: 'Vignette Library' })).toHaveAttribute('href', '/definitions');
-    expect(screen.getByRole('link', { name: 'Trials' })).toHaveAttribute('href', '/runs');
+    expect(screen.getByRole('link', { name: 'Runs' })).toHaveAttribute('href', '/runs');
     expect(screen.getByRole('link', { name: 'Analysis' })).toHaveAttribute('href', '/analysis');
   });
 
