@@ -7,6 +7,8 @@ export type Domain = {
   updatedAt: string;
   definitionCount: number;
   defaultLevelPresetVersionId: string | null;
+  defaultPreambleVersionId: string | null;
+  defaultContextId: string | null;
 };
 
 export const DOMAINS_QUERY = gql`
@@ -18,9 +20,43 @@ export const DOMAINS_QUERY = gql`
       updatedAt
       definitionCount
       defaultLevelPresetVersionId
+      defaultPreambleVersionId
+      defaultContextId
     }
   }
 `;
+
+export const SET_DOMAIN_DEFAULTS_MUTATION = gql`
+  mutation SetDomainDefaults(
+    $id: ID!
+    $defaultLevelPresetVersionId: ID
+    $defaultPreambleVersionId: ID
+    $defaultContextId: ID
+  ) {
+    setDomainDefaults(
+      id: $id
+      defaultLevelPresetVersionId: $defaultLevelPresetVersionId
+      defaultPreambleVersionId: $defaultPreambleVersionId
+      defaultContextId: $defaultContextId
+    ) {
+      id
+      defaultLevelPresetVersionId
+      defaultPreambleVersionId
+      defaultContextId
+    }
+  }
+`;
+
+export type SetDomainDefaultsMutationResult = {
+  setDomainDefaults: Pick<Domain, 'id' | 'defaultLevelPresetVersionId' | 'defaultPreambleVersionId' | 'defaultContextId'>;
+};
+
+export type SetDomainDefaultsMutationVariables = {
+  id: string;
+  defaultLevelPresetVersionId?: string | null;
+  defaultPreambleVersionId?: string | null;
+  defaultContextId?: string | null;
+};
 
 export const CREATE_DOMAIN_MUTATION = gql`
   mutation CreateDomain($name: String!) {
