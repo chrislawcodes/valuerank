@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 import type { MethodsUsed, AnalysisWarning } from '../../api/operations/analysis';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 
 type MethodsDocumentationProps = {
   methodsUsed: MethodsUsed;
@@ -87,7 +88,7 @@ function getMethodDescription(value: string): string {
  */
 function formatMethodValue(value: string | number): string {
   if (typeof value === 'number') return value.toString();
-  return value.replace(/_/g, ' ');
+  return formatDisplayLabel(value);
 }
 
 export function MethodsDocumentation({

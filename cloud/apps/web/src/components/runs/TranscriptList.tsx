@@ -13,6 +13,7 @@ import {
   getScenarioDimensionsForId,
   normalizeScenarioId,
 } from '../../utils/scenarioUtils';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import { Tooltip } from '../ui/Tooltip';
 import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
 
@@ -591,8 +592,8 @@ export function TranscriptList({
             {dimensionKeys.map((key) => (
               <SortHeaderButton
                 key={key}
-                label={dimensionLabels?.[key] ?? key}
-                ariaLabel={dimensionLabels?.[key] ?? key}
+                label={formatDisplayLabel(dimensionLabels?.[key] ?? key)}
+                ariaLabel={formatDisplayLabel(dimensionLabels?.[key] ?? key)}
                 onClick={() => handleSortChange({ type: 'dimension', key })}
                 active={isActiveSort({ type: 'dimension', key })}
                 direction={sortState.direction}
@@ -702,8 +703,8 @@ export function TranscriptList({
                   {dimensionKeys.map((key) => (
                     <SortHeaderButton
                       key={key}
-                      label={dimensionLabels?.[key] ?? key}
-                      ariaLabel={dimensionLabels?.[key] ?? key}
+                      label={formatDisplayLabel(dimensionLabels?.[key] ?? key)}
+                      ariaLabel={formatDisplayLabel(dimensionLabels?.[key] ?? key)}
                       onClick={() => handleSortChange({ type: 'dimension', key })}
                       active={isActiveSort({ type: 'dimension', key })}
                       direction={sortState.direction}

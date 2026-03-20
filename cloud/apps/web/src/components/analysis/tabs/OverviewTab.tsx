@@ -4,13 +4,14 @@
  * Displays a semantics-backed summary table above condition-level drilldowns.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PerModelStats } from './types';
 import type { AnalysisResult, VarianceAnalysis, VisualizationData } from '../../../api/operations/analysis';
 import type { Run } from '../../../api/operations/runs';
 import { Button } from '../../ui/Button';
+import { CopyVisualButton } from '../../ui/CopyVisualButton';
 import { Tooltip } from '../../ui/Tooltip';
 import { PairedRunComparisonCard } from '../PairedRunComparisonCard';
 import {
@@ -255,6 +256,45 @@ function SummaryHeader({
       <span>{label}</span>
       <InfoTooltipTrigger label={label} title={title} />
     </div>
+  );
+}
+
+function getOverviewUnavailableMessage(
+  semantics: AnalysisSemanticsView,
+  analysisMode?: 'single' | 'paired',
+  hasCompanionAnalysis?: boolean,
+): string | null {
+  if (semantics.preference.rowAvailability.status === 'unavailable') {
+    return semantics.preference.rowAvailability.message;
+  }
+
+  if (semantics.reliability.rowAvailability.status !== 'unavailable') {
+    return null;
+  }
+
+  if (
+    analysisMode === 'paired'
+    && hasCompanionAnalysis
+    && semantics.reliability.rowAvailability.reason === 'no-repeat-coverage'
+  ) {
+    return 'This paired view has no repeated measurements per condition, so baseline reliability is unavailable. Pooling both vignette orders does not add repeat coverage.';
+  }
+
+  return semantics.reliability.rowAvailability.message;
+}
+
+function ModeAvailabilitySection({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <section className="space-y-1 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{title}</h4>
+      <p className="text-sm text-gray-600">{message}</p>
+    </section>
   );
 }
 
@@ -648,11 +688,11 @@ function OverviewSummaryTable({
     return sources;
   }, [analysisMode, companionAnalysis, companionConditionRows, conditionRows, runId, varianceAnalysis]);
   const isPooledAcrossRuns = repeatPatternSources.length > 1;
-  const summaryUnavailableMessage = semantics.preference.rowAvailability.status === 'unavailable'
-    ? semantics.preference.rowAvailability.message
-    : semantics.reliability.rowAvailability.status === 'unavailable'
-      ? semantics.reliability.rowAvailability.message
-      : null;
+  const summaryUnavailableMessage = getOverviewUnavailableMessage(
+    semantics,
+    analysisMode,
+    companionAnalysis != null,
+  );
 
   const helperText = analysisMode === 'paired' && companionAnalysis
     ? `Run-level evidence: pooled across ${repeatPatternSources.length} companion runs`
@@ -663,11 +703,15 @@ function OverviewSummaryTable({
     : completedBatches === '-'
       ? 'Run-level evidence: completed batch count unavailable'
       : `Run-level evidence: ${completedBatches} completed batch${completedBatches === 1 ? '' : 'es'}`;
+  const summaryRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-      <div>
-        <h3 className="text-sm font-medium text-gray-700">Overview Summary</h3>
-        <p className="mt-1 text-xs text-gray-500">{helperText}</p>
+    <div ref={summaryRef} className="space-y-3 rounded-lg border border-gray-200 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">Overview Summary</h3>
+          <p className="mt-1 text-xs text-gray-500">{helperText}</p>
+        </div>
+        <CopyVisualButton targetRef={summaryRef} label="overview summary" />
       </div>
 
       {summaryUnavailableMessage ? (
@@ -784,8 +828,8 @@ function OverviewSummaryTable({
         </table>
       </div>
 
-      {analysisMode === 'paired' && currentRun && currentAnalysis && (
-        <div className="border-t border-gray-200 pt-4">
+      <div className="border-t border-gray-200 pt-4">
+        {analysisMode === 'paired' && currentRun && currentAnalysis ? (
           <PairedRunComparisonCard
             currentRun={currentRun}
             currentAnalysis={currentAnalysis}
@@ -795,8 +839,13 @@ function OverviewSummaryTable({
             analysisSearch={typeof analysisSearchParams === 'string' ? analysisSearchParams : analysisSearchParams?.toString() ?? ''}
             embedded
           />
-        </div>
-      )}
+        ) : (
+          <ModeAvailabilitySection
+            title="Paired Run Comparison"
+            message="This comparison is only available in Paired vignettes mode. Switch the toggle above to see both vignette orders together."
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -332,8 +332,44 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Soft Lean %')).toBeInTheDocument();
     expect(screen.queryByText('Decision Consistency')).not.toBeInTheDocument();
     expect(screen.getByText('88%')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy overview summary as image/i })).toBeInTheDocument();
 
     expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
+  });
+
+  it('keeps the paired comparison section visible with a single-mode note', () => {
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={createSemantics()}
+          completedBatches={3}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="single"
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 5 },
+            },
+          }}
+          varianceAnalysis={createVarianceAnalysis()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
+    expect(screen.getByText(/only available in Paired vignettes mode/i)).toBeInTheDocument();
   });
 
   it('keeps one decimal for non-integer summary percentages', () => {
@@ -370,6 +406,61 @@ describe('OverviewTab', () => {
     );
 
     expect(screen.getByText('98.3%')).toBeInTheDocument();
+  });
+
+  it('uses paired-specific no-repeat wording in overview summary', () => {
+    const semantics = createSemantics();
+    semantics.reliability.rowAvailability = {
+      status: 'unavailable',
+      reason: 'no-repeat-coverage',
+      message: 'This model has one sample per condition, so baseline reliability is unavailable. Recomputing the same run without repeated samples will not populate this section.',
+    };
+    semantics.reliability.byModel.model1 = {
+      ...semantics.reliability.byModel.model1,
+      availability: semantics.reliability.rowAvailability,
+      baselineReliability: null,
+      baselineNoise: null,
+      directionalAgreement: null,
+      neutralShare: null,
+      coverageCount: 0,
+      uniqueScenarios: 0,
+      repeatCoverageShare: null,
+      contributingRunCount: null,
+      weightedOverallSignedCenterSd: null,
+    };
+
+    render(
+      <MemoryRouter>
+        <OverviewTab
+          runId="run-1"
+          semantics={semantics}
+          completedBatches={3}
+          aggregateSourceRunCount={null}
+          isAggregate={false}
+          analysisMode="paired"
+          companionAnalysis={createCompanionAnalysis()}
+          perModel={{
+            model1: {
+              sampleSize: 3,
+              values: {},
+              overall: { mean: 3, stdDev: 0, min: 1, max: 5 },
+            },
+          }}
+          visualizationData={{
+            decisionDistribution: {},
+            scenarioDimensions: {
+              s1: { Freedom: 'a1', Harmony: 'b1' },
+            },
+            modelScenarioMatrix: {
+              model1: { s1: 5 },
+            },
+          }}
+          varianceAnalysis={createVarianceAnalysis()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/pooling both vignette orders does not add repeat coverage/i)).toBeInTheDocument();
   });
 
   it('shows the custom header tooltip on focus', async () => {
@@ -836,6 +927,7 @@ describe('OverviewTab', () => {
 
     expect(screen.getByText('Run-level evidence: pooled across 2 companion runs')).toBeInTheDocument();
     expect(screen.getByText('Paired Run Comparison')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy paired run comparison as image/i })).toBeInTheDocument();
     expect(screen.queryByText('Condition Decisions')).not.toBeInTheDocument();
   });
 

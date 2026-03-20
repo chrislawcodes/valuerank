@@ -10,6 +10,7 @@ import {
   type ModelEntry,
   type ValueKey,
 } from '../../data/domainAnalysisData';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getPriorityColor } from './domainAnalysisColors';
 import {
   type ClusterAnalysis,
@@ -110,8 +111,8 @@ function getClusterPersonality(cluster: DomainCluster): ClusterPersonality {
   return {
     title,
     tendency,
-    topValues: topKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? key.replace(/_/g, ' ')),
-    bottomValues: bottomKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? key.replace(/_/g, ' ')),
+    topValues: topKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? formatDisplayLabel(key)),
+    bottomValues: bottomKeys.map((key) => VALUE_LABELS[key as ValueKey] ?? formatDisplayLabel(key)),
   };
 }
 

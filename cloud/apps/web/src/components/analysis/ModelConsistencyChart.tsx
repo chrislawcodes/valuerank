@@ -56,7 +56,7 @@ function formatCoverage(
     return `${count} repeated cells across ${total} conditions`;
   }
 
-  return `${count} / ${total} scenarios`;
+  return `${count} / ${total} conditions`;
 }
 
 function WarningCallout({
@@ -218,7 +218,7 @@ export function ModelConsistencyChart({
             {analysisMode === 'paired' ? ' (paired scope)' : ''}
           </h3>
           <p className="mt-1 text-xs text-gray-500">
-            Higher values mean more repeatable baseline decisions across repeated scenario judgments.
+            Higher values mean more repeatable baseline decisions across repeated condition judgments.
             {analysisMode === 'paired'
               ? isPooledAcrossCompanionRuns
                 ? ' Paired mode uses pooled companion reliability data when that data is available.'

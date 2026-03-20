@@ -34,6 +34,7 @@ import {
   resolveScenarioAttributes,
   resolveScenarioAxisDimensions,
 } from '../utils/decisionLabels';
+import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
 import {
   ANALYSIS_BASE_PATH,
@@ -796,7 +797,7 @@ export function AnalysisTranscripts() {
               {pairedValueLabel && (
                 <>
                   <span className="mx-2">•</span>
-                  Paired Value: <span className="font-medium text-gray-900">{pairedValueLabel}</span>
+                  Paired Value: <span className="font-medium text-gray-900">{formatDisplayLabel(pairedValueLabel)}</span>
                 </>
               )}
               {decisionCode && (
@@ -825,7 +826,7 @@ export function AnalysisTranscripts() {
 
       {hasPairedValueFilterParams && pairedValueLabel && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">
-          Blended paired inspection is active for <span className="font-medium">{pairedValueLabel}</span>. This list merges transcripts from both companion runs for the selected model.
+          Blended paired inspection is active for <span className="font-medium">{formatDisplayLabel(pairedValueLabel)}</span>. This list merges transcripts from both companion runs for the selected model.
         </div>
       )}
 
@@ -847,7 +848,7 @@ export function AnalysisTranscripts() {
 
       {!scenarioDimensions && !hasRepeatPatternParams && !hasDirectTranscriptParam && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-          Scenario dimension data is not available for this run. Recompute analysis to enable pivot filtering.
+          Condition dimension data is not available for this run. Recompute analysis to enable pivot filtering.
         </div>
       )}
 

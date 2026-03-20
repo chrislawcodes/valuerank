@@ -44,7 +44,7 @@ export function AnalysisScopeBanner({
       <p className="mt-1 text-xs text-teal-800">{getAnalysisModeScopeDescription(analysisMode)}</p>
       {hasOrientationPairing && (
         <p className="mt-1 text-xs text-teal-700">
-          {orientationCorrectedCount} scenario{orientationCorrectedCount === 1 ? '' : 's'} had
+          {orientationCorrectedCount} condition{orientationCorrectedCount === 1 ? '' : 's'} had
           their presentation order reversed and were normalized to a canonical orientation before
           analysis.
         </p>

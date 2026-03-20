@@ -9,6 +9,7 @@ import {
     mapDecisionSidesToScenarioAttributes,
     resolveScenarioAttributes,
 } from '../../utils/decisionLabels';
+import { formatDisplayLabel } from '../../utils/displayLabels';
 import {
     ANALYSIS_BASE_PATH,
     type AnalysisBasePath,
@@ -62,10 +63,10 @@ type LegendCounts = {
 
 function Legend({ lowName, highName, counts }: { lowName: string; highName: string; counts: LegendCounts }) {
     return (
-        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+        <div className="flex items-center gap-4 text-xs text-gray-500">
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200"></span>
-                <span className="font-medium text-blue-800">{lowName} {counts.low}</span>
+                <span className="font-medium text-blue-800">{formatDisplayLabel(lowName)} {counts.low}</span>
             </div>
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-gray-100 border border-gray-200"></span>
@@ -73,7 +74,7 @@ function Legend({ lowName, highName, counts }: { lowName: string; highName: stri
             </div>
             <div className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-orange-100 border border-orange-200"></span>
-                <span className="font-medium text-orange-800">{highName} {counts.high}</span>
+                <span className="font-medium text-orange-800">{formatDisplayLabel(highName)} {counts.high}</span>
             </div>
         </div>
     );
@@ -247,12 +248,12 @@ export function PivotAnalysisTable({
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
                     <Legend
                         lowName={sideAttributeMap.lowAttribute}
                         highName={sideAttributeMap.highAttribute}
                         counts={legendCounts}
                     />
+                    <CopyVisualButton targetRef={tableRef} label="pivot analysis table" />
                 </div>
             </div>
             {showDetails && (
@@ -269,7 +270,7 @@ export function PivotAnalysisTable({
                                 onChange={e => setRowDim(e.target.value)}
                                 className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
-                                {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
                             </select>
                         </label>
 
@@ -281,7 +282,7 @@ export function PivotAnalysisTable({
                                 onChange={e => setColDim(e.target.value)}
                                 className="block w-48 rounded-md border-gray-300 bg-white text-sm font-normal normal-case text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
-                                {availableDimensions.map(d => <option key={d} value={d}>{d}</option>)}
+                                {availableDimensions.map(d => <option key={d} value={d}>{formatDisplayLabel(d)}</option>)}
                             </select>
                         </label>
                     </div>
@@ -302,9 +303,10 @@ export function PivotAnalysisTable({
             </div>
             {/* Grid */}
             {pivotData && (
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 border-collapse">
-                        <thead>
+                <div className="space-y-2">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 border-collapse">
+                            <thead>
                             {/* Row 1: Empty + Column Dimension Label */}
                             <tr>
                                 <th className="p-2 bg-gray-50 border border-gray-200 border-b-0"></th>
@@ -312,26 +314,26 @@ export function PivotAnalysisTable({
                                     colSpan={pivotData.cols.length}
                                     className="p-2 bg-gray-100 border border-gray-200 text-center text-xs font-bold text-gray-700 uppercase"
                                 >
-                                    {colDim}
+                                    {formatDisplayLabel(colDim)}
                                 </th>
                             </tr>
                             {/* Row 2: Row Dimension Label + Column Values */}
                             <tr>
                                 <th className="p-3 bg-gray-100 border border-gray-200 text-left text-xs font-bold text-gray-700 uppercase w-32">
-                                    {rowDim}
+                                    {formatDisplayLabel(rowDim)}
                                 </th>
                                 {pivotData.cols.map(col => (
                                     <th key={col} className="p-3 bg-gray-50 border border-gray-200 text-center text-xs font-medium text-gray-500 font-mono">
-                                        {col}
+                                        {formatDisplayLabel(col)}
                                     </th>
                                 ))}
                             </tr>
-                        </thead>
-                        <tbody className="bg-white">
+                            </thead>
+                            <tbody className="bg-white">
                             {pivotData.rows.map(row => (
                                 <tr key={row}>
                                     <td className="p-3 bg-gray-50 border border-gray-200 text-left text-xs font-medium text-gray-500 font-mono whitespace-nowrap">
-                                        {row}
+                                        {formatDisplayLabel(row)}
                                     </td>
                                     {pivotData.cols.map(col => {
                                         const cell = pivotData.grid[row]?.[col];
@@ -355,10 +357,11 @@ export function PivotAnalysisTable({
                                     })}
                                 </tr>
                             ))}
-                        </tbody>
-                    </table>
-                    <div className="mt-2 text-xs text-gray-500">
-                        Click a cell to view pooled condition details.
+                            </tbody>
+                        </table>
+                        <div className="mt-2 text-xs text-gray-500">
+                            Click a cell to view pooled condition details.
+                        </div>
                     </div>
                 </div>
             )}

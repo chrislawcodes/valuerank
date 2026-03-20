@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { AnalysisResult } from '../../api/operations/analysis';
@@ -8,6 +8,7 @@ import { collectDecisionBucketCounts, type DecisionBucket } from '../../utils/de
 import { computeAttributeSensitivity } from '../../utils/decisionSensitivity';
 import { getPairedOrientationLabels } from '../../utils/methodology';
 import { Button } from '../ui/Button';
+import { CopyVisualButton } from '../ui/CopyVisualButton';
 import { Tooltip } from '../ui/Tooltip';
 import {
   deriveDecisionDimensionLabels,
@@ -472,6 +473,7 @@ export function PairedRunComparisonCard({
   analysisSearch,
   embedded = false,
 }: PairedRunComparisonCardProps) {
+  const comparisonRef = useRef<HTMLElement>(null);
   const currentOrder = getRunPresentationOrder(currentRun);
   const companionOrder = companionRun ? getRunPresentationOrder(companionRun) : null;
 
@@ -512,12 +514,15 @@ export function PairedRunComparisonCard({
     : 'space-y-4 rounded-xl border border-teal-200 bg-teal-50/60 p-4';
 
   return (
-    <section className={containerClass} data-testid="paired-run-comparison">
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Paired Run Comparison</h2>
-        <p className="text-sm text-teal-900/80">
-          Paired mode keeps the blended summary first and lets you open the two value orders underneath when you want to compare them directly.
-        </p>
+    <section ref={comparisonRef} className={containerClass} data-testid="paired-run-comparison">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Paired Run Comparison</h2>
+          <p className="text-sm text-teal-900/80">
+            Paired mode keeps the blended summary first and lets you open the two value orders underneath when you want to compare them directly.
+          </p>
+        </div>
+        <CopyVisualButton targetRef={comparisonRef} label="paired run comparison" />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -599,21 +604,21 @@ export function PairedRunComparisonCard({
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse">
               <thead>
-                <tr>
-                  <th
-                    rowSpan={2}
-                    className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700"
-                  >
-                    Model
-                  </th>
-                  <th
-                    colSpan={5}
-                    className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
-                  >
-                    Blended
-                  </th>
-                  {showOrderDetail ? (
-                    <>
+                {showOrderDetail ? (
+                  <>
+                    <tr>
+                      <th
+                        rowSpan={2}
+                        className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700"
+                      >
+                        Model
+                      </th>
+                      <th
+                        colSpan={5}
+                        className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
+                      >
+                        Blended
+                      </th>
                       <th
                         colSpan={3}
                         className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700"
@@ -626,33 +631,29 @@ export function PairedRunComparisonCard({
                       >
                         {bFirstGroupLabel}
                       </th>
-                    </>
-                  ) : null}
-                </tr>
-                <tr>
-                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    {firstValueLabel}
-                  </th>
-                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    Neutral
-                  </th>
-                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    {secondValueLabel}
-                  </th>
-                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    <SensitivityHeader
-                      label={`${firstValueLabel} Sensitivity`}
-                      valueLabel={firstValueLabel}
-                    />
-                  </th>
-                  <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
-                    <SensitivityHeader
-                      label={`${secondValueLabel} Sensitivity`}
-                      valueLabel={secondValueLabel}
-                    />
-                  </th>
-                  {showOrderDetail ? (
-                    <>
+                    </tr>
+                    <tr>
+                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                        {firstValueLabel}
+                      </th>
+                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                        Neutral
+                      </th>
+                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                        {secondValueLabel}
+                      </th>
+                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                        <SensitivityHeader
+                          label={`${firstValueLabel} Sensitivity`}
+                          valueLabel={firstValueLabel}
+                        />
+                      </th>
+                      <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                        <SensitivityHeader
+                          label={`${secondValueLabel} Sensitivity`}
+                          valueLabel={secondValueLabel}
+                        />
+                      </th>
                       <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
                         {firstValueLabel}
                       </th>
@@ -671,9 +672,36 @@ export function PairedRunComparisonCard({
                       <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
                         {secondValueLabel}
                       </th>
-                    </>
-                  ) : null}
-                </tr>
+                    </tr>
+                  </>
+                ) : (
+                  <tr>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-left text-xs font-semibold uppercase text-teal-700">
+                      Model
+                    </th>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                      {firstValueLabel}
+                    </th>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                      Neutral
+                    </th>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                      {secondValueLabel}
+                    </th>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                      <SensitivityHeader
+                        label={`${firstValueLabel} Sensitivity`}
+                        valueLabel={firstValueLabel}
+                      />
+                    </th>
+                    <th className="border border-teal-200 bg-white px-3 py-2 text-center text-xs font-semibold text-teal-700">
+                      <SensitivityHeader
+                        label={`${secondValueLabel} Sensitivity`}
+                        valueLabel={secondValueLabel}
+                      />
+                    </th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {comparisonRows.map((row) => (
