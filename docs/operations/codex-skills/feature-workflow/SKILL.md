@@ -117,6 +117,8 @@ If the answers are already clear from the repo context or user instructions:
 - do not invent extra questions
 - briefly state the assumptions you are carrying into the spec
 
+**Discovery is not optional.** Before authoring the spec, always either ask the clarifying questions or explicitly state the assumptions you are carrying in. Do not silently proceed to spec authoring without one of these two. If the request arrives with enough context to make the spec stable, a one-sentence "here are the assumptions I'm carrying in" satisfies this requirement — but the step must not be skipped entirely.
+
 Do not start implementation until the answers are good enough to make the spec and plan stable.
 For workflow-system improvement work, treat the maintained plan as the source of truth for the next slice, and prioritize making discovery and task shaping more enforceable before deeper engine hardening.
 
@@ -256,6 +258,19 @@ After the closeout checkpoint, write a post mortem that covers:
 - specific proposed changes to the workflow (guides, scripts, or stage order)
 
 Post mortem changes require human approval before being applied to any guide or script.
+
+## Workflow File Reference
+
+Each workflow lives in `docs/workflows/<slug>/`. The files have different roles:
+
+| File | Role |
+|------|------|
+| `workflow.json` | **Authoritative runtime state** — the runner reads and writes this; it is the single source of truth for phase, block status, delivery state, and discovery state |
+| `spec.md`, `plan.md`, `tasks.md`, `closeout.md` | **Authored artifacts** — source of truth for intent, scope, and decisions; edited by the orchestrator |
+| `reviews/*.md` | **Generated + resolved state** — produced by the checkpoint runner, resolved via reconcile; do not edit manually except to update resolution fields |
+| `reviews/*.checkpoint.json` | **Generated state** — checkpoint metadata; do not edit manually |
+
+When in doubt about current workflow state, read `workflow.json` or run `status --slug <slug>`. Do not infer state from which artifact files exist.
 
 ## Notes
 
