@@ -1,3 +1,0 @@
-Adversarial review request: focus on verification strategy, observability gaps, migration testability, backend/UI contract assertions, and whether the phased plan can be safely validated as it rolls out.
-
-Prior reviews already focused on UX/IA structure and backend semantics. Avoid duplicating those unless they create a distinct testability or observability problem.

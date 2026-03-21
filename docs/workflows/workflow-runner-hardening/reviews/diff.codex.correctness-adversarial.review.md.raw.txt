@@ -1,8 +1,0 @@
-## Findings
-1. **High:** In [`run_feature_workflow.py`](file:///Users/chrislaw/valuerank/docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py#L1062), the new `args.base_ref = None` assignments clear the base ref unconditionally in all three reset branches. That also wipes any caller-supplied `base_ref`, so a checkpoint reset will silently ignore an explicit base selection and fall back to `preferred_diff_base_ref()` heuristics. The added tests only cover the stale `last_head` case, not an intentional upstream base ref.
-
-2. **Medium:** In the new closeout repair block in [`run_feature_workflow.py`](file:///Users/chrislaw/valuerank/docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py#L1658), `closeout_state` is taken from the pre-repair `stages["closeout"]` snapshot and never refreshed after earlier stage repairs. If repairing an earlier stage changes closeout metadata or health, this block will still make its decision on stale state, which can produce a false block or a redundant closeout repair attempt.
-
-## Residual Risks
-- The closeout repair path still only handles `unhealthy-manifest`; if `stage_drift_class()` later broadens the set of repairable closeout failures, this code will bypass them unless it is updated in lockstep.
-- The behavior of `repair_checkpoint_args()` and `command_checkpoint()` for closeout remains a coupling point; if either has side effects beyond manifest refresh, repeated repair attempts could still perturb workflow state.
