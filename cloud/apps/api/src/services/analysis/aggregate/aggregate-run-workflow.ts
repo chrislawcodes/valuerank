@@ -54,6 +54,7 @@ export type AggregateRunPreparation = {
   selection: AggregateRunSelection;
   scenarios: AggregateScenarioInput[];
   sourceRunIds: string[];
+  analysisCount: number;
   sampleSize: number;
   templateRun: {
     createdByUserId: string | null;
@@ -75,6 +76,7 @@ export type AggregateRunPreparation = {
 export type AggregateClaimRecord = {
   aggregateRunId: string;
   createdNew: boolean;
+  previousConfig: AggregateRunConfig | null;
   claim: AggregateRecomputeClaim;
 };
 
@@ -156,7 +158,7 @@ export async function prepareAggregateRunSnapshot(
     include: {
       analysisResults: {
         where: { status: 'CURRENT' },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 1,
       },
       tags: {
@@ -417,6 +419,7 @@ export async function prepareAggregateRunSnapshot(
   >;
 
   const sampleSize = compatibleRuns.reduce((sum, run) => sum + (run._count?.transcripts || 0), 0);
+  const analysisCount = analysisObjects.length;
   const templateRun = compatibleRuns[0];
   if (!templateRun) {
     log.error('Unexpected state: compatibleRuns is empty but length check passed');
@@ -522,6 +525,7 @@ export async function prepareAggregateRunSnapshot(
     },
     scenarios,
     sourceRunIds: aggregateMetadataBase.sourceRunIds,
+    analysisCount,
     sampleSize,
     templateRun: {
       createdByUserId: templateRun.createdByUserId,
@@ -540,6 +544,7 @@ export async function prepareAggregateRunSnapshot(
 
 export async function claimAggregateRun(prepared: AggregateRunPreparation): Promise<AggregateClaimRecord> {
   let createdNew = false;
+  let previousConfig: AggregateRunConfig | null = null;
   const aggregateRun = await db.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
 
@@ -559,10 +564,9 @@ export async function claimAggregateRun(prepared: AggregateRunPreparation): Prom
 
     const aggregateRun = findMatchingAggregateRun(existingRuns, prepared.selection);
     const existingConfigResult = aggregateRun == null ? null : zRunConfig.safeParse(aggregateRun.config);
-    const claimConfig = buildClaimConfig(
-      prepared,
-      existingConfigResult != null && existingConfigResult.success ? existingConfigResult.data as AggregateRunConfig : null
-    );
+    previousConfig =
+      existingConfigResult != null && existingConfigResult.success ? (existingConfigResult.data as AggregateRunConfig) : null;
+    const claimConfig = buildClaimConfig(prepared, previousConfig);
 
     if (!aggregateRun) {
       createdNew = true;
@@ -601,6 +605,7 @@ export async function claimAggregateRun(prepared: AggregateRunPreparation): Prom
   return {
     aggregateRunId: aggregateRun.id,
     createdNew,
+    previousConfig,
     claim: prepared.claim,
   };
 }
@@ -668,7 +673,6 @@ export async function persistAggregateRun(
       varianceAnalysis: prepared.aggregatedResult.varianceAnalysis,
       decisionStats: prepared.aggregatedResult.decisionStats,
       valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
-      runCount: prepared.aggregateMetadataBase.sourceRunCount,
       sourceRunIds: prepared.sourceRunIds,
       methodsUsed: {
         aggregateSemantics: 'same-signature-v1',
@@ -677,6 +681,7 @@ export async function persistAggregateRun(
       warnings: [],
       computedAt: new Date().toISOString(),
       durationMs: 0,
+      runCount: prepared.analysisCount,
     };
 
     await tx.run.update({
@@ -740,10 +745,13 @@ export async function releaseAggregateClaim(
         return;
       }
 
-      const restoredConfig: AggregateRunConfig = {
-        ...(currentConfig as AggregateRunConfig),
-      };
+      const restoredConfig: AggregateRunConfig = claim.previousConfig != null
+        ? { ...claim.previousConfig }
+        : { ...(currentConfig as AggregateRunConfig) };
       delete restoredConfig.aggregateRecomputeClaim;
+      if (claim.previousConfig == null) {
+        delete restoredConfig.aggregateSourceFingerprint;
+      }
 
       await tx.run.update({
         where: { id: aggregateRun.id },

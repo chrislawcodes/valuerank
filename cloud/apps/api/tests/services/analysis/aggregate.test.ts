@@ -133,6 +133,24 @@ async function createSourceRun({
   return run;
 }
 
+async function createCurrentAnalysisResult(
+  runId: string,
+  scenarioIds: string[],
+  modelScenarioMap: Record<string, string[]>,
+  analysisCodeVersion = '1.1.1'
+) {
+  return db.analysisResult.create({
+    data: {
+      runId,
+      analysisType: 'basic',
+      status: 'CURRENT',
+      codeVersion: analysisCodeVersion,
+      inputHash: `hash-${runId}-${analysisCodeVersion}-${Date.now()}`,
+      output: buildAnalysisOutput(scenarioIds, modelScenarioMap),
+    },
+  });
+}
+
 describe('updateAggregateRun same-signature aggregate eligibility', () => {
   const definitionIds: string[] = [];
 
@@ -291,6 +309,8 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       modelScenarioMap: { 'gpt-4': scenarioIds },
     });
 
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
     const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
     expect(prepared).not.toBeNull();
 
@@ -315,6 +335,124 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     });
 
     await releaseAggregateClaim(prepared!, claim);
+  });
+
+  it('restores the previous aggregate config when cleanup runs on the matching claim', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 9}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+    const baselineAggregateRun = await db.run.findFirstOrThrow({
+      where: {
+        definitionId: definition.id,
+        tags: {
+          some: {
+            tag: {
+              name: 'Aggregate',
+            },
+          },
+        },
+      },
+    });
+    const baselineConfigResult = baselineAggregateRun.config != null ? baselineAggregateRun.config : null;
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+
+    await releaseAggregateClaim(prepared!, claim);
+
+    const restoredAggregateRun = await db.run.findUniqueOrThrow({
+      where: { id: claim.aggregateRunId },
+    });
+
+    expect(restoredAggregateRun.status).toBe('COMPLETED');
+    expect(restoredAggregateRun.config).toEqual(baselineConfigResult);
+  });
+
+  it('uses the newest current analysis result when multiple CURRENT rows exist', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 8}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    const run = await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const originalAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: { runId: run.id, status: 'CURRENT' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    await db.analysisResult.update({
+      where: { id: originalAnalysis.id },
+      data: {
+        output: { broken: true },
+      },
+    });
+
+    await createCurrentAnalysisResult(run.id, scenarioIds, { 'gpt-4': scenarioIds }, '1.1.2');
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    expect(spawnPython).toHaveBeenCalledTimes(1);
+
+    const aggregateAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: {
+        analysisType: 'AGGREGATE',
+        run: { definitionId: definition.id },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    expect(aggregateAnalysis.output).toMatchObject({
+      aggregateMetadata: {
+        sourceRunCount: 1,
+      },
+      runCount: 1,
+    });
   });
 
   it('fails closed when any source run is an assumption run', async () => {

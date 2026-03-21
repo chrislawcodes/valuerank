@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch"
-artifact_sha256: "a1c02c0f05ea1438a2df0dbc3f3479ff89fd8a948cca80e306a07332850890c1"
+artifact_sha256: "4799b084c1cb11b81f8508d0cfba5db10192d7e43b0d3a0c2b4e807bcbd38f29"
 repo_root: "."
-git_head_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
-git_base_ref: "origin/main"
+git_head_sha: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
+git_base_ref: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
 git_base_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
 generation_method: "gemini-cli"
-resolution_status: "accepted"
-resolution_note: "Cleanup now only deletes the newly claimed run when the claim still matches or clears the claim metadata without restoring a stale previous config, so valid concurrent results are not overwritten."
+resolution_status: "open"
+resolution_note: ""
 raw_output_path: "docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.regression-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,31 +22,58 @@ coverage_note: ""
 
 ## Findings
 
-1.  **(High) Unsafe Error Cleanup Can Cause Data Loss:** The `releaseAggregateClaim` function, intended to run on failure, exhibits unsafe behavior when reverting an existing aggregate run (`createdNew: false`). It restores the run's `config` to `claim.previousConfig`, which was snapshotted before the long-running worker began. If another process successfully updated the aggregate run in the interim, this cleanup action will revert the database to the older state, silently wiping out the valid, more recent results. This is a critical data-loss regression.
+### 1. (High) Incomplete Error Handling Can "Poison" Aggregate Runs
 
-2.  **(Medium) Orphaned Database Records on Concurrent Failures:** In the error path, `releaseAggregateClaim` for a newly created run (`createdNew: true`) will only perform its cleanup (deleting the run) if the claim token still matches. If another process has already overwritten the claim, the cleanup is skipped. This leaves a "zombie" run in the database with a `RUNNING` status that will never be resolved, leading to data bloat and potential user confusion.
+The new workflow introduces a `releaseAggregateClaim` function to handle rollbacks. However, if this cleanup function itself fails, the `catch` block in `updateAggregateRun` simply re-throws the error. This can leave an aggregate run record in the database stuck in a `RUNNING` state with an active `aggregateRecomputeClaim`.
 
-3.  **(Medium) Inefficient Failure Mode Leading to Wasted Computation:** The new workflow verifies the data snapshot's freshness (`verifyAggregateSnapshot`) *after* the expensive `spawnAggregateWorker` step completes. If the underlying source data changes during worker execution, the entire computation is discarded, and a retryable error is thrown. While this ensures correctness, it creates a significant inefficiency. Frequent updates to source runs will lead to a high rate of wasted work, increasing cost and delaying the availability of aggregate analyses.
+**Impact:** The poisoned aggregate run cannot be updated again until the claim lease expires (currently 5 minutes). Any user or system action attempting to trigger an update for that aggregate will fail, likely with a `AggregateRecomputeRetryableError`. This creates a temporary denial of service for the feature on that specific data slice.
 
-4.  **(Low) Fragile Fingerprinting on Complex Data Structures:** The `sourceFingerprint` is computed by serializing a very large, deeply nested data structure that includes the raw output of all source analysis runs. The correctness of the entire concurrency model depends on this serialization being perfectly deterministic. The implementation is vulnerable to subtle variations (e.g., floating-point representation, unstable key order in nested objects within prior analysis `output` blobs) that could change the fingerprint for semantically identical data, leading to spurious and hard-to-diagnose `AggregateRecomputeRetryableError` failures.
+**Example:**
+1. `prepareAggregateRunSnapshot` and `claimAggregateRun` succeed. A new aggregate run is created and marked `RUNNING`.
+2. `spawnAggregateWorker` fails.
+3. The `catch` block calls `releaseAggregateClaim`.
+4. `releaseAggregateClaim` fails due to a transient network issue or bug.
+5. The aggregate run is now permanently (for 5 minutes) stuck in a `RUNNING` state.
+
+### 2. (Medium) Stale Claim Test Doesn't Verify Full Workflow Recovery
+
+The new test `rejects stale aggregate claims before the final persist step` correctly asserts that `persistAggregateRun` will throw a `retryable` error if the claim token is invalid. However, the test itself manually calls `releaseAggregateClaim` afterward.
+
+**Impact:** This test does not verify the full recovery loop—that the main `updateAggregateRun` orchestrator correctly catches the exception from `persistAggregateRun` and successfully invokes `releaseAggregateClaim` to clean up the state. It only tests the failure detection, not the automated recovery from that failure.
+
+### 3. (Low) Brittle "Magic Number" in Score Normalization
+
+The `buildValueOutcomes` function normalizes scores for flipped-orientation scenarios using the formula `6 - score`.
+
+```typescript
+// cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
+
+const normalizedScore = orientationFlipped ? 6 - score : score;
+```
+
+**Impact:** This hardcoded `6` implicitly assumes a 1-to-5 integer scale for `decisionCode`. If the scoring scale ever changes (e.g., to 1-7), this logic will calculate incorrect outcomes silently. A constant like `MAX_SCORE` or a comment explaining the `(MAX_SCORE + 1) - score` logic would make the implementation more robust and maintainable.
 
 ## Residual Risks
 
-1.  **Data Integrity Regressions:** The most significant risk is that race conditions in the error-handling logic can lead to the silent deletion of valid analysis results. The `releaseAggregateClaim` function is not safe for concurrent operations and can improperly revert the state of an aggregate run, causing data loss.
+### 1. Loss of Transactional Atomicity
 
-2.  **Database Health Degradation:** The failure to clean up orphaned records in all error scenarios will lead to an accumulation of "zombie" runs in the database. Over time, this will degrade database health, slow down queries, and present a confusing and inaccurate state to users of the system.
+The original implementation performed the entire update within a single database transaction. The refactor breaks this into multiple steps: `prepare` (read), `claim` (write), `worker` (external process), `persist` (write). The fingerprinting and claim-leasing system is a form of software transactional memory designed to compensate for the loss of database-level atomicity.
 
-3.  **Performance and Cost Under Concurrent Load:** The system may become inefficient and expensive to operate under concurrent write loads. The "act-then-check" pattern guarantees that work will be wasted if data changes during processing. This could lead to a thundering herd problem where multiple processes repeatedly trigger expensive computations that are ultimately discarded, driving up costs and delaying results.
+**Risk:** This compensation, while well-designed, is more complex than a simple DB transaction. It is vulnerable to subtle bugs in the fingerprinting logic (`stableStringify`) or an incomplete `fingerprintPayload`. If a data dependency is ever added that is not captured in the fingerprint, the system could persist an aggregate based on stale or inconsistent source data, defeating the purpose of the verification step.
 
-4.  **Latent Instability from Non-Deterministic Serialization:** The stability of the fingerprinting is a strong, untested assumption. There is a latent risk that specific data patterns or environmental differences could introduce non-determinism, causing the concurrency control mechanism to fail unpredictably and undermining the reliability of the aggregation feature.
+### 2. Potential for Advisory Lock Hash Collisions
+
+The advisory lock uses `hashtext(definitionId)`. The underlying Postgres `hashtext` function produces a 32-bit integer hash. While collisions are statistically rare, they are possible.
+
+**Risk:** If two different `definitionId`s were to produce the same hash, updates for these two logically separate aggregates would become serialized, blocking each other. This would manifest as a difficult-to-diagnose performance bottleneck where one aggregate update appears to be stuck waiting for another, completely unrelated one to finish.
 
 ## Token Stats
 
-- total_input=15314
-- total_output=719
-- total_tokens=31830
-- `gemini-2.5-pro`: input=15314, output=719, total=31830
+- total_input=15348
+- total_output=858
+- total_tokens=32004
+- `gemini-2.5-pro`: input=15348, output=858, total=32004
 
 ## Resolution
-- status: accepted
-- note: Cleanup now only deletes the newly claimed run when the claim still matches or clears the claim metadata without restoring a stale previous config, so valid concurrent results are not overwritten.
+- status: open
+- note:
