@@ -1,35 +1,35 @@
 {
-  "session_id": "eef61f8b-c20b-4265-b821-3f73e454e1aa",
-  "response": "## Findings\n\nOrdered by severity:\n\n1.  **Missing Backend Implementation for `byModel` Progress**:\n    -   **Flaw**: The frontend is updated to query for per-model completion counts (`runProgress.byModel`), and the `ProviderCard` component is redesigned around displaying this data. However, the corresponding backend change to the `runProgress` resolver to calculate and return this data is absent from the provided diff. The changes to `cloud/apps/api/src/graphql/types/run.ts` only account for `executionMetrics.totalRetries`.\n    -   **Impact**: This will likely cause the `byModel` field in the GraphQL response to be null. While the UI is defensively coded to prevent a crash, the per-model \"done\" counts will always display as `0`. This makes a core feature of the new UI non-functional and unable to display the intended progress breakdown.\n\n2.  **Execution Summary Disappears on Run Completion**:\n    -   **Flaw**: The new `ExecutionProgress` component is designed to show a final summary of the probe stage, including per-model statistics and total retries. However, its parent component (`RunProgress.tsx`) is explicitly coded to unmount it as soon as the run's status becomes `COMPLETED`, `FAILED`, or `CANCELLED`.\n    -   **Impact**: The user loses access to this valuable summary information at the exact moment the run finishes, which is precisely when they would want to review it. The component's final state is discarded instead of being preserved as a final report.\n\n3.  **Ambiguous `RunStatus` Handling**:\n    -   **Flaw**: The `activeStage` helper function in `ExecutionProgress.tsx` assumes that any run status that is not `SUMMARIZING` or a terminal state (like `COMPLETED`) must be `probe`.\n    -   **Impact**: If other statuses exist (e.g., `PENDING`, `INITIALIZING`, `CANCEL_REQUESTED`), the UI will incorrectly represent them as being in the 'Probe' stage. This could be misleading to the user about the run's actual state.\n\n4.  **Misleading Progress Bar for \"Analyse\" Stage**:\n    -   **Flaw**: The UI for the \"Analyse\" stage renders a progress bar element. However, this stage appears to lack granular progress data, as its `progress` prop is hardcoded to `null`, meaning the bar will always show 0% completion.\n    -   **Impact**: This can confuse the user, who sees a progress bar that never progresses. A UI element that more accurately reflects a binary or status-based state (e.g., a spinner or status text) would be less misleading than a zero-filled progress bar.\n\n## Residual Risks\n\n1.  **Potential Frontend Performance Degradation**:\n    -   The `computeRate` function iterates over a `recentCompletions` array multiple times to calculate per-provider and per-model rates. The performance of this logic is dependent on the size of that array. If the backend does not limit the array to a small, recent time window (e.g., the last 60-120 seconds), the frontend could experience performance issues on runs with high model counts and completion rates.\n\n2.  **`totalRetries` Data Integrity**:\n    -   The `totalRetries` metric is calculated by summing a `retryCount` field in the database. There is a theoretical risk that a catastrophic failure in the probe worker could prevent it from updating this `retryCount`, leading to an undercounting of retries on the dashboard. This risk is likely low but represents a minor gap in data integrity.",
+  "session_id": "88bf4819-bf1b-47d7-b10f-7615bfd45db2",
+  "response": "## Findings\n\n1.  **Potential for Displaying Incomplete or Misleading Data:** The `isActiveRun` function is used to determine whether to show \"expanded metrics\". By adding `SUMMARIZING` to the list of active states, the UI will now attempt to render these metrics while the summarization process is still in-flight. This creates a significant risk of a race condition where the frontend tries to display summary data that is not yet generated or is only partially complete. This could manifest as empty charts, zeroed-out values, or client-side rendering errors if the components expect fully-formed data structures.\n\n2.  **Weak Abstraction May Lead to Confusing UX:** The change conflates two distinct phases of a run's lifecycle. `PENDING` and `RUNNING` states involve the generation of raw transcript data from models. `SUMMARIZING` is a post-processing step that analyzes those transcripts to create the final results. Grouping them under a single `isActiveRun` boolean is a weak abstraction. A user might see that 100% of models have completed (the `RUNNING` phase is over), but the run is still \"active.\" Without a clear UI distinction that the \"SUMMARIZING\" phase is now in progress, the user may be confused about what the system is doing. The UI should ideally show a distinct state for summarization (e.g., \"Summarizing results...\") rather than reusing the same UI state as the `RUNNING` phase.\n\n## Residual Risks\n\n1.  **Downstream Component Fragility:** The change assumes that all components rendered within the \"expanded metrics\" section are resilient to the `SUMMARIZING` state. There's a risk that one or more of these components implicitly assume that if the status is not `PENDING` or `RUNNING`, then all summary data is present and valid. This could lead to uncaught exceptions on the client when data fields are null or a data structure is incomplete, degrading the user experience.\n\n2.  **Stuck States Become More Prominent:** If a backend job fails and leaves a run permanently in the `SUMMARIZING` state, the UI will now persistently show it as an active, in-progress run. While this accurately reflects the backend's state, it makes robust error handling and state transitions (e.g., to a `FAILED_SUMMARIZATION` state) on the backend more critical, as the UI will no longer hide these stuck runs from the user's primary view.",
   "stats": {
     "models": {
       "gemini-2.5-pro": {
         "api": {
           "totalRequests": 1,
           "totalErrors": 0,
-          "totalLatencyMs": 56566
+          "totalLatencyMs": 25065
         },
         "tokens": {
-          "input": 8437,
-          "prompt": 20892,
-          "candidates": 785,
-          "total": 26440,
-          "cached": 12455,
-          "thoughts": 4763,
+          "input": 1346,
+          "prompt": 12857,
+          "candidates": 521,
+          "total": 15152,
+          "cached": 11511,
+          "thoughts": 1774,
           "tool": 0
         },
         "roles": {
           "main": {
             "totalRequests": 1,
             "totalErrors": 0,
-            "totalLatencyMs": 56566,
+            "totalLatencyMs": 25065,
             "tokens": {
-              "input": 8437,
-              "prompt": 20892,
-              "candidates": 785,
-              "total": 26440,
-              "cached": 12455,
-              "thoughts": 4763,
+              "input": 1346,
+              "prompt": 12857,
+              "candidates": 521,
+              "total": 15152,
+              "cached": 11511,
+              "thoughts": 1774,
               "tool": 0
             }
           }

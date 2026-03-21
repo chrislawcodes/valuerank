@@ -3,11 +3,11 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflows/run-status-visualization/reviews/implementation.diff.patch"
-artifact_sha256: "24db86d2c069136af35cd918304bf5757b9ba6f39363051c7106218f6bebd6f3"
+artifact_sha256: "59d7e7bd18ad4ea9f46a620d308c0bbd44d0facfcce42f69d77e7947aed74af2"
 repo_root: "."
-git_head_sha: "aa599ef1dfd54d82d3d0fb6dd7ef4fdfeb32f2fe"
-git_base_ref: "origin/main"
-git_base_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
+git_head_sha: "561692d24c350ea911a7ed269197e5e9673dae82"
+git_base_ref: "aa599ef1dfd54d82d3d0fb6dd7ef4fdfeb32f2fe"
+git_base_sha: "aa599ef1dfd54d82d3d0fb6dd7ef4fdfeb32f2fe"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
 resolution_note: "F1 rejected: byModel already implemented server-side. F2 accepted: panel is live monitoring only; post-completion display is out of spec scope. F3 rejected: spec explicitly says 'Any other unrecognized status → Probe active (safe default)'. F4 accepted: Analyse has no granular progress data; progress=null is correct per spec."
@@ -22,38 +22,22 @@ coverage_note: ""
 
 ## Findings
 
-Ordered by severity:
+1.  **Potential for Displaying Incomplete or Misleading Data:** The `isActiveRun` function is used to determine whether to show "expanded metrics". By adding `SUMMARIZING` to the list of active states, the UI will now attempt to render these metrics while the summarization process is still in-flight. This creates a significant risk of a race condition where the frontend tries to display summary data that is not yet generated or is only partially complete. This could manifest as empty charts, zeroed-out values, or client-side rendering errors if the components expect fully-formed data structures.
 
-1.  **Missing Backend Implementation for `byModel` Progress**:
-    -   **Flaw**: The frontend is updated to query for per-model completion counts (`runProgress.byModel`), and the `ProviderCard` component is redesigned around displaying this data. However, the corresponding backend change to the `runProgress` resolver to calculate and return this data is absent from the provided diff. The changes to `cloud/apps/api/src/graphql/types/run.ts` only account for `executionMetrics.totalRetries`.
-    -   **Impact**: This will likely cause the `byModel` field in the GraphQL response to be null. While the UI is defensively coded to prevent a crash, the per-model "done" counts will always display as `0`. This makes a core feature of the new UI non-functional and unable to display the intended progress breakdown.
-
-2.  **Execution Summary Disappears on Run Completion**:
-    -   **Flaw**: The new `ExecutionProgress` component is designed to show a final summary of the probe stage, including per-model statistics and total retries. However, its parent component (`RunProgress.tsx`) is explicitly coded to unmount it as soon as the run's status becomes `COMPLETED`, `FAILED`, or `CANCELLED`.
-    -   **Impact**: The user loses access to this valuable summary information at the exact moment the run finishes, which is precisely when they would want to review it. The component's final state is discarded instead of being preserved as a final report.
-
-3.  **Ambiguous `RunStatus` Handling**:
-    -   **Flaw**: The `activeStage` helper function in `ExecutionProgress.tsx` assumes that any run status that is not `SUMMARIZING` or a terminal state (like `COMPLETED`) must be `probe`.
-    -   **Impact**: If other statuses exist (e.g., `PENDING`, `INITIALIZING`, `CANCEL_REQUESTED`), the UI will incorrectly represent them as being in the 'Probe' stage. This could be misleading to the user about the run's actual state.
-
-4.  **Misleading Progress Bar for "Analyse" Stage**:
-    -   **Flaw**: The UI for the "Analyse" stage renders a progress bar element. However, this stage appears to lack granular progress data, as its `progress` prop is hardcoded to `null`, meaning the bar will always show 0% completion.
-    -   **Impact**: This can confuse the user, who sees a progress bar that never progresses. A UI element that more accurately reflects a binary or status-based state (e.g., a spinner or status text) would be less misleading than a zero-filled progress bar.
+2.  **Weak Abstraction May Lead to Confusing UX:** The change conflates two distinct phases of a run's lifecycle. `PENDING` and `RUNNING` states involve the generation of raw transcript data from models. `SUMMARIZING` is a post-processing step that analyzes those transcripts to create the final results. Grouping them under a single `isActiveRun` boolean is a weak abstraction. A user might see that 100% of models have completed (the `RUNNING` phase is over), but the run is still "active." Without a clear UI distinction that the "SUMMARIZING" phase is now in progress, the user may be confused about what the system is doing. The UI should ideally show a distinct state for summarization (e.g., "Summarizing results...") rather than reusing the same UI state as the `RUNNING` phase.
 
 ## Residual Risks
 
-1.  **Potential Frontend Performance Degradation**:
-    -   The `computeRate` function iterates over a `recentCompletions` array multiple times to calculate per-provider and per-model rates. The performance of this logic is dependent on the size of that array. If the backend does not limit the array to a small, recent time window (e.g., the last 60-120 seconds), the frontend could experience performance issues on runs with high model counts and completion rates.
+1.  **Downstream Component Fragility:** The change assumes that all components rendered within the "expanded metrics" section are resilient to the `SUMMARIZING` state. There's a risk that one or more of these components implicitly assume that if the status is not `PENDING` or `RUNNING`, then all summary data is present and valid. This could lead to uncaught exceptions on the client when data fields are null or a data structure is incomplete, degrading the user experience.
 
-2.  **`totalRetries` Data Integrity**:
-    -   The `totalRetries` metric is calculated by summing a `retryCount` field in the database. There is a theoretical risk that a catastrophic failure in the probe worker could prevent it from updating this `retryCount`, leading to an undercounting of retries on the dashboard. This risk is likely low but represents a minor gap in data integrity.
+2.  **Stuck States Become More Prominent:** If a backend job fails and leaves a run permanently in the `SUMMARIZING` state, the UI will now persistently show it as an active, in-progress run. While this accurately reflects the backend's state, it makes robust error handling and state transitions (e.g., to a `FAILED_SUMMARIZATION` state) on the backend more critical, as the UI will no longer hide these stuck runs from the user's primary view.
 
 ## Token Stats
 
-- total_input=8437
-- total_output=785
-- total_tokens=26440
-- `gemini-2.5-pro`: input=8437, output=785, total=26440
+- total_input=1346
+- total_output=521
+- total_tokens=15152
+- `gemini-2.5-pro`: input=1346, output=521, total=15152
 
 ## Resolution
 - status: accepted

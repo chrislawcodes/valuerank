@@ -1,35 +1,35 @@
 {
-  "session_id": "6bac5e2e-f8f0-41e1-8584-266f4d9a05e2",
-  "response": "An adversarial review of this diff reveals several potential issues, primarily related to incomplete data display and brittle logic for UI rendering.\n\n## Findings\n\n1.  **High Severity - Incomplete Model Display:** The UI may fail to display all models involved in a run. The `providerData` memoized hook builds its list of models to display (`seenModelIds`) from `provider.activeModelIds` and `provider.recentCompletions`. If a model has finished all its work and is no longer \"active\" or \"recent,\" it will disappear from its provider card, even though it contributed to the run. This provides an incomplete and potentially misleading view of the run's progress. The canonical list of models for the run should be the source of truth for rendering, not a list derived from transient activity.\n\n2.  **Medium Severity - Per-Model Failure Count is Omitted:** The GraphQL query was updated to fetch `failed` counts on a per-model basis (`runProgress.byModel { failed }`), and this data is correctly propagated into the `modelRows` data structure within the `ExecutionProgress` component. However, the UI never renders this value. The `ProviderCard`'s per-model rows only display the `done` count and the completion `rate`, omitting critical information about model-specific failures.\n\n3.  **Low Severity - Inaccurate Throttling Heuristic:** The `isThrottled` flag is only true when a provider has zero active jobs but jobs are still queued. A provider can be effectively throttled by a rate limit even with some active jobs (i.e., unable to utilize all available `maxParallel` slots because it's waiting for a rate limit window to reset). The current logic is too narrow and will fail to indicate this common throttling scenario.\n\n## Residual Risks\n\n1.  **Data Dependency Risk:** The functionality of the new UI is critically dependent on the `runProgress.byModel` field being correctly resolved and populated by the backend. The backend implementation for this field is not part of the provided diff. If this backend change is missing or incorrect, the per-model progress tracking (`done` counts) will fail to render, leaving the provider cards mostly empty.\n\n2.  **Rate Calculation Brittleness:** The client-side `computeRate` function calculates a rate based on completions within the last 60 seconds. This implicitly assumes the server provides at least a 60-second window of `recentCompletions`. If the server-side implementation provides a shorter window (e.g., only the last 30 seconds of events), the client-side rate calculation will be a persistent underestimate, presenting an inaccurate view of performance.\n\n3.  **Visual Feedback Regression:** The old UI included a `RecentCompletionsFeed` that showed a real-time stream of individual success/failure events. This has been removed in favor of aggregated counts and a calculated rate. While the new design is more structured, users lose the explicit, granular feedback of seeing individual tasks complete, which can reduce the perceived \"liveness\" of the system during a run.",
+  "session_id": "0e0bea78-914a-405b-bb18-33d07e6fa5de",
+  "response": "## Findings\n\n1.  **High Severity: Potentially Misleading UI State.** The `isActiveRun` function is used to determine if a run should show \"expanded metrics.\" The existing active states, `PENDING` and `RUNNING`, describe a run that is queued or actively generating transcripts. The `RunProgress` component likely shows progress related to this generation (e.g., \"X of Y scenarios complete\"). By adding `SUMMARIZING`, the same progress indicator will now be displayed for a completely different phase of the process. If the metrics shown are for transcript generation, the progress bar would likely show 100% throughout the entire `SUMMARIZING` phase, giving the user the false impression that the process is complete when it is still actively working. This creates a confusing and misleading user experience.\n\n2.  **Medium Severity: Weak Assumption of State Equivalence.** The change assumes that the UI representation for an \"active\" run is appropriate for the `SUMMARIZING` state. However, the work being performed during `SUMMARIZING` (analyzing results) is fundamentally different from `RUNNING` (generating results). A better user experience would involve a distinct progress indicator that specifically tracks summarization progress (e.g., \"Summarized X of Y models\") rather than reusing a generic \"active\" state that was clearly designed for the execution phase.\n\n## Residual Risks\n\n1.  **Data Inconsistency:** The `RunProgress` component receives a `run` object. The data structure and values within this object may differ between the `RUNNING` and `SUMMARIZING` states. The component might attempt to render metrics based on fields that are only populated during the `RUNNING` phase (like per-scenario progress), leading to either a crash, incorrect zeros, or stale data being displayed during summarization.\n\n2.  **Ambiguous Function Responsibility:** The purpose of `isActiveRun` is now blurred. It's no longer just for \"runs that are running\" but for \"runs that are not in a terminal state.\" This ambiguity increases the risk that other components might misuse this function in the future, showing UI elements during the `SUMMARIZING` phase that are only intended for `PENDING` or `RUNNING` states. This could lead to a brittle frontend where seemingly unrelated changes have unintended consequences.",
   "stats": {
     "models": {
       "gemini-2.5-pro": {
         "api": {
           "totalRequests": 1,
           "totalErrors": 0,
-          "totalLatencyMs": 35206
+          "totalLatencyMs": 21750
         },
         "tokens": {
-          "input": 20892,
-          "prompt": 20892,
-          "candidates": 645,
-          "total": 24234,
-          "cached": 0,
-          "thoughts": 2697,
+          "input": 1346,
+          "prompt": 12857,
+          "candidates": 482,
+          "total": 14783,
+          "cached": 11511,
+          "thoughts": 1444,
           "tool": 0
         },
         "roles": {
           "main": {
             "totalRequests": 1,
             "totalErrors": 0,
-            "totalLatencyMs": 35206,
+            "totalLatencyMs": 21750,
             "tokens": {
-              "input": 20892,
-              "prompt": 20892,
-              "candidates": 645,
-              "total": 24234,
-              "cached": 0,
-              "thoughts": 2697,
+              "input": 1346,
+              "prompt": 12857,
+              "candidates": 482,
+              "total": 14783,
+              "cached": 11511,
+              "thoughts": 1444,
               "tool": 0
             }
           }

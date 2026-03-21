@@ -2,7 +2,7 @@
   "feature_slug": "run-status-visualization",
   "stage": "diff",
   "artifact_path": "docs/workflows/run-status-visualization/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/main",
+  "git_base_ref": "aa599ef1dfd54d82d3d0fb6dd7ef4fdfeb32f2fe",
   "allowed_dirty_paths": [],
   "required_reviews": [
     {
