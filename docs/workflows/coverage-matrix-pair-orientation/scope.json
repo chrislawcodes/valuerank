@@ -1,0 +1,20 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts",
+    "cloud/apps/web/src/pages/DomainCoverage.tsx",
+    "cloud/apps/web/tests/pages/DomainCoverage.test.tsx",
+    "specs/coverage-matrix-pair-orientation/spec.md",
+    "specs/coverage-matrix-pair-orientation/plan.md",
+    "specs/coverage-matrix-pair-orientation/quickstart.md"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/queries/domain-coverage.ts",
+    "cloud/apps/api/src/graphql/queries/domain-coverage-utils.ts",
+    "cloud/apps/api/src/graphql/queries/__tests__/domain-coverage.test.ts",
+    "cloud/apps/web/src/pages/DomainCoverage.tsx",
+    "cloud/apps/web/tests/pages/DomainCoverage.test.tsx",
+    "specs/coverage-matrix-pair-orientation"
+  ]
+}

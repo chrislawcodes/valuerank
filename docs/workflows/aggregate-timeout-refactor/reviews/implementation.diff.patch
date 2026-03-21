@@ -1,0 +1,136 @@
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts b/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
+index e6094bba..772e100c 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
+@@ -674,6 +674,8 @@ export async function persistAggregateRun(
+       decisionStats: prepared.aggregatedResult.decisionStats,
+       valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
+       sourceRunIds: prepared.sourceRunIds,
++      runCount: prepared.aggregateMetadataBase.sourceRunCount,
++      analysisCount: prepared.analysisCount,
+       methodsUsed: {
+         aggregateSemantics: 'same-signature-v1',
+         codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
+@@ -681,7 +683,6 @@ export async function persistAggregateRun(
+       warnings: [],
+       computedAt: new Date().toISOString(),
+       durationMs: 0,
+-      runCount: prepared.analysisCount,
+     };
+ 
+     await tx.run.update({
+@@ -726,18 +727,6 @@ export async function releaseAggregateClaim(
+         return;
+       }
+ 
+-      if (claim.createdNew) {
+-        const currentConfig = zRunConfig.safeParse(aggregateRun.config);
+-        const currentClaim = currentConfig.success ? getAggregateRecomputeClaim(currentConfig.data) : null;
+-        if (currentClaim?.token !== claim.claim.token) {
+-          return;
+-        }
+-
+-        await tx.analysisResult.deleteMany({ where: { runId: aggregateRun.id } });
+-        await tx.run.delete({ where: { id: aggregateRun.id } });
+-        return;
+-      }
+-
+       const currentConfigResult = zRunConfig.safeParse(aggregateRun.config);
+       const currentConfig = currentConfigResult.success ? currentConfigResult.data : {};
+       const currentClaim = getAggregateRecomputeClaim(currentConfig);
+@@ -745,14 +734,26 @@ export async function releaseAggregateClaim(
+         return;
+       }
+ 
+-      const restoredConfig: AggregateRunConfig = claim.previousConfig != null
+-        ? { ...claim.previousConfig }
+-        : { ...(currentConfig as AggregateRunConfig) };
+-      delete restoredConfig.aggregateRecomputeClaim;
+-      if (claim.previousConfig == null) {
+-        delete restoredConfig.aggregateSourceFingerprint;
++      if (claim.createdNew || claim.previousConfig == null) {
++        const failedConfig: AggregateRunConfig = {
++          ...(currentConfig as AggregateRunConfig),
++        };
++        delete failedConfig.aggregateRecomputeClaim;
++        delete failedConfig.aggregateSourceFingerprint;
++
++        await tx.run.update({
++          where: { id: aggregateRun.id },
++          data: {
++            config: failedConfig as unknown as Prisma.InputJsonValue,
++            status: 'FAILED',
++          },
++        });
++        return;
+       }
+ 
++      const restoredConfig: AggregateRunConfig = { ...claim.previousConfig };
++      delete restoredConfig.aggregateRecomputeClaim;
++
+       await tx.run.update({
+         where: { id: aggregateRun.id },
+         data: {
+diff --git a/cloud/apps/api/tests/services/analysis/aggregate.test.ts b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+index ae9e59c6..db709c4b 100644
+--- a/cloud/apps/api/tests/services/analysis/aggregate.test.ts
++++ b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+@@ -394,6 +394,50 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+     expect(restoredAggregateRun.config).toEqual(baselineConfigResult);
+   });
+ 
++  it('marks a newly created aggregate as failed when cleanup runs on the matching claim', async () => {
++    const definition = await db.definition.create({
++      data: {
++        name: `aggregate-test-${Date.now() + 10}`,
++        content: {
++          schema_version: 1,
++          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
++        },
++      },
++    });
++    definitionIds.push(definition.id);
++
++    const scenarios = await db.scenario.createManyAndReturn({
++      data: [
++        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
++        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
++      ],
++      select: { id: true },
++    });
++    const scenarioIds = scenarios.map((scenario) => scenario.id);
++
++    await createSourceRun({
++      definitionId: definition.id,
++      scenarioIds,
++      modelScenarioMap: { 'gpt-4': scenarioIds },
++    });
++
++    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
++    expect(prepared).not.toBeNull();
++
++    const claim = await claimAggregateRun(prepared!);
++    expect(claim.createdNew).toBe(true);
++
++    await releaseAggregateClaim(prepared!, claim);
++
++    const failedAggregateRun = await db.run.findUniqueOrThrow({
++      where: { id: claim.aggregateRunId },
++    });
++
++    expect(failedAggregateRun.status).toBe('FAILED');
++    expect(failedAggregateRun.config).not.toHaveProperty('aggregateRecomputeClaim');
++    expect(failedAggregateRun.config).not.toHaveProperty('aggregateSourceFingerprint');
++  });
++
+   it('uses the newest current analysis result when multiple CURRENT rows exist', async () => {
+     const definition = await db.definition.create({
+       data: {
+@@ -452,6 +496,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+         sourceRunCount: 1,
+       },
+       runCount: 1,
++      analysisCount: 1,
+     });
+   });
+ 

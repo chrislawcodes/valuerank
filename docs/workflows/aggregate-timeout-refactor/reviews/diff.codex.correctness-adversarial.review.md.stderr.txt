@@ -1,0 +1,627 @@
+2026-03-21T03:19:30.814189Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.815056Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.823471Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0e67-b4f6-7242-8303-48549e9f57b1
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts b/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
+index e6094bba..772e100c 100644
+--- a/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
++++ b/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts
+@@ -674,6 +674,8 @@ export async function persistAggregateRun(
+       decisionStats: prepared.aggregatedResult.decisionStats,
+       valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
+       sourceRunIds: prepared.sourceRunIds,
++      runCount: prepared.aggregateMetadataBase.sourceRunCount,
++      analysisCount: prepared.analysisCount,
+       methodsUsed: {
+         aggregateSemantics: 'same-signature-v1',
+         codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
+@@ -681,7 +683,6 @@ export async function persistAggregateRun(
+       warnings: [],
+       computedAt: new Date().toISOString(),
+       durationMs: 0,
+-      runCount: prepared.analysisCount,
+     };
+ 
+     await tx.run.update({
+@@ -726,18 +727,6 @@ export async function releaseAggregateClaim(
+         return;
+       }
+ 
+-      if (claim.createdNew) {
+-        const currentConfig = zRunConfig.safeParse(aggregateRun.config);
+-        const currentClaim = currentConfig.success ? getAggregateRecomputeClaim(currentConfig.data) : null;
+-        if (currentClaim?.token !== claim.claim.token) {
+-          return;
+-        }
+-
+-        await tx.analysisResult.deleteMany({ where: { runId: aggregateRun.id } });
+-        await tx.run.delete({ where: { id: aggregateRun.id } });
+-        return;
+-      }
+-
+       const currentConfigResult = zRunConfig.safeParse(aggregateRun.config);
+       const currentConfig = currentConfigResult.success ? currentConfigResult.data : {};
+       const currentClaim = getAggregateRecomputeClaim(currentConfig);
+@@ -745,14 +734,26 @@ export async function releaseAggregateClaim(
+         return;
+       }
+ 
+-      const restoredConfig: AggregateRunConfig = claim.previousConfig != null
+-        ? { ...claim.previousConfig }
+-        : { ...(currentConfig as AggregateRunConfig) };
+-      delete restoredConfig.aggregateRecomputeClaim;
+-      if (claim.previousConfig == null) {
+-        delete restoredConfig.aggregateSourceFingerprint;
++      if (claim.createdNew || claim.previousConfig == null) {
++        const failedConfig: AggregateRunConfig = {
++          ...(currentConfig as AggregateRunConfig),
++        };
++        delete failedConfig.aggregateRecomputeClaim;
++        delete failedConfig.aggregateSourceFingerprint;
++
++        await tx.run.update({
++          where: { id: aggregateRun.id },
++          data: {
++            config: failedConfig as unknown as Prisma.InputJsonValue,
++            status: 'FAILED',
++          },
++        });
++        return;
+       }
+ 
++      const restoredConfig: AggregateRunConfig = { ...claim.previousConfig };
++      delete restoredConfig.aggregateRecomputeClaim;
++
+       await tx.run.update({
+         where: { id: aggregateRun.id },
+         data: {
+diff --git a/cloud/apps/api/tests/services/analysis/aggregate.test.ts b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+index ae9e59c6..db709c4b 100644
+--- a/cloud/apps/api/tests/services/analysis/aggregate.test.ts
++++ b/cloud/apps/api/tests/services/analysis/aggregate.test.ts
+@@ -394,6 +394,50 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+     expect(restoredAggregateRun.config).toEqual(baselineConfigResult);
+   });
+ 
++  it('marks a newly created aggregate as failed when cleanup runs on the matching claim', async () => {
++    const definition = await db.definition.create({
++      data: {
++        name: `aggregate-test-${Date.now() + 10}`,
++        content: {
++          schema_version: 1,
++          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
++        },
++      },
++    });
++    definitionIds.push(definition.id);
++
++    const scenarios = await db.scenario.createManyAndReturn({
++      data: [
++        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
++        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
++      ],
++      select: { id: true },
++    });
++    const scenarioIds = scenarios.map((scenario) => scenario.id);
++
++    await createSourceRun({
++      definitionId: definition.id,
++      scenarioIds,
++      modelScenarioMap: { 'gpt-4': scenarioIds },
++    });
++
++    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
++    expect(prepared).not.toBeNull();
++
++    const claim = await claimAggregateRun(prepared!);
++    expect(claim.createdNew).toBe(true);
++
++    await releaseAggregateClaim(prepared!, claim);
++
++    const failedAggregateRun = await db.run.findUniqueOrThrow({
++      where: { id: claim.aggregateRunId },
++    });
++
++    expect(failedAggregateRun.status).toBe('FAILED');
++    expect(failedAggregateRun.config).not.toHaveProperty('aggregateRecomputeClaim');
++    expect(failedAggregateRun.config).not.toHaveProperty('aggregateSourceFingerprint');
++  });
++
+   it('uses the newest current analysis result when multiple CURRENT rows exist', async () => {
+     const definition = await db.definition.create({
+       data: {
+@@ -452,6 +496,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
+         sourceRunCount: 1,
+       },
+       runCount: 1,
++      analysisCount: 1,
+     });
+   });
+ 
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-21T03:19:30.848596Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.850444Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.875651Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.876772Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.879831Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d0e67-b4f6-7242-8303-48549e9f57b1.tmp-1774063170816731000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-21T03:19:30.901423Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.902230Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.926198Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.927258Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.952297Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.953190Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:30.978194Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:30.979072Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.001543Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.002423Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.027418Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.028366Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.053412Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.054633Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.078606Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.079549Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.104270Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.105221Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.128283Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-21T03:19:31.129564Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-21T03:19:31.152876Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+Reviewing the patch against the aggregate claim lifecycle now. I’m checking for behavior regressions around cleanup, state transitions, and any metadata mismatches that could silently corrupt persisted runs.
+exec
+/bin/zsh -lc 'rg -n "createdNew|previousConfig|releaseAggregateClaim|getAggregateRecomputeClaim|claimAggregateRun|persistAggregateRun|runCount: prepared|analysisCount" cloud/apps/api/src/services/analysis/aggregate cloud/apps/api/tests/services/analysis/aggregate.test.ts' in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:4:  claimAggregateRun,
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:5:  persistAggregateRun,
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:7:  releaseAggregateClaim,
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:317:    const claim = await claimAggregateRun(prepared!);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:333:    await expect(persistAggregateRun(prepared!, claim, workerResult)).rejects.toMatchObject({
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:337:    await releaseAggregateClaim(prepared!, claim);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:385:    const claim = await claimAggregateRun(prepared!);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:387:    await releaseAggregateClaim(prepared!, claim);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:427:    const claim = await claimAggregateRun(prepared!);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:428:    expect(claim.createdNew).toBe(true);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:430:    await releaseAggregateClaim(prepared!, claim);
+cloud/apps/api/tests/services/analysis/aggregate.test.ts:499:      analysisCount: 1,
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:3:  claimAggregateRun,
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:4:  persistAggregateRun,
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:6:  releaseAggregateClaim,
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:30:  const claim = await claimAggregateRun(prepared);
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:34:    await persistAggregateRun(prepared, claim, workerResult);
+cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts:36:    await releaseAggregateClaim(prepared, claim);
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:57:  analysisCount: number;
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:78:  createdNew: boolean;
+exec
+/bin/zsh -lc 'git status --porcelain' in /Users/chrislaw/valuerank succeeded in 0ms:
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-oFAc5Fdz' (errno=Operation not permitted)
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-ueGnoHWo' (errno=Operation not permitted)
+ M docs/operations/codex-skills/feature-workflow/CODEX-ORCHESTRATOR.md
+ M docs/operations/codex-skills/review-lens/scripts/verify_reconciliation.py
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.checkpoint.json
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.quality-adversarial.review.md
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.quality-adversarial.review.md.json
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.quality-adversarial.review.md.stdout.txt
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.regression-adversarial.review.md
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.regression-adversarial.review.md.json
+ M docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.regression-adversarial.review.md.stdout.txt
+ M docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch
+ M docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch.json
+ M docs/workflows/aggregate-timeout-refactor/workflow.json
+?? .claude/launch.json
+?? docs/plans/run-status-visualization-plan.md
+?? docs/workflows/coverage-matrix-pair-orientation/
+?? docs/workflows/run-status-visualization/
+codex
+I’ve confirmed the change touches the aggregate claim release path and persisted metadata, and there’s already a likely regression candidate around how newly created runs are cleaned up. I’m reading just the surrounding workflow code to verify whether that suspicion is real or a false alarm.
+exec
+/bin/zsh -lc "sed -n '300,520p' cloud/apps/api/tests/services/analysis/aggregate.test.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '545,820p' cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    const workerResult = await spawnAggregateWorker(prepared!);
+
+ succeeded in 0ms:
+export async function claimAggregateRun(prepared: AggregateRunPreparation): Promise<AggregateClaimRecord> {
+  let createdNew = false;
+  let previousConfig: AggregateRunConfig | null = null;
+  const aggregateRun = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${prepared.definitionId}))`;
+
+    const existingRuns = await tx.run.findMany({
+      where: {
+        definitionId: prepared.definitionId,
+        tags: {
+          some: {
+            tag: {
+              name: 'Aggregate',
+            },
+          },
+        },
+        deletedAt: null,
+      },
+    });
+
+codex
+I found the key behavioral pivot: the cleanup path no longer removes brand-new aggregate runs, it leaves them in the database as `FAILED`. The next thing I’m checking is whether later recomputation logic can accidentally treat that failed placeholder as a real aggregate and reuse it.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { createHash, randomUUID } from 'crypto';
+import path from 'path';
+import { db, resolveDefinitionContent, type Prisma } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { spawnPython } from '../../../queue/spawn.js';
+import {
+  AGGREGATE_ANALYSIS_CODE_VERSION,
+  ANALYZE_WORKER_PATH,
+  DRIFT_WARNING_THRESHOLD,
+  LOW_COVERAGE_CAUTION_THRESHOLD,
+  MIN_REPEAT_COVERAGE_COUNT,
+  MIN_REPEAT_COVERAGE_SHARE,
+} from './constants.js';
+import {
+  type AggregateMetadata,
+  type AggregateScenarioInput,
+  type AggregateWorkerInput,
+  type AggregateWorkerOutput,
+  type AggregateWorkerTranscript,
+  type AggregatedResult,
+exec
+/bin/zsh -lc "rg -n \"function findMatchingAggregateRun|findMatchingAggregateRun\\(|status: 'FAILED'|tags: \\{\\s*some: \\{\\s*tag: \\{\\s*name: 'Aggregate'\" cloud/apps/api/src/services/analysis/aggregate" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:565:    const aggregateRun = findMatchingAggregateRun(existingRuns, prepared.selection);
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:748:            status: 'FAILED',
+cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts:835:function findMatchingAggregateRun(
+exec
+/bin/zsh -lc "sed -n '820,900p' cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+    typeof sourceFingerprint !== 'string' ||
+    sourceFingerprint.trim() === '' ||
+    typeof leaseExpiresAt !== 'string' ||
+    leaseExpiresAt.trim() === ''
+  ) {
+    return null;
+  }
+
+  return {
+    token,
+    sourceFingerprint,
+    leaseExpiresAt,
+  };
+}
+
+function findMatchingAggregateRun(
+  runs: AggregateSourceRunRecord[],
+  selection: AggregateRunSelection
+): AggregateSourceRunRecord | null {
+  return runs.find((run) => {
+codex
+I’ve verified the failure branch does not just mark state; it changes the lifecycle contract for a missing/aborted claim. I’m checking where `runCount` and this failed placeholder shape are consumed so I can separate an intentional semantic change from a genuine compatibility break.
+exec
+/bin/zsh -lc "rg -n \"runCount\\b|analysisCount\\b|aggregateMetadata\" cloud/apps/api cloud/apps/web packages docs | head -n 200" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "rg -n \"FAILED'|status === 'FAILED'|status: 'FAILED'|run.status.*FAILED|Aggregate.*FAILED\" cloud/apps/api cloud/apps/web packages | head -n 200" in /Users/chrislaw/valuerank succeeded in 0ms:
+rg: packages: No such file or directory (os error 2)
+cloud/apps/api/src/services/probe-result/index.ts:105:        status: 'FAILED',
+cloud/apps/api/src/services/probe-result/index.ts:112:        status: 'FAILED',
+cloud/apps/api/src/services/probe-result/index.ts:146:    where: { runId, status: 'FAILED' },
+cloud/apps/web/src/pages/RunDetail/RunDetail.tsx:94:    task.status === 'FAILED' &&
+cloud/apps/web/src/pages/RunDetail/RunDetail.tsx:120:  if (run.status !== 'FAILED') return null;
+cloud/apps/web/src/pages/RunDetail/RunDetail.tsx:123:    (task: TaskResult) => task.status === 'FAILED' && task.error
+cloud/apps/web/src/pages/RunDetail/RunDetail.tsx:354:  const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
+cloud/apps/web/src/pages/DomainTrialsDashboard.tsx:207:    const failed = runStatuses.filter((run) => run.status === 'FAILED' || run.status === 'CANCELLED').length;
+cloud/apps/api/src/services/run/query.ts:33:  'FAILED',
+cloud/apps/api/src/services/run/control.ts:187:  return run?.status ? ['COMPLETED', 'FAILED', 'CANCELLED'].includes(run.status) : true;
+cloud/apps/web/src/api/operations/definitions.ts:35:export type ExpansionJobStatus = 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'NONE';
+cloud/apps/api/src/services/run/summarization.ts:18:const SUMMARIZATION_RESTARTABLE_STATES = ['COMPLETED', 'FAILED', 'CANCELLED'];
+cloud/apps/web/src/pages/ValidationHome.tsx:36:    case 'FAILED':
+cloud/apps/api/src/services/run/start.ts:896:        status: 'FAILED',
+cloud/apps/api/src/services/run/progress.ts:130:type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+cloud/apps/api/src/services/run/progress.ts:140:  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(currentStatus)) {
+cloud/apps/api/src/services/run/progress.ts:189:  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(toStatus)) {
+cloud/apps/web/tests/pages/RunDetail.test.tsx:526:      status: 'FAILED',
+cloud/apps/web/tests/pages/RunDetail.test.tsx:531:          status: 'FAILED',
+ succeeded in 0ms:
+rg: packages: No such file or directory (os error 2)
+cloud/apps/web/src/services/AggregateAnalysisService.ts:34:    runCount: number;
+cloud/apps/web/src/services/AggregateAnalysisService.ts:54:    const runCount = analyses.length;
+cloud/apps/web/src/services/AggregateAnalysisService.ts:271:        runCount,
+cloud/apps/web/src/pages/ValidationHome.tsx:88:  const totalValidationRuns = runCountData?.runCount ?? 0;
+docs/api/graphql-schema.md:137:  runCount: Int!
+docs/api/graphql-schema.md:348:  runCount: Int!
+cloud/apps/web/src/pages/SurveyResults.tsx:128:        .filter((survey) => survey.analysisPlan?.kind === 'survey' && survey.runCount > 0)
+cloud/apps/web/src/pages/SurveyResults.tsx:360:                        <td className="px-4 py-2">{survey.runCount}</td>
+cloud/apps/web/src/pages/Compare.tsx:118:                runCount={runsWithAnalysis.length}
+cloud/apps/web/src/pages/DefinitionDetail/DefinitionMetadata.tsx:11:  runCount: number;
+cloud/apps/web/src/pages/DefinitionDetail/DefinitionMetadata.tsx:29:export function DefinitionMetadata({ createdAt, runCount, childCount }: DefinitionMetadataProps) {
+cloud/apps/web/src/pages/DefinitionDetail/DefinitionMetadata.tsx:38:        {runCount} run{runCount !== 1 ? 's' : ''}
+cloud/apps/web/src/pages/DefinitionDetail/DefinitionDetail.tsx:369:          runCount={definition.runCount}
+cloud/apps/web/tests/pages/Runs.test.tsx:261:          runCount: 2,
+cloud/apps/web/tests/pages/Runs.test.tsx:289:          runCount: 1,
+cloud/apps/web/tests/pages/Runs.test.tsx:367:        data: { runs, runCount: 10 },
+cloud/apps/web/tests/pages/Runs.test.tsx:417:        data: { runs, runCount: 2 },
+cloud/apps/web/src/pages/Survey.tsx:469:                      <td className="px-4 py-3 text-gray-700">{survey.runCount}</td>
+cloud/apps/web/src/api/operations/analysis.ts:198:  aggregateMetadata?: AggregateMetadata | null;
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/api/src/services/analysis/aggregate/contracts.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/api/operations/analysis.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { gql } from 'urql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type ContestedScenario = {
+  scenarioId: string;
+  scenarioName: string;
+  variance: number;
+  modelScores: Record<string, number>;
+};
+
+export type AnalysisWarning = {
+  code: string;
+  message: string;
+  recommendation: string;
+};
+
+export type ConfidenceInterval = {
+ succeeded in 0ms:
+import { z } from 'zod';
+
+export const zRunSnapshot = z.object({
+  _meta: z.object({
+    preambleVersionId: z.string().optional(),
+    definitionVersion: z.union([z.number(), z.string()]).optional(),
+  }).optional(),
+  preambleVersionId: z.string().optional(),
+  version: z.union([z.number(), z.string()]).optional(),
+});
+
+export const zRunConfig = z.object({
+  definitionSnapshot: zRunSnapshot.optional(),
+  isAggregate: z.boolean().optional(),
+  sourceRunIds: z.array(z.string()).optional(),
+  transcriptCount: z.number().optional(),
+  temperature: z.number().nullable().optional(),
+  assumptionKey: z.string().optional(),
+}).passthrough();
+
+exec
+/bin/zsh -lc 'rg -n "analysisCount|runCount" cloud/apps/web/src/components/analysis-v2 cloud/apps/web/src/components/analysis cloud/apps/web/src/pages/RunDetail cloud/apps/api/src/graphql/types/analysis.ts cloud/apps/api/tests/graphql/queries/analysis.test.ts' in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:72:  runCount: number;
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:80:  runCount: number;
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:210:        runCount: folderCounts?.aggregateCount ?? aggregateRuns.length,
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:221:            runCount: folderCounts?.aggregateTagCounts[tag.id] ?? taggedRuns.length,
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:244:            runCount: folderCounts?.aggregateUntaggedCount ?? aggregateUntaggedRuns.length,
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:269:        runCount: folderCounts?.tagCounts[tag.id] ?? tagRuns.length,
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:292:        runCount: folderCounts?.untaggedCount ?? untaggedRuns.length,
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:463:                      ({item.runCount})
+cloud/apps/web/src/components/analysis/VirtualizedAnalysisFolderView.tsx:506:                    <span className="text-sm text-gray-500">({item.runCount})</span>
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/apps/api/src/graphql/types/analysis.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { db } from '@valuerank/db';
+import { builder } from '../builder.js';
+import { ActualCostRef } from './cost-estimate.js';
+import { computeActualCost } from '../../services/cost/estimate.js';
+import { normalizeAnalysisArtifacts } from '../../services/analysis/normalize-analysis-output.js';
+
+// Shape definitions for internal types
+type ContestedScenarioShape = {
+  scenarioId: string;
+  scenarioName: string;
+  variance: number;
+  modelScores: Record<string, number>;
+};
+
+type AnalysisWarningShape = {
+  code: string;
+  message: string;
+  recommendation: string;
+};
+
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { createLogger } from '@valuerank/shared';
+import {
+  claimAggregateRun,
+  persistAggregateRun,
+  prepareAggregateRunSnapshot,
+  releaseAggregateClaim,
+  spawnAggregateWorker,
+} from './aggregate-run-workflow.js';
+
+const log = createLogger('analysis:aggregate');
+
+export async function updateAggregateRun(
+  definitionId: string,
+  preambleVersionId: string | null,
+  definitionVersion: number | null,
+  temperature: number | null = null,
+) {
+  if (!definitionId) {
+    log.error('Cannot update aggregate run without definitionId');
+    return;
+codex
+I found a stronger downstream effect of the new `FAILED` placeholder: the repo’s run-count queries generally count persisted runs, not only completed ones. I’m confirming that with the definition/run count resolvers, because that turns this from a storage choice into a visible metrics regression.
+exec
+/bin/zsh -lc "sed -n '220,310p' cloud/apps/api/src/graphql/queries/run.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '320,380p' cloud/apps/api/src/graphql/types/definition.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+    }),
+
+    // Relation: runs (excludes soft-deleted) with pagination
+    runs: t.field({
+      type: [RunRef],
+      args: {
+        limit: t.arg.int({
+          required: false,
+          description: 'Maximum number of runs to return (default: all, max: 100)',
+        }),
+        offset: t.arg.int({
+          required: false,
+          description: 'Number of runs to skip for pagination (default: 0)',
+        }),
+      },
+      description: 'Runs executed with this definition',
+      resolve: async (definition, args) => {
+        const limit = args.limit != null ? Math.min(args.limit, 100) : undefined;
+        const offset = args.offset ?? 0;
+
+ succeeded in 0ms:
+      });
+
+      // Track access for each run (non-blocking)
+      for (const run of runs) {
+        trackRunAccess(run.id);
+      }
+
+      ctx.log.debug(
+        { requestedCount: ids.length, foundCount: runs.length },
+        'Runs fetched for comparison'
+      );
+
+      // Return in the same order as requested IDs for consistent display
+      const runMap = new Map(runs.map((r) => [r.id, r]));
+      return ids.map((id) => runMap.get(id)).filter((r): r is NonNullable<typeof r> => r != null);
+    },
+  })
+);
+
+// Query: runCount - Get count of runs matching filters
+exec
+/bin/zsh -lc "sed -n '360,560p' cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+    const dimensions = buildScenarioAnalysisDimensionRecord(normalizedScenarioMetadata);
+    const orientationFlipped = transcript.scenario?.orientationFlipped ?? false;
+    const values = buildValueOutcomes(
+      Number.isFinite(score) ? score : null,
+      orientationFlipped,
+      valueA,
+      valueB,
+    );
+
+    return {
+      id: transcript.id,
+      runId: transcript.runId,
+      modelId: transcript.modelId,
+      scenarioId: transcript.scenarioId!,
+      sampleIndex: transcript.sampleIndex,
+      orientationFlipped,
+      summary: values ? { score, values } : { score },
+      scenario: {
+        name: transcript.scenario?.name ?? transcript.scenarioId ?? '',
+        dimensions,
+exec
+/bin/zsh -lc "sed -n '520,700p' cloud/apps/api/tests/services/analysis/aggregate.test.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+      assumptionKey: 'order_invariance',
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    expect(spawnPython).not.toHaveBeenCalled();
+
+    const aggregateAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: {
+        analysisType: 'AGGREGATE',
+        run: { definitionId: definition.id },
+      },
+exec
+/bin/zsh -lc "rg -n \"FAILED|deleted|cleanup|aggregate claim|newly created aggregate\" docs/plans docs/workflows/aggregate-timeout-refactor -g '"'!**/*.json'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+docs/plans/vignette-analysis-ui-consumer-slice-plan.md:578:3. Remove only assertions and test blocks that directly encode deleted behavior; do not delete whole component test files before replacement coverage exists.
+docs/plans/vignette-analysis-ui-consumer-slice-plan.md:601:Tests that must be rewritten or deleted:
+docs/plans/analysis-page-remerge-overview-summary-plan.md:597:- nav cleanup after hard removal
+docs/plans/analysis-page-remerge-overview-summary-plan.md:599:- cleanup of stale `/analysis-v1` path generation in transcript routing helpers
+docs/workflows/aggregate-timeout-refactor/reviews/tasks.gemini.dependency-order-adversarial.review.md:27:2.  **Incomplete Orphaned Claim Handling:** The plan relies on a lease expiring to clean up after a worker failure but does not define the cleanup mechanism. If a worker crashes, the claim remains, and the aggregate cannot be updated by any other process until the lease expires. The tasks do not specify if a new worker process is responsible for clearing an old, expired lease before starting its own work, or if a separate garbage-collection process is assumed. This omission can lead to stalled aggregate computations.
+docs/workflows/aggregate-timeout-refactor/reviews/tasks.gemini.dependency-order-adversarial.review.md:35:1.  **"Best-Effort" Cleanup on Failure:** The plan's reliance on "best-effort cleanup on worker failure" is a weak assumption. A hard crash (e.g., OOM kill) will prevent any cleanup code from running, leaving the claim orphaned until its lease expires. While the lease provides an eventual fallback, the system remains vulnerable to periods where aggregates are "frozen" and cannot be recomputed, impacting data freshness.
+docs/plans/domain-first-site-ia-plan.md:479:   - not deleted
+docs/plans/domain-first-site-ia-plan.md:506:Long-lived domains need explicit cleanup rules.
+docs/plans/domain-first-site-ia-plan.md:1228:4. do not treat archived work as deleted work
+docs/workflows/aggregate-timeout-refactor/reviews/tasks.codex.execution-adversarial.review.md.stdout.txt:3:- High: The plan does not require an explicit concurrency or lease-expiry race test. Moving prepare/compute outside the transaction creates a new window where two workers can overlap, one can claim and another can retry after expiry, or cleanup can race with persistence. Advisory locks and lease checks are not enough on their own without a test that proves the boundary under contention.
+docs/workflows/aggregate-timeout-refactor/reviews/tasks.codex.execution-adversarial.review.md.stdout.txt:8:- “Best-effort cleanup on worker failure” will not clear claims on hard process death; stale state will persist until lease expiry.
+docs/workflows/aggregate-timeout-refactor/reviews/spec.codex.feasibility-adversarial.review.md.stderr.txt:81:- Clear the claim in the same transaction that writes the new aggregate result; if compute fails before the final write, clear it best-effort in a separate short cleanup step and rely on the lease as a fallback.
+docs/workflows/aggregate-timeout-refactor/reviews/spec.codex.feasibility-adversarial.review.md.stderr.txt:94:8. The existing aggregate test suite passes, and the refactor is covered by at least one test that exercises the new split boundary, at least one test that guards against stale-result commits, and at least one test that proves claim expiry or cleanup works.
+docs/workflows/aggregate-timeout-refactor/reviews/spec.codex.feasibility-adversarial.review.md.stderr.txt:139:4. Medium: The cleanup path can erase the wrong claim unless it is token-guarded. The spec allows best-effort claim clearing in a separate step after failure, but a delayed cleanup from an older worker can clobber a newer in-flight claim if that update is not conditional on the original token or fingerprint. That creates a new race where a valid recompute loses its reservation.
+docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch:62:+            status: 'FAILED',
+docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch:82:+  it('marks a newly created aggregate as failed when cleanup runs on the matching claim', async () => {
+docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch:121:+    expect(failedAggregateRun.status).toBe('FAILED');
+docs/workflows/aggregate-timeout-refactor/reviews/diff.codex.correctness-adversarial.review.md:13:resolution_note: "Cleanup now strips stale claim state before restoring existing aggregates, marks brand-new failed aggregates as FAILED, and keeps runCount as the source-run count while exposing analysisCount for the included analysis rows."
+docs/workflows/aggregate-timeout-refactor/reviews/diff.codex.correctness-adversarial.review.md:26:   - The new `previousConfig` path restores the pre-claim config verbatim. If that config already contained an `aggregateRecomputeClaim` or other leftover claim-only state from an earlier interrupted run, cleanup will put that poisoned state back onto the run instead of removing it.
+docs/workflows/aggregate-timeout-refactor/reviews/diff.codex.correctness-adversarial.review.md:27:   - The old behavior always rebuilt from the current claimed config and stripped the claim fields, which accidentally cleared stale claim metadata. This change reintroduces the stale-state failure mode on retry/cleanup paths.
+exec
+/bin/zsh -lc "sed -n '1,260p' docs/workflows/aggregate-timeout-refactor/spec.md" in /Users/chrislaw/valuerank succeeded in 0ms:
+# Aggregate Timeout Refactor Spec
+
+## Goal
+
+Refactor `cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts` so aggregate recomputation no longer holds a Prisma interactive transaction across the expensive read, validation, and Python worker steps.
+
+The goal is to keep the aggregate result and eligibility semantics the same while shrinking the locked write window enough that growing batch counts do not trigger the Prisma 5 second timeout.
+
+## Problem
+
+`updateAggregateRun` currently performs all of the following inside one interactive transaction:
+
+- advisory-lock acquisition
+- loading source runs and their transcripts
+- validating configs and baseline eligibility
+- building worker payloads
+- spawning the Python aggregate worker
+- finding or creating the aggregate run
+- superseding the old aggregate analysis row
+- writing the new aggregate analysis row
+codex
+## Findings
+- **High:** Marking a brand-new aggregate claim as `FAILED` instead of deleting it turns a transient cleanup case into a permanent, countable run record. The patch at [aggregate-run-workflow.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts#L737) leaves the row in place, and the repo’s run-count logic counts all non-deleted runs. That means every timeout/crash now inflates definition `runCount`, pollutes run listings/pagination, and accumulates one extra aggregate row per failure with no pruning path.
+- **Medium:** The `runCount` field in the stored aggregate output changed meaning from “analysis rows included” to “source runs selected,” while a new `analysisCount` field was added only in storage. See [aggregate-run-workflow.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts#L677). That is a breaking contract change for any consumer still reading `runCount`, and there is no corresponding API/schema migration exposing `analysisCount`, so divergence between source-run count and analysis count will be silently misreported.
+
+## Residual Risks
+- The new `FAILED` placeholder behavior is only covered for the `1 == 1` case in the added test; there is still no proof that the output behaves correctly when `sourceRunCount !== analysisCount`.
+- Because claim lookup is still status-agnostic and unordered, retaining `FAILED` aggregate rows may make later claim selection less predictable once multiple historical aggregate attempts exist for the same definition/snapshot.
+tokens used
+61,712

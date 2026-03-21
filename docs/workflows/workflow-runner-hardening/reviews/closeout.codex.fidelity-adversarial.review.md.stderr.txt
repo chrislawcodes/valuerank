@@ -1,0 +1,74 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0c9d-1a81-7cc1-9e05-d67352fb9e84
+--------
+user
+Review this closeout artifact using a fidelity-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: closeout.md
+# Closeout: workflow-runner-hardening
+
+## Summary
+
+Three correctness fixes shipped to `run_feature_workflow.py`:
+
+1. **`DEFAULT_CODEX_MODEL` constant** — Replaced hardcoded `"gpt-5.4-mini"` string in `required_reviews()` with a named constant. Constant initially introduced as `"codex-5.4-mini"` (unsupported by the Codex CLI) and corrected to `"gpt-5.4-mini"` before the diff checkpoint.
+
+2. **Base-ref reset in `command_checkpoint`** — Added `args.base_ref = None` immediately after `update_workflow_state(...)` in all three checkpoint-progress reset branches (index overflow, markers-sha mismatch, dangling SHA). This ensures `preferred_diff_base_ref` receives `None` after a reset and falls through to the recorded branch base rather than reusing a stale commit SHA.
+
+3. **Closeout stage repair in `command_repair`** — Added a closeout repair block after the `"diff"` iteration, guarded by `if not blocked_reason:`. Handles: `unhealthy-manifest` + repairable → repair + re-verify; `unhealthy-manifest` + not repairable → block; `not-checkpointed` / `missing-artifact` / `stub-artifact` → skip silently.
+
+## Tests Added
+
+13 new tests across 3 classes in `test_run_feature_workflow_repair.py`:
+
+- `DefaultCodexModelTests` (2 tests)
+- `BaseRefResetTests` (4 tests — sentinel-exception approach to capture `args.base_ref` before subprocess calls)
+- `RepairCloseoutTests` (6 tests — happy path, failure, not-repairable, partial-success, blocked guard)
+
+All 53 tests pass (1 pre-existing unrelated failure in `test_command_deliver_dry_run_does_not_mutate_delivery_state`).
+
+## Commits
+
+- Implementation: 3 stories + tests
+- Fix: corrected `DEFAULT_CODEX_MODEL` to `"gpt-5.4-mini"`
+
+## Review Reconciliation
+
+All 12 reviews (3 spec + 3 plan + 3 tasks + 3 diff) accepted. All adversarial findings either rejected with documented rationale or accepted and addressed in the implementation.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+I’m reviewing the closeout artifact itself for gaps and weak assumptions, not reopening implementation details. I’ll keep this adversarial and scoped to what the artifact claims versus what it actually establishes.
+codex
+## Findings
+1. **High: The test-success claim is inaccurate as written.** The artifact says “All 53 tests pass” while also admitting one pre-existing failure. That is not a clean pass condition, and the “unrelated” label is not substantiated. The failing test, `test_command_deliver_dry_run_does_not_mutate_delivery_state`, is still about state mutation, which is close enough to this closeout’s `update_workflow_state` and `args.base_ref` changes that the artifact does not establish independence.
+2. **Medium: The new closeout repair path creates a silent blind spot.** The artifact says `not-checkpointed`, `missing-artifact`, and `stub-artifact` are skipped silently. If any of those states can arise from partial corruption or an interrupted run instead of a harmless absence, this logic will suppress both repair and diagnosis with no observable signal. The artifact does not justify that these cases are always safe to ignore.
+3. **Medium: The base-ref fix is described more strongly than the evidence in the artifact supports.** The explanation claims `args.base_ref = None` ensures `preferred_diff_base_ref` falls through to the recorded branch base, but the artifact only cites sentinel-style unit tests. It does not establish that the same behavior holds through the full checkpoint/repair flow under real subprocess execution or repeated resets, so the guarantee is narrower than the wording suggests.
+
+## Residual Risks
+- One known test failure still exists, so the workflow hardening was not validated against a fully green suite.
+- The closeout repair logic still depends on the assumption that the skipped artifact states are truly benign, which may not hold if upstream corruption modes change.
+- The base-ref reset fix remains convention-sensitive: any future caller that reintroduces a stale `base_ref` after the reset could re-open the original bug.
+tokens used
+4,461
