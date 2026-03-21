@@ -181,6 +181,17 @@ def upstream_branch_name() -> str | None:
     return git_output("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 
 
+def commits_behind_upstream() -> int | None:
+    """Return how many commits HEAD is behind its upstream, or None if unknown."""
+    result = git_output("rev-list", "--count", "HEAD..@{upstream}")
+    if result is None:
+        return None
+    try:
+        return int(result)
+    except ValueError:
+        return None
+
+
 def repo_remote_url(remote_name: str) -> str | None:
     return git_output("remote", "get-url", remote_name)
 
@@ -1502,9 +1513,13 @@ def command_status(args: argparse.Namespace) -> int:
     checkpoint_fallback = state.get(CHECKPOINT_FALLBACK_KEY, {})
     diff_budget = diff_review_budget_state(args.slug)
 
+    behind = commits_behind_upstream()
+
     print(f"workflow: {args.slug}")
     print(f"branch: {branch}")
     print(f"upstream: {upstream}")
+    if behind is not None and behind > 0:
+        print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — rebase before creating PR")
     print("")
     print("stages:")
     for stage in CHECKPOINT_STAGES:
@@ -1795,6 +1810,9 @@ def command_deliver(args: argparse.Namespace) -> int:
     if args.create_pr and not pr:
         if not upstream:
             raise SystemExit("deliver requires a published branch with an upstream before creating a PR")
+        behind = commits_behind_upstream()
+        if behind is not None and behind > 0:
+            print(f"warning: branch is {behind} commit{'s' if behind != 1 else ''} behind upstream — consider rebasing before creating PR")
         title = args.title or f"Workflow: {args.slug}"
         body = "\n".join(
             [

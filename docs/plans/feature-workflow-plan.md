@@ -25,7 +25,7 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 ### Priority 1 — Do first (high benefit, near-zero cost)
 
 #### I-1: Upfront requirements clarification step
-**Status:** Planned
+**Status:** Shipped 2026-03-20
 **Source:** Codex retro + human observation (2026-03-20)
 **What:** Add a pre-spec Q&A step to SKILL.md and CODEX-ORCHESTRATOR.md. Before authoring the spec, the workflow should ask clarifying questions: What problem are we solving? Are there edge cases or constraints to know upfront? What does done look like?
 **Why:** The workflow currently dives straight into spec authoring. Scope ambiguity discovered mid-pipeline forces rewrites and adds adversarial finding cycles.
@@ -37,7 +37,7 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 ### Priority 2 — Easy wins (low cost, clear benefit)
 
 #### I-2: Branch staleness warning in `status`
-**Status:** Planned
+**Status:** Shipped 2026-03-20
 **Source:** Codex retro (2026-03-20)
 **What:** In `command_status`, run `git rev-list --count HEAD..origin/<base>` and surface a warning if the branch is behind. Ideally warn before `deliver --create-pr` if staleness is detected.
 **Why:** Branch was behind `main` during a workflow run but the runner didn't warn; merge conflicts appeared after PR creation.
@@ -45,7 +45,7 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 **Files:** `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`
 
 #### I-3: Source-of-truth clarification in SKILL.md
-**Status:** Planned
+**Status:** Shipped 2026-03-20
 **Source:** Codex retro (2026-03-20)
 **What:** Add one paragraph to SKILL.md clarifying which files are authoritative vs. generated:
 - `workflow.json` — authoritative runtime state
@@ -57,7 +57,7 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 **Files:** `docs/operations/codex-skills/feature-workflow/SKILL.md`
 
 #### I-4: Fix `verify_reconciliation.py` orphan bug
-**Status:** Planned
+**Status:** Shipped 2026-03-20
 **Source:** Observed during workflow-runner-hardening (2026-03-20)
 **What:** `verify_reconciliation.py` treats pre-existing plan.md reconciliation entries as "orphaned" when called with fewer `--review` args than the total number of entries in the file. Fix the script to only check that the supplied reviews are present, not that no others exist.
 **Why:** Forced a manual workaround (calling `update_review_resolution.py` + `append_reconciliation_entry.py` directly) on every `reconcile` call during a multi-stage workflow. Hit multiple times.
@@ -97,6 +97,10 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 | base-ref reset after checkpoint progress reset | `args.base_ref = None` in 3 reset branches of `command_checkpoint` | 2026-03-20 | workflow-runner-hardening |
 | closeout stage repair | `command_repair` now handles `closeout` unhealthy-manifest | 2026-03-20 | workflow-runner-hardening |
 | `DEFAULT_CODEX_MODEL` constant | Replaced hardcoded `"gpt-5.4-mini"` in `required_reviews()` | 2026-03-20 | workflow-runner-hardening |
+| I-1: Upfront requirements clarification | Discovery step made mandatory in SKILL.md + CODEX-ORCHESTRATOR.md | 2026-03-20 | direct |
+| I-2: Branch staleness warning | `commits_behind_upstream()` added; warns in `status` and `deliver --create-pr` | 2026-03-20 | direct |
+| I-3: Source-of-truth clarification | Workflow file reference table added to SKILL.md | 2026-03-20 | direct |
+| I-4: `verify_reconciliation.py` orphan bug | Removed orphan check; script now only validates supplied reviews | 2026-03-20 | direct |
 
 ---
 
@@ -126,3 +130,4 @@ Priority order reflects benefit/cost ratio. Update status when items are shipped
 |------|------|--------|
 | 2026-03-20 | I-1 through I-6 | Created from Codex retro + human feedback |
 | 2026-03-20 | Shipped items | Populated from workflow-runner-hardening closeout |
+| 2026-03-20 | I-1, I-2, I-3, I-4 | Shipped directly (low-cost, no pipeline needed) |
