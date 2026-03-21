@@ -212,7 +212,13 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
 
       {/* Execution metrics for active runs */}
       {isActive && hasExecutionMetrics && run.executionMetrics && (
-        <ExecutionProgress metrics={run.executionMetrics} />
+        <ExecutionProgress
+          metrics={run.executionMetrics}
+          runStatus={run.status}
+          runProgress={run.runProgress}
+          summarizeProgress={run.summarizeProgress}
+          analysisStatus={run.analysisStatus}
+        />
       )}
 
       {/* Stats row - always show for active runs, only when expanded for completed */}
