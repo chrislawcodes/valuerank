@@ -102,6 +102,7 @@ export const ExecutionMetrics = builder.objectRef<{
   totalActive: number;
   totalQueued: number;
   estimatedSecondsRemaining: number | null;
+  totalRetries: number;
 }>('ExecutionMetrics').implement({
   description: 'Real-time execution metrics for monitoring parallel processing',
   fields: (t) => ({
@@ -119,6 +120,9 @@ export const ExecutionMetrics = builder.objectRef<{
     estimatedSecondsRemaining: t.exposeInt('estimatedSecondsRemaining', {
       nullable: true,
       description: 'Estimated seconds until all pending jobs complete',
+    }),
+    totalRetries: t.exposeInt('totalRetries', {
+      description: 'Total probe retry attempts across all models for this run',
     }),
   }),
 });
