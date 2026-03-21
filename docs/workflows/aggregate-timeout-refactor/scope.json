@@ -1,0 +1,13 @@
+{
+  "paths": [
+    "cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts",
+    "cloud/apps/api/tests/services/analysis/aggregate.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts",
+    "cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts",
+    "cloud/apps/api/tests/services/analysis/aggregate.test.ts",
+    "docs/workflows/aggregate-timeout-refactor"
+  ]
+}

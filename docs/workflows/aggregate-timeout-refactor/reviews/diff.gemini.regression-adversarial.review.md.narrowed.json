@@ -1,0 +1,14 @@
+{
+  "source_artifact_path": "docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "4799b084c1cb11b81f8508d0cfba5db10192d7e43b0d3a0c2b4e807bcbd38f29",
+  "narrowed_artifact_path": "docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.regression-adversarial.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "4faad98c4c2924bb0d409d050f282a14518e09548f841d6b13d7770ffd53d23c",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts b/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts"
+  ],
+  "tail_chunks": [
+    "diff --git a/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts b/cloud/apps/api/src/services/analysis/aggregate/update-aggregate-run.ts",
+    "diff --git a/cloud/apps/api/tests/services/analysis/aggregate.test.ts b/cloud/apps/api/tests/services/analysis/aggregate.test.ts"
+  ]
+}

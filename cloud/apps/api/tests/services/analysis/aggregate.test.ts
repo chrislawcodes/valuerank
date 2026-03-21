@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@valuerank/db';
+import {
+  claimAggregateRun,
+  persistAggregateRun,
+  prepareAggregateRunSnapshot,
+  releaseAggregateClaim,
+  spawnAggregateWorker,
+} from '../../../src/services/analysis/aggregate/aggregate-run-workflow.js';
 
 const { spawnPython } = vi.hoisted(() => ({
   spawnPython: vi.fn(),
@@ -126,6 +133,24 @@ async function createSourceRun({
   return run;
 }
 
+async function createCurrentAnalysisResult(
+  runId: string,
+  scenarioIds: string[],
+  modelScenarioMap: Record<string, string[]>,
+  analysisCodeVersion = '1.1.1'
+) {
+  return db.analysisResult.create({
+    data: {
+      runId,
+      analysisType: 'basic',
+      status: 'CURRENT',
+      codeVersion: analysisCodeVersion,
+      inputHash: `hash-${runId}-${analysisCodeVersion}-${Date.now()}`,
+      output: buildAnalysisOutput(scenarioIds, modelScenarioMap),
+    },
+  });
+}
+
 describe('updateAggregateRun same-signature aggregate eligibility', () => {
   const definitionIds: string[] = [];
 
@@ -211,6 +236,267 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     expect((aggregateAnalysis.output as Record<string, unknown>).aggregateMetadata).toMatchObject({
       aggregateEligibility: 'ineligible_partial_coverage',
       aggregateIneligibilityReason: 'At least one model is missing planned baseline conditions, so pooled baseline summaries would be incomplete.',
+    });
+  });
+
+  it('prepares a stable aggregate snapshot with a fingerprint and claim lease before worker execution', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 6}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+
+    expect(prepared).not.toBeNull();
+    expect(prepared?.sourceFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(prepared?.claim.token).toMatch(/^[0-9a-f-]{36}$/);
+    expect(new Date(prepared?.claim.leaseExpiresAt ?? '').getTime()).toBeGreaterThan(Date.now());
+    expect(prepared?.aggregateWorkerInput).not.toBeNull();
+    expect(prepared?.finalRunConfig).toMatchObject({
+      isAggregate: true,
+      sourceRunIds: expect.any(Array),
+      transcriptCount: 2,
+      temperature: 0.7,
+      aggregateSourceFingerprint: prepared?.sourceFingerprint,
+    });
+  });
+
+  it('rejects stale aggregate claims before the final persist step', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 7}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    const workerResult = await spawnAggregateWorker(prepared!);
+
+    await db.run.update({
+      where: { id: claim.aggregateRunId },
+      data: {
+        config: {
+          ...prepared!.finalRunConfig,
+          aggregateRecomputeClaim: {
+            ...claim.claim,
+            token: 'stale-token',
+          },
+        },
+      },
+    });
+
+    await expect(persistAggregateRun(prepared!, claim, workerResult)).rejects.toMatchObject({
+      retryable: true,
+    });
+
+    await releaseAggregateClaim(prepared!, claim);
+  });
+
+  it('restores the previous aggregate config when cleanup runs on the matching claim', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 9}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+    const baselineAggregateRun = await db.run.findFirstOrThrow({
+      where: {
+        definitionId: definition.id,
+        tags: {
+          some: {
+            tag: {
+              name: 'Aggregate',
+            },
+          },
+        },
+      },
+    });
+    const baselineConfigResult = baselineAggregateRun.config != null ? baselineAggregateRun.config : null;
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+
+    await releaseAggregateClaim(prepared!, claim);
+
+    const restoredAggregateRun = await db.run.findUniqueOrThrow({
+      where: { id: claim.aggregateRunId },
+    });
+
+    expect(restoredAggregateRun.status).toBe('COMPLETED');
+    expect(restoredAggregateRun.config).toEqual(baselineConfigResult);
+  });
+
+  it('marks a newly created aggregate as failed when cleanup runs on the matching claim', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 10}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    expect(claim.createdNew).toBe(true);
+
+    await releaseAggregateClaim(prepared!, claim);
+
+    const failedAggregateRun = await db.run.findUniqueOrThrow({
+      where: { id: claim.aggregateRunId },
+    });
+
+    expect(failedAggregateRun.status).toBe('FAILED');
+    expect(failedAggregateRun.config).not.toHaveProperty('aggregateRecomputeClaim');
+    expect(failedAggregateRun.config).not.toHaveProperty('aggregateSourceFingerprint');
+  });
+
+  it('uses the newest current analysis result when multiple CURRENT rows exist', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 8}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    const run = await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const originalAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: { runId: run.id, status: 'CURRENT' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    await db.analysisResult.update({
+      where: { id: originalAnalysis.id },
+      data: {
+        output: { broken: true },
+      },
+    });
+
+    await createCurrentAnalysisResult(run.id, scenarioIds, { 'gpt-4': scenarioIds }, '1.1.2');
+
+    await updateAggregateRun(definition.id, 'pre-1', 1, 0.7);
+
+    expect(spawnPython).toHaveBeenCalledTimes(1);
+
+    const aggregateAnalysis = await db.analysisResult.findFirstOrThrow({
+      where: {
+        analysisType: 'AGGREGATE',
+        run: { definitionId: definition.id },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    expect(aggregateAnalysis.output).toMatchObject({
+      aggregateMetadata: {
+        sourceRunCount: 1,
+      },
+      runCount: 1,
+      analysisCount: 1,
     });
   });
 

@@ -1,0 +1,36 @@
+{
+  "feature_slug": "aggregate-timeout-refactor",
+  "stage": "plan",
+  "artifact_path": "docs/workflows/aggregate-timeout-refactor/plan.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "architecture-adversarial",
+      "stage": "plan",
+      "path": "docs/workflows/aggregate-timeout-refactor/reviews/plan.gemini.architecture-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "testability-adversarial",
+      "stage": "plan",
+      "path": "docs/workflows/aggregate-timeout-refactor/reviews/plan.gemini.testability-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "implementation-adversarial",
+      "stage": "plan",
+      "path": "docs/workflows/aggregate-timeout-refactor/reviews/plan.codex.implementation-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}
