@@ -1,0 +1,17 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/types/execution-metrics.ts",
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/components/runs/ExecutionProgress.tsx",
+    "cloud/apps/web/src/components/runs/RunProgress.tsx"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/types/execution-metrics.ts",
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/components/runs/ExecutionProgress.tsx",
+    "cloud/apps/web/src/components/runs/RunProgress.tsx",
+    "docs/workflows/run-status-visualization"
+  ]
+}

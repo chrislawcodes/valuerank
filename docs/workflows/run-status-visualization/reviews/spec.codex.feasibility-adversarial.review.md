@@ -1,0 +1,45 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/workflows/run-status-visualization/spec.md"
+artifact_sha256: "17b62ed33bc6e739ba0828a91b1e2d68104837de4f993f520bc36d8f7d74943c"
+repo_root: "."
+git_head_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
+git_base_ref: "origin/main"
+git_base_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "See plan.md Review Reconciliation for full finding-by-finding notes."
+raw_output_path: "docs/workflows/run-status-visualization/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- **High:** `totalRetries` is specified as a new `ExecutionMetrics` GraphQL field, but the scope explicitly excludes the places where retry truth usually lives (`rate-limiter service`, `database schema`, and related backend plumbing). As written, the resolver has no stated source of truth for a run-wide retry count, so this is either impossible to implement accurately or will be inferred from incomplete state and undercount retries after restarts, page reloads, or missed events.
+- **High:** The retry badge semantics are underspecified and internally shaky: the spec says it reflects the proportion of trials that needed retries, but the formula is `totalRetries / runProgress.total`, which counts retry events, not unique trials. A single trial that retries multiple times can push the ratio far above the intuitive “share of trials retried,” so the badge color can misrepresent the actual retry burden.
+- **Medium:** The stage-pill rules conflict in failure cases. The spec says `analysisStatus != null` makes `Analyse` active, but also says `FAILED` / `CANCELLED` should show `Probe` as failed/stopped with later stages dimmed. Without explicit precedence, a run that has started analysis and then fails can be rendered inconsistently, depending on which condition the implementation checks first.
+- **Medium:** The UI requirements assume the current run query already exposes all the needed provider/model data, but the scope only mentions adding `byModel` to `runProgress` and updating `RunProgress.tsx` passthrough. If `ExecutionProgress.tsx` does not already receive provider `activeJobs`, `maxParallel`, `queuedJobs`, `recentCompletions`, and model identifiers through existing fragments, this rewrite will not be feasible without additional GraphQL changes that the spec does not list.
+- **Medium:** `full model name (monospace, no truncation)` in a 3-column card grid is not paired with any overflow or responsive behavior. On narrow screens or with long vendor model IDs, cards can easily blow out the layout or become unreadable, especially because the spec forbids truncation but does not define wrapping or horizontal scrolling.
+
+## Residual Risks
+
+- Throughput is defined as a rolling 60-second window from `recentCompletions`, so low-volume models will have noisy or zero rates even when they are actively progressing.
+- The spec does not define stable sorting for providers or per-model rows, so the dashboard could feel jumpy if data arrives out of order.
+- If retry counts are derived from transient in-memory run state, the displayed badge will drift from the actual historical run behavior after process restarts or partial event loss.
+- The failure/cancellation presentation for `Summarize` and `Analyse` remains underspecified beyond “dimmed,” so the UI may still obscure where the run actually stopped.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: See plan.md Review Reconciliation for full finding-by-finding notes.

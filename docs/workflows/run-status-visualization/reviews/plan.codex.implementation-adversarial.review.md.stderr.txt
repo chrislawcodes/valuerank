@@ -1,0 +1,143 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0de9-bea1-7471-a6a2-0f772b5d4164
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: run-status-visualization
+
+Two independent waves. Wave 2 depends on Wave 1.
+
+---
+
+## Wave 1 — API Data Layer (~25 lines changed, LOW risk)
+
+Additive changes only. Existing queries continue to work unchanged.
+
+### execution-metrics.ts
+Add `totalRetries: Int!` to the `ExecutionMetrics` objectRef backing type and the Pothos field definition.
+
+### run.ts
+In the `executionMetrics` resolver (already exists), add `totalRetries` to the returned object:
+```ts
+totalRetries: (await db.probeResult.aggregate({
+  _sum: { retryCount: true },
+  where: { runId: run.id },
+}))._sum.retryCount ?? 0
+```
+
+### runs.ts (web)
+1. Add `totalRetries: number` to the `ExecutionMetrics` TypeScript type
+2. Add `totalRetries` to the `executionMetrics { ... }` block in `RUN_WITH_TRANSCRIPTS_FRAGMENT`
+3. Add `byModel?: Array<{ modelId: string; completed: number; failed: number }>` to the `RunProgress` type
+4. Add `byModel { modelId completed failed }` to the `runProgress { ... }` block in `RUN_WITH_TRANSCRIPTS_FRAGMENT`
+
+**Verification:** `npm run build --workspace @valuerank/api && npm run build --workspace @valuerank/web` from `cloud/`
+
+---
+
+## Wave 2 — UI Redesign (~200 lines changed, MEDIUM risk)
+
+Full rewrite of `ExecutionProgress.tsx`. Only `RunProgress.tsx` imports it — TypeScript enforces the prop contract at build time.
+
+### ExecutionProgress.tsx — new props interface
+```ts
+type ExecutionProgressProps = {
+  metrics: ExecutionMetrics;                 // existing (now includes totalRetries)
+  runStatus: RunStatus;                      // NEW — stage pills
+  runProgress: RunProgress | null;           // NEW — byModel done counts + retry badge denominator
+  summarizeProgress: RunProgress | null;     // NEW — Summarize section
+  analysisStatus: string | null;             // NEW — Analyse section
+};
+```
+
+### Model-to-provider mapping strategy
+`byModel` has no provider field. For each provider card, derive modelIds:
+```ts
+const providerModelIds = new Set([
+  ...provider.activeModelIds,
+  ...provider.recentCompletions.map(c => c.modelId),
+]);
+```
+Join with `runProgress.byModel` by `modelId` for done counts.
+
+### Per-model throughput
+```ts
+function computeRatePerMin(completions: CompletionEvent[], modelId?: string): number {
+  const now = Date.now();
+  const relevant = modelId ? completions.filter(c => c.modelId === modelId) : completions;
+  return relevant.filter(c => now - new Date(c.completedAt).getTime() < 60_000).length;
+}
+```
+
+### Keep from existing file
+- `PROVIDER_CONFIG` color map and `getProviderConfig` helper (all 6 providers present)
+- `formatTime` helper
+
+### Remove from existing file
+- `ConcurrencyGauge` (dot-pill) → replaced by fill-bar
+- `ProviderProgressBar` (old) → replaced
+- `ProviderCard` (old) → replaced with new inline version
+- `RecentCompletionsFeed` → removed
+
+### RunProgress.tsx — call site update
+```tsx
+// Before:
+<ExecutionProgress metrics={run.executionMetrics} />
+
+// After:
+<ExecutionProgress
+  metrics={run.executionMetrics}
+  runStatus={run.status}
+  runProgress={run.runProgress}
+  summarizeProgress={run.summarizeProgress}
+  analysisStatus={run.analysisStatus}
+/>
+```
+
+**Verification:** `npm run build --workspace @valuerank/web` + `npm run lint --workspace @valuerank/web` + `npm run test --workspace @valuerank/web` from `cloud/`
+
+---
+
+## Risk Notes
+
+- Wave 1: purely additive — no breaking changes to existing resolvers or fragments
+- Wave 2: prop interface change is contained to one caller (`RunProgress.tsx`); TypeScript will catch any mismatch
+- No migrations, no data at risk
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+## Findings
+1. **High**: The provider-card mapping is built on a heuristic, not a canonical source of truth. `providerModelIds` is derived from `activeModelIds` plus `recentCompletions`, then joined against `runProgress.byModel` by `modelId`. That will silently misattribute or drop counts whenever a model moves between providers, appears under multiple providers, or has no recent completions. The plan does not introduce any explicit provider field to prevent that class of error.
+2. **High**: The data contract is insufficient for the UI you describe. Wave 2 wants per-provider progress, retry badges, and throughput, but Wave 1 only adds run-wide `totalRetries` and per-model `completed/failed` counts. There is no provider-level retry breakdown, no in-flight count, and no explicit denominator for the badge logic, so the UI will either be approximated incorrectly or cannot be implemented as specified.
+3. **Medium**: `analysisStatus` is weakened to `string | null` instead of a strict status union/enum. That removes the TypeScript guardrail the plan is relying on for the full rewrite, and it makes it easy for the UI to receive an unsupported status value that the new component cannot render correctly.
+4. **Medium**: `totalRetries` is exposed as GraphQL `Int!` even though it is computed by summing `retryCount` across a run. That can exceed GraphQL’s 32-bit integer ceiling on sufficiently large runs, so the resolver can fail at serialization time even if the database aggregate succeeds.
+
+## Residual Risks
+- The verification commands only build/lint/test the web side and do not prove the new GraphQL shape is available at runtime to every consumer.
+- The throughput calculation is based on `Date.now()` on the client, so displayed rates will vary with client clock skew and rerender timing.
+- The plan assumes `ExecutionProgress.tsx` has only one consumer; if there are tests, stories, or barrel exports outside `RunProgress.tsx`, the rewrite could still break them without being obvious from the planned call-site change.
+tokens used
+6,719

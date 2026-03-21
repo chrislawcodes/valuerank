@@ -1,0 +1,38 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 1,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Design is fully approved and locked from prior session \u2014 no re-litigation",
+      "Provider cards use 3-column grid with per-model rows; utilization bar not dot pills",
+      "Model-to-provider mapping derived client-side from provider.activeModelIds + recentCompletions",
+      "No standalone component files \u2014 ConcurrencyGauge, ProviderCard, RecentCompletionsFeed are inline functions inside ExecutionProgress.tsx",
+      "Codex model unavailable \u2014 Claude implements directly"
+    ],
+    "summary": "Design approved and locked. 2-wave plan: Wave 1 = API data layer (totalRetries field + byModel fragment, ~25 lines). Wave 2 = ExecutionProgress.tsx full rewrite + RunProgress.tsx prop passthrough (~200 lines). All design decisions are locked from prior session.",
+    "updated_at": 1774054477
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}
