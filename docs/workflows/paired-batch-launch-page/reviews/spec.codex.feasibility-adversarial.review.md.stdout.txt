@@ -1,9 +1,0 @@
-## Findings
-- **High:** The spec requires the new route-driven page to support cancel/back navigation and mutation failure “without losing the user's form inputs,” but it never defines where that draft state lives once the modal becomes a routed page. A route transition unmounts the current UI, so unless the form state is explicitly persisted outside the page component, back/cancel and retry flows will lose edits.
-- **Medium:** The route/error contract is too loose for direct navigation. “Invalid or missing definitions should render a friendly not-found/error state” does not say how to distinguish a deleted definition, a permission failure, and a transient fetch error. That leaves room for either masking real access-control problems as 404s or surfacing the wrong failure state to users.
-- **Medium:** The copy changes are scoped ambiguously across shared components. The spec changes labels such as `Start Paired Batch` and `Batch Size`, but it does not strictly fence those strings to the new paired-batch page. Because `RunForm` is shared, a naive refactor could leak glossary changes into the regular trial launch flow or the separate domain-trials modal that the spec explicitly says must remain unchanged.
-
-## Residual Risks
-- The percentage-backed nature of `Batch Size` can still confuse users unless the UI adds explicit context; the spec calls this out, but does not require any concrete explanatory pattern.
-- The “adjacent on wider screens, stacked on narrow screens” requirement is underspecified, so the layout can still degrade at mid-range breakpoints or under long localized labels.
-- The acceptance criteria rely on targeted tests, but they do not explicitly require a browser-refresh or full back-navigation test, so draft-state regressions may still slip through.

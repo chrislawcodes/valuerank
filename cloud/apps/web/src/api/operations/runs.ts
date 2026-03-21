@@ -12,6 +12,7 @@ export type RunProgress = {
   completed: number;
   failed: number;
   percentComplete: number;
+  byModel?: Array<{ modelId: string; completed: number; failed: number }>;
 };
 
 export type TaskResult = {
@@ -45,6 +46,7 @@ export type ExecutionMetrics = {
   totalActive: number;
   totalQueued: number;
   estimatedSecondsRemaining: number | null;
+  totalRetries: number;
 };
 
 export type Transcript = {
@@ -190,6 +192,11 @@ export const RUN_FRAGMENT = gql`
       completed
       failed
       percentComplete
+      byModel {
+        modelId
+        completed
+        failed
+      }
     }
     summarizeProgress {
       total
@@ -289,6 +296,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
       totalActive
       totalQueued
       estimatedSecondsRemaining
+      totalRetries
     }
   }
   ${RUN_FRAGMENT}

@@ -713,11 +713,18 @@ builder.objectType(RunRef, {
           }
         }
 
+        const retriesAggregate = await db.probeResult.aggregate({
+          _sum: { retryCount: true },
+          where: { runId: run.id },
+        });
+        const totalRetries = retriesAggregate._sum.retryCount ?? 0;
+
         return {
           providers,
           totalActive,
           totalQueued,
           estimatedSecondsRemaining,
+          totalRetries,
         };
       },
     }),
