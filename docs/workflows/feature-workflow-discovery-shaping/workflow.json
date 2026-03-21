@@ -1,0 +1,52 @@
+{
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 1,
+    "required": true,
+    "complete": true,
+    "question_count": 4,
+    "asked_count": 4,
+    "questions": [
+      {
+        "question": "Should requirements clarification be a mandatory gated step before spec authoring, or a recommended prompt that can be skipped for well-scoped requests?",
+        "recommendation": "Make it a recommended prompt (not a hard gate) \u2014 human can skip if the request is already well-scoped",
+        "rationale": "A hard gate adds friction for straightforward requests; a prompt covers the gap without blocking fast paths",
+        "updated_at": 1774053295
+      },
+      {
+        "question": "Should branch staleness block deliver --create-pr or only surface as a warning?",
+        "recommendation": "Warn, don't block \u2014 the human should decide whether to rebase first",
+        "rationale": "Blocking would add friction in cases where the staleness is intentional or harmless; a clear warning is sufficient",
+        "updated_at": 1774053304
+      },
+      {
+        "question": "Should verify_reconciliation.py be fixed to allow partial reconcile calls, or should reconcile always require all reviews to be passed?",
+        "recommendation": "Fix verify_reconciliation.py to check only that supplied reviews are present, not that no other entries exist",
+        "rationale": "Requiring all reviews defeats the purpose of the reconcile command in multi-stage workflows where reviews accumulate incrementally",
+        "updated_at": 1774053305
+      },
+      {
+        "question": "Should I-1 through I-4 ship as one wave or separately?",
+        "recommendation": "One wave \u2014 all four are low-cost docs/small-code changes with no interdependencies",
+        "rationale": "Batching reduces ceremony overhead; none of the four items require sequential dependency on each other",
+        "updated_at": 1774053305
+      }
+    ],
+    "assumptions": [],
+    "summary": "Feature workflow has two completed improvement cycles (workflow-two-mode-implementation, workflow-runner-hardening). Six improvements tracked in feature-workflow-plan.md. I-1 through I-4 are strong candidates for a single low-cost wave: upfront clarification prompt, branch staleness warning, source-of-truth docs, and verify_reconciliation orphan fix. I-5 (runner self-containment) is a separate wave. I-6 (lightweight mode) is deferred.",
+    "updated_at": 1774053305
+  }
+}

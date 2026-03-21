@@ -92,10 +92,6 @@ def main() -> int:
                 f"must be one of: {', '.join(sorted(TERMINAL_STATUSES))}"
             )
 
-    orphaned = sorted(set(entries) - expected_refs)
-    for ref in orphaned:
-        errors.append(f"{plan_path} has orphaned reconciliation entry for {ref}")
-
     if errors:
         for error in errors:
             print(error)

@@ -39,7 +39,7 @@ python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workfl
 | Phase | What you do | Runner command |
 |-------|-------------|----------------|
 | **Check status** | Always start here — read current state | `status --slug <slug>` |
-| **Discovery** | Ask clarifying questions one at a time; record assumptions | `discover --slug <slug> --complete --summary "<summary>"` |
+| **Discovery** | **Mandatory before spec.** Ask clarifying questions one at a time, or explicitly state assumptions you are carrying in. Never silently skip to spec authoring. Record the outcome. | `discover --slug <slug> --question "..." --recommendation "..." --rationale "..."` (repeat per question), then `discover --slug <slug> --summary "<summary>" --complete` |
 | **Write spec** | Research real file paths via Gemini, author `spec.md` | Write to `docs/workflows/<slug>/spec.md`, then checkpoint |
 | **Spec checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage spec` |
 | **Write plan** | Author `plan.md` with architecture decisions | Write to `docs/workflows/<slug>/plan.md`, then checkpoint |
