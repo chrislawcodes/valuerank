@@ -382,12 +382,6 @@ export async function prepareAggregateRunSnapshot(
   });
 
   let aggregateWorkerInput: AggregateWorkerInput | null = null;
-  let preferenceSummary: { perModel: Record<string, unknown> } | null = null;
-  let reliabilitySummary: { perModel: Record<string, unknown> } | null = null;
-  let aggregateSemanticMetadata: Pick<AggregateMetadata, 'perModelRepeatCoverage' | 'perModelDrift'> = {
-    perModelRepeatCoverage: {},
-    perModelDrift: {},
-  };
 
   if (aggregateEligibility === 'eligible_same_signature_baseline') {
     aggregateWorkerInput = {
@@ -411,8 +405,8 @@ export async function prepareAggregateRunSnapshot(
     sourceRunCount: compatibleRuns.length,
     sourceRunIds: compatibleRuns.map((run) => run.id),
     conditionCoverage,
-    perModelRepeatCoverage: aggregateSemanticMetadata.perModelRepeatCoverage,
-    perModelDrift: aggregateSemanticMetadata.perModelDrift,
+    perModelRepeatCoverage: {},
+    perModelDrift: {},
   } satisfies Pick<
     AggregateMetadata,
     'aggregateEligibility' | 'aggregateIneligibilityReason' | 'sourceRunCount' | 'sourceRunIds' | 'conditionCoverage' | 'perModelRepeatCoverage' | 'perModelDrift'
@@ -786,7 +780,7 @@ export async function spawnAggregateWorker(prepared: AggregateRunPreparation): P
     throw new Error(`${workerResult.data.error.code}: ${workerResult.data.error.message}`);
   }
 
-  return workerResult.data as AggregateWorkerSuccessOutput;
+  return workerResult.data;
 }
 
 export class AggregateRecomputeRetryableError extends Error {
