@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@valuerank/db';
+import {
+  claimAggregateRun,
+  persistAggregateRun,
+  prepareAggregateRunSnapshot,
+  releaseAggregateClaim,
+  spawnAggregateWorker,
+} from '../../../src/services/analysis/aggregate/aggregate-run-workflow.js';
 
 const { spawnPython } = vi.hoisted(() => ({
   spawnPython: vi.fn(),
@@ -212,6 +219,102 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
       aggregateEligibility: 'ineligible_partial_coverage',
       aggregateIneligibilityReason: 'At least one model is missing planned baseline conditions, so pooled baseline summaries would be incomplete.',
     });
+  });
+
+  it('prepares a stable aggregate snapshot with a fingerprint and claim lease before worker execution', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 6}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+
+    expect(prepared).not.toBeNull();
+    expect(prepared?.sourceFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(prepared?.claim.token).toMatch(/^[0-9a-f-]{36}$/);
+    expect(new Date(prepared?.claim.leaseExpiresAt ?? '').getTime()).toBeGreaterThan(Date.now());
+    expect(prepared?.aggregateWorkerInput).not.toBeNull();
+    expect(prepared?.finalRunConfig).toMatchObject({
+      isAggregate: true,
+      sourceRunIds: expect.any(Array),
+      transcriptCount: 2,
+      temperature: 0.7,
+      aggregateSourceFingerprint: prepared?.sourceFingerprint,
+    });
+  });
+
+  it('rejects stale aggregate claims before the final persist step', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 7}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    const workerResult = await spawnAggregateWorker(prepared!);
+
+    await db.run.update({
+      where: { id: claim.aggregateRunId },
+      data: {
+        config: {
+          ...prepared!.finalRunConfig,
+          aggregateRecomputeClaim: {
+            ...claim.claim,
+            token: 'stale-token',
+          },
+        },
+      },
+    });
+
+    await expect(persistAggregateRun(prepared!, claim, workerResult)).rejects.toMatchObject({
+      retryable: true,
+    });
+
+    await releaseAggregateClaim(prepared!, claim);
   });
 
   it('fails closed when any source run is an assumption run', async () => {

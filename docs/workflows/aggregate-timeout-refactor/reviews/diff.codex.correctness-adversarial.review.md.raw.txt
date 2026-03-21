@@ -1,0 +1,9 @@
+## Findings
+- High: `updateAggregateRun` now snapshots the source state before it acquires the advisory lock, and `persistAggregateRun` only checks that cached fingerprint/token pair later. That leaves a correctness gap: any scenario/run/transcript change between `prepareAggregateRunSnapshot()` and the later claim/persist path can be published even though the aggregate no longer reflects the live source state. The old implementation read the source rows while holding the lock, so this is a regression in consistency.
+- Medium-High: The new fingerprint is order-sensitive, but the queries feeding it do not specify `orderBy` for `scenarios`, `runs`, or `transcripts`. Because `computeAggregateFingerprint()` hashes arrays as returned, the same logical database state can produce different `sourceFingerprint` values, causing false stale-claim rejections and unnecessary retries.
+- Medium: When an existing aggregate run is claimed, `claimAggregateRun()` only rewrites `config`; it does not mark the run `RUNNING` or suppress the old `CURRENT` analysis result until final persist. During the worker window, external readers can still see a `COMPLETED` aggregate as if it were final even though it is mid-recompute and carrying a transient claim token.
+
+## Residual Risks
+- If other writers already serialize source mutations with the same advisory lock, the stale-snapshot race is narrower, but the code still does not revalidate the live source rows under the lock.
+- If the database/ORM returns rows in a stable order in practice, the fingerprint-flapping risk is reduced, but the implementation still relies on unspecified ordering.
+- Abandoned claims still depend on later cleanup or a subsequent successful recompute; a crash after claiming can leave the aggregate in a claimed state until something else supersedes it.
