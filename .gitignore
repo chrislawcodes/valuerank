@@ -56,3 +56,4 @@ yarn-error.log*
 !scenarios/
 !scenarios/**
 .agents/tmp/
+.claude/launch.json
