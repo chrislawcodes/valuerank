@@ -1,0 +1,17 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "aa599ef1dfd54d82d3d0fb6dd7ef4fdfeb32f2fe",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "8a6a690305a367479fd3897aa807a0fd38a30c4f",
+  "paths": [
+    "cloud/apps/api/src/graphql/types/execution-metrics.ts",
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/components/runs/ExecutionProgress.tsx",
+    "cloud/apps/web/src/components/runs/RunProgress.tsx"
+  ],
+  "allowed_dirty_paths": [],
+  "untracked_files_included": [],
+  "artifact_path": "docs/workflows/run-status-visualization/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

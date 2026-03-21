@@ -1,0 +1,1159 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d0ee1-bd24-7952-82e5-6b43b0c71ad5
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/types/execution-metrics.ts b/cloud/apps/api/src/graphql/types/execution-metrics.ts
+index 7cd11f71..894f4dc2 100644
+--- a/cloud/apps/api/src/graphql/types/execution-metrics.ts
++++ b/cloud/apps/api/src/graphql/types/execution-metrics.ts
+@@ -102,6 +102,7 @@ export const ExecutionMetrics = builder.objectRef<{
+   totalActive: number;
+   totalQueued: number;
+   estimatedSecondsRemaining: number | null;
++  totalRetries: number;
+ }>('ExecutionMetrics').implement({
+   description: 'Real-time execution metrics for monitoring parallel processing',
+   fields: (t) => ({
+@@ -120,5 +121,8 @@ export const ExecutionMetrics = builder.objectRef<{
+       nullable: true,
+       description: 'Estimated seconds until all pending jobs complete',
+     }),
++    totalRetries: t.exposeInt('totalRetries', {
++      description: 'Total probe retry attempts across all models for this run',
++    }),
+   }),
+ });
+diff --git a/cloud/apps/api/src/graphql/types/run.ts b/cloud/apps/api/src/graphql/types/run.ts
+index 1a3efe62..e0d8c9eb 100644
+--- a/cloud/apps/api/src/graphql/types/run.ts
++++ b/cloud/apps/api/src/graphql/types/run.ts
+@@ -713,11 +713,18 @@ builder.objectType(RunRef, {
+           }
+         }
+ 
++        const retriesAggregate = await db.probeResult.aggregate({
++          _sum: { retryCount: true },
++          where: { runId: run.id },
++        });
++        const totalRetries = retriesAggregate._sum.retryCount ?? 0;
++
+         return {
+           providers,
+           totalActive,
+           totalQueued,
+           estimatedSecondsRemaining,
++          totalRetries,
+         };
+       },
+     }),
+diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts
+index af5b554f..9ae66913 100644
+--- a/cloud/apps/web/src/api/operations/runs.ts
++++ b/cloud/apps/web/src/api/operations/runs.ts
+@@ -12,6 +12,7 @@ export type RunProgress = {
+   completed: number;
+   failed: number;
+   percentComplete: number;
++  byModel?: Array<{ modelId: string; completed: number; failed: number }>;
+ };
+ 
+ export type TaskResult = {
+@@ -45,6 +46,7 @@ export type ExecutionMetrics = {
+   totalActive: number;
+   totalQueued: number;
+   estimatedSecondsRemaining: number | null;
++  totalRetries: number;
+ };
+ 
+ export type Transcript = {
+@@ -190,6 +192,11 @@ export const RUN_FRAGMENT = gql`
+       completed
+       failed
+       percentComplete
++      byModel {
++        modelId
++        completed
++        failed
++      }
+     }
+     summarizeProgress {
+       total
+@@ -289,6 +296,7 @@ export const RUN_WITH_TRANSCRIPTS_FRAGMENT = gql`
+       totalActive
+       totalQueued
+       estimatedSecondsRemaining
++      totalRetries
+     }
+   }
+   ${RUN_FRAGMENT}
+diff --git a/cloud/apps/web/src/components/runs/ExecutionProgress.tsx b/cloud/apps/web/src/components/runs/ExecutionProgress.tsx
+index 5c65854c..62df9082 100644
+--- a/cloud/apps/web/src/components/runs/ExecutionProgress.tsx
++++ b/cloud/apps/web/src/components/runs/ExecutionProgress.tsx
+@@ -1,262 +1,356 @@
+ /**
+  * ExecutionProgress Component
+  *
+- * Real-time visualization of parallel execution during runs.
+- * Shows per-provider concurrency, rate limits, and recent completions.
++ * Real-time visualization of the three pipeline stages during a run:
++ * Probe → Summarize → Analyse.
++ *
++ * Shows per-provider swim-lane cards with per-model rows, utilization bars,
++ * job queue strip, retry badge, and pending stage indicators.
+  */
+ 
+ import { useMemo } from 'react';
+-import { Activity, Zap, Clock, CheckCircle, XCircle } from 'lucide-react';
+-import type { ExecutionMetrics, ProviderExecutionMetrics, CompletionEvent } from '../../api/operations/runs';
++import { Activity, Clock } from 'lucide-react';
++import type { ExecutionMetrics, RunProgress, RunStatus } from '../../api/operations/runs';
+ 
+ type ExecutionProgressProps = {
+   metrics: ExecutionMetrics;
++  runStatus: RunStatus;
++  runProgress: RunProgress | null;
++  summarizeProgress: RunProgress | null;
++  analysisStatus: string | null;
+ };
+ 
+-// Provider display names and colors
+-const PROVIDER_CONFIG: Record<string, { name: string; color: string; bgColor: string }> = {
+-  anthropic: { name: 'Anthropic', color: 'text-orange-600', bgColor: 'bg-orange-500' },
+-  openai: { name: 'OpenAI', color: 'text-emerald-600', bgColor: 'bg-emerald-500' },
+-  google: { name: 'Google', color: 'text-blue-600', bgColor: 'bg-blue-500' },
+-  deepseek: { name: 'DeepSeek', color: 'text-purple-600', bgColor: 'bg-purple-500' },
+-  xai: { name: 'xAI', color: 'text-gray-600', bgColor: 'bg-gray-500' },
+-  mistral: { name: 'Mistral', color: 'text-cyan-600', bgColor: 'bg-cyan-500' },
++// Provider display config
++const PROVIDER_CONFIG: Record<string, { name: string; dot: string; bar: string; border: string; bg: string }> = {
++  anthropic: { name: 'Anthropic', dot: 'bg-orange-500', bar: 'bg-orange-400', border: 'border-orange-200', bg: 'bg-orange-50' },
++  openai:    { name: 'OpenAI',    dot: 'bg-emerald-500', bar: 'bg-emerald-400', border: 'border-emerald-200', bg: 'bg-emerald-50' },
++  google:    { name: 'Google',    dot: 'bg-blue-500',    bar: 'bg-blue-400',    border: 'border-blue-200',    bg: 'bg-blue-50'    },
++  deepseek:  { name: 'DeepSeek', dot: 'bg-purple-500',  bar: 'bg-purple-400',  border: 'border-purple-200',  bg: 'bg-purple-50'  },
++  xai:       { name: 'xAI',      dot: 'bg-gray-500',    bar: 'bg-gray-400',    border: 'border-gray-200',    bg: 'bg-gray-50'    },
++  mistral:   { name: 'Mistral',  dot: 'bg-cyan-500',    bar: 'bg-cyan-400',    border: 'border-cyan-200',    bg: 'bg-cyan-50'    },
+ };
+ 
+ function getProviderConfig(provider: string) {
+   return PROVIDER_CONFIG[provider] ?? {
+     name: provider,
+-    color: 'text-gray-600',
+-    bgColor: 'bg-gray-500',
++    dot: 'bg-gray-500',
++    bar: 'bg-gray-400',
++    border: 'border-gray-200',
++    bg: 'bg-gray-50',
+   };
+ }
+ 
+-/**
+- * Format seconds into human-readable time.
+- */
+-function formatTime(seconds: number): string {
+-  if (seconds < 60) {
+-    return `${seconds}s`;
+-  }
+-  const mins = Math.floor(seconds / 60);
+-  const secs = seconds % 60;
+-  if (mins < 60) {
+-    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+-  }
+-  const hours = Math.floor(mins / 60);
+-  const remainingMins = mins % 60;
+-  return `${hours}h ${remainingMins}m`;
++/** Completions in the last 60 seconds → per-minute rate. */
++function computeRate(
++  completions: ExecutionMetrics['providers'][0]['recentCompletions'],
++  modelId?: string,
++): number {
++  const now = Date.now();
++  const relevant = modelId != null
++    ? completions.filter((c) => c.modelId === modelId)
++    : completions;
++  return relevant.filter((c) => now - new Date(c.completedAt).getTime() < 60_000).length;
+ }
+ 
+-/**
+- * Concurrency gauge showing active slots.
+- */
+-function ConcurrencyGauge({ active, max, color }: { active: number; max: number; color: string }) {
+-  const slots = Array.from({ length: max }, (_, i) => i < active);
++function formatRate(rate: number): string {
++  return rate > 0 ? `${rate}/min` : '0/min';
++}
+ 
+-  return (
+-    <div className="flex items-center gap-1">
+-      {slots.map((isActive, i) => (
+-        <div
+-          key={i}
+-          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${isActive ? `${color} animate-pulse` : 'bg-gray-200'
+-            }`}
+-        />
+-      ))}
+-      <span className="ml-1.5 text-xs text-gray-500 tabular-nums">
+-        {active}/{max}
+-      </span>
+-    </div>
+-  );
++// ── Stage pills ──────────────────────────────────────────────────────────────
++
++type Stage = 'probe' | 'summarize' | 'analyse';
++
++function activeStage(status: RunStatus): Stage {
++  if (status === 'SUMMARIZING') return 'summarize';
++  if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED') return 'analyse';
++  return 'probe';
+ }
+ 
+-/**
+- * Mini progress bar for provider.
+- */
+-function ProviderProgressBar({ provider }: { provider: ProviderExecutionMetrics }) {
+-  const { activeJobs, queuedJobs, maxParallel: _maxParallel } = provider;
+-  const total = activeJobs + queuedJobs;
+-  const progress = total > 0 ? (activeJobs / total) * 100 : 0;
++function StagePills({ status }: { status: RunStatus }) {
++  const current = activeStage(status);
++  const stages: { key: Stage; label: string; num: number }[] = [
++    { key: 'probe', label: 'Probe', num: 1 },
++    { key: 'summarize', label: 'Summarize', num: 2 },
++    { key: 'analyse', label: 'Analyse', num: 3 },
++  ];
+ 
+   return (
+-    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+-      <div
+-        className="h-full bg-teal-500 transition-all duration-500"
+-        style={{ width: `${progress}%` }}
+-      />
++    <div className="flex items-center gap-1 mt-3">
++      {stages.map((s, i) => {
++        const isActive = s.key === current;
++        return (
++          <span key={s.key} className="flex items-center gap-1">
++            {i > 0 && <span className="text-gray-300 text-sm mx-1">›</span>}
++            <span
++              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
++                isActive ? 'bg-emerald-100 text-emerald-800' : 'text-gray-400'
++              }`}
++            >
++              <span
++                className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
++                  isActive ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'
++                }`}
++              >
++                {s.num}
++              </span>
++              {s.label}
++              {isActive && (
++                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
++              )}
++            </span>
++          </span>
++        );
++      })}
+     </div>
+   );
+ }
+ 
+-/**
+- * Single provider card.
+- */
+-function ProviderCard({ provider }: { provider: ProviderExecutionMetrics }) {
+-  const config = getProviderConfig(provider.provider);
++// ── Provider card ────────────────────────────────────────────────────────────
++
++type ModelRow = {
++  modelId: string;
++  done: number;
++  failed: number;
++  rate: number;
++};
++
++function ProviderCard({
++  provider,
++  modelRows,
++  totalDone,
++  totalRate,
++}: {
++  provider: ExecutionMetrics['providers'][0];
++  modelRows: ModelRow[];
++  totalDone: number;
++  totalRate: number;
++}) {
++  const cfg = getProviderConfig(provider.provider);
+   const isActive = provider.activeJobs > 0;
++  const utilPct = provider.maxParallel > 0
++    ? Math.min(100, (provider.activeJobs / provider.maxParallel) * 100)
++    : 0;
++  const isThrottled = provider.requestsPerMinute > 0 && provider.activeJobs === 0 && provider.queuedJobs > 0;
+ 
+   return (
+     <div
+-      className={`
+-        rounded-lg border p-3 transition-all duration-300
+-        ${isActive ? 'border-teal-200 bg-teal-50/50 shadow-sm' : 'border-gray-200 bg-white'}
+-      `}
++      className={`rounded-lg border overflow-hidden flex flex-col transition-all duration-300 ${
++        isActive ? `${cfg.border} shadow-sm` : 'border-gray-200'
++      }`}
+     >
+       {/* Header */}
+-      <div className="flex items-center justify-between mb-2">
+-        <div className="flex items-center gap-2">
+-          <div className={`w-2 h-2 rounded-full ${isActive ? config.bgColor + ' animate-pulse' : 'bg-gray-300'}`} />
+-          <span className={`text-sm font-medium ${config.color}`}>{config.name}</span>
+-        </div>
+-        {isActive && (
+-          <Activity className="w-3.5 h-3.5 text-teal-500 animate-pulse" />
+-        )}
++      <div className={`flex items-center gap-2 px-3 py-2 ${isActive ? cfg.bg : 'bg-white'}`}>
++        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? cfg.dot + ' animate-pulse' : 'bg-gray-300'}`} />
++        <span className="text-sm font-semibold text-gray-700 flex-1">{cfg.name}</span>
++        {isActive && <Activity className="w-3 h-3 text-gray-400" />}
+       </div>
+ 
+-      {/* Concurrency */}
+-      <div className="mb-2">
+-        <ConcurrencyGauge active={provider.activeJobs} max={provider.maxParallel} color={config.bgColor} />
++      {/* Model rows */}
++      <div className="px-3 py-2 flex flex-col gap-1 flex-1">
++        {modelRows.length === 0 ? (
++          <p className="text-xs text-gray-400 italic">No activity</p>
++        ) : (
++          modelRows.map((row) => (
++            <div key={row.modelId} className="flex items-center gap-2 min-w-0">
++              <span className="font-mono text-xs text-gray-700 flex-1 min-w-0 truncate">{row.modelId}</span>
++              <span className="text-xs font-semibold text-gray-900 flex-shrink-0 tabular-nums">{row.done} done</span>
++              <span className="text-xs text-gray-400 flex-shrink-0 tabular-nums w-12 text-right">{formatRate(row.rate)}</span>
++            </div>
++          ))
++        )}
+       </div>
+ 
+-      {/* Rate limit indicator */}
+-      <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+-        <Zap className="w-3 h-3" />
+-        <span>{provider.requestsPerMinute}/min</span>
+-        {provider.queuedJobs > 0 && (
+-          <span className="ml-auto text-amber-600">+{provider.queuedJobs} queued</span>
+-        )}
++      {/* Totals line */}
++      <div className="px-3 pb-1.5 flex items-center gap-1.5 text-xs text-gray-500">
++        <span className="font-medium text-gray-700">{totalDone} done total</span>
++        <span>·</span>
++        <span className="tabular-nums">{formatRate(totalRate)}</span>
++        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />}
++        {isThrottled && <span className="ml-auto text-amber-600 font-medium">throttled</span>}
+       </div>
+ 
+-      {/* Active Models Display */}
+-      {provider.activeModelIds && provider.activeModelIds.length > 0 && (
+-        <div className="mb-2 text-xs">
+-          <span className="text-gray-500 font-medium">Active: </span>
+-          <span className="text-gray-700">
+-            {provider.activeModelIds.slice(0, 3).join(', ')}
+-            {provider.activeModelIds.length > 3 && (
+-              <span className="text-gray-400"> +{provider.activeModelIds.length - 3} more</span>
+-            )}
+-          </span>
++      {/* Footer: util bar + slots + queue */}
++      <div className={`px-3 py-2 border-t border-gray-100 flex flex-col gap-1.5 ${isActive ? cfg.bg : 'bg-gray-50/50'}`}>
++        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
++          <div
++            className={`h-full rounded-full transition-all duration-500 ${cfg.bar}`}
++            style={{ width: `${utilPct}%` }}
++          />
+         </div>
+-      )}
+-
+-      {/* Progress bar */}
+-      <ProviderProgressBar provider={provider} />
++        <div className="flex items-center gap-2 text-xs text-gray-500">
++          <span className="tabular-nums">{provider.activeJobs}/{provider.maxParallel} slots</span>
++          {provider.queuedJobs > 0 && (
++            <span className="tabular-nums text-amber-600">{provider.queuedJobs} queued</span>
++          )}
++        </div>
++      </div>
+     </div>
+   );
+ }
+ 
+-/**
+- * Recent completions feed.
+- */
+-function RecentCompletionsFeed({ completions }: { completions: CompletionEvent[] }) {
+-  if (completions.length === 0) {
+-    return null;
+-  }
++// ── Pending stage bar ────────────────────────────────────────────────────────
+ 
+-  // Get the most recent 5 completions
+-  const recent = completions.slice(0, 5);
++function PendingStageBar({
++  label,
++  hint,
++  progress,
++}: {
++  label: string;
++  hint: string;
++  progress: RunProgress | null;
++}) {
++  const pct = progress != null ? progress.percentComplete : 0;
++  const done = progress != null ? progress.completed : 0;
++  const total = progress != null ? progress.total : 0;
++  const failed = progress != null ? progress.failed : 0;
++  const isActive = pct > 0 || done > 0;
+ 
+   return (
+-    <div className="flex items-center gap-2 overflow-x-auto py-1">
+-      <span className="text-xs text-gray-500 whitespace-nowrap">Recent:</span>
+-      {recent.map((event, i) => {
+-        // Truncate model name for display
+-        const modelShort = event.modelId.split('-').slice(0, 2).join('-');
+-        return (
+-          <div
+-            key={`${event.scenarioId}-${event.modelId}-${i}`}
+-            className={`
+-              flex items-center gap-1 px-2 py-0.5 rounded-full text-xs whitespace-nowrap
+-              ${event.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}
+-              animate-fadeIn
+-            `}
+-          >
+-            {event.success ? (
+-              <CheckCircle className="w-3 h-3" />
+-            ) : (
+-              <XCircle className="w-3 h-3" />
+-            )}
+-            <span className="max-w-20 truncate">{modelShort}</span>
+-          </div>
+-        );
+-      })}
++    <div className="flex items-center gap-3 px-4 py-3">
++      <span className={`text-xs font-semibold uppercase tracking-wide w-24 flex-shrink-0 ${isActive ? 'text-gray-600' : 'text-gray-300'}`}>
++        {label}
++      </span>
++      <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
++        <div
++          className={`h-full rounded-full transition-all duration-500 ${isActive ? 'bg-emerald-400' : 'bg-gray-200'}`}
++          style={{ width: `${pct}%` }}
++        />
++      </div>
++      {isActive ? (
++        <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
++          {done} / {total}
++          {failed > 0 && <span className="text-red-500 ml-1">{failed} failed</span>}
++        </span>
++      ) : (
++        <span className="text-xs text-gray-300 flex-shrink-0">{hint}</span>
++      )}
+     </div>
+   );
+ }
+ 
+-/**
+- * Main ExecutionProgress component.
+- */
+-export function ExecutionProgress({ metrics }: ExecutionProgressProps) {
+-  // Filter to only show providers with activity or capacity
+-  const activeProviders = useMemo(() => {
+-    return metrics.providers.filter(
+-      (p) => p.activeJobs > 0 || p.queuedJobs > 0 || p.maxParallel > 0
+-    );
+-  }, [metrics.providers]);
+-
+-  // Collect all recent completions
+-  const allCompletions = useMemo(() => {
+-    return metrics.providers
+-      .flatMap((p) => p.recentCompletions)
+-      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+-      .slice(0, 10);
+-  }, [metrics.providers]);
+-
+-  const hasActivity = metrics.totalActive > 0 || metrics.totalQueued > 0;
++// ── Retry badge (run-level) ──────────────────────────────────────────────────
+ 
+-  if (activeProviders.length === 0) {
+-    return null;
++function RetryBadge({ totalRetries, total }: { totalRetries: number; total: number }) {
++  if (totalRetries === 0) {
++    return <span className="text-xs text-gray-400 tabular-nums">0 retries</span>;
+   }
++  const pct = total > 0 ? (totalRetries / total) * 100 : 0;
++  const color = pct < 10
++    ? 'bg-green-100 text-green-700'
++    : pct < 25
++    ? 'bg-amber-100 text-amber-700'
++    : 'bg-red-100 text-red-700';
+ 
+   return (
+-    <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+-      {/* Header */}
+-      <div className="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-teal-50 to-transparent">
++    <span className={`text-xs px-2 py-0.5 rounded-full font-medium tabular-nums ${color}`}>
++      {totalRetries} {totalRetries === 1 ? 'retry' : 'retries'}
++    </span>
++  );
++}
++
++// ── Main component ───────────────────────────────────────────────────────────
++
++export function ExecutionProgress({
++  metrics,
++  runStatus,
++  runProgress,
++  summarizeProgress,
++  analysisStatus,
++}: ExecutionProgressProps) {
++  const byModelMap = useMemo(() => {
++    const map = new Map<string, { completed: number; failed: number }>();
++    for (const m of runProgress?.byModel ?? []) {
++      map.set(m.modelId, { completed: m.completed, failed: m.failed });
++    }
++    return map;
++  }, [runProgress?.byModel]);
++
++  const providerData = useMemo(() => {
++    return metrics.providers.map((provider) => {
++      const seenModelIds = new Set([
++        ...provider.activeModelIds,
++        ...provider.recentCompletions.map((c) => c.modelId),
++      ]);
++
++      const modelRows: ModelRow[] = Array.from(seenModelIds).map((modelId) => {
++        const counts = byModelMap.get(modelId);
++        return {
++          modelId,
++          done: counts?.completed ?? 0,
++          failed: counts?.failed ?? 0,
++          rate: computeRate(provider.recentCompletions, modelId),
++        };
++      }).sort((a, b) => b.done - a.done);
++
++      const totalDone = modelRows.reduce((sum, r) => sum + r.done, 0);
++      const totalRate = computeRate(provider.recentCompletions);
++
++      return { provider, modelRows, totalDone, totalRate };
++    });
++  }, [metrics.providers, byModelMap]);
++
++  const activeProviders = providerData.filter(
++    (p) => p.provider.activeJobs > 0 || p.provider.queuedJobs > 0 || p.modelRows.length > 0,
++  );
++
++  if (activeProviders.length === 0) return null;
++
++  const hasActivity = metrics.totalActive > 0 || metrics.totalQueued > 0;
++
++  return (
++    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
++      {/* Probe section header */}
++      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+         <div className="flex items-center justify-between">
+           <div className="flex items-center gap-2">
+-            <Activity className={`w-4 h-4 ${hasActivity ? 'text-teal-600 animate-pulse' : 'text-gray-400'}`} />
+-            <span className="text-sm font-medium text-gray-700">Parallel Execution</span>
++            <Activity className={`w-4 h-4 ${hasActivity ? 'text-emerald-600 animate-pulse' : 'text-gray-400'}`} />
++            <span className="text-sm font-semibold text-gray-700">PROBE</span>
+           </div>
+ 
+-          <div className="flex items-center gap-4 text-xs text-gray-500">
+-            {metrics.totalActive > 0 && (
+-              <div className="flex items-center gap-1">
+-                <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+-                <span>{metrics.totalActive} active</span>
+-              </div>
+-            )}
++          {/* Job queue + retry info */}
++          <div className="flex items-center gap-3 text-xs text-gray-500">
+             {metrics.totalQueued > 0 && (
+               <div className="flex items-center gap-1">
+                 <Clock className="w-3 h-3" />
+-                <span>{metrics.totalQueued} queued</span>
+-              </div>
+-            )}
+-            {metrics.estimatedSecondsRemaining !== null && metrics.estimatedSecondsRemaining > 0 && (
+-              <div className="flex items-center gap-1 text-teal-600">
+-                <span>ETA: {formatTime(metrics.estimatedSecondsRemaining)}</span>
++                <span className="tabular-nums font-medium text-gray-700">{metrics.totalQueued}</span>
++                <span>trials pending dispatch</span>
+               </div>
+             )}
++            <RetryBadge totalRetries={metrics.totalRetries} total={runProgress?.total ?? 0} />
+           </div>
+         </div>
++
++        <StagePills status={runStatus} />
+       </div>
+ 
+       {/* Provider grid */}
+       <div className="p-4">
+-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+-          {activeProviders.map((provider) => (
+-            <ProviderCard key={provider.provider} provider={provider} />
++        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
++          {activeProviders.map(({ provider, modelRows, totalDone, totalRate }) => (
++            <ProviderCard
++              key={provider.provider}
++              provider={provider}
++              modelRows={modelRows}
++              totalDone={totalDone}
++              totalRate={totalRate}
++            />
+           ))}
+         </div>
+       </div>
+ 
+-      {/* Recent completions feed */}
+-      {allCompletions.length > 0 && (
+-        <div className="px-4 py-2 border-t border-gray-100 bg-gray-50/50">
+-          <RecentCompletionsFeed completions={allCompletions} />
+-        </div>
+-      )}
++      {/* Summarize + Analyse pending bars */}
++      <div className="border-t border-gray-100 divide-y divide-gray-100">
++        <PendingStageBar
++          label="Summarize"
++          hint="Starts after Probe"
++          progress={summarizeProgress}
++        />
++        <PendingStageBar
++          label="Analyse"
++          hint={analysisStatus === 'computing' ? 'Computing…' : 'Starts after Summarize'}
++          progress={null}
++        />
++      </div>
+     </div>
+   );
+ }
+diff --git a/cloud/apps/web/src/components/runs/RunProgress.tsx b/cloud/apps/web/src/components/runs/RunProgress.tsx
+index 48786f75..190d87bb 100644
+--- a/cloud/apps/web/src/components/runs/RunProgress.tsx
++++ b/cloud/apps/web/src/components/runs/RunProgress.tsx
+@@ -212,7 +212,13 @@ export function RunProgress({ run, showPerModel = false }: RunProgressProps) {
+ 
+       {/* Execution metrics for active runs */}
+       {isActive && hasExecutionMetrics && run.executionMetrics && (
+-        <ExecutionProgress metrics={run.executionMetrics} />
++        <ExecutionProgress
++          metrics={run.executionMetrics}
++          runStatus={run.status}
++          runProgress={run.runProgress}
++          summarizeProgress={run.summarizeProgress}
++          analysisStatus={run.analysisStatus}
++        />
+       )}
+ 
+       {/* Stats row - always show for active runs, only when expanded for completed */}
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+I’m checking the changed types and status flow for places where the new UI assumes a shape or lifecycle the backend may not actually provide, then I’ll call out only concrete correctness issues.
+exec
+/bin/zsh -lc "rg -n \"type RunStatus|enum RunStatus|RunStatus =|analysisStatus|summarizeProgress|byModel\" cloud/apps/web/src cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/api/src/services/mcp/formatters.ts:60:  analysisStatus: 'pending' | 'completed' | 'failed';
+cloud/apps/api/src/services/mcp/formatters.ts:264:    analysisStatus: 'pending',
+cloud/apps/api/src/services/mcp/formatters.ts:277:      analysisStatus: analysis.status === 'CURRENT' ? 'completed' : 'pending',
+cloud/apps/api/src/services/mcp/formatters.ts:331:    analysisStatus: analysis.status === 'CURRENT' ? 'completed' : 'pending',
+cloud/apps/api/src/queue/types.ts:133:  byModel?: Record<string, { completed: number; failed: number }>;
+cloud/apps/api/src/services/run/query.ts:1:import { db, type AnalysisStatus, type Prisma, type RunCategory, type RunStatus } from '@valuerank/db';
+cloud/apps/api/src/services/run/query.ts:12:  analysisStatus?: AnalysisStatus;
+cloud/apps/api/src/services/run/query.ts:76:async function getRunIdsWithAnalysis(analysisStatus?: AnalysisStatus): Promise<string[]> {
+cloud/apps/api/src/services/run/query.ts:80:      ...(analysisStatus !== undefined ? { status: analysisStatus } : {}),
+cloud/apps/api/src/services/run/query.ts:165:  if (filters.hasAnalysis === true || filters.analysisStatus !== undefined) {
+cloud/apps/api/src/services/run/query.ts:166:    const runIdsWithAnalysis = await getRunIdsWithAnalysis(filters.analysisStatus);
+cloud/apps/api/src/services/run/progress.ts:130:type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+cloud/apps/api/src/services/run/progress.ts:229:  // Initialize summarizeProgress
+cloud/apps/api/src/services/run/progress.ts:233:      summarizeProgress: {
+cloud/apps/api/src/services/run/progress.ts:315:      select: { summarizeProgress: true },
+cloud/apps/api/src/services/run/progress.ts:317:    return run?.summarizeProgress as ProgressData | null;
+cloud/apps/api/src/services/run/progress.ts:351:  log.debug({ runId, summarizeProgress: updatedRun.summarize_progress }, 'Summarize progress updated');
+cloud/apps/web/src/pages/AnalysisDetail.tsx:68:    pause: !id || !run?.analysisStatus,
+cloud/apps/web/src/pages/AnalysisDetail.tsx:70:    analysisStatus: run?.analysisStatus ?? null,
+cloud/apps/web/src/pages/AnalysisDetail.tsx:83:    analysisStatus: companionRun?.analysisStatus ?? null,
+exec
+/bin/zsh -lc 'git diff -- cloud/apps/web/src/components/runs/RunProgress.tsx cloud/apps/web/src/components/runs/ExecutionProgress.tsx cloud/apps/web/src/api/operations/runs.ts cloud/apps/api/src/graphql/types/run.ts cloud/apps/api/src/graphql/types/execution-metrics.ts' in /Users/chrislaw/valuerank succeeded in 0ms:
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-eb0Atfm8' (errno=Operation not permitted)
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-wRqDyO8U' (errno=Operation not permitted)
+codex
+I’ve confirmed the run model already has `summarizeProgress` and a separate analysis lifecycle; now I’m checking whether the new component mixes those states in a way that hides real progress or drops data.
+exec
+/bin/zsh -lc "sed -n '300,410p' cloud/apps/api/src/graphql/types/run.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+      type: UserRef,
+      nullable: true,
+      description: 'User who deleted this run (only populated for soft-deleted records)',
+      resolve: async (run) => {
+        if (run.deletedByUserId === null || run.deletedByUserId === undefined || run.deletedByUserId === '') return null;
+        return db.user.findUnique({
+          where: { id: run.deletedByUserId },
+        });
+      },
+    }),
+
+    // Structured progress with percentComplete calculation
+    runProgress: t.field({
+      type: RunProgress,
+      nullable: true,
+      description: 'Structured progress information with percentComplete',
+      resolve: async (run) => {
+        const progress = run.progress as ProgressData | null;
+        if (progress === null) return null;
+
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/apps/api/src/graphql/types/run-progress.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * RunProgress and TaskResult GraphQL Types
+ *
+ * Structured types for run progress tracking.
+ */
+
+import { builder } from '../builder.js';
+
+// TaskStatus enum
+builder.enumType('TaskStatus', {
+  values: ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'] as const,
+  description: 'Status of an individual task/job',
+});
+
+// TaskResult - result of a completed/failed task
+export const TaskResult = builder.objectRef<{
+  scenarioId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  error?: string | null;
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/runs/ExecutionProgress.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * ExecutionProgress Component
+ *
+ * Real-time visualization of the three pipeline stages during a run:
+ * Probe → Summarize → Analyse.
+ *
+ * Shows per-provider swim-lane cards with per-model rows, utilization bars,
+ * job queue strip, retry badge, and pending stage indicators.
+ */
+
+import { useMemo } from 'react';
+import { Activity, Clock } from 'lucide-react';
+import type { ExecutionMetrics, RunProgress, RunStatus } from '../../api/operations/runs';
+
+type ExecutionProgressProps = {
+  metrics: ExecutionMetrics;
+  runStatus: RunStatus;
+  runProgress: RunProgress | null;
+  summarizeProgress: RunProgress | null;
+  analysisStatus: string | null;
+exec
+/bin/zsh -lc "sed -n '260,420p' cloud/apps/web/src/components/runs/ExecutionProgress.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+  const byModelMap = useMemo(() => {
+    const map = new Map<string, { completed: number; failed: number }>();
+    for (const m of runProgress?.byModel ?? []) {
+      map.set(m.modelId, { completed: m.completed, failed: m.failed });
+    }
+    return map;
+  }, [runProgress?.byModel]);
+
+  const providerData = useMemo(() => {
+    return metrics.providers.map((provider) => {
+      const seenModelIds = new Set([
+        ...provider.activeModelIds,
+        ...provider.recentCompletions.map((c) => c.modelId),
+      ]);
+
+      const modelRows: ModelRow[] = Array.from(seenModelIds).map((modelId) => {
+        const counts = byModelMap.get(modelId);
+        return {
+          modelId,
+          done: counts?.completed ?? 0,
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/web/src/api/operations/runs.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { gql } from 'urql';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type RunStatus = 'PENDING' | 'RUNNING' | 'PAUSED' | 'SUMMARIZING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type RunCategory = 'PILOT' | 'PRODUCTION' | 'REPLICATION' | 'VALIDATION' | 'UNKNOWN_LEGACY';
+
+export type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  percentComplete: number;
+  byModel?: Array<{ modelId: string; completed: number; failed: number }>;
+};
+
+export type TaskResult = {
+  scenarioId: string;
+  modelId: string;
+exec
+/bin/zsh -lc "sed -n '700,760p' cloud/apps/api/src/graphql/types/run.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+        const { totalActive, totalQueued } = getTotals();
+
+        // Calculate estimated time remaining based on progress and throughput
+        const progress = run.progress as ProgressData | null;
+        let estimatedSecondsRemaining: number | null = null;
+
+        if (progress !== null && progress !== undefined) {
+          const remaining = progress.total - progress.completed - progress.failed;
+          if (remaining > 0 && totalActive > 0) {
+            // Rough estimate: assume average of 5 seconds per job
+            // In production, calculate from recent completion times
+            const avgJobTime = 5;
+            estimatedSecondsRemaining = Math.ceil((remaining * avgJobTime) / Math.max(1, totalActive));
+          }
+        }
+
+        const retriesAggregate = await db.probeResult.aggregate({
+          _sum: { retryCount: true },
+          where: { runId: run.id },
+        });
+codex
+I found the new component hard-coding pipeline state from `run.status` alone, so I’m checking whether that breaks the already-existing separate `analysisStatus` and `summarizeProgress` lifecycles.
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/runs/RunProgress.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * RunProgress Component
+ *
+ * Displays progress of a run with visual progress bar and status indicators.
+ * Shows detailed execution metrics during RUNNING state, collapses when complete.
+ */
+
+import { useState } from 'react';
+import { CheckCircle, XCircle, Clock, Loader2, Pause, AlertCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Badge, type BadgeProps } from '../ui/Badge';
+import type { Run, RunProgress as RunProgressType } from '../../api/operations/runs';
+import { ExecutionProgress } from './ExecutionProgress';
+
+type RunProgressProps = {
+  run: Run;
+  showPerModel?: boolean;
+};
+
+/**
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/web/src/pages/RunDetail/AnalysisBanner.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * Analysis Banner
+ *
+ * Shows the analysis status and link to analysis page for a run.
+ */
+
+import { Link } from 'react-router-dom';
+import { BarChart2, Loader2 } from 'lucide-react';
+
+type AnalysisBannerProps = {
+  runId: string;
+  analysisStatus: string | null;
+  runStatus: string;
+};
+
+export function AnalysisBanner({ runId, analysisStatus, runStatus }: AnalysisBannerProps) {
+  // Don't show banner if run isn't completed and no analysis exists
+  if (runStatus !== 'COMPLETED' && !analysisStatus) {
+    return null;
+  }
+exec
+/bin/zsh -lc "sed -n '1,120p' cloud/apps/web/src/lib/statusBadge.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * Status to Badge Variant Mapping Utilities
+ *
+ * Centralizes the mapping of status strings to Badge variants for consistent
+ * styling across all status indicators in the application.
+ */
+
+import type { BadgeProps } from '../components/ui/Badge';
+
+type BadgeVariant = NonNullable<BadgeProps['variant']>;
+
+/**
+ * Run status types from the API
+ */
+export type RunStatus =
+  | 'PENDING'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'SUMMARIZING'
+  | 'COMPLETED'
+codex
+I’m looking for backend semantics now, because the main risk is the new aggregate silently counting the wrong thing or missing a state that the UI assumes exists.
+exec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/graphql/types/execution-metrics.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * Execution Metrics GraphQL Types
+ *
+ * Real-time metrics for monitoring parallel execution during runs.
+ * Shows per-provider concurrency, rate limits, and recent completions.
+ */
+
+import { builder } from '../builder.js';
+
+// CompletionEvent - recent job completion
+export const CompletionEvent = builder.objectRef<{
+  modelId: string;
+  scenarioId: string;
+  success: boolean;
+  completedAt: Date;
+  durationMs: number;
+}>('CompletionEvent').implement({
+  description: 'A recent job completion event',
+  fields: (t) => ({
+    modelId: t.exposeString('modelId', {
+exec
+/bin/zsh -lc "rg -n \"retryCount\" cloud/apps/api/src cloud/packages -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "rg -n \"type ProbeResult|model ProbeResult|probeResult\" cloud/apps/api -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/api/src/services/probe-result/index.ts:37:  retryCount?: number;
+cloud/apps/api/src/services/probe-result/index.ts:88:  const { runId, scenarioId, modelId, sampleIndex = 0, errorCode, errorMessage, retryCount = 0 } = input;
+cloud/apps/api/src/services/probe-result/index.ts:108:        retryCount,
+cloud/apps/api/src/services/probe-result/index.ts:115:        retryCount,
+cloud/apps/api/src/queue/handlers/probe-dead-letter.ts:46:          retryCount: 0,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:633:          retryCount: 0,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:727:    const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:728:    const maxRetriesReached = retryCount >= RETRY_LIMIT;
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:731:      { jobId, runId, scenarioId, modelId, retryable, retryCount, maxRetriesReached, err: error },
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:754:          retryCount,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:762:          { jobId, runId, scenarioId, modelId, progress, status, retryCount, err: error },
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:774:        { jobId, runId, retryCount, retriesRemaining: RETRY_LIMIT - retryCount },
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:247:    const retryCount = (job as unknown as { retrycount?: number }).retrycount ?? 0;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:248:    const maxRetriesReached = retryCount >= RETRY_LIMIT;
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:251:      { jobId, transcriptId, retryCount, maxRetriesReached, err: error },
+cloud/apps/api/src/queue/handlers/summarize-transcript.ts:263:            decisionText: `Summary failed after ${retryCount} retries: ${error instanceof Error ? error.message : String(error)}`,
+cloud/packages/db/prisma/schema.prisma:569:  retryCount   Int              @default(0) @map("retry_count")
+cloud/apps/api/src/graphql/types/run.ts:717:          _sum: { retryCount: true },
+cloud/apps/api/src/graphql/types/run.ts:720:        const totalRetries = retriesAggregate._sum.retryCount ?? 0;
+cloud/apps/api/src/graphql/types/probe-result.ts:53:    retryCount: t.exposeInt('retryCount', {
+ succeeded in 0ms:
+cloud/apps/api/src/services/probe-result/index.ts:48:    await db.probeResult.upsert({
+cloud/apps/api/src/services/probe-result/index.ts:96:    await db.probeResult.upsert({
+cloud/apps/api/src/services/probe-result/index.ts:135:  return db.probeResult.findMany({
+cloud/apps/api/src/services/probe-result/index.ts:145:  return db.probeResult.findMany({
+cloud/apps/api/src/services/probe-result/index.ts:155:  const results = await db.probeResult.groupBy({
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:24:type ProbeResultData = {
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:45:  probeResults: ProbeResultData[];
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:96:        const probeResults = await db.probeResult.findMany({
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:110:        if (probeResults.length === 0) {
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:116:        const modelIds = [...new Set(probeResults.map((p) => p.modelId))];
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:174:        const probeData: ProbeResultData[] = probeResults.map((p) => {
+cloud/apps/api/src/queue/handlers/compute-token-stats.ts:193:          { runId, definitionId, probeResults: probeData, existingStats, existingDefinitionStats },
+cloud/apps/api/src/graphql/queries/order-invariance.ts:744:        const stalledProbeRows = await db.probeResult.findMany({
+cloud/apps/api/src/graphql/queries/order-invariance.ts:761:        ? await db.probeResult.findMany({
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:476:  const probeResultKey = {
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:504:    const existingProbeResult = await db.probeResult.findUnique({
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:505:      where: probeResultKey,
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:743:        const existingProbeResult = await db.probeResult.findUnique({
+cloud/apps/api/src/queue/handlers/probe-scenario.ts:744:          where: probeResultKey,
+cloud/apps/api/src/mcp/tools/get-run-results.ts:170:        const [totalAvailable, probeResults] = await Promise.all([
+exec
+/bin/zsh -lc "sed -n '450,820p' cloud/apps/api/src/queue/handlers/probe-scenario.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1,220p' cloud/apps/api/src/services/probe-result/index.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+/**
+ * Probe Result Service
+ *
+ * Tracks the outcome of each probe job (success or failure).
+ * Provides queryable data for job status, error details, and diagnostics.
+ */
+
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+
+const log = createLogger('services:probe-result');
+
+/**
+ * Input for recording a successful probe result.
+ */
+export type RecordSuccessInput = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  sampleIndex?: number; // Index within sample set for multi-sample runs (0 to N-1), defaults to 0
+ succeeded in 0ms:
+      maxTurns: config.maxTurns,
+      ...(typeof config.temperature === 'number' ? { temperature: config.temperature } : {}),
+      ...(config.temperature === 0 ? { seed: 42 } : {}),
+    },
+  };
+
+  if (modelInfo !== null) {
+    input.modelCost = {
+      costInputPerMillion: modelInfo.costInputPerMillion,
+      costOutputPerMillion: modelInfo.costOutputPerMillion,
+    };
+    if (modelInfo.apiConfig !== undefined) {
+      input.modelConfig = modelInfo.apiConfig;
+    }
+  }
+
+  return input;
+}
+
+/**
+exec
+/bin/zsh -lc "rg -n \"executionMetrics \\{\" cloud/apps/web/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/api/operations/runs.ts:280:    executionMetrics {
+exec
+/bin/zsh -lc "rg -n \"totalRetries\" cloud/apps/web/src cloud/apps/api/src -g '"'!**/node_modules/**'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/api/src/graphql/types/run.ts:720:        const totalRetries = retriesAggregate._sum.retryCount ?? 0;
+cloud/apps/api/src/graphql/types/run.ts:727:          totalRetries,
+cloud/apps/web/src/api/operations/runs.ts:49:  totalRetries: number;
+cloud/apps/web/src/api/operations/runs.ts:299:      totalRetries
+cloud/apps/api/src/graphql/types/execution-metrics.ts:105:  totalRetries: number;
+cloud/apps/api/src/graphql/types/execution-metrics.ts:124:    totalRetries: t.exposeInt('totalRetries', {
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:233:function RetryBadge({ totalRetries, total }: { totalRetries: number; total: number }) {
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:234:  if (totalRetries === 0) {
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:237:  const pct = total > 0 ? (totalRetries / total) * 100 : 0;
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:246:      {totalRetries} {totalRetries === 1 ? 'retry' : 'retries'}
+cloud/apps/web/src/components/runs/ExecutionProgress.tsx:319:            <RetryBadge totalRetries={metrics.totalRetries} total={runProgress?.total ?? 0} />
+codex
+I’ve narrowed it down to one backend accounting bug and one front-end lifecycle regression; I’m grabbing exact line numbers now so the review is precise.
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/graphql/types/run.ts | sed -n '710,730p'" in /Users/chrislaw/valuerank succeeded in 0ms:
+   710	            // In production, calculate from recent completion times
+   711	            const avgJobTime = 5;
+   712	            estimatedSecondsRemaining = Math.ceil((remaining * avgJobTime) / Math.max(1, totalActive));
+   713	          }
+   714	        }
+   715	
+   716	        const retriesAggregate = await db.probeResult.aggregate({
+   717	          _sum: { retryCount: true },
+   718	          where: { runId: run.id },
+   719	        });
+   720	        const totalRetries = retriesAggregate._sum.retryCount ?? 0;
+   721	
+   722	        return {
+   723	          providers,
+   724	          totalActive,
+   725	          totalQueued,
+   726	          estimatedSecondsRemaining,
+   727	          totalRetries,
+   728	        };
+   729	      },
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/runs/ExecutionProgress.tsx | sed -n '250,360p'" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/runs/RunProgress.tsx | sed -n '110,230p'" in /Users/chrislaw/valuerank succeeded in 0ms:
+   250	
+   251	// ── Main component ───────────────────────────────────────────────────────────
+   252	
+   253	export function ExecutionProgress({
+   254	  metrics,
+   255	  runStatus,
+   256	  runProgress,
+   257	  summarizeProgress,
+   258	  analysisStatus,
+   259	}: ExecutionProgressProps) {
+   260	  const byModelMap = useMemo(() => {
+   261	    const map = new Map<string, { completed: number; failed: number }>();
+   262	    for (const m of runProgress?.byModel ?? []) {
+   263	      map.set(m.modelId, { completed: m.completed, failed: m.failed });
+   264	    }
+   265	    return map;
+   266	  }, [runProgress?.byModel]);
+   267	
+   268	  const providerData = useMemo(() => {
+   269	    return metrics.providers.map((provider) => {
+ succeeded in 0ms:
+   110	/**
+   111	 * Estimate per-transcript time for a model using run-local transcript durations.
+   112	 */
+   113	function estimateModelTranscriptTimeMs(
+   114	  modelId: string,
+   115	  modelDurations: number[],
+   116	  run: Run
+   117	): number | null {
+   118	  if (modelDurations.length > 0) {
+   119	    return Math.round(modelDurations.reduce((sum, ms) => sum + ms, 0) / modelDurations.length);
+   120	  }
+   121	
+   122	  // Fallback for early RUNNING state: use in-memory recent completions if available.
+   123	  const recentDurations = (run.executionMetrics?.providers ?? [])
+   124	    .flatMap((provider) => provider.recentCompletions)
+   125	    .filter(
+   126	      (completion) =>
+   127	        completion.success &&
+   128	        completion.modelId === modelId &&
+   129	        completion.durationMs > 0
+exec
+/bin/zsh -lc "nl -ba cloud/apps/web/src/components/runs/ExecutionProgress.tsx | sed -n '60,120p'" in /Users/chrislaw/valuerank succeeded in 0ms:
+    60	
+    61	type Stage = 'probe' | 'summarize' | 'analyse';
+    62	
+    63	function activeStage(status: RunStatus): Stage {
+    64	  if (status === 'SUMMARIZING') return 'summarize';
+    65	  if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED') return 'analyse';
+    66	  return 'probe';
+    67	}
+    68	
+    69	function StagePills({ status }: { status: RunStatus }) {
+    70	  const current = activeStage(status);
+    71	  const stages: { key: Stage; label: string; num: number }[] = [
+    72	    { key: 'probe', label: 'Probe', num: 1 },
+    73	    { key: 'summarize', label: 'Summarize', num: 2 },
+    74	    { key: 'analyse', label: 'Analyse', num: 3 },
+    75	  ];
+    76	
+    77	  return (
+    78	    <div className="flex items-center gap-1 mt-3">
+    79	      {stages.map((s, i) => {
+exec
+/bin/zsh -lc "nl -ba cloud/apps/api/src/queue/handlers/probe-scenario.ts | sed -n '736,775p'" in /Users/chrislaw/valuerank succeeded in 0ms:
+   736	    // 1. Error is not retryable, OR
+   737	    // 2. Max retries have been reached
+   738	    if (!retryable || maxRetriesReached) {
+   739	      try {
+   740	        // Record the failure with error details
+   741	        const errorMessage = error instanceof Error ? error.message : String(error);
+   742	        const errorCode = !retryable ? 'NON_RETRYABLE' : 'MAX_RETRIES_EXCEEDED';
+   743	        const existingProbeResult = await db.probeResult.findUnique({
+   744	          where: probeResultKey,
+   745	          select: { status: true },
+   746	        });
+   747	        await recordProbeFailure({
+   748	          runId,
+   749	          scenarioId,
+   750	          modelId,
+   751	          sampleIndex,
+   752	          errorCode,
+   753	          errorMessage,
+   754	          retryCount,
+   755	        });
+codex
+## Findings
+1. **High**: `totalRetries` is not actually counting all retry attempts. The new aggregate in [run.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/graphql/types/run.ts:716) sums `probeResult.retryCount`, but retry counts are only persisted on terminal failures in [probe-scenario.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/queue/handlers/probe-scenario.ts:738). Any probe that retries and then succeeds never writes a failure row, so it contributes `0` to this metric. The badge label therefore overstates what is being measured.
+2. **High**: The new three-stage progress UI is effectively unreachable in the view that renders it. `ExecutionProgress` is only mounted for `PENDING`/`RUNNING` runs in [RunProgress.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/RunProgress.tsx:143), and `activeStage()` maps both of those statuses to `probe` in [ExecutionProgress.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/ExecutionProgress.tsx:63). As soon as the run becomes `SUMMARIZING`, the whole panel disappears, so the added Summarize/Analyse bars never show during the phases they were introduced for.
+3. **Medium**: The provider visibility filter now drops idle-but-configured providers and can blank the entire metrics panel during a live run. In [ExecutionProgress.tsx](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/ExecutionProgress.tsx:292), providers are kept only if they have active jobs, queued jobs, or recent completions; the previous `maxParallel > 0` guard is gone. A run with all workers temporarily idle but still active will now render nothing at all, which regresses the old always-on capacity display.
+
+## Residual Risks
+- The per-minute rate labels still come from the last 60 seconds of `recentCompletions`, which is capped elsewhere to a small recent window, so bursty runs can still be underreported even after this patch.
+- There are no tests here covering the retry aggregate or the new stage-visibility conditions, so regressions in the run lifecycle wiring could slip through again.
+tokens used
+54,921

@@ -141,7 +141,7 @@ function estimateModelTranscriptTimeMs(
  * Check if run is in an active state that should show expanded metrics.
  */
 function isActiveRun(status: string): boolean {
-  return ['PENDING', 'RUNNING'].includes(status);
+  return ['PENDING', 'RUNNING', 'SUMMARIZING'].includes(status);
 }
 
 export function RunProgress({ run, showPerModel = false }: RunProgressProps) {

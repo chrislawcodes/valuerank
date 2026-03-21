@@ -1,0 +1,36 @@
+{
+  "feature_slug": "run-status-visualization",
+  "stage": "diff",
+  "artifact_path": "docs/workflows/run-status-visualization/reviews/implementation.diff.patch",
+  "git_base_ref": "origin/main",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "regression-adversarial",
+      "stage": "diff",
+      "path": "docs/workflows/run-status-visualization/reviews/diff.gemini.regression-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "quality-adversarial",
+      "stage": "diff",
+      "path": "docs/workflows/run-status-visualization/reviews/diff.gemini.quality-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "correctness-adversarial",
+      "stage": "diff",
+      "path": "docs/workflows/run-status-visualization/reviews/diff.codex.correctness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}
