@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch"
-artifact_sha256: "4799b084c1cb11b81f8508d0cfba5db10192d7e43b0d3a0c2b4e807bcbd38f29"
+artifact_sha256: "c28b06b7994d0381d694de1f434dd2b4c8bd6f31bddd53efb166ebaaa7619cbd"
 repo_root: "."
-git_head_sha: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
-git_base_ref: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
-git_base_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
+git_head_sha: "6190b55c6551aa0983ec3645e2a332c4d92c480c"
+git_base_ref: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
+git_base_sha: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Cleanup now strips stale claim state before restoring existing aggregates, marks brand-new failed aggregates as FAILED, and keeps runCount as the source-run count while exposing analysisCount for the included analysis rows."
 raw_output_path: "docs/workflows/aggregate-timeout-refactor/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,16 +22,19 @@ coverage_note: ""
 
 ## Findings
 
-1. High: [aggregate-run-workflow.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts) does not restore the pre-claim config for an existing aggregate run if recomputation fails. `claimAggregateRun()` overwrites the run with the new `sourceRunIds`, `transcriptCount`, and `aggregateSourceFingerprint` before the worker succeeds, and `releaseAggregateClaim()` only strips `aggregateRecomputeClaim` and flips status back to `COMPLETED`. If the worker fails or `persistAggregateRun()` rejects a stale claim, the run can be left published with metadata from the aborted snapshot but with the old `analysisResult`, so config and output diverge.
+1. **`releaseAggregateClaim` can now restore stale claim state instead of cleaning it up** (`cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts`).
+   - The new `previousConfig` path restores the pre-claim config verbatim. If that config already contained an `aggregateRecomputeClaim` or other leftover claim-only state from an earlier interrupted run, cleanup will put that poisoned state back onto the run instead of removing it.
+   - The old behavior always rebuilt from the current claimed config and stripped the claim fields, which accidentally cleared stale claim metadata. This change reintroduces the stale-state failure mode on retry/cleanup paths.
 
-2. Medium: [aggregate-run-workflow.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts) now selects the oldest `CURRENT` analysis per run. In `prepareAggregateRunSnapshot()`, `analysisResults` is ordered ascending and then `analysisResults[0]` is used, which is the opposite of the previous descending selection. If a run ever has multiple `CURRENT` rows, the aggregate will consume stale analysis data instead of the newest one.
-
-3. Medium: [aggregate-run-workflow.ts](/Users/chrislaw/valuerank/cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts) now reports `runCount` from `sourceRunCount`, which counts compatible source runs rather than analyses actually included. Because invalid analysis outputs are filtered out earlier, the persisted aggregate can overstate how many source analyses contributed to the result, and `runCount` can disagree with the actual aggregated set.
+2. **`runCount` is now derived from `analysisObjects.length`, which can drift from the authoritative source-run count** (`cloud/apps/api/src/services/analysis/aggregate/aggregate-run-workflow.ts`).
+   - The persisted aggregate output still carries `aggregateMetadata.sourceRunCount` and `sourceRunIds`, but `runCount` now comes from an internal analysis projection instead of the source-run set.
+   - That creates an internal-consistency risk: if analysis extraction ever diverges from the source-run list, consumers will see conflicting counts in the same record. The new test only covers the 1-run happy path, so the assumption that both counts always match is unguarded.
 
 ## Residual Risks
 
-- A hard crash between claim and cleanup can still leave an aggregate run in `RUNNING` until some later recompute path touches it; the lease is only enforced at persist time.
-- Snapshot verification still happens after the worker has run, so concurrent source changes can waste worker time before the recompute is rejected.
+- The `analysisResults` lookup now prefers the latest `CURRENT` row, but if two rows share the same timestamp bucket, the `id` tie-breaker is only deterministic, not necessarily “newest” in any semantic sense.
+- Cleanup still only strips `aggregateSourceFingerprint` in the `previousConfig == null` branch. If additional claim-specific fields are added later, they can leak back unless this restore path is kept in sync.
+- I did not verify downstream consumers of the persisted `runCount`; if any code compares it directly with `aggregateMetadata.sourceRunCount`, the new semantics may require a coordinated consumer update.
 
 ## Runner Stats
 - total_input=0
@@ -39,5 +42,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: Cleanup now strips stale claim state before restoring existing aggregates, marks brand-new failed aggregates as FAILED, and keeps runCount as the source-run count while exposing analysisCount for the included analysis rows.

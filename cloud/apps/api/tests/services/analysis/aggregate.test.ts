@@ -394,6 +394,50 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
     expect(restoredAggregateRun.config).toEqual(baselineConfigResult);
   });
 
+  it('marks a newly created aggregate as failed when cleanup runs on the matching claim', async () => {
+    const definition = await db.definition.create({
+      data: {
+        name: `aggregate-test-${Date.now() + 10}`,
+        content: {
+          schema_version: 1,
+          dimensions: [{ name: 'ValueA' }, { name: 'ValueB' }],
+        },
+      },
+    });
+    definitionIds.push(definition.id);
+
+    const scenarios = await db.scenario.createManyAndReturn({
+      data: [
+        { definitionId: definition.id, name: 'Scenario 1', content: { dimensions: { stakes: 1 } } },
+        { definitionId: definition.id, name: 'Scenario 2', content: { dimensions: { stakes: 2 } } },
+      ],
+      select: { id: true },
+    });
+    const scenarioIds = scenarios.map((scenario) => scenario.id);
+
+    await createSourceRun({
+      definitionId: definition.id,
+      scenarioIds,
+      modelScenarioMap: { 'gpt-4': scenarioIds },
+    });
+
+    const prepared = await prepareAggregateRunSnapshot(definition.id, 'pre-1', 1, 0.7);
+    expect(prepared).not.toBeNull();
+
+    const claim = await claimAggregateRun(prepared!);
+    expect(claim.createdNew).toBe(true);
+
+    await releaseAggregateClaim(prepared!, claim);
+
+    const failedAggregateRun = await db.run.findUniqueOrThrow({
+      where: { id: claim.aggregateRunId },
+    });
+
+    expect(failedAggregateRun.status).toBe('FAILED');
+    expect(failedAggregateRun.config).not.toHaveProperty('aggregateRecomputeClaim');
+    expect(failedAggregateRun.config).not.toHaveProperty('aggregateSourceFingerprint');
+  });
+
   it('uses the newest current analysis result when multiple CURRENT rows exist', async () => {
     const definition = await db.definition.create({
       data: {
@@ -452,6 +496,7 @@ describe('updateAggregateRun same-signature aggregate eligibility', () => {
         sourceRunCount: 1,
       },
       runCount: 1,
+      analysisCount: 1,
     });
   });
 

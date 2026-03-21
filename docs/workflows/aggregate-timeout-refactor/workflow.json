@@ -36,12 +36,12 @@
       "specs/coverage-matrix-pair-orientation"
     ],
     "used": true,
-    "updated_at": 1774062425
+    "updated_at": 1774062778
   },
   "checkpoint_progress": {
-    "index": 2,
+    "index": 3,
     "markers_sha": "0b3fac6b4968221fb74df0eb024a66da955fb5894b9e3229043e6097e88c63c7",
-    "last_diff_head_sha": "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
+    "last_diff_head_sha": "6190b55c6551aa0983ec3645e2a332c4d92c480c"
   },
   "checkpoint_fallback": {}
 }

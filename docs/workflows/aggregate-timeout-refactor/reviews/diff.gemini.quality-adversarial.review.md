@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/workflows/aggregate-timeout-refactor/reviews/implementation.diff.patch"
-artifact_sha256: "4799b084c1cb11b81f8508d0cfba5db10192d7e43b0d3a0c2b4e807bcbd38f29"
+artifact_sha256: "c28b06b7994d0381d694de1f434dd2b4c8bd6f31bddd53efb166ebaaa7619cbd"
 repo_root: "."
-git_head_sha: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
-git_base_ref: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
-git_base_sha: "8a6a690305a367479fd3897aa807a0fd38a30c4f"
+git_head_sha: "6190b55c6551aa0983ec3645e2a332c4d92c480c"
+git_base_ref: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
+git_base_sha: "6bd91d55a85ce2ba4f56de1c8db83f50a6d6a44c"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Cleanup now strips stale claim state, brand-new failed aggregates are FAILED, and the split runCount / analysisCount contract plus newest CURRENT selection are covered by tests; the remaining timestamp tie-break and upstream multi-CURRENT hygiene are follow-up concerns."
 raw_output_path: "docs/workflows/aggregate-timeout-refactor/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,25 +22,32 @@ coverage_note: ""
 
 ## Findings
 
-1.  **(Severity: Moderate) Integration Risk with Retryable Errors:** The new workflow correctly introduces `AggregateRecomputeRetryableError` to signal that an operation failed due to a transient data conflict (e.g., a race condition) and should be retried. However, the `updateAggregateRun` function simply re-throws this error. The effectiveness of this entire robustness mechanism is contingent on the calling system (likely a job queue processor) explicitly catching this specific error type and implementing a retry policy. The diff does not include the caller's implementation, creating a risk that these "retryable" failures might be treated as permanent failures, negating the benefit of the new error type.
+The review of this patch has surfaced several issues, ordered by severity. The primary concerns relate to state management on failure and the handling of data integrity anomalies.
 
-2.  **(Severity: Low) Brittleness of Custom Fingerprint Function:** The `sourceFingerprint` is critical for consistency and relies on a custom `stableStringify` function. This function sorts object keys but is not fully robust for all JavaScript types. It would produce unexpected string representations for types like `Map`, `Set`, or `BigInt`. If the structure of the `fingerprintPayload` were to change in the future to include these types (e.g., within a `run.config` object), the fingerprint's stability could be compromised, leading to unnecessary recomputations or incorrect stale data detection.
-
-3.  **(Severity: Low) Duplicated Aggregate Matching Logic:** The logic for identifying a "matching" aggregate run (based on `preambleVersionId`, `definitionVersion`, and `temperature`) is implemented independently in both `prepareAggregateRunSnapshot` and `findMatchingAggregateRun`. This duplication creates a maintenance risk. If the criteria defining a unique aggregate change, the logic must be updated in both places. A mismatch would cause the system to fail to find or incorrectly update aggregate runs.
+| Severity | Finding |
+| :--- | :--- |
+| **High** | **Flawed Rollback Logic for New Aggregate Runs** |
+| | The restoration logic in `releaseAggregateClaim` is incorrect for newly created aggregate runs. When a claim is released for a run that didn't previously exist (`claim.previousConfig == null`), the code modifies the configuration of the new run but leaves its status as `COMPLETED`. This creates a "zombie" run: an entity that appears to have completed successfully but contains no valid analysis data and is based on a failed process. Such a run should be marked as `FAILED` or deleted entirely to prevent it from being misinterpreted as a valid result in UIs or downstream data processing. |
+| **Medium** | **Multiple `CURRENT` Analysis Results Handled Superficially** |
+| | The query change in `prepareAggregateRunSnapshot` to sort analysis results by `createdAt: 'desc'` correctly selects the newest record when multiple `CURRENT` analysis results exist for a single run. While this fixes the immediate bug, it papers over a serious data integrity problem. The existence of multiple `CURRENT` results for one run indicates a flaw in another part of the system that is not being addressed. The patch lacks defensive programming; it should at least log a high-severity warning when this invalid state is detected to facilitate root cause analysis. |
+| **Low** | **Confusing Semantic Shift for `runCount` Metric** |
+| | In `persistAggregateRun`, the `runCount` field within the `AnalysisResult` output is repurposed. It previously represented the number of source `Run` entities, but now it represents `analysisCount`—the number of `AnalysisResult` entities being aggregated. Reusing the `runCount` key for a different metric is a poor practice that creates ambiguity. Consumers of this data (UIs, analysts, other services) may misinterpret the results, assuming the meaning of the field has not changed. A new, more descriptive key (e.g., `sourceAnalysisCount`) should have been used. |
+| **Low** | **Incomplete Test Coverage for Restoration Logic** |
+| | The new test `restores the previous aggregate config when cleanup runs on the matching claim` successfully validates the rollback path for an *existing* aggregate run. However, it fails to cover the rollback scenario for a *newly created* aggregate run. This is a critical omission, as this is precisely the failure case where the logic is flawed (see High severity finding). |
 
 ## Residual Risks
 
-1.  **Claim Lease Expiration under High Load:** The recompute claim has a 5-minute lease, while the Python worker timeout is 2 minutes. While this margin seems safe, an aggregation with an exceptionally large number of source runs and transcripts could potentially cause the entire workflow to exceed the 5-minute lease. In this scenario, the current process would correctly fail its final persistence step, but a competing process could have already acquired a new claim and started redundant work, leading to wasted computation. The static lease duration may not be suitable for all future workloads.
-
-2.  **Orphaned Claims on Unhandled Process Death:** The `releaseAggregateClaim` function handles cleanup for expected errors. However, if the node process dies unexpectedly (e.g., `SIGKILL`, OOM error) after `claimAggregateRun` completes, the claim will not be gracefully released. This would leave the aggregate run record locked in a `RUNNING` state. The 5-minute lease is the only fallback mechanism for recovery, meaning the affected aggregate would be unavailable for re-computation for up to 5 minutes.
+-   **Zombie Aggregation Artifacts:** The most significant risk is that failed aggregation jobs will pollute the database with `COMPLETED` runs that are empty or invalid. These zombie runs can mislead users, corrupt metrics, and be incorrectly included in subsequent data analysis, undermining trust in the system's outputs.
+-   **Ongoing Data Integrity Degradation:** The underlying issue causing multiple `CURRENT` analysis results remains unaddressed. The patch makes the aggregation service resilient to one symptom, but the root cause could have other negative side effects (e.g., performance degradation, incorrect data elsewhere) that are still present in the system.
+-   **Incorrect Data Interpretation:** The semantic change of `runCount` introduces a latent risk of data misinterpretation. Any person or system relying on this field is now susceptible to drawing incorrect conclusions about the scope of the aggregated data. This risk will persist until the field is renamed or its change in meaning is explicitly documented and communicated to all consumers.
 
 ## Token Stats
 
-- total_input=15348
-- total_output=619
-- total_tokens=33143
-- `gemini-2.5-pro`: input=15348, output=619, total=33143
+- total_input=3678
+- total_output=766
+- total_tokens=19028
+- `gemini-2.5-pro`: input=3678, output=766, total=19028
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Cleanup now strips stale claim state, brand-new failed aggregates are FAILED, and the split runCount / analysisCount contract plus newest CURRENT selection are covered by tests; the remaining timestamp tie-break and upstream multi-CURRENT hygiene are follow-up concerns.

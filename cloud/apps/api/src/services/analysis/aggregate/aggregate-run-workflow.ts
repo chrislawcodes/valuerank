@@ -674,6 +674,8 @@ export async function persistAggregateRun(
       decisionStats: prepared.aggregatedResult.decisionStats,
       valueAggregateStats: prepared.aggregatedResult.valueAggregateStats,
       sourceRunIds: prepared.sourceRunIds,
+      runCount: prepared.aggregateMetadataBase.sourceRunCount,
+      analysisCount: prepared.analysisCount,
       methodsUsed: {
         aggregateSemantics: 'same-signature-v1',
         codeVersion: AGGREGATE_ANALYSIS_CODE_VERSION,
@@ -681,7 +683,6 @@ export async function persistAggregateRun(
       warnings: [],
       computedAt: new Date().toISOString(),
       durationMs: 0,
-      runCount: prepared.analysisCount,
     };
 
     await tx.run.update({
@@ -726,18 +727,6 @@ export async function releaseAggregateClaim(
         return;
       }
 
-      if (claim.createdNew) {
-        const currentConfig = zRunConfig.safeParse(aggregateRun.config);
-        const currentClaim = currentConfig.success ? getAggregateRecomputeClaim(currentConfig.data) : null;
-        if (currentClaim?.token !== claim.claim.token) {
-          return;
-        }
-
-        await tx.analysisResult.deleteMany({ where: { runId: aggregateRun.id } });
-        await tx.run.delete({ where: { id: aggregateRun.id } });
-        return;
-      }
-
       const currentConfigResult = zRunConfig.safeParse(aggregateRun.config);
       const currentConfig = currentConfigResult.success ? currentConfigResult.data : {};
       const currentClaim = getAggregateRecomputeClaim(currentConfig);
@@ -745,13 +734,25 @@ export async function releaseAggregateClaim(
         return;
       }
 
-      const restoredConfig: AggregateRunConfig = claim.previousConfig != null
-        ? { ...claim.previousConfig }
-        : { ...(currentConfig as AggregateRunConfig) };
-      delete restoredConfig.aggregateRecomputeClaim;
-      if (claim.previousConfig == null) {
-        delete restoredConfig.aggregateSourceFingerprint;
+      if (claim.createdNew || claim.previousConfig == null) {
+        const failedConfig: AggregateRunConfig = {
+          ...(currentConfig as AggregateRunConfig),
+        };
+        delete failedConfig.aggregateRecomputeClaim;
+        delete failedConfig.aggregateSourceFingerprint;
+
+        await tx.run.update({
+          where: { id: aggregateRun.id },
+          data: {
+            config: failedConfig as unknown as Prisma.InputJsonValue,
+            status: 'FAILED',
+          },
+        });
+        return;
       }
+
+      const restoredConfig: AggregateRunConfig = { ...claim.previousConfig };
+      delete restoredConfig.aggregateRecomputeClaim;
 
       await tx.run.update({
         where: { id: aggregateRun.id },
