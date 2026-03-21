@@ -28,7 +28,11 @@
     "updated_at": 1774054477
   },
   "delivery": {},
-  "dirty_overrides": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [],
+    "used": false,
+    "updated_at": 1774071415
+  },
   "checkpoint_progress": {
     "index": 0,
     "markers_sha": "",
