@@ -39,7 +39,17 @@ CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
 def atomic_json_write(path: Path, data: dict) -> None:
     """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(data, indent=2)
+    payload = data
+    # Keep legacy state.json writers compatible with the current runner by
+    # down-revving discovery.version on disk only.
+    if path.name == FACTORY_STATE and isinstance(data, dict):
+        discovery = data.get(DISCOVERY_KEY)
+        if isinstance(discovery, dict) and discovery.get("version", 1) >= 2:
+            payload = dict(data)
+            legacy_discovery = dict(discovery)
+            legacy_discovery["version"] = 1
+            payload[DISCOVERY_KEY] = legacy_discovery
+    text = json.dumps(payload, indent=2)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
     tmp_path = Path(tmp_name)
     try:
@@ -133,7 +143,7 @@ def default_artifact_path(slug: str, stage: str) -> Path:
 
 def default_discovery_state() -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "required": False,
         "complete": True,
         "question_count": 0,
@@ -142,4 +152,48 @@ def default_discovery_state() -> dict:
         "assumptions": [],
         "summary": "",
         "updated_at": 0,
+        "answers": {},
+        "non_goals": [],
+        "acceptance_criteria": [],
+        "unresolved": [],
     }
+
+
+def migrate_discovery_state(d: dict) -> dict:
+    """Upgrade a V1 discovery blob to V2. Returns a new dict (does not mutate input.
+
+    Idempotent on V2+ blobs. Safe for malformed inputs.
+    """
+    if d.get("version", 1) >= 2:
+        return d
+    d = dict(d)  # shallow copy — do not mutate caller's dict
+    d["version"] = 2
+    # Add missing V2 fields
+    if "answers" not in d:
+        d["answers"] = {}
+    if "non_goals" not in d:
+        d["non_goals"] = []
+    if "acceptance_criteria" not in d:
+        d["acceptance_criteria"] = []
+    # Sanitize unresolved: keep only valid dicts with an "item" key
+    existing_unresolved = d.get("unresolved", [])
+    if not isinstance(existing_unresolved, list):
+        existing_unresolved = []
+    d["unresolved"] = [
+        item for item in existing_unresolved
+        if isinstance(item, dict) and "item" in item
+    ]
+    # Populate unresolved from V1 questions when discovery is required and incomplete
+    if d.get("required") and not bool(d.get("complete")):
+        questions = d.get("questions", [])
+        if not isinstance(questions, list):
+            questions = []
+        existing_items = {u["item"] for u in d["unresolved"]}
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            text = (q.get("question") or "").strip()
+            if text and text not in existing_items:
+                d["unresolved"].append({"item": text, "deferred": False})
+                existing_items.add(text)
+    return d
