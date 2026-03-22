@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "3030"],
+      "cwd": "/Users/chrislaw/valuerank/cloud/apps/web",
+      "port": 3030
+    },
+    {
+      "name": "mockup",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "7788", "--directory", "/tmp"],
+      "port": 7788
+    }
+  ]
+}

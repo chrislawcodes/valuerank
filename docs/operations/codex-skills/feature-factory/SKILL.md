@@ -35,7 +35,7 @@ When Claude's tokens are exhausted mid-workflow:
 
 ## What This Skill Owns
 
-- create or resume the workflow directory under `docs/workflows/<slug>/`
+- create or resume the workflow directory under `docs/feature-runs/<slug>/`
 - keep the main artifact chain moving:
   - `spec.md`
   - `plan.md`
@@ -53,7 +53,7 @@ When Claude's tokens are exhausted mid-workflow:
 Use these scripts as the workflow backbone:
 
 - `scripts/sync-codex-skills.py`
-- `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`
+- `docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
 - `docs/operations/codex-skills/review-lens/scripts/*.py`
 
 Do not duplicate checkpoint manifest logic, review file validation, diff writing, or reconciliation logic in the skill itself unless the scripts are broken.
@@ -261,16 +261,16 @@ Post mortem changes require human approval before being applied to any guide or 
 
 ## Workflow File Reference
 
-Each workflow lives in `docs/workflows/<slug>/`. The files have different roles:
+Each workflow lives in `docs/feature-runs/<slug>/`. The files have different roles:
 
 | File | Role |
 |------|------|
-| `workflow.json` | **Authoritative runtime state** — the runner reads and writes this; it is the single source of truth for phase, block status, delivery state, and discovery state |
+| `state.json` | **Authoritative runtime state** — the runner reads and writes this; it is the single source of truth for phase, block status, delivery state, and discovery state |
 | `spec.md`, `plan.md`, `tasks.md`, `closeout.md` | **Authored artifacts** — source of truth for intent, scope, and decisions; edited by the orchestrator |
 | `reviews/*.md` | **Generated + resolved state** — produced by the checkpoint runner, resolved via reconcile; do not edit manually except to update resolution fields |
 | `reviews/*.checkpoint.json` | **Generated state** — checkpoint metadata; do not edit manually |
 
-When in doubt about current workflow state, read `workflow.json` or run `status --slug <slug>`. Do not infer state from which artifact files exist.
+When in doubt about current workflow state, read `state.json` or run `status --slug <slug>`. Do not infer state from which artifact files exist.
 
 ## Notes
 

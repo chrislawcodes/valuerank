@@ -10,7 +10,7 @@ For the authoritative phase table (what happens at each stage), see `SKILL.md` i
 
 You are in **Codex Orchestrator** mode when:
 - A human says "use feature workflow to implement X" from a Codex session
-- Claude has handed off mid-workflow via a `block` note in `workflow.json`
+- Claude has handed off mid-workflow via a `block` note in `state.json`
 - The workflow `status` shows a `blocked-state: active` with a reason that starts with "Claude session ended"
 
 In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write artifacts, call the runner, call Gemini for reviews and research, judge findings where you can, and escalate to the human where you cannot.
@@ -33,23 +33,23 @@ In Codex Orchestrator mode, **you drive the workflow end-to-end**. You write art
 All runner commands run from the repo root:
 
 ```bash
-python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py <command> --slug <slug>
+python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py <command> --slug <slug>
 ```
 
 | Phase | What you do | Runner command |
 |-------|-------------|----------------|
 | **Check status** | Always start here — read current state | `status --slug <slug>` |
 | **Discovery** | **Mandatory before spec.** Ask clarifying questions one at a time, or explicitly state assumptions you are carrying in. Never silently skip to spec authoring. Record the outcome. | `discover --slug <slug> --question "..." --recommendation "..." --rationale "..."` (repeat per question), then `discover --slug <slug> --summary "<summary>" --complete` |
-| **Write spec** | Research real file paths via Gemini, author `spec.md` | Write to `docs/workflows/<slug>/spec.md`, then checkpoint |
+| **Write spec** | Research real file paths via Gemini, author `spec.md` | Write to `docs/feature-runs/<slug>/spec.md`, then checkpoint |
 | **Spec checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage spec` |
-| **Write plan** | Author `plan.md` with architecture decisions | Write to `docs/workflows/<slug>/plan.md`, then checkpoint |
+| **Write plan** | Author `plan.md` with architecture decisions | Write to `docs/feature-runs/<slug>/plan.md`, then checkpoint |
 | **Plan checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage plan` |
-| **Write tasks** | Author `tasks.md` with `[CHECKPOINT]` markers at slice boundaries | Write to `docs/workflows/<slug>/tasks.md`, then checkpoint |
+| **Write tasks** | Author `tasks.md` with `[CHECKPOINT]` markers at slice boundaries | Write to `docs/feature-runs/<slug>/tasks.md`, then checkpoint |
 | **Tasks checkpoint** | Generate adversarial reviews, judge findings | `checkpoint --slug <slug> --stage tasks` |
 | **Implementation** | Implement one slice, run build + tests, commit | `codex exec -s workspace-write "..."` |
 | **Diff checkpoint** | Generate adversarial reviews of the diff, judge findings | `checkpoint --slug <slug> --stage diff` |
 | **Deliver** | Stage the PR for human approval | `deliver --slug <slug> --dry-run` then notify human |
-| **Closeout** | Write closeout summary | Write to `docs/workflows/<slug>/closeout.md`, then checkpoint |
+| **Closeout** | Write closeout summary | Write to `docs/feature-runs/<slug>/closeout.md`, then checkpoint |
 | **Closeout checkpoint** | Final adversarial review | `checkpoint --slug <slug> --stage closeout` |
 | **Reconcile a review** | Record your judgment on a review finding | `reconcile --slug <slug> --review <path> --status <accepted\|rejected\|deferred> --note "<judgment>"` |
 | **Block on a decision** | Escalate to human | `block --slug <slug> --reason "<specific decision needed>"` |
@@ -74,7 +74,7 @@ python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workfl
 
 When escalating:
 ```bash
-python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py \
+python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py \
   block --slug <slug> --reason "<specific decision needed — not just 'blocked'"
 ```
 
@@ -113,18 +113,18 @@ When your session is ending or you have reached a natural stopping point:
 
 **Step 1:** Check current state:
 ```bash
-python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py \
+python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py \
   status --slug <slug>
 ```
 
 **Step 2:** Record state for Claude:
 ```bash
-python3 docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py \
+python3 docs/operations/codex-skills/feature-factory/scripts/run_factory.py \
   block --slug <slug> \
   --reason "Codex session ending at <current phase>. Open decisions: <list any unresolved findings or escalated decisions>. Last completed: <last successfully checkpointed stage>."
 ```
 
-The `block` command writes to `workflow.json` — this is the handoff artifact. When Claude returns, it reads `status --slug <slug>` and sees the block reason, then clears the block after reviewing the open decisions.
+The `block` command writes to `state.json` — this is the handoff artifact. When Claude returns, it reads `status --slug <slug>` and sees the block reason, then clears the block after reviewing the open decisions.
 
 **What to include in the block reason:**
 - Current phase (e.g., "tasks checkpoint complete, ready for implementation")

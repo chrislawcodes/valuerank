@@ -16,13 +16,13 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[5]
-WORKFLOWS_ROOT: Path = REPO_ROOT / "docs" / "workflows"
+FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "feature-runs"
 
 # ---------------------------------------------------------------------------
 # String constants used as workflow-state dictionary keys
 # ---------------------------------------------------------------------------
 
-WORKFLOW_STATE = "workflow.json"
+FACTORY_STATE = "state.json"
 
 BLOCKED_KEY = "blocked"
 DISCOVERY_KEY = "discovery"
@@ -74,9 +74,9 @@ def validated_slug(slug: str) -> str:
     part = candidate.parts[0]
     if part in {".", ".."}:
         raise SystemExit(f"Invalid workflow slug: {slug!r}")
-    resolved = (WORKFLOWS_ROOT / part).resolve()
+    resolved = (FACTORY_RUNS_ROOT / part).resolve()
     try:
-        resolved.relative_to(WORKFLOWS_ROOT.resolve())
+        resolved.relative_to(FACTORY_RUNS_ROOT.resolve())
     except ValueError as exc:
         raise SystemExit(f"Invalid workflow slug: {slug!r}") from exc
     return part
@@ -101,7 +101,7 @@ def normalized_repo_path(raw: str, field_name: str) -> str:
 
 
 def workflow_dir(slug: str) -> Path:
-    return WORKFLOWS_ROOT / validated_slug(slug)
+    return FACTORY_RUNS_ROOT / validated_slug(slug)
 
 
 def reviews_dir(slug: str) -> Path:
@@ -112,8 +112,8 @@ def scope_manifest_path(slug: str) -> Path:
     return workflow_dir(slug) / "scope.json"
 
 
-def workflow_state_path(slug: str) -> Path:
-    return workflow_dir(slug) / WORKFLOW_STATE
+def factory_state_path(slug: str) -> Path:
+    return workflow_dir(slug) / FACTORY_STATE
 
 
 def checkpoint_manifest_path(slug: str, stage: str) -> Path:

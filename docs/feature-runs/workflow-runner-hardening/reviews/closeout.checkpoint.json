@@ -1,0 +1,36 @@
+{
+  "feature_slug": "workflow-runner-hardening",
+  "stage": "closeout",
+  "artifact_path": "docs/feature-runs/workflow-runner-hardening/closeout.md",
+  "git_base_ref": "",
+  "allowed_dirty_paths": [],
+  "required_reviews": [
+    {
+      "reviewer": "gemini",
+      "lens": "completeness-adversarial",
+      "stage": "closeout",
+      "path": "docs/feature-runs/workflow-runner-hardening/reviews/closeout.gemini.completeness-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "gemini",
+      "lens": "residual-risk-adversarial",
+      "stage": "closeout",
+      "path": "docs/feature-runs/workflow-runner-hardening/reviews/closeout.gemini.residual-risk-adversarial.review.md",
+      "context_paths": [],
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "reviewer": "codex",
+      "lens": "fidelity-adversarial",
+      "stage": "closeout",
+      "path": "docs/feature-runs/workflow-runner-hardening/reviews/closeout.codex.fidelity-adversarial.review.md",
+      "context_paths": [],
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "max_artifact_chars": null,
+  "max_context_chars": null,
+  "max_total_chars": null
+}

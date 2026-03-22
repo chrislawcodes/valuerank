@@ -14,10 +14,10 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from workflow_state import (  # noqa: E402
+from factory_state import (  # noqa: E402
     REPO_ROOT,
-    WORKFLOWS_ROOT,
-    WORKFLOW_STATE,
+    FACTORY_RUNS_ROOT,
+    FACTORY_STATE,
     BLOCKED_KEY,
     DISCOVERY_KEY,
     DELIVERY_KEY,
@@ -31,7 +31,7 @@ from workflow_state import (  # noqa: E402
     workflow_dir,
     reviews_dir,
     scope_manifest_path,
-    workflow_state_path,
+    factory_state_path,
     checkpoint_manifest_path,
     default_artifact_path,
     default_discovery_state,
@@ -232,7 +232,7 @@ def load_scope_manifest(slug: str) -> dict:
 
 
 def load_workflow_state(slug: str) -> dict:
-    path = workflow_state_path(slug)
+    path = factory_state_path(slug)
     if not path.exists():
         return {
             "review_policy": {
@@ -276,7 +276,7 @@ def load_workflow_state(slug: str) -> dict:
 
 
 def save_workflow_state(slug: str, state: dict) -> Path:
-    path = workflow_state_path(slug)
+    path = factory_state_path(slug)
     atomic_json_write(path, state)
     return path
 
@@ -302,7 +302,7 @@ def save_scope_manifest(slug: str, paths: list[str]) -> Path:
         "allowed_dirty_paths": sorted(
             {
                 *normalized_paths,
-                f"docs/workflows/{safe_slug}",
+                f"docs/feature-runs/{safe_slug}",
             }
         ),
     }
@@ -1818,9 +1818,9 @@ def command_deliver(args: argparse.Namespace) -> int:
             [
                 f"## Workflow",
                 f"- slug: `{args.slug}`",
-                f"- spec: `docs/workflows/{args.slug}/spec.md`",
-                f"- plan: `docs/workflows/{args.slug}/plan.md`",
-                f"- tasks: `docs/workflows/{args.slug}/tasks.md`",
+                f"- spec: `docs/feature-runs/{args.slug}/spec.md`",
+                f"- plan: `docs/feature-runs/{args.slug}/plan.md`",
+                f"- tasks: `docs/feature-runs/{args.slug}/tasks.md`",
                 "",
                 "## Verification",
                 "- Local workflow checkpoints completed through diff review.",

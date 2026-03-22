@@ -7,11 +7,11 @@ from pathlib import Path
 import tempfile
 from contextlib import redirect_stdout
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_feature_workflow.py"
-SPEC = importlib.util.spec_from_file_location("run_feature_workflow", SCRIPT_PATH)
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_factory.py"
+SPEC = importlib.util.spec_from_file_location("run_factory", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
@@ -44,10 +44,10 @@ class RepairDecisionTests(unittest.TestCase):
                 {
                     "reviewer": "gemini",
                     "lens": "risk-adversarial",
-                    "context_paths": ["docs/workflows/feature-workflow-repair/spec.md"],
+                    "context_paths": ["docs/feature-runs/feature-workflow-repair/spec.md"],
                 }
             ],
-            "allowed_dirty_paths": ["docs/workflows/feature-workflow-repair"],
+            "allowed_dirty_paths": ["docs/feature-runs/feature-workflow-repair"],
             "git_base_ref": "origin/main",
             "max_artifact_chars": 123,
         }
@@ -62,7 +62,7 @@ class RepairDecisionTests(unittest.TestCase):
 
         self.assertEqual(args.required_reviews, manifest["required_reviews"])
         self.assertEqual(args.base_ref, "origin/main")
-        self.assertEqual(args.allow_dirty_path, ["docs/workflows/feature-workflow-repair"])
+        self.assertEqual(args.allow_dirty_path, ["docs/feature-runs/feature-workflow-repair"])
 
     def test_stage_drift_class_distinguishes_missing_artifact_and_missing_manifest(self) -> None:
         blank_spec = stage_state()
@@ -434,7 +434,7 @@ class RepairDecisionTests(unittest.TestCase):
     def test_command_discover_records_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            state_path = temp_root / "workflow.json"
+            state_path = temp_root / "state.json"
             args = SimpleNamespace(
                 slug="feature-workflow-discovery-shaping",
                 required=True,
@@ -447,7 +447,7 @@ class RepairDecisionTests(unittest.TestCase):
                 complete=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_state_path", return_value=state_path
+                MODULE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -466,7 +466,7 @@ class RepairDecisionTests(unittest.TestCase):
     def test_command_discover_clear_resets_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            state_path = temp_root / "workflow.json"
+            state_path = temp_root / "state.json"
             state_path.write_text(
                 json.dumps(
                     {
@@ -499,7 +499,7 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=True,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_state_path", return_value=state_path
+                MODULE, "factory_state_path", return_value=state_path
             ):
                 exit_code = MODULE.command_discover(args)
 
@@ -516,7 +516,7 @@ class RepairDecisionTests(unittest.TestCase):
     def test_command_discover_rejects_premature_completion_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
-            state_path = temp_root / "workflow.json"
+            state_path = temp_root / "state.json"
             state_path.write_text(
                 json.dumps(
                     {
@@ -549,7 +549,7 @@ class RepairDecisionTests(unittest.TestCase):
                 clear=False,
             )
             with patch.object(MODULE, "ensure_sync"), patch.object(
-                MODULE, "workflow_state_path", return_value=state_path
+                MODULE, "factory_state_path", return_value=state_path
             ):
                 with self.assertRaises(SystemExit) as ctx:
                     MODULE.command_discover(args)
@@ -569,8 +569,12 @@ class RepairDecisionTests(unittest.TestCase):
             auto_merge=False,
             dry_run=True,
         )
+        fake_manifest_path = MagicMock()
+        fake_manifest_path.exists.return_value = True
         with patch.object(MODULE, "ensure_sync"), patch.object(
             MODULE, "command_path", return_value="/usr/bin/gh"
+        ), patch.object(
+            MODULE, "checkpoint_manifest_path", return_value=fake_manifest_path
         ), patch.object(
             MODULE, "verify_checkpoint_manifest", return_value=(True, "")
         ), patch.object(
