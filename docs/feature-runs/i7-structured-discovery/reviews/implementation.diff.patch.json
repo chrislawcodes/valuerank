@@ -1,0 +1,21 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "1310e207293440894fe2a6092ff537d450c8a993",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "bb7a5403bbe8414e99820865a15e2490fe0542cb",
+  "paths": [
+    "docs/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/operations/codex-skills/feature-factory/scripts/factory_state.py",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ],
+  "allowed_dirty_paths": [
+    ".obsidian",
+    "STATUS.md",
+    "cloud/scripts/launch-remaining-batches.mjs",
+    "docs/feature-runs/feature-workflow-discovery-shaping"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/feature-runs/i7-structured-discovery/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

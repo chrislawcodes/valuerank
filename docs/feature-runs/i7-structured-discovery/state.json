@@ -51,7 +51,16 @@
     "updated_at": 1774213997
   },
   "delivery": {},
-  "dirty_overrides": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      ".obsidian",
+      "STATUS.md",
+      "cloud/scripts/launch-remaining-batches.mjs",
+      "docs/feature-runs/feature-workflow-discovery-shaping"
+    ],
+    "used": true,
+    "updated_at": 1774215805
+  },
   "checkpoint_progress": {
     "index": 0,
     "markers_sha": "",
