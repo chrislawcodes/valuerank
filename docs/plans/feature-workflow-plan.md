@@ -1,7 +1,7 @@
 # Feature Workflow — Plan of Record
 
 This is the maintained plan of record for the feature workflow system. Keep in sync with
-`docs/operations/codex-skills/feature-workflow/SKILL.md` when making changes to the workflow.
+`docs/operations/codex-skills/feature-factory/SKILL.md` when making changes to the workflow.
 
 ---
 
@@ -31,10 +31,10 @@ The feature workflow pipeline is operational with three completed improvement cy
 ### I-5: Runner self-containment
 **Status:** Planned
 **Source:** Codex retro (2026-03-20)
-**What:** `run_feature_workflow.py status` failed due to a missing `workflow_utils` import. The runner should either inline its deps, add graceful try/except with a clear diagnostic error, or document the required setup explicitly.
+**What:** `run_factory.py status` failed due to a missing `workflow_utils` import. The runner should either inline its deps, add graceful try/except with a clear diagnostic error, or document the required setup explicitly.
 **Why:** Silent setup failures are hard to diagnose in agent-driven runs.
 **Cost:** Low-medium — need to audit the import, decide inline vs. graceful-fail, add test. ~1–2 hours.
-**Files:** `docs/operations/codex-skills/feature-workflow/scripts/run_feature_workflow.py`, possibly `workflow_state.py`
+**Files:** `docs/operations/codex-skills/feature-factory/scripts/run_factory.py`, possibly `workflow_state.py`
 
 ---
 
@@ -44,7 +44,7 @@ The feature workflow pipeline is operational with three completed improvement cy
 **What:** A `--lightweight` mode that skips or reduces adversarial review rounds for straightforward delivery work.
 **Why not now:** High implementation cost (300–500 lines, new execution mode, second test suite). Risk that agents opt into lightweight mode for work that turns out to be non-trivial. Need more evidence on how often the full pipeline added no value before building this.
 **Revisit when:** 3+ workflow runs where the adversarial review phase produced zero actionable findings.
-**Files:** `scripts/run_feature_workflow.py`, `SKILL.md`, `CODEX-ORCHESTRATOR.md`
+**Files:** `scripts/run_factory.py`, `SKILL.md`, `CODEX-ORCHESTRATOR.md`
 
 ---
 

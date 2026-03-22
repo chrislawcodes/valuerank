@@ -1,8 +1,0 @@
-This wave canonicalizes `/archive/surveys` and `/archive/survey-results`, keeps `/survey` and `/survey-results` as compatibility aliases while preserving search params, and relabels Archive survey surfaces as legacy/historical.
-
-Earlier `Archive` shell, top-level navigation, and `TransitionNotice` work are already landed and intentionally assumed present.
-
-Out of scope:
-- backend archive classification fields
-- retirement of the underlying survey functionality
-- findings snapshot completeness

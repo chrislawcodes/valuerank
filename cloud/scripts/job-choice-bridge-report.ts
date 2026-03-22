@@ -22,7 +22,7 @@ type ParsedArgs = {
 function parseArgs(argv: string[]): ParsedArgs {
   const runIds: string[] = [];
   let runIdsFile: string | null = null;
-  let outputDir = path.resolve('/Users/chrislaw/valuerank/docs/workflows/job-choice-implementation/bridge-report');
+  let outputDir = path.resolve('output/bridge-report');
   let baseUrl = 'http://localhost:3030';
 
   for (let index = 0; index < argv.length; index += 1) {

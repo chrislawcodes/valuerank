@@ -1,3 +1,0 @@
-Adopt a skeptical, adversarial code-review posture.
-Focus on breakages, silent behavior changes, rollout hazards, and missing coverage.
-Findings first, ordered by severity.
