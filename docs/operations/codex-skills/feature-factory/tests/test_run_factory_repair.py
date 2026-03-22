@@ -17,6 +17,13 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
+# Import factory_state directly for migration tests
+_FS_PATH = Path(__file__).resolve().parents[1] / "scripts" / "factory_state.py"
+_FS_SPEC = importlib.util.spec_from_file_location("factory_state", _FS_PATH)
+assert _FS_SPEC and _FS_SPEC.loader
+FACTORY_STATE = importlib.util.module_from_spec(_FS_SPEC)
+_FS_SPEC.loader.exec_module(FACTORY_STATE)
+
 
 def stage_state(
     *,
@@ -461,7 +468,7 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertEqual(discovery["questions"][0]["question"], args.question)
             self.assertIn("Keep the first slice small.", discovery["assumptions"])
             self.assertIn("Five questions are expected", discovery["summary"])
-            self.assertEqual(discovery["version"], 1)
+            self.assertEqual(discovery["version"], 2)
 
     def test_command_discover_clear_resets_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1507,3 +1514,149 @@ class RepairCloseoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMigrateDiscoveryState(unittest.TestCase):
+    """Wave 1: Tests for default_discovery_state() V2 schema and migrate_discovery_state()."""
+
+    def test_default_discovery_state_has_v2_fields(self) -> None:
+        d = FACTORY_STATE.default_discovery_state()
+        self.assertEqual(d["version"], 2)
+        self.assertIn("answers", d)
+        self.assertIn("non_goals", d)
+        self.assertIn("acceptance_criteria", d)
+        self.assertIn("unresolved", d)
+        self.assertIsInstance(d["answers"], dict)
+        self.assertIsInstance(d["non_goals"], list)
+        self.assertIsInstance(d["acceptance_criteria"], list)
+        self.assertIsInstance(d["unresolved"], list)
+
+    def test_migrate_noop_on_v2(self) -> None:
+        v2 = {"version": 2, "answers": {"q": "a"}, "non_goals": ["x"], "unresolved": []}
+        result = FACTORY_STATE.migrate_discovery_state(v2)
+        self.assertIs(result, v2)  # same object returned unchanged
+
+    def test_migrate_sets_version_2(self) -> None:
+        v1 = {"version": 1, "required": False, "complete": True, "questions": [], "assumptions": []}
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(result["version"], 2)
+
+    def test_migrate_adds_missing_v2_fields(self) -> None:
+        v1 = {"version": 1, "required": False, "complete": True}
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertIn("answers", result)
+        self.assertIn("non_goals", result)
+        self.assertIn("acceptance_criteria", result)
+        self.assertIn("unresolved", result)
+
+    def test_migrate_does_not_mutate_input(self) -> None:
+        v1 = {"version": 1, "required": False, "complete": True}
+        original_version = v1["version"]
+        FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(v1["version"], original_version)  # input unchanged
+
+    def test_migrate_preserves_existing_data(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": True,
+            "questions": [{"question": "Q1", "recommendation": "r", "rationale": "r", "updated_at": 0}],
+            "assumptions": ["Assumption A"],
+            "summary": "Summary text",
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(result["questions"], v1["questions"])
+        self.assertEqual(result["assumptions"], v1["assumptions"])
+        self.assertEqual(result["summary"], v1["summary"])
+        self.assertTrue(result["required"])
+        self.assertTrue(result["complete"])
+
+    def test_migrate_populates_unresolved_from_questions_when_required_incomplete(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": False,
+            "questions": [
+                {"question": "Q1", "recommendation": "r1", "rationale": "r1", "updated_at": 0},
+                {"question": "Q2", "recommendation": "r2", "rationale": "r2", "updated_at": 0},
+            ],
+            "assumptions": [],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        items = [u["item"] for u in result["unresolved"]]
+        self.assertIn("Q1", items)
+        self.assertIn("Q2", items)
+        for u in result["unresolved"]:
+            self.assertFalse(u["deferred"])
+
+    def test_migrate_does_not_populate_unresolved_when_complete(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": True,
+            "questions": [
+                {"question": "Q1", "recommendation": "r", "rationale": "r", "updated_at": 0},
+            ],
+            "assumptions": [],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(result["unresolved"], [])
+
+    def test_migrate_does_not_populate_unresolved_when_not_required(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": False,
+            "complete": False,
+            "questions": [
+                {"question": "Q1", "recommendation": "r", "rationale": "r", "updated_at": 0},
+            ],
+            "assumptions": [],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(result["unresolved"], [])
+
+    def test_migrate_handles_malformed_questions_list(self) -> None:
+        v1 = {"version": 1, "required": True, "complete": False, "questions": None}
+        result = FACTORY_STATE.migrate_discovery_state(v1)  # must not raise
+        self.assertEqual(result["unresolved"], [])
+
+    def test_migrate_sanitizes_malformed_unresolved_entries(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": False,
+            "complete": True,
+            "unresolved": ["string", 42, {"item": "valid", "deferred": False}, {"no_item_key": "x"}],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(len(result["unresolved"]), 1)
+        self.assertEqual(result["unresolved"][0]["item"], "valid")
+
+    def test_migrate_deduplicates_questions_in_unresolved(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": False,
+            "questions": [
+                {"question": "Q1", "recommendation": "r", "rationale": "r", "updated_at": 0},
+                {"question": "Q1", "recommendation": "r", "rationale": "r", "updated_at": 0},
+            ],
+            "assumptions": [],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(len(result["unresolved"]), 1)
+        self.assertEqual(result["unresolved"][0]["item"], "Q1")
+
+    def test_migrate_skips_questions_with_null_text(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": False,
+            "questions": [
+                {"question": None, "recommendation": "r", "rationale": "r", "updated_at": 0},
+                {"question": "", "recommendation": "r", "rationale": "r", "updated_at": 0},
+                {"question": "  ", "recommendation": "r", "rationale": "r", "updated_at": 0},
+            ],
+            "assumptions": [],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(result["unresolved"], [])

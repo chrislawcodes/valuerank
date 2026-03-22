@@ -1,0 +1,180 @@
+00001: # Feature Factory — Plan of Record
+00002: 
+00003: This is the maintained plan of record for the feature factory system. Keep in sync with
+00004: `docs/operations/codex-skills/feature-factory/SKILL.md` when making changes to the workflow.
+00005: 
+00006: ---
+00007: 
+00008: ## Current State
+00009: 
+00010: The feature factory pipeline is operational with three completed improvement cycles and one
+00011: structural rename. The system now lives at `docs/operations/codex-skills/feature-factory/`
+00012: with per-feature state in `docs/feature-runs/<slug>/state.json`.
+00013: 
+00014: A three-way adversarial evaluation (Codex → Claude → Codex) in 2026-03-22 produced a clear
+00015: diagnosis: **the pipeline is strongest at bookkeeping, state recovery, and auditability; it
+00016: is weakest at preventing the team from building the wrong thing.** The open backlog below
+00017: reflects that finding.
+00018: 
+00019: ### Completed cycles
+00020: 
+00021: | Workflow | What shipped | Date |
+00022: |----------|-------------|------|
+00023: | `workflow-two-mode-implementation` | Dual-orchestrator mode (Claude + Codex), `[CHECKPOINT]` marker support, CLAUDE.md handoff protocol | 2026-03 |
+00024: | `workflow-runner-hardening` | `DEFAULT_CODEX_MODEL` constant, base-ref reset after checkpoint progress reset, closeout stage repair | 2026-03-20 |
+00025: | Direct improvements (I-1–I-4) | Discovery mandatory, branch staleness warning, source-of-truth docs, `verify_reconciliation.py` orphan fix | 2026-03-20 |
+00026: | `feature-factory-rename` (#387) | Renamed feature-workflow → feature-factory, docs/workflows → docs/feature-runs, deleted 17 stale workflow dirs | 2026-03-22 |
+00027: 
+00028: ### Open items
+00029: 
+00030: | ID | Item | Priority | Status |
+00031: |----|------|----------|--------|
+00032: | I-7 | Structured discovery state | 1 — do first | Planned |
+00033: | I-8 | Structured block / handoff state | 2 | Planned |
+00034: | I-9 | Deterministic validation gates | 3 | Planned |
+00035: | I-10 | Runner modularization | 4 — do last | Planned |
+00036: | I-5 | Runner self-containment | Low | Planned |
+00037: | I-6 | Lightweight execution path | — | Deferred |
+00038: 
+00039: ---
+00040: 
+00041: ## Open Backlog
+00042: 
+00043: ### Ordering rationale
+00044: 
+00045: The four main items are sequenced deliberately:
+00046: 
+00047: **I-7 before I-9** (discovery before deterministic validation): if the spec is wrong,
+00048: deterministic validation doesn't help — it just confirms the wrong thing was built correctly.
+00049: The cascade effect of bad framing makes discovery the higher-leverage fix. Also cheaper.
+00050: 
+00051: **I-8 second** (handoff after discovery): a structured block note is essentially a snapshot
+00052: of the discovery state at handoff time. The two items share the same data model — structured
+00053: questions, open decisions, and acceptance criteria. Building discovery first makes handoff
+00054: state nearly free.
+00055: 
+00056: **I-9 third** (validation after the above): requires design decisions about how the runner
+00057: invokes test/build/lint for arbitrary repos, how it handles flaky tests, and whether
+00058: validation is a new stage or a gate inside existing ones. Worth doing after the process
+00059: gaps are closed.
+00060: 
+00061: **I-10 last** (modularize after the interface stabilizes): I-7, I-8, and I-9 all touch the
+00062: runner. Modularizing first means touching the code twice. Do it once the shape of the
+00063: interface is clear.
+00064: 
+00065: ---
+00066: 
+00067: ### I-7: Structured discovery state
+00068: **Status:** Planned
+00069: **Priority:** 1
+00070: **Source:** 2026-03-22 adversarial evaluation (Codex + Claude)
+00071: **What:** Replace the current free-text discovery fields with structured, machine-readable
+00072: state in `state.json`:
+00073: - `questions[]` — asked by the agent before spec
+00074: - `answers{}` — recorded responses (keyed by question)
+00075: - `assumptions[]` — explicit assumptions the spec rests on
+00076: - `non_goals[]` — what is explicitly out of scope
+00077: - `acceptance_criteria[]` — what done looks like
+00078: - `unresolved[]` — open items that have not been answered
+00079: 
+00080: Make `unresolved` a first-class status: if any item is unresolved, `status` surfaces it
+00081: prominently and `spec` is blocked from progressing until the human clears or defers each one.
+00082: 
+00083: **Why:** The pipeline currently validates artifact consistency, not product intent. A wrong
+00084: spec sails through every gate. This is where wrong-product failures are born. Discovery is
+00085: already mandatory (I-1) — this makes it enforceable.
+00086: 
+00087: **Why this order:** Cheapest fix with the highest cascade value. Also unlocks I-8 for nearly
+00088: free.
+00089: 
+00090: **Cost:** Medium — runner changes to `command_discovery`, `command_status`, `command_spec`
+00091: (add unresolved gate); `factory_state.py` schema additions; SKILL.md update; tests.
+00092: 
+00093: **Files:**
+00094: - `do
+
+... [narrowed review slice: middle omitted] ...
+
+prioritized:** I-7 through I-10 are higher-leverage. This is a one-time setup
+00207: problem, not a recurring correctness issue.
+00208: **Cost:** Low.
+00209: 
+00210: ---
+00211: 
+00212: ### I-6: Lightweight execution path
+00213: **Status:** Deferred — reinforced by evaluation
+00214: **Source:** Codex retro (2026-03-20)
+00215: **Why still deferred:** The 2026-03-22 evaluation reinforces deferral. Once I-9 adds
+00216: deterministic validation gates, the full pipeline becomes more appropriate more often —
+00217: the overhead is now paying for real correctness checks, not just AI review ceremony.
+00218: Revisit after 3+ runs where the full pipeline produced no actionable findings.
+00219: 
+00220: ---
+00221: 
+00222: ## Shipped
+00223: 
+00224: | Item | What shipped | Date |
+00225: |------|-------------|------|
+00226: | Dual-orchestrator mode | Claude + Codex Orchestrator modes, handoff protocol via `block` | 2026-03 |
+00227: | `[CHECKPOINT]` marker support | Runner parses markers, tracks progress, selects diff base | 2026-03 |
+00228: | CLAUDE.md handoff protocol | Step-by-step handoff instructions added to global CLAUDE.md | 2026-03 |
+00229: | base-ref reset after checkpoint progress reset | `args.base_ref = None` in 3 reset branches of `command_checkpoint` | 2026-03-20 |
+00230: | closeout stage repair | `command_repair` now handles `closeout` unhealthy-manifest | 2026-03-20 |
+00231: | `DEFAULT_CODEX_MODEL` constant | Replaced hardcoded `"gpt-5.4-mini"` in `required_reviews()` | 2026-03-20 |
+00232: | I-1: Upfront requirements clarification | Discovery step made mandatory in SKILL.md + CODEX-ORCHESTRATOR.md | 2026-03-20 |
+00233: | I-2: Branch staleness warning | `commits_behind_upstream()` added; warns in `status` and `deliver --create-pr` | 2026-03-20 |
+00234: | I-3: Source-of-truth clarification | Workflow file reference table added to SKILL.md | 2026-03-20 |
+00235: | I-4: `verify_reconciliation.py` orphan fix | Removed orphan check; script now only validates supplied reviews | 2026-03-20 |
+00236: | feature-factory rename (#387) | Renamed system and artifact dirs; deleted 17 stale workflow dirs | 2026-03-22 |
+00237: 
+00238: ---
+00239: 
+00240: ## Feedback Log
+00241: 
+00242: ### 2026-03-22 — Three-way adversarial evaluation (Codex → Claude → Codex)
+00243: 
+00244: **Diagnosis:** The pipeline catches process failures better than product failures. It is
+00245: strongest at resumability, checkpointing, review traceability, and delivery bookkeeping.
+00246: It is weakest at catching wrong framing, forcing real understanding before implementation,
+00247: keeping the execution surface small, and validating truth outside the artifact chain.
+00248: 
+00249: **Key findings:**
+00250: - False confidence from AI consensus: agents agreeing is not independent validation when
+00251:   they read the same context with the same framing
+00252: - Deterministic validation is absent: the entire pipeline relies on AI judgment
+00253: - Discovery is the highest-value gate but not enforceable — unresolved items don't block
+00254: - Session/context fragmentation: no model of what was known at handoff; wrong-feature
+00255:   derailments are possible and have occurred
+00256: - The runner is 2000+ lines; state mutation, orchestration, and formatting are entangled
+00257: - Diff review degrades to theater once artifact size exceeds honest review capacity
+00258: 
+00259: **What the evaluation did not change:**
+00260: - I-6 (lightweight mode) remains deferred — if anything, the case for it weakened
+00261: - The existing stage structure is sound; the pipeline needs strengthening, not redesigning
+00262: 
+00263: ### 2026-03-20 — Codex retro + human observation
+00264: 
+00265: **What worked:**
+00266: - Kept changes organized from spec → implementation → delivery
+00267: - Pushed toward small reviewable slices instead of one large patch
+00268: - Checkpoint discipline made the work feel more reliable
+00269: 
+00270: **What didn't:**
+00271: - Runner fragility: `status` failed due to missing `workflow_utils` import (→ I-5)
+00272: - Ceremony vs. value mismatch: felt heavier than warranted for semantic/UI work (→ I-6)
+00273: - Branch staleness not surfaced before PR creation → merge conflicts (→ I-2, shipped)
+00274: - Source-of-truth ambiguity: unclear which workflow files were authoritative (→ I-3, shipped)
+00275: - No upfront requirements clarification (→ I-1, shipped)
+00276: 
+00277: ---
+00278: 
+00279: ## Change Log
+00280: 
+00281: | Date | Item | Action |
+00282: |------|------|--------|
+00283: | 2026-03-20 | I-1 through I-6 | Created from Codex retro + human feedback |
+00284: | 2026-03-20 | I-1, I-2, I-3, I-4 | Shipped directly |
+00285: | 2026-03-20 | Restructured | Collapsed shipped items into Shipped table |
+00286: | 2026-03-22 | feature-factory rename | Shipped (#387); updated all references |
+00287: | 2026-03-22 | I-7 through I-10 | Added from adversarial evaluation; replaced prior backlog |
+00288: | 2026-03-22

@@ -1,0 +1,12 @@
+## Findings
+1. **High: `--answer` never closes the loop with the new gate semantics.** The plan stores answers in `answers{}`, but it never specifies how answering a question clears the corresponding blocking item from `unresolved[]` or flips `complete`. Given the Wave 3 gate blocks on `complete=false` or any non-deferred unresolved item, a user can successfully record answers and still remain permanently blocked.
+
+2. **High: Migration can silently discard pending work by trusting `complete=true`.** Wave 1 says V1 `questions[]` are only converted into `unresolved[]` when `required=true` and `complete=false`. If a V1 blob has a stale or incorrect `complete=true`, the plan explicitly preserves that completion and drops the outstanding questions during migration. That is a data-loss path, not just a reconciliation choice.
+
+3. **Medium: The first-access writeback migration has no concurrency or atomicity story.** Wave 2 rewrites the on-disk state as soon as migration changes the version. The plan does not mention locking, compare-and-swap, or atomic temp-file replacement, so two concurrent commands can migrate and overwrite each other, and a crash mid-write can corrupt the only copy of the discovery state.
+
+4. **Medium: Malformed list element shapes are not actually handled, despite the claim of graceful migration.** The plan only says non-list fields become empty lists and `None` is skipped. But Wave 3 gate logic assumes each `unresolved[]` entry is a dict and calls `i.get("deferred")`. A list containing a string, integer, or other malformed item will still crash status/checkpoint paths even after migration.
+
+## Residual Risks
+- Exact-text identity for questions and `--resolve TEXT` remains operationally brittle. Even if accepted for V1, duplicated prompts, whitespace changes, or formatting drift will still make items hard to address unambiguously.
+- Removing `question_count` and `asked_count` in Wave 4 may still break untracked downstream consumers or scripts that are not covered by the repo tests, even if the internal runner is updated.

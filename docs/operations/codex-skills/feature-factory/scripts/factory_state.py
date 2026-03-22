@@ -39,17 +39,7 @@ CHECKPOINT_PROGRESS_KEY = "checkpoint_progress"
 def atomic_json_write(path: Path, data: dict) -> None:
     """Write *data* to *path* as JSON atomically via a temp file + os.replace()."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = data
-    # Keep legacy state.json writers compatible with the current runner by
-    # down-revving discovery.version on disk only.
-    if path.name == FACTORY_STATE and isinstance(data, dict):
-        discovery = data.get(DISCOVERY_KEY)
-        if isinstance(discovery, dict) and discovery.get("version", 1) >= 2:
-            payload = dict(data)
-            legacy_discovery = dict(discovery)
-            legacy_discovery["version"] = 1
-            payload[DISCOVERY_KEY] = legacy_discovery
-    text = json.dumps(payload, indent=2)
+    text = json.dumps(data, indent=2)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp.", suffix=".json")
     tmp_path = Path(tmp_name)
     try:
