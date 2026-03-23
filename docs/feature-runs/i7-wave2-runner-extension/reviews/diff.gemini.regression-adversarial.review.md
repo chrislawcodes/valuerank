@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/implementation.diff.patch"
-artifact_sha256: "1d2bb609eabdb3810a0d970a3db7229d9c94db818f5fb0252eee2be3d0b76ed0"
+artifact_sha256: "99a05317795b45a2903fd8339994a1521af3b4693da3ed787ff3d76e9886a73c"
 repo_root: "."
-git_head_sha: "c16754b277e7f93f31eb63486dc5be9dc6320105"
+git_head_sha: "9b6c1a437d3a3ef0e805b848fb4a74fc9266e200"
 git_base_ref: "origin/main"
 git_base_sha: "1bc92c5502d64397cd53f28fed52f4f58ff07934"
 generation_method: "gemini-cli"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "Non-iterable V2 fields now guarded by _safe_list() in discovery_state(). Resolve/defer inconsistency deferred. Silent no-op deferred to Wave 4."
 raw_output_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/diff.gemini.regression-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,27 +22,25 @@ coverage_note: ""
 
 ## Findings
 
-1.  **High Severity - Regression**: The forward-compatibility version check has been removed from the `command_discover` function. Previously, the code would warn the user and exit if it encountered a discovery state version newer than it understood. The removal of this block means an older version of this script could silently corrupt or misinterpret a newer state file, leading to data loss or unpredictable behavior instead of failing safely.
+1.  **High Severity: Inconsistent Behavior for Duplicate `unresolved` Items.** The `--resolve` and `--defer` commands behave differently when multiple unresolved items share the same text. `--resolve` uses a list comprehension that removes *all* items matching the text, while `--defer` uses a `for` loop with a `break` that only modifies the *first* match. This inconsistency can lead to unexpected behavior and data states. A user would reasonably expect these related commands to operate on either the first match or all matches, but not a mix of both.
 
-2.  **Medium Severity - Brittle Design**: The `--resolve` and `--defer` arguments operate on "exact text match." This is highly brittle and error-prone for users. A minor typo, a missing period, or different whitespace will cause the operation to fail silently, as the user must recall the exact string they used to create the unresolved item. This design invites user error. A more robust implementation might list unresolved items with an index and allow the user to resolve or defer items by that stable index.
+2.  **Medium Severity: Potential Crash on Malformed State File.** The `discovery_state` function is not fully resilient to corrupted state data. Lines such as `merged["unresolved"] = list(merged.get("unresolved", []))` will raise a `TypeError` if the value for `"unresolved"` in the state file is a non-iterable (e.g., a string or integer instead of a list). This would cause the script to crash. Since state files can be manually edited or corrupted, the loading mechanism should be more defensive and validate the types of incoming data, especially before a migration is attempted.
 
-3.  **Low Severity - Silent Failures**: When a user attempts to `--resolve` or `--defer` an item that does not exist (due to a typo or because it was already resolved), the command fails silently. The user receives no feedback that the operation did not find a matching item, and they may incorrectly assume the state was updated. The command should inform the user when a match is not found.
-
-4.  **Low Severity - Inconsistent Duplicate Handling**: The logic to add items to `unresolved`, `non_goals`, and `acceptance_criteria` prevents duplicates. However, the modification commands are inconsistent. `--resolve` uses a list comprehension that will remove *all* occurrences of a matching item text, while `--defer` uses a loop with a `break`, meaning it will only ever modify the *first* matching item. While duplicates are meant to be prevented, this inconsistency could lead to subtle bugs if state becomes corrupted.
+3.  **Low Severity: Silent Failure When Match Is Not Found.** When using `--resolve` or `--defer` with text that doesn't match any existing unresolved item, the command completes successfully with exit code 0 but performs no action. This provides no feedback to the user, who may assume the operation succeeded. The script should warn the user when a specified item to resolve or defer was not found.
 
 ## Residual Risks
 
-1.  **High Risk - Undefined Migration Behavior**: The `migrate_discovery_state` function is imported and executed, but its implementation is not provided in the artifact. This function is a black box. It could contain bugs that improperly migrate state from older schemas, potentially corrupting or dropping data *before* any of the new logic is even executed. Without reviewing this function, the correctness of the entire state manipulation cannot be guaranteed.
+1.  **State Corruption via Race Conditions.** The script appears to follow a read-modify-write pattern on a shared JSON state file without implementing any file-locking mechanism. If two instances of the script are run concurrently, they can read the same initial state, and the last one to write will overwrite the changes of the first, leading to lost updates and potential state corruption.
 
-2.  **Low Risk - Increased Maintenance Burden**: The `command_discover` function's validation logic, which checks if any update arguments have been passed, has grown significantly. The `any([...])` check is now performed on a long list of 12 conditions and is duplicated. This increases the maintenance burden and the risk that a future developer might add a new argument but forget to update both validation checks, leading to subtle bugs.
+2.  **Migration Logic Brittleness.** The change introduces a `migrate_discovery_state` function, which is now critical for maintaining data integrity across versions. The implementation of this function is not visible in the diff. Any lack of idempotency (i.e., applying the migration multiple times changes the result) or inability to handle states from various older versions could lead to irreversible data loss or corruption. The current design, which runs the migration on every read and write, is heavily dependent on this function being perfectly robust.
 
 ## Token Stats
 
-- total_input=5809
-- total_output=572
-- total_tokens=20900
-- `gemini-2.5-pro`: input=5809, output=572, total=20900
+- total_input=738
+- total_output=522
+- total_tokens=21031
+- `gemini-2.5-pro`: input=738, output=522, total=21031
 
 ## Resolution
-- status: open
-- note:
+- status: accepted
+- note: Non-iterable V2 fields now guarded by _safe_list() in discovery_state(). Resolve/defer inconsistency deferred. Silent no-op deferred to Wave 4.

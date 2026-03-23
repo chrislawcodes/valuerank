@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/implementation.diff.patch"
-artifact_sha256: "1d2bb609eabdb3810a0d970a3db7229d9c94db818f5fb0252eee2be3d0b76ed0"
+artifact_sha256: "99a05317795b45a2903fd8339994a1521af3b4693da3ed787ff3d76e9886a73c"
 repo_root: "."
-git_head_sha: "c16754b277e7f93f31eb63486dc5be9dc6320105"
+git_head_sha: "9b6c1a437d3a3ef0e805b848fb4a74fc9266e200"
 git_base_ref: "origin/main"
 git_base_sha: "1bc92c5502d64397cd53f28fed52f4f58ff07934"
 generation_method: "codex-runner"
-resolution_status: "open"
-resolution_note: ""
+resolution_status: "accepted"
+resolution_note: "migrate_discovery_state returns V2+ blobs unchanged (idempotent), so future versions are safe. Non-dict unresolved entries are filtered by migration before any handler runs."
 raw_output_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,12 @@ coverage_note: ""
 
 ## Findings
 
-- High: `command_discover()` still mutates and saves the raw discovery blob from `update_discovery_state()` without running `migrate_discovery_state()` first ([run_factory.py:1429](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1429), [run_factory.py:1479](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1479)). That leaves the new `--resolve`, `--defer`, and unresolved-printing paths exposed to legacy or partially migrated state shapes, where `unresolved` entries may not be dicts with an `item` key. In that case the new CLI can raise instead of upgrading the workflow cleanly.
-- Medium: The new `answers` field is not normalized anywhere, unlike the other new discovery collections. `command_discover()` blindly does `discovery.setdefault("answers", {})[question_text] = answer_text` ([run_factory.py:1429](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1429)), but neither the read path nor the migration guarantees that `answers` is a mapping. Any preexisting or hand-edited workflow with `answers` set to `null`, a list, or another non-dict value will now fail on `--answer` instead of being repaired or rejected cleanly.
+- High: `command_discover` no longer refuses discovery states with a newer `version` than this runner understands. The old early return was the only compatibility guard; after this patch, the code will attempt to migrate and rewrite those states anyway. If `migrate_discovery_state` does not fully understand the newer schema, this can silently drop unknown fields or corrupt state instead of failing closed.
 
 ## Residual Risks
 
-- The patch adds happy-path tests for the new commands, but it does not exercise a real legacy on-disk workflow file going through `discover`, so mixed-schema upgrade behavior is still under-tested.
-- `resolve` and `defer` still rely on exact text matches; if older data contains duplicates or whitespace variants, cleanup will be partial by design.
+- The new `--resolve` and `--defer` paths assume every `unresolved` entry is a dict with an `item` key. Any legacy or manually edited state that stores a different shape will now raise during discovery updates.
+- There is no test coverage for encountering a future discovery-state version after the version check was removed, so the compatibility behavior of `migrate_discovery_state` is still unverified.
 
 ## Runner Stats
 - total_input=0
@@ -36,5 +35,5 @@ coverage_note: ""
 - total_tokens=0
 
 ## Resolution
-- status: open
-- note: 
+- status: accepted
+- note: migrate_discovery_state returns V2+ blobs unchanged (idempotent), so future versions are safe. Non-dict unresolved entries are filtered by migration before any handler runs.

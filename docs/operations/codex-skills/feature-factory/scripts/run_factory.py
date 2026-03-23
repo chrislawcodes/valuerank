@@ -286,11 +286,13 @@ def discovery_state(slug: str) -> dict:
     state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
     merged = default_discovery_state()
     merged.update(state if isinstance(state, dict) else {})
-    merged["questions"] = list(merged.get("questions", []))
-    merged["assumptions"] = list(merged.get("assumptions", []))
-    merged["unresolved"] = list(merged.get("unresolved", []))
-    merged["non_goals"] = list(merged.get("non_goals", []))
-    merged["acceptance_criteria"] = list(merged.get("acceptance_criteria", []))
+    def _safe_list(val) -> list:
+        return list(val) if isinstance(val, list) else []
+    merged["questions"] = _safe_list(merged.get("questions"))
+    merged["assumptions"] = _safe_list(merged.get("assumptions"))
+    merged["unresolved"] = _safe_list(merged.get("unresolved"))
+    merged["non_goals"] = _safe_list(merged.get("non_goals"))
+    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
     merged = migrate_discovery_state(merged)
     return merged
 

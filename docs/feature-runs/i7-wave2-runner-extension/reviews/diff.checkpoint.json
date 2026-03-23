@@ -7,8 +7,7 @@
     ".obsidian",
     "docs/feature-runs/feature-workflow-discovery-shaping",
     "docs/feature-runs/stall-watchdog",
-    "specs/028-stall-watchdog",
-    "docs/feature-runs/i7-wave2-runner-extension"
+    "specs/028-stall-watchdog"
   ],
   "required_reviews": [
     {
