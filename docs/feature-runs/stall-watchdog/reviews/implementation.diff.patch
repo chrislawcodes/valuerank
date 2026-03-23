@@ -1,0 +1,46 @@
+diff --git a/cloud/apps/api/src/graphql/types/run.ts b/cloud/apps/api/src/graphql/types/run.ts
+index e0d8c9eb..e9ebf5c8 100644
+--- a/cloud/apps/api/src/graphql/types/run.ts
++++ b/cloud/apps/api/src/graphql/types/run.ts
+@@ -276,6 +276,9 @@ builder.objectType(RunRef, {
+     }),
+     // Keep raw progress as JSON for backward compatibility
+     progress: t.expose('progress', { type: 'JSON', nullable: true }),
++    stalledModels: t.exposeStringList('stalledModels', {
++      description: 'Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)',
++    }),
+     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
+     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
+     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts
+index 9ae66913..006ef14d 100644
+--- a/cloud/apps/web/src/api/operations/runs.ts
++++ b/cloud/apps/web/src/api/operations/runs.ts
+@@ -131,6 +131,7 @@ export type Run = {
+   status: RunStatus;
+   runCategory: RunCategory;
+   config: RunConfig;
++  stalledModels: string[];
+   batchCount?: number;
+   pairedBatchGroupId?: string | null;
+   progress: { total: number; completed: number; failed: number } | null;
+@@ -184,6 +185,7 @@ export const RUN_FRAGMENT = gql`
+     status
+     runCategory
+     config
++    stalledModels
+     batchCount
+     pairedBatchGroupId
+     progress
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index 930fda3d..1f311911 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -322,6 +322,7 @@ model Run {
+   config             Json      @db.JsonB
+   progress           Json?     @db.JsonB
+   summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
++  stalledModels      String[]  @default([]) @map("stalled_models")
+   startedAt          DateTime? @map("started_at")
+   completedAt        DateTime? @map("completed_at")
+   createdAt          DateTime  @default(now()) @map("created_at")

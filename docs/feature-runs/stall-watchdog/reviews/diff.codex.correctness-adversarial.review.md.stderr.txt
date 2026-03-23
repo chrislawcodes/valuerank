@@ -1,0 +1,86 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /private/tmp/wt-stall-watchdog
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d1948-fb4a-7473-ba2e-5ab04218bb08
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/graphql/types/run.ts b/cloud/apps/api/src/graphql/types/run.ts
+index e0d8c9eb..e9ebf5c8 100644
+--- a/cloud/apps/api/src/graphql/types/run.ts
++++ b/cloud/apps/api/src/graphql/types/run.ts
+@@ -276,6 +276,9 @@ builder.objectType(RunRef, {
+     }),
+     // Keep raw progress as JSON for backward compatibility
+     progress: t.expose('progress', { type: 'JSON', nullable: true }),
++    stalledModels: t.exposeStringList('stalledModels', {
++      description: 'Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)',
++    }),
+     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
+     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
+     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts
+index 9ae66913..006ef14d 100644
+--- a/cloud/apps/web/src/api/operations/runs.ts
++++ b/cloud/apps/web/src/api/operations/runs.ts
+@@ -131,6 +131,7 @@ export type Run = {
+   status: RunStatus;
+   runCategory: RunCategory;
+   config: RunConfig;
++  stalledModels: string[];
+   batchCount?: number;
+   pairedBatchGroupId?: string | null;
+   progress: { total: number; completed: number; failed: number } | null;
+@@ -184,6 +185,7 @@ export const RUN_FRAGMENT = gql`
+     status
+     runCategory
+     config
++    stalledModels
+     batchCount
+     pairedBatchGroupId
+     progress
+diff --git a/cloud/packages/db/prisma/schema.prisma b/cloud/packages/db/prisma/schema.prisma
+index 930fda3d..1f311911 100644
+--- a/cloud/packages/db/prisma/schema.prisma
++++ b/cloud/packages/db/prisma/schema.prisma
+@@ -322,6 +322,7 @@ model Run {
+   config             Json      @db.JsonB
+   progress           Json?     @db.JsonB
+   summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
++  stalledModels      String[]  @default([]) @map("stalled_models")
+   startedAt          DateTime? @map("started_at")
+   completedAt        DateTime? @map("completed_at")
+   createdAt          DateTime  @default(now()) @map("created_at")
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+## Findings
+1. High: `cloud/packages/db/prisma/schema.prisma` adds a new required `Run.stalledModels` column, but this patch does not include the matching database migration. As written, the app will start expecting `stalled_models` to exist, and any environment whose database has not been migrated will fail when Prisma tries to read or write `Run` records.
+2. Medium: The patch only adds storage and exposure for `stalledModels`; it does not add any code that computes, updates, or clears the stalled model IDs. Unless there is already external writer logic, the new field will stay at its default empty array forever, so the new API and UI surface will never report actual stalls.
+
+## Residual Risks
+- If a migration was generated in another commit or file not included here, the first issue is reduced or removed.
+- If another subsystem already maintains `stalled_models`, the second issue is mitigated; otherwise the field will drift toward being permanently empty and misleading.
+tokens used
+5,969

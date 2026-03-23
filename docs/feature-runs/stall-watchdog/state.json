@@ -26,7 +26,11 @@
     "unresolved": []
   },
   "delivery": {},
-  "dirty_overrides": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [],
+    "used": false,
+    "updated_at": 1774245631
+  },
   "checkpoint_progress": {
     "index": 0,
     "markers_sha": "",

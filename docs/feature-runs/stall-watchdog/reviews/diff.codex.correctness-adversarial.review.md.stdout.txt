@@ -1,0 +1,7 @@
+## Findings
+1. High: `cloud/packages/db/prisma/schema.prisma` adds a new required `Run.stalledModels` column, but this patch does not include the matching database migration. As written, the app will start expecting `stalled_models` to exist, and any environment whose database has not been migrated will fail when Prisma tries to read or write `Run` records.
+2. Medium: The patch only adds storage and exposure for `stalledModels`; it does not add any code that computes, updates, or clears the stalled model IDs. Unless there is already external writer logic, the new field will stay at its default empty array forever, so the new API and UI surface will never report actual stalls.
+
+## Residual Risks
+- If a migration was generated in another commit or file not included here, the first issue is reduced or removed.
+- If another subsystem already maintains `stalled_models`, the second issue is mitigated; otherwise the field will drift toward being permanently empty and misleading.
