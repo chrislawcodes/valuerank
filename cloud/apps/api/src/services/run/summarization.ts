@@ -114,6 +114,7 @@ export async function cancelSummarization(runId: string): Promise<CancelSummariz
       status: 'COMPLETED',
       completedAt: new Date(),
       summarizeProgress: updatedProgress,
+      stalledModels: [],
     },
     select: {
       id: true,
@@ -240,6 +241,7 @@ export async function restartSummarization(
       status: 'SUMMARIZING',
       completedAt: null,
       summarizeProgress: updatedProgress,
+      stalledModels: [],
     },
     select: {
       id: true,

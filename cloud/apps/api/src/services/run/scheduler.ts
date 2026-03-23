@@ -18,6 +18,7 @@ import {
   RECOVERY_INTERVAL_MS,
   runStartupRecovery
 } from './recovery.js';
+import { detectAndUpdateStalledRuns } from './stall-detection.js';
 
 const log = createLogger('services:run:scheduler');
 
@@ -41,6 +42,7 @@ async function runRecoveryJob(): Promise<void> {
   try {
     const result = await recoverOrphanedRuns();
     const zombieResult = await detectAndRecoverStuckJobs();
+    const stallResult = await detectAndUpdateStalledRuns();
 
     if (result.detected.length > 0 || result.errors.length > 0 || zombieResult.recovered > 0) {
       log.info(
@@ -52,6 +54,11 @@ async function runRecoveryJob(): Promise<void> {
         },
         'Recovery job completed'
       );
+    }
+
+    if (stallResult.totalStalled > 0) {
+      // Keep scheduler alive while stalls persist (not just when new stalls appear)
+      signalRunActivity();
     }
   } catch (error) {
     log.error({ error }, 'Recovery job failed');
