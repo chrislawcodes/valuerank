@@ -43,6 +43,7 @@ dist/
 .idea/
 .vscode/
 *.sublime-*
+.obsidian/
 
 # OS files
 Thumbs.db
