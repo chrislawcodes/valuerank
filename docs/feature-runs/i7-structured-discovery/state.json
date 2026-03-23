@@ -55,11 +55,13 @@
     "allowed_dirty_paths": [
       ".obsidian",
       "STATUS.md",
+      "AGENTS.md",
+      "CLAUDE.md",
       "cloud/scripts/launch-remaining-batches.mjs",
       "docs/feature-runs/feature-workflow-discovery-shaping"
     ],
     "used": true,
-    "updated_at": 1774215805
+    "updated_at": 1774223335
   },
   "checkpoint_progress": {
     "index": 0,

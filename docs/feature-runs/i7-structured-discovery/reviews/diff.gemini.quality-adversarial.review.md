@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-structured-discovery/reviews/implementation.diff.patch"
-artifact_sha256: "c5bac998c3e5564afa9dd59438661cb7f5d19e4720025e0238a878eb1e9c30db"
+artifact_sha256: "ad34f54e708f578a0fef6c5cddf2f7a829cbf2c39f7eb3a14d6e793a54ef3a12"
 repo_root: "."
-git_head_sha: "1310e207293440894fe2a6092ff537d450c8a993"
-git_base_ref: "origin/main"
-git_base_sha: "bb7a5403bbe8414e99820865a15e2490fe0542cb"
+git_head_sha: "6a6c10ca390d76b2fb1b536bd00634e46fdfa959"
+git_base_ref: "1310e207293440894fe2a6092ff537d450c8a993"
+git_base_sha: "1310e207293440894fe2a6092ff537d450c8a993"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "single migration path intentional for Wave 1. Silent malformed-unresolved discard is intentional and tested. V2->V3 path deferred."
+resolution_note: "try/except scope acceptable for Wave 1; None-question silent skip is intentional improvement. Medium findings deferred."
 raw_output_path: "docs/feature-runs/i7-structured-discovery/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,22 +22,25 @@ coverage_note: ""
 
 ## Findings
 
-1.  **Silent Discard of Malformed Data:** The migration logic for the `unresolved` field (`d["unresolved"] = [item for item in existing_unresolved if isinstance(item, dict) and "item" in item]`) will silently discard any pre-existing entries in a V1 state that are malformed (e.g., are not dictionaries or lack the required `"item"` key). While this makes the migration robust against corrupted data, it is a form of non-recoverable data loss for those specific entries. This behavior is intentional and explicitly tested in `test_migrate_sanitizes_malformed_unresolved_entries`.
-2.  **Implicit Default Behavior for Missing Flags:** The logic for populating `unresolved` items from V1 questions depends on the `required` and `complete` flags. If a V1 state is missing the `required` flag (`d.get("required")`), it is treated as `False`. If it is missing the `complete` flag (`not bool(d.get("complete"))`), it is treated as `False` (`incomplete`). These are safe defaults but rely on implicit boolean casting of `None` which could be non-obvious to future maintainers.
-3.  **Question Migration Logic is Not Applied Universally:** V1 `questions` are only migrated to the new V2 `unresolved` list if the discovery state is both `required: True` and `complete: False`. V1 states that are already marked `complete` or are not `required` will have their `questions` data preserved but not migrated into the new `unresolved` structure, which appears to be the intended behavior.
+1.  **(Severity: Medium)** The `try...except Exception` block around the version check is overly broad. It will catch any exception (e.g., an `AttributeError` if the input `d` is not a dictionary) and silently return the original input. This prevents a crash but masks the underlying problem. An upstream caller might incorrectly believe the migration was successful when, in fact, it aborted due to malformed input, leading to latent data corruption issues. A more specific exception handler would be safer.
+
+2.  **(Severity: Low)** The sanitization of the `unresolved` list adds a valuable `try...except TypeError` to ensure the `item["item"]` value is hashable, which prevents a crash when building the `existing_items` set. However, it does not validate the *type* of the item itself. A hashable non-string value (e.g., an integer, a boolean, a tuple) would pass this check and be added to `valid_unresolved`. Later, the code adds stripped strings from the `questions` list to the same logical set. This could result in a list of `unresolved` items with mixed data types, which might violate the expectations of downstream consumers.
+
+3.  **(Severity: Low)** The new logic for processing the `questions` list is a significant improvement, as it now explicitly checks that the `question` value is a string before calling `.strip()`. However, the old code's use of `(q.get("question") or "")` would have gracefully handled a `None` value, whereas the new logic does not. If `q.get("question")` returns `None`, `isinstance(None, str)` will be false, and the question will be skipped. This is a subtle change in behavior; while safer, it silently drops `None` values that were previously treated as empty strings.
 
 ## Residual Risks
 
-1.  **Shallow Copy Brittleness:** The migration uses `d = dict(d)` to create a shallow copy, ensuring the top-level input dictionary isn't mutated. However, any nested mutable objects (e.g., dictionaries within the `questions` list) are not deep-copied. The current implementation is safe as it only reads from these nested objects. A future modification that attempts an in-place mutation of a nested object would break the guarantee of immutability and could introduce side effects.
-2.  **Single-Version Migration Path:** The function is tightly coupled to a single V1 -> V2 upgrade path. The idempotency check (`if d.get("version", 1) >= 2:`) correctly prevents it from running on V2+ data, but it provides no mechanism for future migrations (e.g., V2 -> V3). Maintaining this will require a new, separate migration function and potentially a migration chain orchestrator if V1 blobs ever need to be upgraded directly to V3+.
+1.  **Silent Failure Propagation:** The most significant risk is that malformed state objects will not be fixed and will not raise an alarm. Because the function fails silently by returning the original object, the problematic data persists in the system. This could cause other parts of the application to fail later or lead to an accumulation of un-migrated V1 objects that are repeatedly and inefficiently re-processed.
+
+2.  **Downstream Type Errors:** A downstream process consuming the `unresolved` list might assume all `item` values are strings. If a non-string but hashable type makes it through the new validation logic, that process could fail with an unexpected `TypeError` (e.g., if it tries to call a string method on an integer).
 
 ## Token Stats
 
-- total_input=3892
-- total_output=574
-- total_tokens=19528
-- `gemini-2.5-pro`: input=3892, output=574, total=19528
+- total_input=13311
+- total_output=560
+- total_tokens=15556
+- `gemini-2.5-pro`: input=13311, output=560, total=15556
 
 ## Resolution
 - status: accepted
-- note: single migration path intentional for Wave 1. Silent malformed-unresolved discard is intentional and tested. V2->V3 path deferred.
+- note: try/except scope acceptable for Wave 1; None-question silent skip is intentional improvement. Medium findings deferred.

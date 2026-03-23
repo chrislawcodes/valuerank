@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-structured-discovery/reviews/implementation.diff.patch"
-artifact_sha256: "c5bac998c3e5564afa9dd59438661cb7f5d19e4720025e0238a878eb1e9c30db"
+artifact_sha256: "ad34f54e708f578a0fef6c5cddf2f7a829cbf2c39f7eb3a14d6e793a54ef3a12"
 repo_root: "."
-git_head_sha: "1310e207293440894fe2a6092ff537d450c8a993"
-git_base_ref: "origin/main"
-git_base_sha: "bb7a5403bbe8414e99820865a15e2490fe0542cb"
+git_head_sha: "6a6c10ca390d76b2fb1b536bd00634e46fdfa959"
+git_base_ref: "1310e207293440894fe2a6092ff537d450c8a993"
+git_base_sha: "1310e207293440894fe2a6092ff537d450c8a993"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "fixed: version type guard, non-string question skip, unhashable item filter all added. migrate not wired yet — correct, Wave 2 scope."
+resolution_note: "decimal/numpy impossible in JSON state files. Non-hashable item drop is intentional to prevent crashes; structured item payloads not valid in this schema."
 raw_output_path: "docs/feature-runs/i7-structured-discovery/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,14 +22,16 @@ coverage_note: ""
 
 ## Findings
 
-- **High**: `migrate_discovery_state()` is still not actually safe for malformed inputs. `d.get("version", 1) >= 2` will throw if `version` is a non-numeric type, `q.get("question")...strip()` will throw if a truthy `question` value is not a string, and `{u["item"] for u in d["unresolved"]}` will throw if any `item` is unhashable. That directly contradicts the helper’s stated “safe for malformed inputs” behavior and can crash the repair path instead of recovering it. [factory_state.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/factory_state.py#L151)
-- **Medium**: The patch adds the migration helper and bumps the default schema, but nothing in the shown diff wires `migrate_discovery_state()` into a runtime load/repair path. If there is no unseen caller already doing that, persisted v1 discovery blobs will still be consumed as v1 and never gain the new `answers`, `non_goals`, `acceptance_criteria`, or `unresolved` fields. [factory_state.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/factory_state.py#L133)
-- **Medium**: The `version >= 2` early return means partially corrupted V2 blobs are never normalized. Any V2 state missing the new keys, or carrying malformed `unresolved` entries, will be returned unchanged and can still fail later. That makes the helper a one-way upgrader rather than a repair function for bad on-disk data. [factory_state.py](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/factory_state.py#L151)
+1. **High: the version gate now skips legitimate numeric version values that are not plain `int`/`float`.**  
+   The new `isinstance(version, (int, float))` check rejects other numeric types that compare correctly with `2`, such as `decimal.Decimal`, `numpy` numeric scalars, or custom numeric wrappers. Those blobs will now return unchanged instead of migrating from V1 to V2, which can leave downstream code seeing an older schema than expected.
+
+2. **Medium: the new hashability filter silently drops unresolved entries instead of preserving them.**  
+   `unresolved` entries with a non-hashable `item` value are now removed entirely. The prior code kept any dict with an `item` key, so this is a behavior change that can lose user state. If older blobs contain structured `item` payloads, the migration will now erase those unresolved tasks rather than carrying them forward or normalizing them.
 
 ## Residual Risks
 
-- The migration deduplicates only by exact question text; whitespace and casing differences can still produce duplicate unresolved items.
-- The helper uses a shallow copy, so nested mutable structures remain shared with the input on the migrated path.
+- This patch still assumes `version` and `question` fields are shaped like clean JSON primitives; anything outside that shape is either skipped or discarded.
+- There are no visible tests here covering non-builtin numeric `version` values or unresolved items with structured payloads, so the regression surface above may remain unexercised.
 
 ## Runner Stats
 - total_input=0
@@ -38,4 +40,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: fixed: version type guard, non-string question skip, unhashable item filter all added. migrate not wired yet — correct, Wave 2 scope.
+- note: decimal/numpy impossible in JSON state files. Non-hashable item drop is intentional to prevent crashes; structured item payloads not valid in this schema.

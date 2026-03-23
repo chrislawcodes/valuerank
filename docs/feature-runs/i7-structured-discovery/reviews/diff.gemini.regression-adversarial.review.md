@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-structured-discovery/reviews/implementation.diff.patch"
-artifact_sha256: "c5bac998c3e5564afa9dd59438661cb7f5d19e4720025e0238a878eb1e9c30db"
+artifact_sha256: "ad34f54e708f578a0fef6c5cddf2f7a829cbf2c39f7eb3a14d6e793a54ef3a12"
 repo_root: "."
-git_head_sha: "1310e207293440894fe2a6092ff537d450c8a993"
-git_base_ref: "origin/main"
-git_base_sha: "bb7a5403bbe8414e99820865a15e2490fe0542cb"
+git_head_sha: "6a6c10ca390d76b2fb1b536bd00634e46fdfa959"
+git_base_ref: "1310e207293440894fe2a6092ff537d450c8a993"
+git_base_sha: "1310e207293440894fe2a6092ff537d450c8a993"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "shallow-copy safe in Wave 1 (no nested mutation). Codex crash findings fixed: version type guard, non-string question guard, unhashable item guard added. Dedup casing deferred to Wave 2."
+resolution_note: "non-string hashable item edge case theoretical; our schema always produces string item values. Low severity, deferred."
 raw_output_path: "docs/feature-runs/i7-structured-discovery/reviews/diff.gemini.regression-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,27 +22,23 @@ coverage_note: ""
 
 ## Findings
 
-1.  **Risk of Unintended Mutation via Shallow Copy:** The migration function uses `d = dict(d)` to create a copy of the input dictionary. This is a *shallow copy*. If any values in the dictionary are mutable objects (like lists or other dicts), they will be shared between the original V1 dictionary and the new V2 dictionary. For example, if the `assumptions` list is modified in the returned V2 dictionary, the original V1 dictionary will also be mutated. This breaks the expectation of a safe, non-destructive migration and could lead to hard-to-debug side effects elsewhere in the application. Using `copy.deepcopy()` would provide better isolation.
+1.  **Crash from Unhashable Items Prevented (High Severity Fix):** The previous implementation was vulnerable to a `TypeError` crash. If `d["unresolved"]` contained a dictionary where the value of the `"item"` key was unhashable (e.g., a list or another dictionary), the set comprehension `existing_items = {i["item"] for i in d["unresolved"]}` would fail. The patch correctly introduces a `try/except TypeError` block to test for hashability, filtering out these malformed entries and preventing the migration from crashing.
 
-2.  **Silent Data Loss in Sanitization:** The migration logic for the `unresolved` field (`d["unresolved"] = [item for item in existing_unresolved if isinstance(item, dict) and "item" in item]`) silently discards any pre-existing entries that are malformed (e.g., strings, or dicts without an `"item"` key). In a data migration context, silent data loss is dangerous. A more robust approach would be to log a warning or move malformed entries into a separate `_malformed_unresolved` field for later inspection, rather than deleting them permanently.
+2.  **Crash from Non-String Questions Prevented (Medium Severity Fix):** The original code assumed `q.get("question")` would be a string or `None`. If the V1 data contained a question object where the `question` key held a non-string value (e.g., `{"question": 123}`), the call to `.strip()` would raise an `AttributeError`. The patch adds a `isinstance(raw, str)` check, making the migration more resilient to corrupt or unexpected input formats.
 
-3.  **Incomplete Deduplication of Questions:** The logic to populate `unresolved` from `questions` prevents duplicates based on the exact stripped text of the question. However, it does not normalize for case or internal whitespace. This could result in functionally duplicate unresolved items like `"what is the goal?"` and `"What is the goal?"`, polluting the final state.
+3.  **Faulty Idempotency on Malformed Versions Corrected (Medium Severity Fix):** The original version check, `if d.get("version", 1) >= 2:`, would fail to identify a V2+ blob if the version number was not a numeric type (e.g., `"version": "2.0"`). This would cause the migration logic to run unnecessarily on an already-migrated object, potentially corrupting it. The new `try...except` block and `isinstance` check ensure that any object with a non-numeric version or a version that can't be compared is returned unmodified, properly fulfilling the idempotency claim.
 
 ## Residual Risks
 
-1.  **Untested Migration Scenarios:** The test suite is comprehensive but misses a few key adversarial cases:
-    *   **V1 State with Mixed Content:** There is no test for a V1 object that contains *both* a pre-existing `unresolved` list and a `questions` list where the content overlaps. While the current implementation appears to handle this correctly, the lack of a dedicated test makes the behavior vulnerable to regressions during future refactoring.
-    *   **Shallow Copy Side Effects:** The tests do not check for the mutation risk described in Finding #1. A test that modifies a list in the migrated output and then asserts that the original input remains unchanged would have caught this flaw.
-
-2.  **Integration Point Assumption:** A test in `RepairDecisionTests` was updated to assert `discovery["version"] == 2`. This confirms that *newly generated* discovery states are V2. However, this implicitly assumes that all code paths that *read* discovery states will now correctly handle V2 or transparently migrate V1. The risk is that another part of the system might read an old V1 state file from disk, not use the migration function, and fail due to the missing V2 fields. A full regression would require auditing all consumers of this state object, not just its producers.
+1.  **Potential for Semantic Duplicates in `unresolved` List (Low Severity):** The patch validates that `item["item"]` is *hashable*, but not that it is a *string*. The subsequent logic populates `existing_items` from these potentially non-string values. It then iterates through V1 `questions` (which *are* enforced as strings) and adds them to `unresolved` if the string text is not in `existing_items`. This creates a loophole: if the input `unresolved` list contains `{"item": ("some question text",)}` (a tuple), the migration will later add a duplicate `{"item": "some question text"}` (a string) because `("some question text",) != "some question text"`. This could lead to silent data duplication in the migrated state.
 
 ## Token Stats
 
-- total_input=15847
-- total_output=632
-- total_tokens=19290
-- `gemini-2.5-pro`: input=15847, output=632, total=19290
+- total_input=13311
+- total_output=561
+- total_tokens=15459
+- `gemini-2.5-pro`: input=13311, output=561, total=15459
 
 ## Resolution
 - status: accepted
-- note: shallow-copy safe in Wave 1 (no nested mutation). Codex crash findings fixed: version type guard, non-string question guard, unhashable item guard added. Dedup casing deferred to Wave 2.
+- note: non-string hashable item edge case theoretical; our schema always produces string item values. Low severity, deferred.

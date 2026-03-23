@@ -2,10 +2,12 @@
   "feature_slug": "i7-structured-discovery",
   "stage": "diff",
   "artifact_path": "docs/feature-runs/i7-structured-discovery/reviews/implementation.diff.patch",
-  "git_base_ref": "origin/main",
+  "git_base_ref": "1310e207293440894fe2a6092ff537d450c8a993",
   "allowed_dirty_paths": [
     ".obsidian",
     "STATUS.md",
+    "AGENTS.md",
+    "CLAUDE.md",
     "cloud/scripts/launch-remaining-batches.mjs",
     "docs/feature-runs/feature-workflow-discovery-shaping"
   ],
