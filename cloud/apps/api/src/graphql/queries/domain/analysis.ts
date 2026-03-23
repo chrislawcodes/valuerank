@@ -16,7 +16,6 @@ import {
   classifyDecisionForSelectedValue,
   computeFullBTScores,
   computeSmoothedLogOddsScore,
-  DOMAIN_ANALYSIS_VALUE_KEYS,
   getMissingReasonLabel,
   hydrateDefinitionAncestors,
   incrementPairwiseWin,
@@ -26,12 +25,13 @@ import {
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
 } from './shared.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../domain-analysis-values.js';
 import type {
   DomainAnalysisConditionDetail,
   DomainAnalysisValueCounts,
-  DomainAnalysisValueKey,
   DomainAnalysisVignetteDetail,
 } from './shared.js';
+import type { DomainAnalysisValueKey } from '../domain-analysis-values.js';
 
 builder.queryField('domainAnalysis', (t) =>
   t.field({
