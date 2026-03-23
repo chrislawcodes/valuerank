@@ -35,6 +35,7 @@ from factory_state import (  # noqa: E402
     checkpoint_manifest_path,
     default_artifact_path,
     default_discovery_state,
+    migrate_discovery_state,
 )
 
 REVIEW_SCRIPTS = REPO_ROOT / "docs" / "operations" / "codex-skills" / "review-lens" / "scripts"
@@ -287,6 +288,10 @@ def discovery_state(slug: str) -> dict:
     merged.update(state if isinstance(state, dict) else {})
     merged["questions"] = list(merged.get("questions", []))
     merged["assumptions"] = list(merged.get("assumptions", []))
+    merged["unresolved"] = list(merged.get("unresolved", []))
+    merged["non_goals"] = list(merged.get("non_goals", []))
+    merged["acceptance_criteria"] = list(merged.get("acceptance_criteria", []))
+    merged = migrate_discovery_state(merged)
     return merged
 
 
@@ -1345,6 +1350,12 @@ def command_discover(args: argparse.Namespace) -> int:
             args.summary is not None,
             args.complete,
             force_complete,
+            getattr(args, "unresolved", None) is not None,
+            getattr(args, "resolve", None) is not None,
+            getattr(args, "defer", None) is not None,
+            getattr(args, "non_goal", None) is not None,
+            getattr(args, "acceptance_criteria", None) is not None,
+            getattr(args, "answer", None) is not None,
         ]
     ):
         raise SystemExit("discover --clear cannot be combined with other discovery updates")
@@ -1363,6 +1374,12 @@ def command_discover(args: argparse.Namespace) -> int:
             args.summary is not None,
             args.complete,
             force_complete,
+            getattr(args, "unresolved", None) is not None,
+            getattr(args, "resolve", None) is not None,
+            getattr(args, "defer", None) is not None,
+            getattr(args, "non_goal", None) is not None,
+            getattr(args, "acceptance_criteria", None) is not None,
+            getattr(args, "answer", None) is not None,
         ]
     ):
         raise SystemExit("discover requires at least one update, or use --clear to reset discovery state")
@@ -1407,6 +1424,33 @@ def command_discover(args: argparse.Namespace) -> int:
         if args.summary is not None:
             discovery["summary"] = args.summary
             discovery["required"] = discovery["required"] or bool(args.summary.strip())
+        if getattr(args, "answer", None) is not None:
+            question_text, answer_text = args.answer
+            discovery.setdefault("answers", {})[question_text] = answer_text
+        if getattr(args, "unresolved", None) is not None:
+            item_text = args.unresolved
+            unresolved = discovery.setdefault("unresolved", [])
+            if not any(u["item"] == item_text for u in unresolved):
+                unresolved.append({"item": item_text, "deferred": False})
+        if getattr(args, "resolve", None) is not None:
+            resolve_text = args.resolve
+            discovery["unresolved"] = [
+                u for u in discovery.get("unresolved", []) if u["item"] != resolve_text
+            ]
+        if getattr(args, "defer", None) is not None:
+            defer_text = args.defer
+            for u in discovery.get("unresolved", []):
+                if u["item"] == defer_text:
+                    u["deferred"] = True
+                    break
+        if getattr(args, "non_goal", None) is not None:
+            ng = discovery.setdefault("non_goals", [])
+            if args.non_goal not in ng:
+                ng.append(args.non_goal)
+        if getattr(args, "acceptance_criteria", None) is not None:
+            ac = discovery.setdefault("acceptance_criteria", [])
+            if args.acceptance_criteria not in ac:
+                ac.append(args.acceptance_criteria)
         if args.complete:
             if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
                 raise SystemExit(
@@ -1414,7 +1458,19 @@ def command_discover(args: argparse.Namespace) -> int:
                     "use --force-complete if you intentionally want to override the count"
                 )
             discovery["complete"] = True
-        elif args.required or args.count is not None or args.question or args.assumption or args.summary is not None:
+        elif (
+            args.required
+            or args.count is not None
+            or args.question
+            or args.assumption
+            or args.summary is not None
+            or getattr(args, "answer", None) is not None
+            or getattr(args, "unresolved", None) is not None
+            or getattr(args, "resolve", None) is not None
+            or getattr(args, "defer", None) is not None
+            or getattr(args, "non_goal", None) is not None
+            or getattr(args, "acceptance_criteria", None) is not None
+        ):
             discovery["complete"] = False
         if force_complete:
             discovery["complete"] = True
@@ -1422,12 +1478,6 @@ def command_discover(args: argparse.Namespace) -> int:
 
     state = update_discovery_state(args.slug, mutate)
     discovery = state.get(DISCOVERY_KEY, {})
-    if discovery.get("version", 1) != 1:
-        print(f"workflow: {args.slug}")
-        print("discovery:")
-        print(f"- version: {discovery.get('version', 1)}")
-        print("- warning: discovery state version is newer than this runner understands")
-        return 0
     remaining = max(int(discovery.get("question_count", 0)) - int(discovery.get("asked_count", 0)), 0)
     print(f"workflow: {args.slug}")
     print("discovery:")
@@ -1443,6 +1493,21 @@ def command_discover(args: argparse.Namespace) -> int:
             print(f"- assumption: {assumption}")
     if discovery.get("summary"):
         print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
+    if discovery.get("non_goals"):
+        print(f"- non-goals: {len(discovery['non_goals'])}")
+        for ng in discovery["non_goals"]:
+            print(f"  - {ng}")
+    if discovery.get("acceptance_criteria"):
+        print(f"- acceptance-criteria: {len(discovery['acceptance_criteria'])}")
+        for ac in discovery["acceptance_criteria"]:
+            print(f"  - {ac}")
+    if discovery.get("answers"):
+        print(f"- answers: {len(discovery['answers'])}")
+    if discovery.get("unresolved"):
+        print(f"- unresolved: {len(discovery['unresolved'])}")
+        for u in discovery["unresolved"]:
+            status = " [deferred]" if u.get("deferred") else ""
+            print(f"  - {u['item']}{status}")
     return 0
 
 
@@ -2158,6 +2223,18 @@ def build_parser() -> argparse.ArgumentParser:
     discover_parser.add_argument("--assumption", action="append", default=[])
     discover_parser.add_argument("--summary")
     discover_parser.add_argument("--complete", action="store_true")
+    discover_parser.add_argument("--unresolved", type=str,
+        help="Add an item to unresolved[]")
+    discover_parser.add_argument("--resolve", type=str,
+        help="Remove an item from unresolved[] by exact text match")
+    discover_parser.add_argument("--defer", type=str,
+        help="Mark an unresolved item as deferred by exact text match")
+    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
+        help="Add a string to non_goals[]")
+    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
+        help="Add a string to acceptance_criteria[]")
+    discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
+        help="Record answers[QUESTION] = ANSWER")
     discover_parser.add_argument("--force-complete", action="store_true")
     discover_parser.add_argument("--clear", action="store_true")
     discover_parser.set_defaults(func=command_discover)
