@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/stall-watchdog/reviews/implementation.diff.patch"
-artifact_sha256: "c383a49b715d673cfe7d54d5b1e975399c997d8fb45ae379b84476fc4f38a45c"
+artifact_sha256: "e156b342d3707ccddf5629db5c39a1741cd3684a80efa2d08119f85fbb23b314"
 repo_root: "."
-git_head_sha: "e268d097d29db1737ee180f53b0c65b37ddcce0d"
+git_head_sha: "c80ff92384433fc3578a30b5fa42476483fb1b78"
 git_base_ref: "origin/main"
 git_base_sha: "a6e5c2470e67aaee16564cabf4a43c226c61498d"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "Slice 1 is schema+types only — detection logic, state clearing, and frontend are Slices 2-3 (intentional staged delivery). Schema annotation format is project-specific. Migration file was included in the diff."
+resolution_note: "Billing banner removal is intentional: user explicitly requested deletion of getBudgetFailureBanner/isBudgetFailure (broken code, no real billing data returned). stalledModels IS cleared on PAUSED/CANCELLED/FAILED/COMPLETED via T2.3 (7 sites: control.ts, progress.ts, start.ts, recovery.ts, summarization.ts, summarize-transcript.ts). Migration file IS in the diff. Stall threshold: acknowledged known limitation. Schema annotation is project-specific format."
 raw_output_path: "docs/feature-runs/stall-watchdog/reviews/diff.gemini.regression-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,29 +22,29 @@ coverage_note: ""
 
 ## Findings
 
-1.  **Critical: Incorrect Prisma Schema Annotation.** In `cloud/packages/db/prisma/schema.prisma`, the `stalledModels` field has an annotation `@cloud/apps/api/src/mcp/tools/set-default-llm-model.ts([])`. The referenced file is completely unrelated to stall detection; it is an MCP tool for setting a provider's default model. This appears to be a copy-paste error and indicates a lack of attention to detail. Depending on how this proprietary annotation system works, this could cause silent failures, incorrect default values, or build-time errors.
+1.  **High Severity - Critical UI Regression for Failure Diagnosis:** The change completely removes the existing UI banners that specifically detected and reported budget exhaustion and other critical system failures. The previous implementation could inform a user that their "OpenAI budget exhausted," providing a clear, actionable insight. The new implementation replaces this with a stall detection banner that *only* appears for `RUNNING` runs. If a run `FAILED` immediately due to an invalid API key or zero budget, the user will now see no explanatory banner at all, which is a significant regression in user-facing diagnostics. Stall detection is not a substitute for hard failure detection.
 
-2.  **Critical: Missing Core Logic.** The diff introduces the data structure to store stalled model information (`stalledModels` array) and surfaces it via the API. However, the implementation for the detection logic itself is entirely absent. There is no code that identifies when a model has "no successful probe completion for 3+ minutes" and populates this new database field. The feature as presented is incomplete and non-functional.
+2.  **Medium Severity - Stalled State Persists Incorrectly:** The `stalledModels` field is only cleared when a run transitions to `SUMMARIZING` or `COMPLETED`. If a user `PAUSES` or `CANCELS` a run that has stalled models, the `stalledModels` list will persist in the database. When the run is resumed, it will incorrectly and confusingly display a "stalled" banner immediately, before the run has had any chance to make progress. The state should be reset on any transition that interrupts execution.
 
-3.  **High: Ambiguous Stall Definition and Magic Numbers.** The GraphQL description defines a stall with a hardcoded "3+ minutes" threshold. This magic number is not configurable and may not be appropriate for all models or scenarios. Slower, legitimate models could be incorrectly flagged as stalled, while the detection window may be too long for other use cases. The conditions for the timer starting (e.g., "while jobs are pending") are also not defined in code.
+3.  **Medium Severity - Brittle, Hardcoded Stall Definition:** The definition of a "stall" is hardcoded to a "3+ minute" timeout. This magic number is inflexible and makes a weak assumption that all models should respond within this window. Slower, more complex models could be perpetually and incorrectly flagged as stalled. A robust system would allow this threshold to be configurable, preventing false positives and improving the accuracy of the detection.
 
-4.  **Medium: Undefined "Unstall" Mechanism.** The artifact provides no mechanism for removing a model from the `stalledModels` array once it recovers. This creates a significant risk that a model, once flagged, could remain permanently marked as stalled for the duration of the run, even if it was only a transient issue. This would mislead users about the run's true status.
-
-5.  **Medium: Mismatched Schema Annotation and Data.** The annotation `@cloud/scripts/analysis/run-mapping.json("stalled_models")` in `schema.prisma` references a key that does not exist in the provided `run-mapping.json` file. This suggests that any scripts or tooling relying on this mapping will fail or ignore the new field.
+4.  **Low Severity - Misleading Prisma Schema Annotation:** The `stalledModels` field in `schema.prisma` is annotated with `@cloud/apps/api/src/mcp/tools/set-default-llm-model.ts([])`. The referenced file is entirely unrelated to stall detection. This appears to be a copy-paste error that, while not breaking functionality, creates technical debt and will confuse future developers.
 
 ## Residual Risks
 
-1.  **Tooling or Build Failure:** The incorrect file reference in the Prisma schema annotation is a landmine. It could cause a custom annotation processor to fail during the build or deployment process, potentially in a CI/CD environment where it is harder to debug.
-2.  **Misleading UI and User Confusion:** Since the core detection logic is missing and there is no "unstall" mechanism, the `stalledModels` array, if ever populated by a future implementation, risks presenting false or stale information to the user, eroding trust in the platform's status reporting.
-3.  **Database Migration Issues:** The new `stalledModels` column is a required array (`String[]`). While the annotation seems to imply a default of `[]`, this is not standard Prisma syntax (`@default([])`). If this custom annotation does not correctly enforce a database-level default during migration, operations on existing `Run` records could fail.
+1.  **Core Stall-Detection Logic is Un-auditable:** The implementation of the most critical function, `detectAndUpdateStalledRuns`, is not included in the artifact. Its logic is a black box. This carries a risk that the implementation may be inefficient (causing database load), contain logical flaws (leading to false positives/negatives), or lack sufficient testing for edge cases. The correctness of the entire feature hinges on this unseen code.
+
+2.  **Scheduler Instability:** The recovery job scheduler is now kept active as long as any run is stalled. If the stall detection logic produces persistent false positives (e.g., due to the hardcoded 3-minute timeout), it could force the scheduler to run far more frequently than intended. This risks consuming excess server resources and could create noisy, repetitive logging that masks other system issues.
+
+3.  **Loss of Granularity in Error Reporting:** The new system conflates transient issues with permanent failures. A model that is temporarily slow and one that is failing every attempt due to budget exhaustion are both simply labeled "stalled." This is misleading, as a stall implies a potential for recovery while a budget failure is a hard stop. This ambiguity removes valuable, specific feedback from the user, forcing them to investigate the root cause manually.
 
 ## Token Stats
 
-- total_input=18056
-- total_output=678
-- total_tokens=20415
-- `gemini-2.5-pro`: input=18056, output=678, total=20415
+- total_input=20726
+- total_output=701
+- total_tokens=23996
+- `gemini-2.5-pro`: input=20726, output=701, total=23996
 
 ## Resolution
 - status: accepted
-- note: Slice 1 is schema+types only — detection logic, state clearing, and frontend are Slices 2-3 (intentional staged delivery). Schema annotation format is project-specific. Migration file was included in the diff.
+- note: Billing banner removal is intentional: user explicitly requested deletion of getBudgetFailureBanner/isBudgetFailure (broken code, no real billing data returned). stalledModels IS cleared on PAUSED/CANCELLED/FAILED/COMPLETED via T2.3 (7 sites: control.ts, progress.ts, start.ts, recovery.ts, summarization.ts, summarize-transcript.ts). Migration file IS in the diff. Stall threshold: acknowledged known limitation. Schema annotation is project-specific format.

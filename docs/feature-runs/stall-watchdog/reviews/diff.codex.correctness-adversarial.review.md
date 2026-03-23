@@ -3,14 +3,14 @@ reviewer: "codex"
 lens: "correctness-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/stall-watchdog/reviews/implementation.diff.patch"
-artifact_sha256: "c383a49b715d673cfe7d54d5b1e975399c997d8fb45ae379b84476fc4f38a45c"
+artifact_sha256: "e156b342d3707ccddf5629db5c39a1741cd3684a80efa2d08119f85fbb23b314"
 repo_root: "."
-git_head_sha: "e268d097d29db1737ee180f53b0c65b37ddcce0d"
+git_head_sha: "c80ff92384433fc3578a30b5fa42476483fb1b78"
 git_base_ref: "origin/main"
 git_base_sha: "a6e5c2470e67aaee16564cabf4a43c226c61498d"
 generation_method: "codex-runner"
 resolution_status: "accepted"
-resolution_note: "Migration file IS included in the diff. Detection logic is intentionally deferred to Slice 2 (stall-detection.ts + scheduler wiring + status transition clearing)."
+resolution_note: "Migration file IS in the diff (migration.sql). Billing banner removal is intentional product decision. stalledModels clearing covers all 7 transition sites (not just recovery.ts): control.ts pauseRun/cancelRun, progress.ts COMPLETED, start.ts FAILED, recovery.ts COMPLETED, summarization.ts, summarize-transcript.ts."
 raw_output_path: "docs/feature-runs/stall-watchdog/reviews/diff.codex.correctness-adversarial.review.md.raw.txt"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,13 +22,14 @@ coverage_note: ""
 
 ## Findings
 
-1. High: `cloud/packages/db/prisma/schema.prisma` adds a new required `Run.stalledModels` column, but this patch does not include the matching database migration. As written, the app will start expecting `stalled_models` to exist, and any environment whose database has not been migrated will fail when Prisma tries to read or write `Run` records.
-2. Medium: The patch only adds storage and exposure for `stalledModels`; it does not add any code that computes, updates, or clears the stalled model IDs. Unless there is already external writer logic, the new field will stay at its default empty array forever, so the new API and UI surface will never report actual stalls.
+1. **High** - `[cloud/apps/web/src/pages/RunDetail/RunDetail.tsx](/private/tmp/wt-stall-watchdog/cloud/apps/web/src/pages/RunDetail/RunDetail.tsx)` drops the existing budget/system failure banners entirely and replaces them with a stall banner that only renders for `RUNNING` runs. That means a `FAILED` run no longer shows any error explanation at all, which is a regression in the primary user-facing failure path.
+2. **High** - `[cloud/packages/db/prisma/schema.prisma](/private/tmp/wt-stall-watchdog/cloud/packages/db/prisma/schema.prisma)` adds a new non-null `stalledModels` column, but this patch does not include the corresponding database migration. As written, the app will expect `stalled_models` to exist while deployed databases still lack it, which will break reads/writes against `Run`.
+3. **Medium** - `[cloud/apps/api/src/services/run/recovery.ts](/private/tmp/wt-stall-watchdog/cloud/apps/api/src/services/run/recovery.ts)` only clears `stalledModels` on the two recovery branches shown here. Any other path that moves a run out of `RUNNING` will leave stale stall IDs attached, so the new field can stop meaning “currently detected” and become stale state instead.
 
 ## Residual Risks
 
-- If a migration was generated in another commit or file not included here, the first issue is reduced or removed.
-- If another subsystem already maintains `stalled_models`, the second issue is mitigated; otherwise the field will drift toward being permanently empty and misleading.
+- I could not verify the unseen `detectAndUpdateStalledRuns` logic, so there may still be edge cases around clearing, deduplicating, or reintroducing stalled model IDs.
+- The new stall banner is only shown for `RUNNING` runs; if stalls can legitimately exist in other statuses, that signal is still suppressed in the UI.
 
 ## Runner Stats
 - total_input=0
@@ -37,4 +38,4 @@ coverage_note: ""
 
 ## Resolution
 - status: accepted
-- note: Migration file IS included in the diff. Detection logic is intentionally deferred to Slice 2 (stall-detection.ts + scheduler wiring + status transition clearing).
+- note: Migration file IS in the diff (migration.sql). Billing banner removal is intentional product decision. stalledModels clearing covers all 7 transition sites (not just recovery.ts): control.ts pauseRun/cancelRun, progress.ts COMPLETED, start.ts FAILED, recovery.ts COMPLETED, summarization.ts, summarize-transcript.ts.

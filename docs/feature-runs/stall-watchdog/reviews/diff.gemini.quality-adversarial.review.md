@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "quality-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/stall-watchdog/reviews/implementation.diff.patch"
-artifact_sha256: "c383a49b715d673cfe7d54d5b1e975399c997d8fb45ae379b84476fc4f38a45c"
+artifact_sha256: "e156b342d3707ccddf5629db5c39a1741cd3684a80efa2d08119f85fbb23b314"
 repo_root: "."
-git_head_sha: "e268d097d29db1737ee180f53b0c65b37ddcce0d"
+git_head_sha: "c80ff92384433fc3578a30b5fa42476483fb1b78"
 git_base_ref: "origin/main"
 git_base_sha: "a6e5c2470e67aaee16564cabf4a43c226c61498d"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "Detection logic, clearing mechanism, and frontend are Slices 2-3 (intentional). Prisma annotation format is project-specific. Migration file present in diff."
+resolution_note: "Same as regression review. stall-detection.ts IS in the diff — reviewer missed it. Billing banner removal was explicitly requested by the product owner. stalledModels cleared on all terminal/non-RUNNING status transitions via T2.3."
 raw_output_path: "docs/feature-runs/stall-watchdog/reviews/diff.gemini.quality-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,33 +22,46 @@ coverage_note: ""
 
 ## Findings
 
-1.  **Incomplete Implementation**: The artifact introduces a `stalledModels` field but omits the corresponding business logic required to populate or manage it. The feature is non-functional as presented. There is no implementation for the stall detection logic described in the GraphQL comment ("no successful probe completion for 3+ minutes while jobs are pending"). The mechanism to add or remove model IDs from this array is entirely absent.
+Ordered by severity.
 
-2.  **Incorrect and Misleading Schema Annotations**: The annotations on the new `stalledModels` field in `prisma/schema.prisma` are erroneous and represent a significant lapse in quality.
-    *   The default value annotation ` @cloud/apps/api/src/mcp/tools/set-default-llm-model.ts([])` points to a completely unrelated file for setting default LLM models. This is likely a copy-paste error and severely degrades code clarity and maintainability.
-    *   The mapping annotation `@cloud/scripts/analysis/run-mapping.json("stalled_models")` references a file that, based on the provided content, does not contain a `stalled_models` key. This could cause silent failures in any data processing scripts that rely on this metadata.
+### 1. Critical Functionality Regression in Error Reporting
 
-3.  **Undefined State Clearing Mechanism**: The design fails to account for clearing the "stalled" state. Once a model ID is added to the `stalledModels` array, no logic is provided to remove it if the model recovers and starts processing jobs again. This will lead to a persistent and inaccurate "stalled" status for any model that experiences a transient delay.
+The artifact removes the existing functionality for detecting and reporting specific budget and quota-related failures (`getBudgetFailureBanner`, `isBudgetFailure`). It replaces this with a more generic "stalled model" banner.
 
-4.  **Brittle "Magic Number" in Definition**: The stall condition relies on a hardcoded "3+ minutes" threshold mentioned only in a comment. This approach is brittle and lacks adaptability. It doesn't account for models that may have naturally longer processing times and risks generating false positives. A robust solution would make this threshold configurable.
+-   **Omitted Case:** The previous implementation explicitly informed the user when a run failed due to an exhausted budget (e.g., `"OpenAI budget exhausted. Check provider credits."`). This is a common, user-actionable failure mode. The new implementation only reports that a model is "stalled," providing no insight into the root cause. A user will no longer know if they need to add credits to their account or if the issue is a temporary provider outage.
+-   **Weak Assumption:** The change assumes that "stalling" is an adequate proxy for all previously detected errors. This is incorrect. A model can stall for many reasons (rate limits, API errors, network issues), while budget exhaustion is a distinct and permanent failure state until the user intervenes. Removing this specific feedback significantly degrades the user's ability to diagnose and resolve problems.
+
+### 2. Loss of Diagnostics for Terminally Failed Runs
+
+The new `stalledModelsBanner` is only displayed when a run has the status `RUNNING`. The previous `getSystemFailureBanner` would render for a `FAILED` run, providing the last known error context.
+
+-   **Hidden Flaw:** If a model stall leads to a run timeout and the run's status transitions from `RUNNING` to `FAILED`, the user will lose all diagnostic information. The UI will simply show a failed run with no explanation, as the condition (`run.status !== 'RUNNING'`) for showing the banner will no longer be met. This makes it impossible to perform a post-mortem on a failed run from the UI.
+
+### 3. Core Logic for Stall Detection is Missing
+
+The diff introduces a call to `detectAndUpdateStalledRuns` from a new, un-provided file (`stall-detection.js`). The entire premise of the feature rests on this unseen logic.
+
+-   **Hidden Flaw:** It is impossible to assess the quality, correctness, or robustness of the stall detection mechanism. The definition of "stalled" (e.g., the "3+ minutes" window mentioned in a comment) is not verifiable. The logic could contain bugs, edge cases, or flawed assumptions that lead to either failing to detect stalled models or incorrectly flagging healthy ones.
+
+### 4. Brittle and Illogical Database Schema Annotations
+
+The `schema.prisma` file adds annotations to the new `stalledModels` field that point to completely unrelated files.
+
+-   **Weak Assumption:** The annotation `@cloud/apps/api/src/mcp/tools/set-default-llm-model.ts([])` appears to be an attempt to set a default value. However, the referenced file (`set-default-llm-model.ts`) has no logical connection to run stalls; its purpose is to manage default LLM models. This creates a confusing and brittle dependency. If the referenced file is ever moved or deleted during refactoring, it could break schema processing or other tooling in non-obvious ways. The same issue exists for the `@cloud/scripts/analysis/run-mapping.json("stalled_models")` annotation. This indicates a potential flaw in the project's tooling or developer practices.
 
 ## Residual Risks
 
-1.  **Permanent Data Inaccuracy**: The most significant risk is that the `stalledModels` field will become a source of misinformation. Without a clearing mechanism, any transient slowdown will cause a model to be permanently flagged as stalled for a given run, misleading users and potentially triggering unnecessary manual interventions.
-
-2.  **Silent Pipeline Failures**: The incorrect `run-mapping.json` annotation introduces a risk of latent bugs. Any script or process that consumes this annotation for data transformation or analysis may fail silently or produce incorrect results, which could be difficult to debug.
-
-3.  **Propagation of Technical Debt**: The erroneous annotation in the Prisma schema points to a breakdown in code review and quality standards. Merging this introduces technical debt that will confuse future developers, complicate schema maintenance, and erode trust in the project's documentation-as-code conventions.
-
-4.  **Incomplete Feature Risk**: Shipping a data model without the corresponding logic and UI creates a risk that the feature will remain incomplete. The "dead" field adds bloat to the data model and API surface without delivering any user value.
+-   **Inability to Resolve Failures:** Users will be less equipped to resolve run failures. Without specific budget feedback, they may waste time waiting for a "stalled" run to resolve itself when the actual problem is a lack of funds in their provider account, leading to user frustration and unnecessary support load.
+-   **Silent Failure of Stall Detection:** The core `detectAndUpdateStalledRuns` logic, being un-reviewed, may not be reliable. It could fail silently, leaving users unaware of genuine run stalls, or it could be overly aggressive, creating false alarms. This undermines the feature's primary purpose.
+-   **Scheduler Instability:** The new logic to `signalRunActivity()` whenever stalls are detected is intended to keep the scheduler polling. This could have unintended consequences, preventing the scheduler from entering an idle state correctly or causing excessive database polling, potentially impacting system performance and cost.
 
 ## Token Stats
 
-- total_input=18056
-- total_output=640
-- total_tokens=20902
-- `gemini-2.5-pro`: input=18056, output=640, total=20902
+- total_input=8284
+- total_output=914
+- total_tokens=24198
+- `gemini-2.5-pro`: input=8284, output=914, total=24198
 
 ## Resolution
 - status: accepted
-- note: Detection logic, clearing mechanism, and frontend are Slices 2-3 (intentional). Prisma annotation format is project-specific. Migration file present in diff.
+- note: Same as regression review. stall-detection.ts IS in the diff — reviewer missed it. Billing banner removal was explicitly requested by the product owner. stalledModels cleared on all terminal/non-RUNNING status transitions via T2.3.
