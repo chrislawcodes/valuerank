@@ -49,6 +49,26 @@ function parseTemperatureFromSignature(signature: string): number | null {
   return null;
 }
 
+function getSignaturePriority(option: DomainAvailableSignature): number {
+  if (option.signature === 'vnewtd') return 0;
+  if (!option.isVirtual && /td$/i.test(option.signature)) return 1;
+  if (option.isVirtual) return 2;
+  return 3;
+}
+
+function formatSignatureOptionLabel(option: DomainAvailableSignature): string {
+  if (option.isVirtual) return option.label;
+  const defaultMatch = option.signature.match(/^v(\d+)td$/i);
+  if (defaultMatch) {
+    return `v${defaultMatch[1]} @ default`;
+  }
+  const tempMatch = option.signature.match(/^v(\d+)t(.+)$/i);
+  if (tempMatch) {
+    return `v${tempMatch[1]} @ t=${tempMatch[2]}`;
+  }
+  return option.label;
+}
+
 export function DomainAnalysis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -69,7 +89,17 @@ export function DomainAnalysis() {
   });
 
   const signatureOptions = useMemo<DomainAvailableSignature[]>(
-    () => signatureData?.domainAvailableSignatures ?? [],
+    () => {
+      const options = signatureData?.domainAvailableSignatures ?? [];
+      return options
+        .map((option, index) => ({ option, index }))
+        .sort((left, right) => {
+          const priorityDifference = getSignaturePriority(left.option) - getSignaturePriority(right.option);
+          if (priorityDifference !== 0) return priorityDifference;
+          return left.index - right.index;
+        })
+        .map(({ option }) => option);
+    },
     [signatureData],
   );
   const [{ data: findingsEligibilityData, fetching: findingsEligibilityLoading, error: findingsEligibilityError }] = useQuery<
@@ -282,7 +312,7 @@ export function DomainAnalysis() {
               )}
               {signatureOptions.map((signatureOption) => (
                 <option key={signatureOption.signature} value={signatureOption.signature}>
-                  {signatureOption.label}
+                  {formatSignatureOptionLabel(signatureOption)}
                 </option>
               ))}
             </select>

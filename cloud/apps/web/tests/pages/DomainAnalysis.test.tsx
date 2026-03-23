@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { DomainAnalysis } from '../../src/pages/DomainAnalysis';
 import {
@@ -46,6 +46,8 @@ describe('DomainAnalysis', () => {
         return [{
           data: {
             domainAvailableSignatures: [
+              { signature: 'vnewt0', label: 'Latest @ t=0', isVirtual: true, temperature: 0 },
+              { signature: 'vnewtd', label: 'Latest @ default', isVirtual: true, temperature: null },
               { signature: 'v1td', label: 'v1 default', isVirtual: false, temperature: null },
             ],
           },
@@ -128,5 +130,32 @@ describe('DomainAnalysis', () => {
     expect(screen.getByText(/launch snapshot boundary is not complete/i)).toBeInTheDocument();
     expect(screen.getByText(/what you are seeing on this page right now is domain-level diagnostic evidence/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /open domain evaluation and start a production run/i })).toBeInTheDocument();
+  });
+
+  it('defaults the signature dropdown to latest default when available', async () => {
+    render(
+      <MemoryRouter>
+        <DomainAnalysis />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(useQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            domainId: 'domain-a',
+            scoreMethod: 'FULL_BT',
+            signature: 'vnewtd',
+          }),
+        }),
+      );
+    });
+
+    const comboboxes = screen.getAllByRole('combobox');
+    const signatureSelect = comboboxes[1];
+    expect(signatureSelect).toHaveValue('vnewtd');
+
+    const optionLabels = within(signatureSelect).getAllByRole('option').map((option) => option.textContent);
+    expect(optionLabels.slice(0, 3)).toEqual(['Latest @ default', 'v1 @ default', 'Latest @ t=0']);
   });
 });
