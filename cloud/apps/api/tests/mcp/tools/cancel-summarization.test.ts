@@ -5,64 +5,102 @@
  * Service layer tests are in tests/services/run/summarization.test.ts
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { db } from '@valuerank/db';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Mock PgBoss
+const { db, mockRunState, mockTranscriptCount } = vi.hoisted(() => {
+  const state: {
+    run: null | {
+      id: string;
+      status: string;
+      summarizeProgress: { total: number; completed: number; failed: number } | null;
+      completedAt: Date | null;
+    };
+  } = {
+    run: null,
+  };
+
+  const countState = { value: 0 };
+
+  const run = {
+    findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+      if (!state.run || state.run.id !== where.id) return null;
+      return {
+        id: state.run.id,
+        status: state.run.status,
+        summarizeProgress: state.run.summarizeProgress,
+      };
+    }),
+    update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      if (!state.run || state.run.id !== where.id) {
+        throw new Error('Run not found');
+      }
+
+      state.run = {
+        ...state.run,
+        status: typeof data.status === 'string' ? data.status : state.run.status,
+        summarizeProgress: (data.summarizeProgress as {
+          total: number;
+          completed: number;
+          failed: number;
+        } | null) ?? state.run.summarizeProgress,
+        completedAt: (data.completedAt as Date | null) ?? state.run.completedAt,
+      };
+
+      return {
+        id: state.run.id,
+        status: state.run.status,
+        summarizeProgress: state.run.summarizeProgress,
+      };
+    }),
+  };
+
+  return {
+    db: {
+      run,
+      transcript: {
+        count: vi.fn(async () => countState.value),
+      },
+      $executeRaw: vi.fn(async () => 0),
+    },
+    mockRunState: state,
+    mockTranscriptCount: countState,
+  };
+});
+
+vi.mock('@valuerank/db', () => ({ db }));
 vi.mock('../../../src/queue/boss.js', () => ({
   getBoss: vi.fn(() => ({
     send: vi.fn().mockResolvedValue('mock-job-id'),
   })),
 }));
+vi.mock('../../../src/services/analysis/cache.js', () => ({
+  invalidateCache: vi.fn().mockResolvedValue(0),
+}));
 
-import {
-  cancelSummarization,
-  type CancelSummarizationResult,
-} from '../../../src/services/run/summarization.js';
+import { cancelSummarization } from '../../../src/services/run/summarization.js';
 
 describe('cancel_summarization MCP Tool [T034]', () => {
-  const createdDefinitionIds: string[] = [];
-  const createdRunIds: string[] = [];
-
-  afterEach(async () => {
-    for (const runId of createdRunIds) {
-      await db.transcript.deleteMany({ where: { runId } });
-      await db.runScenarioSelection.deleteMany({ where: { runId } });
-    }
-    await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
-    createdRunIds.length = 0;
-
-    await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
-    createdDefinitionIds.length = 0;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRunState.run = null;
+    mockTranscriptCount.value = 0;
   });
 
-  async function createTestRun(status: string) {
-    const definition = await db.definition.create({
-      data: {
-        name: 'MCP Cancel Test ' + Date.now(),
-        content: { schema_version: 1, preamble: 'Test' },
-      },
-    });
-    createdDefinitionIds.push(definition.id);
+  function createTestRun(status: string) {
+    const run = {
+      id: `run-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      status,
+      summarizeProgress: { total: 3, completed: 1, failed: 0 },
+      completedAt: null as Date | null,
+    };
 
-    const run = await db.run.create({
-      data: {
-        definitionId: definition.id,
-        status,
-        startedAt: new Date(),
-        config: { models: ['gpt-4'] },
-        progress: { total: 3, completed: 3, failed: 0 },
-        summarizeProgress: { total: 3, completed: 1, failed: 0 },
-      },
-    });
-    createdRunIds.push(run.id);
-
+    mockRunState.run = run;
     return run;
   }
 
   describe('input handling', () => {
     it('accepts valid run_id', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       const result = await cancelSummarization(run.id);
 
@@ -72,7 +110,7 @@ describe('cancel_summarization MCP Tool [T034]', () => {
 
   describe('success response format', () => {
     it('returns run with updated status', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       const result = await cancelSummarization(run.id);
 
@@ -80,7 +118,7 @@ describe('cancel_summarization MCP Tool [T034]', () => {
     });
 
     it('returns cancelled count', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       const result = await cancelSummarization(run.id);
 
@@ -89,7 +127,7 @@ describe('cancel_summarization MCP Tool [T034]', () => {
     });
 
     it('returns summarize progress', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       const result = await cancelSummarization(run.id);
 
@@ -107,19 +145,19 @@ describe('cancel_summarization MCP Tool [T034]', () => {
     });
 
     it('throws RunStateError when run is COMPLETED', async () => {
-      const run = await createTestRun('COMPLETED');
+      const run = createTestRun('COMPLETED');
 
       await expect(cancelSummarization(run.id)).rejects.toThrow(/cannot.*cancel/i);
     });
 
     it('throws RunStateError when run is RUNNING', async () => {
-      const run = await createTestRun('RUNNING');
+      const run = createTestRun('RUNNING');
 
       await expect(cancelSummarization(run.id)).rejects.toThrow(/cannot.*cancel/i);
     });
 
     it('throws RunStateError when run is FAILED', async () => {
-      const run = await createTestRun('FAILED');
+      const run = createTestRun('FAILED');
 
       await expect(cancelSummarization(run.id)).rejects.toThrow(/cannot.*cancel/i);
     });
@@ -127,7 +165,7 @@ describe('cancel_summarization MCP Tool [T034]', () => {
 
   describe('state transitions', () => {
     it('transitions SUMMARIZING to COMPLETED', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       await cancelSummarization(run.id);
 
@@ -136,12 +174,11 @@ describe('cancel_summarization MCP Tool [T034]', () => {
     });
 
     it('sets completedAt timestamp', async () => {
-      const run = await createTestRun('SUMMARIZING');
+      const run = createTestRun('SUMMARIZING');
 
       await cancelSummarization(run.id);
 
-      const updatedRun = await db.run.findUnique({ where: { id: run.id } });
-      expect(updatedRun?.completedAt).not.toBeNull();
+      expect(mockRunState.run?.completedAt).not.toBeNull();
     });
   });
 });
