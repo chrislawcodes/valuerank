@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
-import { getAuthHeader } from '../../test-utils.js';
+import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 
 const app = createServer();
 
@@ -142,6 +142,16 @@ describe('GraphQL Scalar Types', () => {
     });
 
     it('parses JSON input in mutations', async () => {
+      await db.user.upsert({
+        where: { id: TEST_USER.id },
+        create: {
+          id: TEST_USER.id,
+          email: TEST_USER.email,
+          passwordHash: 'test-hash',
+        },
+        update: {},
+      });
+
       const mutation = `
         mutation CreateDefinition($input: CreateDefinitionInput!) {
           createDefinition(input: $input) {
