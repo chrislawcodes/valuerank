@@ -123,7 +123,14 @@ class RepairDecisionTests(unittest.TestCase):
             {
                 "blocked": {"active": False},
                 "delivery": {},
-                "discovery": {"required": True, "complete": False},
+                "discovery": {
+                    "required": True,
+                    "complete": False,
+                    "answers": {},
+                    "unresolved": [],
+                    "non_goals": [],
+                    "acceptance_criteria": [],
+                },
             },
             stages,
             True,
@@ -143,7 +150,14 @@ class RepairDecisionTests(unittest.TestCase):
             {
                 "blocked": {"active": True},
                 "delivery": {},
-                "discovery": {"required": True, "complete": False},
+                "discovery": {
+                    "required": True,
+                    "complete": False,
+                    "answers": {},
+                    "unresolved": [],
+                    "non_goals": [],
+                    "acceptance_criteria": [],
+                },
             },
             stages,
             True,
@@ -293,6 +307,10 @@ class RepairDecisionTests(unittest.TestCase):
             "assumptions": ["Faster clarity beats extra approval ceremony."],
             "summary": "Discovery is still in progress.",
             "updated_at": 1,
+            "answers": {},
+            "unresolved": [],
+            "non_goals": [],
+            "acceptance_criteria": [],
         }
         with patch.object(MODULE, "ensure_sync"), patch.object(
             MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
@@ -431,7 +449,18 @@ class RepairDecisionTests(unittest.TestCase):
         with patch.object(MODULE, "ensure_sync"), patch.object(
             MODULE, "prerequisite_failure", return_value=None
         ), patch.object(
-            MODULE, "discovery_state", return_value={"required": True, "complete": False, "question_count": 5, "asked_count": 2}
+            MODULE,
+            "discovery_state",
+            return_value={
+                "required": True,
+                "complete": False,
+                "question_count": 5,
+                "asked_count": 2,
+                "answers": {},
+                "unresolved": [],
+                "non_goals": [],
+                "acceptance_criteria": [],
+            },
         ):
             with self.assertRaises(SystemExit) as ctx:
                 MODULE.command_checkpoint(args)
@@ -487,6 +516,10 @@ class RepairDecisionTests(unittest.TestCase):
                             "assumptions": ["x"],
                             "summary": "old",
                             "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
                         }
                     }
                 ),
@@ -537,6 +570,10 @@ class RepairDecisionTests(unittest.TestCase):
                             "assumptions": [],
                             "summary": "",
                             "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
                         }
                     }
                 ),
@@ -562,6 +599,159 @@ class RepairDecisionTests(unittest.TestCase):
                     MODULE.command_discover(args)
 
         self.assertIn("force-complete", str(ctx.exception))
+
+    def _write_discovery_state(self, path: Path, **updates) -> None:
+        discovery = FACTORY_STATE.default_discovery_state()
+        discovery.update(updates)
+        path.write_text(json.dumps({"discovery": discovery}), encoding="utf-8")
+
+    def _discover_args(self, **overrides) -> SimpleNamespace:
+        base = {
+            "slug": "feature-workflow-discovery-shaping",
+            "required": False,
+            "count": None,
+            "question": None,
+            "recommendation": None,
+            "rationale": None,
+            "assumption": [],
+            "summary": None,
+            "complete": False,
+            "force_complete": False,
+            "clear": False,
+            "unresolved": None,
+            "resolve": None,
+            "defer": None,
+            "non_goal": None,
+            "acceptance_criteria": None,
+            "answer": None,
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_command_discover_unresolved_adds_item_with_deferred_false(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            args = self._discover_args(unresolved="Need API contract")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["discovery"]["unresolved"],
+                [{"item": "Need API contract", "deferred": False}],
+            )
+
+    def test_command_discover_resolve_removes_item_by_exact_text_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            self._write_discovery_state(
+                state_path,
+                required=True,
+                complete=False,
+                unresolved=[
+                    {"item": "Keep this", "deferred": False},
+                    {"item": "Remove this", "deferred": False},
+                ],
+            )
+            args = self._discover_args(resolve="Remove this")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual([u["item"] for u in saved["discovery"]["unresolved"]], ["Keep this"])
+
+    def test_command_discover_resolve_noop_when_item_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            self._write_discovery_state(
+                state_path,
+                required=True,
+                complete=False,
+                unresolved=[{"item": "Keep this", "deferred": False}],
+            )
+            args = self._discover_args(resolve="Missing item")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual([u["item"] for u in saved["discovery"]["unresolved"]], ["Keep this"])
+
+    def test_command_discover_defer_marks_matching_item_deferred(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            self._write_discovery_state(
+                state_path,
+                required=True,
+                complete=False,
+                unresolved=[{"item": "Need follow-up", "deferred": False}],
+            )
+            args = self._discover_args(defer="Need follow-up")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["discovery"]["unresolved"],
+                [{"item": "Need follow-up", "deferred": True}],
+            )
+
+    def test_command_discover_non_goal_appends_deduplicated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            args = self._discover_args(non_goal="Avoid broad scope")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                first_exit = MODULE.command_discover(args)
+                second_exit = MODULE.command_discover(args)
+
+            self.assertEqual(first_exit, 0)
+            self.assertEqual(second_exit, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["discovery"]["non_goals"], ["Avoid broad scope"])
+
+    def test_command_discover_acceptance_criteria_appends_deduplicated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            args = self._discover_args(acceptance_criteria="Clear owner for each decision")
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                first_exit = MODULE.command_discover(args)
+                second_exit = MODULE.command_discover(args)
+
+            self.assertEqual(first_exit, 0)
+            self.assertEqual(second_exit, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["discovery"]["acceptance_criteria"], ["Clear owner for each decision"])
+
+    def test_command_discover_answer_records_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            args = self._discover_args(answer=("What is the goal?", "Ship the first slice"))
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["discovery"]["answers"],
+                {"What is the goal?": "Ship the first slice"},
+            )
 
     def test_command_deliver_dry_run_does_not_mutate_delivery_state(self) -> None:
         args = SimpleNamespace(

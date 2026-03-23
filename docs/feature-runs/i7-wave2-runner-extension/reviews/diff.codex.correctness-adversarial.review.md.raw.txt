@@ -1,0 +1,6 @@
+## Findings
+- High: `command_discover` no longer refuses discovery states with a newer `version` than this runner understands. The old early return was the only compatibility guard; after this patch, the code will attempt to migrate and rewrite those states anyway. If `migrate_discovery_state` does not fully understand the newer schema, this can silently drop unknown fields or corrupt state instead of failing closed.
+
+## Residual Risks
+- The new `--resolve` and `--defer` paths assume every `unresolved` entry is a dict with an `item` key. Any legacy or manually edited state that stores a different shape will now raise during discovery updates.
+- There is no test coverage for encountering a future discovery-state version after the version check was removed, so the compatibility behavior of `migrate_discovery_state` is still unverified.

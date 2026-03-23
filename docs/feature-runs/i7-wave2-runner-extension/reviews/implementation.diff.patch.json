@@ -1,0 +1,19 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "123d8a6ef3d72b14f018f369abb56ff9129d5276",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "1bc92c5502d64397cd53f28fed52f4f58ff07934",
+  "paths": [
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ],
+  "allowed_dirty_paths": [
+    ".obsidian",
+    "docs/feature-runs/feature-workflow-discovery-shaping",
+    "docs/feature-runs/stall-watchdog",
+    "specs/028-stall-watchdog"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/feature-runs/i7-wave2-runner-extension/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

@@ -1,0 +1,11 @@
+{
+  "paths": [
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ],
+  "allowed_dirty_paths": [
+    "docs/feature-runs/i7-wave2-runner-extension",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ]
+}
