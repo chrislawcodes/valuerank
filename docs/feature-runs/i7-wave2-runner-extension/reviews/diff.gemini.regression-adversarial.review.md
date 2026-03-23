@@ -3,14 +3,14 @@ reviewer: "gemini"
 lens: "regression-adversarial"
 stage: "diff"
 artifact_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/implementation.diff.patch"
-artifact_sha256: "99a05317795b45a2903fd8339994a1521af3b4693da3ed787ff3d76e9886a73c"
+artifact_sha256: "33b415e439225716d3f4adcdeecab1e33fcdfe56eaabe8427415d30f269339e7"
 repo_root: "."
-git_head_sha: "9b6c1a437d3a3ef0e805b848fb4a74fc9266e200"
+git_head_sha: "123d8a6ef3d72b14f018f369abb56ff9129d5276"
 git_base_ref: "origin/main"
 git_base_sha: "1bc92c5502d64397cd53f28fed52f4f58ff07934"
 generation_method: "gemini-cli"
 resolution_status: "accepted"
-resolution_note: "Non-iterable V2 fields now guarded by _safe_list() in discovery_state(). Resolve/defer inconsistency deferred. Silent no-op deferred to Wave 4."
+resolution_note: "Round 3 findings: migration idempotent and well-tested (Wave 1, 13 tests). _safe_list() defensive loading added. Resolve/defer duplicate inconsistency deferred. Silent no-op deferred to Wave 4."
 raw_output_path: "docs/feature-runs/i7-wave2-runner-extension/reviews/diff.gemini.regression-adversarial.review.md.json"
 narrowed_artifact_path: ""
 narrowed_artifact_sha256: ""
@@ -22,25 +22,96 @@ coverage_note: ""
 
 ## Findings
 
-1.  **High Severity: Inconsistent Behavior for Duplicate `unresolved` Items.** The `--resolve` and `--defer` commands behave differently when multiple unresolved items share the same text. `--resolve` uses a list comprehension that removes *all* items matching the text, while `--defer` uses a `for` loop with a `break` that only modifies the *first* match. This inconsistency can lead to unexpected behavior and data states. A user would reasonably expect these related commands to operate on either the first match or all matches, but not a mix of both.
+Here is a regression-adversarial review of the artifact. The findings are ordered by severity.
 
-2.  **Medium Severity: Potential Crash on Malformed State File.** The `discovery_state` function is not fully resilient to corrupted state data. Lines such as `merged["unresolved"] = list(merged.get("unresolved", []))` will raise a `TypeError` if the value for `"unresolved"` in the state file is a non-iterable (e.g., a string or integer instead of a list). This would cause the script to crash. Since state files can be manually edited or corrupted, the loading mechanism should be more defensive and validate the types of incoming data, especially before a migration is attempted.
+### 1. **High Severity: Forward-Compatibility Safety Net Removed**
 
-3.  **Low Severity: Silent Failure When Match Is Not Found.** When using `--resolve` or `--defer` with text that doesn't match any existing unresolved item, the command completes successfully with exit code 0 but performs no action. This provides no feedback to the user, who may assume the operation succeeded. The script should warn the user when a specified item to resolve or defer was not found.
+The most critical issue is the removal of the discovery state version check:
+
+```diff
+-    if discovery.get("version", 1) \!= 1:
+-        print(f"workflow: {args.slug}")
+-        print("discovery:")
+-        print(f"- version: {discovery.get('version', 1)}")
+-        print("- warning: discovery state version is newer than this runner understands")
+-        return 0
+```
+
+**Adversarial Analysis:**
+This check was a crucial safety mechanism that prevented older versions of the script from reading and potentially corrupting a newer state format they don't understand. By removing it, the script now silently assumes it can handle any state it encounters.
+
+**Regression Scenario:**
+1.  A user runs this new version of `run_factory.py`, which creates/updates a state file with new fields like `unresolved` and `acceptance_criteria`.
+2.  Another user (or a CI system) on an older branch runs an older version of `run_factory.py` against the same state file.
+3.  The old script, lacking this version check, will read the file, ignore the unknown fields, perform its operations, and write the state back, potentially **deleting the new fields** (`unresolved`, `acceptance_criteria`, etc.) entirely. This causes silent data loss.
+
+This change introduces a significant regression in data integrity when multiple versions of the script are in use.
+
+### 2. **Medium Severity: Implicit, Untested State Migration**
+
+The diff introduces a `migrate_discovery_state` function, but its implementation and tests are not provided.
+
+```python
+# run_factory.py
+merged = migrate_discovery_state(merged)
+
+# run_factory.py
+def _migrated_mutate(state: dict):
+    discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    migrated = migrate_discovery_state(discovery)
+    # ...
+```
+
+**Adversarial Analysis:**
+The state mutation logic now depends entirely on this unseen migration function. The `update_discovery_state` function applies this migration on every single write.
+-   The migration logic itself is a black box. It could contain bugs that corrupt or misinterpret state.
+-   The tests do not validate the migration path. There are no tests that load a legacy state object (pre-change), run a command, and assert that the new fields (`unresolved`, `non_goals`, etc.) are correctly initialized.
+-   While existing tests are updated with the new fields, they use default empty values. This confirms the new structure won't break old tests but fails to confirm the migration from the old structure to the new one actually works.
+
+This creates a blind spot where the critical path for state evolution is completely unverified.
+
+### 3. **Low Severity: State Completion Logic is Brittle**
+
+The logic for marking the discovery phase as incomplete is now tied to any modification of the new fields.
+
+```python
+# run_factory.py
+elif (
+    #...
+    or getattr(args, "non_goal", None) is not None
+    or getattr(args, "acceptance_criteria", None) is not None
+):
+    discovery["complete"] = False
+```
+
+**Adversarial Analysis:**
+This assumes that adding, for example, a "non-goal" or "acceptance criterion" should always invalidate the completion of the discovery phase. This might be undesirable. A user may consider discovery complete but want to add a clarifying non-goal afterward without having to re-run the completion steps (`--complete --force-complete`). This UX assumption makes the workflow more rigid than necessary.
+
+### 4. **Low Severity: Test Coverage is Limited to "Happy Paths"**
+
+The new tests in `test_run_factory_repair.py` validate that the new commands work as expected under normal conditions but fail to explore edge cases or negative scenarios.
+
+**Adversarial Analysis:**
+The tests are missing:
+-   **Idempotency checks:** What happens if you `--defer` an already-deferred item or `--resolve` an item that doesn't exist?
+-   **Input validation:** What happens with empty strings (e.g., `discover --non-goal ""`)?
+-   **State interaction:** What happens if you try to `--resolve` a deferred item?
+-   **Conflict scenarios:** Although the code prevents adding duplicate `unresolved` items, a test could manually create a state with duplicates to confirm that `--resolve` and `--defer` only act on the first match, which is important but potentially non-obvious behavior.
+
+Without these tests, the robustness of the new functionality is unproven.
 
 ## Residual Risks
 
-1.  **State Corruption via Race Conditions.** The script appears to follow a read-modify-write pattern on a shared JSON state file without implementing any file-locking mechanism. If two instances of the script are run concurrently, they can read the same initial state, and the last one to write will overwrite the changes of the first, leading to lost updates and potential state corruption.
-
-2.  **Migration Logic Brittleness.** The change introduces a `migrate_discovery_state` function, which is now critical for maintaining data integrity across versions. The implementation of this function is not visible in the diff. Any lack of idempotency (i.e., applying the migration multiple times changes the result) or inability to handle states from various older versions could lead to irreversible data loss or corruption. The current design, which runs the migration on every read and write, is heavily dependent on this function being perfectly robust.
+-   **Race Conditions:** The `read -> modify -> write` pattern for the JSON state file is inherently vulnerable to race conditions if two processes execute `run_factory.py` concurrently. One process could overwrite the changes of another. The diff does not show any file-locking mechanism, so this risk remains.
+-   **Fragile String-Based Matching:** The `--resolve` and `--defer` commands identify items by exact text match. While the script attempts to enforce uniqueness, any manual edit or future bug that introduces items with identical text will make these commands ambiguous, as they will only operate on the first match found.
 
 ## Token Stats
 
-- total_input=738
-- total_output=522
-- total_tokens=21031
-- `gemini-2.5-pro`: input=738, output=522, total=21031
+- total_input=6068
+- total_output=1186
+- total_tokens=22471
+- `gemini-2.5-pro`: input=6068, output=1186, total=22471
 
 ## Resolution
 - status: accepted
-- note: Non-iterable V2 fields now guarded by _safe_list() in discovery_state(). Resolve/defer inconsistency deferred. Silent no-op deferred to Wave 4.
+- note: Round 3 findings: migration idempotent and well-tested (Wave 1, 13 tests). _safe_list() defensive loading added. Resolve/defer duplicate inconsistency deferred. Silent no-op deferred to Wave 4.

@@ -1,5 +1,5 @@
 diff --git a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
-index 31e896ff..2d9d8a6d 100644
+index 31e896ff..fc923128 100644
 --- a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
 +++ b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
 @@ -35,6 +35,7 @@ from factory_state import (  # noqa: E402
@@ -10,13 +10,19 @@ index 31e896ff..2d9d8a6d 100644
  )
  
  REVIEW_SCRIPTS = REPO_ROOT / "docs" / "operations" / "codex-skills" / "review-lens" / "scripts"
-@@ -287,11 +288,20 @@ def discovery_state(slug: str) -> dict:
+@@ -285,13 +286,24 @@ def discovery_state(slug: str) -> dict:
+     state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
+     merged = default_discovery_state()
      merged.update(state if isinstance(state, dict) else {})
-     merged["questions"] = list(merged.get("questions", []))
-     merged["assumptions"] = list(merged.get("assumptions", []))
-+    merged["unresolved"] = list(merged.get("unresolved", []))
-+    merged["non_goals"] = list(merged.get("non_goals", []))
-+    merged["acceptance_criteria"] = list(merged.get("acceptance_criteria", []))
+-    merged["questions"] = list(merged.get("questions", []))
+-    merged["assumptions"] = list(merged.get("assumptions", []))
++    def _safe_list(val) -> list:
++        return list(val) if isinstance(val, list) else []
++    merged["questions"] = _safe_list(merged.get("questions"))
++    merged["assumptions"] = _safe_list(merged.get("assumptions"))
++    merged["unresolved"] = _safe_list(merged.get("unresolved"))
++    merged["non_goals"] = _safe_list(merged.get("non_goals"))
++    merged["acceptance_criteria"] = _safe_list(merged.get("acceptance_criteria"))
 +    merged = migrate_discovery_state(merged)
      return merged
  
@@ -32,7 +38,7 @@ index 31e896ff..2d9d8a6d 100644
  
  
  def save_scope_manifest(slug: str, paths: list[str]) -> Path:
-@@ -1345,6 +1355,12 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1345,6 +1357,12 @@ def command_discover(args: argparse.Namespace) -> int:
              args.summary is not None,
              args.complete,
              force_complete,
@@ -45,7 +51,7 @@ index 31e896ff..2d9d8a6d 100644
          ]
      ):
          raise SystemExit("discover --clear cannot be combined with other discovery updates")
-@@ -1363,6 +1379,12 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1363,6 +1381,12 @@ def command_discover(args: argparse.Namespace) -> int:
              args.summary is not None,
              args.complete,
              force_complete,
@@ -58,7 +64,7 @@ index 31e896ff..2d9d8a6d 100644
          ]
      ):
          raise SystemExit("discover requires at least one update, or use --clear to reset discovery state")
-@@ -1407,6 +1429,35 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1407,6 +1431,35 @@ def command_discover(args: argparse.Namespace) -> int:
          if args.summary is not None:
              discovery["summary"] = args.summary
              discovery["required"] = discovery["required"] or bool(args.summary.strip())
@@ -94,7 +100,7 @@ index 31e896ff..2d9d8a6d 100644
          if args.complete:
              if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
                  raise SystemExit(
-@@ -1414,7 +1465,19 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1414,7 +1467,19 @@ def command_discover(args: argparse.Namespace) -> int:
                      "use --force-complete if you intentionally want to override the count"
                  )
              discovery["complete"] = True
@@ -115,7 +121,7 @@ index 31e896ff..2d9d8a6d 100644
              discovery["complete"] = False
          if force_complete:
              discovery["complete"] = True
-@@ -1422,12 +1485,6 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1422,12 +1487,6 @@ def command_discover(args: argparse.Namespace) -> int:
  
      state = update_discovery_state(args.slug, mutate)
      discovery = state.get(DISCOVERY_KEY, {})
@@ -128,7 +134,7 @@ index 31e896ff..2d9d8a6d 100644
      remaining = max(int(discovery.get("question_count", 0)) - int(discovery.get("asked_count", 0)), 0)
      print(f"workflow: {args.slug}")
      print("discovery:")
-@@ -1443,6 +1500,21 @@ def command_discover(args: argparse.Namespace) -> int:
+@@ -1443,6 +1502,21 @@ def command_discover(args: argparse.Namespace) -> int:
              print(f"- assumption: {assumption}")
      if discovery.get("summary"):
          print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
@@ -150,7 +156,7 @@ index 31e896ff..2d9d8a6d 100644
      return 0
  
  
-@@ -2158,6 +2230,18 @@ def build_parser() -> argparse.ArgumentParser:
+@@ -2158,6 +2232,18 @@ def build_parser() -> argparse.ArgumentParser:
      discover_parser.add_argument("--assumption", action="append", default=[])
      discover_parser.add_argument("--summary")
      discover_parser.add_argument("--complete", action="store_true")
