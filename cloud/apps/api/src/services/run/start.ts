@@ -895,6 +895,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
       data: {
         status: 'FAILED',
         completedAt: new Date(),
+        stalledModels: [],
       },
     });
     // Any jobs that were already enqueued before failure are safely ignored by workers:

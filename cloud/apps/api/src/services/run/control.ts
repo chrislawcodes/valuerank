@@ -46,7 +46,7 @@ export async function pauseRun(runId: string): Promise<{
 
   const updatedRun = await db.run.update({
     where: { id: runId },
-    data: { status: 'PAUSED' },
+    data: { status: 'PAUSED', stalledModels: [] },
     select: { id: true, status: true, progress: true },
   });
 
@@ -148,6 +148,7 @@ export async function cancelRun(runId: string): Promise<{
     data: {
       status: 'CANCELLED',
       completedAt: new Date(),
+      stalledModels: [],
     },
     select: { id: true, status: true, progress: true },
   });
