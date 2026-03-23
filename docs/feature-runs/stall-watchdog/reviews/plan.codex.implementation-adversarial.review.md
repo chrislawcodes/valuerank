@@ -1,0 +1,49 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/feature-runs/stall-watchdog/plan.md"
+artifact_sha256: "3e80be95fdaa13bb3a8ac657961ba293c58353bd9d6e2889fff1b106899267c7"
+repo_root: "."
+git_head_sha: "c16754b277e7f93f31eb63486dc5be9dc6320105"
+git_base_ref: "origin/main"
+git_base_sha: "1bc92c5502d64397cd53f28fed52f4f58ff07934"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "First-probe stall fixed: use run.startedAt as baseline when no SUCCESS exists. signalRunActivity gated on totalStalled>0. Status transition sites enumerated in plan. FR-012 dropped: maintained decision, false positive <3min. Concurrent writers: acceptable last-write-wins at current scheduler frequency."
+raw_output_path: "docs/feature-runs/stall-watchdog/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+1. `updateRunStalledModels()` is race-prone and can resurrect stale stall state after a run has already left `RUNNING`. The scheduler reads a snapshot of running runs, then updates `stalledModels` later without re-checking `status` or using a compare-and-swap guard. If a completion, cancel, or pause path clears the field between those two steps, the later scheduler write can put stale values back onto a terminal run and keep the banner alive incorrectly.
+
+2. Dropping FR-012 is not a small UX tradeoff; it makes resume behavior knowingly wrong. The plan uses `startedAt` as the only time anchor and explicitly says resumed runs may be flagged on the first tick after resume. Because there is no `resumedAt` or equivalent marker, a run that was paused for a while is still treated as old immediately after resuming, so the banner can show false stalls right when operators expect the run to recover.
+
+3. The clearing strategy for `stalledModels` is incomplete and easy to miss in practice. The plan only tells the implementor to grep `db.run.update` calls, but terminal state changes can also happen through `updateMany`, helper wrappers, raw SQL, or other non-obvious paths. Any missed write path will leave stale stall data behind forever after a run leaves `RUNNING`, so a manual grep checklist is too weak for a state field that must be kept authoritative.
+
+4. `detectStalledModels()` can hide real stalls because it works at the model level and treats any recent success for that model as progress. If one probe for a model is healthy while another probe for the same model is wedged, the model will not be marked stalled as long as the healthy probe keeps succeeding inside the threshold window. That means the banner can under-report stuck work and give a false sense that the model is fine.
+
+5. The plan does not normalize stalled model order before comparing or persisting arrays. Both queries can return IDs in nondeterministic order, but `updateRunStalledModels()` compares `newStalled` and `run.stalledModels` as raw arrays. That can cause repeated updates and repeated warning logs even when the set of stalled models has not actually changed.
+
+## Residual Risks
+
+- The 3-minute threshold is hard-coded and may be too aggressive for legitimately slow probes, especially under load or on cold starts.
+- Detection lag is bounded by the scheduler interval plus the threshold, so stalls may remain invisible for several minutes even when the logic is correct.
+- The plan assumes `runId` and `modelId` are always present and well-formed in PgBoss job payloads; any legacy or malformed jobs will be invisible to the detector.
+- Querying `pgboss.job` and `probe_results` on every scheduler tick may become a noticeable load source if either table grows quickly.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: First-probe stall fixed: use run.startedAt as baseline when no SUCCESS exists. signalRunActivity gated on totalStalled>0. Status transition sites enumerated in plan. FR-012 dropped: maintained decision, false positive <3min. Concurrent writers: acceptable last-write-wins at current scheduler frequency.
