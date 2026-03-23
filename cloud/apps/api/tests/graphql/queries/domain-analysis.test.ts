@@ -6,7 +6,7 @@ import { TEST_USER, getAuthHeader } from '../../test-utils.js';
 
 const app = createServer();
 
-describe('GraphQL domain analysis value detail', () => {
+describe('GraphQL domain analysis', () => {
   const createdDomainIds: string[] = [];
   const createdDefinitionIds: string[] = [];
   const createdRunIds: string[] = [];
@@ -45,11 +45,11 @@ describe('GraphQL domain analysis value detail', () => {
     await db.user.deleteMany({ where: { id: TEST_USER.id } });
   });
 
-  it('keeps scenario dimensions for job-choice value detail matrices', async () => {
+  it('analyzes lowercase job-choice pairs for both orientations', async () => {
     const domain = await db.domain.create({
       data: {
-        name: `Job Choice Detail Matrix ${Date.now()}`,
-        normalizedName: `job-choice-detail-matrix-${Date.now()}`,
+        name: `Job Choice Analysis Fix ${Date.now()}`,
+        normalizedName: `job-choice-analysis-fix-${Date.now()}`,
       },
     });
     createdDomainIds.push(domain.id);
@@ -76,8 +76,8 @@ describe('GraphQL domain analysis value detail', () => {
             pair_key: 'pair-a',
           },
           dimensions: [
-            { name: 'Achievement' },
-            { name: 'Benevolence_Dependability' },
+            { name: 'achievement' },
+            { name: 'benevolence_dependability' },
           ],
         },
       },
@@ -100,8 +100,8 @@ describe('GraphQL domain analysis value detail', () => {
             pair_key: 'pair-b',
           },
           dimensions: [
-            { name: 'Achievement' },
-            { name: 'Benevolence_Dependability' },
+            { name: 'achievement' },
+            { name: 'benevolence_dependability' },
           ],
         },
       },
@@ -136,21 +136,7 @@ describe('GraphQL domain analysis value detail', () => {
     });
     createdScenarioIds.push(aScenario.id);
 
-    await db.transcript.create({
-      data: {
-        runId: aRun.id,
-        scenarioId: aScenario.id,
-        modelId: 'job-choice-detail-model',
-        content: { messages: [] },
-        decisionCode: '5',
-        decisionCodeSource: 'manual',
-        turnCount: 2,
-        tokenCount: 100,
-        durationMs: 1000,
-      },
-    });
-
-    await db.run.create({
+    const bRun = await db.run.create({
       data: {
         definitionId: bFirstDefinition.id,
         status: 'COMPLETED',
@@ -160,19 +146,63 @@ describe('GraphQL domain analysis value detail', () => {
         completedAt: new Date(),
       },
     });
+    createdRunIds.push(bRun.id);
+
+    await db.transcript.create({
+      data: {
+        runId: aRun.id,
+        scenarioId: aScenario.id,
+        modelId: 'job-choice-analysis-model',
+        content: { messages: [] },
+        decisionCode: '5',
+        decisionCodeSource: 'manual',
+        turnCount: 2,
+        tokenCount: 100,
+        durationMs: 1000,
+      },
+    });
+
+    await db.transcript.create({
+      data: {
+        runId: bRun.id,
+        modelId: 'job-choice-analysis-model',
+        content: { messages: [] },
+        decisionCode: '5',
+        decisionCodeSource: 'manual',
+        turnCount: 2,
+        tokenCount: 100,
+        durationMs: 1000,
+      },
+    });
 
     const query = `
-      query JobChoiceValueDetail($domainId: ID!, $signature: String!, $modelId: String!, $valueKey: String!, $scoreMethod: String!) {
-        detail: domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, scoreMethod: $scoreMethod, signature: $signature) {
+      query JobChoiceDomainAnalysis($domainId: ID!, $signature: String!, $modelId: String!, $valueKey: String!) {
+        analysis: domainAnalysis(domainId: $domainId, signature: $signature) {
+          models {
+            model
+            values {
+              valueKey
+              prioritized
+              deprioritized
+              neutral
+              totalComparisons
+            }
+          }
+        }
+        detail: domainAnalysisValueDetail(domainId: $domainId, modelId: $modelId, valueKey: $valueKey, signature: $signature) {
           targetedDefinitions
           coveredDefinitions
+          prioritized
+          deprioritized
+          neutral
+          totalTrials
           vignettes {
             definitionName
-            conditions {
-              scenarioId
-              conditionName
-              dimensions
-            }
+            otherValueKey
+            prioritized
+            deprioritized
+            neutral
+            totalTrials
           }
         }
       }
@@ -186,36 +216,76 @@ describe('GraphQL domain analysis value detail', () => {
         variables: {
           domainId: domain.id,
           signature: 'vnewtd',
-          modelId: 'job-choice-detail-model',
+          modelId: 'job-choice-analysis-model',
           valueKey: 'Achievement',
-          scoreMethod: 'FULL_BT',
         },
       })
       .expect(200);
 
     expect(response.body.errors).toBeUndefined();
 
+    const analysis = response.body.data.analysis as {
+      models: Array<{
+        model: string;
+        values: Array<{
+          valueKey: string;
+          prioritized: number;
+          deprioritized: number;
+          neutral: number;
+          totalComparisons: number;
+        }>;
+      }>;
+    };
+    const model = analysis.models.find((entry) => entry.model === 'job-choice-analysis-model');
+    expect(model).toBeDefined();
+
+    const valueByKey = new Map(model?.values.map((value) => [value.valueKey, value]) ?? []);
+    expect(valueByKey.get('Achievement')).toEqual({
+      valueKey: 'Achievement',
+      prioritized: 1,
+      deprioritized: 1,
+      neutral: 0,
+      totalComparisons: 2,
+    });
+    expect(valueByKey.get('Benevolence_Dependability')).toEqual({
+      valueKey: 'Benevolence_Dependability',
+      prioritized: 1,
+      deprioritized: 1,
+      neutral: 0,
+      totalComparisons: 2,
+    });
+
     const detail = response.body.data.detail as {
       targetedDefinitions: number;
       coveredDefinitions: number;
+      prioritized: number;
+      deprioritized: number;
+      neutral: number;
+      totalTrials: number;
       vignettes: Array<{
         definitionName: string;
-        conditions: Array<{
-          scenarioId: string | null;
-          conditionName: string;
-          dimensions: Record<string, string | number> | null;
-        }>;
+        otherValueKey: string;
+        prioritized: number;
+        deprioritized: number;
+        neutral: number;
+        totalTrials: number;
       }>;
     };
 
     expect(detail.targetedDefinitions).toBe(2);
     expect(detail.coveredDefinitions).toBe(2);
-
-    const aDetail = detail.vignettes.find((vignette) => vignette.definitionName === 'Job Choice A First');
-    expect(aDetail?.conditions).toHaveLength(1);
-    expect(aDetail?.conditions[0]?.dimensions).toEqual({
-      autonomy: 'very high',
-      risk: 'low',
-    });
+    expect(detail.prioritized).toBe(1);
+    expect(detail.deprioritized).toBe(1);
+    expect(detail.neutral).toBe(0);
+    expect(detail.totalTrials).toBe(2);
+    expect(detail.vignettes).toHaveLength(2);
+    expect(detail.vignettes.map((vignette) => vignette.definitionName).sort()).toEqual([
+      'Job Choice A First',
+      'Job Choice B First',
+    ]);
+    expect(detail.vignettes.map((vignette) => vignette.otherValueKey)).toEqual([
+      'Benevolence_Dependability',
+      'Benevolence_Dependability',
+    ]);
   });
 });
