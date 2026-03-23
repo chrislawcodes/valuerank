@@ -1,0 +1,88 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d190e-78e1-7631-985a-31bd7450ed62
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Wave 2 Spec: Runner Extension — Migration Wire-up + V2 CLI Flags
+
+## Objective
+
+Wire `migrate_discovery_state()` into `discovery_state()` so all in-memory blobs are V2
+regardless of what's on disk. Add new CLI flags to `command_discover()` for populating V2 fields.
+Remove the V1-only version guard that blocks V2 state from being displayed.
+
+## Files
+
+- `docs/operations/codex-skills/feature-factory/scripts/run_factory.py`
+- `docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py`
+
+## Changes
+
+### run_factory.py
+
+1. Add `migrate_discovery_state` to the `from factory_state import (...)` block
+2. In `discovery_state()`: after `.update()` merge, initialize V2 list fields and call `migrate_discovery_state(merged)`
+3. Remove the `if discovery.get("version", 1) != 1:` early-exit guard in `command_discover()`
+4. Add V2 flag checks to the `--clear` mutual-exclusion guard and the "at least one update" guard
+5. Add V2 mutation handlers inside `command_discover.mutate()` for: `--answer`, `--unresolved`, `--resolve`, `--defer`, `--non-goal`, `--acceptance-criteria`
+6. Register new argparse flags on `discover_parser`
+7. Extend status output section to print V2 fields
+
+### test_run_factory_repair.py
+
+1. Update V1 fixture dicts to include V2 keys with empty defaults
+2. Add 6+ new tests for V2 flag behavior
+
+## Do Not Touch
+
+- `factory_state.py`
+- `command_checkpoint()` gate logic
+- `SKILL.md`
+- `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, `.gitignore`
+
+## Verification
+
+```bash
+cd docs/operations/codex-skills/feature-factory
+python -m pytest tests/ -q  # all tests must pass
+```
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+I’m reviewing the spec itself against feasibility and edge cases, not the code. I’ll focus on places where the described changes can still fail, be incomplete, or leave behavior ambiguous.
+codex
+## Findings
+- High: The spec says to "initialize V2 list fields" in `discovery_state()` after merging, but it never says to preserve pre-existing V2 values. If this is implemented as direct assignment instead of `setdefault`, any already-present V2 data on disk will be wiped before migration runs, causing silent data loss.
+- High: The versioning story is incomplete. The spec removes the guard that blocks non-V1 state but never says when or whether `version` is normalized to 2, or what to do with malformed or future-version blobs. That leaves a mismatch where V2-shaped in-memory state can still advertise V1, or unexpected versions can flow through unvalidated.
+- Medium: `--clear` behavior is only partially specified. Adding V2 flags to the exclusion/update guards does not say whether a standalone `--clear` clears the new V2 fields too. If it does not, users can clear the legacy fields and keep stale V2 state, which breaks the expected reset semantics.
+- Medium: The new CLI flags are underdefined. The spec names the flags but does not pin down whether each flag is single-value or repeatable, how empty values are handled, or how conflicts are resolved when V1 and V2 inputs are both present. That leaves room for an inconsistent CLI that the stated tests may not catch.
+
+## Residual Risks
+- `migrate_discovery_state()` still needs to be idempotent; if it rewrites data on every `discovery_state()` call, repeated reads can drift state.
+- The proposed tests focus on happy-path V2 flag behavior, but may still miss mixed legacy/new blobs and malformed on-disk states.
+- The status output change may preserve data but still differ in ordering or formatting unless the spec pins that down.
+tokens used
+6,805

@@ -1,0 +1,832 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d1916-85ef-7d22-afaf-b0ca19c4bf08
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
+index 31e896ff..49ab3a4e 100644
+--- a/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
++++ b/docs/operations/codex-skills/feature-factory/scripts/run_factory.py
+@@ -35,6 +35,7 @@ from factory_state import (  # noqa: E402
+     checkpoint_manifest_path,
+     default_artifact_path,
+     default_discovery_state,
++    migrate_discovery_state,
+ )
+ 
+ REVIEW_SCRIPTS = REPO_ROOT / "docs" / "operations" / "codex-skills" / "review-lens" / "scripts"
+@@ -287,6 +288,10 @@ def discovery_state(slug: str) -> dict:
+     merged.update(state if isinstance(state, dict) else {})
+     merged["questions"] = list(merged.get("questions", []))
+     merged["assumptions"] = list(merged.get("assumptions", []))
++    merged["unresolved"] = list(merged.get("unresolved", []))
++    merged["non_goals"] = list(merged.get("non_goals", []))
++    merged["acceptance_criteria"] = list(merged.get("acceptance_criteria", []))
++    merged = migrate_discovery_state(merged)
+     return merged
+ 
+ 
+@@ -1345,6 +1350,12 @@ def command_discover(args: argparse.Namespace) -> int:
+             args.summary is not None,
+             args.complete,
+             force_complete,
++            getattr(args, "unresolved", None) is not None,
++            getattr(args, "resolve", None) is not None,
++            getattr(args, "defer", None) is not None,
++            getattr(args, "non_goal", None) is not None,
++            getattr(args, "acceptance_criteria", None) is not None,
++            getattr(args, "answer", None) is not None,
+         ]
+     ):
+         raise SystemExit("discover --clear cannot be combined with other discovery updates")
+@@ -1363,6 +1374,12 @@ def command_discover(args: argparse.Namespace) -> int:
+             args.summary is not None,
+             args.complete,
+             force_complete,
++            getattr(args, "unresolved", None) is not None,
++            getattr(args, "resolve", None) is not None,
++            getattr(args, "defer", None) is not None,
++            getattr(args, "non_goal", None) is not None,
++            getattr(args, "acceptance_criteria", None) is not None,
++            getattr(args, "answer", None) is not None,
+         ]
+     ):
+         raise SystemExit("discover requires at least one update, or use --clear to reset discovery state")
+@@ -1407,6 +1424,33 @@ def command_discover(args: argparse.Namespace) -> int:
+         if args.summary is not None:
+             discovery["summary"] = args.summary
+             discovery["required"] = discovery["required"] or bool(args.summary.strip())
++        if getattr(args, "answer", None) is not None:
++            question_text, answer_text = args.answer
++            discovery.setdefault("answers", {})[question_text] = answer_text
++        if getattr(args, "unresolved", None) is not None:
++            item_text = args.unresolved
++            unresolved = discovery.setdefault("unresolved", [])
++            if not any(u["item"] == item_text for u in unresolved):
++                unresolved.append({"item": item_text, "deferred": False})
++        if getattr(args, "resolve", None) is not None:
++            resolve_text = args.resolve
++            discovery["unresolved"] = [
++                u for u in discovery.get("unresolved", []) if u["item"] != resolve_text
++            ]
++        if getattr(args, "defer", None) is not None:
++            defer_text = args.defer
++            for u in discovery.get("unresolved", []):
++                if u["item"] == defer_text:
++                    u["deferred"] = True
++                    break
++        if getattr(args, "non_goal", None) is not None:
++            ng = discovery.setdefault("non_goals", [])
++            if args.non_goal not in ng:
++                ng.append(args.non_goal)
++        if getattr(args, "acceptance_criteria", None) is not None:
++            ac = discovery.setdefault("acceptance_criteria", [])
++            if args.acceptance_criteria not in ac:
++                ac.append(args.acceptance_criteria)
+         if args.complete:
+             if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
+                 raise SystemExit(
+@@ -1414,7 +1458,19 @@ def command_discover(args: argparse.Namespace) -> int:
+                     "use --force-complete if you intentionally want to override the count"
+                 )
+             discovery["complete"] = True
+-        elif args.required or args.count is not None or args.question or args.assumption or args.summary is not None:
++        elif (
++            args.required
++            or args.count is not None
++            or args.question
++            or args.assumption
++            or args.summary is not None
++            or getattr(args, "answer", None) is not None
++            or getattr(args, "unresolved", None) is not None
++            or getattr(args, "resolve", None) is not None
++            or getattr(args, "defer", None) is not None
++            or getattr(args, "non_goal", None) is not None
++            or getattr(args, "acceptance_criteria", None) is not None
++        ):
+             discovery["complete"] = False
+         if force_complete:
+             discovery["complete"] = True
+@@ -1422,12 +1478,6 @@ def command_discover(args: argparse.Namespace) -> int:
+ 
+     state = update_discovery_state(args.slug, mutate)
+     discovery = state.get(DISCOVERY_KEY, {})
+-    if discovery.get("version", 1) != 1:
+-        print(f"workflow: {args.slug}")
+-        print("discovery:")
+-        print(f"- version: {discovery.get('version', 1)}")
+-        print("- warning: discovery state version is newer than this runner understands")
+-        return 0
+     remaining = max(int(discovery.get("question_count", 0)) - int(discovery.get("asked_count", 0)), 0)
+     print(f"workflow: {args.slug}")
+     print("discovery:")
+@@ -1443,6 +1493,21 @@ def command_discover(args: argparse.Namespace) -> int:
+             print(f"- assumption: {assumption}")
+     if discovery.get("summary"):
+         print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
++    if discovery.get("non_goals"):
++        print(f"- non-goals: {len(discovery['non_goals'])}")
++        for ng in discovery["non_goals"]:
++            print(f"  - {ng}")
++    if discovery.get("acceptance_criteria"):
++        print(f"- acceptance-criteria: {len(discovery['acceptance_criteria'])}")
++        for ac in discovery["acceptance_criteria"]:
++            print(f"  - {ac}")
++    if discovery.get("answers"):
++        print(f"- answers: {len(discovery['answers'])}")
++    if discovery.get("unresolved"):
++        print(f"- unresolved: {len(discovery['unresolved'])}")
++        for u in discovery["unresolved"]:
++            status = " [deferred]" if u.get("deferred") else ""
++            print(f"  - {u['item']}{status}")
+     return 0
+ 
+ 
+@@ -2158,6 +2223,18 @@ def build_parser() -> argparse.ArgumentParser:
+     discover_parser.add_argument("--assumption", action="append", default=[])
+     discover_parser.add_argument("--summary")
+     discover_parser.add_argument("--complete", action="store_true")
++    discover_parser.add_argument("--unresolved", type=str,
++        help="Add an item to unresolved[]")
++    discover_parser.add_argument("--resolve", type=str,
++        help="Remove an item from unresolved[] by exact text match")
++    discover_parser.add_argument("--defer", type=str,
++        help="Mark an unresolved item as deferred by exact text match")
++    discover_parser.add_argument("--non-goal", type=str, dest="non_goal",
++        help="Add a string to non_goals[]")
++    discover_parser.add_argument("--acceptance-criteria", type=str, dest="acceptance_criteria",
++        help="Add a string to acceptance_criteria[]")
++    discover_parser.add_argument("--answer", nargs=2, metavar=("QUESTION", "ANSWER"),
++        help="Record answers[QUESTION] = ANSWER")
+     discover_parser.add_argument("--force-complete", action="store_true")
+     discover_parser.add_argument("--clear", action="store_true")
+     discover_parser.set_defaults(func=command_discover)
+diff --git a/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py b/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
+index 62137259..5c0618a7 100644
+--- a/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
++++ b/docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py
+@@ -123,7 +123,14 @@ class RepairDecisionTests(unittest.TestCase):
+             {
+                 "blocked": {"active": False},
+                 "delivery": {},
+-                "discovery": {"required": True, "complete": False},
++                "discovery": {
++                    "required": True,
++                    "complete": False,
++                    "answers": {},
++                    "unresolved": [],
++                    "non_goals": [],
++                    "acceptance_criteria": [],
++                },
+             },
+             stages,
+             True,
+@@ -143,7 +150,14 @@ class RepairDecisionTests(unittest.TestCase):
+             {
+                 "blocked": {"active": True},
+                 "delivery": {},
+-                "discovery": {"required": True, "complete": False},
++                "discovery": {
++                    "required": True,
++                    "complete": False,
++                    "answers": {},
++                    "unresolved": [],
++                    "non_goals": [],
++                    "acceptance_criteria": [],
++                },
+             },
+             stages,
+             True,
+@@ -293,6 +307,10 @@ class RepairDecisionTests(unittest.TestCase):
+             "assumptions": ["Faster clarity beats extra approval ceremony."],
+             "summary": "Discovery is still in progress.",
+             "updated_at": 1,
++            "answers": {},
++            "unresolved": [],
++            "non_goals": [],
++            "acceptance_criteria": [],
+         }
+         with patch.object(MODULE, "ensure_sync"), patch.object(
+             MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+@@ -431,7 +449,18 @@ class RepairDecisionTests(unittest.TestCase):
+         with patch.object(MODULE, "ensure_sync"), patch.object(
+             MODULE, "prerequisite_failure", return_value=None
+         ), patch.object(
+-            MODULE, "discovery_state", return_value={"required": True, "complete": False, "question_count": 5, "asked_count": 2}
++            MODULE,
++            "discovery_state",
++            return_value={
++                "required": True,
++                "complete": False,
++                "question_count": 5,
++                "asked_count": 2,
++                "answers": {},
++                "unresolved": [],
++                "non_goals": [],
++                "acceptance_criteria": [],
++            },
+         ):
+             with self.assertRaises(SystemExit) as ctx:
+                 MODULE.command_checkpoint(args)
+@@ -487,6 +516,10 @@ class RepairDecisionTests(unittest.TestCase):
+                             "assumptions": ["x"],
+                             "summary": "old",
+                             "updated_at": 1,
++                            "answers": {},
++                            "unresolved": [],
++                            "non_goals": [],
++                            "acceptance_criteria": [],
+                         }
+                     }
+                 ),
+@@ -537,6 +570,10 @@ class RepairDecisionTests(unittest.TestCase):
+                             "assumptions": [],
+                             "summary": "",
+                             "updated_at": 1,
++                            "answers": {},
++                            "unresolved": [],
++                            "non_goals": [],
++                            "acceptance_criteria": [],
+                         }
+                     }
+                 ),
+@@ -563,6 +600,159 @@ class RepairDecisionTests(unittest.TestCase):
+ 
+         self.assertIn("force-complete", str(ctx.exception))
+ 
++    def _write_discovery_state(self, path: Path, **updates) -> None:
++        discovery = FACTORY_STATE.default_discovery_state()
++        discovery.update(updates)
++        path.write_text(json.dumps({"discovery": discovery}), encoding="utf-8")
++
++    def _discover_args(self, **overrides) -> SimpleNamespace:
++        base = {
++            "slug": "feature-workflow-discovery-shaping",
++            "required": False,
++            "count": None,
++            "question": None,
++            "recommendation": None,
++            "rationale": None,
++            "assumption": [],
++            "summary": None,
++            "complete": False,
++            "force_complete": False,
++            "clear": False,
++            "unresolved": None,
++            "resolve": None,
++            "defer": None,
++            "non_goal": None,
++            "acceptance_criteria": None,
++            "answer": None,
++        }
++        base.update(overrides)
++        return SimpleNamespace(**base)
++
++    def test_command_discover_unresolved_adds_item_with_deferred_false(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            args = self._discover_args(unresolved="Need API contract")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual(
++                saved["discovery"]["unresolved"],
++                [{"item": "Need API contract", "deferred": False}],
++            )
++
++    def test_command_discover_resolve_removes_item_by_exact_text_match(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            self._write_discovery_state(
++                state_path,
++                required=True,
++                complete=False,
++                unresolved=[
++                    {"item": "Keep this", "deferred": False},
++                    {"item": "Remove this", "deferred": False},
++                ],
++            )
++            args = self._discover_args(resolve="Remove this")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual([u["item"] for u in saved["discovery"]["unresolved"]], ["Keep this"])
++
++    def test_command_discover_resolve_noop_when_item_missing(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            self._write_discovery_state(
++                state_path,
++                required=True,
++                complete=False,
++                unresolved=[{"item": "Keep this", "deferred": False}],
++            )
++            args = self._discover_args(resolve="Missing item")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual([u["item"] for u in saved["discovery"]["unresolved"]], ["Keep this"])
++
++    def test_command_discover_defer_marks_matching_item_deferred(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            self._write_discovery_state(
++                state_path,
++                required=True,
++                complete=False,
++                unresolved=[{"item": "Need follow-up", "deferred": False}],
++            )
++            args = self._discover_args(defer="Need follow-up")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual(
++                saved["discovery"]["unresolved"],
++                [{"item": "Need follow-up", "deferred": True}],
++            )
++
++    def test_command_discover_non_goal_appends_deduplicated(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            args = self._discover_args(non_goal="Avoid broad scope")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                first_exit = MODULE.command_discover(args)
++                second_exit = MODULE.command_discover(args)
++
++            self.assertEqual(first_exit, 0)
++            self.assertEqual(second_exit, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual(saved["discovery"]["non_goals"], ["Avoid broad scope"])
++
++    def test_command_discover_acceptance_criteria_appends_deduplicated(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            args = self._discover_args(acceptance_criteria="Clear owner for each decision")
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                first_exit = MODULE.command_discover(args)
++                second_exit = MODULE.command_discover(args)
++
++            self.assertEqual(first_exit, 0)
++            self.assertEqual(second_exit, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual(saved["discovery"]["acceptance_criteria"], ["Clear owner for each decision"])
++
++    def test_command_discover_answer_records_mapping(self) -> None:
++        with tempfile.TemporaryDirectory() as temp_dir:
++            state_path = Path(temp_dir) / "state.json"
++            args = self._discover_args(answer=("What is the goal?", "Ship the first slice"))
++            with patch.object(MODULE, "ensure_sync"), patch.object(
++                MODULE, "factory_state_path", return_value=state_path
++            ):
++                exit_code = MODULE.command_discover(args)
++
++            self.assertEqual(exit_code, 0)
++            saved = json.loads(state_path.read_text(encoding="utf-8"))
++            self.assertEqual(
++                saved["discovery"]["answers"],
++                {"What is the goal?": "Ship the first slice"},
++            )
++
+     def test_command_deliver_dry_run_does_not_mutate_delivery_state(self) -> None:
+         args = SimpleNamespace(
+             slug="feature-workflow-repair",
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+I’m reviewing the diff as a hostile change set: first I’m checking whether the new discovery fields are wired consistently, then I’m looking for behavior changes that would silently break existing workflows or state migrations.
+codex
+I have enough to suspect a couple of schema and migration issues, but I’m checking the surrounding state helpers to verify whether those are real regressions or already handled elsewhere.
+exec
+/bin/zsh -lc "sed -n '1,260p' docs/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1,220p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+#!/usr/bin/env python3
+import argparse
+import hashlib
+import json
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from factory_state import (  # noqa: E402
+    REPO_ROOT,
+    FACTORY_RUNS_ROOT,
+    FACTORY_STATE,
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Pure path helpers, atomic I/O primitives, and state constants for the feature workflow.
+
+Nothing in this module calls external processes or performs I/O beyond reading
+Path metadata.  Every public symbol is safe to import in tests without side
+effects.
+"""
+import json
+import os
+import tempfile
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Repository root + canonical subdirectory roots
+# ---------------------------------------------------------------------------
+
+REPO_ROOT: Path = Path(__file__).resolve().parents[5]
+FACTORY_RUNS_ROOT: Path = REPO_ROOT / "docs" / "feature-runs"
+
+exec
+/bin/zsh -lc 'rg -n "def default_discovery_state|def migrate_discovery_state|def update_discovery_state|DISCOVERY_KEY|version" docs/operations/codex-skills/feature-factory/scripts/factory_state.py docs/operations/codex-skills/feature-factory/scripts/run_factory.py' in /Users/chrislaw/valuerank succeeded in 0ms:
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:28:DISCOVERY_KEY = "discovery"
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:134:def default_discovery_state() -> dict:
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:136:        "version": 2,
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:152:def migrate_discovery_state(d: dict) -> dict:
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:158:        version = d.get("version", 1)
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:159:        if not isinstance(version, (int, float)) or version >= 2:
+docs/operations/codex-skills/feature-factory/scripts/factory_state.py:164:    d["version"] = 2
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:22:    DISCOVERY_KEY,
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:250:            DISCOVERY_KEY: default_discovery_state(),
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:272:    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:286:    state = load_workflow_state(slug).get(DISCOVERY_KEY, {})
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:298:def update_discovery_state(slug: str, mutate) -> dict:
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:299:    return update_workflow_state(slug, lambda state: mutate(state.setdefault(DISCOVERY_KEY, default_discovery_state())))
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1026:    existing_state.setdefault(DISCOVERY_KEY, default_discovery_state())
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1480:    discovery = state.get(DISCOVERY_KEY, {})
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1484:    print(f"- version: {discovery.get('version', 1)}")
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1523:    discovery = state.get(DISCOVERY_KEY, {})
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1795:        "ok" if sys.version_info >= (3, 10) else "fail",
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1796:        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+codex
+I confirmed the state helper now explicitly models version 2, so the old version guard removal is probably intentional. I’m narrowing in on places where the new fields are only partially normalized or where the CLI can now accept a state shape the code can’t actually consume.
+exec
+/bin/zsh -lc "sed -n '260,340p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+            "performance_sensitive": False,
+            "extra_gemini_lenses": [],
+        },
+    )
+    state.setdefault(
+        BLOCKED_KEY,
+        {
+            "active": False,
+            "reason": "",
+            "updated_at": 0,
+        },
+    )
+    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+    state.setdefault(DELIVERY_KEY, {})
+    state.setdefault(DIRTY_OVERRIDE_KEY, {})
+    state.setdefault(CHECKPOINT_FALLBACK_KEY, {})
+    return state
+
+
+def save_workflow_state(slug: str, state: dict) -> Path:
+exec
+/bin/zsh -lc "sed -n '1400,1515p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '150,230p' docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+            discovery["question_count"] = args.count
+            discovery["required"] = discovery["required"] or args.count > 0
+        if args.question:
+            questions = list(discovery.get("questions", []))
+            questions.append(
+                {
+                    "question": args.question,
+                    "recommendation": args.recommendation,
+                    "rationale": args.rationale,
+                    "updated_at": int(time.time()),
+                }
+            )
+            discovery["questions"] = questions
+            discovery["asked_count"] = len(questions)
+            discovery["required"] = True
+            if discovery.get("question_count", 0) < len(questions):
+                discovery["question_count"] = len(questions)
+        if args.assumption:
+            assumptions = list(discovery.get("assumptions", []))
+            for assumption in args.assumption:
+ succeeded in 0ms:
+            {
+                "blocked": {"active": True},
+                "delivery": {},
+                "discovery": {
+                    "required": True,
+                    "complete": False,
+                    "answers": {},
+                    "unresolved": [],
+                    "non_goals": [],
+                    "acceptance_criteria": [],
+                },
+            },
+            stages,
+            True,
+        )
+        self.assertEqual(action, "mark_blocked")
+
+    def test_diff_missing_artifact_keeps_implementation_flow_next(self) -> None:
+        stages = {
+            "spec": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
+codex
+The new load path does sanitize unresolved items, but the write path still goes straight through `update_discovery_state`. I’m checking whether that leaves a hole for old state shapes to crash when someone mutates discovery instead of just reading it.
+exec
+/bin/zsh -lc "sed -n '580,760p' docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '220,310p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+    run([sys.executable, str(SYNC_SCRIPT), "--sync-if-needed"])
+
+
+def ensure_file(path: Path, heading: str) -> None:
+    if not path.exists():
+        path.write_text(f"# {heading}\n", encoding="utf-8")
+
+
+def load_scope_manifest(slug: str) -> dict:
+    path = scope_manifest_path(slug)
+    if not path.exists():
+        return {"paths": [], "allowed_dirty_paths": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_workflow_state(slug: str) -> dict:
+    path = factory_state_path(slug)
+    if not path.exists():
+        return {
+            "review_policy": {
+ succeeded in 0ms:
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(
+                slug="feature-workflow-discovery-shaping",
+                required=False,
+                count=None,
+                question=None,
+                recommendation=None,
+                rationale=None,
+                assumption=[],
+                summary=None,
+                complete=True,
+                force_complete=False,
+                clear=False,
+            )
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    MODULE.command_discover(args)
+exec
+/bin/zsh -lc 'rg -n "def load_workflow_state|def update_workflow_state" docs/operations/codex-skills/feature-factory/scripts/run_factory.py' in /Users/chrislaw/valuerank succeeded in 0ms:
+235:def load_workflow_state(slug: str) -> dict:
+597:def update_workflow_state(slug: str, mutate) -> dict:
+exec
+/bin/zsh -lc "sed -n '560,640p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '100,190p' docs/operations/codex-skills/feature-factory/scripts/factory_state.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+        if not payload:
+            continue
+        if payload.get("stage") == "closeout":
+            continue
+        healthy, _ = verify_checkpoint_manifest(manifest)
+        if not healthy:
+            continue
+        for review in payload.get("required_reviews", []):
+            reviews.append(resolve_stored_path(review["path"], REPO_ROOT))
+    if not reviews:
+        return True, ""
+    plan_path = workflow_dir(slug) / "plan.md"
+    cmd = [sys.executable, str(VERIFY_RECONCILIATION), "--plan", str(plan_path), "--require-terminal"]
+    for review in reviews:
+        cmd.extend(["--review", str(review)])
+    result = subprocess.run(cmd, text=True, capture_output=True)
+    detail = (result.stdout or result.stderr or "").strip()
+    return result.returncode == 0, detail
+
+
+ succeeded in 0ms:
+    return str(relative)
+
+
+def workflow_dir(slug: str) -> Path:
+    return FACTORY_RUNS_ROOT / validated_slug(slug)
+
+
+def reviews_dir(slug: str) -> Path:
+    return workflow_dir(slug) / "reviews"
+
+
+def scope_manifest_path(slug: str) -> Path:
+    return workflow_dir(slug) / "scope.json"
+
+
+def factory_state_path(slug: str) -> Path:
+    return workflow_dir(slug) / FACTORY_STATE
+
+
+def checkpoint_manifest_path(slug: str, stage: str) -> Path:
+codex
+I’ve got one likely regression already: the migration only protects the read path, while `command_discover` still writes the raw state. I’m doing one last sweep for any second-order breakage in how the new fields are formatted or consumed.
+exec
+/bin/zsh -lc "rg -n \"non_goals|acceptance_criteria|answers|unresolved\" docs/operations/codex-skills/feature-factory -g '"'!**/implementation.diff.patch'"'" in /Users/chrislaw/valuerank succeeded in 0ms:
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:129:                    "answers": {},
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:130:                    "unresolved": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:131:                    "non_goals": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:132:                    "acceptance_criteria": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:156:                    "answers": {},
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:157:                    "unresolved": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:158:                    "non_goals": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:159:                    "acceptance_criteria": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:310:            "answers": {},
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:311:            "unresolved": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:312:            "non_goals": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:313:            "acceptance_criteria": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:459:                "answers": {},
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:460:                "unresolved": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:461:                "non_goals": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:462:                "acceptance_criteria": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:519:                            "answers": {},
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:520:                            "unresolved": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:521:                            "non_goals": [],
+docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py:522:                            "acceptance_criteria": [],
+exec
+/bin/zsh -lc "rg -n \"command_discover\\(|discovery_state\\(\" docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+250:            DISCOVERY_KEY: default_discovery_state(),
+272:    state.setdefault(DISCOVERY_KEY, default_discovery_state())
+285:def discovery_state(slug: str) -> dict:
+287:    merged = default_discovery_state()
+294:    merged = migrate_discovery_state(merged)
+298:def update_discovery_state(slug: str, mutate) -> dict:
+299:    return update_workflow_state(slug, lambda state: mutate(state.setdefault(DISCOVERY_KEY, default_discovery_state())))
+1026:    existing_state.setdefault(DISCOVERY_KEY, default_discovery_state())
+1045:        discovery = discovery_state(args.slug)
+1338:def command_discover(args: argparse.Namespace) -> int:
+1390:            discovery.update(default_discovery_state())
+1479:    state = update_discovery_state(args.slug, mutate)
+1576:    discovery = discovery_state(args.slug)
+exec
+/bin/zsh -lc "sed -n '1380,1400p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1030,1060p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+            getattr(args, "non_goal", None) is not None,
+            getattr(args, "acceptance_criteria", None) is not None,
+            getattr(args, "answer", None) is not None,
+        ]
+    ):
+        raise SystemExit("discover requires at least one update, or use --clear to reset discovery state")
+
+    def mutate(discovery: dict) -> None:
+        if clear:
+            discovery.clear()
+            discovery.update(default_discovery_state())
+            return
+        if args.required:
+            discovery["required"] = True
+        if args.count is not None:
+            if discovery.get("asked_count", 0) > args.count:
+                raise SystemExit(
+                    "discover requires --count to stay at or above the number of already asked questions; "
+                    "use --clear to restart discovery"
+                )
+ succeeded in 0ms:
+    save_workflow_state(args.slug, existing_state)
+    print(str(root))
+    return 0
+
+
+def command_checkpoint(args: argparse.Namespace) -> int:
+    ensure_sync()
+    root = workflow_dir(args.slug)
+    reviews = reviews_dir(args.slug)
+    root.mkdir(parents=True, exist_ok=True)
+    reviews.mkdir(parents=True, exist_ok=True)
+    prereq_error = prerequisite_failure(args.slug, args.stage)
+    if prereq_error:
+        raise SystemExit(prereq_error)
+    if args.stage == "spec":
+        discovery = discovery_state(args.slug)
+        if discovery.get("required") and not discovery.get("complete"):
+            raise SystemExit(
+                "spec checkpoint requires discovery to be complete first; "
+                "record the remaining questions and assumptions with the discover command"
+codex
+I’ve narrowed it to the migration boundary. The next check is whether the new CLI path ever upgrades the in-memory discovery blob before mutating it, because that’s where a legacy state would actually break.
+exec
+/bin/zsh -lc "sed -n '1700,1810p' docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1810,1860p' docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+        result = FACTORY_STATE.migrate_discovery_state(v1)  # must not raise
+        self.assertEqual(result["unresolved"], [])
+
+    def test_migrate_sanitizes_malformed_unresolved_entries(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": False,
+            "complete": True,
+            "unresolved": ["string", 42, {"item": "valid", "deferred": False}, {"no_item_key": "x"}],
+        }
+        result = FACTORY_STATE.migrate_discovery_state(v1)
+        self.assertEqual(len(result["unresolved"]), 1)
+        self.assertEqual(result["unresolved"][0]["item"], "valid")
+
+    def test_migrate_deduplicates_questions_in_unresolved(self) -> None:
+        v1 = {
+            "version": 1,
+            "required": True,
+            "complete": False,
+            "questions": [
+ succeeded in 0ms:
+
+        self.assertEqual(result, 1, "expected repair to fail due to diff being blocked")
+        self.assertEqual(len(checkpoint_calls), 0, "command_checkpoint should not be called for closeout when earlier stage is blocked")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestMigrateDiscoveryState(unittest.TestCase):
+    """Wave 1: Tests for default_discovery_state() V2 schema and migrate_discovery_state()."""
+
+    def test_default_discovery_state_has_v2_fields(self) -> None:
+        d = FACTORY_STATE.default_discovery_state()
+        self.assertEqual(d["version"], 2)
+        self.assertIn("answers", d)
+        self.assertIn("non_goals", d)
+        self.assertIn("acceptance_criteria", d)
+        self.assertIn("unresolved", d)
+        self.assertIsInstance(d["answers"], dict)
+exec
+/bin/zsh -lc "sed -n '1560,1605p' docs/operations/codex-skills/feature-factory/scripts/run_factory.py" in /Users/chrislaw/valuerank succeeded in 0ms:
+        return "closeout"
+    if not stages["closeout"]["healthy"]:
+        return "repair_closeout_checkpoint"
+    return "done"
+
+
+def command_status(args: argparse.Namespace) -> int:
+    ensure_sync()
+    state = load_workflow_state(args.slug)
+    stages = {stage: stage_manifest_state(args.slug, stage) for stage in CHECKPOINT_STAGES}
+    recon_ok, recon_detail = reconciliation_state(args.slug)
+    next_action = recommended_next_action(args.slug, state, stages, recon_ok)
+    branch = current_branch_name() or "(detached HEAD)"
+    upstream = upstream_branch_name() or "(none)"
+    blocked = state.get(BLOCKED_KEY, {})
+    delivery = refresh_delivery_snapshot(state.get(DELIVERY_KEY, {}))
+    discovery = discovery_state(args.slug)
+    dirty_override = state.get(DIRTY_OVERRIDE_KEY, {})
+    checkpoint_fallback = state.get(CHECKPOINT_FALLBACK_KEY, {})
+    diff_budget = diff_review_budget_state(args.slug)
+exec
+/bin/zsh -lc "rg -n \"discovery.get\\('version'|discovery\\.get\\(\\\"version\\\"|version\\) "'!= 1|version >= 2" docs/operations/codex-skills/feature-factory/scripts/run_factory.py docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py' in /Users/chrislaw/valuerank succeeded in 0ms:
+docs/operations/codex-skills/feature-factory/scripts/run_factory.py:1484:    print(f"- version: {discovery.get('version', 1)}")
+codex
+## Findings
+- High: `command_discover()` still mutates and saves the raw discovery blob from `update_discovery_state()` without running `migrate_discovery_state()` first ([run_factory.py:1429](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1429), [run_factory.py:1479](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1479)). That leaves the new `--resolve`, `--defer`, and unresolved-printing paths exposed to legacy or partially migrated state shapes, where `unresolved` entries may not be dicts with an `item` key. In that case the new CLI can raise instead of upgrading the workflow cleanly.
+- Medium: The new `answers` field is not normalized anywhere, unlike the other new discovery collections. `command_discover()` blindly does `discovery.setdefault("answers", {})[question_text] = answer_text` ([run_factory.py:1429](/Users/chrislaw/valuerank/docs/operations/codex-skills/feature-factory/scripts/run_factory.py#L1429)), but neither the read path nor the migration guarantees that `answers` is a mapping. Any preexisting or hand-edited workflow with `answers` set to `null`, a list, or another non-dict value will now fail on `--answer` instead of being repaired or rejected cleanly.
+
+## Residual Risks
+- The patch adds happy-path tests for the new commands, but it does not exercise a real legacy on-disk workflow file going through `discover`, so mixed-schema upgrade behavior is still under-tested.
+- `resolve` and `defer` still rely on exact text matches; if older data contains duplicates or whitespace variants, cleanup will be partial by design.
+tokens used
+45,018

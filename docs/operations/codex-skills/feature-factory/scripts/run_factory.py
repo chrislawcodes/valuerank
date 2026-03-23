@@ -296,7 +296,12 @@ def discovery_state(slug: str) -> dict:
 
 
 def update_discovery_state(slug: str, mutate) -> dict:
-    return update_workflow_state(slug, lambda state: mutate(state.setdefault(DISCOVERY_KEY, default_discovery_state())))
+    def _migrated_mutate(state: dict):
+        discovery = state.setdefault(DISCOVERY_KEY, default_discovery_state())
+        migrated = migrate_discovery_state(discovery)
+        state[DISCOVERY_KEY] = migrated
+        return mutate(migrated)
+    return update_workflow_state(slug, _migrated_mutate)
 
 
 def save_scope_manifest(slug: str, paths: list[str]) -> Path:
@@ -1426,7 +1431,9 @@ def command_discover(args: argparse.Namespace) -> int:
             discovery["required"] = discovery["required"] or bool(args.summary.strip())
         if getattr(args, "answer", None) is not None:
             question_text, answer_text = args.answer
-            discovery.setdefault("answers", {})[question_text] = answer_text
+            if not isinstance(discovery.get("answers"), dict):
+                discovery["answers"] = {}
+            discovery["answers"][question_text] = answer_text
         if getattr(args, "unresolved", None) is not None:
             item_text = args.unresolved
             unresolved = discovery.setdefault("unresolved", [])
