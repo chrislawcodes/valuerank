@@ -190,6 +190,10 @@ async function transitionStatus(
     updates.completedAt = new Date();
   }
 
+  if (toStatus !== 'RUNNING') {
+    updates.stalledModels = [];
+  }
+
   await db.run.update({
     where: { id: runId },
     data: updates,
@@ -221,7 +225,7 @@ async function queueSummarizeJobs(runId: string): Promise<void> {
     log.warn({ runId }, 'No transcripts to summarize, completing run');
     await db.run.update({
       where: { id: runId },
-      data: { status: 'COMPLETED', completedAt: new Date() },
+      data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
     });
     return;
   }
