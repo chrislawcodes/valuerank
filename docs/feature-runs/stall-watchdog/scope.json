@@ -1,0 +1,23 @@
+{
+  "paths": [
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/scheduler.ts",
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/pages/RunDetail/RunDetail.tsx",
+    "cloud/packages/db/prisma/schema.prisma"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/api/src/graphql/types/run.ts",
+    "cloud/apps/api/src/services/run/recovery.ts",
+    "cloud/apps/api/src/services/run/scheduler.ts",
+    "cloud/apps/web/src/api/operations/runs.ts",
+    "cloud/apps/web/src/pages/RunDetail/RunDetail.tsx",
+    "cloud/packages/db/prisma/schema.prisma",
+    "docs/feature-runs/stall-watchdog",
+    "docs/feature-runs/feature-workflow-discovery-shaping",
+    "docs/feature-runs/job-choice-analysis-key-mapping-fix",
+    "specs/028-stall-watchdog",
+    ".codex-workflow"
+  ]
+}

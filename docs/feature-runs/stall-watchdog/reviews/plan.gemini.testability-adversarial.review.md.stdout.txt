@@ -1,0 +1,57 @@
+{
+  "session_id": "f2a0d957-009c-4fdc-8458-6b9e0dff4291",
+  "response": "## Findings\n\n### 1. High-Severity Performance Flaw in Stall Detection\n\nThe proposed implementation of `detectAndUpdateStalledRuns` in `recovery.ts` creates a classic `N+1` query problem. It iterates through all `RUNNING` runs and, for each one, executes two additional database queries (`getModelsWithPendingJobs` and `getLastSuccessfulCompletionByModel`). If 100 runs are active, this will result in 201 database queries per scheduler tick, which is inefficient and will not scale.\n\n**Recommendation:** Refactor the logic to use bulk queries. The implementation should fetch pending jobs and recent successful probes for all `RUNNING` runs in just two queries. The results can then be processed and grouped by `runId` in memory. This avoids iterating and querying per run.\n\n### 2. Lack of Testability in Core Logic\n\nThe plan presents logic that is difficult or impossible to test efficiently and deterministically.\n\n*   **Hardcoded Threshold:** `STALL_THRESHOLD_MS` is a hardcoded constant of 3 minutes. This makes unit and integration tests unfeasibly slow.\n*   **Reliance on Real Time:** `detectStalledModels` implicitly relies on `Date.now()`. This makes outcomes non-deterministic and dependent on the execution time of the test itself.\n\n**Recommendation:** Both the stall threshold and the concept of \"now\" must be injectable into the `detectStalledModels` function. This allows tests to provide a fixed threshold (e.g., `0ms`) and a mocked `now` timestamp to validate the logic against various scenarios without waiting.\n\n```typescript\n// Proposed signature for testability\ndetectStalledModels(\n  runId: string,\n  runStartedAt: Date,\n  options: { now: Date; stallThresholdMs: number }\n): Promise<string[]>;\n```\n\n### 3. Incorrect Default for `runStartedAt`\n\nIn `detectAndUpdateStalledRuns`, the line `const stalled = await detectStalledModels(run.id, run.startedAt ?? new Date());` is problematic. If `run.startedAt` is ever `null` for a running job (which would indicate a data integrity problem), it defaults to the current time. This masks the underlying issue and guarantees that the run will never be flagged as stalled, as the start time will always be recent.\n\n**Recommendation:** If `run.startedAt` is null, the system should log a severe error and skip the run for stall detection. The code should not silently substitute a value that leads to incorrect behavior. The database schema should also be enforced to make `startedAt` non-nullable for the `Run` model.\n\n### 4. Incorrect Decorators in Database Schema\n\nThe plan specifies adding the `stalledModels` field with decorators that appear to be erroneously copied from another field:\n`stalledModels String[] @cloud/apps/api/src/mcp/tools/set-default-llm-model.ts([]) @cloud/apps/web/src/components/analysis/ScenarioHeatmap.tsx(\"stalled_models\")`\n\nThe referenced files (`set-default-llm-model.ts` and `ScenarioHeatmap.tsx`) have no logical connection to this new field. While this may not cause a functional error (depending on how the project's tooling interprets these annotations), it is incorrect, confusing, and points to a lack of diligence in the planning stage.\n\n**Recommendation:** Remove the incorrect decorators. The field definition should be `stalledModels String[] @default([]) @map(\"stalled_models\")`.\n\n## Residual Risks\n\n### 1. Incomplete Stall Detection Logic\n\nThe current detection logic is based on two conditions: a model has pending jobs, and it has not had a successful completion recently. This fails to cover a potential failure mode: a model may finish a job, but the subsequent job in the sequence is never created due to an error or bug. In this case, the model would have no pending jobs and would not be considered \"stalled\"; the system would incorrectly assume it has finished its work. This represents a gap in the assumption that \"not finished\" implies \"has pending jobs.\"\n\n### 2. High Risk of Incomplete Implementation\n\nThe plan correctly identifies that `stalledModels` must be cleared on every status transition to a non-`RUNNING` state. However, it relies entirely on the developer to manually `grep` the codebase and find every location where this occurs. This is a highly error-prone manual process. Missing even one code path will lead to persistent, incorrect `stalledModels` data on runs that are paused, completed, or failed. The only robust mitigation is a comprehensive test suite that covers every possible run status transition.\n\n### 3. Understated Impact of Dropped Requirement (FR-012)\n\nThe decision to drop the grace period for resumed runs is presented as a \"UX nuisance.\" However, if the \"log+alert-only feature\" sends notifications to an on-call system like PagerDuty or a high-traffic Slack channel, this brief false positive upon every resume action will quickly become a significant source of alert fatigue and user frustration, undermining the tool's reliability.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 36833
+        },
+        "tokens": {
+          "input": 6761,
+          "prompt": 19061,
+          "candidates": 1103,
+          "total": 22639,
+          "cached": 12300,
+          "thoughts": 2475,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 36833,
+            "tokens": {
+              "input": 6761,
+              "prompt": 19061,
+              "candidates": 1103,
+              "total": 22639,
+              "cached": 12300,
+              "thoughts": 2475,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

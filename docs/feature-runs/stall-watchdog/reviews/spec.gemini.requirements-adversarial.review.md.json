@@ -1,0 +1,57 @@
+{
+  "session_id": "e19ddff7-4da0-41aa-b231-efa67a2e09ec",
+  "response": "## Findings\n\nThe review identified several weaknesses in the specification, ordered below by severity.\n\n1.  **Critical Flaw in Stall Definition**: The core logic in **FR-001** and the \"Run with no probes yet\" edge case creates a major blind spot. A stall is only detected if a model has had *at least one prior successful probe*. This means a model that is broken from the very start (e.g., due to invalid credentials, an incompatible API change, or immediate rate-limiting) will *never* complete a probe successfully and therefore will *never* be flagged as stalled. The run will appear to be progressing (as other models work) while one model's jobs retry indefinitely with no warning to the operator. This directly undermines the primary goal of the feature.\n\n2.  **Unverified Critical Assumption for Paired Batches**: The \"PAIRED_BATCH runs\" edge case and the `Assumptions` section defer the responsibility of verifying if PgBoss jobs can be queried per-model to the implementation plan. This is not a minor detail; it is a fundamental prerequisite for the entire feature to work with paired runs. If jobs are created for the *pair* and not attributable to a single model, the per-model stall detection logic is invalid for this run type. The specification is not complete without confirming this capability exists.\n\n3.  **Race Condition leading to False Positives**: The detection process as described is vulnerable to a race condition. The scheduler can read the state (no recent probes), decide to flag a stall, and then a new probe can successfully complete *before* the scheduler writes the `stalledModels` field to the database. This will result in a validly progressing model being incorrectly flagged as stalled for an entire 5-minute scheduler cycle, creating a false alarm. The update operation needs to be atomic or conditional to prevent this.\n\n4.  **Destruction of Forensic Data on Failure**: **FR-009** mandates that `stalledModels` MUST be cleared when a run transitions to a `FAILED` state. This is a mistake. If a run fails *because* one or more models were stalled for too long, clearing this field destroys the most direct evidence explaining the failure. This information is critical for post-mortem analysis by the operator. The field should be preserved if the run's terminal state is `FAILED`.\n\n5.  **Fragile Hardcoded Time Thresholds**: The spec hardcodes both the `3-minute` stall threshold and the `5-minute` post-resume grace period (**FR-012**).\n    *   The **stall threshold** makes the dangerous assumption that no future model will have a legitimate probe completion time exceeding 3 minutes. This creates future technical debt and guarantees false positives if slower, more complex models are introduced.\n    *   The **grace period** being a magic number creates a tight coupling with the scheduler's current interval. If the scheduler's timing is ever adjusted, this logic will break, either causing false positives or failing to apply the grace period correctly.\n\n6.  **Ambiguous and Potentially Misleading Log Logic**: **FR-004** requires a log entry only when a model *newly* enters a stalled state. This is ambiguous. If model A stalls on one tick and model B stalls on the next, the logs might read \"Stalled: [modelA]\" then \"Stalled: [modelB]\". This could imply model A recovered. The logic should instead trigger on any *change* to the `stalledModels` set (while it's non-empty) and the log message should always report the *complete* list of currently stalled models to provide full context.\n\n## Residual Risks\n\nThese are items that may not be direct flaws but represent accepted risks or unaddressed complexities that could impact the feature's long-term success.\n\n1.  **Detection Latency**: The acknowledged 8-minute maximum latency from stall onset to UI notification, while deemed acceptable, remains a significant blind spot for operations requiring faster feedback. This feature should not be presented as a near-real-time alerting mechanism.\n\n2.  **Clock-Skew Vulnerability**: The entire detection mechanism relies on comparing `createdAt` timestamps with the scheduler's server time. It implicitly assumes negligible clock drift between the application servers writing probe results and the server running the scheduler. Significant clock skew could either delay or accelerate stall detection, making it unreliable.\n\n3.  **Threshold \"Flapping\"**: As noted in the limitations, a model whose performance hovers around the 3-minute mark could enter and exit the stalled state on subsequent ticks. While **FR-004** prevents duplicate logs for a sustained stall, it doesn't prevent a stream of \"now stalled\" / \"now recovered\" logs, which can become noise.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 38071
+        },
+        "tokens": {
+          "input": 3749,
+          "prompt": 15683,
+          "candidates": 1008,
+          "total": 19098,
+          "cached": 11934,
+          "thoughts": 2407,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 38071,
+            "tokens": {
+              "input": 3749,
+              "prompt": 15683,
+              "candidates": 1008,
+              "total": 19098,
+              "cached": 11934,
+              "thoughts": 2407,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

@@ -301,7 +301,7 @@ export async function recoverOrphanedRun(
         log.info({ runId }, 'Triggering summarization for completed run');
         await db.run.update({
           where: { id: runId },
-          data: { status: 'SUMMARIZING' },
+          data: { status: 'SUMMARIZING', stalledModels: [] },
         });
 
         // Queue summarize jobs for unsummarized transcripts
@@ -338,7 +338,7 @@ export async function recoverOrphanedRun(
           log.info({ runId }, 'All transcripts summarized, completing run');
           await db.run.update({
             where: { id: runId },
-            data: { status: 'COMPLETED', completedAt: new Date() },
+            data: { status: 'COMPLETED', completedAt: new Date(), stalledModels: [] },
           });
           return { action: 'completed_run' };
         }

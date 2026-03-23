@@ -76,6 +76,7 @@ function createMockRun(overrides: Partial<Run> = {}): Run {
       content: null,
     },
     tags: [],
+    stalledModels: [],
     ...overrides,
   };
 }
@@ -521,41 +522,10 @@ describe('RunDetail', () => {
     expect(screen.getByText('Results')).toBeInTheDocument();
   });
 
-  it('shows provider budget banner for budget-related failures', () => {
-    const run = createMockRun({
-      status: 'FAILED',
-      recentTasks: [
-        {
-          scenarioId: 's-1',
-          modelId: 'gpt-5.1',
-          status: 'FAILED',
-          error: 'insufficient_quota: You exceeded your current quota',
-          completedAt: '2024-01-15T10:05:00Z',
-        },
-      ],
-    });
-    vi.mocked(useRun).mockReturnValue({
-      run,
-      loading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    renderWithRouter();
-
-    expect(screen.getByText('OpenAI budget exhausted. Check provider credits.')).toBeInTheDocument();
-  });
-
-  it('shows budget banner even when run is not failed', () => {
+  it('shows stall warning banner when run is RUNNING with stalled models', () => {
     const run = createMockRun({
       status: 'RUNNING',
-      failedProbes: [
-        {
-          modelId: 'grok-4-1-fast-reasoning',
-          errorCode: 'NON_RETRYABLE',
-          errorMessage: 'insufficient_quota: out of funds for this API key',
-        },
-      ],
+      stalledModels: ['gpt-4', 'claude-3'],
     });
     vi.mocked(useRun).mockReturnValue({
       run,
@@ -566,22 +536,11 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('xAI budget exhausted. Check provider credits.')).toBeInTheDocument();
+    expect(screen.getByText('2 models are stalled (no progress for 3+ minutes): gpt-4, claude-3')).toBeInTheDocument();
   });
 
-  it('shows API budget-check banner for unknown API failures', () => {
-    const run = createMockRun({
-      status: 'FAILED',
-      recentTasks: [
-        {
-          scenarioId: 's-1',
-          modelId: 'gemini-2.5-pro',
-          status: 'FAILED',
-          error: 'HTTP 500 Internal Server Error',
-          completedAt: '2024-01-15T10:05:00Z',
-        },
-      ],
-    });
+  it('does not show stall banner when stalledModels is empty', () => {
+    const run = createMockRun({ status: 'RUNNING', stalledModels: [] });
     vi.mocked(useRun).mockReturnValue({
       run,
       loading: false,
@@ -591,7 +550,7 @@ describe('RunDetail', () => {
 
     renderWithRouter();
 
-    expect(screen.getByText('API failure. Check budget.')).toBeInTheDocument();
+    expect(screen.queryByText(/stalled/)).not.toBeInTheDocument();
   });
 
   it('has back button that navigates to runs list', () => {

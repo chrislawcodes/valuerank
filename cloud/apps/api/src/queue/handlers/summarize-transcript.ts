@@ -105,6 +105,7 @@ async function maybeCompleteRun(runId: string): Promise<void> {
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
+        stalledModels: [],
       },
     });
     log.info({ runId }, 'Run completed - all transcripts summarized');
