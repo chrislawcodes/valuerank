@@ -1,0 +1,7 @@
+{
+  "source_artifact_path": "docs/plans/feature-workflow-plan.md",
+  "source_artifact_sha256": "ebde39ffa69e36f4a4519fbbe6ebf711a2da24ce881b443f604facf9eda58535",
+  "narrowed_artifact_path": "docs/feature-runs/i7-structured-discovery/reviews/spec.gemini.requirements-adversarial.review.context1.narrowed.txt",
+  "narrowed_artifact_sha256": "8ea7a4f36e49dce62adc1ae9d4d8007c4b4fa719b5187e8f79d50340314732f4",
+  "strategy": "head-tail-numbered-lines"
+}

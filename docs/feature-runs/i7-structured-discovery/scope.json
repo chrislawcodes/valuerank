@@ -1,0 +1,15 @@
+{
+  "paths": [
+    "docs/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/operations/codex-skills/feature-factory/scripts/factory_state.py",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ],
+  "allowed_dirty_paths": [
+    "docs/feature-runs/i7-structured-discovery",
+    "docs/operations/codex-skills/feature-factory/SKILL.md",
+    "docs/operations/codex-skills/feature-factory/scripts/factory_state.py",
+    "docs/operations/codex-skills/feature-factory/scripts/run_factory.py",
+    "docs/operations/codex-skills/feature-factory/tests/test_run_factory_repair.py"
+  ]
+}

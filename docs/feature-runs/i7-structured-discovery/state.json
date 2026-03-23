@@ -1,0 +1,72 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 1,
+    "required": true,
+    "complete": true,
+    "question_count": 4,
+    "asked_count": 4,
+    "questions": [
+      {
+        "question": "What new fields does discovery state need?",
+        "recommendation": "Add answers{}, non_goals[], acceptance_criteria[], unresolved[] to state.json",
+        "rationale": "These are the structured fields from the I-7 spec; unresolved[] becomes the enforceable gate",
+        "updated_at": 1774213981
+      },
+      {
+        "question": "How does the blocking gate work?",
+        "recommendation": "unresolved[] being non-empty blocks spec checkpoint; complete flag kept as second axis",
+        "rationale": "Codex adversarial review confirmed complete is load-bearing in 3 places; replacing it risks breakage",
+        "updated_at": 1774213990
+      },
+      {
+        "question": "How do V1 state.json files on disk get upgraded?",
+        "recommendation": "Add migrate_discovery_state() pure function; wire into discovery_state() loader in Wave 2",
+        "rationale": "One live V1 blob exists (workflow-runner-hardening/state.json); transparent migration on read is safest",
+        "updated_at": 1774213991
+      },
+      {
+        "question": "What gets removed and when?",
+        "recommendation": "question_count and asked_count removed in Wave 4 only, after gate logic no longer depends on them",
+        "rationale": "Codex found Wave 2 too large if removals are bundled in; isolate cleanup to Wave 4",
+        "updated_at": 1774213991
+      }
+    ],
+    "assumptions": [
+      "run_factory.py must stay runnable at every wave boundary \u2014 no broken intermediate states",
+      "V1 state.json files will be migrated transparently on first read in Wave 2",
+      "complete flag stays in schema; unresolved[] is additive second gate, not a replacement"
+    ],
+    "summary": "I-7 adds answers{}, non_goals[], acceptance_criteria[], unresolved[] to discovery state. unresolved[] becomes an enforceable blocking gate at spec checkpoint. Delivered in 4 waves: (1) additive schema + migration fn, (2) migration wire-up + new CLI flags + test updates, (3) gate enforcement + status display, (4) cleanup question_count/asked_count + docs.",
+    "updated_at": 1774213997
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      ".obsidian",
+      "STATUS.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "cloud/scripts/launch-remaining-batches.mjs",
+      "docs/feature-runs/feature-workflow-discovery-shaping"
+    ],
+    "used": true,
+    "updated_at": 1774223335
+  },
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

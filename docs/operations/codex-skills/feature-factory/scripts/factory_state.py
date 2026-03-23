@@ -133,7 +133,7 @@ def default_artifact_path(slug: str, stage: str) -> Path:
 
 def default_discovery_state() -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "required": False,
         "complete": True,
         "question_count": 0,
@@ -142,4 +142,61 @@ def default_discovery_state() -> dict:
         "assumptions": [],
         "summary": "",
         "updated_at": 0,
+        "answers": {},
+        "non_goals": [],
+        "acceptance_criteria": [],
+        "unresolved": [],
     }
+
+
+def migrate_discovery_state(d: dict) -> dict:
+    """Upgrade a V1 discovery blob to V2. Returns a new dict (does not mutate input.
+
+    Idempotent on V2+ blobs. Safe for malformed inputs.
+    """
+    try:
+        version = d.get("version", 1)
+        if not isinstance(version, (int, float)) or version >= 2:
+            return d
+    except Exception:
+        return d
+    d = dict(d)  # shallow copy — do not mutate caller's dict
+    d["version"] = 2
+    # Add missing V2 fields
+    if "answers" not in d:
+        d["answers"] = {}
+    if "non_goals" not in d:
+        d["non_goals"] = []
+    if "acceptance_criteria" not in d:
+        d["acceptance_criteria"] = []
+    # Sanitize unresolved: keep only valid dicts with a hashable "item" key
+    existing_unresolved = d.get("unresolved", [])
+    if not isinstance(existing_unresolved, list):
+        existing_unresolved = []
+    valid_unresolved = []
+    for item in existing_unresolved:
+        if not isinstance(item, dict) or "item" not in item:
+            continue
+        try:
+            hash(item["item"])
+        except TypeError:
+            continue
+        valid_unresolved.append(item)
+    d["unresolved"] = valid_unresolved
+    # Populate unresolved from V1 questions when discovery is required and incomplete
+    if d.get("required") and not bool(d.get("complete")):
+        questions = d.get("questions", [])
+        if not isinstance(questions, list):
+            questions = []
+        existing_items = {u["item"] for u in d["unresolved"]}
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            raw = q.get("question")
+            if not isinstance(raw, str):
+                continue
+            text = raw.strip()
+            if text and text not in existing_items:
+                d["unresolved"].append({"item": text, "deferred": False})
+                existing_items.add(text)
+    return d

@@ -1,0 +1,55 @@
+diff --git a/docs/operations/codex-skills/feature-factory/scripts/factory_state.py b/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
+index af41f4ce..93540359 100644
+--- a/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
++++ b/docs/operations/codex-skills/feature-factory/scripts/factory_state.py
+@@ -154,7 +154,11 @@ def migrate_discovery_state(d: dict) -> dict:
+ 
+     Idempotent on V2+ blobs. Safe for malformed inputs.
+     """
+-    if d.get("version", 1) >= 2:
++    try:
++        version = d.get("version", 1)
++        if not isinstance(version, (int, float)) or version >= 2:
++            return d
++    except Exception:
+         return d
+     d = dict(d)  # shallow copy — do not mutate caller's dict
+     d["version"] = 2
+@@ -165,14 +169,20 @@ def migrate_discovery_state(d: dict) -> dict:
+         d["non_goals"] = []
+     if "acceptance_criteria" not in d:
+         d["acceptance_criteria"] = []
+-    # Sanitize unresolved: keep only valid dicts with an "item" key
++    # Sanitize unresolved: keep only valid dicts with a hashable "item" key
+     existing_unresolved = d.get("unresolved", [])
+     if not isinstance(existing_unresolved, list):
+         existing_unresolved = []
+-    d["unresolved"] = [
+-        item for item in existing_unresolved
+-        if isinstance(item, dict) and "item" in item
+-    ]
++    valid_unresolved = []
++    for item in existing_unresolved:
++        if not isinstance(item, dict) or "item" not in item:
++            continue
++        try:
++            hash(item["item"])
++        except TypeError:
++            continue
++        valid_unresolved.append(item)
++    d["unresolved"] = valid_unresolved
+     # Populate unresolved from V1 questions when discovery is required and incomplete
+     if d.get("required") and not bool(d.get("complete")):
+         questions = d.get("questions", [])
+@@ -182,7 +192,10 @@ def migrate_discovery_state(d: dict) -> dict:
+         for q in questions:
+             if not isinstance(q, dict):
+                 continue
+-            text = (q.get("question") or "").strip()
++            raw = q.get("question")
++            if not isinstance(raw, str):
++                continue
++            text = raw.strip()
+             if text and text not in existing_items:
+                 d["unresolved"].append({"item": text, "deferred": False})
+                 existing_items.add(text)

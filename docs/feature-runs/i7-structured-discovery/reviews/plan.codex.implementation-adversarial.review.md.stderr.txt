@@ -1,0 +1,143 @@
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d176e-fba7-78a1-89d7-596973ebce04
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# I-7: Structured Discovery State — Plan
+
+## Spec Review Reconciliation
+
+### Gemini requirements-adversarial
+
+**Finding 1 (Fragile text-based identifiers):** Accepted as a known limitation.
+`answers{}` keyed by question text and `--resolve TEXT` with exact-match are fragile for
+human use but acceptable for V1 agent-operated workflows. Agents write what they read.
+The risk of typos/rewording is low in practice. Deferred to future improvement.
+Status: **accepted-limitation**
+
+**Finding 2 (Ambiguous state logic for `deferred`):** Addressed in plan.
+Deferred items in `unresolved[]` do NOT block checkpoint. Gate logic: block only when
+`any(not item.get("deferred", False) for item in unresolved)`. Status: **resolved**
+
+**Finding 3 (Incomplete CRUD):** Accepted as out of scope.
+Factory is agent-operated; edit/delete deferred. Status: **accepted-limitation**
+
+**Finding 4 (Optimistic migration):** Addressed. Migration handles malformed fields
+gracefully: treat non-list fields as empty lists, skip None values.
+Migration also populates `unresolved[]` from existing V1 `questions[]` when `required=true`
+and `complete=false`. Status: **resolved**
+
+**Finding 5 (Remove `question_count`/`asked_count` earlier):** Disagree.
+Runner has 33 references to these fields — removing in Wave 1 breaks the runner.
+Wave 4 cleanup is correct ordering. Status: **accepted-disagreement**
+
+### Gemini edge-cases-adversarial
+
+**Finding 1 (Migration leaves `unresolved[]` empty for existing questions):** Resolved.
+`migrate_discovery_state()` populates `unresolved[]` from existing `questions[]` when
+`required=true` and `complete=false`. When `complete=true`, leaves `unresolved[]` empty
+(respects the explicit completion). Status: **resolved**
+
+**Finding 2 (Brittle text-based identifiers):** Same as Gemini req finding 1.
+Status: **accepted-limitation**
+
+**Finding 3 (`--resolve` ambiguity):** Addressed. `--resolve` uses exact full-string
+match, case-sensitive. Error if no match found (lists current items). Status: **resolved**
+
+**Finding 4 (`deferred` undefined):** `deferred` is boolean. Deferred items display in
+status but do not block checkpoint. Status: **resolved**
+
+**Residual risk (`complete` flag ambiguity):** Addressed. Full gate semantics:
+checkpoint blocked if `complete=False` OR any non-deferred item in `unresolved[]`.
+Status: **resolved**
+
+### Codex feasibility-adversarial
+
+**Finding 1 (Text-based identifiers):** Same. Status: **accepted-limitation**
+
+**Finding 2 (Migration not persisted):** Resolved. Wave 2 writes migrated state back
+to disk so V1 blobs become V2 permanently on first access. Status: **resolved**
+
+**Finding 3 (`deferred` semantics):** Resolved. See above. Status: **resolved**
+
+**Finding 4 (CLI deduplication/substring behavior):** Resolved. Exact full-string
+match for `--resolve`. Deduplication for `--unresolved`/`--non-goal`/`--acceptance-criteria`.
+`--answer` requires question already in `questions[]`; upserts otherwise. Status: **resolved**
+
+**Finding 5 (`complete=False` with empty `unresolved[]`):** Resolved.
+Full gate: block if `required=True AND (complete=False OR any non-deferred unresolved)`.
+Status: **resolved**
+
+---
+
+## Implementation Plan
+
+### Wave 1 — Schema Extension + Migration Function (`factory_state.py` only)
+- `default_discovery_state()`: add V2 fields (`answers: {}`, `non_goals: []`,
+  `acceptance_criteria: []`, `unresolved: []`), bump `version` to 2
+- `migrate_discovery_state(d: dict) -> dict`: pure function, V1 to V2:
+  - Adds all missing V2 fields with correct defaults, sets `version: 2`
+  - Preserves all existing data
+  - If `required=true` and `complete=false`: populates `unresolved[]` from `questions[]`
+  - Handles malformed fields: non-list treated as empty list, None skipped
+- New tests: 8-10 tests covering default state keys, V1 to V2 upgrade, V2 no-op,
+  malformed field handling, unresolved population from questions
+
+### Wave 2 — Migration Wire-up + New CLI Flags (`run_factory.py` + tests)
+- `discovery_state()`: apply migration then write back to disk if version changed
+- `command_discover()`: add `--unresolved`, `--resolve`, `--non-goal`,
+  `--acceptance-criteria`, `--answer` with exact-match and deduplication semantics
+- Update 7 existing tests that assume V1 discovery shape to include V2 fields
+
+### Wave 3 — Enforceable Gate + Status (`run_factory.py` + tests)
+- `command_checkpoint()`: extend gate to block on non-deferred unresolved items
+  Full gate: `required AND (not complete OR any(not i.get("deferred") for i in unresolved))`
+- `recommended_next_action()`: same check
+- `command_status()`: display unresolved items with deferred/blocking distinction
+- Add gate tests
+
+### Wave 4 — Cleanup + SKILL.md
+- Remove `question_count`/`asked_count` from default state and write paths
+- Remove `--count` CLI flag from `command_discover`
+- Update SKILL.md discovery section
+- Update ~4 tests that assert old count fields
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+codex
+## Findings
+1. **High: `--answer` never closes the loop with the new gate semantics.** The plan stores answers in `answers{}`, but it never specifies how answering a question clears the corresponding blocking item from `unresolved[]` or flips `complete`. Given the Wave 3 gate blocks on `complete=false` or any non-deferred unresolved item, a user can successfully record answers and still remain permanently blocked.
+
+2. **High: Migration can silently discard pending work by trusting `complete=true`.** Wave 1 says V1 `questions[]` are only converted into `unresolved[]` when `required=true` and `complete=false`. If a V1 blob has a stale or incorrect `complete=true`, the plan explicitly preserves that completion and drops the outstanding questions during migration. That is a data-loss path, not just a reconciliation choice.
+
+3. **Medium: The first-access writeback migration has no concurrency or atomicity story.** Wave 2 rewrites the on-disk state as soon as migration changes the version. The plan does not mention locking, compare-and-swap, or atomic temp-file replacement, so two concurrent commands can migrate and overwrite each other, and a crash mid-write can corrupt the only copy of the discovery state.
+
+4. **Medium: Malformed list element shapes are not actually handled, despite the claim of graceful migration.** The plan only says non-list fields become empty lists and `None` is skipped. But Wave 3 gate logic assumes each `unresolved[]` entry is a dict and calls `i.get("deferred")`. A list containing a string, integer, or other malformed item will still crash status/checkpoint paths even after migration.
+
+## Residual Risks
+- Exact-text identity for questions and `--resolve TEXT` remains operationally brittle. Even if accepted for V1, duplicated prompts, whitespace changes, or formatting drift will still make items hard to address unambiguously.
+- Removing `question_count` and `asked_count` in Wave 4 may still break untracked downstream consumers or scripts that are not covered by the repo tests, even if the internal runner is updated.
+tokens used
+6,888
