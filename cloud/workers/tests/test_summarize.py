@@ -1,6 +1,8 @@
 """Tests for summarize worker."""
 
+import importlib
 import json
+import sys
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -93,6 +95,15 @@ class TestValidateInput:
         with pytest.raises(ValidationError) as exc_info:
             validate_input(data)
         assert "turns must be an array" in exc_info.value.message
+
+
+def load_summarize_module(monkeypatch: pytest.MonkeyPatch, parser_version: str | None = None):
+    """Reload summarize.py with controlled environment."""
+    monkeypatch.delenv("SUMMARIZE_PARSER_VERSION", raising=False)
+    if parser_version is not None:
+        monkeypatch.setenv("SUMMARIZE_PARSER_VERSION", parser_version)
+    sys.modules.pop("summarize", None)
+    return importlib.import_module("summarize")
 
 
 class TestExtractDecisionCodeFromText:
@@ -666,6 +677,20 @@ class TestRunSummarize:
         assert result["summary"]["decisionSource"] == "deterministic"
         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
         assert result["summary"]["decisionText"] is None
+
+    def test_parser_version_defaults_to_current_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test parser version defaults to the current worker value."""
+        module = load_summarize_module(monkeypatch)
+
+        assert module.PARSER_VERSION == "job-choice-v2"
+        sys.modules.pop("summarize", None)
+
+    def test_parser_version_uses_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test parser version can be overridden from the environment."""
+        module = load_summarize_module(monkeypatch, "parser-override-1")
+
+        assert module.PARSER_VERSION == "parser-override-1"
+        sys.modules.pop("summarize", None)
 
     def test_extracts_text_label_scale_decision(self) -> None:
         """Test deterministic text-label parsing for Job Choice scales."""

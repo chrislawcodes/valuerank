@@ -85,4 +85,22 @@ describe('config', () => {
 
     expect(config.DECISION_MODEL_V2).toBe(true);
   });
+
+  it('defaults SUMMARIZE_PARSER_VERSION to the current worker version', async () => {
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    delete process.env.SUMMARIZE_PARSER_VERSION;
+
+    const { config } = await import('../src/config.js');
+
+    expect(config.SUMMARIZE_PARSER_VERSION).toBe('job-choice-v2');
+  });
+
+  it('reads SUMMARIZE_PARSER_VERSION from environment', async () => {
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
+    process.env.SUMMARIZE_PARSER_VERSION = 'parser-override-1';
+
+    const { config } = await import('../src/config.js');
+
+    expect(config.SUMMARIZE_PARSER_VERSION).toBe('parser-override-1');
+  });
 });
