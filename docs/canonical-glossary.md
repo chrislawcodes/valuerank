@@ -253,6 +253,20 @@ Example:
 
 - “If the model changes its answer when the same condition is presented in a different order, that is an order effect.”
 
+### `Average Marginal Effect`
+
+Average Marginal Effect, often shortened to AME, is a way to measure how much the chance of a model prioritizing an attribute changes on average when that attribute’s `Level` goes up by one step.
+
+Example:
+
+- “A higher AME means the model is more sensitive to changes in that attribute’s level.”
+
+Avoid confusion:
+
+- AME is a summary of change, not the model’s raw score
+- it is used to compare sensitivity across attributes and vignettes
+- it should be read as “how much the model moves when pressure increases,” not as a replacement for `direction + strength`
+
 ### `Order Invariance`
 
 Order invariance means a model gives the same answer even when the order or presentation changes.

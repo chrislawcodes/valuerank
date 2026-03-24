@@ -173,7 +173,7 @@ describe('DomainAnalysisValueDetail', () => {
       expect(screen.getByText('Canonical decision')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /transcript/i })[0]!);
 

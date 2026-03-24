@@ -73,13 +73,13 @@ describe('TranscriptList', () => {
     render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
 
     // Initially collapsed - row content not visible
-    expect(screen.queryByText('test-sce')).not.toBeInTheDocument();
+    expect(screen.queryByText('3')).not.toBeInTheDocument();
 
     // Click to expand
     await user.click(screen.getByText('gpt-4'));
 
-    // Now scenario should be visible
-    expect(screen.getByText('test-sce')).toBeInTheDocument();
+    // Now transcript content should be visible
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('collapses model group when clicked again', async () => {
@@ -90,13 +90,13 @@ describe('TranscriptList', () => {
 
     // Expand
     await user.click(screen.getByText('gpt-4'));
-    expect(screen.getByText('test-sce')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
 
     // Collapse - use getAllByText since the model name also appears in the expanded transcript row
     const gpt4Elements = screen.getAllByText('gpt-4');
     // The first match is the model group header button
     await user.click(gpt4Elements[0]);
-    expect(screen.queryByText('test-sce')).not.toBeInTheDocument();
+    expect(screen.queryByText('3')).not.toBeInTheDocument();
   });
 
   it('calls onSelect when transcript is clicked', async () => {
@@ -109,7 +109,7 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
 
     // Click transcript
-    await user.click(screen.getByText('scenario'));
+    await user.click(screen.getByText('3'));
 
     expect(mockOnSelect).toHaveBeenCalledWith(transcript);
   });
@@ -149,7 +149,7 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.getByPlaceholderText('Filter by model or scenario...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Filter by model or transcript...')).toBeInTheDocument();
   });
 
   it('does not show filter for small lists', () => {
@@ -163,7 +163,7 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.queryByPlaceholderText('Filter by model or scenario...')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Filter by model or transcript...')).not.toBeInTheDocument();
   });
 
   it('shows decision in transcript row', async () => {
@@ -216,13 +216,56 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
-    expect(screen.getByText(/Favors second value · strong/i)).toBeInTheDocument();
-    expect(screen.getByText('Norm')).toBeInTheDocument();
-    expect(screen.getByText('deterministic')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+    expect(screen.queryByText('Fallback')).not.toBeInTheDocument();
   });
 
-  it('shows token count in transcript row', async () => {
+  it('shows a fallback badge first when the transcript was not summarized deterministically', async () => {
+    const transcript = createMockTranscript({
+      decisionCode: '1',
+      decisionModelV2: {
+        raw: {
+          matchedText: 'Achievement',
+          matchedLabel: 'Achievement',
+          parseClass: 'fallback_resolved',
+          parsePath: 'fallback_resolved.favor_second.strong',
+          parserVersion: 'v1',
+          responseExcerpt: 'Achievement',
+          manualOverride: null,
+        },
+        canonical: {
+          favoredValueKey: 'Benevolence_Dependability',
+          opposedValueKey: 'Achievement',
+          direction: 'favor_second',
+          strength: 'strong',
+          normalizationApplied: true,
+          normalizationReason: 'orientation_flipped',
+          source: 'deterministic',
+        },
+        legacy: {
+          rawScore: null,
+          canonicalScore: 1,
+        },
+      },
+    });
+
+    render(
+      <TranscriptList
+        transcripts={[transcript]}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        decisionDisplayMode="audit"
+        decisionColumnLabel="Canonical decision"
+      />
+    );
+
+    const fallbackBadge = screen.getByText('Fallback');
+    expect(fallbackBadge).toBeInTheDocument();
+    const containerText = fallbackBadge.parentElement?.textContent ?? '';
+    expect(containerText.startsWith('Fallback')).toBe(true);
+  });
+
+  it('does not show token count in transcript row', async () => {
     const user = userEvent.setup();
     const transcripts = [createMockTranscript({ tokenCount: 1234 })];
 
@@ -230,7 +273,7 @@ describe('TranscriptList', () => {
 
     await user.click(screen.getByText('gpt-4'));
 
-    expect(screen.getByText('1,234')).toBeInTheDocument();
+    expect(screen.queryByText('1,234 tokens')).not.toBeInTheDocument();
   });
 
   it('shows created time in transcript row', async () => {
@@ -242,31 +285,6 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
 
     expect(screen.getByText(/\d{2}:\d{2}:\d{2} [AP]M/)).toBeInTheDocument();
-  });
-
-  it('handles transcript without scenario ID', async () => {
-    const user = userEvent.setup();
-    const transcripts = [createMockTranscript({ scenarioId: null })];
-
-    render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
-
-    await user.click(screen.getByText('gpt-4'));
-
-    expect(screen.getByText('No scenario')).toBeInTheDocument();
-  });
-
-  it('truncates long scenario IDs', async () => {
-    const user = userEvent.setup();
-    const transcripts = [
-      createMockTranscript({ scenarioId: 'very-long-scenario-id-that-should-be-truncated' }),
-    ];
-
-    render(<TranscriptList transcripts={transcripts} onSelect={mockOnSelect} />);
-
-    await user.click(screen.getByText('gpt-4'));
-
-    // Should show truncated version
-    expect(screen.getByText('very-lon')).toBeInTheDocument();
   });
 
   it('shows table headers in flat list even without dimensions', () => {
@@ -282,7 +300,6 @@ describe('TranscriptList', () => {
       />
     );
 
-    expect(screen.getByText('Scenario')).toBeInTheDocument();
     expect(screen.getByText('Model')).toBeInTheDocument();
     expect(screen.getByText('Decision')).toBeInTheDocument();
   });
@@ -308,7 +325,7 @@ describe('TranscriptList', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(tooltipText);
   });
 
-  it('shows normalized decision labels and a Norm badge for adjusted rows', () => {
+  it('shows normalized decision labels for adjusted rows', () => {
     const transcript = createMockTranscript({
       decisionCode: '5',
       decisionMetadata: {
@@ -329,35 +346,10 @@ describe('TranscriptList', () => {
         groupByModel={false}
         decisionColumnLabel="Normalized decision score"
         normalizedDecisionTranscriptIds={new Set([transcript.id])}
-        normalizationBadgeTitle="This score was adjusted because this transcript showed the options in the opposite order."
       />
     );
 
     expect(screen.getByText('1 - Strongly support (Achievement)')).toBeInTheDocument();
-    expect(screen.getByText('Norm')).toBeInTheDocument();
-  });
-
-  it('applies the same condition marker to rows from the same scenario', () => {
-    const transcripts = [
-      createMockTranscript({ id: 't1', scenarioId: 'scenario-1', modelId: 'gpt-4' }),
-      createMockTranscript({ id: 't2', scenarioId: 'scenario-1', modelId: 'claude-3' }),
-      createMockTranscript({ id: 't3', scenarioId: 'scenario-2', modelId: 'gemini-2' }),
-    ];
-
-    render(
-      <TranscriptList
-        transcripts={transcripts}
-        onSelect={mockOnSelect}
-        groupByModel={false}
-      />
-    );
-
-    expect(screen.getAllByText('C1')).toHaveLength(2);
-    expect(screen.getByText('C2')).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => element?.textContent === 'Rows with the same C# badge come from the same repeated condition.')
-    ).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/Condition group C1\. Rows with this badge come from the same repeated condition\./i)).toHaveLength(2);
   });
 
   it('sorts flat transcript rows by the first value and then the second by default', () => {
@@ -389,9 +381,9 @@ describe('TranscriptList', () => {
   it('sorts flat transcript rows when a column header is clicked', async () => {
     const user = userEvent.setup();
     const transcripts = [
-      createMockTranscript({ id: 't1', tokenCount: 300 }),
-      createMockTranscript({ id: 't2', tokenCount: 100 }),
-      createMockTranscript({ id: 't3', tokenCount: 200 }),
+      createMockTranscript({ id: 't1', modelId: 'model-c' }),
+      createMockTranscript({ id: 't2', modelId: 'model-a' }),
+      createMockTranscript({ id: 't3', modelId: 'model-b' }),
     ];
 
     const { container } = render(
@@ -402,8 +394,7 @@ describe('TranscriptList', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /Sort by Tokens/i }));
-    await user.click(screen.getByRole('button', { name: /Sort by Tokens/i }));
+    await user.click(screen.getByRole('button', { name: /Sort by Model/i }));
 
     const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
       .map((element) => element.getAttribute('data-transcript-id'));

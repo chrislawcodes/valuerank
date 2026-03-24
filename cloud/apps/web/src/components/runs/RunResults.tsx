@@ -10,6 +10,7 @@ import { Button } from '../ui/Button';
 import { TranscriptList } from './TranscriptList';
 import { TranscriptViewer } from './TranscriptViewer';
 import type { Run, Transcript } from '../../api/operations/runs';
+import { hasTranscriptDecisionModelV2 } from '../../utils/transcriptDecisionModel';
 
 type RunResultsProps = {
   run: Run;
@@ -111,6 +112,19 @@ export function RunResults({
 
   const transcripts = run.transcripts ?? [];
   const stats = calculateStats(transcripts, run.analysis);
+  const listDisplayMode = transcripts.length > 0
+    && transcripts.every(hasTranscriptDecisionModelV2)
+    ? 'audit'
+    : 'legacy';
+  const viewerDisplayMode = selectedTranscript?.decisionModelV2 != null
+    ? 'audit'
+    : listDisplayMode;
+  const decisionColumnLabel = listDisplayMode === 'audit'
+    ? 'Decision summary'
+    : 'Decision';
+  const decisionColumnTooltip = listDisplayMode === 'audit'
+    ? 'Shows the decision headline and summary from the backend transcript data.'
+    : undefined;
 
   const handleTranscriptSelect = (transcript: Transcript) => {
     setSelectedTranscript(transcript);
@@ -315,6 +329,9 @@ export function RunResults({
         dimensionLabels={dimensionLabels}
         onDecisionChange={handleDecisionChange}
         updatingTranscriptIds={updatingTranscriptIds}
+        decisionColumnLabel={decisionColumnLabel}
+        decisionColumnTooltip={decisionColumnTooltip}
+        decisionDisplayMode={listDisplayMode}
       />
 
       {/* Transcript viewer modal */}
@@ -324,6 +341,7 @@ export function RunResults({
           onClose={handleCloseViewer}
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
+          decisionDisplayMode={viewerDisplayMode}
         />
       )}
     </div>

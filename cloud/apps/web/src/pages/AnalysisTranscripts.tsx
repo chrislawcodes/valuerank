@@ -638,21 +638,15 @@ export function AnalysisTranscripts() {
     ? 'audit'
     : listDisplayMode;
   const decisionColumnLabel = listDisplayMode === 'audit'
-    ? 'Canonical decision'
+    ? 'Decision summary'
     : normalizedDecisionTranscriptIds.size > 0
       ? 'Normalized decision score'
       : 'Decision';
   const decisionColumnTooltip = listDisplayMode === 'audit'
-    ? 'Shows the favored value and strength from the V2 canonical decision model.'
+    ? 'Shows the decision headline and summary from the backend transcript data.'
     : normalizedDecisionTranscriptIds.size > 0
       ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
       : undefined;
-  const normalizationBadgeTitle = listDisplayMode === 'audit'
-    ? 'Canonical orientation was normalized in the V2 decision model.'
-    : normalizedDecisionTranscriptIds.size > 0
-      ? 'This score was adjusted because this transcript showed the options in the opposite order.'
-      : undefined;
-
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -896,7 +890,7 @@ export function AnalysisTranscripts() {
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-gray-900">
-              {listDisplayMode === 'audit' ? 'Canonical coverage' : 'Parse coverage'}
+              {listDisplayMode === 'audit' ? 'Decision coverage' : 'Parse coverage'}
             </span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               Exact {transcriptCoverage.exact}
@@ -939,7 +933,6 @@ export function AnalysisTranscripts() {
           decisionColumnLabel={decisionColumnLabel}
           decisionColumnTooltip={decisionColumnTooltip}
           normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
-          normalizationBadgeTitle={normalizationBadgeTitle}
           decisionDisplayMode={listDisplayMode}
         />
       )}
@@ -951,7 +944,6 @@ export function AnalysisTranscripts() {
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
           normalizeDecision={normalizedDecisionTranscriptIds.has(selectedTranscript.id)}
-          normalizationBadgeTitle={normalizationBadgeTitle}
           decisionDisplayMode={viewerDisplayMode}
         />
       )}

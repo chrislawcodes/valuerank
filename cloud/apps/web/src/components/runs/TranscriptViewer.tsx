@@ -4,14 +4,14 @@
  * Displays the full content of a transcript in a modal or expanded view.
  */
 
-import { X, User, Bot, Clock, Hash, Zap } from 'lucide-react';
+import { X, User, Bot, Clock, Hash } from 'lucide-react';
 import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
 import { getDecisionMetadata } from '../../utils/methodology';
 import {
   formatCanonicalDecisionHeadline,
-  formatCanonicalDecisionSubtitle,
+  getTranscriptDecisionAuditBadge,
   normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
@@ -22,7 +22,6 @@ type TranscriptViewerProps = {
   onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
   decisionUpdating?: boolean;
   normalizeDecision?: boolean;
-  normalizationBadgeTitle?: string;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
@@ -109,7 +108,6 @@ export function TranscriptViewer({
   onDecisionChange,
   decisionUpdating = false,
   normalizeDecision = false,
-  normalizationBadgeTitle,
   decisionDisplayMode,
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
@@ -122,7 +120,7 @@ export function TranscriptViewer({
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const rawEvidence = transcript.decisionModelV2?.raw ?? null;
   const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
-  const canonicalDecisionSubtitle = isAuditMode ? formatCanonicalDecisionSubtitle(transcript) : '';
+  const auditDecisionBadge = isAuditMode ? getTranscriptDecisionAuditBadge(transcript) : null;
   const scaleLabels = decisionMetadata?.scaleLabels ?? [];
   const canOverrideDecision = Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
@@ -174,7 +172,6 @@ export function TranscriptViewer({
             {transcript.turnCount} turn{transcript.turnCount !== 1 ? 's' : ''}
           </span>
           <span className="flex items-center gap-1">
-            <Zap className="w-4 h-4" />
             {transcript.tokenCount.toLocaleString()} tokens
           </span>
           <span className="flex items-center gap-1">
@@ -183,24 +180,13 @@ export function TranscriptViewer({
           </span>
           {isAuditMode ? (
             <span className="flex items-center gap-2">
+              {auditDecisionBadge && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                  {auditDecisionBadge}
+                </span>
+              )}
               <span className="text-gray-500">Canonical decision:</span>
               <span className="font-medium text-gray-800">{canonicalDecisionHeadline}</span>
-              {canonicalDecision?.normalizationApplied && (
-                <span
-                  className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
-                  title="Orientation was normalized in the canonical decision model."
-                >
-                  Norm
-                </span>
-              )}
-              {canonicalDecision?.source && (
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
-                  {canonicalDecision.source}
-                </span>
-              )}
-              {canonicalDecisionSubtitle && (
-                <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
-              )}
             </span>
           ) : (
             <span className="flex items-center gap-2">
@@ -208,14 +194,6 @@ export function TranscriptViewer({
               <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
                 {legacyDecisionDisplay}
               </span>
-              {normalizeDecision && (
-                <span
-                  className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
-                  title={normalizationBadgeTitle}
-                >
-                  Norm
-                </span>
-              )}
               {decisionMetadata?.parseClass === 'ambiguous' && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                   Ambiguous

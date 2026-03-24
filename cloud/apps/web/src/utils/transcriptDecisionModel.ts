@@ -30,7 +30,8 @@ export function formatCanonicalDecisionHeadline(transcript: Transcript): string 
     return 'Unknown';
   }
 
-  return `${formatDisplayLabel(canonical.favoredValueKey)} > ${formatDisplayLabel(canonical.opposedValueKey)}`;
+  const strengthLabel = canonical.strength === 'strong' ? 'Strongly favors' : 'Somewhat favors';
+  return `${strengthLabel} ${formatDisplayLabel(canonical.favoredValueKey)}`;
 }
 
 export function formatCanonicalDecisionSubtitle(transcript: Transcript): string {
@@ -45,10 +46,14 @@ export function formatCanonicalDecisionSubtitle(transcript: Transcript): string 
     return 'Neutral';
   }
 
-  const directionLabel = canonical.direction === 'favor_first'
-    ? 'Favors first value'
-    : 'Favors second value';
-  return `${directionLabel} · ${canonical.strength}`;
+  return '';
+}
+
+export function getTranscriptDecisionAuditBadge(transcript: Transcript): string | null {
+  const raw = transcript.decisionModelV2?.raw;
+  if (!raw) return null;
+  if (raw.parseClass === 'exact') return null;
+  return 'Fallback';
 }
 
 export function normalizeLegacyDecisionCode(decision: string, normalizeDecision: boolean): string {
