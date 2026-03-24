@@ -262,6 +262,7 @@ export async function restartSummarization(
       {
         runId,
         transcriptId: transcript.id,
+        ...(force ? { forceSummarize: true } : {}),
       },
       jobOptions
     );

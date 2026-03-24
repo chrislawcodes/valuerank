@@ -9,10 +9,12 @@
  */
 
 import path from 'path';
+import crypto from 'crypto';
 import type * as PgBoss from 'pg-boss';
 import { db, Prisma } from '@valuerank/db';
-import type { DecisionMetadata } from '@valuerank/db';
+import type { DecisionMetadata, SummaryCache } from '@valuerank/db';
 import { createLogger } from '@valuerank/shared';
+import { config } from '../../config.js';
 import type { SummarizeTranscriptJobData } from '../types.js';
 import { DEFAULT_JOB_OPTIONS } from '../types.js';
 import { spawnPython } from '../spawn.js';
@@ -21,7 +23,6 @@ import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
-import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -58,13 +59,77 @@ type SummarizeWorkerOutput =
     }
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
 
+type SuccessfulSummarizeWorkerSummary = Extract<SummarizeWorkerOutput, { success: true }>['summary'];
+
+type RawDecisionEvidence = {
+  matchedText: string | null;
+  matchedLabel: string | null;
+  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
+  parsePath: string | null;
+  parserVersion: string | null;
+  responseExcerpt: string | null;
+  manualOverride: {
+    previousValue: string | null;
+    overriddenAt: string | null;
+    overriddenByUserId: string | null;
+  } | null;
+};
+
 function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function buildRawDecisionEvidence(decisionMetadata: unknown): RawDecisionEvidence {
+  const record = isPlainJsonObject(decisionMetadata) ? decisionMetadata : null;
+  const manualOverride = record && isPlainJsonObject(record.manualOverride) ? record.manualOverride : null;
+
+  return {
+    matchedText:
+      record && typeof record.matchedText === 'string'
+        ? record.matchedText
+        : record && typeof record.matchedLabel === 'string'
+          ? record.matchedLabel
+          : record && typeof record.responseExcerpt === 'string'
+            ? record.responseExcerpt
+            : null,
+    matchedLabel: record && typeof record.matchedLabel === 'string' ? record.matchedLabel : null,
+    parseClass:
+      record &&
+      (record.parseClass === 'exact' ||
+        record.parseClass === 'fallback_resolved' ||
+        record.parseClass === 'ambiguous' ||
+        record.parseClass === 'unparseable')
+        ? record.parseClass
+        : null,
+    parsePath: record && typeof record.parsePath === 'string' ? record.parsePath : null,
+    parserVersion: record && typeof record.parserVersion === 'string' ? record.parserVersion : null,
+    responseExcerpt: record && typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
+    manualOverride:
+      manualOverride === null
+        ? null
+        : {
+            previousValue:
+              typeof manualOverride.previousValue === 'string'
+                ? manualOverride.previousValue
+                : typeof manualOverride.previousDecisionCode === 'string'
+                  ? manualOverride.previousDecisionCode
+                  : null,
+            overriddenAt:
+              typeof manualOverride.overriddenAt === 'string'
+                ? manualOverride.overriddenAt
+                : null,
+            overriddenByUserId:
+              typeof manualOverride.overriddenByUserId === 'string'
+                ? manualOverride.overriddenByUserId
+                : null,
+    },
+  };
+}
+
 function buildDecisionMetadataForPersist(
-  decisionMetadata: DecisionMetadata | null | undefined,
-  rawDecisionEvidence: ReturnType<typeof buildRawDecisionEvidence>,
+  decisionMetadata: unknown,
+  rawDecisionEvidence: RawDecisionEvidence,
+  summaryCache?: SummaryCache,
 ): Prisma.InputJsonValue | typeof Prisma.DbNull {
   if (decisionMetadata == null) {
     return Prisma.DbNull;
@@ -74,12 +139,118 @@ function buildDecisionMetadataForPersist(
     return decisionMetadata as Prisma.InputJsonValue;
   }
 
+  const { summaryCache: _ignoredSummaryCache, ...persistedDecisionMetadata } = decisionMetadata;
+
   return {
-    ...decisionMetadata,
+    ...persistedDecisionMetadata,
     rawDecisionEvidence,
+    ...(summaryCache ? { summaryCache } : {}),
   } as Prisma.InputJsonValue;
 }
 
+function getTranscriptResponseText(transcriptContent: unknown): string {
+  if (!isPlainJsonObject(transcriptContent)) {
+    return '';
+  }
+
+  const turns = transcriptContent.turns;
+  if (!Array.isArray(turns)) {
+    return '';
+  }
+
+  const responses: string[] = [];
+  for (const turn of turns) {
+    if (!isPlainJsonObject(turn)) {
+      continue;
+    }
+
+    const response = turn.targetResponse;
+    if (typeof response === 'string' && response.length > 0) {
+      responses.push(response);
+    }
+  }
+
+  return responses.join('\n').trim();
+}
+
+function computeTranscriptResponseSha256(transcriptContent: unknown): string | null {
+  const responseText = getTranscriptResponseText(transcriptContent);
+  if (responseText.length === 0) {
+    return null;
+  }
+
+  return crypto.createHash('sha256').update(responseText, 'utf8').digest('hex');
+}
+
+function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.decisionCode === 'string' &&
+    value.decisionCode !== 'error' &&
+    typeof value.decisionCodeSource === 'string' &&
+    (typeof value.decisionText === 'string' || value.decisionText === null) &&
+    isPlainJsonObject(value.decisionMetadata) &&
+    !('summaryCache' in value)
+  );
+}
+
+function isSummaryCache(value: unknown): value is SummaryCache {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.responseSha256 === 'string' &&
+    value.responseSha256.length > 0 &&
+    typeof value.parserVersion === 'string' &&
+    value.parserVersion.length > 0 &&
+    typeof value.modelId === 'string' &&
+    value.modelId.length > 0 &&
+    isSummaryCacheSummary(value.summary)
+  );
+}
+
+function buildSummaryCacheRecord(
+  summary: SuccessfulSummarizeWorkerSummary,
+  responseSha256: string,
+  parserVersion: string,
+  modelId: string,
+): SummaryCache | null {
+  if (!isPlainJsonObject(summary.decisionMetadata)) {
+    return null;
+  }
+
+  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
+
+  return {
+    responseSha256,
+    parserVersion,
+    modelId,
+    summary: {
+      decisionCode: summary.decisionCode,
+      decisionCodeSource: summary.decisionSource,
+      decisionText: summary.decisionText,
+      decisionMetadata: workerDecisionMetadata,
+    },
+  };
+}
+
+function isCacheRecordMatch(
+  cache: SummaryCache,
+  responseSha256: string | null,
+  parserVersion: string,
+  modelId: string,
+): boolean {
+  return (
+    responseSha256 !== null &&
+    cache.responseSha256 === responseSha256 &&
+    cache.parserVersion === parserVersion &&
+    cache.modelId === modelId
+  );
+}
 /**
  * Queues a compute_token_stats job for cost prediction data.
  */
@@ -186,10 +357,54 @@ async function processSummarizeJob(
       return; // Complete job - nothing to summarize
     }
 
-    // Skip if already summarized
-    if (transcript.summarizedAt) {
+    const wasAlreadySummarized = transcript.summarizedAt !== null;
+    const responseSha256 = computeTranscriptResponseSha256(transcript.content);
+    const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
+      ? transcript.decisionMetadata
+      : null;
+    const hasSummaryCacheField = transcriptDecisionMetadata !== null
+      && 'summaryCache' in transcriptDecisionMetadata;
+    const summaryCache = hasSummaryCacheField && isSummaryCache(transcriptDecisionMetadata.summaryCache)
+      ? transcriptDecisionMetadata.summaryCache
+      : null;
+    const parserVersion = config.SUMMARIZE_PARSER_VERSION;
+    const forceSummarize = job.data.forceSummarize === true;
+
+    if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
+      log.info({ jobId, transcriptId, modelId }, 'Transcript summary cache hit');
+
+      if (!wasAlreadySummarized) {
+        const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
+        await db.transcript.update({
+          where: { id: transcriptId },
+          data: {
+            decisionCode: summaryCache.summary.decisionCode,
+            decisionCodeSource: summaryCache.summary.decisionCodeSource,
+            decisionText: summaryCache.summary.decisionText,
+            decisionMetadata: buildDecisionMetadataForPersist(
+              summaryCache.summary.decisionMetadata,
+              rawDecisionEvidence,
+              summaryCache,
+            ),
+            summarizedAt: new Date(),
+          },
+        });
+
+        await incrementSummarizeCompleted(runId);
+        await maybeCompleteRun(runId);
+      }
+
+      return;
+    }
+
+    // Skip only for legacy summarized transcripts with no cache metadata.
+    if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
       log.info({ jobId, transcriptId }, 'Transcript already summarized, skipping');
       return;
+    }
+
+    if (!forceSummarize && hasSummaryCacheField) {
+      log.info({ jobId, transcriptId, modelId }, 'Transcript summary cache miss, re-summarizing');
     }
 
     // Build input for Python worker
@@ -243,13 +458,20 @@ async function processSummarizeJob(
 
     // Update transcript with summary
     const rawDecisionEvidence = buildRawDecisionEvidence(output.summary.decisionMetadata);
+    const freshSummaryCache = responseSha256
+      ? buildSummaryCacheRecord(output.summary, responseSha256, parserVersion, modelId)
+      : null;
     await db.transcript.update({
       where: { id: transcriptId },
       data: {
         decisionCode: output.summary.decisionCode,
         decisionCodeSource: output.summary.decisionSource,
         decisionText: output.summary.decisionText,
-        decisionMetadata: buildDecisionMetadataForPersist(output.summary.decisionMetadata, rawDecisionEvidence),
+        decisionMetadata: buildDecisionMetadataForPersist(
+          output.summary.decisionMetadata,
+          rawDecisionEvidence,
+          freshSummaryCache ?? undefined,
+        ),
         summarizedAt: new Date(),
       },
     });

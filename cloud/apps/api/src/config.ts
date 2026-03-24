@@ -16,6 +16,7 @@ export const config = {
   DIRECT_URL: getEnvOptional('DIRECT_URL'),
   ADMIN_EXPORT_TOKEN: getEnvOptional('ADMIN_EXPORT_TOKEN'),
   DECISION_MODEL_V2: getEnvOptional('DECISION_MODEL_V2') === 'true',
+  SUMMARIZE_PARSER_VERSION: getEnv('SUMMARIZE_PARSER_VERSION', 'job-choice-v2'),
   JWT_SECRET: getJwtSecret(),
   JWT_EXPIRES_IN: '24h',
 } as const;

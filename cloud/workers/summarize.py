@@ -48,6 +48,7 @@ Error:
 import json
 import hashlib
 import re
+import os
 import sys
 from typing import Any, Optional
 
@@ -120,7 +121,8 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
 # Default summary model if none specified
 DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
 LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
-PARSER_VERSION = "job-choice-v2"
+DEFAULT_SUMMARIZE_PARSER_VERSION = "job-choice-v2"
+PARSER_VERSION = os.getenv("SUMMARIZE_PARSER_VERSION", DEFAULT_SUMMARIZE_PARSER_VERSION)
 
 
 def validate_input(data: dict[str, Any]) -> None:
