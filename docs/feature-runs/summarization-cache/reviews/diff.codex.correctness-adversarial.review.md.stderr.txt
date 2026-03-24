@@ -1,0 +1,864 @@
+2026-03-24T18:44:57.700958Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.701759Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.708652Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d212a-0ede-7a91-afb3-e2be10b4e459
+--------
+user
+Review this diff artifact using a correctness-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: implementation.diff.patch
+diff --git a/cloud/apps/api/src/config.ts b/cloud/apps/api/src/config.ts
+index f7ab80bb..4ae96862 100644
+--- a/cloud/apps/api/src/config.ts
++++ b/cloud/apps/api/src/config.ts
+@@ -16,6 +16,7 @@ export const config = {
+   DIRECT_URL: getEnvOptional('DIRECT_URL'),
+   ADMIN_EXPORT_TOKEN: getEnvOptional('ADMIN_EXPORT_TOKEN'),
+   DECISION_MODEL_V2: getEnvOptional('DECISION_MODEL_V2') === 'true',
++  SUMMARIZE_PARSER_VERSION: getEnv('SUMMARIZE_PARSER_VERSION', 'job-choice-v2'),
+   JWT_SECRET: getJwtSecret(),
+   JWT_EXPIRES_IN: '24h',
+ } as const;
+diff --git a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+index afd18d36..37433f23 100644
+--- a/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
++++ b/cloud/apps/api/src/queue/handlers/summarize-transcript.ts
+@@ -9,10 +9,12 @@
+  */
+ 
+ import path from 'path';
++import crypto from 'crypto';
+ import type * as PgBoss from 'pg-boss';
+ import { db, Prisma } from '@valuerank/db';
+-import type { DecisionMetadata } from '@valuerank/db';
++import type { DecisionMetadata, SummaryCache } from '@valuerank/db';
+ import { createLogger } from '@valuerank/shared';
++import { config } from '../../config.js';
+ import type { SummarizeTranscriptJobData } from '../types.js';
+ import { DEFAULT_JOB_OPTIONS } from '../types.js';
+ import { spawnPython } from '../spawn.js';
+@@ -58,13 +60,16 @@ type SummarizeWorkerOutput =
+     }
+   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+ 
++type SuccessfulSummarizeWorkerSummary = Extract<SummarizeWorkerOutput, { success: true }>['summary'];
++
+ function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
+   return value !== null && typeof value === 'object' && !Array.isArray(value);
+ }
+ 
+ function buildDecisionMetadataForPersist(
+-  decisionMetadata: DecisionMetadata | null | undefined,
++  decisionMetadata: unknown,
+   rawDecisionEvidence: ReturnType<typeof buildRawDecisionEvidence>,
++  summaryCache?: SummaryCache,
+ ): Prisma.InputJsonValue | typeof Prisma.DbNull {
+   if (decisionMetadata == null) {
+     return Prisma.DbNull;
+@@ -74,12 +79,119 @@ function buildDecisionMetadataForPersist(
+     return decisionMetadata as Prisma.InputJsonValue;
+   }
+ 
++  const { summaryCache: _ignoredSummaryCache, ...persistedDecisionMetadata } = decisionMetadata;
++
+   return {
+-    ...decisionMetadata,
++    ...persistedDecisionMetadata,
+     rawDecisionEvidence,
++    ...(summaryCache ? { summaryCache } : {}),
+   } as Prisma.InputJsonValue;
+ }
+ 
++function getTranscriptResponseText(transcriptContent: unknown): string {
++  if (!isPlainJsonObject(transcriptContent)) {
++    return '';
++  }
++
++  const turns = transcriptContent.turns;
++  if (!Array.isArray(turns)) {
++    return '';
++  }
++
++  const responses: string[] = [];
++  for (const turn of turns) {
++    if (!isPlainJsonObject(turn)) {
++      continue;
++    }
++
++    const response = turn.targetResponse;
++    if (typeof response === 'string' && response.length > 0) {
++      responses.push(response);
++    }
++  }
++
++  return responses.join('\n').trim();
++}
++
++function computeTranscriptResponseSha256(transcriptContent: unknown): string | null {
++  const responseText = getTranscriptResponseText(transcriptContent);
++  if (responseText.length === 0) {
++    return null;
++  }
++
++  return crypto.createHash('sha256').update(responseText, 'utf8').digest('hex');
++}
++
++function isSummaryCacheSummary(value: unknown): value is SummaryCache['summary'] {
++  if (!isPlainJsonObject(value)) {
++    return false;
++  }
++
++  return (
++    typeof value.decisionCode === 'string' &&
++    value.decisionCode !== 'error' &&
++    typeof value.decisionCodeSource === 'string' &&
++    (typeof value.decisionText === 'string' || value.decisionText === null) &&
++    isPlainJsonObject(value.decisionMetadata) &&
++    !('summaryCache' in value)
++  );
++}
++
++function isSummaryCache(value: unknown): value is SummaryCache {
++  if (!isPlainJsonObject(value)) {
++    return false;
++  }
++
++  return (
++    typeof value.responseSha256 === 'string' &&
++    value.responseSha256.length > 0 &&
++    typeof value.parserVersion === 'string' &&
++    value.parserVersion.length > 0 &&
++    typeof value.modelId === 'string' &&
++    value.modelId.length > 0 &&
++    isSummaryCacheSummary(value.summary)
++  );
++}
++
++function buildSummaryCacheRecord(
++  summary: SuccessfulSummarizeWorkerSummary,
++  responseSha256: string,
++  parserVersion: string,
++  modelId: string,
++): SummaryCache | null {
++  if (!isPlainJsonObject(summary.decisionMetadata)) {
++    return null;
++  }
++
++  const { summaryCache: _ignoredSummaryCache, ...workerDecisionMetadata } = summary.decisionMetadata;
++
++  return {
++    responseSha256,
++    parserVersion,
++    modelId,
++    summary: {
++      decisionCode: summary.decisionCode,
++      decisionCodeSource: summary.decisionSource,
++      decisionText: summary.decisionText,
++      decisionMetadata: workerDecisionMetadata,
++    },
++  };
++}
++
++function isCacheRecordMatch(
++  cache: SummaryCache,
++  responseSha256: string | null,
++  parserVersion: string,
++  modelId: string,
++): boolean {
++  return (
++    responseSha256 !== null &&
++    cache.responseSha256 === responseSha256 &&
++    cache.parserVersion === parserVersion &&
++    cache.modelId === modelId
++  );
++}
++
+ /**
+  * Queues a compute_token_stats job for cost prediction data.
+  */
+@@ -186,12 +298,56 @@ async function processSummarizeJob(
+       return; // Complete job - nothing to summarize
+     }
+ 
+-    // Skip if already summarized
+-    if (transcript.summarizedAt) {
++    const wasAlreadySummarized = transcript.summarizedAt !== null;
++    const responseSha256 = computeTranscriptResponseSha256(transcript.content);
++    const transcriptDecisionMetadata = isPlainJsonObject(transcript.decisionMetadata)
++      ? transcript.decisionMetadata
++      : null;
++    const hasSummaryCacheField = transcriptDecisionMetadata !== null
++      && 'summaryCache' in transcriptDecisionMetadata;
++    const summaryCache = hasSummaryCacheField && isSummaryCache(transcriptDecisionMetadata.summaryCache)
++      ? transcriptDecisionMetadata.summaryCache
++      : null;
++    const parserVersion = config.SUMMARIZE_PARSER_VERSION;
++    const forceSummarize = job.data.forceSummarize === true;
++
++    if (!forceSummarize && summaryCache && isCacheRecordMatch(summaryCache, responseSha256, parserVersion, modelId)) {
++      log.info({ jobId, transcriptId, modelId }, 'Transcript summary cache hit');
++
++      if (!wasAlreadySummarized) {
++        const rawDecisionEvidence = buildRawDecisionEvidence(summaryCache.summary.decisionMetadata);
++        await db.transcript.update({
++          where: { id: transcriptId },
++          data: {
++            decisionCode: summaryCache.summary.decisionCode,
++            decisionCodeSource: summaryCache.summary.decisionCodeSource,
++            decisionText: summaryCache.summary.decisionText,
++            decisionMetadata: buildDecisionMetadataForPersist(
++              summaryCache.summary.decisionMetadata,
++              rawDecisionEvidence,
++              summaryCache,
++            ),
++            summarizedAt: new Date(),
++          },
++        });
++
++        await incrementSummarizeCompleted(runId);
++        await maybeCompleteRun(runId);
++      }
++
++      return;
++    }
++
++    // Skip only for legacy summarized transcripts with no cache metadata.
++    if (!forceSummarize && !hasSummaryCacheField && wasAlreadySummarized) {
+       log.info({ jobId, transcriptId }, 'Transcript already summarized, skipping');
+       return;
+     }
+ 
++    if (!forceSummarize && hasSummaryCacheField) {
++      log.info({ jobId, transcriptId, modelId }, 'Transcript summary cache miss, re-summarizing');
++    }
++
+     // Build input for Python worker
+     const workerInput: SummarizeWorkerInput = {
+       transcriptId,
+@@ -243,13 +399,20 @@ async function processSummarizeJob(
+ 
+     // Update transcript with summary
+     const rawDecisionEvidence = buildRawDecisionEvidence(output.summary.decisionMetadata);
++    const freshSummaryCache = responseSha256
++      ? buildSummaryCacheRecord(output.summary, responseSha256, parserVersion, modelId)
++      : null;
+     await db.transcript.update({
+       where: { id: transcriptId },
+       data: {
+         decisionCode: output.summary.decisionCode,
+         decisionCodeSource: output.summary.decisionSource,
+         decisionText: output.summary.decisionText,
+-        decisionMetadata: buildDecisionMetadataForPersist(output.summary.decisionMetadata, rawDecisionEvidence),
++        decisionMetadata: buildDecisionMetadataForPersist(
++          output.summary.decisionMetadata,
++          rawDecisionEvidence,
++          freshSummaryCache ?? undefined,
++        ),
+         summarizedAt: new Date(),
+       },
+     });
+diff --git a/cloud/apps/api/src/queue/types.ts b/cloud/apps/api/src/queue/types.ts
+index 27cc9f14..4a19514b 100644
+--- a/cloud/apps/api/src/queue/types.ts
++++ b/cloud/apps/api/src/queue/types.ts
+@@ -25,6 +25,7 @@ export type SummarizeTranscriptJobData = {
+   runId: string;
+   transcriptId: string;
+   summaryModelId?: string; // Optional: defaults to configured summary model
++  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+ };
+ 
+ export type AnalyzeBasicJobData = {
+diff --git a/cloud/apps/api/src/services/run/summarization.ts b/cloud/apps/api/src/services/run/summarization.ts
+index 8754d158..893df55e 100644
+--- a/cloud/apps/api/src/services/run/summarization.ts
++++ b/cloud/apps/api/src/services/run/summarization.ts
+@@ -262,6 +262,7 @@ export async function restartSummarization(
+       {
+         runId,
+         transcriptId: transcript.id,
++        ...(force ? { forceSummarize: true } : {}),
+       },
+       jobOptions
+     );
+diff --git a/cloud/apps/api/tests/config.test.ts b/cloud/apps/api/tests/config.test.ts
+index 3147477d..7fd20849 100644
+--- a/cloud/apps/api/tests/config.test.ts
++++ b/cloud/apps/api/tests/config.test.ts
+@@ -85,4 +85,22 @@ describe('config', () => {
+ 
+     expect(config.DECISION_MODEL_V2).toBe(true);
+   });
++
++  it('defaults SUMMARIZE_PARSER_VERSION to the current worker version', async () => {
++    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
++    delete process.env.SUMMARIZE_PARSER_VERSION;
++
++    const { config } = await import('../src/config.js');
++
++    expect(config.SUMMARIZE_PARSER_VERSION).toBe('job-choice-v2');
++  });
++
++  it('reads SUMMARIZE_PARSER_VERSION from environment', async () => {
++    process.env.DATABASE_URL = 'postgresql://test:test@localhost/test';
++    process.env.SUMMARIZE_PARSER_VERSION = 'parser-override-1';
++
++    const { config } = await import('../src/config.js');
++
++    expect(config.SUMMARIZE_PARSER_VERSION).toBe('parser-override-1');
++  });
+ });
+diff --git a/cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts b/cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts
+index 60cf3e52..9b49196a 100644
+--- a/cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts
++++ b/cloud/apps/api/tests/queue/handlers/summarize-transcript.test.ts
+@@ -4,8 +4,10 @@
+  * Tests summary generation and run completion logic.
+  */
+ 
++import crypto from 'crypto';
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { db } from '@valuerank/db';
++import { config } from '../../../src/config.js';
+ 
+ // Mock pg-boss types
+ type MockJob<T> = {
+@@ -58,7 +60,57 @@ describe('summarize-transcript handler', () => {
+     }
+   });
+ 
+-  async function createTestData() {
++  function computeResponseSha256(content: { turns: Array<{ targetResponse?: string }> }): string {
++    const responseText = content.turns
++      .map((turn) => turn.targetResponse ?? '')
++      .filter((response) => response.length > 0)
++      .join('\n')
++      .trim();
++
++    return crypto.createHash('sha256').update(responseText, 'utf8').digest('hex');
++  }
++
++  function buildSuccessfulWorkerSummary(
++    content: { turns: Array<{ targetResponse?: string }> },
++    options?: {
++    decisionCode?: string;
++    decisionSource?: string;
++    decisionText?: string | null;
++    decisionMetadata?: Record<string, unknown>;
++      parserVersion?: string;
++    }
++  ) {
++    const responseSha256 = computeResponseSha256(content);
++    return {
++      decisionCode: options?.decisionCode ?? '4',
++      decisionSource: options?.decisionSource ?? 'deterministic',
++      decisionText: options?.decisionText ?? 'AI prioritized safety over efficiency',
++      decisionMetadata: options?.decisionMetadata ?? {
++        matchedText: 'Achievement',
++        matchedLabel: 'Achievement',
++        parseClass: 'exact',
++        parsePath: 'numeric_deterministic',
++        parserVersion: options?.parserVersion ?? config.SUMMARIZE_PARSER_VERSION,
++        responseSha256,
++        responseExcerpt: 'Achievement',
++      },
++    };
++  }
++
++  async function createTestData(options?: {
++    content?: { turns: Array<{ probePrompt?: string; targetResponse?: string }> };
++    decisionMetadata?: unknown;
++    decisionCode?: string | null;
++    decisionCodeSource?: string | null;
++    decisionText?: string | null;
++    summarizedAt?: Date | null;
++  }) {
++    const content =
++      options?.content ??
++      {
++        turns: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }],
++      };
++
+     const definition = await db.definition.create({
+       data: {
+         name: 'Test Definition',
+@@ -81,15 +133,20 @@ describe('summarize-transcript handler', () => {
+       data: {
+         runId: run.id,
+         modelId: 'test-model',
+-        content: [{ probePrompt: 'Test prompt', targetResponse: 'Test response' }],
++        content,
+         turnCount: 1,
+         tokenCount: 50,
+         durationMs: 1000,
++        decisionCode: options?.decisionCode ?? null,
++        decisionCodeSource: options?.decisionCodeSource ?? null,
++        decisionText: options?.decisionText ?? null,
++        decisionMetadata: options?.decisionMetadata ?? undefined,
++        summarizedAt: options?.summarizedAt ?? null,
+       },
+     });
+     createdIds.transcripts.push(transcript.id);
+ 
+-    return { definition, run, transcript };
++    return { definition, run, transcript, content };
+   }
+ 
+   describe('successful summarization', () => {
+@@ -231,6 +288,252 @@ describe('summarize-transcript handler', () => {
+     });
+   });
+ 
++  describe('cache behavior', () => {
++    const summaryModelId = 'anthropic:test-summary-model';
++
++    function cloneJson<T>(value: T): T {
++      return JSON.parse(JSON.stringify(value));
++    }
++
++    function makeJob(runId: string, transcriptId: string, forceSummarize = false) {
++      return {
++        id: 'test-job-id',
++        data: {
++          runId,
++          transcriptId,
++          summaryModelId,
++          ...(forceSummarize ? { forceSummarize: true } : {}),
++        },
++      };
++    }
++
++    async function runWorkerWithSummary(
++      runId: string,
++      transcriptId: string,
++      content: { turns: Array<{ targetResponse?: string }> },
++      summary?: ReturnType<typeof buildSuccessfulWorkerSummary>
++    ) {
++      const handler = createSummarizeTranscriptHandler();
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: summary ?? buildSuccessfulWorkerSummary(content),
++        },
++      });
++      await handler([makeJob(runId, transcriptId)] as Parameters<typeof handler>[0]);
++    }
++
++    async function seedCacheFromFreshRun() {
++      const first = await createTestData();
++      const firstSummary = buildSuccessfulWorkerSummary(first.content);
++
++      await runWorkerWithSummary(first.run.id, first.transcript.id, first.content, firstSummary);
++
++      const freshTranscript = await db.transcript.findUnique({
++        where: { id: first.transcript.id },
++      });
++
++      if (!freshTranscript?.decisionMetadata) {
++        throw new Error('Fresh transcript missing decision metadata');
++      }
++
++      mockSpawnPython.mockClear();
++
++      return {
++        first,
++        freshTranscript,
++      };
++    }
++
++    it('reuses the cached summary for an unchanged transcript', async () => {
++      const { first, freshTranscript } = await seedCacheFromFreshRun();
++
++      mockSpawnPython.mockClear();
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(first.run.id, first.transcript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).not.toHaveBeenCalled();
++
++      const cachedTranscript = await db.transcript.findUnique({
++        where: { id: first.transcript.id },
++      });
++
++      expect(cachedTranscript?.decisionCode).toBe(freshTranscript.decisionCode);
++      expect(cachedTranscript?.decisionCodeSource).toBe(freshTranscript.decisionCodeSource);
++      expect(cachedTranscript?.decisionText).toBe(freshTranscript.decisionText);
++      expect(cachedTranscript?.decisionMetadata).toEqual(freshTranscript.decisionMetadata);
++      expect(cachedTranscript?.summarizedAt).not.toBeNull();
++    });
++
++    it('re-runs summarization when transcript content changes', async () => {
++      const { first, freshTranscript } = await seedCacheFromFreshRun();
++      const changedContent = {
++        turns: [{ probePrompt: 'Test prompt', targetResponse: 'Different response' }],
++      };
++
++      await db.transcript.update({
++        where: { id: first.transcript.id },
++        data: { content: changedContent, decisionMetadata: cloneJson(freshTranscript.decisionMetadata) },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(changedContent, {
++            decisionCode: '2',
++            decisionText: 'AI chose balanced approach',
++          }),
++        },
++      });
++
++      await handler([makeJob(first.run.id, first.transcript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++
++      const updated = await db.transcript.findUnique({
++        where: { id: first.transcript.id },
++      });
++
++      expect(updated?.decisionCode).toBe('2');
++    });
++
++    it('re-runs summarization when parser version changes', async () => {
++      const { first, freshTranscript } = await seedCacheFromFreshRun();
++      const changedMetadata = cloneJson(freshTranscript.decisionMetadata) as any;
++      changedMetadata.summaryCache.parserVersion = 'parser-legacy';
++      await db.transcript.update({
++        where: { id: freshTranscript.id },
++        data: {
++          decisionMetadata: changedMetadata,
++          summarizedAt: new Date(),
++        },
++      });
++
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(first.content, {
++            decisionCode: '3',
++            decisionText: 'AI chose a middle path',
++          }),
++        },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(freshTranscript.runId, freshTranscript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++    });
++
++    it('re-runs summarization when model changes', async () => {
++      const { first, freshTranscript } = await seedCacheFromFreshRun();
++      const changedMetadata = cloneJson(freshTranscript.decisionMetadata) as any;
++      changedMetadata.summaryCache.modelId = 'anthropic:other-model';
++      await db.transcript.update({
++        where: { id: freshTranscript.id },
++        data: {
++          decisionMetadata: changedMetadata,
++          summarizedAt: new Date(),
++        },
++      });
++
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(first.content, {
++            decisionCode: '1',
++            decisionText: 'AI chose the opposite side',
++          }),
++        },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(freshTranscript.runId, freshTranscript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++    });
++
++    it('bypasses the cache when forceSummarize is set', async () => {
++      const { first } = await seedCacheFromFreshRun();
++
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(first.content, {
++            decisionCode: '5',
++            decisionText: 'AI strongly preferred the first option',
++          }),
++        },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(first.run.id, first.transcript.id, true)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++    });
++
++    it.each([
++      'missing summary payload',
++      'error summary payload',
++    ])('falls back to the worker when the cache is malformed (%s)', async (caseName) => {
++      const { first, freshTranscript } = await seedCacheFromFreshRun();
++      const malformedMetadata = cloneJson(freshTranscript.decisionMetadata) as any;
++      if (caseName === 'missing summary payload') {
++        malformedMetadata.summaryCache = {
++          responseSha256: malformedMetadata.summaryCache.responseSha256,
++          parserVersion: malformedMetadata.summaryCache.parserVersion,
++          modelId: malformedMetadata.summaryCache.modelId,
++        };
++      } else {
++        malformedMetadata.summaryCache.summary.decisionCode = 'error';
++      }
++
++      await db.transcript.update({
++        where: { id: freshTranscript.id },
++        data: { decisionMetadata: malformedMetadata, summarizedAt: new Date() },
++      });
++
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(first.content, {
++            decisionCode: '4',
++            decisionText: 'AI prioritized safety over efficiency',
++          }),
++        },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(freshTranscript.runId, freshTranscript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++    });
++
++    it('falls back to the worker when the cache is missing', async () => {
++      const missing = await createTestData();
++
++      mockSpawnPython.mockResolvedValueOnce({
++        success: true,
++        data: {
++          success: true,
++          summary: buildSuccessfulWorkerSummary(missing.content),
++        },
++      });
++
++      const handler = createSummarizeTranscriptHandler();
++      await handler([makeJob(missing.run.id, missing.transcript.id)] as Parameters<typeof handler>[0]);
++
++      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
++    });
++  });
++
+   describe('error handling', () => {
+     it('stores error in transcript for non-retryable errors', async () => {
+       const { run, transcript } = await createTestData();
+diff --git a/cloud/apps/api/tests/services/run/summarization.test.ts b/cloud/apps/api/tests/services/run/summarization.test.ts
+index 013917d9..6fa9137b 100644
+--- a/cloud/apps/api/tests/services/run/summarization.test.ts
++++ b/cloud/apps/api/tests/services/run/summarization.test.ts
+@@ -304,6 +304,23 @@ describe('summarization service', () => {
+       expect(jobData).toHaveProperty('runId', run.id);
+       expect(jobData).toHaveProperty('transcriptId');
+       expect(jobOptions).toHaveProperty('retryLimit', 3);
++      expect(jobData).not.toHaveProperty('forceSummarize');
++    });
++
++    it('sets forceSummarize when force mode is enabled', async () => {
++      const { run } = await createTestRun({
++        status: 'COMPLETED',
++        transcriptCount: 1,
++        summarizedCount: 1,
++      });
++
++      mockSend.mockClear();
++      await restartSummarization(run.id, true);
++
++      expect(mockSend).toHaveBeenCalledTimes(1);
++      const [, jobData] = mockSend.mock.calls[0];
++
++      expect(jobData).toHaveProperty('forceSummarize', true);
+     });
+   });
+ });
+diff --git a/cloud/packages/db/src/types.ts b/cloud/packages/db/src/types.ts
+index 51589c2a..78da311f 100644
+--- a/cloud/packages/db/src/types.ts
++++ b/cloud/packages/db/src/types.ts
+@@ -176,6 +176,20 @@ export type DecisionManualOverride = {
+   overriddenByUserId?: string | null;
+ };
+ 
++export type SummaryCacheSummary = {
++  decisionCode: string;
++  decisionCodeSource: string;
++  decisionText: string | null;
++  decisionMetadata: Record<string, unknown> | null;
++};
++
++export type SummaryCache = {
++  responseSha256: string;
++  parserVersion: string;
++  modelId: string;
++  summary: SummaryCacheSummary;
++};
++
+ export type DecisionMetadata = {
+   parserVersion: string;
+   parseClass: 'exact' | 'fallback_resolved' | 'ambiguous';
+@@ -185,6 +199,7 @@ export type DecisionMetadata = {
+   matchedLabel?: string | null;
+   scaleLabels?: DecisionScaleLabel[];
+   manualOverride?: DecisionManualOverride;
++  summaryCache?: SummaryCache;
+ };
+ 
+ // ============================================================================
+diff --git a/cloud/workers/summarize.py b/cloud/workers/summarize.py
+index 6ba46527..d4c9f29e 100644
+--- a/cloud/workers/summarize.py
++++ b/cloud/workers/summarize.py
+@@ -48,6 +48,7 @@ Error:
+ import json
+ import hashlib
+ import re
++import os
+ import sys
+ from typing import Any, Optional
+ 
+@@ -120,7 +121,8 @@ LEADING_DECISION_PREFIX_PATTERN = re.compile(
+ # Default summary model if none specified
+ DEFAULT_SUMMARY_MODEL = "anthropic:claude-sonnet-4-20250514"
+ LLM_FALLBACK_MODEL = "xai:grok-4-1-fast-reasoning"
+-PARSER_VERSION = "job-choice-v2"
++DEFAULT_SUMMARIZE_PARSER_VERSION = "job-choice-v2"
++PARSER_VERSION = os.getenv("SUMMARIZE_PARSER_VERSION", DEFAULT_SUMMARIZE_PARSER_VERSION)
+ 
+ 
+ def validate_input(data: dict[str, Any]) -> None:
+diff --git a/cloud/workers/tests/test_summarize.py b/cloud/workers/tests/test_summarize.py
+index c9903966..536e9eb8 100644
+--- a/cloud/workers/tests/test_summarize.py
++++ b/cloud/workers/tests/test_summarize.py
+@@ -1,6 +1,8 @@
+ """Tests for summarize worker."""
+ 
++import importlib
+ import json
++import sys
+ from typing import Any
+ from unittest.mock import MagicMock, patch
+ 
+@@ -95,6 +97,15 @@ class TestValidateInput:
+         assert "turns must be an array" in exc_info.value.message
+ 
+ 
++def load_summarize_module(monkeypatch: pytest.MonkeyPatch, parser_version: str | None = None):
++    """Reload summarize.py with controlled environment."""
++    monkeypatch.delenv("SUMMARIZE_PARSER_VERSION", raising=False)
++    if parser_version is not None:
++        monkeypatch.setenv("SUMMARIZE_PARSER_VERSION", parser_version)
++    sys.modules.pop("summarize", None)
++    return importlib.import_module("summarize")
++
++
+ class TestExtractDecisionCodeFromText:
+     """Tests for extract_decision_code_from_text helper function."""
+ 
+@@ -667,6 +678,20 @@ class TestRunSummarize:
+         assert result["summary"]["decisionMetadata"]["parseClass"] == "ambiguous"
+         assert result["summary"]["decisionText"] is None
+ 
++    def test_parser_version_defaults_to_current_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
++        """Test parser version defaults to the current worker value."""
++        module = load_summarize_module(monkeypatch)
++
++        assert module.PARSER_VERSION == "job-choice-v2"
++        sys.modules.pop("summarize", None)
++
++    def test_parser_version_uses_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
++        """Test parser version can be overridden from the environment."""
++        module = load_summarize_module(monkeypatch, "parser-override-1")
++
++        assert module.PARSER_VERSION == "parser-override-1"
++        sys.modules.pop("summarize", None)
++
+     def test_extracts_text_label_scale_decision(self) -> None:
+         """Test deterministic text-label parsing for Job Choice scales."""
+         from summarize import extract_decision_result
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-24T18:44:57.734279Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.737526Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.759620Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d212a-0ede-7a91-afb3-e2be10b4e459.tmp-1774377897703138000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-24T18:44:57.766466Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.767339Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.796899Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.797694Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.827208Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.827998Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.857573Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.858355Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.887887Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.888544Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.917610Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.918310Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.947821Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.948520Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:57.978126Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:57.979197Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.007684Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.008690Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.034823Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.036521Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.060804Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.063244Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.087879Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.090473Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.117814Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.119827Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.145706Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.148391Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.176595Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.179527Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.203524Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:44:58.204978Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:44:58.231018Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High: the cache hash can collide for different transcripts** in `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`. `computeTranscriptResponseSha256()` hashes `responses.join('\n').trim()`, which is not a safe serialization of the response list. Distinct inputs can produce the same hash, for example `["a", "b"]` and `["a\nb"]`, or any case where leading/trailing whitespace is significant. That can make the handler reuse a summary for the wrong transcript.
+
+2. **Medium: cache invalidation only covers `targetResponse`, not the full transcript payload** in `cloud/apps/api/src/queue/handlers/summarize-transcript.ts`. The worker is invoked with `transcript.content`, but the cache key ignores everything except concatenated response text. If any other part of the transcript content changes, such as prompt text or other turn metadata, the cache can still hit and return a stale summary. That is a weak assumption unless the worker is guaranteed to depend on response text only.
+
+## Residual Risks
+- Cache correctness still depends on `SUMMARIZE_PARSER_VERSION` being kept in sync between the API and worker processes. The code now reads that value in both places separately, so a deploy skew can still produce mismatched cache behavior.
+- The new short-circuit path still relies on existing run-completion bookkeeping staying consistent if a job is interrupted after transcript persistence but before counter updates.
+tokens used
+20,233
