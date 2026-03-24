@@ -9,12 +9,21 @@ import type { ChangeEvent } from 'react';
 import { Button } from '../ui/Button';
 import type { Transcript } from '../../api/operations/runs';
 import { getDecisionMetadata } from '../../utils/methodology';
+import {
+  formatCanonicalDecisionHeadline,
+  formatCanonicalDecisionSubtitle,
+  normalizeLegacyDecisionCode,
+  type TranscriptDecisionDisplayMode,
+} from '../../utils/transcriptDecisionModel';
 
 type TranscriptViewerProps = {
   transcript: Transcript;
   onClose: () => void;
   onDecisionChange?: (transcript: Transcript, decisionCode: string) => Promise<void> | void;
   decisionUpdating?: boolean;
+  normalizeDecision?: boolean;
+  normalizationBadgeTitle?: string;
+  decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
 type Turn = {
@@ -87,20 +96,37 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+function formatAuditValue(value: string | null | undefined): string {
+  if (value == null || value.trim().length === 0) {
+    return '—';
+  }
+  return value;
+}
+
 export function TranscriptViewer({
   transcript,
   onClose,
   onDecisionChange,
   decisionUpdating = false,
+  normalizeDecision = false,
+  normalizationBadgeTitle,
+  decisionDisplayMode,
 }: TranscriptViewerProps) {
   const content = parseTranscriptContent(transcript.content);
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
-  const decision = transcript.decisionCode ?? '-';
-  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decision}*` : decision;
+  const rawDecision = transcript.decisionCode ?? '-';
+  const legacyDecision = normalizeLegacyDecisionCode(rawDecision, normalizeDecision);
+  const legacyDecisionDisplay = transcript.decisionCodeSource === 'llm' ? `${legacyDecision}*` : legacyDecision;
+  const viewMode = decisionDisplayMode ?? (transcript.decisionModelV2 ? 'audit' : 'legacy');
+  const isAuditMode = viewMode === 'audit' && transcript.decisionModelV2 != null;
+  const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
+  const rawEvidence = transcript.decisionModelV2?.raw ?? null;
+  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
+  const canonicalDecisionSubtitle = isAuditMode ? formatCanonicalDecisionSubtitle(transcript) : '';
   const scaleLabels = decisionMetadata?.scaleLabels ?? [];
   const canOverrideDecision = Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
-    || !['1', '2', '3', '4', '5'].includes(decision)
+    || !['1', '2', '3', '4', '5'].includes(legacyDecision)
   );
 
   const handleDecisionChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -155,48 +181,145 @@ export function TranscriptViewer({
             <Clock className="w-4 h-4" />
             {formatDuration(transcript.durationMs)}
           </span>
-          <span className="flex items-center gap-2">
-            <span className="text-gray-500">Decision:</span>
-            <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
-              {decisionDisplay}
+          {isAuditMode ? (
+            <span className="flex items-center gap-2">
+              <span className="text-gray-500">Canonical decision:</span>
+              <span className="font-medium text-gray-800">{canonicalDecisionHeadline}</span>
+              {canonicalDecision?.normalizationApplied && (
+                <span
+                  className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                  title="Orientation was normalized in the canonical decision model."
+                >
+                  Norm
+                </span>
+              )}
+              {canonicalDecision?.source && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                  {canonicalDecision.source}
+                </span>
+              )}
+              {canonicalDecisionSubtitle && (
+                <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
+              )}
             </span>
-            {decisionMetadata?.parseClass === 'ambiguous' && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                Ambiguous
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="text-gray-500">Decision:</span>
+              <span className="font-medium text-gray-800" title={transcript.decisionCodeSource === 'llm' ? 'LLM-classified decision' : undefined}>
+                {legacyDecisionDisplay}
               </span>
-            )}
-            {decisionMetadata?.parseClass === 'fallback_resolved' && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
-                Fallback
-              </span>
-            )}
-            {transcript.decisionCodeSource === 'manual' && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                Manual
-              </span>
-            )}
-            {canOverrideDecision && (
-              <select
-                aria-label={`Set decision for transcript ${transcript.id}`}
-                className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
-                defaultValue=""
-                disabled={decisionUpdating}
-                onChange={handleDecisionChange}
-              >
-                <option value="">{decisionUpdating ? 'Saving...' : 'Change'}</option>
-                {decisionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </span>
+              {normalizeDecision && (
+                <span
+                  className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
+                  title={normalizationBadgeTitle}
+                >
+                  Norm
+                </span>
+              )}
+              {decisionMetadata?.parseClass === 'ambiguous' && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                  Ambiguous
+                </span>
+              )}
+              {decisionMetadata?.parseClass === 'fallback_resolved' && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                  Fallback
+                </span>
+              )}
+              {transcript.decisionCodeSource === 'manual' && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                  Manual
+                </span>
+              )}
+              {canOverrideDecision && (
+                <select
+                  aria-label={`Set decision for transcript ${transcript.id}`}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs bg-white"
+                  defaultValue=""
+                  disabled={decisionUpdating}
+                  onChange={handleDecisionChange}
+                >
+                  <option value="">{decisionUpdating ? 'Saving...' : 'Change'}</option>
+                  {decisionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </span>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {(decisionMetadata?.parsePath || decisionMetadata?.matchedLabel || decisionMetadata?.manualOverride) && (
+          {isAuditMode && rawEvidence && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+              <h3 className="mb-2 text-sm font-medium text-sky-950">Canonical Decision</h3>
+              <div className="space-y-2 text-xs">
+                <p>
+                  <span className="font-medium text-sky-800">Favored value:</span> {formatAuditValue(canonicalDecision?.favoredValueKey)}
+                </p>
+                <p>
+                  <span className="font-medium text-sky-800">Opposed value:</span> {formatAuditValue(canonicalDecision?.opposedValueKey)}
+                </p>
+                <p>
+                  <span className="font-medium text-sky-800">Direction:</span> {canonicalDecision?.direction ?? 'unknown'}
+                </p>
+                <p>
+                  <span className="font-medium text-sky-800">Strength:</span> {canonicalDecision?.strength ?? 'unknown'}
+                </p>
+                <p>
+                  <span className="font-medium text-sky-800">Source:</span> {canonicalDecision?.source ?? 'unknown'}
+                </p>
+                <p>
+                  <span className="font-medium text-sky-800">Legacy compatibility:</span>{' '}
+                  raw {transcript.decisionModelV2?.legacy?.rawScore ?? 'null'} · canonical {transcript.decisionModelV2?.legacy?.canonicalScore ?? 'null'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isAuditMode && rawEvidence && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <h3 className="mb-2 text-sm font-medium text-gray-900">Raw Evidence</h3>
+              <div className="space-y-1 text-xs">
+                <p>
+                  <span className="font-medium text-gray-700">Matched text:</span> {formatAuditValue(rawEvidence.matchedText)}
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">Matched label:</span> {formatAuditValue(rawEvidence.matchedLabel)}
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">Parse class:</span> {rawEvidence.parseClass ?? 'unknown'}
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">Parse path:</span> {formatAuditValue(rawEvidence.parsePath)}
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">Parser version:</span> {formatAuditValue(rawEvidence.parserVersion)}
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">Response excerpt:</span> {formatAuditValue(rawEvidence.responseExcerpt)}
+                </p>
+                {rawEvidence.manualOverride && (
+                  <>
+                    <p>
+                      <span className="font-medium text-gray-700">Manual override previous value:</span> {formatAuditValue(rawEvidence.manualOverride.previousValue)}
+                    </p>
+                    <p>
+                      <span className="font-medium text-gray-700">Manual override at:</span> {formatAuditValue(rawEvidence.manualOverride.overriddenAt)}
+                    </p>
+                    <p>
+                      <span className="font-medium text-gray-700">Manual override by:</span> {formatAuditValue(rawEvidence.manualOverride.overriddenByUserId)}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!isAuditMode && (decisionMetadata?.parsePath || decisionMetadata?.matchedLabel || decisionMetadata?.manualOverride) && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
               <h3 className="mb-2 text-sm font-medium text-gray-900">Decision Metadata</h3>
               <div className="space-y-1 text-xs">

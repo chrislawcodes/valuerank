@@ -55,6 +55,7 @@ from typing import Any
 from common.errors import ErrorCode, ValidationError
 from common.logging import get_logger
 from stats.basic_stats import aggregate_transcripts_by_model, compute_visualization_data
+from stats.decision_model import resolve_transcript_normalized_score
 from stats.model_comparison import compute_model_agreement
 from stats.dimension_impact import compute_dimension_analysis
 from stats.variance_analysis import compute_variance_analysis
@@ -121,8 +122,7 @@ def extract_model_scores(transcripts: list[dict[str, Any]]) -> dict[str, list[fl
     for t in transcripts:
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
-        summary = t.get("summary", {})
-        score = summary.get("score")
+        score = resolve_transcript_normalized_score(t)
 
         if score is None:
             continue
@@ -167,9 +167,8 @@ def find_contested_scenarios(
     for t in transcripts:
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
-        summary = t.get("summary", {})
-        score = summary.get("score")
         scenario = t.get("scenario", {})
+        score = resolve_transcript_normalized_score(t)
 
         if score is None:
             continue
@@ -248,19 +247,6 @@ def generate_warnings(
     return warnings
 
 
-def normalize_score(score: Any, orientation_flipped: bool) -> float | None:
-    """Normalize a score onto the canonical 1-5 orientation."""
-    try:
-        numeric_score = float(score)
-    except (TypeError, ValueError):
-        return None
-
-    if numeric_score < 1.0 or numeric_score > 5.0:
-        return None
-
-    return float(6 - numeric_score) if orientation_flipped else numeric_score
-
-
 def build_preference_summary(
     transcripts: list[dict[str, Any]],
     per_model: dict[str, Any],
@@ -276,13 +262,7 @@ def build_preference_summary(
     for transcript in transcripts:
         model_id = transcript.get("modelId", "unknown")
         scenario_id = transcript.get("scenarioId", "unknown")
-        summary = transcript.get("summary", {})
-        score = summary.get("score")
-
-        normalized_score = normalize_score(
-            score,
-            bool(transcript.get("orientationFlipped", False)),
-        )
+        normalized_score = resolve_transcript_normalized_score(transcript)
         if normalized_score is None:
             continue
 
@@ -453,9 +433,8 @@ def build_pooled_aggregate_reliability(
         transcripts_by_run[run_id].append(transcript)
         model_id = transcript.get("modelId")
         scenario_id = transcript.get("scenarioId")
-        summary = transcript.get("summary", {})
         if isinstance(model_id, str) and model_id != "" and isinstance(scenario_id, str) and scenario_id != "":
-            if summary.get("score") is not None:
+            if resolve_transcript_normalized_score(transcript) is not None:
                 pooled_unique_scenarios[model_id].add(scenario_id)
 
     run_level_reliability: dict[str, dict[str, Any]] = {}

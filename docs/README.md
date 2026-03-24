@@ -174,7 +174,7 @@ A **run** executes scenarios against one or more AI models. Each run:
 
 1. Probes models with scenarios (parallel processing via PgBoss)
 2. Records transcripts with model responses
-3. Generates summaries (decision codes, key reasoning)
+3. Generates summaries (canonical decision meaning, compatibility scores, key reasoning)
 4. Triggers analysis (statistics, visualizations)
 
 ### Analysis

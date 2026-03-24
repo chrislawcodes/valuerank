@@ -177,6 +177,51 @@ describe('TranscriptList', () => {
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
+  it('shows canonical decision details in audit mode', async () => {
+    const transcript = createMockTranscript({
+      decisionCode: '1',
+      decisionModelV2: {
+        raw: {
+          matchedText: 'Achievement',
+          matchedLabel: 'Achievement',
+          parseClass: 'exact',
+          parsePath: 'exact.favor_second.strong',
+          parserVersion: 'v1',
+          responseExcerpt: 'Achievement',
+          manualOverride: null,
+        },
+        canonical: {
+          favoredValueKey: 'Benevolence_Dependability',
+          opposedValueKey: 'Achievement',
+          direction: 'favor_second',
+          strength: 'strong',
+          normalizationApplied: true,
+          normalizationReason: 'orientation_flipped',
+          source: 'deterministic',
+        },
+        legacy: {
+          rawScore: null,
+          canonicalScore: 1,
+        },
+      },
+    });
+
+    render(
+      <TranscriptList
+        transcripts={[transcript]}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+        decisionDisplayMode="audit"
+        decisionColumnLabel="Canonical decision"
+      />
+    );
+
+    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
+    expect(screen.getByText(/Favors second value · strong/i)).toBeInTheDocument();
+    expect(screen.getByText('Norm')).toBeInTheDocument();
+    expect(screen.getByText('deterministic')).toBeInTheDocument();
+  });
+
   it('shows token count in transcript row', async () => {
     const user = userEvent.setup();
     const transcripts = [createMockTranscript({ tokenCount: 1234 })];

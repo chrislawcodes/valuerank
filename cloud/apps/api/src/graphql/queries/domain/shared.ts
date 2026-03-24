@@ -3,6 +3,31 @@ import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSigna
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { parseDefinitionVersion } from '../../../utils/definition-version.js';
+export {
+  buildRawDecisionEvidence,
+  DECISION_MODEL_READ_RULES,
+  canonicalDecisionToLegacyScore,
+  resolveCanonicalDecision,
+  resolveDecisionModel,
+  resolveLegacyDecisionCompat,
+  resolveTranscriptDecisionModel,
+} from './decision-model.js';
+export type {
+  CanonicalDecision,
+  DecisionDirection,
+  DecisionReadMode,
+  DecisionReadRule,
+  DecisionReadSurface,
+  DecisionModelInput,
+  DecisionModelResult,
+  DecisionPair,
+  DecisionSource,
+  DecisionStrength,
+  LegacyDecisionCompat,
+  RawDecisionEvidence,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+} from './decision-model.js';
 
 export { formatVnewLabel, formatVnewSignature };
 

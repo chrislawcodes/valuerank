@@ -1,0 +1,43 @@
+---
+reviewer: "codex"
+lens: "feasibility-adversarial"
+stage: "spec"
+artifact_path: "docs/feature-runs/vignette-analysis-decision-model/spec.md"
+artifact_sha256: "bcb7cbf2c3dd2bec4a0dd03de8d94a0850d5b05d16ac67e587bebf14deaa493d"
+repo_root: "."
+git_head_sha: "fce47f73a2542524b87e0bbf199703aaf9f3c4c6"
+git_base_ref: "origin/chore/agents-md-single-source-of-truth"
+git_base_sha: "fce47f73a2542524b87e0bbf199703aaf9f3c4c6"
+generation_method: "codex-runner"
+resolution_status: "accepted"
+resolution_note: "Defined rawScore and canonicalScore mapping, legacy compatibility preservation, and the phase-1 adapter boundary."
+raw_output_path: "docs/feature-runs/vignette-analysis-decision-model/reviews/spec.codex.feasibility-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: spec feasibility-adversarial
+
+## Findings
+
+- High: The adapter contract is missing the actual source for `LegacyDecisionCompat.rawScore`. `RawDecisionEvidence` does not include the current applied legacy decision value, yet the spec says `rawScore` is "the legacy numeric answer parsed from the current applied legacy decision value when that value is numeric." Without an input field or retrieval rule for that value, the adapter cannot deterministically produce legacy compatibility data for ordinary exact/fallback rows, so the phase cannot fully satisfy its own contract.
+- High: The canonical conversion rules are underspecified for conflicting or ambiguous label resolution. The spec says `matchedLabel` may refer to either side, orientation can flip direction, and the adapter must fail closed on malformed metadata, but it never defines what happens when a label matches more than one canonical key, when `parsePath` disagrees with label/orientation, or when historical aliases collide. That leaves a real implementation gap on messy legacy data and weakens the claim of deterministic conversion.
+- Medium: The file scope includes `cloud/apps/api/src/graphql/queries/domain/shared.ts`, which is part of the live aggregation path, while this phase explicitly says consumer behavior must remain unchanged and migration is out of scope. Touching the shared aggregation module during a contract-only phase creates a high chance of incidental behavior changes, and the spec does not define an isolation strategy to prevent that.
+- Low/Medium: `normalizationApplied` and `normalizationReason` are only specified for the happy path. The spec does not say what those fields should be when canonical output is `unknown` or `error`, so two implementations could both satisfy the text while emitting different normalization metadata.
+
+## Residual Risks
+
+- Legacy rows that lack `matchedLabel`, `parseClass`, or pair metadata will still collapse to `unknown`; the spec accepts that, but it means Phase 1 can only prove compatibility on a subset of historical records.
+- The `decision_model_v2` flag is default-off and appears to have no consumer wired to it in this phase, so the new contract will not get end-to-end validation until a later rollout.
+- Updating docs before consumer migration will leave score-first and direction/strength terminology coexisting for a while, which can confuse implementers unless later phases are tightly controlled.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: accepted
+- note: Defined rawScore and canonicalScore mapping, legacy compatibility preservation, and the phase-1 adapter boundary.

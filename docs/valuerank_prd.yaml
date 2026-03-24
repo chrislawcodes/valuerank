@@ -64,7 +64,7 @@ User_Journeys:
 
   Evaluation_Phase:
     - "The Target AI is prompted to return a 1-5 rating directly."
-    - "The summarize worker extracts this explicit numerical decision deterministically. There is no separate Judge AI; the models score themselves on the given scale."
+    - "The summarize worker records canonical decision meaning as `direction + strength` and preserves legacy compatibility scalars for analysis. There is no separate Judge AI; the models answer the prompt directly."
 
   Analysis_Export:
     - "Review aggregate statistics (Win Rates, Pairwise Matrices) via the Web UI."

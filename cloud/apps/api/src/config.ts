@@ -15,6 +15,7 @@ export const config = {
   DATABASE_URL: getEnv('DATABASE_URL') ?? '',
   DIRECT_URL: getEnvOptional('DIRECT_URL'),
   ADMIN_EXPORT_TOKEN: getEnvOptional('ADMIN_EXPORT_TOKEN'),
+  DECISION_MODEL_V2: getEnvOptional('DECISION_MODEL_V2') === 'true',
   JWT_SECRET: getJwtSecret(),
   JWT_EXPIRES_IN: '24h',
 } as const;

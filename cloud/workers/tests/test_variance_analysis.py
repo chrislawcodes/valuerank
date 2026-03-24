@@ -169,6 +169,131 @@ class TestVarianceAnalysis:
         # 2 valid samples out of 3
         assert m1_stats["totalSamples"] == 2
 
+    def test_v2_scores_override_legacy_scalar_scores(self):
+        """Variance analysis should prefer the V2 compatibility scalar when present."""
+        transcripts = [
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 0,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 1,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+        ]
+        analysis = compute_variance_analysis(transcripts)
+
+        scenario_stats = analysis["perModel"]["m1"]["perScenario"]["s1"]
+        assert scenario_stats["mean"] == pytest.approx(4.0, abs=0.001)
+        assert scenario_stats["variance"] == 0.0
+
+    def test_v2_scores_do_not_double_flip_when_orientation_is_already_normalized(self):
+        """Canonical V2 scores should not be flipped a second time by the worker."""
+        transcripts = [
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 0,
+                "orientationFlipped": True,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 1,
+                "orientationFlipped": True,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+        ]
+        analysis = compute_variance_analysis(transcripts)
+
+        scenario_stats = analysis["perModel"]["m1"]["perScenario"]["s1"]
+        assert scenario_stats["mean"] == pytest.approx(4.0, abs=0.001)
+        assert scenario_stats["variance"] == 0.0
+
+    def test_orientation_corrected_count_only_tracks_raw_scores(self):
+        """Only raw V2 scores that actually need flipping should count as corrected."""
+        transcripts = [
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 0,
+                "orientationFlipped": True,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "legacy": {
+                        "canonicalScore": 4,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+            {
+                "scenarioId": "s1",
+                "modelId": "m1",
+                "sampleIndex": 1,
+                "orientationFlipped": True,
+                "summary": {"score": 1},
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 1,
+                    },
+                },
+                "scenario": {"name": "Scenario 1"},
+            },
+        ]
+        analysis = compute_variance_analysis(transcripts)
+
+        assert analysis["orientationCorrectedCount"] == 1
+        assert analysis["perModel"]["m1"]["perScenario"]["s1"]["orientationCorrected"] is True
+
 
 class TestIntegration:
     """Integration tests for complete variance analysis pipeline."""
@@ -182,10 +307,15 @@ class TestIntegration:
         # Create 5 samples per model-scenario pair
         for model in models:
             for i, scenario in enumerate(scenarios):
-                base_score = 3 + i * 0.5  # Slightly different base per scenario
+                base_score = 3 + i  # Slightly different base per scenario
                 for sample_idx in range(5):
-                    # Add some variance
-                    score = base_score + (sample_idx - 2) * 0.2
+                    # Add some variance while staying on the canonical 1-5 scale
+                    if sample_idx == 0:
+                        score = base_score - 1
+                    elif sample_idx == 4:
+                        score = base_score + 1 if base_score < 5 else base_score - 1
+                    else:
+                        score = base_score
                     transcripts.append({
                         "scenarioId": scenario,
                         "modelId": model,

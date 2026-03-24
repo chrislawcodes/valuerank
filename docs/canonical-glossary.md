@@ -212,7 +212,7 @@ Example:
 
 ### `Score`
 
-A score is the 1-to-5 answer that a model gives for a condition.
+A score is the legacy 1-to-5 answer that a model gives for a condition.
 
 Example:
 
@@ -220,7 +220,8 @@ Example:
 
 Avoid confusion:
 
-- a score is the model’s answer on the scale
+- a score is the model’s raw answer on the scale
+- for value-labeled vignette analysis, `direction + strength` is the canonical decision model
 - later analysis may combine many scores into summaries or metrics
 
 ### `Cell`

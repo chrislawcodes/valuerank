@@ -200,3 +200,31 @@ def migrate_discovery_state(d: dict) -> dict:
                 d["unresolved"].append({"item": text, "deferred": False})
                 existing_items.add(text)
     return d
+
+
+def blocking_unresolved_items(discovery: dict) -> list[dict]:
+    """Return unresolved discovery entries that still block spec progress."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return [{"item": "<malformed discovery state>", "deferred": False, "malformed": True}]
+    blocking: list[dict] = []
+    for item in unresolved:
+        if not isinstance(item, dict):
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        value = item.get("item")
+        if not isinstance(value, str) or not value.strip():
+            blocking.append({"item": "<malformed unresolved item>", "deferred": False, "malformed": True})
+            continue
+        if item.get("deferred") is True:
+            continue
+        blocking.append(item)
+    return blocking
+
+
+def discovery_blockers_are_malformed(discovery: dict) -> bool:
+    """Return True when blocking discovery items include malformed state."""
+    unresolved = discovery.get("unresolved", [])
+    if not isinstance(unresolved, list):
+        return True
+    return any(isinstance(item, dict) and item.get("malformed") is True for item in blocking_unresolved_items(discovery))

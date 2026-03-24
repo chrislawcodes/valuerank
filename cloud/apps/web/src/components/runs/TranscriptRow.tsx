@@ -3,6 +3,12 @@ import type { ChangeEvent } from 'react';
 import type { Transcript } from '../../api/operations/runs';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import { getDecisionMetadata } from '../../utils/methodology';
+import {
+  formatCanonicalDecisionHeadline,
+  formatCanonicalDecisionSubtitle,
+  normalizeLegacyDecisionCode,
+  type TranscriptDecisionDisplayMode,
+} from '../../utils/transcriptDecisionModel';
 
 export type TranscriptScenarioHighlight = {
   label: string;
@@ -24,6 +30,7 @@ type TranscriptRowProps = {
   scenarioHighlight?: TranscriptScenarioHighlight | null;
   normalizeDecision?: boolean;
   normalizationBadgeTitle?: string;
+  decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
 function formatDate(dateString: string): string {
@@ -84,16 +91,33 @@ function extractDecision(content: unknown): string {
   return '-';
 }
 
-function normalizeDecisionCode(decision: string, normalizeDecision: boolean): string {
-  if (!normalizeDecision) {
-    return decision;
-  }
+function getLegacyDecisionDisplay(
+  transcript: Transcript,
+  decision: string,
+  normalizeDecision: boolean,
+  dimensions?: Record<string, string | number> | null,
+): string {
+  const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
+  const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
+  const normalizedDecision = normalizeLegacyDecisionCode(decision, normalizeDecision);
+  const decisionScaleEntry = decisionScaleLabels.find((entry) => entry.code === String(normalizedDecision));
+  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
+  const labelText = normalizeDecision
+    ? (decisionScaleEntry?.label ?? null)
+    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
+  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
+  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
+  const jobWithMarker = ' taking the job with ';
+  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
+  const jobSubject = jobWithIdx >= 0 && labelText != null
+    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
+    : null;
 
-  if (!['1', '2', '3', '4', '5'].includes(decision)) {
-    return decision;
-  }
-
-  return String(6 - Number(decision));
+  return shortDirection != null
+    ? (jobSubject != null
+        ? `${normalizedDecision} - ${shortDirection} (${jobSubject})`
+        : (primaryDimKey != null ? `${normalizedDecision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${normalizedDecision} - ${shortDirection}`))
+    : String(normalizedDecision);
 }
 
 export function TranscriptRow({
@@ -110,39 +134,26 @@ export function TranscriptRow({
   scenarioHighlight = null,
   normalizeDecision = false,
   normalizationBadgeTitle,
+  decisionDisplayMode,
 }: TranscriptRowProps) {
   const decisionMetadata = getDecisionMetadata(transcript.decisionMetadata);
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
-  const decision = normalizeDecisionCode(rawDecision, normalizeDecision);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
-
-  // Build enriched decision label: "{code} - {Short direction} ({job subject})"
-  // e.g. "2 - Somewhat support (trust from other people)"
-  // For non-job-choice labels, falls back to "{code} - {Short direction} {primary_dim_key}"
-  const decisionScaleEntry = decisionScaleLabels.find((e) => e.code === String(decision));
-  const rawMatchedLabel = (decisionMetadata as Record<string, unknown> | null)?.['matchedLabel'] as string | null;
-  const labelText = normalizeDecision
-    ? (decisionScaleEntry?.label ?? null)
-    : (rawMatchedLabel ?? decisionScaleEntry?.label ?? null);
-  const shortDirection = labelText != null ? extractShortDirection(labelText) : null;
-  const primaryDimKey = dimensions != null ? (Object.keys(dimensions)[0] ?? null) : null;
-  // For job-choice scale labels ("... taking the job with X"), extract the subject X.
-  // This correctly reflects orientation (A-first vs B-first) unlike primaryDimKey which is
-  // always the alphabetically-first dimension key due to PostgreSQL JSONB key ordering.
-  const jobWithMarker = ' taking the job with ';
-  const jobWithIdx = labelText?.toLowerCase().indexOf(jobWithMarker) ?? -1;
-  const jobSubject = jobWithIdx >= 0 && labelText != null
-    ? formatDisplayLabel(labelText.slice(jobWithIdx + jobWithMarker.length))
-    : null;
-  const decisionCore = shortDirection != null
-    ? (jobSubject != null
-        ? `${decision} - ${shortDirection} (${jobSubject})`
-        : (primaryDimKey != null ? `${decision} - ${shortDirection} ${formatDisplayLabel(primaryDimKey)}` : `${decision} - ${shortDirection}`))
-    : String(decision);
-  const decisionDisplay = transcript.decisionCodeSource === 'llm' ? `${decisionCore}*` : decisionCore;
-  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(decision));
-  const isDecisionOverrideAllowed = Boolean(onDecisionChange) && (
+  const rowDecisionDisplayMode = decisionDisplayMode ?? 'legacy';
+  const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, rawDecision, normalizeDecision, dimensions);
+  const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
+  const canonicalDecisionDisplay = canonicalDecision
+    ? formatCanonicalDecisionHeadline(transcript)
+    : '-';
+  const canonicalDecisionSubtitle = canonicalDecision
+    ? formatCanonicalDecisionSubtitle(transcript)
+    : '';
+  const decisionDisplay = rowDecisionDisplayMode === 'audit'
+    ? canonicalDecisionDisplay
+    : legacyDecisionDisplay;
+  const isAnalyzableDecision = ['1', '2', '3', '4', '5'].includes(String(rawDecision));
+  const isDecisionOverrideAllowed = rowDecisionDisplayMode === 'legacy' && Boolean(onDecisionChange) && (
     decisionMetadata?.parseClass === 'ambiguous'
     || !isAnalyzableDecision
   );
@@ -267,12 +278,25 @@ export function TranscriptRow({
             ) : (
               <div className="flex items-center gap-2">
                 <span>{decisionDisplay}</span>
-                {normalizeDecision && (
+                {rowDecisionDisplayMode === 'audit' && canonicalDecisionSubtitle && (
+                  <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
+                )}
+                {rowDecisionDisplayMode === 'legacy' && normalizeDecision && (
                   <span
                     className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
                     title={normalizationBadgeTitle}
                   >
                     Norm
+                  </span>
+                )}
+                {rowDecisionDisplayMode === 'audit' && canonicalDecision?.normalizationApplied && (
+                  <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+                    Norm
+                  </span>
+                )}
+                {rowDecisionDisplayMode === 'audit' && canonicalDecision?.source && (
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                    {canonicalDecision.source}
                   </span>
                 )}
                 {decisionMetadata?.parseClass === 'ambiguous' && (
@@ -329,10 +353,17 @@ export function TranscriptRow({
           <div className="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0">
             <span
               className="flex items-center gap-2"
-              title={transcript.decisionCodeSource === 'llm' ? 'Decision (LLM-classified)' : 'Decision'}
+              title={rowDecisionDisplayMode === 'audit'
+                ? 'Canonical decision'
+                : transcript.decisionCodeSource === 'llm'
+                  ? 'Decision (LLM-classified)'
+                  : 'Decision'}
             >
               <span>{decisionDisplay}</span>
-              {normalizeDecision && (
+              {rowDecisionDisplayMode === 'audit' && canonicalDecisionSubtitle && (
+                <span className="text-xs text-gray-500">{canonicalDecisionSubtitle}</span>
+              )}
+              {rowDecisionDisplayMode === 'legacy' && normalizeDecision && (
                 <span
                   className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800"
                   title={normalizationBadgeTitle}
@@ -340,19 +371,29 @@ export function TranscriptRow({
                   Norm
                 </span>
               )}
-              {decisionMetadata?.parseClass === 'ambiguous' && (
+              {rowDecisionDisplayMode === 'legacy' && decisionMetadata?.parseClass === 'ambiguous' && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
                   Ambiguous
                 </span>
               )}
-              {decisionMetadata?.parseClass === 'fallback_resolved' && (
+              {rowDecisionDisplayMode === 'legacy' && decisionMetadata?.parseClass === 'fallback_resolved' && (
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
                   Fallback
                 </span>
               )}
-              {transcript.decisionCodeSource === 'manual' && (
+              {rowDecisionDisplayMode === 'legacy' && transcript.decisionCodeSource === 'manual' && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
                   Manual
+                </span>
+              )}
+              {rowDecisionDisplayMode === 'audit' && canonicalDecision?.normalizationApplied && (
+                <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+                  Norm
+                </span>
+              )}
+              {rowDecisionDisplayMode === 'audit' && canonicalDecision?.source && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                  {canonicalDecision.source}
                 </span>
               )}
             </span>

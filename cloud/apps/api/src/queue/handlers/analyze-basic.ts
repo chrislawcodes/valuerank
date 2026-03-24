@@ -18,7 +18,13 @@ import {
   buildScenarioAnalysisDimensionRecord,
   normalizeScenarioAnalysisMetadata,
 } from '../../services/analysis/scenario-metadata.js';
+import {
+  resolveAnalysisDecisionModel,
+  resolveAnalysisScore,
+  resolveAnalysisValueOutcomes,
+} from '../../services/decision-model.js';
 import { parseTemperature } from '../../utils/temperature.js';
+import { config } from '../../config.js';
 
 const log = createLogger('queue:analyze-basic');
 
@@ -39,6 +45,11 @@ type TranscriptData = {
   scenarioId: string;
   sampleIndex: number; // Multi-sample: index within sample set (0 to N-1)
   orientationFlipped: boolean;
+  decisionModelV2: {
+    raw: unknown;
+    canonical: unknown;
+    legacy: unknown;
+  } | null;
   summary: {
     score: number | null; // Decision code as numeric 1-5 (matches CSV "Decision Code")
     values?: Record<string, 'prioritized' | 'deprioritized' | 'neutral'>;
@@ -236,6 +247,7 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
 
         // Transform to worker input format (matches CSV export structure)
         const scenarioDimensions: Record<string, Record<string, number | string>> = {};
+        const useDecisionModelV2 = config.DECISION_MODEL_V2;
         const transcriptData: TranscriptData[] = transcripts
           .filter((t) => t.scenario !== null && t.scenarioId !== null)
           .map((t) => {
@@ -251,17 +263,38 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               scenarioDimensions[scenario.id] = normalizedScenarioMetadata.groupingDimensions;
             }
 
-            // Convert decisionCode string to numeric score (matches CSV "Decision Code")
-            const decisionCode = t.decisionCode;
-            let score: number | null = null;
-            if (decisionCode !== null) {
-              const parsed = parseInt(decisionCode, 10);
-              if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
-                score = parsed;
-              }
-            }
             const orientationFlipped = scenario.orientationFlipped ?? false;
-            const values = buildValueOutcomes(score, orientationFlipped, valueA, valueB);
+            const decisionModel = resolveAnalysisDecisionModel(
+              {
+                decisionCode: t.decisionCode,
+                decisionMetadata: t.decisionMetadata,
+                definitionSnapshot: t.definitionSnapshot,
+                orientationFlipped,
+              },
+              useDecisionModelV2,
+            );
+            const score = resolveAnalysisScore(
+              {
+                decisionCode: t.decisionCode,
+                decisionMetadata: t.decisionMetadata,
+                definitionSnapshot: t.definitionSnapshot,
+                orientationFlipped,
+              },
+              useDecisionModelV2,
+            );
+            const values = useDecisionModelV2
+              ? resolveAnalysisValueOutcomes(
+                  {
+                    decisionCode: t.decisionCode,
+                    decisionMetadata: t.decisionMetadata,
+                    definitionSnapshot: t.definitionSnapshot,
+                    orientationFlipped,
+                  },
+                  valueA,
+                  valueB,
+                  useDecisionModelV2,
+                )
+              : buildValueOutcomes(score, orientationFlipped, valueA, valueB);
 
             return {
               id: t.id,
@@ -269,6 +302,13 @@ export function createAnalyzeBasicHandler(): PgBoss.WorkHandler<AnalyzeBasicJobD
               scenarioId: t.scenarioId as string,
               sampleIndex: t.sampleIndex,
               orientationFlipped,
+              decisionModelV2: decisionModel
+                ? {
+                    raw: decisionModel.raw,
+                    canonical: decisionModel.canonical,
+                    legacy: decisionModel.legacy,
+                  }
+                : null,
               summary: values ? { score, values } : { score },
               scenario: {
                 name: t.scenario!.name,

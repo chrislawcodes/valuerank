@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createServer } from '../../../src/server.js';
 import { db } from '@valuerank/db';
@@ -7,6 +7,22 @@ import { getAuthHeader, TEST_USER } from '../../test-utils.js';
 const app = createServer();
 
 describe('GraphQL Scalar Types', () => {
+  beforeAll(async () => {
+    await db.user.upsert({
+      where: { id: TEST_USER.id },
+      create: {
+        id: TEST_USER.id,
+        email: TEST_USER.email,
+        passwordHash: 'test-hash',
+      },
+      update: {},
+    });
+  });
+
+  afterAll(async () => {
+    await db.user.deleteMany({ where: { id: TEST_USER.id } });
+  });
+
   describe('DateTime scalar parseValue', () => {
     // Test parseValue directly through a custom resolver that accepts DateTime input
     // Since we don't have mutations with DateTime input, we test the scalar behavior
@@ -142,16 +158,6 @@ describe('GraphQL Scalar Types', () => {
     });
 
     it('parses JSON input in mutations', async () => {
-      await db.user.upsert({
-        where: { id: TEST_USER.id },
-        create: {
-          id: TEST_USER.id,
-          email: TEST_USER.email,
-          passwordHash: 'test-hash',
-        },
-        update: {},
-      });
-
       const mutation = `
         mutation CreateDefinition($input: CreateDefinitionInput!) {
           createDefinition(input: $input) {

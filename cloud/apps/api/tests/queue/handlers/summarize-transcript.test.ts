@@ -103,6 +103,14 @@ describe('summarize-transcript handler', () => {
           summary: {
             decisionCode: '1',
             decisionText: 'AI prioritized safety over efficiency',
+            decisionMetadata: {
+              matchedText: 'Achievement',
+              matchedLabel: 'Achievement',
+              parseClass: 'exact',
+              parsePath: 'exact.favor_first.strong',
+              parserVersion: 'parser-1',
+              responseExcerpt: 'Achievement',
+            },
           },
         },
       });
@@ -122,6 +130,49 @@ describe('summarize-transcript handler', () => {
       expect(updated?.decisionCode).toBe('1');
       expect(updated?.decisionText).toBe('AI prioritized safety over efficiency');
       expect(updated?.summarizedAt).not.toBeNull();
+      expect(updated?.decisionMetadata).toMatchObject({
+        rawDecisionEvidence: {
+          matchedText: 'Achievement',
+          matchedLabel: 'Achievement',
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.strong',
+          parserVersion: 'parser-1',
+          responseExcerpt: 'Achievement',
+          manualOverride: null,
+        },
+      });
+    });
+
+    it('preserves non-object decision metadata without corrupting JSON shape', async () => {
+      const { run, transcript } = await createTestData();
+
+      const legacyMetadata = ['legacy', 'metadata'] as unknown as never;
+
+      mockSpawnPython.mockResolvedValueOnce({
+        success: true,
+        data: {
+          success: true,
+          summary: {
+            decisionCode: '1',
+            decisionText: 'AI prioritized safety over efficiency',
+            decisionMetadata: legacyMetadata,
+          },
+        },
+      });
+
+      const handler = createSummarizeTranscriptHandler();
+      const job: MockJob<{ runId: string; transcriptId: string }> = {
+        id: 'test-job-id',
+        data: { runId: run.id, transcriptId: transcript.id },
+      };
+
+      await handler([job] as Parameters<typeof handler>[0]);
+
+      const updated = await db.transcript.findUnique({
+        where: { id: transcript.id },
+      });
+
+      expect(updated?.decisionMetadata).toEqual(legacyMetadata);
     });
 
     it('completes run when all transcripts are summarized', async () => {

@@ -14,7 +14,8 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
     "create-user": "tsx --env-file=../../.env src/cli/create-user.ts",
-    "normalize:aggregate-analysis": "tsx --env-file=../../.env src/cli/normalize-aggregate-analysis-output.ts"
+    "normalize:aggregate-analysis": "tsx --env-file=../../.env src/cli/normalize-aggregate-analysis-output.ts",
+    "shadow:decision-model": "tsx --env-file=../../.env src/cli/decision-model-shadow-validation.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.3",

@@ -1,5 +1,7 @@
 import { gql } from 'urql';
 
+import type { TranscriptDecisionModelV2 } from './runs';
+
 export const DOMAIN_ANALYSIS_QUERY = gql`
   query DomainAnalysis($domainId: ID!, $scoreMethod: String, $signature: String) {
     domainAnalysis(domainId: $domainId, scoreMethod: $scoreMethod, signature: $signature) {
@@ -215,6 +217,7 @@ export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
       modelId
       decisionCode
       decisionCodeSource
+      decisionModelV2
       turnCount
       tokenCount
       durationMs
@@ -470,6 +473,7 @@ export type DomainAnalysisConditionTranscript = {
   modelId: string;
   decisionCode: string | null;
   decisionCodeSource: string | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
