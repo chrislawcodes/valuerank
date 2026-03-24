@@ -1,5 +1,6 @@
-2026-03-24T06:27:44.438275Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.438297Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.611496Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.612299Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.620362Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
 OpenAI Codex v0.116.0 (research preview)
 --------
 workdir: /Users/chrislaw/valuerank
@@ -9,7 +10,7 @@ approval: never
 sandbox: read-only
 reasoning effort: high
 reasoning summaries: none
-session id: 019d1e87-1cb5-7073-9b72-519f977e96b0
+session id: 019d1ea7-304b-76c3-b8c0-0a32a7b16e7f
 --------
 user
 Review this diff artifact using a correctness-adversarial lens.
@@ -94,12 +95,11 @@ index c87e2c2a..51ebb390 100644
        )}
      </div>
    );
-
-diff --git acloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx bcloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
+diff --git a/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
 new file mode 100644
 index 00000000..d8986985
 --- /dev/null
-+++ bcloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
++++ b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
 @@ -0,0 +1,314 @@
 +import { beforeEach, describe, expect, it, vi } from 'vitest';
 +import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -422,43 +422,368 @@ Return only markdown with exactly these sections:
 ## Residual Risks
 Do not include any other sections.
 mcp startup: no servers
-2026-03-24T06:27:44.441159Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.463709Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.466522Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.491134Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.492254Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.501104Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d1e87-1cb5-7073-9b72-519f977e96b0.tmp-1774333664438548000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
-2026-03-24T06:27:44.516714Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.517687Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.541970Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.543102Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.567339Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.568377Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.591375Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.592361Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.615317Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.616478Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.640015Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.640988Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.664941Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.665912Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.690929Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.692079Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.715541Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.716576Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.740691Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.741612Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.766321Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
-2026-03-24T06:27:44.767450Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
-2026-03-24T06:27:44.791459Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.650249Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.652131Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.668702Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d1ea7-304b-76c3-b8c0-0a32a7b16e7f.tmp-1774335766613883000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-24T07:02:46.678878Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.679783Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.709399Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.710247Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.739815Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.740552Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.770061Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.770776Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.800329Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.801091Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.830594Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.831262Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.860786Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.861714Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.891285Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.892145Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.921703Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.922383Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.951406Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.953483Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:46.976326Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:46.979151Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:47.003577Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T07:02:47.006877Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T07:02:47.034358Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
 codex
-I’m reviewing the diff as a correctness pass, not a style pass. I’m checking for places where the new canonical-mode logic can misclassify mixed data, leak inconsistent state into the viewer, or break on edge cases the tests don’t cover.
+I’m reviewing the patch as if it could fail in edge cases, not as if it was intended. I’ll focus on places where the new display-mode switch can misclassify data or show the wrong thing when the transcript set is mixed or incomplete.
+exec
+/bin/zsh -lc "sed -n '240,540p' cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+    },
+    pause: selectedCondition === null || domainId === '' || modelId === '' || valueKey === '',
+    requestPolicy: 'cache-and-network',
+  });
+
+  if (domainId === '' || modelId === '' || valueKey === '') {
+    return (
+      <div className="space-y-4">
+        <ErrorMessage message="Missing parameters. Open this page from a value cell in Domain Analysis." />
+        <Link to="/domains/analysis" className="inline-flex text-sm text-sky-700 hover:text-sky-900 hover:underline">
+          Back to Domain Analysis
+        </Link>
+      </div>
+    );
+  }
+
+  if (fetching) return <Loading size="lg" text="Loading value detail..." />;
+  if (error || !data?.domainAnalysisValueDetail) {
+    return (
+      <div className="space-y-4">
+exec
+/bin/zsh -lc 'rg -n "hasTranscriptDecisionModelV2|formatCanonicalDecisionHeadline|decisionDisplayMode|normalizedTranscripts" cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx cloud/apps/web/src/utils/transcriptDecisionModel.ts cloud/apps/web/src/components/runs/TranscriptViewer.tsx' in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:10:export function hasTranscriptDecisionModelV2(
+cloud/apps/web/src/utils/transcriptDecisionModel.ts:16:export function formatCanonicalDecisionHeadline(transcript: Transcript): string {
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:20:  formatCanonicalDecisionHeadline,
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:21:  hasTranscriptDecisionModelV2,
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:274:  const normalizedTranscripts: Transcript[] = (transcriptData?.domainAnalysisConditionTranscripts ?? []).map((transcript) => ({
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:291:  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = normalizedTranscripts.length > 0
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:292:    && normalizedTranscripts.every(hasTranscriptDecisionModelV2)
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:443:                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length === 0 && (
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:446:                  {!transcriptsFetching && !transcriptsError && normalizedTranscripts.length > 0 && (
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:461:                          {normalizedTranscripts.map((transcript) => (
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:476:                                  ? formatCanonicalDecisionHeadline(transcript)
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:511:          decisionDisplayMode={reportDecisionDisplayMode}
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:13:  formatCanonicalDecisionHeadline,
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:26:  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:113:  decisionDisplayMode,
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:120:  const viewMode = decisionDisplayMode ?? (transcript.decisionModelV2 ? 'audit' : 'legacy');
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:124:  const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
+exec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/utils/transcriptDecisionModel.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '1,260p' cloud/apps/web/src/components/runs/TranscriptViewer.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+import type { Transcript } from '../api/operations/runs';
+import { formatDisplayLabel } from './displayLabels';
+
+export type TranscriptDecisionDisplayMode = 'legacy' | 'audit';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function hasTranscriptDecisionModelV2(
+  transcript: Transcript,
+): transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
+  return transcript.decisionModelV2 != null;
+}
+
+export function formatCanonicalDecisionHeadline(transcript: Transcript): string {
+  const canonical = transcript.decisionModelV2?.canonical;
+  if (!canonical) return '-';
+
+  if (canonical.direction === 'neutral') {
+ succeeded in 0ms:
+/**
+ * TranscriptViewer Component
+ *
+ * Displays the full content of a transcript in a modal or expanded view.
+ */
+
+import { X, User, Bot, Clock, Hash, Zap } from 'lucide-react';
+import type { ChangeEvent } from 'react';
+import { Button } from '../ui/Button';
+import type { Transcript } from '../../api/operations/runs';
+import { getDecisionMetadata } from '../../utils/methodology';
+import {
+  formatCanonicalDecisionHeadline,
+  formatCanonicalDecisionSubtitle,
+  normalizeLegacyDecisionCode,
+  type TranscriptDecisionDisplayMode,
+} from '../../utils/transcriptDecisionModel';
+
+type TranscriptViewerProps = {
+  transcript: Transcript;
+codex
+I’ve confirmed the new mode is computed at the condition level and then forced into the modal as a page-level prop. That creates a stale-state path: if the user opens a transcript and then clicks a different condition, the modal keeps the old transcript but inherits the new condition’s display mode.
+exec
+/bin/zsh -lc 'rg -n "selectedTranscript|setSelectedTranscript|selectedCondition" cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx' in /Users/chrislaw/valuerank succeeded in 0ms:
+66:  selectedConditionKey: string;
+70:function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelect }: ConditionMatrixProps) {
+142:                const isSelected = condition != null && selectedConditionKey === conditionKey;
+219:  const [selectedCondition, setSelectedCondition] = useState<{
+224:  const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
+236:      definitionId: selectedCondition?.definitionId ?? '',
+237:      scenarioId: selectedCondition?.scenarioId ?? null,
+241:    pause: selectedCondition === null || domainId === '' || modelId === '' || valueKey === '',
+273:  const selectedConditionKey = selectedCondition === null ? '' : `${selectedCondition.definitionId}:${selectedCondition.scenarioId ?? '__unknown__'}`;
+299:    if (selectedConditionKey === clickedKey) {
+426:                    selectedConditionKey={selectedConditionKey}
+431:              {selectedCondition !== null && selectedCondition.definitionId === vignette.definitionId && (
+435:                      Transcripts for condition: {selectedCondition.conditionName}
+469:                                  onClick={() => setSelectedTranscript(transcript)}
+507:      {selectedTranscript !== null && (
+509:          transcript={selectedTranscript}
+510:          onClose={() => setSelectedTranscript(null)}
+exec
+/bin/zsh -lc "sed -n '1,240p' cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from 'urql';
+import { Button } from '../components/ui/Button';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Loading } from '../components/ui/Loading';
+import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+import type { Transcript } from '../api/operations/runs';
+import {
+  DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY,
+  DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY,
+  DOMAIN_ANALYSIS_VALUE_DETAIL_QUERY_LEGACY,
+  type DomainAnalysisConditionTranscriptsQueryResult,
+  type DomainAnalysisConditionTranscriptsQueryVariables,
+  type DomainAnalysisValueDetailQueryResult,
+  type DomainAnalysisValueDetailQueryVariables,
+} from '../api/operations/domainAnalysis';
+import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
+import {
+  formatCanonicalDecisionHeadline,
+codex
+I’m checking one more thing before I lock findings: whether `decisionModelV2` is guaranteed to be complete, or whether the new mode switch can be triggered by a partially populated object. If it’s only a presence check, the page can flip into audit mode on malformed or incomplete V2 data and hide the fallback decision.
+exec
+/bin/zsh -lc "rg -n \"decisionModelV2\" cloud/apps/web/src/api/operations/runs.ts cloud/apps/web/src/api/operations -g'*.ts'" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "rg -n \"type Transcript|interface Transcript\" cloud/apps/web/src/api/operations/runs.ts cloud/apps/web/src/api/operations -g'*.ts'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/api/operations/runs.ts:69:  decisionModelV2?: TranscriptDecisionModelV2 | null;
+cloud/apps/web/src/api/operations/runs.ts:298:      decisionModelV2
+cloud/apps/web/src/api/operations/runs.ts:553:      decisionModelV2
+cloud/apps/web/src/api/operations/domainAnalysis.ts:220:      decisionModelV2
+cloud/apps/web/src/api/operations/domainAnalysis.ts:476:  decisionModelV2?: TranscriptDecisionModelV2 | null;
+cloud/apps/web/src/api/operations/runs.ts:69:  decisionModelV2?: TranscriptDecisionModelV2 | null;
+cloud/apps/web/src/api/operations/runs.ts:298:      decisionModelV2
+cloud/apps/web/src/api/operations/runs.ts:553:      decisionModelV2
+ succeeded in 0ms:
+cloud/apps/web/src/api/operations/runs.ts:52:export type Transcript = {
+cloud/apps/web/src/api/operations/runs.ts:72:export type TranscriptDecisionModelV2RawEvidence = {
+cloud/apps/web/src/api/operations/runs.ts:86:export type TranscriptDecisionModelV2Canonical = {
+cloud/apps/web/src/api/operations/runs.ts:96:export type TranscriptDecisionModelV2LegacyCompat = {
+cloud/apps/web/src/api/operations/runs.ts:101:export type TranscriptDecisionModelV2 = {
+cloud/apps/web/src/api/operations/runs.ts:52:export type Transcript = {
+cloud/apps/web/src/api/operations/runs.ts:72:export type TranscriptDecisionModelV2RawEvidence = {
+cloud/apps/web/src/api/operations/runs.ts:86:export type TranscriptDecisionModelV2Canonical = {
+cloud/apps/web/src/api/operations/runs.ts:96:export type TranscriptDecisionModelV2LegacyCompat = {
+cloud/apps/web/src/api/operations/runs.ts:101:export type TranscriptDecisionModelV2 = {
+exec
+/bin/zsh -lc "sed -n '450,520p' cloud/apps/web/src/api/operations/domainAnalysis.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '52,130p' cloud/apps/web/src/api/operations/runs.ts" in /Users/chrislaw/valuerank succeeded in 0ms:
+  domainAvailableSignatures: DomainAvailableSignature[];
+};
+
+export type DomainAvailableSignaturesQueryVariables = {
+  domainId: string;
+};
+
+export type DomainAnalysisValueDetailQueryResult = {
+  domainAnalysisValueDetail: DomainAnalysisValueDetailResult;
+};
+
+export type DomainAnalysisValueDetailQueryVariables = {
+  domainId: string;
+  modelId: string;
+  valueKey: string;
+  scoreMethod?: 'LOG_ODDS' | 'FULL_BT';
+  signature?: string;
+};
+
+export type DomainAnalysisConditionTranscript = {
+ succeeded in 0ms:
+export type Transcript = {
+  id: string;
+  runId: string;
+  scenarioId: string | null;
+  modelId: string;
+  modelVersion: string | null;
+  content: unknown;
+  decisionCode: string | null;
+  decisionCodeSource?: string | null;
+  decisionMetadata?: unknown;
+  turnCount: number;
+  tokenCount: number;
+  durationMs: number;
+  estimatedCost: number | null;
+  createdAt: string;
+  lastAccessedAt: string | null;
+  dimensionValues?: Record<string, string | number> | null;
+  decisionModelV2?: TranscriptDecisionModelV2 | null;
+};
+
+exec
+/bin/zsh -lc "sed -n '180,240p' cloud/apps/web/src/api/operations/domainAnalysis.ts" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc 'rg -n "domainAnalysisConditionTranscripts" -n cloud/apps/web/src/api/operations/domainAnalysis.ts' in /Users/chrislaw/valuerank succeeded in 0ms:
+          scenarioId
+          conditionName
+          dimensions
+          prioritized
+          deprioritized
+          neutral
+          totalTrials
+          selectedValueWinRate
+          meanDecisionScore
+        }
+      }
+    }
+  }
+`;
+
+export const DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY = gql`
+  query DomainAnalysisConditionTranscripts(
+    $domainId: ID!
+    $modelId: String!
+    $valueKey: String!
+ succeeded in 0ms:
+205:    domainAnalysisConditionTranscripts(
+485:  domainAnalysisConditionTranscripts: DomainAnalysisConditionTranscript[];
+exec
+/bin/zsh -lc "rg -n \"TranscriptViewer\" cloud/apps/web/src -g'*.tsx'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/pages/AnalysisTranscripts.tsx:15:import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+cloud/apps/web/src/pages/AnalysisTranscripts.tsx:948:        <TranscriptViewer
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:7:import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:508:        <TranscriptViewer
+cloud/apps/web/src/pages/SurveyResults.tsx:16:import { TranscriptViewer } from '../components/runs/TranscriptViewer';
+cloud/apps/web/src/pages/SurveyResults.tsx:615:        <TranscriptViewer
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:8:import { TranscriptViewer } from '../runs/TranscriptViewer';
+cloud/apps/web/src/components/assumptions/OrderEffectPanel.tsx:356:          <TranscriptViewer
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:2: * TranscriptViewer Component
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:19:type TranscriptViewerProps = {
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:106:export function TranscriptViewer({
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:114:}: TranscriptViewerProps) {
+cloud/apps/web/src/components/runs/RunResults.tsx:11:import { TranscriptViewer } from './TranscriptViewer';
+cloud/apps/web/src/components/runs/RunResults.tsx:322:        <TranscriptViewer
+exec
+/bin/zsh -lc "rg -n \"decisionDisplayMode\" cloud/apps/web/src -g'*.tsx'" in /Users/chrislaw/valuerank succeeded in 0ms:
+cloud/apps/web/src/pages/AnalysisTranscripts.tsx:943:          decisionDisplayMode={listDisplayMode}
+cloud/apps/web/src/pages/AnalysisTranscripts.tsx:955:          decisionDisplayMode={viewerDisplayMode}
+cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx:511:          decisionDisplayMode={reportDecisionDisplayMode}
+cloud/apps/web/src/components/runs/TranscriptList.tsx:37:  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+cloud/apps/web/src/components/runs/TranscriptList.tsx:292:  decisionDisplayMode = 'legacy',
+cloud/apps/web/src/components/runs/TranscriptList.tsx:367:          getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
+cloud/apps/web/src/components/runs/TranscriptList.tsx:368:          getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
+cloud/apps/web/src/components/runs/TranscriptList.tsx:377:  }, [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds]);
+cloud/apps/web/src/components/runs/TranscriptList.tsx:637:              decisionDisplayMode={decisionDisplayMode}
+cloud/apps/web/src/components/runs/TranscriptList.tsx:750:                    decisionDisplayMode={decisionDisplayMode}
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:26:  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:113:  decisionDisplayMode,
+cloud/apps/web/src/components/runs/TranscriptViewer.tsx:120:  const viewMode = decisionDisplayMode ?? (transcript.decisionModelV2 ? 'audit' : 'legacy');
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:33:  decisionDisplayMode?: TranscriptDecisionDisplayMode;
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:137:  decisionDisplayMode,
+cloud/apps/web/src/components/runs/TranscriptRow.tsx:143:  const rowDecisionDisplayMode = decisionDisplayMode ?? 'legacy';
+codex
+I found one more useful comparison point: other pages already pass a viewer-specific display mode, so I’m checking whether this page is reusing the same pattern or if it now ties the modal to the list mode in a way the rest of the app avoids.
+exec
+/bin/zsh -lc "sed -n '900,980p' cloud/apps/web/src/pages/AnalysisTranscripts.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+            </span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+              Exact {transcriptCoverage.exact}
+            </span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+              Fallback {transcriptCoverage.fallback}
+            </span>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              Ambiguous {transcriptCoverage.ambiguous}
+            </span>
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+              Manual {transcriptCoverage.manual}
+            </span>
+          </div>
+          {transcriptCoverage.unresolved > 0 && (
+            <p className="mt-2 text-xs text-amber-700">
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+              Open those transcripts to review the raw evidence.
+            </p>
+          )}
+exec
+/bin/zsh -lc "sed -n '300,380p' cloud/apps/web/src/components/runs/TranscriptRow.tsx" in /Users/chrislaw/valuerankexec
+/bin/zsh -lc "sed -n '300,380p' cloud/apps/web/src/components/runs/TranscriptList.tsx" in /Users/chrislaw/valuerank succeeded in 0ms:
+                  </span>
+                )}
+                {decisionMetadata?.parseClass === 'ambiguous' && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                    Ambiguous
+                  </span>
+                )}
+                {decisionMetadata?.parseClass === 'fallback_resolved' && (
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                    Fallback
+                  </span>
+                )}
+                {transcript.decisionCodeSource === 'manual' && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                    Manual
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+ succeeded in 0ms:
+    // Use the union of keys across all scenarios so sparse/empty first
+    // entries do not drop valid columns from the table.
+    const keys = new Set<string>();
+    for (const dimensions of Object.values(scenarioDimensions)) {
+      if (!dimensions || typeof dimensions !== 'object' || Array.isArray(dimensions)) {
+        continue;
+      }
+      for (const key of Object.keys(dimensions)) {
+        keys.add(key);
+      }
+    }
+    return Array.from(keys);
+  }, [scenarioDimensions]);
+
+  const normalizedScenarioDimensions = useMemo(() => {
+    return buildNormalizedScenarioDimensionsMap(scenarioDimensions);
+  }, [scenarioDimensions]);
+
+  const getScenarioDimensions = useCallback((scenarioId: string | null) => {
+    return getScenarioDimensionsForId(
 codex
 ## Findings
-- High: `reportDecisionDisplayMode` is computed with `every(hasTranscriptDecisionModelV2)`, so one legacy transcript forces the entire condition into legacy mode. That suppresses canonical headlines in the table and canonical rendering in `TranscriptViewer` even for transcripts that already have `decisionModelV2`. In mixed conditions, the new canonical path becomes unusable for the transcripts that support it.
+1. **High** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) now decides `reportDecisionDisplayMode` from the transcripts returned by `DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY`, but that query is still capped at `limit: 100`. If a condition has more than 100 transcripts, the page can classify it as fully V2 based on the first page alone and switch the whole surface into canonical mode even though later transcripts may still be legacy. That silently hides raw decision codes and mislabels a mixed condition.
+
+2. **Medium** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) and [`/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx) now force the transcript modal to follow the condition-wide mode instead of the transcript’s own `decisionModelV2`. In any mixed condition, opening a transcript that already has canonical V2 data still renders the legacy view, so the user cannot inspect the canonical evidence for the exact transcript they clicked.
 
 ## Residual Risks
-- The new tests do not cover empty transcript lists, partially populated `decisionModelV2` payloads, or stale/cache-mixed responses, so mode-selection edge cases could still regress.
-- If `TranscriptViewer` has other call sites outside this page, they may still be on the old decision-display behavior unless updated separately.
+- There is still no regression coverage for the truncated-transcript case, so the `limit: 100` assumption remains fragile.
+- The new behavior is all-or-nothing by condition, so future changes to transcript ordering or backend pagination could change display mode without any UI warning.
 tokens used
-15,973
+39,447

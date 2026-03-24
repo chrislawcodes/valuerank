@@ -69,12 +69,11 @@ index c87e2c2a..51ebb390 100644
        )}
      </div>
    );
-
-diff --git acloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx bcloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
+diff --git a/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
 new file mode 100644
 index 00000000..d8986985
 --- /dev/null
-+++ bcloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
++++ b/cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx
 @@ -0,0 +1,314 @@
 +import { beforeEach, describe, expect, it, vi } from 'vitest';
 +import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';

@@ -1,6 +1,8 @@
 ## Findings
-- High: `reportDecisionDisplayMode` is computed with `every(hasTranscriptDecisionModelV2)`, so one legacy transcript forces the entire condition into legacy mode. That suppresses canonical headlines in the table and canonical rendering in `TranscriptViewer` even for transcripts that already have `decisionModelV2`. In mixed conditions, the new canonical path becomes unusable for the transcripts that support it.
+1. **High** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) now decides `reportDecisionDisplayMode` from the transcripts returned by `DOMAIN_ANALYSIS_CONDITION_TRANSCRIPTS_QUERY`, but that query is still capped at `limit: 100`. If a condition has more than 100 transcripts, the page can classify it as fully V2 based on the first page alone and switch the whole surface into canonical mode even though later transcripts may still be legacy. That silently hides raw decision codes and mislabels a mixed condition.
+
+2. **Medium** - [`/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx) and [`/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx`](/Users/chrislaw/valuerank/cloud/apps/web/src/components/runs/TranscriptViewer.tsx) now force the transcript modal to follow the condition-wide mode instead of the transcript’s own `decisionModelV2`. In any mixed condition, opening a transcript that already has canonical V2 data still renders the legacy view, so the user cannot inspect the canonical evidence for the exact transcript they clicked.
 
 ## Residual Risks
-- The new tests do not cover empty transcript lists, partially populated `decisionModelV2` payloads, or stale/cache-mixed responses, so mode-selection edge cases could still regress.
-- If `TranscriptViewer` has other call sites outside this page, they may still be on the old decision-display behavior unless updated separately.
+- There is still no regression coverage for the truncated-transcript case, so the `limit: 100` assumption remains fragile.
+- The new behavior is all-or-nothing by condition, so future changes to transcript ordering or backend pagination could change display mode without any UI warning.
