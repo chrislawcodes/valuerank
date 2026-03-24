@@ -1,0 +1,57 @@
+{
+  "session_id": "4df96648-8ce4-4f21-8a1b-4207cccfec37",
+  "response": "## Findings\n\n### 1. **Degraded UX in Mixed-Data Scenarios**\nThe implementation uses an `every()` check to determine the display mode. If a set of transcripts contains even a single record without the `decisionModelV2` field, the entire table falls back to the legacy display mode. This \"all or nothing\" approach forces a downgrade of the user experience, hiding the richer canonical decision format for all other transcripts in the set that *do* support it. For a list of 100 transcripts where 99 have the new data model, the user is only shown the old format for all 100, which is a significant loss of information. A row-by-row determination would provide a better and more accurate presentation of the available data.\n\n### 2. **Incomplete Test Coverage for Data Fetching States**\nThe new test suite (`DomainAnalysisValueDetail.test.tsx`) exclusively covers the happy path where the `useQuery` hook successfully returns data. It does not validate the component's behavior during `fetching` or `error` states for the transcript query. This leaves the component's resilience unverified; it's unclear if it correctly displays loading indicators or handles API errors gracefully without crashing.\n\n### 3. **Brittle Test Mock Implementation**\nThe mock for `useQuery` in the tests uses conditional logic based on `definitionId` to return different datasets for the \"all V2\" and \"mixed\" test cases. However, the second test case does not explicitly set up a scenario to trigger the mixed data path; it works only because the mock data is hardcoded that way. This makes the tests less explicit and more brittle. A better approach would be to use `mockImplementationOnce` for each test to provide a clean, isolated mock that precisely matches the test's intent.\n\n## Residual Risks\n\n### 1. **Presentation-Layer Data Obfuscation**\nThe \"all or nothing\" display logic creates a significant risk of user confusion. As data is progressively migrated to `decisionModelV2`, the UI will appear to flip between 'legacy' and 'audit' modes based on which data slice the user selects. A user might see the rich view for one condition, click another, and see the legacy view, incorrectly assuming the underlying data is universally sparse, when in fact only one record was missing. This degrades the tool's perceived reliability and analytical power.\n\n### 2. **Dependency on Unguarded Utility Functions**\nThe component's rendering logic unconditionally calls `formatCanonicalDecisionHeadline(transcript)` when in `audit` mode. This assumes the `reportDecisionDisplayMode` check is a perfect guard and that any transcript in that context will have a valid `decisionModelV2` object. If there is any logic error that allows a transcript without this object to be rendered in `audit` mode, the `formatCanonicalDecisionHeadline` function could throw a runtime error, as its own robustness against malformed input is not demonstrated or tested here.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 25028
+        },
+        "tokens": {
+          "input": 4316,
+          "prompt": 16330,
+          "candidates": 626,
+          "total": 18997,
+          "cached": 12014,
+          "thoughts": 2041,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 25028,
+            "tokens": {
+              "input": 4316,
+              "prompt": 16330,
+              "candidates": 626,
+              "total": 18997,
+              "cached": 12014,
+              "thoughts": 2041,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

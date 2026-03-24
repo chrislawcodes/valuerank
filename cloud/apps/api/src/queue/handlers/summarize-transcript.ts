@@ -21,6 +21,7 @@ import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
+import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -56,6 +57,28 @@ type SummarizeWorkerOutput =
       };
     }
   | { success: false; error: { message: string; code: string; retryable: boolean; details?: string } };
+
+function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function buildDecisionMetadataForPersist(
+  decisionMetadata: DecisionMetadata | null | undefined,
+  rawDecisionEvidence: ReturnType<typeof buildRawDecisionEvidence>,
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (decisionMetadata == null) {
+    return Prisma.DbNull;
+  }
+
+  if (!isPlainJsonObject(decisionMetadata)) {
+    return decisionMetadata as Prisma.InputJsonValue;
+  }
+
+  return {
+    ...decisionMetadata,
+    rawDecisionEvidence,
+  } as Prisma.InputJsonValue;
+}
 
 /**
  * Queues a compute_token_stats job for cost prediction data.
@@ -219,16 +242,14 @@ async function processSummarizeJob(
     }
 
     // Update transcript with summary
+    const rawDecisionEvidence = buildRawDecisionEvidence(output.summary.decisionMetadata);
     await db.transcript.update({
       where: { id: transcriptId },
       data: {
         decisionCode: output.summary.decisionCode,
         decisionCodeSource: output.summary.decisionSource,
         decisionText: output.summary.decisionText,
-        decisionMetadata:
-          output.summary.decisionMetadata == null
-            ? Prisma.DbNull
-            : (output.summary.decisionMetadata as Prisma.InputJsonValue),
+        decisionMetadata: buildDecisionMetadataForPersist(output.summary.decisionMetadata, rawDecisionEvidence),
         summarizedAt: new Date(),
       },
     });

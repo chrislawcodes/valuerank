@@ -35,6 +35,8 @@ from factory_state import (  # noqa: E402
     checkpoint_manifest_path,
     default_artifact_path,
     default_discovery_state,
+    blocking_unresolved_items,
+    discovery_blockers_are_malformed,
     migrate_discovery_state,
 )
 
@@ -1050,6 +1052,17 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         raise SystemExit(prereq_error)
     if args.stage == "spec":
         discovery = discovery_state(args.slug)
+        blocking = blocking_unresolved_items(discovery)
+        if blocking:
+            if discovery_blockers_are_malformed(discovery):
+                raise SystemExit(
+                    "spec checkpoint requires discovery state to be repaired first; "
+                    "use discover --clear to reset malformed discovery state"
+                )
+            raise SystemExit(
+                "spec checkpoint requires discovery unresolved items to be resolved or deferred first; "
+                "use discover --resolve or discover --defer before checkpointing spec"
+            )
         if discovery.get("required") and not discovery.get("complete"):
             raise SystemExit(
                 "spec checkpoint requires discovery to be complete first; "
@@ -1393,8 +1406,50 @@ def command_discover(args: argparse.Namespace) -> int:
 
     def mutate(discovery: dict) -> None:
         if clear:
+            preserved_required = bool(discovery.get("required"))
+            preserved_question_count = discovery.get("question_count", 0)
+            if not isinstance(preserved_question_count, int):
+                preserved_question_count = 0
+            preserved_asked_count = discovery.get("asked_count", 0)
+            if not isinstance(preserved_asked_count, int):
+                preserved_asked_count = 0
+            preserved_questions = discovery.get("questions", [])
+            if not isinstance(preserved_questions, list):
+                preserved_questions = []
+            preserved_assumptions = discovery.get("assumptions", [])
+            if not isinstance(preserved_assumptions, list):
+                preserved_assumptions = []
+            preserved_summary = discovery.get("summary", "")
+            if not isinstance(preserved_summary, str):
+                preserved_summary = ""
+            preserved_answers = discovery.get("answers", {})
+            if not isinstance(preserved_answers, dict):
+                preserved_answers = {}
+            preserved_non_goals = discovery.get("non_goals", [])
+            if not isinstance(preserved_non_goals, list):
+                preserved_non_goals = []
+            preserved_acceptance = discovery.get("acceptance_criteria", [])
+            if not isinstance(preserved_acceptance, list):
+                preserved_acceptance = []
             discovery.clear()
             discovery.update(default_discovery_state())
+            discovery["required"] = (
+                preserved_required
+                or bool(preserved_question_count)
+                or bool(preserved_questions)
+                or bool(preserved_assumptions)
+            )
+            discovery["question_count"] = preserved_question_count
+            discovery["asked_count"] = preserved_asked_count
+            discovery["questions"] = preserved_questions
+            discovery["assumptions"] = preserved_assumptions
+            discovery["summary"] = preserved_summary
+            discovery["answers"] = preserved_answers
+            discovery["non_goals"] = preserved_non_goals
+            discovery["acceptance_criteria"] = preserved_acceptance
+            discovery["unresolved"] = []
+            discovery["complete"] = False
+            discovery["updated_at"] = int(time.time())
             return
         if args.required:
             discovery["required"] = True
@@ -1460,7 +1515,18 @@ def command_discover(args: argparse.Namespace) -> int:
             ac = discovery.setdefault("acceptance_criteria", [])
             if args.acceptance_criteria not in ac:
                 ac.append(args.acceptance_criteria)
+        blocking = blocking_unresolved_items(discovery)
         if args.complete:
+            if blocking:
+                if discovery_blockers_are_malformed(discovery):
+                    raise SystemExit(
+                        "discover cannot mark discovery complete while discovery state is malformed; "
+                        "use discover --clear to reset malformed discovery state"
+                    )
+                raise SystemExit(
+                    "discover cannot mark discovery complete while unresolved items remain; "
+                    "resolve or defer each item first"
+                )
             if not force_complete and int(discovery.get("asked_count", 0)) < int(discovery.get("question_count", 0)):
                 raise SystemExit(
                     "discover cannot mark discovery complete before the planned questions are recorded; "
@@ -1482,6 +1548,11 @@ def command_discover(args: argparse.Namespace) -> int:
         ):
             discovery["complete"] = False
         if force_complete:
+            if blocking:
+                raise SystemExit(
+                    "discover cannot force discovery complete while unresolved items remain; "
+                    "resolve or defer each item first"
+                )
             discovery["complete"] = True
         discovery["updated_at"] = int(time.time())
 
@@ -1530,7 +1601,7 @@ def recommended_next_action(
     if blocked.get("active"):
         return "mark_blocked"
     discovery = state.get(DISCOVERY_KEY, {})
-    if discovery.get("required") and not discovery.get("complete"):
+    if blocking_unresolved_items(discovery) or (discovery.get("required") and not discovery.get("complete")):
         return "discover"
     if not stages["spec"]["artifact_exists"] or not stages["spec"]["artifact_meaningful"]:
         if later_progress_exists(stages, "spec")[0]:
@@ -1620,7 +1691,9 @@ def command_status(args: argparse.Namespace) -> int:
     else:
         print("- inactive")
 
-    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary"):
+    blocking = blocking_unresolved_items(discovery)
+    unresolved = discovery.get("unresolved", [])
+    if discovery.get("required") or not discovery.get("complete") or discovery.get("asked_count") or discovery.get("assumptions") or discovery.get("summary") or blocking or (isinstance(unresolved, list) and unresolved):
         print("")
         print("discovery:")
         print(f"- required: {'yes' if discovery.get('required') else 'no'}")
@@ -1633,6 +1706,20 @@ def command_status(args: argparse.Namespace) -> int:
             print(f"- assumptions: {len(discovery.get('assumptions', []))}")
         if discovery.get("summary"):
             print(f"- summary: {trim_detail(str(discovery.get('summary', '')))}")
+        if isinstance(unresolved, list) and unresolved:
+            print(f"- unresolved-open: {len(blocking)}")
+            print(f"- unresolved-deferred: {len(unresolved) - len(blocking)}")
+            if blocking:
+                if discovery_blockers_are_malformed(discovery):
+                    print("- action: use discover --clear to repair malformed discovery state")
+                else:
+                    print("- action: resolve or defer unresolved items before spec")
+        elif blocking:
+            print(f"- unresolved-open: {len(blocking)}")
+            if discovery_blockers_are_malformed(discovery):
+                print("- action: use discover --clear to repair malformed discovery state")
+            else:
+                print("- action: resolve or defer unresolved items before spec")
 
     cp = checkpoint_progress_state(args.slug)
     if cp["index"] > 0:

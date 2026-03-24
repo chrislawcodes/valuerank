@@ -16,6 +16,8 @@ import type { Transcript, Scenario, Run } from '@prisma/client';
  */
 export type TranscriptWithScenario = Transcript & {
   scenario: Scenario | null;
+  decisionMetadata?: unknown;
+  definitionSnapshot?: unknown;
 };
 
 /**

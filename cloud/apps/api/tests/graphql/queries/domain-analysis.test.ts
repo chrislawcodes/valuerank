@@ -203,6 +203,17 @@ describe('GraphQL domain analysis', () => {
             deprioritized
             neutral
             totalTrials
+            conditions {
+              scenarioId
+              conditionName
+              dimensions
+              prioritized
+              deprioritized
+              neutral
+              totalTrials
+              selectedValueWinRate
+              meanDecisionScore
+            }
           }
         }
       }
@@ -287,5 +298,14 @@ describe('GraphQL domain analysis', () => {
       'Benevolence_Dependability',
       'Benevolence_Dependability',
     ]);
+<<<<<<< HEAD
+=======
+    const aDetail = detail.vignettes.find((vignette) => vignette.definitionName === 'Job Choice A First');
+    expect(aDetail?.conditions).toHaveLength(1);
+    expect(aDetail?.conditions[0]?.dimensions).toEqual({
+      autonomy: 'very high',
+      risk: 'low',
+    });
+>>>>>>> bb5a4d6f (Implement vignette analysis decision model)
   });
 });

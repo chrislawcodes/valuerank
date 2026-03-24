@@ -1,0 +1,21 @@
+{
+  "source_artifact_path": "docs/feature-runs/vignette-analysis-decision-model/reviews/implementation.diff.patch",
+  "source_artifact_sha256": "1b6a2d72f175c801a223672c9c81d9f655ee14a046934e469d01445a20a76341",
+  "narrowed_artifact_path": "docs/feature-runs/vignette-analysis-decision-model/reviews/diff.gemini.regression-adversarial.review.md.narrowed.txt",
+  "narrowed_artifact_sha256": "150cee512d785ebbda38a9ed9281d8cf1347ef078305507e8e8f79d250a031b9",
+  "strategy": "diff-head-tail-chunks",
+  "head_chunks": [
+    "diff --git a/cloud/apps/web/src/api/operations/domainAnalysis.ts b/cloud/apps/web/src/api/operations/domainAnalysis.ts",
+    "diff --git a/cloud/apps/web/src/api/operations/runs.ts b/cloud/apps/web/src/api/operations/runs.ts",
+    "diff --git a/cloud/apps/web/src/components/runs/TranscriptList.tsx b/cloud/apps/web/src/components/runs/TranscriptList.tsx",
+    "diff --git a/cloud/apps/web/src/components/runs/TranscriptRow.tsx b/cloud/apps/web/src/components/runs/TranscriptRow.tsx"
+  ],
+  "tail_chunks": [
+    "diff --git a/cloud/apps/web/src/pages/AnalysisTranscripts.tsx b/cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "diff --git a/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx b/cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "diff --git a/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx b/cloud/apps/web/tests/components/runs/TranscriptList.test.tsx",
+    "diff --git a/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx b/cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "diff --git acloud/apps/web/src/utils/transcriptDecisionModel.ts bcloud/apps/web/src/utils/transcriptDecisionModel.ts",
+    "diff --git acloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx bcloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx"
+  ]
+}

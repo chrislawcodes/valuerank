@@ -1,0 +1,57 @@
+{
+  "session_id": "ed2d851f-59c6-498e-b4a9-1bfd93849174",
+  "response": "## Findings\n\nOrdered by severity.\n\n### 1. UI State Flicker and Inconsistent Display\n\nWhen a user clicks a condition, the `transcriptsForCondition` data is fetched asynchronously. This creates a user-facing flicker and a temporary state inconsistency:\n\n1.  **Initial State:** The `normalizedTranscripts` array is empty. `reportDecisionDisplayMode` defaults to `'legacy'`. The table header is rendered as \"Decision\".\n2.  **Data Fetching:** The transcript query begins. The table remains in the legacy state.\n3.  **Data Arrival:** The query completes. The component re-renders with `normalizedTranscripts` populated. `reportDecisionDisplayMode` is recalculated.\n4.  **UI Flicker:** If the new data is fully V2, the mode switches to `'audit'`, and the table header abruptly changes from \"Decision\" to \"Canonical decision\".\n\nThis creates a jarring user experience and could be perceived as a bug. The UI should ideally wait for the data and render the correct table structure in a single, stable paint.\n\n### 2. Unverified Dependency on `TranscriptViewer`\n\nThe diff introduces a new prop, `decisionDisplayMode`, which is passed to the `<TranscriptViewer />` component. However, the changes to `TranscriptViewer` to consume this prop are not included in the artifact. The new test file explicitly mocks this component, hiding its actual behavior.\n\nThis represents a critical, unverified dependency. If the `TranscriptViewer` component has not been updated to correctly interpret the `decisionDisplayMode` prop, this feature is incomplete and will fail to render decisions correctly inside the viewer modal, even if the main table view is correct.\n\n### 3. Fragile Dependency on Unseen Utility Functions\n\nThe entire display logic hinges on two imported functions whose implementation is not provided:\n*   `hasTranscriptDecisionModelV2`: The `every()` check relies entirely on this type guard. If it has a flaw (e.g., doesn't properly check for `null` vs `undefined`, or for empty objects), the `reportDecisionDisplayMode` will be calculated incorrectly.\n*   `formatCanonicalDecisionHeadline`: This function is called directly in the render path. If it encounters a malformed `decisionModelV2` object (e.g., missing a `canonical` key) and throws an error, it will crash the entire component because it is not wrapped in any error boundary.\n\nThis makes the component fragile and susceptible to runtime errors based on data shape variations that may not have been considered.\n\n### 4. Incomplete Test Coverage\n\nThe new test file `DomainAnalysisValueDetail.test.tsx` is a valuable addition, but it fails to cover several key scenarios:\n\n*   **Empty/Null Data:** No test exists for the case where the `domainAnalysisConditionTranscripts` query returns an empty array or `null`. While the code appears to handle this by defaulting to `'legacy'` mode, this behavior is not locked in with a test and could be subject to future regressions.\n*   **Pure Legacy Data:** The tests cover a \"mixed\" V1/V2 scenario but not a \"pure\" V1/legacy scenario where no transcripts have the `decisionModelV2` field.\n*   **UI Flicker:** The tests validate the final state of the DOM but do not assert the initial state during data fetching, so the UI flicker regression is not captured.\n\n## Residual Risks\n\n*   **Incomplete Feature Implementation:** The most significant risk is that the feature is only half-complete. The changes in `DomainAnalysisValueDetail` may be correct, but if the required changes in `TranscriptViewer` are missing or flawed, the user will still see incorrect or legacy data when they click to view a transcript, defeating the purpose of the change.\n*   **Data-Driven Crashes:** The component is now vulnerable to runtime errors if the `decisionModelV2` object from the API ever deviates from the exact structure expected by `formatCanonicalDecisionHeadline`. This is a brittle implementation that assumes perfect and consistent data from the backend.\n*   **UX Regression:** The UI flicker risk remains. Even if functionally correct, this lack of polish can erode user trust and give the impression of a buggy interface.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 29334
+        },
+        "tokens": {
+          "input": 4316,
+          "prompt": 16330,
+          "candidates": 888,
+          "total": 19384,
+          "cached": 12014,
+          "thoughts": 2166,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 29334,
+            "tokens": {
+              "input": 4316,
+              "prompt": 16330,
+              "candidates": 888,
+              "total": 19384,
+              "cached": 12014,
+              "thoughts": 2166,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

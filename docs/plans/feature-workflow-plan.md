@@ -65,7 +65,7 @@ interface is clear.
 ---
 
 ### I-7: Structured discovery state
-**Status:** Planned
+**Status:** In progress
 **Priority:** 1
 **Source:** 2026-03-22 adversarial evaluation (Codex + Claude)
 **What:** Replace the current free-text discovery fields with structured, machine-readable
@@ -79,6 +79,10 @@ state in `state.json`:
 
 Make `unresolved` a first-class status: if any item is unresolved, `status` surfaces it
 prominently and `spec` is blocked from progressing until the human clears or defers each one.
+
+First enforcement slice landed: blocking unresolved items now surface in status, prevent
+discovery from being marked complete, and block spec checkpointing until they are cleared or
+explicitly deferred.
 
 **Why:** The pipeline currently validates artifact consistency, not product intent. A wrong
 spec sails through every gate. This is where wrong-product failures are born. Discovery is
@@ -274,6 +278,29 @@ keeping the execution surface small, and validating truth outside the artifact c
 - Source-of-truth ambiguity: unclear which workflow files were authoritative (→ I-3, shipped)
 - No upfront requirements clarification (→ I-1, shipped)
 
+### 2026-03-23 — Feature-factory retro from job-choice analysis fix
+
+**What worked:**
+- The staged artifact chain still kept the work understandable: spec, plan, tasks, implementation, diff review, and closeout were all traceable.
+- The review gates helped catch a stale plan/testability mismatch before delivery.
+- The diff checkpoint made it obvious when unrelated dirty paths would have polluted the reviewed slice.
+
+**What hurt:**
+- Review reconciliation was too text-sensitive. We had to mirror review notes very closely in `plan.md`, and small wording drift caused repeated mismatches.
+- Delivery state could lag behind reality. Closeout blocked on stale check status even after the PR had passing checks.
+- Production rollout confirmation was separate from merge confirmation. Railway could still show `BUILDING` after the PR was merged, so “merged” did not always mean “live.”
+- Cleanup was manual. Removing the finished workflow tree was awkward after merge.
+
+**Plan updates to carry forward:**
+- Make review reconciliation structured by review ID and terminal status, with the note treated as descriptive metadata instead of a strict match string.
+- Refresh PR/check state automatically before closeout, or have closeout call the delivery refresh path itself.
+- Add a live deploy verification step before closing out so we do not assume production has the fix just because GitHub merged it.
+- Add a first-class cleanup/archive command for completed feature runs.
+- Improve dirty-scope messaging so the user can see which files are outside the feature slice and why.
+- Keep the runner naming consistent across docs, scripts, and help text so the feature-factory path is obvious.
+
+**Net:** the workflow is useful, but it needs less string matching and more machine-readable state before it will feel truly low-friction.
+
 ---
 
 ## Change Log
@@ -286,3 +313,4 @@ keeping the execution surface small, and validating truth outside the artifact c
 | 2026-03-22 | feature-factory rename | Shipped (#387); updated all references |
 | 2026-03-22 | I-7 through I-10 | Added from adversarial evaluation; replaced prior backlog |
 | 2026-03-22 | I-6 | Deferred status reinforced by evaluation |
+| 2026-03-23 | Feature-factory retro | Added concrete plan updates from the job-choice analysis fix run |

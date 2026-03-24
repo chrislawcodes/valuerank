@@ -1,0 +1,6 @@
+## Findings
+- High: `reportDecisionDisplayMode` is computed with `every(hasTranscriptDecisionModelV2)`, so one legacy transcript forces the entire condition into legacy mode. That suppresses canonical headlines in the table and canonical rendering in `TranscriptViewer` even for transcripts that already have `decisionModelV2`. In mixed conditions, the new canonical path becomes unusable for the transcripts that support it.
+
+## Residual Risks
+- The new tests do not cover empty transcript lists, partially populated `decisionModelV2` payloads, or stale/cache-mixed responses, so mode-selection edge cases could still regress.
+- If `TranscriptViewer` has other call sites outside this page, they may still be on the old decision-display behavior unless updated separately.

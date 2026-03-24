@@ -1,0 +1,182 @@
+2026-03-24T06:32:17.513367Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.514191Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.521882Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d1e8b-4761-71f3-8034-17def1d391ae
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Vignette Analysis Decision Model Phase 1 — Plan
+
+## Goal
+
+Establish the canonical decision contract for vignette-analysis without changing the meaning
+of any existing V1 fields or migrating any live consumer surface yet.
+
+Phase 1 is intentionally narrow:
+
+- update active docs so `direction + strength` is the canonical model for value-labeled
+  transcripts
+- add a shared, pure adapter boundary for canonical and legacy-compatible decision shapes
+- add a default-off `decision_model_v2` config hook
+- prove the adapter with deterministic tests and legacy parity checks
+- leave API, worker, export, and web consumers on the current V1 path
+
+## Architecture Decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Canonical contract shape | `RawDecisionEvidence`, `CanonicalDecision`, `LegacyDecisionCompat` | Keeps audit evidence, canonical meaning, and legacy compatibility separated |
+| Adapter placement | `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` | Keeps phase-1 logic in one shared module instead of scattering it through query code |
+| Integration point | `cloud/apps/api/src/graphql/queries/domain/shared.ts` | Lets existing domain-analysis code import the adapter later without changing the current consumer behavior in phase 1 |
+| Flag hook | `cloud/apps/api/src/config.ts` | Uses the repo's existing env/config style instead of inventing a new feature-flag service |
+| Manual override shape | Canonical-first `appliedDecision` plus `previousDecisionCode` audit history | Makes the override authoritative in the new model while preserving the prior legacy value for audit |
+| Provenance handling | `deterministic`, `manual`, `error`, `unknown` | Keeps the failure model explicit and fail-closed |
+| Legacy compatibility | `canonicalScore` is derived, `rawScore` remains available for legacy numeric history | Preserves current scalar-dependent code paths without redefining V1 semantics |
+
+## Contract Recap
+
+The phase-1 plan implements the spec's contract, not a new one.
+
+- `RawDecisionEvidence` carries parser audit data, manual override history, and parse
+  provenance
+- `CanonicalDecision` carries the canonical meaning used by later report surfaces:
+  `favoredValueKey`, `opposedValueKey`, `direction`, `strength`, normalization metadata, and
+  `source`
+- `LegacyDecisionCompat` carries compatibility scalars for older analysis math and exports
+- `parsePath` is audit provenance only and is never rewritten by normalization
+- canonical validity rules are fail-closed: missing metadata, malformed metadata, malformed
+  overrides, and unrecognized parser states all resolve to `unknown` or `error`
+- manual overrides are canonical-first: the override decision wins, and the previous legacy
+  code is audit history only
+- exact and fallback-resolved parses are deterministic branches, not fuzzy heuristics
+- `neutral` and `unknown` are matched states; mixed direction/strength combinations are
+  invalid
+
+## Wave Breakdown
+
+| Wave | Scope | Files | Exit Rule |
+|---|---|---|---|
+| 1 | Lock terminology in active docs | `docs/canonical-glossary.md`, `docs/valuerank_prd.yaml`, `docs/README.md` | Active docs no longer teach score-first semantics as the main vignette-analysis model |
+| 2 | Add the canonical adapter boundary and flag hook | `cloud/apps/api/src/config.ts`, `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` | Adapter functions are pure, typed, and do not mutate any consumer surface |
+| 3 | Wire integration points and test coverage | `cloud/apps/api/src/graphql/queries/domain/shared.ts`, `cloud/apps/api/tests/graphql/queries/domain/decision-model.test.ts` | Legacy numeric fixtures and adapter examples both pass, and existing query outputs stay identical on current fixtures |
+
+## Implementation Notes
+
+- The adapter must be a pure function layer, not a query-local helper, so later phases can
+  reuse it from API, worker, and export code.
+- `parsePath` stays as audit provenance and is not rewritten by normalization.
+- `shared.ts` may import the new adapter later, but phase 1 must not change the meaning of
+  current query outputs.
+- The new config hook exists now so later phases can gate consumer rollout without adding a
+  second rollout mechanism.
+- The first phase should not try to solve the full override-history problem. It preserves the
+  latest prior value and the current canonical override, which is enough for phase 1 audit
+  and replay.
+- `fallback_resolved` is a deterministic parser branch, not a free-form rescue path.
+- label resolution must allow a matched label to refer to either value in the pair; favored
+  vs. opposed is derived from the parse branch and orientation metadata.
+- plan-phase verification should use deep-equality assertions for the specified API query
+  outputs and worker artifacts, not a manual spot-check.
+
+## Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Historical rows without pair/orientation metadata may remain undecodable canonically | Some legacy transcripts may only preserve the scalar compatibility path | Keep `LegacyDecisionCompat` available and treat canonical unknowns as explicit coverage gaps |
+| Manual override semantics can drift if the adapter and tests disagree on valid input | Broken audit trail or inconsistent canonical results | Keep override validation in the adapter and add explicit negative tests for inconsistent inputs |
+| `shared.ts` refactor could silently change live outputs | User-visible regressions in analysis views | Require regression checks on current legacy fixtures before any consumer wiring lands |
+| The feature flag exists before any consumer uses it | Dead code risk if later phases stall | Treat the flag as a boundary only; later phases must wire it into a real consumer before rollout |
+
+## Verification Plan
+
+1. Run the phase-1 adapter tests for exact, fallback, ambiguous, unparseable, manual
+   override, orientation normalization, and malformed metadata cases.
+2. Run parity checks against the existing numeric legacy fixtures in
+   `cloud/apps/api/tests/graphql/queries/domain-analysis.test.ts` and
+   `cloud/workers/tests/test_analyze_basic.py`.
+3. Add explicit tests for:
+   - canonical unknowns on missing metadata
+   - valid manual override application
+   - invalid manual override rejection
+   - `decision_model_v2` defaulting off in config
+   - unchanged domain-analysis output on the designated legacy fixture set
+4. Confirm the new docs no longer teach score-first semantics as the primary model with a
+   grep-style check over the three listed doc files.
+
+## Acceptance Criteria
+
+- The canonical contract is documented and deterministic
+- The adapter can derive canonical and legacy-compatible outputs from the same transcript
+- The phase-1 feature flag exists and defaults off
+- Existing V1 field semantics remain unchanged
+- Existing consumer behavior remains unchanged
+- Phase 1 stops before any API, worker, export, or web consumer migration
+on
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-24T06:32:17.546883Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.549896Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.575061Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.577268Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.580956Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d1e8b-4761-71f3-8034-17def1d391ae.tmp-1774333937515826000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-24T06:32:17.601942Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.603023Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.627096Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.628035Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.653051Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.653910Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.677822Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.678839Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.703886Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.704946Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.729032Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.730321Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.753152Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.754580Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.777838Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.779113Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.803979Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.805129Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.829145Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.830316Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.852048Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T06:32:17.853224Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T06:32:17.875734Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+I’m reviewing the plan as if I had to break the implementation later. I’ll focus on where the plan is internally inconsistent, under-specified, or likely to let regressions slip through.
+codex
+## Findings
+- **High: The adapter is being placed in an API-GraphQL path even though the plan claims it is a shared boundary for later API, worker, and export reuse.** Putting the canonical decision logic in `cloud/apps/api/src/graphql/queries/domain/decision-model.ts` makes the core contract live inside an API-specific layer, which will force cross-layer imports or a second relocation when phase 2/3 need the same logic elsewhere. That is a structural mismatch with the stated goal of a reusable pure adapter.
+- **High: The plan does not define a complete precedence model for raw parser output, normalization, manual overrides, and compatibility scalars.** It names `direction`, `strength`, `parsePath`, `appliedDecision`, `previousDecisionCode`, `canonicalScore`, and `rawScore`, but it never states which source wins in each conflict case or how every branch maps to canonical vs legacy output. That leaves too much room for two implementations to both look “correct” while diverging on edge cases.
+- **Medium: The provenance vocabulary is inconsistent and under-specified.** The architecture table lists `deterministic`, `manual`, `error`, and `unknown`, but the implementation notes add `fallback_resolved`, and the recap says malformed metadata and unrecognized parser states resolve to `unknown` or `error` without defining the boundary. If this is not frozen now, the persisted shape and tests can drift immediately.
+
+## Residual Risks
+- Some legacy transcripts may never be canonically decodable because they lack the pair or orientation metadata needed for the new contract. `LegacyDecisionCompat` keeps them usable, but canonical reporting will still have blind spots until there is a backfill or migration.
+- The plan intentionally keeps only the current canonical override plus `previousDecisionCode`. If later audit or replay requirements need the full override chain, phase 2 will require schema work, not just adapter changes.
+- The verification plan is still narrow. A grep check on docs and a designated fixture set can miss semantic regressions in examples, comments, or transcript shapes that are not in the chosen parity samples.
+tokens used
+7,842

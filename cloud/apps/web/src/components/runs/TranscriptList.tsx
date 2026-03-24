@@ -14,6 +14,11 @@ import {
   normalizeScenarioId,
 } from '../../utils/scenarioUtils';
 import { formatDisplayLabel } from '../../utils/displayLabels';
+import {
+  getTranscriptDecisionSortValue,
+  normalizeLegacyDecisionCode,
+  type TranscriptDecisionDisplayMode,
+} from '../../utils/transcriptDecisionModel';
 import { Tooltip } from '../ui/Tooltip';
 import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
 
@@ -29,6 +34,7 @@ type TranscriptListProps = {
   decisionColumnTooltip?: string;
   normalizedDecisionTranscriptIds?: Set<string>;
   normalizationBadgeTitle?: string;
+  decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
 type GroupedTranscripts = Record<string, Transcript[]>;
@@ -188,31 +194,21 @@ function isSameSortColumn(a: SortColumn, b: SortColumn): boolean {
 
 function getTranscriptDecisionValue(
   transcript: Transcript,
+  displayMode: TranscriptDecisionDisplayMode,
   normalizedDecisionTranscriptIds?: Set<string>,
 ): string | number {
-  const fallbackCandidates = [
-    transcript.decisionCode,
-    (transcript.content as { decisionCode?: unknown } | null)?.decisionCode,
-    (transcript.content as { decision?: unknown } | null)?.decision,
-    (transcript.content as { score?: unknown } | null)?.score,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decisionCode,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.decision,
-    (transcript.content as { summary?: { decisionCode?: unknown; decision?: unknown; score?: unknown } } | null)?.summary?.score,
-  ];
-
-  for (const candidate of fallbackCandidates) {
-    if (typeof candidate === 'number' || typeof candidate === 'string') {
-      if (
-        normalizedDecisionTranscriptIds?.has(transcript.id)
-        && ['1', '2', '3', '4', '5'].includes(String(candidate))
-      ) {
-        return 6 - Number(candidate);
-      }
-      return candidate;
-    }
+  if (displayMode === 'audit') {
+    return getTranscriptDecisionSortValue(transcript, displayMode);
   }
 
-  return '';
+  const sortValue = getTranscriptDecisionSortValue(transcript, displayMode);
+  if (
+    normalizedDecisionTranscriptIds?.has(transcript.id)
+    && ['1', '2', '3', '4', '5'].includes(String(sortValue))
+  ) {
+    return normalizeLegacyDecisionCode(String(sortValue), true);
+  }
+  return sortValue;
 }
 
 function SortHeaderButton({
@@ -293,6 +289,7 @@ export function TranscriptList({
   decisionColumnTooltip,
   normalizedDecisionTranscriptIds,
   normalizationBadgeTitle,
+  decisionDisplayMode = 'legacy',
 }: TranscriptListProps) {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -367,8 +364,8 @@ export function TranscriptList({
       }
       case 'decision':
         return compareDimensionValues(
-          getTranscriptDecisionValue(a, normalizedDecisionTranscriptIds),
-          getTranscriptDecisionValue(b, normalizedDecisionTranscriptIds),
+          getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
+          getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
         );
       case 'tokens':
         return a.tokenCount - b.tokenCount;
@@ -377,7 +374,7 @@ export function TranscriptList({
       default:
         return 0;
     }
-  }, [getScenarioDimensions, normalizedDecisionTranscriptIds]);
+  }, [decisionDisplayMode, getScenarioDimensions, normalizedDecisionTranscriptIds]);
 
   const sortTranscripts = useCallback((items: Transcript[]): Transcript[] => {
     const fallbackColumns: SortColumn[] = [];
@@ -637,6 +634,7 @@ export function TranscriptList({
               scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
               normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
               normalizationBadgeTitle={normalizationBadgeTitle}
+              decisionDisplayMode={decisionDisplayMode}
             />
           ))}
         </div>
@@ -749,6 +747,7 @@ export function TranscriptList({
                     scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
                     normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
                     normalizationBadgeTitle={normalizationBadgeTitle}
+                    decisionDisplayMode={decisionDisplayMode}
                   />
                 ))}
               </div>
