@@ -1,4 +1,5 @@
 import { builder } from '../../builder.js';
+import { config } from '../../../config.js';
 import {
   type RankingShape,
   type RankingShapeBenchmarks,
@@ -29,6 +30,7 @@ import type {
   DomainEvaluationEstimateModel,
   DomainTrialRunStatus,
 } from './shared.js';
+import { resolveTranscriptDecisionModel } from './shared.js';
 
 export type DomainAnalysisModel = {
   model: string;
@@ -319,6 +321,27 @@ builder.objectType(DomainAnalysisConditionTranscriptRef, {
     modelId: t.exposeString('modelId'),
     decisionCode: t.exposeString('decisionCode', { nullable: true }),
     decisionCodeSource: t.exposeString('decisionCodeSource', { nullable: true }),
+    decisionModelV2: t.field({
+      type: 'JSON',
+      nullable: true,
+      resolve: async (transcript, _args, ctx) => {
+        if (!config.DECISION_MODEL_V2) {
+          return null;
+        }
+
+        const scenario =
+          transcript.scenarioId === null || transcript.scenarioId === undefined || transcript.scenarioId === ''
+            ? null
+            : await ctx.loaders.scenario.load(transcript.scenarioId);
+
+        return resolveTranscriptDecisionModel({
+          decisionCode: transcript.decisionCode,
+          decisionMetadata: transcript.decisionMetadata,
+          definitionSnapshot: transcript.definitionSnapshot,
+          orientationFlipped: scenario?.orientationFlipped ?? null,
+        });
+      },
+    }),
     turnCount: t.exposeInt('turnCount'),
     tokenCount: t.exposeInt('tokenCount'),
     durationMs: t.exposeInt('durationMs'),
