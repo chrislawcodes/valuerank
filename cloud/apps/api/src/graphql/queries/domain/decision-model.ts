@@ -1,4 +1,5 @@
-import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, extractValuePair, toPascalCaseKey, type DomainAnalysisValueKey } from '../domain-analysis-values.js';
+import { JOB_CHOICE_VALUE_STATEMENTS, labelFromBody } from '@valuerank/shared';
 
 export type DecisionDirection = 'favor_first' | 'favor_second' | 'neutral' | 'unknown';
 export type DecisionStrength = 'strong' | 'lean' | 'neutral' | 'unknown';
@@ -190,10 +191,61 @@ function parseDecisionPath(parsePath: string | null | undefined): ParsedDecision
   };
 }
 
+function isJobChoiceDecisionPath(parsePath: string | null | undefined): boolean {
+  return typeof parsePath === 'string' && (
+    parsePath.startsWith('numeric_')
+    || parsePath.startsWith('text_label_')
+  );
+}
+
 function flipDirection(direction: DecisionDirection): DecisionDirection {
   if (direction === 'favor_first') return 'favor_second';
   if (direction === 'favor_second') return 'favor_first';
   return direction;
+}
+
+function normalizeJobChoiceLabelText(text: string): string {
+  const stripped = text
+    .replace(/[*_`]+/g, ' ')
+    .replace(/^level of support\s*:\s*/i, '')
+    .replace(/^(?:my\s+)?(?:final\s+|overall\s+)?(?:judg(?:e)?ment|answer|response|decision|choice|rating|score)(?:\s+on\s+the\s+scale)?\s*(?:(?:is)\s*[:=]?|[:=])?\s*/i, '')
+    .trim();
+
+  return stripped
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseJobChoiceStrengthFromText(text: string): DecisionStrength | null {
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.startsWith('strongly support')) return 'strong';
+  if (normalized.startsWith('somewhat support')) return 'lean';
+  if (normalized.startsWith('neutral')) return 'neutral';
+  return null;
+}
+
+function resolveJobChoiceValueKeyFromText(text: string): DomainAnalysisValueKey | null {
+  const normalized = normalizeJobChoiceLabelText(text);
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  let resolved: DomainAnalysisValueKey | null = null;
+  for (const entry of JOB_CHOICE_VALUE_STATEMENTS) {
+    const valueKey = toPascalCaseKey(entry.token) as DomainAnalysisValueKey;
+    const label = normalizeJobChoiceLabelText(labelFromBody(entry.body));
+    if (!label || !normalized.includes(label)) {
+      continue;
+    }
+    if (resolved !== null && resolved !== valueKey) {
+      return null;
+    }
+    resolved = valueKey;
+  }
+
+  return resolved;
 }
 
 function canonicalDecisionScoreFromDirectionStrength(
@@ -426,6 +478,35 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
   }
 
   const parsedPath = parseDecisionPath(input.raw.parsePath);
+  if (
+    input.raw.parserVersion === 'job-choice-v2'
+    && isJobChoiceDecisionPath(input.raw.parsePath)
+  ) {
+    const candidateText = input.raw.matchedLabel ?? input.raw.matchedText ?? input.raw.responseExcerpt;
+    if (typeof candidateText !== 'string') {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const strength = parseJobChoiceStrengthFromText(candidateText);
+    const favoredValueKey = resolveJobChoiceValueKeyFromText(candidateText);
+    if (strength === null || favoredValueKey === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (favoredValueKey !== pair.valueA && favoredValueKey !== pair.valueB) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+
+    const direction = favoredValueKey === pair.valueA ? 'favor_first' : 'favor_second';
+
+    return buildCanonicalDecisionFromPair(
+      pair,
+      direction,
+      strength,
+      false,
+      'deterministic',
+    );
+  }
+
   if (!parsedPath || parsedPath.branch === 'manual') {
     return buildUnknownCanonicalDecision('unknown');
   }

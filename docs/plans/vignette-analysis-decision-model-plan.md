@@ -404,6 +404,7 @@ These are intentionally transitional. Remove them in the legacy cleanup phase
 once the remaining API, worker, export, and UI consumers are fully canonical.
 
 - `summary.score` as a product-facing analysis concept
+- `decisionCode` as the temporary bridge for Job Choice transcript meaning until canonical transcript summaries are the only source of direction and strength
 - worker-side fallback math that accepts legacy score values for mixed data
 - API compatibility helpers that turn canonical decisions back into scalar scores
 - dual-read logic that prefers the V2 envelope but still falls back to legacy score fields

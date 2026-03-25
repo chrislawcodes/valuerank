@@ -64,8 +64,7 @@ describe('TranscriptViewer', () => {
     );
 
     expect(screen.getByText('Canonical decision:')).toBeInTheDocument();
-    expect(screen.getByText('Benevolence Dependability > Achievement')).toBeInTheDocument();
-    expect(screen.getByText(/Favors second value · strong/i)).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
     expect(screen.getByText('Raw Evidence')).toBeInTheDocument();
     expect(screen.getByText('exact')).toBeInTheDocument();
     expect(screen.getByText(/Manual override previous value:/i).parentElement).toHaveTextContent('5');

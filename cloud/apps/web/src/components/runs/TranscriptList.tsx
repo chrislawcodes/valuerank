@@ -11,7 +11,6 @@ import type { VisualizationData } from '../../api/operations/analysis';
 import {
   buildNormalizedScenarioDimensionsMap,
   getScenarioDimensionsForId,
-  normalizeScenarioId,
 } from '../../utils/scenarioUtils';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import {
@@ -20,7 +19,7 @@ import {
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
 import { Tooltip } from '../ui/Tooltip';
-import { TranscriptRow, type TranscriptScenarioHighlight } from './TranscriptRow';
+import { TranscriptRow } from './TranscriptRow';
 
 type TranscriptListProps = {
   transcripts: Transcript[];
@@ -33,50 +32,20 @@ type TranscriptListProps = {
   decisionColumnLabel?: string;
   decisionColumnTooltip?: string;
   normalizedDecisionTranscriptIds?: Set<string>;
-  normalizationBadgeTitle?: string;
   decisionDisplayMode?: TranscriptDecisionDisplayMode;
 };
 
 type GroupedTranscripts = Record<string, Transcript[]>;
 type SortDirection = 'asc' | 'desc';
 type SortColumn =
-  | { type: 'scenario' }
   | { type: 'model' }
   | { type: 'dimension'; key: string }
   | { type: 'decision' }
-  | { type: 'tokens' }
   | { type: 'created' };
 type SortState = {
   column: SortColumn;
   direction: SortDirection;
 };
-
-const SCENARIO_HIGHLIGHT_VARIANTS: Array<Pick<TranscriptScenarioHighlight, 'containerClassName' | 'badgeClassName'>> = [
-  {
-    containerClassName: 'border-teal-200 bg-teal-50/60 hover:bg-teal-100/70',
-    badgeClassName: 'bg-teal-100 text-teal-700 ring-1 ring-inset ring-teal-200',
-  },
-  {
-    containerClassName: 'border-amber-200 bg-amber-50/60 hover:bg-amber-100/70',
-    badgeClassName: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200',
-  },
-  {
-    containerClassName: 'border-sky-200 bg-sky-50/60 hover:bg-sky-100/70',
-    badgeClassName: 'bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200',
-  },
-  {
-    containerClassName: 'border-rose-200 bg-rose-50/60 hover:bg-rose-100/70',
-    badgeClassName: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200',
-  },
-  {
-    containerClassName: 'border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/70',
-    badgeClassName: 'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200',
-  },
-  {
-    containerClassName: 'border-violet-200 bg-violet-50/60 hover:bg-violet-100/70',
-    badgeClassName: 'bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200',
-  },
-];
 
 const LEVEL_WORD_TO_NUMBER: Record<string, number> = {
   full: 5,
@@ -175,7 +144,7 @@ function getDefaultSortState(
   }
 
   return {
-    column: { type: 'scenario' },
+    column: { type: 'model' },
     direction: 'asc',
   };
 }
@@ -288,7 +257,6 @@ export function TranscriptList({
   decisionColumnLabel = 'Decision',
   decisionColumnTooltip,
   normalizedDecisionTranscriptIds,
-  normalizationBadgeTitle,
   decisionDisplayMode = 'legacy',
 }: TranscriptListProps) {
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
@@ -353,8 +321,6 @@ export function TranscriptList({
 
   const compareByColumn = useCallback((a: Transcript, b: Transcript, column: SortColumn): number => {
     switch (column.type) {
-      case 'scenario':
-        return compareDimensionValues(a.scenarioId ?? undefined, b.scenarioId ?? undefined);
       case 'model':
         return compareDimensionValues(a.modelId, b.modelId);
       case 'dimension': {
@@ -367,8 +333,6 @@ export function TranscriptList({
           getTranscriptDecisionValue(a, decisionDisplayMode, normalizedDecisionTranscriptIds),
           getTranscriptDecisionValue(b, decisionDisplayMode, normalizedDecisionTranscriptIds),
         );
-      case 'tokens':
-        return a.tokenCount - b.tokenCount;
       case 'created':
         return a.createdAt.localeCompare(b.createdAt);
       default:
@@ -387,7 +351,6 @@ export function TranscriptList({
     }
 
     fallbackColumns.push(
-      { type: 'scenario' },
       { type: 'model' },
       { type: 'created' },
     );
@@ -449,55 +412,6 @@ export function TranscriptList({
     });
   }, [hasDimensionKeys, groupedTranscripts]);
 
-  const scenarioHighlights = useMemo(() => {
-    const orderedScenarioIds: string[] = [];
-    const seenScenarioIds = new Set<string>();
-
-    sortTranscripts(transcripts).forEach((transcript) => {
-      if (!transcript.scenarioId) {
-        return;
-      }
-
-      const normalizedScenario = normalizeScenarioId(transcript.scenarioId);
-      if (seenScenarioIds.has(normalizedScenario)) {
-        return;
-      }
-
-      seenScenarioIds.add(normalizedScenario);
-      orderedScenarioIds.push(normalizedScenario);
-    });
-
-    if (orderedScenarioIds.length <= 1) {
-      return new Map<string, TranscriptScenarioHighlight>();
-    }
-
-    const defaultVariant = SCENARIO_HIGHLIGHT_VARIANTS[0]!;
-
-    return new Map<string, TranscriptScenarioHighlight>(
-      orderedScenarioIds.map((scenarioId, index) => {
-        const variant = SCENARIO_HIGHLIGHT_VARIANTS[index % SCENARIO_HIGHLIGHT_VARIANTS.length] ?? defaultVariant;
-
-        return [
-          scenarioId,
-          {
-            label: `C${index + 1}`,
-            containerClassName: variant.containerClassName,
-            badgeClassName: variant.badgeClassName,
-          },
-        ];
-      }),
-    );
-  }, [sortTranscripts, transcripts]);
-
-  const getScenarioHighlight = useCallback((scenarioId: string | null): TranscriptScenarioHighlight | null => {
-    if (!scenarioId) {
-      return null;
-    }
-
-    return scenarioHighlights.get(normalizeScenarioId(scenarioId)) ?? null;
-  }, [scenarioHighlights]);
-  const showScenarioLegend = scenarioHighlights.size > 1;
-
   const modelIds = Object.keys(groupedTranscripts).sort();
 
   const toggleModel = (modelId: string) => {
@@ -512,7 +426,7 @@ export function TranscriptList({
     });
   };
 
-  // Filter transcripts by scenario ID or model ID
+  // Filter transcripts by model ID or scenario ID for underlying lookups.
   const filteredTranscripts = useMemo(() => {
     if (!filter) return sortTranscripts(transcripts);
     const lowerFilter = filter.toLowerCase();
@@ -538,12 +452,10 @@ export function TranscriptList({
 
   if (!groupByModel) {
     // Flat list view
-    const gridTemplateColumns = [
-      'minmax(140px, 1.2fr)',
+  const gridTemplateColumns = [
       'minmax(160px, 1.4fr)',
       ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
       'minmax(220px, 1.4fr)',
-      'minmax(90px, 0.7fr)',
       'minmax(90px, 0.7fr)',
     ].join(' ');
 
@@ -553,17 +465,11 @@ export function TranscriptList({
         {transcripts.length > 5 && (
           <input
             type="text"
-            placeholder="Filter by model or scenario..."
+            placeholder="Filter by model or transcript..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
-        )}
-
-        {showScenarioLegend && (
-          <p className="text-xs text-gray-500">
-            Rows with the same <span className="font-medium text-gray-700">C#</span> badge come from the same repeated condition.
-          </p>
         )}
 
         {/* Transcript list */}
@@ -572,13 +478,6 @@ export function TranscriptList({
             className="grid gap-3 px-3 py-2 text-xs uppercase tracking-wide text-gray-400"
             style={{ gridTemplateColumns }}
           >
-            <SortHeaderButton
-              label="Scenario"
-              ariaLabel="Scenario"
-              onClick={() => handleSortChange({ type: 'scenario' })}
-              active={isActiveSort({ type: 'scenario' })}
-              direction={sortState.direction}
-            />
             <SortHeaderButton
               label="Model"
               ariaLabel="Model"
@@ -605,13 +504,6 @@ export function TranscriptList({
               direction={sortState.direction}
             />
             <SortHeaderButton
-              label="Tokens"
-              ariaLabel="Tokens"
-              onClick={() => handleSortChange({ type: 'tokens' })}
-              active={isActiveSort({ type: 'tokens' })}
-              direction={sortState.direction}
-            />
-            <SortHeaderButton
               label="Created"
               ariaLabel="Created"
               onClick={() => handleSortChange({ type: 'created' })}
@@ -631,9 +523,7 @@ export function TranscriptList({
               showModelColumn
               onDecisionChange={onDecisionChange}
               decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
-              scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
               normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
-              normalizationBadgeTitle={normalizationBadgeTitle}
               decisionDisplayMode={decisionDisplayMode}
             />
           ))}
@@ -644,20 +534,13 @@ export function TranscriptList({
 
   // Grouped by model view
   const groupedGridTemplateColumns = [
-    'minmax(140px, 1.2fr)',
     ...dimensionKeys.map(() => 'minmax(120px, 1fr)'),
     'minmax(220px, 1.4fr)',
-    'minmax(90px, 0.7fr)',
     'minmax(90px, 0.7fr)',
   ].join(' ');
 
   return (
     <div className="space-y-3">
-      {showScenarioLegend && (
-        <p className="text-xs text-gray-500">
-          Rows with the same <span className="font-medium text-gray-700">C#</span> badge come from the same repeated condition.
-        </p>
-      )}
       {modelIds.map((modelId) => {
         const modelTranscripts = groupedTranscripts[modelId] ?? [];
         const isExpanded = expandedModels.has(modelId);
@@ -691,13 +574,6 @@ export function TranscriptList({
                   className="grid gap-3 px-4 py-2 text-xs uppercase tracking-wide text-gray-400"
                   style={{ gridTemplateColumns: groupedGridTemplateColumns }}
                 >
-                  <SortHeaderButton
-                    label="Scenario"
-                    ariaLabel="Scenario"
-                    onClick={() => handleSortChange({ type: 'scenario' })}
-                    active={isActiveSort({ type: 'scenario' })}
-                    direction={sortState.direction}
-                  />
                   {dimensionKeys.map((key) => (
                     <SortHeaderButton
                       key={key}
@@ -714,13 +590,6 @@ export function TranscriptList({
                     tooltip={decisionColumnTooltip}
                     onClick={() => handleSortChange({ type: 'decision' })}
                     active={isActiveSort({ type: 'decision' })}
-                    direction={sortState.direction}
-                  />
-                  <SortHeaderButton
-                    label="Tokens"
-                    ariaLabel="Tokens"
-                    onClick={() => handleSortChange({ type: 'tokens' })}
-                    active={isActiveSort({ type: 'tokens' })}
                     direction={sortState.direction}
                   />
                   <SortHeaderButton
@@ -744,9 +613,7 @@ export function TranscriptList({
                     showModelColumn={false}
                     onDecisionChange={onDecisionChange}
                     decisionUpdating={updatingTranscriptIds?.has(transcript.id) ?? false}
-                    scenarioHighlight={getScenarioHighlight(transcript.scenarioId)}
                     normalizeDecision={normalizedDecisionTranscriptIds?.has(transcript.id) ?? false}
-                    normalizationBadgeTitle={normalizationBadgeTitle}
                     decisionDisplayMode={decisionDisplayMode}
                   />
                 ))}

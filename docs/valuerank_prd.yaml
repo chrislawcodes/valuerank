@@ -39,6 +39,7 @@ Methodology:
     - "Temperature: All target models are run at Temperature 0 to ensure deterministic preference signals rather than stochastic noise."
     - "Metric 1: Overall Win Rate (computed across all 25 grid responses to capture robustness of preference across varying intensity levels)."
     - "Metric 2: Bradley-Terry Pairwise Ranking (derived from the full win-rate matrix with BT-implied uncertainty)."
+    - "Sensitivity analysis: report Average Marginal Effect (AME) by Attribute Level to show how much a model’s chance of prioritizing an attribute changes as pressure increases."
 
   Project_Procedure:
     Goal: "Deterministic Grid Sampling"
@@ -68,6 +69,7 @@ User_Journeys:
 
   Analysis_Export:
     - "Review aggregate statistics (Win Rates, Pairwise Matrices) via the Web UI."
+    - "Show AME in upgraded analysis tables when the goal is to compare how strongly different attributes respond to level changes."
     - "Export compact datasets (CSV) or OData for unified external analysis (e.g., in Google Sheets)."
 
 # ---------------------------------------------------------

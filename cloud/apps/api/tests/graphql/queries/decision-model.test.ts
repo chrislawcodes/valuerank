@@ -133,7 +133,7 @@ describe('decision model', () => {
           presentation_order: 'A_first',
         },
       },
-      orientationFlipped: false,
+      orientationFlipped: true,
     });
 
     expect(result.raw).toEqual({
@@ -146,12 +146,86 @@ describe('decision model', () => {
       manualOverride: null,
     });
     expect(result.canonical).toMatchObject({
-      favoredValueKey: 'Achievement',
-      opposedValueKey: 'Benevolence_Dependability',
+      favoredValueKey: 'Benevolence_Dependability',
+      opposedValueKey: 'Achievement',
+      direction: 'favor_second',
+      strength: 'strong',
+      normalizationApplied: true,
+      normalizationReason: 'orientation_flipped',
+    });
+    expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 1 });
+  });
+
+  it('resolves the current job-choice numeric metadata shape behind the shared boundary', () => {
+    const result = resolveTranscriptDecisionModel({
+      decisionCode: '2',
+      decisionMetadata: {
+        parseClass: 'exact',
+        parsePath: 'numeric_deterministic',
+        parserVersion: 'job-choice-v2',
+        responseExcerpt: '**Strongly support taking the job with trust from other people** ...',
+        matchedLabel: null,
+      },
+      definitionSnapshot: {
+        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+        methodology: {
+          presentation_order: 'A_first',
+        },
+      },
+      orientationFlipped: true,
+    });
+
+    expect(result.raw).toMatchObject({
+      parseClass: 'exact',
+      parsePath: 'numeric_deterministic',
+      parserVersion: 'job-choice-v2',
+      matchedLabel: null,
+    });
+    expect(result.canonical).toMatchObject({
+      favoredValueKey: 'Benevolence_Dependability',
+      opposedValueKey: 'Achievement',
+      direction: 'favor_second',
+      strength: 'strong',
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    });
+    expect(result.legacy).toEqual({ rawScore: 2, canonicalScore: 1 });
+  });
+
+  it('resolves the current job-choice text-label metadata shape behind the shared boundary', () => {
+    const result = resolveTranscriptDecisionModel({
+      decisionCode: '5',
+      decisionMetadata: {
+        parseClass: 'exact',
+        parsePath: 'text_label_leading',
+        parserVersion: 'job-choice-v2',
+        matchedLabel: 'Strongly support taking the job with trust from other people',
+        responseExcerpt: 'Level of Support: Strongly support taking the job with trust from other people ...',
+      },
+      definitionSnapshot: {
+        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+        methodology: {
+          presentation_order: 'B_first',
+        },
+      },
+      orientationFlipped: true,
+    });
+
+    expect(result.raw).toMatchObject({
+      parseClass: 'exact',
+      parsePath: 'text_label_leading',
+      parserVersion: 'job-choice-v2',
+      matchedLabel: 'Strongly support taking the job with trust from other people',
+    });
+    expect(result.canonical).toMatchObject({
+      favoredValueKey: 'Benevolence_Dependability',
+      opposedValueKey: 'Achievement',
       direction: 'favor_first',
       strength: 'strong',
       normalizationApplied: false,
       normalizationReason: null,
+      source: 'deterministic',
     });
     expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 5 });
   });

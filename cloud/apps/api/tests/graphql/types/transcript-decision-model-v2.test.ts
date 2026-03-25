@@ -95,14 +95,14 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
         runId: run.id,
         scenarioId: scenario.id,
         modelId: 'test-model',
-        decisionCode: 'manual',
+        decisionCode: '5',
         decisionCodeSource: 'deterministic',
         decisionMetadata: {
-          matchedLabel: 'Achievement',
+          matchedLabel: 'Strongly support taking the job with trust from other people',
           parseClass: 'exact',
-          parsePath: 'exact.favor_first.strong',
-          parserVersion: 'parser-1',
-          responseExcerpt: 'Achievement',
+          parsePath: 'text_label_leading',
+          parserVersion: 'job-choice-v2',
+          responseExcerpt: 'Level of Support: Strongly support taking the job with trust from other people',
         },
         definitionSnapshot: {
           dimensions: [
@@ -110,7 +110,7 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
             { name: 'Benevolence_Dependability' },
           ],
           methodology: {
-            presentation_order: 'A_first',
+            presentation_order: 'B_first',
           },
         },
         content: { turns: [] },
@@ -143,15 +143,15 @@ describe('Transcript decisionModelV2 GraphQL field', () => {
       canonical: {
         favoredValueKey: 'Benevolence_Dependability',
         opposedValueKey: 'Achievement',
-        direction: 'favor_second',
+        direction: 'favor_first',
         strength: 'strong',
-        normalizationApplied: true,
-        normalizationReason: 'orientation_flipped',
+        normalizationApplied: false,
+        normalizationReason: null,
         source: 'deterministic',
       },
       legacy: {
-        rawScore: null,
-        canonicalScore: 1,
+        rawScore: 5,
+        canonicalScore: 5,
       },
     });
   });

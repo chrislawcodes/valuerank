@@ -23,6 +23,7 @@ import { getSummarizerModel, type InfraModelConfig } from '../../services/infra-
 import { incrementSummarizeCompleted, incrementSummarizeFailed } from '../../services/run/progress.js';
 import { schedule as rateLimitSchedule, getLimiterStats, type ScheduleOptions } from '../../services/rate-limiter/index.js';
 import { getMaxParallelSummarizations } from '../../services/summarization-parallelism/index.js';
+import { buildRawDecisionEvidence } from '../../graphql/queries/domain/shared.js';
 
 const log = createLogger('queue:summarize-transcript');
 
@@ -61,74 +62,13 @@ type SummarizeWorkerOutput =
 
 type SuccessfulSummarizeWorkerSummary = Extract<SummarizeWorkerOutput, { success: true }>['summary'];
 
-type RawDecisionEvidence = {
-  matchedText: string | null;
-  matchedLabel: string | null;
-  parseClass: 'exact' | 'fallback_resolved' | 'ambiguous' | 'unparseable' | null;
-  parsePath: string | null;
-  parserVersion: string | null;
-  responseExcerpt: string | null;
-  manualOverride: {
-    previousValue: string | null;
-    overriddenAt: string | null;
-    overriddenByUserId: string | null;
-  } | null;
-};
-
 function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function buildRawDecisionEvidence(decisionMetadata: unknown): RawDecisionEvidence {
-  const record = isPlainJsonObject(decisionMetadata) ? decisionMetadata : null;
-  const manualOverride = record && isPlainJsonObject(record.manualOverride) ? record.manualOverride : null;
-
-  return {
-    matchedText:
-      record && typeof record.matchedText === 'string'
-        ? record.matchedText
-        : record && typeof record.matchedLabel === 'string'
-          ? record.matchedLabel
-          : record && typeof record.responseExcerpt === 'string'
-            ? record.responseExcerpt
-            : null,
-    matchedLabel: record && typeof record.matchedLabel === 'string' ? record.matchedLabel : null,
-    parseClass:
-      record &&
-      (record.parseClass === 'exact' ||
-        record.parseClass === 'fallback_resolved' ||
-        record.parseClass === 'ambiguous' ||
-        record.parseClass === 'unparseable')
-        ? record.parseClass
-        : null,
-    parsePath: record && typeof record.parsePath === 'string' ? record.parsePath : null,
-    parserVersion: record && typeof record.parserVersion === 'string' ? record.parserVersion : null,
-    responseExcerpt: record && typeof record.responseExcerpt === 'string' ? record.responseExcerpt : null,
-    manualOverride:
-      manualOverride === null
-        ? null
-        : {
-            previousValue:
-              typeof manualOverride.previousValue === 'string'
-                ? manualOverride.previousValue
-                : typeof manualOverride.previousDecisionCode === 'string'
-                  ? manualOverride.previousDecisionCode
-                  : null,
-            overriddenAt:
-              typeof manualOverride.overriddenAt === 'string'
-                ? manualOverride.overriddenAt
-                : null,
-            overriddenByUserId:
-              typeof manualOverride.overriddenByUserId === 'string'
-                ? manualOverride.overriddenByUserId
-                : null,
-    },
-  };
-}
-
 function buildDecisionMetadataForPersist(
   decisionMetadata: unknown,
-  rawDecisionEvidence: RawDecisionEvidence,
+  rawDecisionEvidence: ReturnType<typeof buildRawDecisionEvidence>,
   summaryCache?: SummaryCache,
 ): Prisma.InputJsonValue | typeof Prisma.DbNull {
   if (decisionMetadata == null) {
@@ -251,6 +191,7 @@ function isCacheRecordMatch(
     cache.modelId === modelId
   );
 }
+
 /**
  * Queues a compute_token_stats job for cost prediction data.
  */

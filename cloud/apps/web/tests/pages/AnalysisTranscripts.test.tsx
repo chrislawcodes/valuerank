@@ -728,7 +728,7 @@ describe('AnalysisTranscripts', () => {
     renderPage('/analysis/run-3/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&transcriptId=tx-10');
 
     await waitFor(() => {
-      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Canonical decision');
+      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
       expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
       expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
     });
