@@ -107,11 +107,6 @@ type ParsedDecisionPath = {
   strength: DecisionStrength;
 };
 
-type ParsedLegacyDecision = {
-  direction: DecisionDirection;
-  strength: DecisionStrength;
-};
-
 function isValueKey(value: string): value is DomainAnalysisValueKey {
   return (DOMAIN_ANALYSIS_VALUE_KEYS as readonly string[]).includes(value);
 }
@@ -263,31 +258,6 @@ function canonicalDecisionScoreFromDirectionStrength(
   if (direction === 'favor_second' && strength === 'lean') return 2;
   if (direction === 'favor_second' && strength === 'strong') return 1;
   return null;
-}
-
-function parseLegacyDecisionCodeToDirectionStrength(
-  value: string | null | undefined,
-): ParsedLegacyDecision | null {
-  const score = parseLegacyScore(value);
-  if (score === null) {
-    return null;
-  }
-
-  if (score === 3) {
-    return { direction: 'neutral', strength: 'neutral' };
-  }
-
-  if (score === 4 || score === 5) {
-    return {
-      direction: 'favor_first',
-      strength: score === 5 ? 'strong' : 'lean',
-    };
-  }
-
-  return {
-    direction: 'favor_second',
-    strength: score === 1 ? 'strong' : 'lean',
-  };
 }
 
 function buildUnknownCanonicalDecision(source: DecisionSource): CanonicalDecision {
