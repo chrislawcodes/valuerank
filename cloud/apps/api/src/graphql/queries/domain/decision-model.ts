@@ -488,8 +488,21 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
     }
 
     const strength = parseJobChoiceStrengthFromText(candidateText);
+    if (strength === null) {
+      return buildUnknownCanonicalDecision('unknown');
+    }
+    if (strength === 'neutral') {
+      return buildCanonicalDecisionFromPair(
+        pair,
+        'neutral',
+        'neutral',
+        false,
+        'deterministic',
+      );
+    }
+
     const favoredValueKey = resolveJobChoiceValueKeyFromText(candidateText);
-    if (strength === null || favoredValueKey === null) {
+    if (favoredValueKey === null) {
       return buildUnknownCanonicalDecision('unknown');
     }
     if (favoredValueKey !== pair.valueA && favoredValueKey !== pair.valueB) {
