@@ -97,7 +97,7 @@ describe('GraphQL domain analysis', () => {
             family: 'job-choice',
             response_scale: 'option_text',
             presentation_order: 'B_first',
-            pair_key: 'pair-b',
+            pair_key: 'pair-a',
           },
           dimensions: [
             { name: 'achievement' },
@@ -158,10 +158,10 @@ describe('GraphQL domain analysis', () => {
         decisionCodeSource: 'manual',
         decisionMetadata: {
           parseClass: 'exact',
-          parsePath: 'exact.favor_first.strong',
+          parsePath: 'text_label_leading',
           parserVersion: 'job-choice-v2',
-          matchedLabel: 'Strongly support taking the job with achievement',
-          responseExcerpt: 'Strongly support taking the job with achievement',
+          matchedLabel: 'Strongly support taking the job with recognition of their expertise',
+          responseExcerpt: 'Strongly support taking the job with recognition of their expertise',
         },
         definitionSnapshot: {
           dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
@@ -182,6 +182,13 @@ describe('GraphQL domain analysis', () => {
         content: { messages: [] },
         decisionCode: '5',
         decisionCodeSource: 'manual',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'text_label_leading',
+          parserVersion: 'job-choice-v2',
+          matchedLabel: 'Strongly support taking the job with trust from other people',
+          responseExcerpt: 'Strongly support taking the job with trust from other people',
+        },
         turnCount: 2,
         tokenCount: 100,
         durationMs: 1000,
@@ -225,7 +232,13 @@ describe('GraphQL domain analysis', () => {
               neutral
               totalTrials
               selectedValueWinRate
-              meanDecisionScore
+              strongly
+              somewhat
+              opponentSomewhat
+              opponentStrongly
+              unknownCount
+              meanPreferenceScore
+              opponentMeanPreferenceScore
             }
           }
         }

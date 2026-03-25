@@ -1,0 +1,88 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": true,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "current_phase": "",
+    "open_decisions": [],
+    "deferred_items": [],
+    "context_summary": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": false,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "The canonical decision model (direction + strength) is the source of truth for all new domain analysis aggregation.",
+      "win-rate = prioritized / (prioritized + deprioritized) is a valid canonical metric derivable from canonical decisions.",
+      "Bradley-Terry (FULL_BT) and log-odds scores derived from canonical win/loss counts are valid ranking metrics.",
+      "Cosine similarity over canonical-decision-derived score vectors is valid for the similarity table.",
+      "meanDecisionScore is legacy (average of 1-5 decisionCode values) and has no canonical equivalent \u2014 it is removed.",
+      "orientationFlipped is stored on the Scenario record and must be batch-loaded to resolve canonical decisions correctly.",
+      "unknown direction decisions (where the canonical model cannot determine a decision) are excluded from aggregation counts.",
+      "Export, worker, MCP, and assumption surfaces are out of scope for this slice.",
+      "Transcript and run surfaces (TranscriptList, RunDetail, etc.) are out of scope for this slice."
+    ],
+    "summary": "Replace the legacy decisionCode-based aggregation in the domain analysis backend with canonical decision model resolution. The score shape (log-odds, BT, win-rate) stays but is now derived from canonical decisions rather than raw 1-5 decisionCode parsing. Remove meanDecisionScore as it has no canonical equivalent.",
+    "updated_at": 1774468800,
+    "answers": {},
+    "non_goals": [
+      "Do not change the score field type or remove log-odds/BT score options from the UI.",
+      "Do not change export, worker, MCP, assumptions, or order-invariance surfaces.",
+      "Do not change transcript/run list display surfaces.",
+      "Do not remove the scoreMethod arg from GraphQL.",
+      "Do not redesign the similarity table algorithm."
+    ],
+    "acceptance_criteria": [
+      "domainAnalysis aggregation reads decisionMetadata + definitionSnapshot + orientationFlipped to resolve canonical decisions.",
+      "decisionCode: { in: ['1','2','3','4','5'] } filter is removed from all three domain analysis queries.",
+      "meanDecisionScore field is removed from DomainAnalysisConditionDetail type, GraphQL schema, queries, and frontend.",
+      "prioritized/deprioritized/neutral counts are derived from canonical direction, not decisionCode integer parsing.",
+      "unknown-direction decisions are excluded from counts (not treated as neutral).",
+      "All tests pass. Build clean."
+    ],
+    "unresolved": []
+  },
+  "delivery": {
+    "branch": "",
+    "head_sha": "",
+    "updated_at": 0,
+    "pr_number": 0,
+    "pr_url": "",
+    "pr_state": "",
+    "pr_is_draft": false,
+    "pr_head_branch": "",
+    "pr_head_sha": "",
+    "pr_base_branch": "main",
+    "mergeable": "UNKNOWN",
+    "merge_state_status": "UNKNOWN",
+    "checks_summary": "",
+    "required_checks": [],
+    "upstream": "",
+    "checks_detail": "",
+    "head_mismatch": false
+  },
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "docs/feature-runs/replace"
+    ],
+    "used": false,
+    "updated_at": 0
+  },
+  "diff_slice_override": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

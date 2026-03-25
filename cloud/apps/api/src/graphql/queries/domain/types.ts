@@ -255,7 +255,13 @@ builder.objectType(DomainAnalysisConditionDetailRef, {
     neutral: t.exposeInt('neutral'),
     totalTrials: t.exposeInt('totalTrials'),
     selectedValueWinRate: t.exposeFloat('selectedValueWinRate', { nullable: true }),
-    meanDecisionScore: t.exposeFloat('meanDecisionScore', { nullable: true }),
+    strongly: t.exposeInt('strongly'),
+    somewhat: t.exposeInt('somewhat'),
+    opponentSomewhat: t.exposeInt('opponentSomewhat'),
+    opponentStrongly: t.exposeInt('opponentStrongly'),
+    unknownCount: t.exposeInt('unknownCount'),
+    meanPreferenceScore: t.exposeFloat('meanPreferenceScore', { nullable: true }),
+    opponentMeanPreferenceScore: t.exposeFloat('opponentMeanPreferenceScore', { nullable: true }),
   }),
 });
 
