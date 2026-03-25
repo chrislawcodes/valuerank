@@ -1,0 +1,19 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "b3095605580880e5884d3d66c6b47cfaa3c8d9e8",
+  "git_base_ref": "origin/main",
+  "git_base_sha": "445c9ab175a57ca54a0094c51078af66a1f61bd0",
+  "paths": [
+    "cloud/workers/summarize.py",
+    "cloud/workers/tests/test_summarize.py"
+  ],
+  "allowed_dirty_paths": [
+    "docs/feature-runs/feature-workflow-discovery-shaping",
+    "docs/operations/codex-skills/feature-factory",
+    "docs/operations/codex-skills/review-lens/scripts/verify_reconciliation.py",
+    "docs/plans/feature-workflow-plan.md"
+  ],
+  "untracked_files_included": [],
+  "artifact_path": "docs/feature-runs/transcript-summarization-speedup/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

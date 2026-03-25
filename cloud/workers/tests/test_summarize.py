@@ -1082,6 +1082,145 @@ class TestRunSummarize:
         assert "error" in result
 
 
+class TestRunSummarizeBatch:
+    """Tests for run_summarize_batch function."""
+
+    def test_returns_per_transcript_results(self) -> None:
+        """Batch mode should preserve per-transcript summaries."""
+        from summarize import run_summarize_batch
+
+        data = {
+            "transcripts": [
+                {
+                    "transcriptId": "transcript-1",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                    "transcriptContent": {"turns": []},
+                },
+                {
+                    "transcriptId": "transcript-2",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                    "transcriptContent": {"turns": []},
+                },
+            ]
+        }
+
+        with patch("summarize.run_summarize") as mock_run, patch(
+            "summarize.validate_input"
+        ) as mock_validate:
+            mock_run.side_effect = [
+                {
+                    "success": True,
+                    "summary": {
+                        "decisionCode": "4",
+                        "decisionSource": "deterministic",
+                        "decisionText": None,
+                        "decisionMetadata": {"parseClass": "exact"},
+                    },
+                },
+                {
+                    "success": False,
+                    "error": {
+                        "message": "Rate limited",
+                        "code": "RATE_LIMIT",
+                        "retryable": True,
+                    },
+                },
+            ]
+
+            result = run_summarize_batch(data)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "BATCH_PARTIAL_FAILURE"
+        assert result["error"]["retryable"] is True
+        assert len(result["summaries"]) == 2
+        assert result["summaries"][0]["transcriptId"] == "transcript-1"
+        assert result["summaries"][0]["success"] is True
+        assert result["summaries"][0]["summary"]["decisionCode"] == "4"
+        assert result["summaries"][1]["transcriptId"] == "transcript-2"
+        assert result["summaries"][1]["success"] is False
+        assert result["summaries"][1]["error"]["code"] == "RATE_LIMIT"
+        assert mock_validate.call_count == 2
+        assert mock_run.call_count == 2
+
+    def test_returns_item_validation_error_without_failing_batch(self) -> None:
+        """Invalid batch items should be returned as per-item errors."""
+        from summarize import run_summarize_batch
+
+        data = {
+            "transcripts": [
+                {
+                    "transcriptId": "transcript-1",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                    "transcriptContent": {"turns": []},
+                },
+                {
+                    "transcriptId": "transcript-2",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                },
+            ]
+        }
+
+        with patch("summarize.run_summarize") as mock_run:
+            mock_run.return_value = {
+                "success": True,
+                "summary": {
+                    "decisionCode": "4",
+                    "decisionSource": "deterministic",
+                    "decisionText": None,
+                    "decisionMetadata": {"parseClass": "exact"},
+                },
+            }
+
+            result = run_summarize_batch(data)
+
+        assert result["success"] is False
+        assert result["error"]["code"] == "BATCH_PARTIAL_FAILURE"
+        assert len(result["summaries"]) == 2
+        assert result["summaries"][0]["success"] is True
+        assert result["summaries"][1]["batchIndex"] == 1
+        assert result["summaries"][1]["success"] is False
+        assert result["summaries"][1]["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+        assert mock_run.call_count == 1
+
+    def test_returns_success_for_empty_batch(self) -> None:
+        """An empty batch should round-trip cleanly."""
+        from summarize import run_summarize_batch
+
+        result = run_summarize_batch({"transcripts": []})
+
+        assert result["success"] is True
+        assert result["summaries"] == []
+
+    def test_rejects_non_list_batch_envelope(self) -> None:
+        """A malformed transcripts envelope should fail fast."""
+        from summarize import run_summarize_batch
+
+        result = run_summarize_batch({"transcripts": "not-a-list"})
+
+        assert result["success"] is False
+        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+
+    def test_rejects_oversized_batch(self) -> None:
+        """A batch larger than the configured maximum should fail fast."""
+        from summarize import MAX_SUMMARIZE_BATCH_SIZE, run_summarize_batch
+
+        result = run_summarize_batch(
+            {
+                "transcripts": [
+                    {
+                        "transcriptId": f"transcript-{index}",
+                        "modelId": "anthropic:claude-3.5-sonnet",
+                        "transcriptContent": {"turns": []},
+                    }
+                    for index in range(MAX_SUMMARIZE_BATCH_SIZE + 1)
+                ]
+            }
+        )
+
+        assert result["success"] is False
+        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+
+
 class TestMain:
     """Tests for main entry point."""
 
@@ -1158,3 +1297,97 @@ class TestMain:
         result = json.loads(captured.out)
         assert result["success"] is False
         assert ErrorCode.VALIDATION_ERROR.value == result["error"]["code"]
+
+    @patch("summarize.run_summarize_batch")
+    @patch("sys.stdin")
+    def test_batch_execution(
+        self, mock_stdin: MagicMock, mock_run_batch: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test batch execution path."""
+        from summarize import main
+
+        mock_stdin.read.return_value = json.dumps({
+            "transcripts": [
+                {
+                    "transcriptId": "transcript-1",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                    "transcriptContent": {"turns": []},
+                },
+                {
+                    "transcriptId": "transcript-2",
+                    "modelId": "anthropic:claude-3.5-sonnet",
+                    "transcriptContent": {"turns": []},
+                },
+            ]
+        })
+        mock_run_batch.return_value = {
+            "success": True,
+            "summaries": [
+                {
+                    "transcriptId": "transcript-1",
+                    "success": True,
+                    "summary": {
+                        "decisionCode": "4",
+                        "decisionSource": "deterministic",
+                        "decisionText": None,
+                        "decisionMetadata": {"parseClass": "exact"},
+                    },
+                },
+                {
+                    "transcriptId": "transcript-2",
+                    "success": True,
+                    "summary": {
+                        "decisionCode": "2",
+                        "decisionSource": "deterministic",
+                        "decisionText": None,
+                        "decisionMetadata": {"parseClass": "exact"},
+                    },
+                },
+            ],
+        }
+
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+        assert result["success"] is True
+        assert len(result["summaries"]) == 2
+        mock_run_batch.assert_called_once()
+
+    @patch("sys.stdin")
+    def test_batch_validation_error(
+        self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test malformed batch envelopes stay in batch mode."""
+        from summarize import main
+
+        mock_stdin.read.return_value = json.dumps({
+            "transcripts": "not-a-list",
+        })
+
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+        assert result["success"] is False
+        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value
+
+    @patch("sys.stdin")
+    def test_mixed_batch_envelope_rejected(
+        self, mock_stdin: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that mixed batch and single envelopes fail fast."""
+        from summarize import main
+
+        mock_stdin.read.return_value = json.dumps({
+            "transcriptId": "transcript-123",
+            "transcriptContent": {"turns": []},
+            "transcripts": [],
+        })
+
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+        assert result["success"] is False
+        assert result["error"]["code"] == ErrorCode.VALIDATION_ERROR.value

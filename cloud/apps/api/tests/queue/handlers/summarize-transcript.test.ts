@@ -200,6 +200,71 @@ describe('summarize-transcript handler', () => {
       });
     });
 
+    it('batches multiple transcripts into one Python spawn', async () => {
+      const first = await createTestData();
+      const second = await createTestData();
+      const summaryModelId = 'anthropic:test-summary-model';
+
+      mockSpawnPython.mockResolvedValueOnce({
+        success: true,
+        data: {
+          success: true,
+          summaries: [
+            {
+              transcriptId: first.transcript.id,
+              batchIndex: 0,
+              success: true,
+              summary: buildSuccessfulWorkerSummary(first.content, {
+                decisionCode: '1',
+              }),
+            },
+            {
+              transcriptId: second.transcript.id,
+              batchIndex: 1,
+              success: true,
+              summary: buildSuccessfulWorkerSummary(second.content, {
+                decisionCode: '2',
+              }),
+            },
+          ],
+        },
+      });
+
+      const handler = createSummarizeTranscriptHandler();
+      const jobs: Array<MockJob<{ runId: string; transcriptId: string }>> = [
+        {
+          id: 'test-job-id-1',
+          data: { runId: first.run.id, transcriptId: first.transcript.id, summaryModelId },
+        },
+        {
+          id: 'test-job-id-2',
+          data: { runId: second.run.id, transcriptId: second.transcript.id, summaryModelId },
+        },
+      ];
+
+      await handler(jobs as Parameters<typeof handler>[0]);
+
+      expect(mockSpawnPython).toHaveBeenCalledTimes(1);
+      expect(mockSpawnPython).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          transcripts: [
+            expect.objectContaining({
+              transcriptId: first.transcript.id,
+              modelId: summaryModelId,
+            }),
+            expect.objectContaining({
+              transcriptId: second.transcript.id,
+              modelId: summaryModelId,
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          cwd: expect.any(String),
+        }),
+      );
+    });
+
     it('preserves non-object decision metadata without corrupting JSON shape', async () => {
       const { run, transcript } = await createTestData();
 

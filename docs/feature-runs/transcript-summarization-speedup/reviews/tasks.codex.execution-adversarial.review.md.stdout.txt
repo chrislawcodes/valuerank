@@ -1,0 +1,14 @@
+## Findings
+1. **High: The batch protocol is underspecified for result reassembly and partial failure handling.**  
+   Slice 1 says to “emit per-transcript batch results,” but it never requires stable item IDs, positional mapping, or a contract for what happens when one transcript in the batch fails. That leaves room for summaries to be matched to the wrong transcript, or for one bad item to poison the whole batch with no deterministic recovery path.
+
+2. **High: Slice 2 assumes a single batch invocation for all uncached transcripts, but defines no size limit or chunking rule.**  
+   In execution, a large request can turn this into a memory, payload, or timeout failure mode. The plan replaces many small calls with one potentially unbounded call, which is the kind of optimization that often regresses reliability under real load.
+
+3. **Medium: The verification plan does not include a true end-to-end compatibility check across the API and worker protocol.**  
+   Unit tests for each slice and a build are not enough to catch a request/response shape mismatch between `summarize-transcript.ts` and `summarize.py`, especially for the mixed cached/uncached path and the “single vs batch response” compatibility branch.
+
+## Residual Risks
+- Mixed-version rollout is still risky. If the API starts sending batch requests before every worker instance understands them, the “response compatibility” note does not protect the request path.
+- Cache and force-resummarize behavior may diverge under batching unless the merge order and overwrite rules are explicit. That can produce subtle correctness bugs even when tests pass.
+- The plan does not define any fallback strategy if batching fails for one transcript or for the whole group, so operational behavior under partial failure remains open.
