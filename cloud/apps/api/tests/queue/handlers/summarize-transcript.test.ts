@@ -203,6 +203,7 @@ describe('summarize-transcript handler', () => {
     it('batches multiple transcripts into one Python spawn', async () => {
       const first = await createTestData();
       const second = await createTestData();
+      const summaryModelId = 'anthropic:test-summary-model';
 
       mockSpawnPython.mockResolvedValueOnce({
         success: true,
@@ -233,11 +234,11 @@ describe('summarize-transcript handler', () => {
       const jobs: Array<MockJob<{ runId: string; transcriptId: string }>> = [
         {
           id: 'test-job-id-1',
-          data: { runId: first.run.id, transcriptId: first.transcript.id },
+          data: { runId: first.run.id, transcriptId: first.transcript.id, summaryModelId },
         },
         {
           id: 'test-job-id-2',
-          data: { runId: second.run.id, transcriptId: second.transcript.id },
+          data: { runId: second.run.id, transcriptId: second.transcript.id, summaryModelId },
         },
       ];
 
@@ -250,11 +251,11 @@ describe('summarize-transcript handler', () => {
           transcripts: [
             expect.objectContaining({
               transcriptId: first.transcript.id,
-              modelId: 'test-provider-domain-mutation:test-domain-model',
+              modelId: summaryModelId,
             }),
             expect.objectContaining({
               transcriptId: second.transcript.id,
-              modelId: 'test-provider-domain-mutation:test-domain-model',
+              modelId: summaryModelId,
             }),
           ],
         }),
