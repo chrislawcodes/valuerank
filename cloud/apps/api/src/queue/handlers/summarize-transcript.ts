@@ -520,7 +520,6 @@ async function processSummarizeBatchGroup(
   groupIndex: number,
   pendingJobs: PreparedSummarizeJob[],
   scheduleOptions: ScheduleOptions,
-  infraModel: InfraModelConfig,
 ): Promise<Error | null> {
   if (pendingJobs.length === 0) {
     return null;
@@ -767,7 +766,6 @@ export function createSummarizeTranscriptHandler(): PgBoss.WorkHandler<Summarize
         groupIndex,
         group,
         scheduleOptions,
-        infraModel,
       );
 
       if (groupRetryableError !== null && retryableError === null) {
