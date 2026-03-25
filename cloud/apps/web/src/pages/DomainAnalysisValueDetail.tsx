@@ -133,7 +133,7 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
                 const condition = cellByKey.get(`${row}::${col}`);
                 const selectedScore = condition?.meanPreferenceScore ?? 0;
                 const opponentScore = condition?.opponentMeanPreferenceScore ?? 0;
-                const isOpponent = opponentScore > selectedScore;
+                const isOpponent = opponentScore >= selectedScore && (opponentScore > 0 || selectedScore > 0);
                 const displayScore = isOpponent ? opponentScore : selectedScore;
                 const hasData = condition && condition.totalTrials > 0;
                 const conditionKey = condition
