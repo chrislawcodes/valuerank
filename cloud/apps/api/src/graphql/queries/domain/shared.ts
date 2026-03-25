@@ -3,6 +3,7 @@ import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSigna
 import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { parseDefinitionVersion } from '../../../utils/definition-version.js';
+import type { TranscriptDecisionModelResult } from './decision-model.js';
 export {
   buildRawDecisionEvidence,
   DECISION_MODEL_READ_RULES,
@@ -232,6 +233,9 @@ export type DomainAnalysisConditionTranscript = {
   modelId: string;
   decisionCode: string | null;
   decisionCodeSource: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  decisionModelV2?: TranscriptDecisionModelResult | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;

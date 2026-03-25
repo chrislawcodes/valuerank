@@ -156,6 +156,19 @@ describe('GraphQL domain analysis', () => {
         content: { messages: [] },
         decisionCode: '5',
         decisionCodeSource: 'manual',
+        decisionMetadata: {
+          parseClass: 'exact',
+          parsePath: 'exact.favor_first.strong',
+          parserVersion: 'job-choice-v2',
+          matchedLabel: 'Strongly support taking the job with achievement',
+          responseExcerpt: 'Strongly support taking the job with achievement',
+        },
+        definitionSnapshot: {
+          dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+          methodology: {
+            presentation_order: 'A_first',
+          },
+        },
         turnCount: 2,
         tokenCount: 100,
         durationMs: 1000,
@@ -303,6 +316,48 @@ describe('GraphQL domain analysis', () => {
     expect(aDetail?.conditions[0]?.dimensions).toEqual({
       autonomy: 'very high',
       risk: 'low',
+    });
+
+    const transcriptQuery = `
+      query DomainAnalysisConditionTranscripts($domainId: ID!, $modelId: String!, $valueKey: String!, $definitionId: ID!, $scenarioId: ID, $signature: String) {
+        domainAnalysisConditionTranscripts(
+          domainId: $domainId
+          modelId: $modelId
+          valueKey: $valueKey
+          definitionId: $definitionId
+          scenarioId: $scenarioId
+          signature: $signature
+        ) {
+          id
+          decisionCode
+          decisionCodeSource
+          decisionModelV2
+        }
+      }
+    `;
+
+    const transcriptResponse = await request(app)
+      .post('/graphql')
+      .set('Authorization', getAuthHeader())
+      .send({
+        query: transcriptQuery,
+        variables: {
+          domainId: domain.id,
+          modelId: 'job-choice-analysis-model',
+          valueKey: 'Achievement',
+          definitionId: aFirstDefinition.id,
+          scenarioId: aScenario.id,
+          signature: 'vnewtd',
+        },
+      })
+      .expect(200);
+
+    expect(transcriptResponse.body.errors).toBeUndefined();
+    expect(transcriptResponse.body.data.domainAnalysisConditionTranscripts).toHaveLength(1);
+    expect(transcriptResponse.body.data.domainAnalysisConditionTranscripts[0]).toMatchObject({
+      decisionCode: '5',
+      decisionCodeSource: 'manual',
+      decisionModelV2: null,
     });
   });
 });

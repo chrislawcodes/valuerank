@@ -230,6 +230,43 @@ describe('decision model', () => {
     expect(result.legacy).toEqual({ rawScore: 5, canonicalScore: 5 });
   });
 
+  it('resolves the current job-choice neutral metadata shape behind the shared boundary', () => {
+    const result = resolveTranscriptDecisionModel({
+      decisionCode: '3',
+      decisionMetadata: {
+        parseClass: 'exact',
+        parsePath: 'text_label_exact',
+        parserVersion: 'job-choice-v2',
+        matchedLabel: 'Neutral / Unsure',
+        responseExcerpt: 'Neutral / Unsure Both choices are equally compelling ...',
+      },
+      definitionSnapshot: {
+        dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+        methodology: {
+          presentation_order: 'A_first',
+        },
+      },
+      orientationFlipped: false,
+    });
+
+    expect(result.raw).toMatchObject({
+      parseClass: 'exact',
+      parsePath: 'text_label_exact',
+      parserVersion: 'job-choice-v2',
+      matchedLabel: 'Neutral / Unsure',
+    });
+    expect(result.canonical).toMatchObject({
+      favoredValueKey: null,
+      opposedValueKey: null,
+      direction: 'neutral',
+      strength: 'neutral',
+      normalizationApplied: false,
+      normalizationReason: null,
+      source: 'deterministic',
+    });
+    expect(result.legacy).toEqual({ rawScore: 3, canonicalScore: 3 });
+  });
+
   it('documents the surface read rules for the current migration boundary', () => {
     expect(DECISION_MODEL_READ_RULES).toEqual({
       api: { surface: 'api', defaultMode: 'v1', fallbackLayer: 'server_adapter' },

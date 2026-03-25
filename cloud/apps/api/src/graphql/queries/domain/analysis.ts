@@ -657,6 +657,8 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
           modelId: true,
           decisionCode: true,
           decisionCodeSource: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
           turnCount: true,
           tokenCount: true,
           durationMs: true,
