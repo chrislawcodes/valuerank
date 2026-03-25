@@ -1,0 +1,144 @@
+2026-03-25T04:56:10.160548Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.160570Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2359-a2af-7560-bce9-1e06868b94af
+--------
+user
+Review this plan artifact using a implementation-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: plan.md
+# Plan: Transcript Summarization Speedup
+
+## Approach
+
+Use the existing PgBoss batch boundary as the new spawn boundary.
+
+Phase 1 is intentionally additive:
+
+- teach `cloud/workers/summarize.py` to accept a batch of transcript payloads and emit a
+  batch response
+- refactor `cloud/apps/api/src/queue/handlers/summarize-transcript.ts` so it keeps the
+  current cache short-circuit path, then sends only the uncached transcripts through one
+  Python invocation per PgBoss batch
+- keep the single-transcript worker payload compatible so older callers and existing
+  tests do not break
+- keep the batch response keyed by transcript ID so the API can deterministically map
+  each result back to the correct transcript
+
+## Why this shape
+
+- It removes repeated process startup without introducing a daemon, queue change, or
+  background pool.
+- It preserves correctness because each transcript still gets the same summary logic.
+- It stays additive because the worker script keeps the old single-item entrypoint.
+- It keeps the existing transcript summary cache useful, so repeated runs still avoid
+  Python entirely when nothing changed.
+
+## Implementation Notes
+
+- The Python worker should keep `run_summarize()` as the single-transcript primitive and
+  add a thin batch wrapper around it.
+- The API handler should prepare jobs first, so it can separate cache hits from jobs that
+  still need the worker.
+- The batched worker call should still be rate-limited, but as one batch work unit rather
+  than one transcript at a time.
+- The handler should accept either a single summary response or a batch response from the
+  worker so the change remains backward compatible.
+- Per-transcript DB updates, progress accounting, and `maybeCompleteRun()` calls should
+  stay the same.
+- `forceSummarize` is resolved before the worker call, so the worker never has to infer
+  job-level force behavior from a mixed batch payload.
+
+## Risk Notes
+
+- Batch-level scheduling slightly changes the granularity of provider metrics, because one
+  Python spawn now represents several transcripts. That is acceptable for phase 1 and can
+  be revisited later if we need finer accounting.
+- The batch response shape must stay deterministic so transcript updates still map back to
+  the correct transcript IDs.
+- A top-level Python failure should still be treated as a worker failure for the whole
+  current PgBoss batch, just as a single-transcript worker failure is today.
+- Batch responses are processed transcript by transcript. A retryable failure inside an
+  otherwise successful batch remains a failure for that transcript, but it does not
+  change the already-committed summaries in the same batch.
+
+## Slice Boundaries
+
+1. Add batch support to the Python summarize worker and tests.
+2. Refactor the API summarize-transcript handler to batch uncached transcripts into one
+   Python invocation and add handler tests for the new path.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-25T04:56:10.163393Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.184753Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.187021Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.211878Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.213137Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.223710Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2359-a2af-7560-bce9-1e06868b94af.tmp-1774414570160855000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-25T04:56:10.237657Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.238863Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.263924Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.264987Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.289750Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.290855Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.314799Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.315746Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.340493Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.341696Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.364978Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.366126Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.389211Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.390317Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.413444Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.414540Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.438059Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.439107Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.460589Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.461681Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.483226Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.485805Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.508183Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.509330Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.531078Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.532243Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.556046Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.557297Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.580345Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.581455Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.603828Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-25T04:56:10.604856Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-25T04:56:10.627840Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+## Findings
+1. **High** The plan makes one Python spawn equal one PgBoss batch, but it never defines a batch cap, split strategy, or fallback for oversized batches. That creates a hard hidden assumption that queue batch size is always safe for one process invocation. If a batch is large or skewed, one slow transcript can hold the whole batch open, and the worker can hit payload, memory, or timeout limits.
+2. **High** The batch response contract is underspecified for failure and duplication cases. Keying results only by transcript ID assumes every ID is unique in the batch and that every item has exactly one outcome. If the same transcript appears twice, or if the worker returns mixed success/error states, results can be overwritten or misrouted with no clear recovery path.
+3. **Medium** The cache short-circuit and `maybeCompleteRun()` flow is not fully defined for mixed batches. The plan says cached hits are handled first and per-transcript updates stay the same, but it does not spell out what happens when one batch contains cached transcripts, fresh successes, and one retryable failure. That leaves room for double-counted progress, stale retry behavior, or a run being marked complete before all uncached work is actually persisted.
+4. **Medium** The validation plan is too happy-path heavy for the new contract. It calls for batch-worker tests and handler tests, but it does not explicitly cover the failure modes this change introduces: mixed cached/uncached batches, duplicate transcript IDs, and partial batch failures. Those are the cases most likely to break the new mapping logic while still letting the “batch works” path pass.
+
+## Residual Risks
+- Batch-level provider metrics will still be coarser than transcript-level metrics, so attribution and debugging will be less precise.
+- Throughput will still depend on how PgBoss groups jobs in practice, so one slow item can delay visibility for other items in the same batch even if the implementation is correct.
+- Backward compatibility depends on reliable response-shape detection between single and batch worker outputs; if the schemas overlap too much, malformed output could be accepted too late.
+tokens used
+7,317
