@@ -16,6 +16,16 @@ import {
   type DomainAnalysisValueDetailQueryVariables,
 } from '../api/operations/domainAnalysis';
 import { VALUE_LABELS, type ValueKey } from '../data/domainAnalysisData';
+import {
+  formatCanonicalDecisionHeadline,
+  getTranscriptDecisionDisplayMode,
+  type TranscriptDecisionDisplayMode,
+} from '../utils/transcriptDecisionModel';
+
+const VALUE_DETAIL_COPY = {
+  decisionColumnLabel: 'Decision summary',
+  legacyDecisionColumnLabel: 'Decision',
+} as const;
 
 function toPercent(value: number | null): string {
   if (value === null || Number.isNaN(value)) return '-';
@@ -275,6 +285,7 @@ export function DomainAnalysisValueDetail() {
     content: transcript.content,
     decisionCode: transcript.decisionCode,
     decisionCodeSource: transcript.decisionCodeSource,
+    decisionModelV2: transcript.decisionModelV2 ?? null,
     turnCount: transcript.turnCount,
     tokenCount: transcript.tokenCount,
     durationMs: transcript.durationMs,
@@ -282,6 +293,10 @@ export function DomainAnalysisValueDetail() {
     createdAt: transcript.createdAt,
     lastAccessedAt: null,
   }));
+  const reportDecisionDisplayMode: TranscriptDecisionDisplayMode = getTranscriptDecisionDisplayMode(normalizedTranscripts);
+  const decisionColumnLabel = reportDecisionDisplayMode === 'audit'
+    ? VALUE_DETAIL_COPY.decisionColumnLabel
+    : VALUE_DETAIL_COPY.legacyDecisionColumnLabel;
 
   const handleConditionClick = (definitionId: string, conditionName: string, scenarioId: string | null) => {
     const clickedKey = `${definitionId}:${scenarioId ?? '__unknown__'}`;
@@ -438,9 +453,8 @@ export function DomainAnalysisValueDetail() {
                         <thead>
                           <tr className="border-b border-gray-200 text-gray-600">
                             <th className="px-2 py-2 text-left font-medium">Transcript</th>
-                            <th className="px-2 py-2 text-right font-medium">Decision</th>
+                            <th className="px-2 py-2 text-right font-medium">{decisionColumnLabel}</th>
                             <th className="px-2 py-2 text-right font-medium">Turns</th>
-                            <th className="px-2 py-2 text-right font-medium">Tokens</th>
                             <th className="px-2 py-2 text-right font-medium">Duration</th>
                             <th className="px-2 py-2 text-right font-medium">Created</th>
                             <th className="px-2 py-2 text-right font-medium">Run</th>
@@ -460,9 +474,12 @@ export function DomainAnalysisValueDetail() {
                                   {transcript.id.slice(0, 10)}...
                                 </Button>
                               </td>
-                              <td className="px-2 py-2 text-right text-gray-800">{transcript.decisionCode ?? '-'}</td>
+                              <td className="px-2 py-2 text-right text-gray-800">
+                                {reportDecisionDisplayMode === 'audit'
+                                  ? formatCanonicalDecisionHeadline(transcript)
+                                  : (transcript.decisionCode ?? '-')}
+                              </td>
                               <td className="px-2 py-2 text-right text-gray-800">{transcript.turnCount}</td>
-                              <td className="px-2 py-2 text-right text-gray-800">{transcript.tokenCount.toLocaleString()}</td>
                               <td className="px-2 py-2 text-right text-gray-800">{Math.round(transcript.durationMs / 100) / 10}s</td>
                               <td className="px-2 py-2 text-right text-gray-800">
                                 {new Date(transcript.createdAt).toLocaleString('en-US', {
@@ -490,7 +507,11 @@ export function DomainAnalysisValueDetail() {
         </div>
       </section>
       {selectedTranscript !== null && (
-        <TranscriptViewer transcript={selectedTranscript} onClose={() => setSelectedTranscript(null)} />
+        <TranscriptViewer
+          transcript={selectedTranscript}
+          onClose={() => setSelectedTranscript(null)}
+          decisionDisplayMode={reportDecisionDisplayMode}
+        />
       )}
     </div>
   );

@@ -276,6 +276,9 @@ builder.objectType(RunRef, {
     }),
     // Keep raw progress as JSON for backward compatibility
     progress: t.expose('progress', { type: 'JSON', nullable: true }),
+    stalledModels: t.exposeStringList('stalledModels', {
+      description: 'Model IDs currently detected as stalled (no successful probe completion for 3+ minutes while jobs are pending)',
+    }),
     startedAt: t.expose('startedAt', { type: 'DateTime', nullable: true }),
     completedAt: t.expose('completedAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),

@@ -36,6 +36,7 @@ import {
 } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
+import { getTranscriptDecisionDisplayMode } from '../utils/transcriptDecisionModel';
 import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
@@ -595,8 +596,8 @@ export function AnalysisTranscripts() {
   const normalizedDecisionTranscriptIds = useMemo(() => {
     const shouldNormalizePairedScores = analysisMode === 'paired'
       && (
-        (hasPairedConditionFilterParams && pairView === 'condition-blended')
-        || hasPairedValueFilterParams
+        hasPairedValueFilterParams
+        || (hasPairedConditionFilterParams && pairView === 'condition-blended')
       );
 
     if (!shouldNormalizePairedScores) {
@@ -622,22 +623,27 @@ export function AnalysisTranscripts() {
     companionRun?.id,
     definitionContent,
     filteredTranscripts,
+    hasBucketFilterParams,
     hasPairedConditionFilterParams,
     hasPairedValueFilterParams,
     pairView,
     run?.id,
   ]);
 
-  const decisionColumnLabel = normalizedDecisionTranscriptIds.size > 0
-    ? 'Normalized decision score'
-    : 'Decision';
-  const decisionColumnTooltip = normalizedDecisionTranscriptIds.size > 0
-    ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
-    : undefined;
-  const normalizationBadgeTitle = normalizedDecisionTranscriptIds.size > 0
-    ? 'This score was adjusted because this transcript showed the options in the opposite order.'
-    : undefined;
-
+  const listDisplayMode = getTranscriptDecisionDisplayMode(filteredTranscripts);
+  const viewerDisplayMode = selectedTranscript
+    ? getTranscriptDecisionDisplayMode([selectedTranscript])
+    : listDisplayMode;
+  const decisionColumnLabel = listDisplayMode === 'audit'
+    ? 'Decision summary'
+    : normalizedDecisionTranscriptIds.size > 0
+      ? 'Normalized decision score'
+      : 'Decision';
+  const decisionColumnTooltip = listDisplayMode === 'audit'
+    ? 'Shows the decision headline and summary from the backend transcript data.'
+    : normalizedDecisionTranscriptIds.size > 0
+      ? 'In this paired view, some prompts showed the two options in a different order. We adjust those scores so they all use the same scale. That way, the same number means the same choice direction across every transcript.'
+      : undefined;
   useEffect(() => {
     if (!hasDirectTranscriptParam) {
       return;
@@ -649,25 +655,50 @@ export function AnalysisTranscripts() {
   const transcriptCoverage = useMemo(() => {
     return filteredTranscripts.reduce(
       (acc, transcript) => {
-        const metadata = getDecisionMetadata(transcript.decisionMetadata);
-        if (transcript.decisionCodeSource === 'manual') {
-          acc.manual += 1;
-        }
-        if (metadata?.parseClass === 'exact') {
-          acc.exact += 1;
-        } else if (metadata?.parseClass === 'fallback_resolved') {
-          acc.fallback += 1;
-        } else if (metadata?.parseClass === 'ambiguous') {
-          acc.ambiguous += 1;
-        }
-        if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
-          acc.unresolved += 1;
+        const metadata = listDisplayMode === 'audit'
+          ? transcript.decisionModelV2?.raw
+          : getDecisionMetadata(transcript.decisionMetadata);
+        if (listDisplayMode === 'audit') {
+          const canonical = transcript.decisionModelV2?.canonical ?? null;
+          if (transcript.decisionModelV2?.raw.manualOverride) {
+            acc.manual += 1;
+          }
+          if (metadata?.parseClass === 'exact') {
+            acc.exact += 1;
+          } else if (metadata?.parseClass === 'fallback_resolved') {
+            acc.fallback += 1;
+          } else if (metadata?.parseClass === 'ambiguous') {
+            acc.ambiguous += 1;
+          }
+          if (
+            canonical == null
+            || canonical.direction === 'unknown'
+            || canonical.strength === 'unknown'
+            || canonical.source === 'error'
+            || metadata?.parseClass === 'unparseable'
+          ) {
+            acc.unresolved += 1;
+          }
+        } else {
+          if (transcript.decisionCodeSource === 'manual') {
+            acc.manual += 1;
+          }
+          if (metadata?.parseClass === 'exact') {
+            acc.exact += 1;
+          } else if (metadata?.parseClass === 'fallback_resolved') {
+            acc.fallback += 1;
+          } else if (metadata?.parseClass === 'ambiguous') {
+            acc.ambiguous += 1;
+          }
+          if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
+            acc.unresolved += 1;
+          }
         }
         return acc;
       },
       { exact: 0, fallback: 0, ambiguous: 0, manual: 0, unresolved: 0 }
     );
-  }, [filteredTranscripts]);
+  }, [filteredTranscripts, listDisplayMode]);
 
   if (loading && !run) {
     return (
@@ -855,7 +886,9 @@ export function AnalysisTranscripts() {
       {filteredTranscripts.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-gray-900">Parse coverage</span>
+            <span className="font-medium text-gray-900">
+              {listDisplayMode === 'audit' ? 'Decision coverage' : 'Parse coverage'}
+            </span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               Exact {transcriptCoverage.exact}
             </span>
@@ -871,8 +904,8 @@ export function AnalysisTranscripts() {
           </div>
           {transcriptCoverage.unresolved > 0 && (
             <p className="mt-2 text-xs text-amber-700">
-              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable 1-5 decision.
-              Open those transcripts to review and relabel them manually when needed.
+              {transcriptCoverage.unresolved} transcript{transcriptCoverage.unresolved === 1 ? '' : 's'} in this view still do not have an analyzable canonical decision.
+              Open those transcripts to review the raw evidence.
             </p>
           )}
         </div>
@@ -897,7 +930,7 @@ export function AnalysisTranscripts() {
           decisionColumnLabel={decisionColumnLabel}
           decisionColumnTooltip={decisionColumnTooltip}
           normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
-          normalizationBadgeTitle={normalizationBadgeTitle}
+          decisionDisplayMode={listDisplayMode}
         />
       )}
 
@@ -907,6 +940,8 @@ export function AnalysisTranscripts() {
           onClose={() => setSelectedTranscript(null)}
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
+          normalizeDecision={normalizedDecisionTranscriptIds.has(selectedTranscript.id)}
+          decisionDisplayMode={viewerDisplayMode}
         />
       )}
     </div>

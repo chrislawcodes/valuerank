@@ -1,0 +1,8 @@
+## Findings
+- High: T2.3 is not exhaustive enough to guarantee `stalledModels` gets cleared on every non-`RUNNING` transition. The grep only checks `db.run.update`, so any status change that goes through `updateMany`, a helper wrapper, or raw SQL will keep stale stall state and the frontend banner can survive after the run is no longer running.
+- Medium: T2.1/T2.4 implement the 3-minute rule as a strict `< threshold` comparison, which makes the cutoff effectively “after 3 minutes” instead of “3+ minutes.” A run or model stalled for exactly 180000 ms will be missed.
+
+## Residual Risks
+- Stall detection still keys off `lastSuccessTime` plus `runStartedAt`, not the age of the current pending job, so a fresh pending job on an older run can be marked stalled sooner than an operator might expect.
+- The scheduler update is periodic, so stalled banners can lag until the next recovery cycle even after the underlying jobs recover.
+- The artifact does not require an integrated scheduler-level test for multiple runs and mixed status transitions, so wiring regressions in the `detectAndUpdateStalledRuns` path could still slip through.

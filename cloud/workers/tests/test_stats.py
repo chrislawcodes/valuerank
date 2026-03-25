@@ -14,7 +14,9 @@ from stats.basic_stats import (
     compute_value_stats,
     compute_model_summary,
     aggregate_transcripts_by_model,
+    compute_visualization_data,
 )
+from stats.decision_model import resolve_transcript_score, resolve_transcript_score_details
 from stats.model_comparison import (
     compute_effect_size,
     interpret_effect_size,
@@ -160,21 +162,21 @@ class TestBasicStats:
             {
                 "modelId": "model-a",
                 "summary": {
-                    "score": 0.8,
+                    "score": 4,
                     "values": {"Physical_Safety": "prioritized"},
                 },
             },
             {
                 "modelId": "model-a",
                 "summary": {
-                    "score": 0.6,
+                    "score": 3,
                     "values": {"Physical_Safety": "deprioritized"},
                 },
             },
             {
                 "modelId": "model-b",
                 "summary": {
-                    "score": 0.9,
+                    "score": 5,
                     "values": {"Physical_Safety": "prioritized"},
                 },
             },
@@ -184,6 +186,152 @@ class TestBasicStats:
         assert "model-b" in result
         assert result["model-a"]["sampleSize"] == 2
         assert result["model-b"]["sampleSize"] == 1
+
+    def test_aggregate_transcripts_prefers_v2_compatibility_score(self):
+        """V2 compatibility scores should override stale scalar values."""
+        transcripts = [
+            {
+                "modelId": "model-a",
+                "scenarioId": "scenario-1",
+                "summary": {
+                    "score": 1.0,
+                    "values": {"Physical_Safety": "prioritized"},
+                },
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+            },
+        ]
+        result = aggregate_transcripts_by_model(transcripts)
+        assert result["model-a"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+
+    def test_aggregate_transcripts_corrects_orientation_for_v2_raw_scores(self):
+        """Raw V2 scores should still be orientation-corrected in aggregate stats."""
+        transcripts = [
+            {
+                "modelId": "model-a",
+                "scenarioId": "scenario-1",
+                "orientationFlipped": True,
+                "summary": {"score": 1.0},
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 1,
+                    },
+                },
+            },
+        ]
+        result = aggregate_transcripts_by_model(transcripts)
+        assert result["model-a"]["overall"]["mean"] == pytest.approx(5.0, abs=0.001)
+
+    def test_visualization_data_prefers_v2_compatibility_score(self):
+        """Decision distributions should use the V2 compatibility score when present."""
+        transcripts = [
+            {
+                "modelId": "model-a",
+                "scenarioId": "scenario-1",
+                "summary": {"score": 1.0},
+                "decisionModelV2": {
+                    "canonical": {
+                        "direction": "favor_first",
+                        "strength": "lean",
+                    },
+                    "legacy": {
+                        "rawScore": 1,
+                        "canonicalScore": 4,
+                    },
+                },
+            },
+        ]
+        result = compute_visualization_data(transcripts)
+        assert result["decisionDistribution"]["model-a"]["4"] == 1
+        assert result["modelScenarioMatrix"]["model-a"]["scenario-1"] == pytest.approx(4.0, abs=0.001)
+
+    def test_visualization_data_corrects_orientation_for_v2_raw_scores(self):
+        """Raw V2 scores should be orientation-corrected before visualization counts."""
+        transcripts = [
+            {
+                "modelId": "model-a",
+                "scenarioId": "scenario-1",
+                "orientationFlipped": True,
+                "summary": {"score": 1.0},
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 1,
+                    },
+                },
+            },
+        ]
+        result = compute_visualization_data(transcripts)
+        assert result["decisionDistribution"]["model-a"]["5"] == 1
+        assert result["modelScenarioMatrix"]["model-a"]["scenario-1"] == pytest.approx(5.0, abs=0.001)
+
+
+class TestDecisionModelResolution:
+    """Tests for the worker-side decision model bridge."""
+
+    def test_prefers_v2_compatibility_score(self):
+        transcript = {
+            "summary": {"score": 1.0},
+            "decisionModelV2": {
+                "canonical": {
+                    "direction": "favor_first",
+                    "strength": "lean",
+                },
+                "legacy": {
+                    "rawScore": 1,
+                    "canonicalScore": 4,
+                },
+            },
+        }
+
+        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
+
+    def test_rejects_fractional_v2_scores_and_falls_back_to_legacy_scalar(self):
+        transcript = {
+            "summary": {"score": 4},
+            "decisionModelV2": {
+                "legacy": {
+                    "canonicalScore": 4.5,
+                },
+            },
+        }
+
+        resolved = resolve_transcript_score_details(transcript)
+        assert resolved is not None
+        score, canonicalized = resolved
+        assert score == pytest.approx(4.0, abs=0.001)
+        assert canonicalized is False
+        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
+
+    def test_falls_back_to_legacy_scalar_score(self):
+        transcript = {"summary": {"score": 4}}
+
+        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
+
+    def test_rejects_malformed_v2_compat_scores_and_falls_back_to_legacy_scalar(self):
+        transcript = {
+            "summary": {"score": 4},
+            "decisionModelV2": {
+                "legacy": {
+                    "rawScore": 7,
+                    "canonicalScore": 0,
+                },
+            },
+        }
+
+        resolved = resolve_transcript_score_details(transcript)
+        assert resolved is not None
+        score, canonicalized = resolved
+        assert score == pytest.approx(4.0, abs=0.001)
+        assert canonicalized is False
+        assert resolve_transcript_score(transcript) == pytest.approx(4.0, abs=0.001)
 
 
 class TestModelComparison:
@@ -295,19 +443,19 @@ class TestDimensionImpact:
         """Test computing effects for multiple dimensions."""
         transcripts = [
             {
-                "summary": {"score": 1.0},
+                "summary": {"score": 1},
                 "scenario": {"dimensions": {"stakes": "low", "context": "work"}},
             },
             {
-                "summary": {"score": 2.0},
+                "summary": {"score": 2},
                 "scenario": {"dimensions": {"stakes": "low", "context": "home"}},
             },
             {
-                "summary": {"score": 5.0},
+                "summary": {"score": 5},
                 "scenario": {"dimensions": {"stakes": "high", "context": "work"}},
             },
             {
-                "summary": {"score": 6.0},
+                "summary": {"score": 4},
                 "scenario": {"dimensions": {"stakes": "high", "context": "home"}},
             },
         ]
@@ -317,6 +465,54 @@ class TestDimensionImpact:
         assert result["stakes"]["effectSize"] > result.get("context", {}).get(
             "effectSize", 0
         )
+
+    def test_compute_dimension_effects_corrects_orientation_for_v2_raw_scores(self):
+        """Orientation-flipped V2 raw scores should be normalized before dimension analysis."""
+        transcripts = [
+            {
+                "summary": {"score": 1.0},
+                "orientationFlipped": True,
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 1,
+                    },
+                },
+                "scenario": {"dimensions": {"stakes": "low"}},
+            },
+            {
+                "summary": {"score": 1.0},
+                "orientationFlipped": True,
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 5,
+                    },
+                },
+                "scenario": {"dimensions": {"stakes": "high"}},
+            },
+            {
+                "summary": {"score": 1.0},
+                "orientationFlipped": True,
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 1,
+                    },
+                },
+                "scenario": {"dimensions": {"stakes": "low"}},
+            },
+            {
+                "summary": {"score": 1.0},
+                "orientationFlipped": True,
+                "decisionModelV2": {
+                    "legacy": {
+                        "rawScore": 5,
+                    },
+                },
+                "scenario": {"dimensions": {"stakes": "high"}},
+            },
+        ]
+        result = compute_dimension_effects(transcripts)
+        assert "stakes" in result
+        assert result["stakes"]["effectSize"] > 0
 
     def test_variance_explained(self):
         """Test variance explained calculation."""
@@ -367,7 +563,7 @@ class TestIntegration:
             {
                 "modelId": "gpt-4",
                 "summary": {
-                    "score": 0.8,
+                    "score": 4,
                     "values": {
                         "Physical_Safety": "prioritized",
                         "Compassion": "deprioritized",
@@ -378,7 +574,7 @@ class TestIntegration:
             {
                 "modelId": "gpt-4",
                 "summary": {
-                    "score": 0.6,
+                    "score": 3,
                     "values": {
                         "Physical_Safety": "prioritized",
                         "Compassion": "prioritized",
@@ -389,7 +585,7 @@ class TestIntegration:
             {
                 "modelId": "claude",
                 "summary": {
-                    "score": 0.7,
+                    "score": 4,
                     "values": {
                         "Physical_Safety": "deprioritized",
                         "Compassion": "prioritized",
@@ -407,8 +603,8 @@ class TestIntegration:
 
         # Test model comparison
         model_scores = {
-            "gpt-4": [0.8, 0.6],
-            "claude": [0.7],
+            "gpt-4": [4, 3],
+            "claude": [4],
         }
         # Can't compute with different lengths, but shows structure
 

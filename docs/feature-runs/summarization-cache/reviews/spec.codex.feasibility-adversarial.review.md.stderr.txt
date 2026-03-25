@@ -1,0 +1,202 @@
+2026-03-24T18:18:39.772578Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.773381Z  WARN codex_core::state_db: failed to initialize state runtime at /Users/chrislaw/.codex: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.780338Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+OpenAI Codex v0.116.0 (research preview)
+--------
+workdir: /Users/chrislaw/valuerank
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019d2111-fb15-7952-bec0-76d31b2f59af
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+The full review artifact text is included below in this prompt.
+Do not ask to open files or fetch more file contents unless the prompt explicitly says something is missing.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Artifact: spec.md
+# Spec
+# Spec: Transcript Summarization Cache
+
+## Problem
+
+Transcript summarization is still re-run even when a transcript has already been summarized
+for the same transcript content, parser context, and summarizer model. That makes force
+reruns, retries, and recovery paths slower than they need to be.
+
+## Goal
+
+Add a safe, additive near-term cache so summarization can reuse a prior successful summary
+when all of these match:
+
+- transcript content hash
+- parser version
+- summarizer model
+
+If any of those change, the worker must fall back to the current summarization path.
+An explicit bypass path must also exist for emergency invalidation and force reruns.
+
+## Scope
+
+- cache storage lives on the transcript itself, inside `decisionMetadata.summaryCache`
+- cache lookup happens in the summarize queue handler before the Python worker is spawned
+- a cache hit restores the prior summary fields and skips the worker
+- a cache miss keeps current behavior unchanged
+- the handler checks cache before any `summarizedAt` short-circuit, and `summarizedAt`
+  remains only a legacy fallback when no usable cache record exists
+- `forceSummarize` takes precedence over `summarizedAt` and cache hits for that job
+- the parser version comes from a shared env/config value that both services read
+- `forceSummarize` bypasses the cache for emergency reruns
+- no transcript text is changed
+- no new table, queue type, or schema migration is introduced
+
+## Assumptions
+
+- The current parser version is treated as a stable worker contract and is read from the
+  same env/config value in both the API handler and the worker. Any change to summarizer
+  prompt text, parsing logic, or post-processing must bump that shared value.
+- The cache is intentionally narrow: key mismatch means "rerun", not "try to infer a
+  partial reuse."
+- Existing restart and recovery flows do not need new queue plumbing; they benefit from the
+  cache because they already route work back through the summarize handler.
+- Once cache metadata exists for a transcript, cache lookup happens before any legacy
+  `summarizedAt` skip.
+- If stored cache data is malformed or incomplete, the handler ignores it and falls back to
+  the worker path.
+- `forceSummarize` is the escape hatch when a cached summary needs to be ignored.
+- A forced rerun leaves the previous cache record in place until a successful replacement
+  is written.
+
+## Cache Schema
+
+`decisionMetadata.summaryCache` stores one latest successful summary per transcript:
+
+```ts
+type SummaryCache = {
+  responseSha256: string;
+  parserVersion: string;
+  modelId: string;
+  summary: {
+    decisionCode: string;
+    decisionCodeSource: string;
+    decisionText: string | null;
+    decisionMetadata: Record<string, unknown> | null;
+  };
+};
+```
+
+- `responseSha256` is the SHA-256 hash of the joined transcript target responses, using the
+  same normalization as the summarize worker.
+- `parserVersion` is the shared parser-version value read by both services.
+- `modelId` is the summarizer model identity from the job payload or configured default.
+- `summary.decisionMetadata` stores the worker-output metadata only, not the final persisted
+  transcript `decisionMetadata` wrapper.
+- `summary` is the full successful summary payload to restore on a cache hit.
+- Missing or non-string key fields, a missing summary payload, or a stored summary with
+  `decisionCode === 'error'` counts as malformed cache data and must fall back to the worker.
+
+## Requirements
+
+- Reuse a previous successful summary when the transcript content hash, parser version, and
+  model all match the stored cache record.
+- Force a fresh summary when transcript content changes.
+- Force a fresh summary when parser version changes.
+- Force a fresh summary when model changes.
+- Preserve current behavior when the cache is missing or does not match.
+- Bypass the cache when `forceSummarize` is set.
+- Keep the previous cache record until a forced rerun succeeds.
+- Keep the change additive and safe for local dev and production rollout.
+- Do not guess at broader invalidation rules.
+- Use SHA-256 for the transcript content hash, matching the worker's normalization.
+
+## Non-goals
+
+- Changing transcript text
+- Adding a cache table or external cache service
+- Reworking the recovery or restart job flow
+- UI or analysis changes
+
+## Acceptance Criteria
+
+- An unchanged transcript with a matching cache record restores the prior summary without
+  spawning the Python worker.
+- A transcript with changed content hash re-runs summarization.
+- A transcript with changed parser version re-runs summarization.
+- A transcript with changed model re-runs summarization.
+- `forceSummarize` bypasses the cache and re-runs summarization.
+- A forced rerun leaves the prior cache record in place until a successful replacement is
+  written.
+- A cache miss still falls back to the worker and persists a fresh summary.
+- Existing non-cached summarization behavior remains unchanged.
+- The cache is safe to use in local development and production without a schema migration.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+mcp startup: no servers
+2026-03-24T18:18:39.805557Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.808778Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.833527Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.834497Z  WARN codex_core::shell_snapshot: Failed to delete shell snapshot at "/Users/chrislaw/.codex/shell_snapshots/019d2111-fb15-7952-bec0-76d31b2f59af.tmp-1774376319774874000": Os { code: 2, kind: NotFound, message: "No such file or directory" }
+2026-03-24T18:18:39.834634Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.858521Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.859472Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.884474Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.885496Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.908864Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.909946Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.934458Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.935379Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.960113Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.961133Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:39.986000Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:39.987030Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.013316Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.014266Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.036270Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.037202Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.059610Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.060728Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.085743Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.086724Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.111763Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.112950Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.137850Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.140485Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.163924Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.166148Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.179024Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.180962Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.205768Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+2026-03-24T18:18:40.207727Z  WARN codex_state::runtime: failed to open logs db at /Users/chrislaw/.codex/logs_1.sqlite: migration 2 was previously applied but is missing in the resolved migrations
+2026-03-24T18:18:40.232785Z  WARN codex_core::rollout::list: state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back
+codex
+Reviewing the spec adversarially for implementation risks and missing cases. I’m focusing on whether the cache can be built safely and whether the rules are complete enough to avoid bad hits or hard-to-debug failures.
+codex
+## Findings
+1. High: The cache key is underspecified, so false hits are possible. `responseSha256`, `parserVersion`, and `modelId` only work if `parserVersion` is guaranteed to encode every parser dependency, prompt/template change, normalization rule, and post-processing rule that affects the summary. The spec does not prove that, and it also does not define a canonical `modelId` format. If handler and worker derive these values differently, the cache can silently reuse the wrong summary.
+
+2. High: The spec omits concurrency and atomicity rules. Two summarize jobs for the same transcript can both miss the cache, both spawn workers, and then race to write `decisionMetadata.summaryCache` and the summary fields. Without a lock, compare-and-set write, or explicit last-write-wins policy, retries and recovery paths can still do duplicate work and leave the cache in an inconsistent state.
+
+3. Medium: Storing the full summary inside `decisionMetadata` is risky without a size bound or pruning rule. `summary.decisionMetadata` is an unconstrained `Record<string, unknown>`, so a large worker payload can bloat the transcript row, slow reads and writes, or hit JSON/row-size limits. The “no schema migration” constraint does not remove that risk.
+
+4. Medium: Cache-hit semantics are incomplete around timestamp and legacy state handling. The spec says a hit restores “prior summary fields,” but it does not say whether `summarizedAt` should be updated, preserved, or ignored on a cache hit. It also does not define what downstream code should see if `forceSummarize` bypasses the cache and the rerun fails. That leaves room for inconsistent legacy short-circuiting and stale summaries that are hard to diagnose.
+
+## Residual Risks
+- If `parserVersion` does not truly capture every parser and post-processing dependency, stale cache hits will still happen after code or prompt changes.
+- If the handler must recompute the transcript hash from raw responses, the “before worker spawn” optimization still requires a nontrivial read and normalization pass.
+- Blue-green or staggered deploys can temporarily desynchronize the shared parser-version value between services, which can make cache behavior inconsistent during rollout.
+- Very large or malformed legacy `decisionMetadata` payloads can still make cache reads and writes expensive even when the cache logic itself is correct.
+tokens used
+7,002

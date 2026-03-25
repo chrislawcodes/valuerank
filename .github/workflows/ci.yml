@@ -46,6 +46,14 @@ jobs:
         working-directory: cloud
         run: npm ci
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python worker dependencies
+        working-directory: cloud/workers
+        run: python -m pip install -r requirements.txt
+
       - name: Setup test database schema
         working-directory: cloud
         run: npm run db:test:setup

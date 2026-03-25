@@ -40,7 +40,7 @@ class TestAnalyzeBasicIntegration:
                     "scenarioId": "s1",
                     "summary": {
                         "values": {"Physical_Safety": "prioritized"},
-                        "score": 0.8,
+                        "score": 4,
                     },
                     "scenario": {"dimensions": {"stakes": "high"}},
                 }
@@ -63,28 +63,28 @@ class TestAnalyzeBasicIntegration:
                     "id": "t1",
                     "modelId": "gpt-4",
                     "scenarioId": "s1",
-                    "summary": {"values": {"Compassion": "prioritized"}, "score": 0.7},
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
                     "scenario": {"dimensions": {"stakes": "low"}},
                 },
                 {
                     "id": "t2",
                     "modelId": "claude-3",
                     "scenarioId": "s1",
-                    "summary": {"values": {"Compassion": "deprioritized"}, "score": 0.3},
+                    "summary": {"values": {"Compassion": "deprioritized"}, "score": 2},
                     "scenario": {"dimensions": {"stakes": "low"}},
                 },
                 {
                     "id": "t3",
                     "modelId": "gpt-4",
                     "scenarioId": "s2",
-                    "summary": {"values": {"Compassion": "prioritized"}, "score": 0.8},
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 4},
                     "scenario": {"dimensions": {"stakes": "high"}},
                 },
                 {
                     "id": "t4",
                     "modelId": "claude-3",
                     "scenarioId": "s2",
-                    "summary": {"values": {"Compassion": "prioritized"}, "score": 0.9},
+                    "summary": {"values": {"Compassion": "prioritized"}, "score": 5},
                     "scenario": {"dimensions": {"stakes": "high"}},
                 },
             ],
@@ -116,14 +116,14 @@ class TestAnalyzeBasicIntegration:
             "transcripts": [
                 # Scenario with high disagreement
                 {"id": "t1", "modelId": "m1", "scenarioId": "contested",
-                 "summary": {"score": 0.1}, "scenario": {"name": "Contested One"}},
+                 "summary": {"score": 1}, "scenario": {"name": "Contested One"}},
                 {"id": "t2", "modelId": "m2", "scenarioId": "contested",
-                 "summary": {"score": 0.9}, "scenario": {"name": "Contested One"}},
+                 "summary": {"score": 5}, "scenario": {"name": "Contested One"}},
                 # Scenario with low disagreement
                 {"id": "t3", "modelId": "m1", "scenarioId": "agreed",
-                 "summary": {"score": 0.5}, "scenario": {"name": "Agreed One"}},
+                 "summary": {"score": 3}, "scenario": {"name": "Agreed One"}},
                 {"id": "t4", "modelId": "m2", "scenarioId": "agreed",
-                 "summary": {"score": 0.5}, "scenario": {"name": "Agreed One"}},
+                 "summary": {"score": 3}, "scenario": {"name": "Agreed One"}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -141,7 +141,7 @@ class TestAnalyzeBasicIntegration:
             "runId": "test-run-4",
             "transcripts": [
                 {"id": "t1", "modelId": "small-model", "scenarioId": "s1",
-                 "summary": {"values": {}, "score": 0.5}, "scenario": {}},
+                 "summary": {"values": {}, "score": 3}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -204,7 +204,7 @@ class TestAnalyzeBasicIntegration:
             "runId": "test-run-5",
             "transcripts": [
                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
-                 "summary": {"values": {}, "score": 0.5}, "scenario": {}},
+                 "summary": {"values": {}, "score": 3}, "scenario": {}},
             ],
         }
         result = run_analyze_basic(input_data)
@@ -218,6 +218,163 @@ class TestAnalyzeBasicIntegration:
         assert methods["alpha"] == 0.05
         assert "codeVersion" in methods
         assert methods["summaryContractVersion"] == "vignette-semantics-v1"
+
+    def test_v2_decision_model_overrides_legacy_scalar_score(self):
+        """The worker should prefer the V2 compatibility score when it is present."""
+        input_data = {
+            "runId": "test-run-v2-precedence",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 1},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                        "legacy": {
+                            "rawScore": 1,
+                            "canonicalScore": 4,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]["m1"]
+        assert per_model["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
+        assert preference == "A"
+
+    def test_v2_decision_model_does_not_double_flip_orientation_corrected_scores(self):
+        """Canonical V2 scores should not be flipped again by the worker."""
+        input_data = {
+            "runId": "test-run-v2-no-double-flip",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "orientationFlipped": True,
+                    "summary": {"values": {}, "score": 1},
+                    "decisionModelV2": {
+                        "canonical": {
+                            "direction": "favor_first",
+                            "strength": "lean",
+                        },
+                        "legacy": {
+                            "rawScore": 1,
+                            "canonicalScore": 4,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+            ],
+        }
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]["m1"]
+        assert per_model["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        preference = result["analysis"]["preferenceSummary"]["perModel"]["m1"]["preferenceDirection"]["overallLean"]
+        assert preference == "A"
+
+    def test_v2_legacy_raw_score_is_orientation_corrected_for_comparison_and_contest_detection(self):
+        """Raw V2 scores should normalize before model comparison and contested-scene analysis."""
+        input_data = {
+            "runId": "test-run-v2-raw-orientation",
+            "transcripts": [
+                {
+                    "id": "t1",
+                    "modelId": "m1",
+                    "scenarioId": "s1",
+                    "orientationFlipped": True,
+                    "summary": {"values": {}, "score": 1},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "rawScore": 1,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t3",
+                    "modelId": "m1",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}, "score": 4},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "rawScore": 4,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t2",
+                    "modelId": "m2",
+                    "scenarioId": "s1",
+                    "summary": {"values": {}, "score": 5},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "canonicalScore": 5,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "high"}},
+                },
+                {
+                    "id": "t4",
+                    "modelId": "m2",
+                    "scenarioId": "s2",
+                    "summary": {"values": {}, "score": 4},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "canonicalScore": 4,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "low"}},
+                },
+                {
+                    "id": "t5",
+                    "modelId": "m1",
+                    "scenarioId": "s3",
+                    "summary": {"values": {}, "score": 3},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "rawScore": 3,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "medium"}},
+                },
+                {
+                    "id": "t6",
+                    "modelId": "m2",
+                    "scenarioId": "s3",
+                    "summary": {"values": {}, "score": 3},
+                    "decisionModelV2": {
+                        "legacy": {
+                            "canonicalScore": 3,
+                        },
+                    },
+                    "scenario": {"dimensions": {"stakes": "medium"}},
+                },
+            ],
+        }
+
+        result = run_analyze_basic(input_data)
+
+        assert result["success"] is True
+        per_model = result["analysis"]["perModel"]
+        assert per_model["m1"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        assert per_model["m2"]["overall"]["mean"] == pytest.approx(4.0, abs=0.001)
+        pairwise = result["analysis"]["modelAgreement"]["pairwise"]["m1:m2"]
+        assert pairwise["spearmanRho"] == pytest.approx(1.0, abs=0.001)
+        contested = result["analysis"]["mostContestedScenarios"]
+        assert contested[0]["variance"] == pytest.approx(0.0, abs=0.001)
 
     def test_legacy_mode_with_transcript_ids(self):
         """Test backwards compatibility with transcriptIds only."""
@@ -643,13 +800,13 @@ class TestAnalyzeBasicIntegration:
             "runId": "test-run-9",
             "transcripts": [
                 {"id": "t1", "modelId": "m1", "scenarioId": "s1",
-                 "summary": {"score": 0.2}, "scenario": {"dimensions": {"stakes": "low"}}},
+                 "summary": {"score": 2}, "scenario": {"dimensions": {"stakes": "low"}}},
                 {"id": "t2", "modelId": "m1", "scenarioId": "s2",
-                 "summary": {"score": 0.3}, "scenario": {"dimensions": {"stakes": "low"}}},
+                 "summary": {"score": 2}, "scenario": {"dimensions": {"stakes": "low"}}},
                 {"id": "t3", "modelId": "m1", "scenarioId": "s3",
-                 "summary": {"score": 0.8}, "scenario": {"dimensions": {"stakes": "high"}}},
+                 "summary": {"score": 4}, "scenario": {"dimensions": {"stakes": "high"}}},
                 {"id": "t4", "modelId": "m1", "scenarioId": "s4",
-                 "summary": {"score": 0.9}, "scenario": {"dimensions": {"stakes": "high"}}},
+                 "summary": {"score": 5}, "scenario": {"dimensions": {"stakes": "high"}}},
             ],
         }
         result = run_analyze_basic(input_data)

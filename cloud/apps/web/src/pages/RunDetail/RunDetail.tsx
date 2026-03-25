@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import type * as React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Play } from 'lucide-react';
 import { formatTrialSignature } from '@valuerank/shared/trial-signature';
@@ -20,7 +21,7 @@ import { useRun } from '../../hooks/useRun';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import { useRunMutations } from '../../hooks/useRunMutations';
 import { exportRunAdjudicationCSV, exportRunAsCSV, exportTranscriptsAsJSON } from '../../api/export';
-import type { Run, TaskResult } from '../../api/operations/runs';
+import type { Run } from '../../api/operations/runs';
 import { RunHeader } from './RunHeader';
 import { RunMetadata } from './RunMetadata';
 import { RunNameEditor } from './RunNameEditor';
@@ -43,97 +44,18 @@ function getDisplaySignature(signature: string): string {
   return signature !== 'v?td' ? signature : 'Unknown Signature';
 }
 
-function inferProviderFromModelId(modelId: string): string | null {
-  const normalized = modelId.toLowerCase();
-
-  if (normalized.includes('gpt') || normalized.includes('openai')) return 'OpenAI';
-  if (normalized.includes('claude') || normalized.includes('anthropic')) return 'Anthropic';
-  if (normalized.includes('gemini') || normalized.includes('google')) return 'Google';
-  if (normalized.includes('deepseek')) return 'DeepSeek';
-  if (normalized.includes('mistral')) return 'Mistral';
-  if (normalized.includes('grok') || normalized.includes('xai')) return 'xAI';
-
-  return null;
-}
-
-function isBudgetFailure(errorMessage: string): boolean {
-  const normalized = errorMessage.toLowerCase();
-  const budgetPatterns = [
-    'insufficient',
-    'insufficient_quota',
-    'insufficient credits',
-    'quota',
-    'credit',
-    'credits',
-    'balance',
-    'low balance',
-    'billing',
-    'hard limit',
-    'rate limit budget',
-    'payment',
-    'payment required',
-    'out of money',
-    'out of funds',
-    'exceeded your current quota',
-  ];
-  return budgetPatterns.some((pattern) => normalized.includes(pattern));
-}
-
-function getBudgetFailureBanner(run: Run): string | null {
-  const providers = new Set<string>();
-
-  const failedProbeBudgetHits = (run.failedProbes ?? []).filter((probe) =>
-    probe.errorMessage !== null && isBudgetFailure(probe.errorMessage)
+function getStalledModelsBanner(run: Run): React.ReactNode | null {
+  if (run.status !== 'RUNNING') return null;
+  if (run.stalledModels == null || run.stalledModels.length === 0) return null;
+  const count = run.stalledModels.length;
+  const label = count === 1 ? 'model is' : 'models are';
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+      <p className="text-sm font-medium text-amber-800">
+        {`${count} ${label} stalled (no progress for 3+ minutes): ${run.stalledModels.join(', ')}`}
+      </p>
+    </div>
   );
-  for (const probe of failedProbeBudgetHits) {
-    const provider = inferProviderFromModelId(probe.modelId);
-    if (provider) providers.add(provider);
-  }
-
-  const recentTaskBudgetHits = run.recentTasks.filter((task) =>
-    task.status === 'FAILED' &&
-    task.error !== null &&
-    isBudgetFailure(task.error)
-  );
-  for (const task of recentTaskBudgetHits) {
-    const provider = inferProviderFromModelId(task.modelId);
-    if (provider) providers.add(provider);
-  }
-
-  const hitCount = failedProbeBudgetHits.length + recentTaskBudgetHits.length;
-  if (hitCount === 0) {
-    return null;
-  }
-
-  const providerList = Array.from(providers);
-  if (providerList.length === 1 && providerList[0] !== undefined) {
-    return `${providerList[0]} budget exhausted. Check provider credits.`;
-  }
-  if (providerList.length > 1) {
-    return `${providerList.join(', ')} budgets exhausted. Check provider credits.`;
-  }
-
-  return 'Target AI provider budget exhausted. Check provider credits.';
-}
-
-function getSystemFailureBanner(run: Run): string | null {
-  if (run.status !== 'FAILED') return null;
-
-  const failedTaskWithError = run.recentTasks.find(
-    (task: TaskResult) => task.status === 'FAILED' && task.error
-  );
-  if (!failedTaskWithError) {
-    return 'API failure. Check budget.';
-  }
-
-  const providerName = inferProviderFromModelId(failedTaskWithError.modelId);
-  const prefix = providerName ?? 'API';
-
-  if (isBudgetFailure(failedTaskWithError.error ?? '')) {
-    return `${prefix} failure. Check budget.`;
-  }
-
-  return 'API failure. Check budget.';
 }
 
 export function RunDetail() {
@@ -352,8 +274,7 @@ export function RunDetail() {
   const isActive = run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'SUMMARIZING';
   const isPaused = run.status === 'PAUSED';
   const isTerminal = run.status === 'COMPLETED' || run.status === 'FAILED' || run.status === 'CANCELLED';
-  const budgetFailureBanner = getBudgetFailureBanner(run);
-  const systemFailureBanner = budgetFailureBanner === null ? getSystemFailureBanner(run) : null;
+  const stalledModelsBanner = getStalledModelsBanner(run);
   const trialSignature = formatTrialSignature(
     run.definitionVersion ?? run.definition?.version ?? null,
     run.config?.temperature ?? null
@@ -386,17 +307,7 @@ export function RunDetail() {
         onDelete={() => setIsDeleteConfirmOpen(true)}
       />
 
-      {budgetFailureBanner && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-medium text-amber-800">{budgetFailureBanner}</p>
-        </div>
-      )}
-
-      {systemFailureBanner && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3">
-          <p className="text-sm font-medium text-red-700">{systemFailureBanner}</p>
-        </div>
-      )}
+      {stalledModelsBanner}
 
       {/* Summarization controls */}
       {(run.status === 'SUMMARIZING' || isTerminal) && run.transcriptCount > 0 && (

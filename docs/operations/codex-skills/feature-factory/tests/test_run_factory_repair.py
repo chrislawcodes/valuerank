@@ -137,6 +137,78 @@ class RepairDecisionTests(unittest.TestCase):
         )
         self.assertEqual(action, "discover")
 
+    def test_recommended_next_action_blocks_spec_when_unresolved_items_remain(self) -> None:
+        stages = {
+            "spec": stage_state(),
+            "plan": stage_state(),
+            "tasks": stage_state(),
+            "diff": stage_state(),
+            "closeout": stage_state(),
+        }
+        action = MODULE.recommended_next_action(
+            "feature-workflow-repair",
+            {
+                "blocked": {"active": False},
+                "delivery": {},
+                "discovery": {
+                    "required": False,
+                    "complete": True,
+                    "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                },
+            },
+            stages,
+            True,
+        )
+        self.assertEqual(action, "discover")
+
+    def test_blocking_unresolved_items_treats_malformed_entries_as_blocking(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items({"unresolved": ["bad", {"no_item": "x"}, {"item": " "}]}),
+            [
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+            ],
+        )
+        self.assertEqual(
+            MODULE.blocking_unresolved_items({"unresolved": None}),
+            [{"item": "<malformed discovery state>", "deferred": False, "malformed": True}],
+        )
+
+    def test_blocking_unresolved_items_requires_boolean_true_for_deferred(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items(
+                {
+                    "unresolved": [
+                        {"item": "Decide API shape", "deferred": "false"},
+                        {"item": "Confirm rollout", "deferred": 1},
+                    ]
+                }
+            ),
+            [
+                {"item": "Decide API shape", "deferred": "false"},
+                {"item": "Confirm rollout", "deferred": 1},
+            ],
+        )
+
+    def test_blocking_unresolved_items_blocks_malformed_entries_even_if_deferred(self) -> None:
+        self.assertEqual(
+            MODULE.blocking_unresolved_items(
+                {
+                    "unresolved": [
+                        {"item": None, "deferred": True},
+                        {"item": " ", "deferred": True},
+                        {"no_item": "x", "deferred": True},
+                    ]
+                }
+            ),
+            [
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+                {"item": "<malformed unresolved item>", "deferred": False, "malformed": True},
+            ],
+        )
+
     def test_recommended_next_action_keeps_blocked_state_ahead_of_discovery(self) -> None:
         stages = {
             "spec": stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True),
@@ -337,6 +409,95 @@ class RepairDecisionTests(unittest.TestCase):
         self.assertIn("- asked-count: 2", output)
         self.assertIn("- remaining: 3", output)
 
+    def test_status_reports_blocking_unresolved_discovery_items(self) -> None:
+        stages = {
+            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+            for stage in ("spec", "plan", "tasks", "diff")
+        }
+        stages["closeout"] = stage_state()
+        buffer = io.StringIO()
+        discovery = {
+            "required": True,
+            "complete": True,
+            "question_count": 2,
+            "asked_count": 2,
+            "questions": [],
+            "assumptions": [],
+            "summary": "",
+            "updated_at": 1,
+            "answers": {},
+            "unresolved": [
+                {"item": "Decide API shape", "deferred": False},
+                {"item": "Confirm rollout plan", "deferred": True},
+            ],
+            "non_goals": [],
+            "acceptance_criteria": [],
+        }
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        ), patch.object(
+            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+        ), patch.object(
+            MODULE, "reconciliation_state", return_value=(True, "")
+        ), patch.object(
+            MODULE, "current_branch_name", return_value="feature-branch"
+        ), patch.object(
+            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+        ), patch.object(
+            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+        ), patch.object(
+            MODULE, "discovery_state", return_value=discovery
+        ), redirect_stdout(buffer):
+            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
+
+        output = buffer.getvalue()
+        self.assertIn("- unresolved-open: 1", output)
+        self.assertIn("- unresolved-deferred: 1", output)
+        self.assertIn("- action: resolve or defer unresolved items before spec", output)
+        self.assertIn("next-action: discover", output)
+
+    def test_status_handles_malformed_unresolved_state_as_blocking(self) -> None:
+        stages = {
+            stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
+            for stage in ("spec", "plan", "tasks", "diff")
+        }
+        stages["closeout"] = stage_state()
+        buffer = io.StringIO()
+        discovery = {
+            "required": True,
+            "complete": True,
+            "question_count": 0,
+            "asked_count": 0,
+            "questions": [],
+            "assumptions": [],
+            "summary": "",
+            "updated_at": 1,
+            "answers": {},
+            "unresolved": None,
+            "non_goals": [],
+            "acceptance_criteria": [],
+        }
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "load_workflow_state", return_value={"blocked": {"active": False}, "delivery": {}, "discovery": discovery}
+        ), patch.object(
+            MODULE, "stage_manifest_state", side_effect=lambda _slug, stage: stages[stage]
+        ), patch.object(
+            MODULE, "reconciliation_state", return_value=(True, "")
+        ), patch.object(
+            MODULE, "current_branch_name", return_value="feature-branch"
+        ), patch.object(
+            MODULE, "upstream_branch_name", return_value="origin/feature-branch"
+        ), patch.object(
+            MODULE, "diff_review_budget_state", return_value={"artifact_exists": False}
+        ), patch.object(
+            MODULE, "discovery_state", return_value=discovery
+        ), redirect_stdout(buffer):
+            MODULE.command_status(SimpleNamespace(slug="feature-workflow-discovery-shaping"))
+
+        output = buffer.getvalue()
+        self.assertIn("- unresolved-open: 1", output)
+        self.assertIn("- action: use discover --clear to repair malformed discovery state", output)
+
     def test_recommended_next_action_blocks_closeout_on_stale_delivery_head(self) -> None:
         stages = {
             stage: stage_state(artifact_exists=True, artifact_meaningful=True, manifest_exists=True, healthy=True)
@@ -467,6 +628,47 @@ class RepairDecisionTests(unittest.TestCase):
 
         self.assertIn("discovery", str(ctx.exception))
 
+    def test_command_checkpoint_blocks_spec_until_unresolved_items_are_cleared(self) -> None:
+        args = SimpleNamespace(
+            slug="feature-workflow-discovery-shaping",
+            stage="spec",
+            path=[],
+            artifact="",
+            base_ref=None,
+            context=[],
+            allow_dirty_path=[],
+            max_artifact_chars=None,
+            max_context_chars=None,
+            max_total_chars=None,
+            gemini_timeout_seconds=120,
+            gemini_retries=1,
+            repair_timeout_seconds=30,
+            fallback=False,
+            use_existing_artifact=False,
+            allow_large_diff_rerun=False,
+            required_reviews=None,
+        )
+        with patch.object(MODULE, "ensure_sync"), patch.object(
+            MODULE, "prerequisite_failure", return_value=None
+        ), patch.object(
+            MODULE,
+            "discovery_state",
+            return_value={
+                "required": True,
+                "complete": True,
+                "question_count": 5,
+                "asked_count": 5,
+                "answers": {},
+                "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                "non_goals": [],
+                "acceptance_criteria": [],
+            },
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                MODULE.command_checkpoint(args)
+
+        self.assertIn("unresolved", str(ctx.exception))
+
     def test_command_discover_records_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -498,6 +700,110 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertIn("Keep the first slice small.", discovery["assumptions"])
             self.assertIn("Five questions are expected", discovery["summary"])
             self.assertEqual(discovery["version"], 2)
+
+    def test_command_discover_rejects_force_complete_with_unresolved_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 1,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(force_complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    MODULE.command_discover(args)
+
+        self.assertIn("unresolved", str(ctx.exception))
+
+    def test_command_discover_can_resolve_then_complete_in_same_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 2,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": [{"item": "Decide API shape", "deferred": False}],
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(resolve="Decide API shape", complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                exit_code = MODULE.command_discover(args)
+
+            self.assertEqual(exit_code, 0)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertTrue(saved["discovery"]["complete"])
+            self.assertEqual(saved["discovery"]["unresolved"], [])
+
+    def test_command_discover_rejects_malformed_state_with_clear_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "discovery": {
+                            "version": 2,
+                            "required": True,
+                            "complete": False,
+                            "question_count": 2,
+                            "asked_count": 2,
+                            "questions": [],
+                            "assumptions": [],
+                            "summary": "",
+                            "updated_at": 1,
+                            "answers": {},
+                            "unresolved": None,
+                            "non_goals": [],
+                            "acceptance_criteria": [],
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self._discover_args(complete=True)
+            with patch.object(MODULE, "ensure_sync"), patch.object(
+                MODULE, "factory_state_path", return_value=state_path
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    MODULE.command_discover(args)
+
+        self.assertIn("discover --clear", str(ctx.exception))
 
     def test_command_discover_clear_resets_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -546,12 +852,17 @@ class RepairDecisionTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             saved = json.loads(state_path.read_text(encoding="utf-8"))
             discovery = saved["discovery"]
-            self.assertFalse(discovery["required"])
-            self.assertTrue(discovery["complete"])
-            self.assertEqual(discovery["question_count"], 0)
-            self.assertEqual(discovery["asked_count"], 0)
-            self.assertEqual(discovery["questions"], [])
-            self.assertEqual(discovery["assumptions"], [])
+            self.assertTrue(discovery["required"])
+            self.assertFalse(discovery["complete"])
+            self.assertEqual(discovery["question_count"], 5)
+            self.assertEqual(discovery["asked_count"], 3)
+            self.assertEqual(discovery["questions"], [{"question": "a", "recommendation": "b", "rationale": "c"}])
+            self.assertEqual(discovery["assumptions"], ["x"])
+            self.assertEqual(discovery["summary"], "old")
+            self.assertEqual(discovery["answers"], {})
+            self.assertEqual(discovery["non_goals"], [])
+            self.assertEqual(discovery["acceptance_criteria"], [])
+            self.assertEqual(discovery["unresolved"], [])
 
     def test_command_discover_rejects_premature_completion_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

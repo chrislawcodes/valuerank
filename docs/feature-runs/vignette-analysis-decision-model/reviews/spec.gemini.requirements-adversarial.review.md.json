@@ -1,0 +1,57 @@
+{
+  "session_id": "e5a9783d-a413-4fc0-8ee3-68c64e779278",
+  "response": "## Findings\n\n1.  **Critical: Project Convention Violation.** The spec repeatedly uses the term \"definition\" (e.g., \"transcript definition snapshot\") when referring to vignettes. This directly violates the project's canonical terminology specified in `GEMINI.md` and `docs/canonical-glossary.md`, which mandates using `vignette` instead of `definition`. Adherence to the canonical glossary is a core project principle.\n\n2.  **High: Type Contract Allows Invalid States.** The `CanonicalDecision` and `manualOverride.appliedDecision` types permit logically inconsistent states, such as `{ direction: 'favor_first', strength: 'neutral' }`. The spec lists the valid pairings under \"Required behavior,\" but the type definition itself should enforce this constraint. A discriminated union would make invalid states unrepresentable at the type level, significantly strengthening the contract and preventing an entire class of potential bugs.\n\n3.  **Medium: Confusing `LegacyDecisionCompat` Contract.** The distinction between `rawScore` and `canonicalScore` is ambiguous. The name `rawScore` implies it's an original, unprocessed value, yet the spec states it can be *derived* from the `CanonicalDecision` during a manual override. This introduces confusion and could lead to implementation errors or incorrect assumptions by future developers about data provenance. The rules for their generation and their relationship in edge cases (e.g., when they might conflict) need clarification.\n\n4.  **Medium: Incomplete `parseClass` Enum.** The `RawDecisionEvidence.parseClass` enum is missing a `'manual'` variant. The spec describes manual overrides as the highest-precedence conversion rule and even suggests a `parsePath` of `manual.override`, but there is no corresponding `parseClass` to classify the evidence itself as manually authored. This is an omission that weakens the auditability and classification of the raw evidence.\n\n5.  **Low: Ambiguity in Handling Legacy Data.** The spec does not explicitly define how to handle legacy transcripts that have non-numeric, string-based `decisionCode` values (e.g., `\"AMBIGUOUS\"`). The rules cover valid numeric scores and nulls, but this case is omitted, leaving its implementation open to interpretation.\n\n## Residual Risks\n\n1.  **Tight Coupling to `parsePath` String Format.** The adapter's logic for determining direction and strength relies on parsing the `parsePath` string (e.g., `exact.favor_first.strong`). This creates a brittle dependency. While `parserVersion` helps identify the source, a future change to the `parsePath` format in the parser worker would break the decision adapter. The contract is coupled to another component's implementation detail, not a formal interface.\n\n2.  **Undefined Constraints on Manual Overrides.** The `manualOverride` object in `RawDecisionEvidence` includes `overriddenByUserId`, but the spec doesn't state whether this field is required. If `null` is permitted, it would be possible to have unattributed manual decisions in the system, weakening the audit trail that the feature is designed to create.\n\n3.  **No Protection Against Stale Metadata.** The spec correctly states that the adapter should use the value registry snapshot attached to the vignette. However, it's a risk that an implementation could mistakenly resolve against the *live* value registry. While the spec intends the correct behavior, the risk of implementation error is non-trivial and should be explicitly highlighted in test cases that ensure a stale vignette snapshot resolves against its own attached registry, not the current one.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 39300
+        },
+        "tokens": {
+          "input": 15317,
+          "prompt": 15317,
+          "candidates": 743,
+          "total": 19188,
+          "cached": 0,
+          "thoughts": 3128,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 39300,
+            "tokens": {
+              "input": 15317,
+              "prompt": 15317,
+              "candidates": 743,
+              "total": 19188,
+              "cached": 0,
+              "thoughts": 3128,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

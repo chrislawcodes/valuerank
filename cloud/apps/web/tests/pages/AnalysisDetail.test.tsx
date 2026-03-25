@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Provider, createClient } from 'urql';
 import { AnalysisDetail } from '../../src/pages/AnalysisDetail';
 
@@ -27,6 +27,17 @@ function LocationProbe() {
   return <div data-testid="location-search">{location.search}</div>;
 }
 
+function NavigationProbe() {
+  const navigate = useNavigate();
+
+  return (
+    <div>
+      <button type="button" onClick={() => navigate(-1)}>Browser back</button>
+      <button type="button" onClick={() => navigate(1)}>Browser forward</button>
+    </div>
+  );
+}
+
 vi.mock('../../src/hooks/useRun', () => ({
   useRun: (args: unknown) => mockUseRun(args),
 }));
@@ -45,6 +56,8 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     runId,
     isAggregate,
     transcripts,
+    activeTab,
+    onTabChange,
     analysisMode,
     onAnalysisModeChange,
     onSingleVignetteChange,
@@ -54,6 +67,8 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
     runId: string;
     isAggregate?: boolean;
     transcripts?: Array<unknown>;
+    activeTab?: 'overview' | 'decisions' | 'scenarios';
+    onTabChange?: (tab: 'overview' | 'decisions' | 'scenarios') => void;
     analysisMode?: 'single' | 'paired';
     onAnalysisModeChange?: (mode: 'single' | 'paired') => void;
     onSingleVignetteChange?: (runId: string) => void;
@@ -72,6 +87,15 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
       <button type="button" aria-pressed={analysisMode === 'paired'} onClick={() => onAnalysisModeChange?.('paired')}>
         Paired vignettes
       </button>
+      <button type="button" aria-pressed={activeTab === 'overview'} onClick={() => onTabChange?.('overview')}>
+        Overview
+      </button>
+      <button type="button" aria-pressed={activeTab === 'decisions'} onClick={() => onTabChange?.('decisions')}>
+        Decisions
+      </button>
+      <button type="button" aria-pressed={activeTab === 'scenarios'} onClick={() => onTabChange?.('scenarios')}>
+        Scenarios
+      </button>
       {analysisMode === 'single' && companionRun ? (
         <label>
           Vignette
@@ -89,12 +113,15 @@ vi.mock('../../src/components/analysis/AnalysisPanel', () => ({
   ),
 }));
 
-function renderWithRouter(runIdOrEntry: string) {
-  const initialEntry = runIdOrEntry.startsWith('/') ? runIdOrEntry : `/analysis/${runIdOrEntry}`;
+function renderWithRouter(runIdOrEntry: string | string[], initialIndex = 0) {
+  const initialEntries = Array.isArray(runIdOrEntry)
+    ? runIdOrEntry
+    : [runIdOrEntry.startsWith('/') ? runIdOrEntry : `/analysis/${runIdOrEntry}`];
 
   return render(
     <Provider value={mockClient}>
-      <MemoryRouter initialEntries={[initialEntry]}>
+      <MemoryRouter initialEntries={initialEntries} initialIndex={initialIndex}>
+        <NavigationProbe />
         <LocationProbe />
         <Routes>
           <Route path="/analysis/:id" element={<AnalysisDetail />} />
@@ -242,7 +269,7 @@ describe('AnalysisDetail', () => {
       expect(screen.getByTestId('analysis-panel')).toBeInTheDocument();
     });
 
-    it('shows the analysis mode toggle and updates the URL when switched', () => {
+    it('shows the analysis mode toggle and updates the URL when switched', async () => {
       mockUseRun.mockReturnValue({
         run: {
           id: 'run-123',
@@ -255,18 +282,88 @@ describe('AnalysisDetail', () => {
 
       renderWithRouter('/analysis/run-123');
 
-      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('');
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /overview/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /decisions/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /scenarios/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=single');
+      });
 
       fireEvent.click(screen.getByRole('button', { name: /paired vignettes/i }));
 
-      expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
-      expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('location-search')).toHaveTextContent('?mode=paired');
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired');
+      });
     });
 
-    it('switches to the selected single vignette run and preserves single mode', () => {
+    it('updates the URL when the active tab changes without resetting mode', async () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter('/analysis/run-123?tab=overview&mode=paired&view=summary');
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=paired&view=summary');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /scenarios/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /scenarios/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=paired&view=summary');
+      });
+    });
+
+    it('restores tab and mode when using browser back and forward', async () => {
+      mockUseRun.mockReturnValue({
+        run: {
+          id: 'run-123',
+          analysisStatus: 'completed',
+          definition: { name: 'Test Definition' },
+        },
+        loading: false,
+        error: null,
+      });
+
+      renderWithRouter([
+        '/analysis/run-123?tab=overview&mode=single',
+        '/analysis/run-123?tab=scenarios&mode=paired',
+      ], 1);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=paired');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /browser back/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=overview&mode=single');
+        expect(screen.getByRole('button', { name: /overview/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /single vignette/i })).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /browser forward/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=paired');
+        expect(screen.getByRole('button', { name: /scenarios/i })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: /paired vignettes/i })).toHaveAttribute('aria-pressed', 'true');
+      });
+    });
+
+    it('switches to the selected single vignette run and preserves single mode', async () => {
       mockUseRun.mockImplementation(({ id }: { id: string }) => ({
         run: {
           id,
@@ -317,6 +414,10 @@ describe('AnalysisDetail', () => {
       });
 
       renderWithRouter('/analysis/run-123?tab=scenarios');
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=scenarios&mode=single');
+      });
 
       fireEvent.change(screen.getByLabelText('Vignette'), { target: { value: 'run-456' } });
 

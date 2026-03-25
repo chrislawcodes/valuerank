@@ -1,0 +1,36 @@
+{
+  "repo_root": ".",
+  "git_head_sha": "a1c887eb123d02287d5f3f4e7ac2e95a1fa42056",
+  "git_base_ref": "9cf5b60dc2f1274c190de0f6d382366a86555257",
+  "git_base_sha": "9cf5b60dc2f1274c190de0f6d382366a86555257",
+  "paths": [
+    "cloud/apps/web/src/components/runs/TranscriptList.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptRow.tsx",
+    "cloud/apps/web/src/components/runs/TranscriptViewer.tsx",
+    "cloud/apps/web/src/pages/AnalysisConditionDetail.tsx",
+    "cloud/apps/web/src/pages/AnalysisTranscripts.tsx",
+    "cloud/apps/web/src/pages/DomainAnalysisValueDetail.tsx",
+    "cloud/apps/web/tests/components/runs/RunResults.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptList.test.tsx",
+    "cloud/apps/web/tests/components/runs/TranscriptViewer.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/pages/AnalysisTranscripts.test.tsx",
+    "cloud/apps/web/tests/pages/DomainAnalysisValueDetail.test.tsx",
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts"
+  ],
+  "allowed_dirty_paths": [
+    "cloud/apps/web/src/utils/transcriptDecisionModel.ts",
+    "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts",
+    "docs/feature-runs/feature-workflow-discovery-shaping",
+    "docs/feature-runs/transcript-summarization-speedup",
+    "docs/operations/codex-skills/feature-factory",
+    "docs/operations/codex-skills/review-lens/scripts",
+    "docs/plans/feature-workflow-plan.md"
+  ],
+  "untracked_files_included": [
+    "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts"
+  ],
+  "artifact_path": "docs/feature-runs/vignette-analysis-group1-ui/reviews/implementation.diff.patch",
+  "allow_empty_diff": false
+}

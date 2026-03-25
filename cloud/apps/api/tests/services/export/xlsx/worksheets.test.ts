@@ -4,7 +4,7 @@
  * Tests for xlsx worksheet builder functions.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import ExcelJS from 'exceljs';
 
 import {
@@ -228,6 +228,57 @@ describe('buildModelSummarySheet', () => {
     const modelAStat = stats.find((s) => s.modelName === 'model-a');
     // Mean should only include valid numeric codes
     expect(modelAStat!.meanScore).toBe(3);
+  });
+
+  it('uses canonical compatibility scores when the V2 flag is enabled', async () => {
+    vi.resetModules();
+    vi.stubEnv('DECISION_MODEL_V2', 'true');
+    try {
+      const { buildModelSummarySheet: buildModelSummarySheetV2 } = await import(
+        '../../../../src/services/export/xlsx/worksheets/model-summary.js'
+      );
+
+      const workbookV2 = createWorkbook('test-run');
+      const transcripts = [
+        createMockTranscript({
+          modelId: 'model-v2',
+          decisionCode: 'manual',
+          decisionMetadata: {
+            matchedLabel: 'Achievement',
+            parseClass: 'exact',
+            parsePath: 'exact.favor_first.strong',
+            parserVersion: 'parser-1',
+            responseExcerpt: 'Achievement',
+          },
+          definitionSnapshot: {
+            dimensions: [{ name: 'Achievement' }, { name: 'Benevolence_Dependability' }],
+            methodology: { presentation_order: 'A_first' },
+          },
+          scenario: {
+            id: 'scenario-1',
+            definitionId: 'def-1',
+            name: 'Test Scenario',
+            body: 'Test body',
+            orientationFlipped: false,
+            content: {
+              dimensions: {
+                Autonomy: 3,
+                Tradition: 2,
+              },
+            },
+            hash: 'abc123',
+            createdAt: new Date(),
+            deletedAt: null,
+          },
+        }),
+      ];
+
+      const stats = buildModelSummarySheetV2(workbookV2, transcripts);
+      expect(stats[0]?.meanScore).toBe(5);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });
 

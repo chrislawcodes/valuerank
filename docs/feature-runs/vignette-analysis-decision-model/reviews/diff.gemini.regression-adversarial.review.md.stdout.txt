@@ -1,0 +1,57 @@
+{
+  "session_id": "32526bef-ec9b-468a-acd1-6173d0b99f04",
+  "response": "## Findings\n\n1.  **All-or-Nothing UI Downgrade:** The implementation uses an `every()` check to determine the `reportDecisionDisplayMode`. This creates an \"all-or-nothing\" scenario where the entire transcript table's \"Decision\" column is downgraded to the legacy format (`decisionCode`) if even a single transcript in the set lacks the V2 data model. This forces a loss of information for the user, as 99 transcripts with rich V2 data will be displayed in the legacy format just because one is missing it. The UI should instead determine the display format on a row-by-row basis to present the best available information for each transcript.\n\n2.  **Brittle Data Contract:** The logic decides to use the `'audit'` display mode based solely on the *presence* of the `decisionModelV2` object. It then unconditionally calls `formatCanonicalDecisionHeadline(transcript)`, assuming the *internal structure* of that object is valid. If an edge case produces a `decisionModelV2` object that is present but malformed (e.g., missing the `canonical` property), the `formatCanonicalDecisionHeadline` function is likely to throw an error and crash the component. The condition for switching the UI mode should be as robust as the function that consumes the data.\n\n3.  **Incomplete Test Coverage:** The new tests validate the \"all V2\" and \"mixed V1/V2\" scenarios. However, they fail to cover the edge case where a condition is selected and the API returns an empty array of transcripts. While the current logic appears to handle this state without crashing, it remains an untested path.\n\n## Residual Risks\n\n1.  **`TranscriptViewer` Behavior Unknown:** The component passes the `decisionDisplayMode` prop to the `TranscriptViewer`. The provided test mocks this child component, so we cannot verify that `TranscriptViewer` correctly handles the `'audit'` vs `'legacy'` modes. A risk remains that the viewer component itself does not implement the divergent display logic correctly or contains similar flaws.\n\n2.  **Implicit Trust in Utilities:** The change relies on utility functions (`formatCanonicalDecisionHeadline`, `hasTranscriptDecisionModelV2`) whose source code is not in the diff. The component's stability is fully dependent on the robustness of these external functions. If `formatCanonicalDecisionHeadline` is not written defensively to handle unexpected or null values within the `decisionModelV2` object, it remains a potential crash point.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 29656
+        },
+        "tokens": {
+          "input": 16343,
+          "prompt": 16343,
+          "candidates": 516,
+          "total": 19194,
+          "cached": 0,
+          "thoughts": 2335,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 29656,
+            "tokens": {
+              "input": 16343,
+              "prompt": 16343,
+              "candidates": 516,
+              "total": 19194,
+              "cached": 0,
+              "thoughts": 2335,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

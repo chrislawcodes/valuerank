@@ -1,0 +1,57 @@
+{
+  "session_id": "b47d6d2e-75e6-4d37-8bbc-f83e1c5dac2f",
+  "response": "An operational-risk-focused adversarial review of the implementation patch follows.\n\n## Findings\n\n### 1. (High) Increased Operational Blindness to Cost and Performance Regressions\n\nThe patch removes the `tokenCount` field from two key analysis surfaces: `TranscriptViewer` and the transcript list in `DomainAnalysisValueDetail`.\n\n*   **Risk:** Token count is a primary driver of LLM cost and a key indicator of model performance and verbosity. Removing this data from summary views makes it significantly harder for operators and analysts to spot costly anomalies or performance regressions at a glance. For example, a model update that inadvertently doubles verbosity would now be much harder to detect, as the cost implications would be hidden until an invoice arrives.\n*   **Adversarial Case:** A subtle bug in a prompt causes a model to output 10x the normal number of tokens for a specific, rare scenario. This would previously have been obvious as an outlier in the \"Tokens\" column of a transcript list. Now, an operator would need to manually click into and inspect every transcript, making detection of such costly edge cases unlikely.\n*   **Recommendation:** Reinstate the `tokenCount` field in summary list views. If UI clutter is a concern, make it a configurable column. For single-item views like `TranscriptViewer`, the information is low-cost to display and high-value for operational context.\n\n### 2. (Medium) Brittle Sorting Logic with Hidden Data Format Assumptions\n\nThe patch introduces a new sorting tie-breaker in `TranscriptList.tsx` that relies on a specific format for transcript IDs. The implementation is `a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' })`.\n\n*   **Risk:** The `numeric: true` option is effective for IDs like `t1`, `t2`, `t10`, but it makes a strong, hidden assumption that all transcript IDs will follow this alphanumeric pattern. If the ID-generation scheme changes in the future (e.g., to UUIDs or a different prefixed format), this sorting logic could fail silently, leading to unpredictable or unstable row ordering. This creates a maintenance risk, as a change in one part of the system (ID generation) could break a seemingly unrelated part (UI sorting) in non-obvious ways.\n*   **Adversarial Case:** The backend team changes the ID format from sequential integers (`transcript-123`) to a format with non-numeric components (`transcript-a1b2`, `transcript-c3d4`) or UUIDs. The `numeric: true` flag may lead to inconsistent sorting behavior across different browsers and JavaScript runtimes, breaking the stability the patch intended to add.\n*   **Recommendation:** Use a universally stable, format-agnostic tie-breaker. A standard lexicographical comparison (`a.id.localeCompare(b.id)`) is more robust and carries no assumptions about the data's format.\n\n### 3. (Low) Inconsistent Handling of Partial V2 Data Payloads\n\nThe new utility function `hasRenderableTranscriptDecisionModelV2` correctly guards against rendering crashes from incomplete `decisionModelV2` data. However, in `TranscriptList.tsx`, this guard is only applied within the 'audit' display mode.\n\n```typescript\n// cloud/apps/web/src/components/runs/TranscriptList.tsx\n\nfunction getTranscriptDecisionValue(\n  //...\n): string | number {\n  if (displayMode === 'audit') {\n    if (!hasRenderableTranscriptDecisionModelV2(transcript)) {\n      // This correctly falls back for a non-renderable transcript in 'audit' mode.\n      return getTranscriptDecisionSortValue(transcript, 'legacy');\n    }\n    return getTranscriptDecisionSortValue(transcript, displayMode);\n  }\n\n  // RISK: Not in 'audit' mode. What if a non-renderable V2 transcript\n  // is present? `getTranscriptDecisionSortValue` might be called with\n  // a mode of 'legacy' but a transcript that has a partial V2 object.\n  return getTranscriptDecisionSortValue(\n    transcript,\n    displayMode === 'normalized' ? 'normalized' : 'legacy',\n  );\n}\n```\n\n*   **Risk:** The logic does not explicitly handle the case of a non-renderable V2 transcript when `displayMode` is *not* `'audit'`. The `getTranscriptDecisionSortValue` function might receive a transcript with a partial `decisionModelV2` object, which could lead to `TypeError` exceptions if downstream code assumes the object is complete. While the new unit tests for `hasRenderableTranscriptDecisionModelV2` are good, they don't cover its integration and usage paths in all display modes.\n*   **Recommendation:** The `hasRenderableTranscriptDecisionModelV2` check should be applied universally at the entry point of the function before any mode-specific logic, ensuring that any transcript with a partial V2 payload is always treated as a 'legacy' transcript for sorting purposes, regardless of the table's overall display mode.\n\n## Residual Risks\n\n*   **Reliance on Developer Discipline:** The system's stability now depends on developers consistently using the `hasRenderableTranscriptDecisionModelV2` guard function instead of a simple truthy check (`if (transcript.decisionModelV2)`). An omission in a future component could re-introduce rendering errors for transcripts with partial V2 data payloads.\n*   **Inconsistent String Management:** The patch introduces constants for some UI text (e.g., `CONDITION_COPY`) but renames \"Canonical decision\" to \"Decision summary\" via hardcoded strings in multiple components and tests. This creates a risk of future inconsistency if the label needs to be changed again, as a developer might miss one of the locations. A centralized string constant file would mitigate this.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 36588
+        },
+        "tokens": {
+          "input": 6460,
+          "prompt": 18729,
+          "candidates": 1244,
+          "total": 22308,
+          "cached": 12269,
+          "thoughts": 2335,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 36588,
+            "tokens": {
+              "input": 6460,
+              "prompt": 18729,
+              "candidates": 1244,
+              "total": 22308,
+              "cached": 12269,
+              "thoughts": 2335,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

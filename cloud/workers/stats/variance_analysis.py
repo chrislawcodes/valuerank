@@ -8,6 +8,8 @@ to measure model consistency and response stability.
 from typing import Any, Literal, Optional, TypedDict
 import numpy as np
 
+from stats.decision_model import normalize_resolved_score, resolve_transcript_score_details
+
 
 class _VarianceStatsBase(TypedDict):
     """Required variance statistics fields."""
@@ -149,12 +151,11 @@ def compute_variance_analysis(
         scenario_id = t.get("scenarioId", "unknown")
         model_id = t.get("modelId", "unknown")
         sample_index = t.get("sampleIndex", 0)
-        summary = t.get("summary", {})
-        score = summary.get("score")
         scenario = t.get("scenario", {})
-
-        if score is None:
+        resolved = resolve_transcript_score_details(t)
+        if resolved is None:
             continue
+        score, already_normalized = resolved
 
         key = (scenario_id, model_id)
         if key not in grouped:
@@ -162,10 +163,9 @@ def compute_variance_analysis(
             scenario_names[scenario_id] = scenario.get("name", scenario_id)
 
         orientation_flipped = bool(t.get("orientationFlipped", False))
-        normalized_score = float(6 - score) if orientation_flipped else float(score)
-        if orientation_flipped:
+        if orientation_flipped and not already_normalized:
             corrected_scenario_ids.add(scenario_id)
-        grouped[key].append((sample_index, normalized_score))
+        grouped[key].append((sample_index, normalize_resolved_score(score, already_normalized, orientation_flipped)))
 
     # Determine if this is a multi-sample run
     max_samples = max(len(scores) for scores in grouped.values()) if grouped else 1

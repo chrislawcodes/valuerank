@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AnalysisTranscripts } from '../../src/pages/AnalysisTranscripts';
 
@@ -8,6 +8,16 @@ const mockUseRun = vi.fn();
 const mockUseRuns = vi.fn();
 const mockUseAnalysis = vi.fn();
 const mockUpdateTranscriptDecision = vi.fn();
+let lastTranscriptListProps: {
+  transcripts: Array<{ id: string }>;
+  decisionColumnLabel?: string;
+  normalizedDecisionTranscriptIds?: Set<string>;
+  decisionDisplayMode?: string;
+} | null = null;
+let lastTranscriptViewerProps: {
+  transcript: { id: string };
+  decisionDisplayMode?: string;
+} | null = null;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -36,15 +46,24 @@ vi.mock('../../src/hooks/useRunMutations', () => ({
 }));
 
 vi.mock('../../src/components/runs/TranscriptList', () => ({
-  TranscriptList: ({ transcripts }: { transcripts: Array<{ id: string }> }) => (
-    <div data-testid="transcript-list">Transcript count: {transcripts.length}</div>
-  ),
+  TranscriptList: (props: {
+    transcripts: Array<{ id: string }>;
+    decisionColumnLabel?: string;
+    normalizedDecisionTranscriptIds?: Set<string>;
+    decisionDisplayMode?: string;
+  }) => {
+    lastTranscriptListProps = props;
+    return (
+      <div data-testid="transcript-list">Transcript count: {props.transcripts.length}</div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/runs/TranscriptViewer', () => ({
-  TranscriptViewer: ({ transcript }: { transcript: { id: string } }) => (
-    <div data-testid="transcript-viewer">Viewer transcript: {transcript.id}</div>
-  ),
+  TranscriptViewer: (props: { transcript: { id: string }; decisionDisplayMode?: string }) => {
+    lastTranscriptViewerProps = props;
+    return <div data-testid="transcript-viewer">Viewer transcript: {props.transcript.id}</div>;
+  },
 }));
 
 function createRun(id: string, definitionVersion: number, overrides: Record<string, unknown> = {}) {
@@ -180,6 +199,8 @@ describe('AnalysisTranscripts', () => {
     mockUseRuns.mockReset();
     mockUseAnalysis.mockReset();
     mockUpdateTranscriptDecision.mockReset();
+    lastTranscriptListProps = null;
+    lastTranscriptViewerProps = null;
 
     mockUseRun.mockReturnValue({
       run: createRun('run-1', 1),
@@ -624,8 +645,8 @@ describe('AnalysisTranscripts', () => {
           },
         },
         transcripts: [
-          { id: 'tx-4', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
-          { id: 'tx-5', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
+          { id: 'tx-4', runId: 'run-2', modelId: 'model1', scenarioId: 's4', decisionCode: 'A' },
+          { id: 'tx-5', runId: 'run-2', modelId: 'model1', scenarioId: 's5', decisionCode: 'A' },
         ],
       }),
       loading: false,
@@ -649,6 +670,153 @@ describe('AnalysisTranscripts', () => {
 
     expect(screen.getByText(/Split inspection is active/i)).toBeInTheDocument();
     expect(screen.getByTestId('transcript-list')).toHaveTextContent('Transcript count: 1');
+    expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
+    expect(lastTranscriptListProps?.normalizedDecisionTranscriptIds).toEqual(new Set());
+  });
+
+  it('switches transcript audit surfaces to canonical decision mode when V2 data is present', async () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-3', 1, {
+        transcripts: [
+          {
+            id: 'tx-10',
+            runId: 'run-3',
+            modelId: 'model1',
+            scenarioId: 's10',
+            decisionCode: '1',
+            decisionModelV2: {
+              raw: {
+                matchedText: 'Achievement',
+                matchedLabel: 'Achievement',
+                parseClass: 'exact',
+                parsePath: 'exact.favor_second.strong',
+                parserVersion: 'v1',
+                responseExcerpt: 'Achievement',
+                manualOverride: null,
+              },
+              canonical: {
+                favoredValueKey: 'Benevolence_Dependability',
+                opposedValueKey: 'Achievement',
+                direction: 'favor_second',
+                strength: 'strong',
+                normalizationApplied: true,
+                normalizationReason: 'orientation_flipped',
+                source: 'deterministic',
+              },
+              legacy: {
+                rawScore: null,
+                canonicalScore: 1,
+              },
+            },
+          },
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis: createPairedAnalysis([{ id: 's10', row: 'High', col: 'Low', score: 1 }], ['s10']),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    renderPage('/analysis/run-3/transcripts?mode=paired&rowDim=Freedom&colDim=Harmony&modelId=model1&transcriptId=tx-10');
+
+    await waitFor(() => {
+      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision summary');
+      expect(lastTranscriptListProps?.decisionDisplayMode).toBe('audit');
+      expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
+    });
+  });
+
+  it('keeps mixed V1 and V2 transcript sets in legacy list mode while auditing selected V2 transcripts', async () => {
+    mockUseRun.mockReturnValue({
+      run: createRun('run-4', 1, {
+        transcripts: [
+          {
+            id: 'tx-11',
+            runId: 'run-4',
+            modelId: 'model1',
+            scenarioId: 's11',
+            decisionCode: '1',
+            decisionModelV2: {
+              raw: {
+                matchedText: 'Achievement',
+                matchedLabel: 'Achievement',
+                parseClass: 'exact',
+                parsePath: 'exact.favor_second.strong',
+                parserVersion: 'v1',
+                responseExcerpt: 'Achievement',
+                manualOverride: null,
+              },
+              canonical: {
+                favoredValueKey: 'Benevolence_Dependability',
+                opposedValueKey: 'Achievement',
+                direction: 'favor_second',
+                strength: 'strong',
+                normalizationApplied: true,
+                normalizationReason: 'orientation_flipped',
+                source: 'deterministic',
+              },
+              legacy: {
+                rawScore: null,
+                canonicalScore: 1,
+              },
+            },
+          },
+          {
+            id: 'tx-12',
+            runId: 'run-4',
+            modelId: 'model1',
+            scenarioId: 's12',
+            decisionCode: '4',
+            decisionMetadata: {
+              parseClass: 'exact',
+            },
+          },
+        ],
+      }),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseAnalysis.mockReturnValue({
+      analysis: createPairedAnalysis([
+        { id: 's11', row: 'High', col: 'Low', score: 1 },
+        { id: 's12', row: 'High', col: 'Low', score: 4 },
+      ]),
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+      recompute: vi.fn(),
+      recomputing: false,
+    });
+
+    renderPage('/analysis/run-4/transcripts?modelId=model1&repeatPattern=stable&rowDim=Freedom&colDim=Harmony&conditionIds=High%7C%7CLow');
+
+    await waitFor(() => {
+      expect(lastTranscriptListProps?.decisionColumnLabel).toBe('Decision');
+      expect(lastTranscriptListProps?.decisionDisplayMode).toBe('legacy');
+      expect(lastTranscriptListProps?.transcripts).toHaveLength(2);
+    });
+
+    const selectedTranscript = lastTranscriptListProps?.transcripts.find((transcript) => transcript.id === 'tx-11');
+    expect(selectedTranscript).toBeDefined();
+    if (!selectedTranscript || !lastTranscriptListProps) {
+      throw new Error('Expected mixed transcript test fixture to include tx-11');
+    }
+
+    lastTranscriptListProps.onSelect(selectedTranscript);
+
+    await waitFor(() => {
+      expect(lastTranscriptViewerProps?.decisionDisplayMode).toBe('audit');
+    });
   });
 
   it('keeps repeat-pattern query params when aggregate signature switching changes runs', () => {

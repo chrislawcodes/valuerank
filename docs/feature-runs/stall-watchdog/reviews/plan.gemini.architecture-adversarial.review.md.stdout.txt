@@ -1,0 +1,57 @@
+{
+  "session_id": "0b3d9d29-a145-4696-ae88-9e48a092e7a9",
+  "response": "## Findings\n\n1.  **High Risk of Race Conditions from Clock Skew.** The core detection logic in `detectStalledModels` is flawed. It compares timestamps fetched from the database (`runStartedAt`, `completed_at`) against the application server's current time (`now`). In a distributed environment with multiple app servers or any clock drift between the app server and the database, this will lead to incorrect stall calculations. A 3-minute threshold can be easily voided by a few seconds of skew, causing false positives or, worse, missed stalls. The comparison should be performed within the database using `NOW()` or timestamps should be consistently sourced from a single source of truth.\n\n2.  **Sequential Processing Creates a Scalability Bottleneck.** The `detectAndUpdateStalledRuns` function iterates through all `RUNNING` runs one-by-one. Each iteration involves multiple database queries. If the number of concurrent runs grows, this function's execution time will increase linearly, potentially taking longer than the scheduler interval itself. This would cause significant delays in stall detection and could overload the scheduler. The processing of runs should be parallelized (e.g., using `Promise.all`).\n\n3.  **Error-Prone Manual State Clearing.** The plan relies on a developer manually finding every single `db.run.update` call that transitions a run to a non-RUNNING state to add `stalledModels: []`. This is extremely fragile. Missing even one code path will cause stale `stalledModels` arrays to persist on completed, paused, or failed runs, leading to incorrect state and potential downstream bugs. A more resilient solution like a centralized state transition function or a database-level trigger would be more appropriate for this critical cleanup step.\n\n4.  **Poor User Experience in Frontend Banner.** The plan specifies rendering raw model IDs (e.g., `deepseek-coder-v2`) in the stall banner. This is not user-friendly and presents internal system identifiers to the end-user. The frontend `Run` object contains the necessary model list to map these IDs to human-readable `displayName`s (\"DeepSeek Coder V2\"). Overlooking this translation delivers a confusing and unprofessional user experience.\n\n5.  **Brittle Job Identification Logic.** The `pgboss` query relies on `name = 'probe_scenario' OR name LIKE 'probe_scenario_%'`. This pattern matching on a string is not robust. Future changes to job naming conventions or the introduction of similarly named but unrelated jobs could break the entire stall detection mechanism by either including incorrect jobs or excluding correct ones. The job data should include a specific, queryable field like `jobGroup: 'probe'` to make this lookup reliable.\n\n## Residual Risks\n\n1.  **One-Size-Fits-All Stall Threshold.** The plan uses a single, hardcoded 3-minute threshold. This assumes all LLM providers have similar performance characteristics, which is an incorrect assumption. Slower, more complex models may be perpetually and incorrectly flagged as stalled, while very fast models may not be flagged for a long time after they have genuinely failed. This reduces the accuracy and reliability of the feature.\n\n2.  **False Positives on Resume.** The plan explicitly drops the requirement for a grace period after a run resumes from a `PAUSED` state. This is a conscious trade-off, but it guarantees that users will see brief, incorrect \"stalled\" banners on the first scheduler tick after resuming a run. This is a known and accepted UX defect.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 34463
+        },
+        "tokens": {
+          "input": 1489,
+          "prompt": 19060,
+          "candidates": 731,
+          "total": 22336,
+          "cached": 17571,
+          "thoughts": 2545,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 34463,
+            "tokens": {
+              "input": 1489,
+              "prompt": 19060,
+              "candidates": 731,
+              "total": 22336,
+              "cached": 17571,
+              "thoughts": 2545,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

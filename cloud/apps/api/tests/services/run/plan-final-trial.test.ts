@@ -1,125 +1,115 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
-import { db } from '@valuerank/db';
-import { planFinalTrial } from '../../../src/services/run/plan-final-trial.js';
-import { TEST_USER } from '../../test-utils.js';
+const { db, state } = vi.hoisted(() => {
+  type MockDefinition = {
+    id: string;
+    preambleVersionId: string;
+    version: number;
+    scenarios: Array<{
+      id: string;
+      deletedAt: Date | null;
+      content: { dimensions: Record<string, string | number> };
+    }>;
+  };
 
-// Mock aggregate analysis update to do nothing, as we inject data manually
+  type MockRun = {
+    definitionId: string;
+    status: string;
+    config: Record<string, unknown>;
+    analysisResults: Array<{ output: unknown }>;
+  };
+
+  const definitionState: { current: MockDefinition | null } = { current: null };
+  const runState: { current: MockRun[] } = { current: [] };
+
+  const definitionFindUnique = vi.fn(async () => {
+    if (!definitionState.current) return null;
+    return {
+      ...definitionState.current,
+      scenarios: definitionState.current.scenarios.filter((scenario) => scenario.deletedAt === null),
+    };
+  });
+
+  const runFindMany = vi.fn(async () => runState.current);
+
+  return {
+    db: {
+      definition: {
+        findUnique: definitionFindUnique,
+      },
+      run: {
+        findMany: runFindMany,
+      },
+    },
+    state: {
+      definition: definitionState,
+      runs: runState,
+    },
+  };
+});
+
+vi.mock('@valuerank/db', () => ({ db }));
 vi.mock('../../../src/services/analysis/aggregate.js', () => ({
-    updateAggregateRun: vi.fn(),
+  updateAggregateRun: vi.fn(),
 }));
 
+import { planFinalTrial } from '../../../src/services/run/plan-final-trial.js';
+
 describe('planFinalTrial service', () => {
-    const createdDefinitionIds: string[] = [];
-    const createdRunIds: string[] = [];
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-    // Clean up after tests
-    afterEach(async () => {
-        if (createdRunIds.length > 0) {
-            await db.runScenarioSelection.deleteMany({ where: { runId: { in: createdRunIds } } });
-            await db.analysisResult.deleteMany({ where: { runId: { in: createdRunIds } } });
-            await db.run.deleteMany({ where: { id: { in: createdRunIds } } });
-            createdRunIds.length = 0;
-        }
-        if (createdDefinitionIds.length > 0) {
-            await db.scenario.deleteMany({ where: { definitionId: { in: createdDefinitionIds } } });
-            await db.definition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
-            createdDefinitionIds.length = 0;
-        }
-    });
+    state.definition.current = {
+      id: 'def-1',
+      preambleVersionId: 'pre-1',
+      version: 1,
+      scenarios: [
+        {
+          id: 'scenario-1',
+          deletedAt: null,
+          content: { dimensions: { d: 1 } },
+        },
+      ],
+    };
 
-    it('preserves requested model ID when alias is used for analysis lookup', async () => {
-        // 1. Create Definition
-        const definition = await db.definition.create({
-            data: {
-                name: 'Alias Plan Test',
-                content: { schema_version: 1, preamble: 'Test' },
+    state.runs.current = [
+      {
+        definitionId: 'def-1',
+        status: 'COMPLETED',
+        config: {
+          definitionSnapshot: {
+            _meta: {
+              preambleVersionId: 'pre-1',
+              definitionVersion: 1,
             },
-        });
-        createdDefinitionIds.push(definition.id);
-
-        // 2. Create Scenario
-        const scenario = await db.scenario.create({
-            data: {
-                definitionId: definition.id,
-                name: 'Scenario 1',
-                content: { dimensions: { d: 1 } },
-            },
-        });
-
-        // 3. Create Aggregate Run
-        const aggRun = await db.run.create({
-            data: {
-                definitionId: definition.id,
-                name: 'Aggregate Run',
-                status: 'COMPLETED',
-                config: {
-                    definitionSnapshot: {
-                        preambleVersionId: definition.preambleVersionId,
-                        version: definition.version,
-                    },
-                    temperature: null,
-                },
-                progress: { total: 0, completed: 0, failed: 0 },
-            },
-        });
-        createdRunIds.push(aggRun.id);
-
-        // Tag as Aggregate
-        const tag = await db.tag.upsert({
-            where: { name: 'Aggregate' },
-            create: { name: 'Aggregate' },
-            update: {},
-        });
-
-        await db.runTag.create({
-            data: {
-                runId: aggRun.id,
-                tagId: tag.id,
-            },
-        });
-
-        // 4. Inject Analysis Result with ALIAS model ID
-        const canonicalModelId = 'gemini-2.5-flash-preview-09-2025';
-        const requestedModelId = 'gemini-2.5-flash';
-
-        const mockAnalysis = {
-            visualizationData: {
+          },
+          temperature: null,
+        },
+        analysisResults: [
+          {
+            output: {
+              visualizationData: {
                 modelScenarioMatrix: {
-                    [canonicalModelId]: {
-                        [scenario.id]: 0.95
-                    }
-                }
-            }
-        };
-
-        await db.analysisResult.create({
-            data: {
-                runId: aggRun.id,
-                analysisType: 'aggregate',
-                inputHash: 'test-hash',
-                codeVersion: '1.0.0',
-                status: 'CURRENT',
-                output: mockAnalysis,
+                  'gemini-2.5-flash-preview-09-2025': {
+                    'scenario-1': 0.95,
+                  },
+                },
+              },
             },
-        });
+          },
+        ],
+      },
+    ];
+  });
 
-        // 5. Call planFinalTrial with REQUESTED model ID
-        const plan = await planFinalTrial(definition.id, [requestedModelId]);
+  it('preserves requested model ID when alias is used for analysis lookup', async () => {
+    const plan = await planFinalTrial('def-1', ['gemini-2.5-flash']);
 
-        // 6. Verify correct model ID is returned
-        expect(plan.models).toHaveLength(1);
-        const modelPlan = plan.models[0];
+    expect(plan.models).toHaveLength(1);
 
-        expect(modelPlan.modelId).toBe(requestedModelId); // Should NOT be canonicalModelId
-
-        // Check that it actually found data (meaning alias resolution worked for lookup)
-        expect(modelPlan.conditions).toHaveLength(1);
-        // If it found the data (0.95), n=1. 
-        // n < 10 -> INSUFFICIENT_DATA. 
-        // If it didn't find data, n=0 -> INSUFFICIENT_DATA.
-        // To be sure lets check currentSamples.
-        // Since we provided a matrix score, it should see n=1.
-        expect(modelPlan.conditions[0].currentSamples).toBe(1);
-    });
+    const modelPlan = plan.models[0];
+    expect(modelPlan.modelId).toBe('gemini-2.5-flash');
+    expect(modelPlan.conditions).toHaveLength(1);
+    expect(modelPlan.conditions[0].currentSamples).toBe(1);
+  });
 });

@@ -1,0 +1,60 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "current_phase": "",
+    "open_decisions": [],
+    "deferred_items": [],
+    "context_summary": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Group 1 includes AnalysisTranscripts, AnalysisConditionDetail, DomainAnalysisValueDetail, TranscriptList, TranscriptRow, and TranscriptViewer.",
+      "This slice is UI-only; no backend contract, worker, export, or analytics-math changes are in scope.",
+      "Mixed legacy/V2 runs should stay on the legacy display mode until the relevant surface is fully V2-backed."
+    ],
+    "summary": "Upgrade the presentation-only transcript surfaces in group 1 so they consistently show the new canonical decision wording while preserving legacy fallback behavior where the run is not fully V2-backed.",
+    "updated_at": 1774415997,
+    "answers": {},
+    "non_goals": [],
+    "acceptance_criteria": [
+      "Existing legacy-only runs keep their current behavior."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {
+    "allowed_dirty_paths": [
+      "cloud/apps/web/src/utils/transcriptDecisionModel.ts",
+      "cloud/apps/web/tests/pages/AnalysisConditionDetail.test.tsx",
+      "cloud/apps/web/tests/utils/transcriptDecisionModel.test.ts",
+      "docs/feature-runs/feature-workflow-discovery-shaping",
+      "docs/feature-runs/transcript-summarization-speedup",
+      "docs/operations/codex-skills/feature-factory",
+      "docs/operations/codex-skills/review-lens/scripts",
+      "docs/plans/feature-workflow-plan.md"
+    ],
+    "used": true,
+    "updated_at": 1774417547
+  },
+  "diff_slice_override": {},
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "checkpoint_fallback": {}
+}

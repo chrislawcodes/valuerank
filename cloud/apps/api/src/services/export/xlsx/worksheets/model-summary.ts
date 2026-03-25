@@ -6,10 +6,12 @@
 
 import type ExcelJS from 'exceljs';
 
+import { config } from '../../../../config.js';
 import { addWorksheet, createColumnConfig } from '../workbook.js';
 import { applyTableStyle, autoSizeColumns, applyNumberFormat, NUMBER_FORMATS } from '../formatting.js';
 import type { TranscriptWithScenario, ModelStatistics } from '../types.js';
 import { getModelName, parseDecisionScore, calculateStdDev } from './helpers.js';
+import { resolveAnalysisScore } from '../../../../services/decision-model.js';
 
 /**
  * Build the Model Summary worksheet with per-model statistics.
@@ -35,7 +37,12 @@ export function buildModelSummarySheet(
   for (const [modelName, modelTranscripts] of modelGroups) {
     // Parse decision codes as scores
     const scores = modelTranscripts
-      .map((t) => parseDecisionScore(t.decisionCode))
+      .map((t) => resolveAnalysisScore({
+        decisionCode: t.decisionCode,
+        decisionMetadata: t.decisionMetadata,
+        definitionSnapshot: t.definitionSnapshot,
+        orientationFlipped: t.scenario?.orientationFlipped ?? null,
+      }, config.DECISION_MODEL_V2) ?? parseDecisionScore(t.decisionCode))
       .filter((s): s is number => s !== null);
 
     // Calculate decision distribution

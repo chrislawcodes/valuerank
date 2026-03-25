@@ -176,6 +176,49 @@ describe('RunResults', () => {
     expect(screen.getByRole('button', { name: /exporting/i })).toBeDisabled();
   });
 
+  it('switches to canonical decision wording when every transcript has V2 data', async () => {
+    const user = userEvent.setup();
+    const run = createMockRun({
+      transcripts: [
+        createMockTranscript({
+          decisionCode: '1',
+          decisionModelV2: {
+            raw: {
+              matchedText: 'Achievement',
+              matchedLabel: 'Achievement',
+              parseClass: 'exact',
+              parsePath: 'exact.favor_second.strong',
+              parserVersion: 'v1',
+              responseExcerpt: 'Achievement',
+              manualOverride: null,
+            },
+            canonical: {
+              favoredValueKey: 'Benevolence_Dependability',
+              opposedValueKey: 'Achievement',
+              direction: 'favor_second',
+              strength: 'strong',
+              normalizationApplied: true,
+              normalizationReason: 'orientation_flipped',
+              source: 'deterministic',
+            },
+            legacy: {
+              rawScore: null,
+              canonicalScore: 1,
+            },
+          },
+        }),
+      ],
+      transcriptCount: 1,
+    });
+
+    render(<RunResults run={run} />);
+
+    await user.click(screen.getByText('gpt-4'));
+
+    expect(screen.getByText('Decision summary')).toBeInTheDocument();
+    expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
+  });
+
   it('opens transcript viewer when transcript is clicked', async () => {
     const user = userEvent.setup();
     const run = createMockRun({
@@ -195,8 +238,8 @@ describe('RunResults', () => {
     // Expand the model group first
     await user.click(screen.getByText('gpt-4'));
 
-    // Click on a transcript row (contains scenario text)
-    const transcriptButton = screen.getByText('scenario');
+    // Click on a transcript row
+    const transcriptButton = screen.getByText('3');
     await user.click(transcriptButton);
 
     // Should show transcript viewer modal
@@ -214,7 +257,7 @@ describe('RunResults', () => {
 
     // Open viewer
     await user.click(screen.getByText('gpt-4'));
-    await user.click(screen.getByText('scenario'));
+    await user.click(screen.getByText('3'));
 
     // Close viewer
     await user.click(screen.getByRole('button', { name: /close/i }));

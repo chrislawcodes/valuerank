@@ -1,31 +1,40 @@
 import { db, resolveDefinitionContent } from '@valuerank/db';
 import { formatTrialSignature, formatVnewLabel, formatVnewSignature, isVnewSignature, parseVnewTemperature } from '@valuerank/shared/trial-signature';
+import { DOMAIN_ANALYSIS_VALUE_KEYS, type DomainAnalysisValueKey, extractValuePair } from '../domain-analysis-values.js';
 import { parseTemperature } from '../../../utils/temperature.js';
 import { parseDefinitionVersion } from '../../../utils/definition-version.js';
+import type { TranscriptDecisionModelResult } from './decision-model.js';
+export {
+  buildRawDecisionEvidence,
+  DECISION_MODEL_READ_RULES,
+  canonicalDecisionToLegacyScore,
+  resolveCanonicalDecision,
+  resolveDecisionModel,
+  resolveLegacyDecisionCompat,
+  resolveTranscriptDecisionModel,
+} from './decision-model.js';
+export type {
+  CanonicalDecision,
+  DecisionDirection,
+  DecisionReadMode,
+  DecisionReadRule,
+  DecisionReadSurface,
+  DecisionModelInput,
+  DecisionModelResult,
+  DecisionPair,
+  DecisionSource,
+  DecisionStrength,
+  LegacyDecisionCompat,
+  RawDecisionEvidence,
+  TranscriptDecisionModelInput,
+  TranscriptDecisionModelResult,
+} from './decision-model.js';
 
 export { formatVnewLabel, formatVnewSignature };
 
 export const MAX_LIMIT = 500;
 export const DEFAULT_LIMIT = 50;
 const VALUE_PAIR_RESOLVE_CHUNK_SIZE = 20;
-
-// Domain analysis visualizations are intentionally scoped to the 10-value set used by
-// the current product experience. Keep this aligned with web `VALUES` and do not
-// expand to all Schwartz values without corresponding UI/product updates.
-export const DOMAIN_ANALYSIS_VALUE_KEYS = [
-  'Self_Direction_Action',
-  'Universalism_Nature',
-  'Benevolence_Dependability',
-  'Security_Personal',
-  'Power_Dominance',
-  'Achievement',
-  'Tradition',
-  'Stimulation',
-  'Hedonism',
-  'Conformity_Interpersonal',
-] as const;
-
-export type DomainAnalysisValueKey = (typeof DOMAIN_ANALYSIS_VALUE_KEYS)[number];
 export type DomainAnalysisScoreMethod = 'LOG_ODDS' | 'FULL_BT';
 
 export type DefinitionRow = {
@@ -224,6 +233,9 @@ export type DomainAnalysisConditionTranscript = {
   modelId: string;
   decisionCode: string | null;
   decisionCodeSource: string | null;
+  decisionMetadata: unknown;
+  definitionSnapshot: unknown;
+  decisionModelV2?: TranscriptDecisionModelResult | null;
   turnCount: number;
   tokenCount: number;
   durationMs: number;
@@ -498,11 +510,9 @@ export async function resolveValuePairsInChunks(
     const settled = await Promise.allSettled(
       batch.map(async (definitionId) => {
         const resolved = await resolveDefinitionContent(definitionId);
-        const valueA = resolved.resolvedContent.dimensions[0]?.name;
-        const valueB = resolved.resolvedContent.dimensions[1]?.name;
-        if (valueA == null || valueA === '' || valueB == null || valueB === '') return;
-        if (!isDomainAnalysisValueKey(valueA) || !isDomainAnalysisValueKey(valueB)) return;
-        valuePairByDefinition.set(definitionId, { valueA, valueB });
+        const pair = extractValuePair(resolved.resolvedContent);
+        if (!pair) return;
+        valuePairByDefinition.set(definitionId, pair);
       }),
     );
     settled.forEach(() => undefined);

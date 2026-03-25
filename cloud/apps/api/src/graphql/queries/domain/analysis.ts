@@ -4,6 +4,7 @@ import {
   computeRankingShapes,
 } from '../domain-shape.js';
 import { computeClusterAnalysis } from '../domain-clustering.js';
+import { buildScenarioAnalysisDimensionRecord, normalizeScenarioAnalysisMetadata } from '../../../services/analysis/scenario-metadata.js';
 import {
   DomainAnalysisConditionTranscriptRef,
   DomainAnalysisResultRef,
@@ -15,7 +16,6 @@ import {
   classifyDecisionForSelectedValue,
   computeFullBTScores,
   computeSmoothedLogOddsScore,
-  DOMAIN_ANALYSIS_VALUE_KEYS,
   getMissingReasonLabel,
   hydrateDefinitionAncestors,
   incrementPairwiseWin,
@@ -25,12 +25,13 @@ import {
   resolveValuePairsInChunks,
   selectLatestDefinitionPerLineage,
 } from './shared.js';
+import { DOMAIN_ANALYSIS_VALUE_KEYS } from '../domain-analysis-values.js';
 import type {
   DomainAnalysisConditionDetail,
   DomainAnalysisValueCounts,
-  DomainAnalysisValueKey,
   DomainAnalysisVignetteDetail,
 } from './shared.js';
+import type { DomainAnalysisValueKey } from '../domain-analysis-values.js';
 
 builder.queryField('domainAnalysis', (t) =>
   t.field({
@@ -453,24 +454,15 @@ builder.queryField('domainAnalysisValueDetail', (t) =>
           : await db.scenario.findMany({
             where: { id: { in: scenarioIds } },
             select: { id: true, name: true, content: true },
-          });
+        });
         const scenarioNameById = new Map(scenarios.map((scenario) => [scenario.id, scenario.name]));
         const scenarioDimensionsById = new Map<string, Record<string, string | number>>();
-        const isDimensionValue = (value: unknown): value is string | number =>
-          typeof value === 'string' || typeof value === 'number';
         for (const scenario of scenarios) {
-          if (scenario.content == null || typeof scenario.content !== 'object' || Array.isArray(scenario.content)) continue;
-          const content = scenario.content as Record<string, unknown>;
-          const dimensions = content.dimensions;
-          if (dimensions == null || typeof dimensions !== 'object' || Array.isArray(dimensions)) continue;
-          const sanitized: Record<string, string | number> = {};
-          for (const [key, value] of Object.entries(dimensions)) {
-            if (isDimensionValue(value)) {
-              sanitized[key] = value;
-            }
-          }
-          if (Object.keys(sanitized).length > 0) {
-            scenarioDimensionsById.set(scenario.id, sanitized);
+          const metadata = normalizeScenarioAnalysisMetadata(scenario.content);
+          if (metadata === null) continue;
+          const dimensions = buildScenarioAnalysisDimensionRecord(metadata);
+          if (Object.keys(dimensions).length > 0) {
+            scenarioDimensionsById.set(scenario.id, dimensions);
           }
         }
 
@@ -665,6 +657,8 @@ builder.queryField('domainAnalysisConditionTranscripts', (t) =>
           modelId: true,
           decisionCode: true,
           decisionCodeSource: true,
+          decisionMetadata: true,
+          definitionSnapshot: true,
           turnCount: true,
           tokenCount: true,
           durationMs: true,
