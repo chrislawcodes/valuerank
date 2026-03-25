@@ -212,7 +212,7 @@ describe('TranscriptList', () => {
         onSelect={mockOnSelect}
         groupByModel={false}
         decisionDisplayMode="audit"
-        decisionColumnLabel="Canonical decision"
+        decisionColumnLabel="Decision summary"
       />
     );
 
@@ -255,7 +255,7 @@ describe('TranscriptList', () => {
         onSelect={mockOnSelect}
         groupByModel={false}
         decisionDisplayMode="audit"
-        decisionColumnLabel="Canonical decision"
+        decisionColumnLabel="Decision summary"
       />
     );
 
@@ -274,6 +274,25 @@ describe('TranscriptList', () => {
     await user.click(screen.getByText('gpt-4'));
 
     expect(screen.queryByText('1,234 tokens')).not.toBeInTheDocument();
+  });
+
+  it('keeps descending tie-breakers stable when column values match', async () => {
+    const user = userEvent.setup();
+    const transcripts = [
+      createMockTranscript({ id: 't2', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
+      createMockTranscript({ id: 't1', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
+    ];
+
+    const { container } = render(
+      <TranscriptList transcripts={transcripts} onSelect={vi.fn()} groupByModel={false} />
+    );
+
+    await user.click(screen.getByRole('button', { name: /sort by model/i }));
+
+    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
+      .map((element) => element.getAttribute('data-transcript-id'));
+
+    expect(rowIds).toEqual(['t2', 't1']);
   });
 
   it('shows created time in transcript row', async () => {
@@ -400,6 +419,26 @@ describe('TranscriptList', () => {
       .map((element) => element.getAttribute('data-transcript-id'));
 
     expect(rowIds).toEqual(['t1', 't3', 't2']);
+  });
+
+  it('uses a stable id tie-breaker when the primary sort values are equal', () => {
+    const transcripts = [
+      createMockTranscript({ id: 't2', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
+      createMockTranscript({ id: 't1', modelId: 'gpt-4', createdAt: '2024-01-15T10:00:00Z' }),
+    ];
+
+    const { container } = render(
+      <TranscriptList
+        transcripts={transcripts}
+        onSelect={mockOnSelect}
+        groupByModel={false}
+      />
+    );
+
+    const rowIds = Array.from(container.querySelectorAll('[data-transcript-id]'))
+      .map((element) => element.getAttribute('data-transcript-id'));
+
+    expect(rowIds).toEqual(['t1', 't2']);
   });
 
   it('sorts dimension columns by numeric tier when values are stored as words', async () => {

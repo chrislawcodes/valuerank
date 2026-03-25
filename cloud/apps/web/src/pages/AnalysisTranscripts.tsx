@@ -36,7 +36,7 @@ import {
 } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
-import { hasTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
+import { getTranscriptDecisionDisplayMode } from '../utils/transcriptDecisionModel';
 import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
@@ -630,12 +630,9 @@ export function AnalysisTranscripts() {
     run?.id,
   ]);
 
-  const listDisplayMode = filteredTranscripts.length > 0
-    && filteredTranscripts.every(hasTranscriptDecisionModelV2)
-    ? 'audit'
-    : 'legacy';
-  const viewerDisplayMode = selectedTranscript?.decisionModelV2 != null
-    ? 'audit'
+  const listDisplayMode = getTranscriptDecisionDisplayMode(filteredTranscripts);
+  const viewerDisplayMode = selectedTranscript
+    ? getTranscriptDecisionDisplayMode([selectedTranscript])
     : listDisplayMode;
   const decisionColumnLabel = listDisplayMode === 'audit'
     ? 'Decision summary'

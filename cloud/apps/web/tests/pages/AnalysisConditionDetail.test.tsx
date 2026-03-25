@@ -174,6 +174,7 @@ describe('AnalysisConditionDetail', () => {
     expect(screen.getByText('Harmony -> Freedom')).toBeInTheDocument();
     expect(screen.getByText('Strongly Support Harmony')).toBeInTheDocument();
     expect(screen.getByText('Strongly Support Freedom')).toBeInTheDocument();
+    expect(screen.getByText('Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.')).toBeInTheDocument();
   });
 
   it('routes a paired row count click to the matching transcript slice', () => {

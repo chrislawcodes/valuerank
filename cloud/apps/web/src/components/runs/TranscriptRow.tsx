@@ -6,6 +6,7 @@ import { getDecisionMetadata } from '../../utils/methodology';
 import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
+  hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
@@ -130,13 +131,16 @@ export function TranscriptRow({
   const showGrid = !compact && Boolean(gridTemplateColumns);
   const rawDecision = transcript.decisionCode ?? extractDecision(transcript.content);
   const decisionScaleLabels = decisionMetadata?.scaleLabels ?? [];
-  const rowDecisionDisplayMode = decisionDisplayMode ?? 'legacy';
+  const rowDecisionDisplayMode = hasRenderableTranscriptDecisionModelV2(transcript)
+    ? (decisionDisplayMode ?? 'audit')
+    : 'legacy';
   const legacyDecisionDisplay = getLegacyDecisionDisplay(transcript, rawDecision, normalizeDecision, dimensions);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const canonicalDecisionDisplay = canonicalDecision
     ? formatCanonicalDecisionHeadline(transcript)
     : '-';
   const auditDecisionBadge = rowDecisionDisplayMode === 'audit'
+    && hasRenderableTranscriptDecisionModelV2(transcript)
     ? getTranscriptDecisionAuditBadge(transcript)
     : null;
   const decisionDisplay = rowDecisionDisplayMode === 'audit'
@@ -293,7 +297,7 @@ export function TranscriptRow({
             <span
               className="flex items-center gap-2"
               title={rowDecisionDisplayMode === 'audit'
-                ? 'Canonical decision'
+                ? 'Decision summary'
                 : transcript.decisionCodeSource === 'llm'
                   ? 'Decision (LLM-classified)'
                   : 'Decision'}

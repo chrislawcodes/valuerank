@@ -170,7 +170,7 @@ describe('DomainAnalysisValueDetail', () => {
     fireEvent.click(screen.getByTitle('Condition A'));
 
     await waitFor(() => {
-      expect(screen.getByText('Canonical decision')).toBeInTheDocument();
+      expect(screen.getByText('Decision summary')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
@@ -180,6 +180,7 @@ describe('DomainAnalysisValueDetail', () => {
     const viewer = await screen.findByTestId('transcript-viewer');
     expect(within(viewer).getByText('transcript-v2')).toBeInTheDocument();
     expect(within(viewer).getByText('audit')).toBeInTheDocument();
+    expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
   });
 
   it('keeps the report surface in legacy mode when mixed V1/V2 transcripts are present', async () => {
@@ -310,5 +311,6 @@ describe('DomainAnalysisValueDetail', () => {
     const legacyViewer = await screen.findByTestId('transcript-viewer');
     expect(within(legacyViewer).getByText('transcript-legacy')).toBeInTheDocument();
     expect(within(legacyViewer).getByText('legacy')).toBeInTheDocument();
+    expect(screen.queryByText('Tokens')).not.toBeInTheDocument();
   });
 });
