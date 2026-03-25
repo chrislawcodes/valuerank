@@ -12,6 +12,7 @@ import { getDecisionMetadata } from '../../utils/methodology';
 import {
   formatCanonicalDecisionHeadline,
   getTranscriptDecisionAuditBadge,
+  hasRenderableTranscriptDecisionModelV2,
   normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
 } from '../../utils/transcriptDecisionModel';
@@ -115,8 +116,10 @@ export function TranscriptViewer({
   const rawDecision = transcript.decisionCode ?? '-';
   const legacyDecision = normalizeLegacyDecisionCode(rawDecision, normalizeDecision);
   const legacyDecisionDisplay = transcript.decisionCodeSource === 'llm' ? `${legacyDecision}*` : legacyDecision;
-  const viewMode = decisionDisplayMode ?? (transcript.decisionModelV2 ? 'audit' : 'legacy');
-  const isAuditMode = viewMode === 'audit' && transcript.decisionModelV2 != null;
+  const viewMode = decisionDisplayMode ?? (
+    hasRenderableTranscriptDecisionModelV2(transcript) ? 'audit' : 'legacy'
+  );
+  const isAuditMode = viewMode === 'audit' && hasRenderableTranscriptDecisionModelV2(transcript);
   const canonicalDecision = transcript.decisionModelV2?.canonical ?? null;
   const rawEvidence = transcript.decisionModelV2?.raw ?? null;
   const canonicalDecisionHeadline = isAuditMode ? formatCanonicalDecisionHeadline(transcript) : '-';
@@ -172,9 +175,6 @@ export function TranscriptViewer({
             {transcript.turnCount} turn{transcript.turnCount !== 1 ? 's' : ''}
           </span>
           <span className="flex items-center gap-1">
-            {transcript.tokenCount.toLocaleString()} tokens
-          </span>
-          <span className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
             {formatDuration(transcript.durationMs)}
           </span>
@@ -185,7 +185,7 @@ export function TranscriptViewer({
                   {auditDecisionBadge}
                 </span>
               )}
-              <span className="text-gray-500">Canonical decision:</span>
+              <span className="text-gray-500">Decision summary:</span>
               <span className="font-medium text-gray-800">{canonicalDecisionHeadline}</span>
             </span>
           ) : (

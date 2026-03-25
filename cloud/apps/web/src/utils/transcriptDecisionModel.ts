@@ -7,10 +7,56 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasRenderableDecisionModelV2(
+  value: Transcript['decisionModelV2'],
+): value is NonNullable<Transcript['decisionModelV2']> {
+  const canonical = value?.canonical;
+  const raw = value?.raw;
+
+  if (!value || !canonical || !raw) {
+    return false;
+  }
+
+  if (typeof raw.parseClass !== 'string' || raw.parseClass.trim().length === 0) {
+    return false;
+  }
+
+  if (canonical.direction === 'neutral') {
+    return canonical.strength === 'neutral';
+  }
+
+  if (canonical.direction === 'unknown' || canonical.strength === 'unknown') {
+    return false;
+  }
+
+  return (
+    canonical.favoredValueKey != null
+    && canonical.opposedValueKey != null
+  );
+}
+
+export function hasRenderableTranscriptDecisionModelV2(
+  transcript: Transcript,
+): transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
+  return hasRenderableDecisionModelV2(transcript.decisionModelV2);
+}
+
 export function hasTranscriptDecisionModelV2(
   transcript: Transcript,
 ): transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
-  return transcript.decisionModelV2 != null;
+  return hasRenderableTranscriptDecisionModelV2(transcript);
+}
+
+export function getTranscriptDecisionDisplayMode(
+  transcripts: Transcript[],
+): TranscriptDecisionDisplayMode {
+  if (transcripts.length === 0) {
+    return 'legacy';
+  }
+
+  return transcripts.every(hasRenderableTranscriptDecisionModelV2)
+    ? 'audit'
+    : 'legacy';
 }
 
 export function formatCanonicalDecisionHeadline(transcript: Transcript): string {
@@ -52,6 +98,7 @@ export function formatCanonicalDecisionSubtitle(transcript: Transcript): string 
 export function getTranscriptDecisionAuditBadge(transcript: Transcript): string | null {
   const raw = transcript.decisionModelV2?.raw;
   if (!raw) return null;
+  if (raw.manualOverride) return 'Manual';
   if (raw.parseClass === 'exact') return null;
   return 'Fallback';
 }

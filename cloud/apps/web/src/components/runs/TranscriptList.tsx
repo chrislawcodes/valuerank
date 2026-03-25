@@ -14,6 +14,7 @@ import {
 } from '../../utils/scenarioUtils';
 import { formatDisplayLabel } from '../../utils/displayLabels';
 import {
+  hasRenderableTranscriptDecisionModelV2,
   getTranscriptDecisionSortValue,
   normalizeLegacyDecisionCode,
   type TranscriptDecisionDisplayMode,
@@ -167,6 +168,9 @@ function getTranscriptDecisionValue(
   normalizedDecisionTranscriptIds?: Set<string>,
 ): string | number {
   if (displayMode === 'audit') {
+    if (!hasRenderableTranscriptDecisionModelV2(transcript)) {
+      return getTranscriptDecisionSortValue(transcript, 'legacy');
+    }
     return getTranscriptDecisionSortValue(transcript, displayMode);
   }
 
@@ -355,10 +359,12 @@ export function TranscriptList({
       { type: 'created' },
     );
 
+    const applyDirection = (value: number): number => (sortState.direction === 'asc' ? value : -value);
+
     return [...items].sort((a, b) => {
       const primaryResult = compareByColumn(a, b, sortState.column);
       if (primaryResult !== 0) {
-        return sortState.direction === 'asc' ? primaryResult : -primaryResult;
+        return applyDirection(primaryResult);
       }
 
       for (const fallback of fallbackColumns) {
@@ -368,11 +374,17 @@ export function TranscriptList({
 
         const fallbackResult = compareByColumn(a, b, fallback);
         if (fallbackResult !== 0) {
-          return fallbackResult;
+          return applyDirection(fallbackResult);
         }
       }
 
-      return 0;
+      if (a.createdAt !== b.createdAt) {
+        const createdResult = a.createdAt.localeCompare(b.createdAt);
+        return applyDirection(createdResult);
+      }
+
+      const idResult = a.id.localeCompare(b.id, undefined, { sensitivity: 'base' });
+      return applyDirection(idResult);
     });
   }, [compareByColumn, sortKeys.primary, sortKeys.secondary, sortState.column, sortState.direction]);
 

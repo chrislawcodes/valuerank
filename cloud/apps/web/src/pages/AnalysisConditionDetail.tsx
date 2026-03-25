@@ -41,6 +41,11 @@ type DetailRow = {
   baseSearchParams: URLSearchParams;
 };
 
+const CONDITION_COPY = {
+  countSummary: 'Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.',
+  unresolvedSummary: 'Counts and means use only transcripts with canonical decision data. Unresolved transcripts for this condition are excluded.',
+} as const;
+
 const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -257,7 +262,7 @@ export function AnalysisConditionDetail() {
     [aFirstRun?.definition?.content, bFirstRun?.definition?.content, run?.definition?.content],
   );
 
-  const scoreLabels = useMemo(() => {
+  const decisionSummaryLabels = useMemo(() => {
     const labels = deriveDecisionDimensionLabels(
       aFirstRun?.definition?.content ?? run?.definition?.content ?? null,
     );
@@ -441,7 +446,7 @@ export function AnalysisConditionDetail() {
             Model: <span className="font-medium text-gray-900">{selectedModel}</span>
           </p>
           <p className="text-sm text-gray-500">
-            Raw transcript counts by normalized 1-5 decision score. Click any non-zero count to open the matching transcripts.
+            {CONDITION_COPY.countSummary}
           </p>
         </div>
       </div>
@@ -459,15 +464,12 @@ export function AnalysisConditionDetail() {
               <th className="border-b border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                 Vignette Order
               </th>
-              {scoreLabels.map(({ code, label }) => (
+              {decisionSummaryLabels.map(({ code, label }) => (
                 <th
                   key={code}
                   className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600"
                 >
                   <div className="mx-auto flex max-w-[8rem] flex-col items-center gap-1 whitespace-normal leading-tight">
-                    <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-700">
-                      {code}
-                    </span>
                     <span>{label}</span>
                   </div>
                 </th>
@@ -520,7 +522,7 @@ export function AnalysisConditionDetail() {
 
       {hasUnresolvedTranscripts && (
         <p className="text-xs text-gray-500">
-          Counts and means use only transcripts with normalized 1-5 decision scores. Unresolved transcripts for this condition are excluded.
+          {CONDITION_COPY.unresolvedSummary}
         </p>
       )}
 

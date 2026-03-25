@@ -63,10 +63,11 @@ describe('TranscriptViewer', () => {
       />
     );
 
-    expect(screen.getByText('Canonical decision:')).toBeInTheDocument();
+    expect(screen.getByText('Decision summary:')).toBeInTheDocument();
     expect(screen.getByText('Strongly favors Benevolence Dependability')).toBeInTheDocument();
     expect(screen.getByText('Raw Evidence')).toBeInTheDocument();
     expect(screen.getByText('exact')).toBeInTheDocument();
+    expect(screen.queryByText('42 tokens')).not.toBeInTheDocument();
     expect(screen.getByText(/Manual override previous value:/i).parentElement).toHaveTextContent('5');
     expect(screen.queryByText('Compatibility Decision Code')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Set decision for transcript transcript-1/i)).not.toBeInTheDocument();
