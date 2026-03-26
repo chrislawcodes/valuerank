@@ -9,6 +9,7 @@ import { createLogger } from '@valuerank/shared';
 
 import { createWorkbook, workbookToBuffer, generateXlsxFilename, XLSX_MIME_TYPE } from './workbook.js';
 import { addPivotTable, type PivotTableConfig } from './pivotTable.js';
+import { DECISION_BUCKET_LABELS, formatDecisionDisplay } from '../decision-display.js';
 
 import type { XlsxExportOptions, XlsxExportResult, RunExportData, TranscriptWithScenario } from './types.js';
 
@@ -154,9 +155,12 @@ export async function generateExcelExport(
         targetSheet: 'Charts',
         targetCell: 'A6',
         rowFields: ['AI Model Name'],
-        columnFields: ['Decision Code'],
-        valueField: 'Decision Code',
+        columnFields: ['Decision Bucket'],
+        valueField: 'Decision Bucket',
         valueFieldLabel: 'Count',
+        fieldValueOrder: {
+          'Decision Bucket': [...DECISION_BUCKET_LABELS],
+        },
       };
 
       buffer = addPivotTable(buffer, pivotConfig, pivotSourceData);
@@ -233,13 +237,16 @@ function getModelName(modelId: string): string {
  */
 function preparePivotSourceData(transcripts: TranscriptWithScenario[]): string[][] {
   // Headers - simplified set for PivotTable
-  const headers = ['AI Model Name', 'Decision Code'];
+  const headers = ['AI Model Name', 'Decision Bucket'];
 
   // Data rows
-  const dataRows = transcripts.map((t) => [
-    getModelName(t.modelId),
-    t.decisionCode ?? 'unknown',
-  ]);
+  const dataRows = transcripts.map((t) => {
+    const decisionDisplay = formatDecisionDisplay(t);
+    return [
+      getModelName(t.modelId),
+      decisionDisplay.bucketLabel,
+    ];
+  });
 
   return [headers, ...dataRows];
 }
@@ -248,7 +255,7 @@ function preparePivotSourceData(transcripts: TranscriptWithScenario[]): string[]
  * Add a hidden "Pivot Source" sheet to the workbook buffer.
  *
  * This is needed because the Raw Data sheet has many columns (dimensions, etc.)
- * but the PivotTable only needs AI Model Name and Decision Code. By creating
+ * but the PivotTable only needs AI Model Name and Decision Bucket. By creating
  * a separate hidden sheet, we ensure the pivot cache columns match the worksheet.
  */
 async function addPivotSourceSheet(xlsxBuffer: Buffer, sourceData: string[][]): Promise<Buffer> {
@@ -310,13 +317,15 @@ function collectWarnings(data: RunExportData): string[] {
     }
   }
 
-  // Check for missing decision codes
-  const missingDecisions = data.transcripts.filter(
-    (t) => t.decisionCode === null || t.decisionCode === '' || t.decisionCode === 'error' || t.decisionCode === 'pending'
+  // Check for unresolved canonical evidence
+  const unresolvedEvidence = data.transcripts.filter(
+    (t) => formatDecisionDisplay(t).reason !== 'rendered'
   ).length;
 
-  if (missingDecisions > 0) {
-    warnings.push(`${missingDecisions} transcript(s) have missing or invalid decision codes. These are excluded from statistical calculations.`);
+  if (unresolvedEvidence > 0) {
+    warnings.push(
+      `${unresolvedEvidence} transcript(s) contain unresolved canonical evidence. They remain in the export, but they are excluded from report summaries.`
+    );
   }
 
   // Check for single model (no comparison possible)

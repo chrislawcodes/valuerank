@@ -2,11 +2,16 @@
  * CSV Serialization Helper
  *
  * Converts run transcripts to CSV format for export.
- * Outputs summarized results with decision codes and explanations.
- * Format matches Python src/summary.py output for compatibility.
+ * Outputs canonical decision display fields plus transcript metadata.
  */
 
 import type { Transcript, Scenario } from '@prisma/client';
+
+import {
+  collectVisibleDimensionColumns,
+  formatDecisionDisplay,
+  type DimensionColumnMap,
+} from './decision-display.js';
 
 export type TranscriptWithScenario = Transcript & {
   scenario: Scenario | null;
@@ -25,8 +30,10 @@ export type CSVRow = {
   transcriptId: string;
   modelName: string;
   sampleIndex: number;
-  decisionCode: string;
-  decisionCodeSource: string;
+  decisionDirection: string;
+  decisionStrength: string;
+  decisionReason: string;
+  decisionSource: string;
   parseClass: string;
   parsePath: string;
   matchedLabel: string;
@@ -48,10 +55,12 @@ export const PRE_VARIABLE_HEADERS = ['AI Model Name', 'Trial Signature', 'Batch'
 
 /**
  * CSV column headers after variable columns.
- * Order: Decision Code, Transcript ID, Probe Prompt, Target Response
+ * Order: Decision Direction, Decision Strength, Decision Reason, Transcript ID, Probe Prompt, Target Response
  */
 export const POST_VARIABLE_HEADERS = [
-  'Decision Code',
+  'Decision Direction',
+  'Decision Strength',
+  'Decision Reason',
   'Transcript ID',
   'Probe Prompt',
   'Target Response',
@@ -65,7 +74,9 @@ export const DECISION_METADATA_HEADERS = [
 ] as const;
 
 export const POST_VARIABLE_HEADERS_WITH_METADATA = [
-  'Decision Code',
+  'Decision Direction',
+  'Decision Strength',
+  'Decision Reason',
   'Decision Source',
   'Decision Parse Class',
   'Decision Parse Path',
@@ -108,6 +119,7 @@ function getModelName(modelId: string): string {
 // Scenario content structure with dimension scores
 type ScenarioContent = {
   dimensions?: Record<string, number>;
+  orientationFlipped?: boolean | null;
 };
 
 // Transcript content structure with turns
@@ -156,7 +168,7 @@ function getTargetResponse(transcript: TranscriptWithScenario): string {
 
 /**
  * Extract dimension scores directly from scenario content.
- * Returns a map of dimension names to their numeric scores (1-5).
+ * Returns a map of dimension names to their numeric values.
  */
 function getScenarioDimensions(transcript: TranscriptWithScenario): Record<string, number> {
   const content = transcript.scenario?.content as ScenarioContent | null;
@@ -228,28 +240,50 @@ function extractTrialSignature(
  * Convert a transcript to a CSV row.
  * @param transcript - The transcript with scenario data
  */
-export function transcriptToCSVRow(transcript: TranscriptWithScenario): CSVRow {
+function getVariablesForTranscript(
+  transcript: TranscriptWithScenario,
+  dimensionColumns?: DimensionColumnMap,
+): Record<string, number> {
+  const dimensions = getScenarioDimensions(transcript);
+  const variables: Record<string, number> = {};
+  const rawKeyToHeader = dimensionColumns?.rawKeyToHeader;
+
+  for (const [rawKey, value] of Object.entries(dimensions)) {
+    const header = rawKeyToHeader?.get(rawKey) ?? rawKey;
+    variables[header] = value;
+  }
+
+  return variables;
+}
+
+export function transcriptToCSVRow(
+  transcript: TranscriptWithScenario,
+  dimensionColumns?: DimensionColumnMap,
+): CSVRow {
   const decisionMetadata = getDecisionMetadata(transcript);
+  const decisionDisplay = formatDecisionDisplay(transcript);
   return {
     batchName: transcript.run?.name ?? '',
     transcriptId: transcript.id,
     modelName: getModelName(transcript.modelId),
     sampleIndex: transcript.sampleIndex,
-    decisionCode: transcript.decisionCode ?? 'pending',
-    decisionCodeSource: transcript.decisionCodeSource ?? '',
-    parseClass: decisionMetadata.parseClass,
-    parsePath: decisionMetadata.parsePath,
-    matchedLabel: decisionMetadata.matchedLabel,
+    decisionDirection: decisionDisplay.direction,
+    decisionStrength: decisionDisplay.strength,
+    decisionReason: decisionDisplay.reason,
+    decisionSource: decisionDisplay.decisionSource,
+    parseClass: decisionDisplay.parseClass || decisionMetadata.parseClass,
+    parsePath: decisionDisplay.parsePath || decisionMetadata.parsePath,
+    matchedLabel: decisionDisplay.matchedLabel || decisionMetadata.matchedLabel,
     trialSignature: extractTrialSignature(transcript.run?.definition?.version, transcript.run?.config),
     probePrompt: getProbePrompt(transcript),
     targetResponse: getTargetResponse(transcript),
-    variables: getScenarioDimensions(transcript),
+    variables: getVariablesForTranscript(transcript, dimensionColumns),
   };
 }
 
 /**
  * Format a CSV row as a string with variable columns.
- * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
+ * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Direction, Decision Strength, Decision Reason, Transcript ID, Probe Prompt, Target Response
  * @param row - The CSV row data
  * @param variableNames - Ordered list of variable column names
  */
@@ -274,12 +308,14 @@ export function formatCSVRow(
 
   // Post-variable columns
   const postVariableValues = [
-    escapeCSV(row.decisionCode),
+    escapeCSV(row.decisionDirection),
+    escapeCSV(row.decisionStrength),
+    escapeCSV(row.decisionReason),
   ];
 
   if (options.includeDecisionMetadata === true) {
     postVariableValues.push(
-      escapeCSV(row.decisionCodeSource),
+      escapeCSV(row.decisionSource),
       escapeCSV(row.parseClass),
       escapeCSV(row.parsePath),
       escapeCSV(row.matchedLabel),
@@ -297,7 +333,7 @@ export function formatCSVRow(
 
 /**
  * Get CSV header line with variable columns.
- * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Code, Transcript ID, Probe Prompt, Target Response
+ * Column order: Model Name, Trial Signature, Batch, Sample Index, [Variables...], Decision Direction, Decision Strength, Decision Reason, Transcript ID, Probe Prompt, Target Response
  * @param variableNames - List of dimension/variable names to include
  */
 export function getCSVHeader(
@@ -310,21 +346,14 @@ export function getCSVHeader(
   return [...PRE_VARIABLE_HEADERS, ...variableNames, ...postHeaders].join(',');
 }
 
-/**
- * Collect all unique variable names from transcripts.
- * Returns sorted list for consistent column ordering.
- */
-function collectVariableNames(transcripts: TranscriptWithScenario[]): string[] {
-  const variableSet = new Set<string>();
-
-  for (const transcript of transcripts) {
-    const dimensions = getScenarioDimensions(transcript);
-    for (const key of Object.keys(dimensions)) {
-      variableSet.add(key);
-    }
-  }
-
-  return Array.from(variableSet).sort();
+function buildDimensionColumns(
+  transcripts: TranscriptWithScenario[],
+  options: CSVFormatOptions = {},
+): DimensionColumnMap {
+  const postHeaders = options.includeDecisionMetadata === true
+    ? POST_VARIABLE_HEADERS_WITH_METADATA
+    : POST_VARIABLE_HEADERS;
+  return collectVisibleDimensionColumns(transcripts, [...PRE_VARIABLE_HEADERS, ...postHeaders]);
 }
 
 /**
@@ -339,12 +368,17 @@ export function transcriptsToCSV(
   const BOM = '\uFEFF'; // UTF-8 BOM for Excel
 
   // Collect all variable names across all transcripts
-  const variableNames = collectVariableNames(transcripts);
+  const dimensionColumns = buildDimensionColumns(transcripts, options);
+  const { headers: variableNames } = dimensionColumns;
 
   const header = getCSVHeader(variableNames, options);
-  const rows = transcripts.map((t) => formatCSVRow(transcriptToCSVRow(t), variableNames, options));
+  const rows = transcripts.map((t) => formatCSVRow(transcriptToCSVRow(t, dimensionColumns), variableNames, options));
 
-  return BOM + header + '\n' + rows.join('\n');
+  if (rows.length === 0) {
+    return BOM + header;
+  }
+
+  return BOM + header + '\n' + rows.join('\n') + '\n';
 }
 
 /**
