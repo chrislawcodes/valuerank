@@ -31,7 +31,6 @@ type DecisionSummary = {
   counts: Record<DecisionCode, number>;
   resolvedCount: number;
   unresolvedCount: number;
-  mean: number | null;
 };
 
 type DetailRow = {
@@ -42,8 +41,8 @@ type DetailRow = {
 };
 
 const CONDITION_COPY = {
-  countSummary: 'Raw transcript counts by canonical decision summary. Click any non-zero count to open the matching transcripts.',
-  unresolvedSummary: 'Counts and means use only transcripts with canonical decision data. Unresolved transcripts for this condition are excluded.',
+  countSummary: 'Canonical transcript counts by decision label. Click any non-zero count to open the matching transcripts.',
+  unresolvedSummary: 'Unknown transcripts are shown in the final column. Known counts use only transcripts with canonical decision data.',
 } as const;
 
 const DECISION_CODES: DecisionCode[] = ['1', '2', '3', '4', '5'];
@@ -86,7 +85,6 @@ function summarizeDecisionCounts(transcripts: Transcript[]): DecisionSummary {
 
   let resolvedCount = 0;
   let unresolvedCount = 0;
-  let weightedSum = 0;
 
   transcripts.forEach((transcript) => {
     if (!isDecisionCode(transcript.decisionCode)) {
@@ -96,19 +94,13 @@ function summarizeDecisionCounts(transcripts: Transcript[]): DecisionSummary {
 
     counts[transcript.decisionCode] += 1;
     resolvedCount += 1;
-    weightedSum += Number(transcript.decisionCode);
   });
 
   return {
     counts,
     resolvedCount,
     unresolvedCount,
-    mean: resolvedCount > 0 ? weightedSum / resolvedCount : null,
   };
-}
-
-function formatMean(value: number | null): string {
-  return value === null ? '—' : value.toFixed(2);
 }
 
 function filterConditionTranscripts(
@@ -478,7 +470,7 @@ export function AnalysisConditionDetail() {
                 n
               </th>
               <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600">
-                Mean
+                Unknown
               </th>
             </tr>
           </thead>
@@ -512,7 +504,7 @@ export function AnalysisConditionDetail() {
                   {row.summary.resolvedCount}
                 </td>
                 <td className="px-3 py-3 text-center text-sm text-gray-700">
-                  {formatMean(row.summary.mean)}
+                  {row.summary.unresolvedCount}
                 </td>
               </tr>
             ))}
