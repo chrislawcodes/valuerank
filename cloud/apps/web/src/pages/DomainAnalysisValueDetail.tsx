@@ -32,37 +32,28 @@ function toPercent(value: number | null): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function getHeatmapColor(value: number): string {
-  if (value < 1 || value > 5) return 'rgba(243, 244, 246, 0.8)';
-  // Continuous blue -> gray -> orange scale across the full 1..5 range.
-  // This avoids a wide neutral dead-zone where 2.6 and 3.4 looked too similar.
-  if (value <= 3) {
-    const t = (value - 1) / 2; // 1..3 => 0..1
-    const r = Math.round(59 + t * (156 - 59));
-    const g = Math.round(130 + t * (163 - 130));
-    const b = Math.round(246 + t * (175 - 246));
-    const alpha = 0.34 - t * 0.18; // stronger at extremes
-    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+function getPreferenceBackground(score: number, isOpponent: boolean): string {
+  const opacity = Math.min(1, Math.max(0, score / 2));
+  if (isOpponent) {
+    return `rgba(251, 146, 60, ${opacity * 0.5})`; // orange-400
   }
-  const t = (value - 3) / 2; // 3..5 => 0..1
-  const r = Math.round(156 + t * (249 - 156));
-  const g = Math.round(163 - t * (163 - 115));
-  const b = Math.round(175 - t * (175 - 22));
-  const alpha = 0.16 + t * 0.18;
-  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+  return `rgba(59, 130, 246, ${opacity * 0.5})`; // blue-500
 }
 
-function getScoreTextColor(value: number): string {
-  if (value <= 2.5) return 'text-blue-700';
-  if (value >= 3.5) return 'text-orange-700';
-  return 'text-gray-600';
+function getPreferenceTextColor(isOpponent: boolean): string {
+  return isOpponent ? 'text-orange-700' : 'text-blue-700';
 }
 
 type MatrixCondition = {
   scenarioId: string | null;
   conditionName: string;
   dimensions: Record<string, string | number> | null;
-  meanDecisionScore: number | null;
+  meanPreferenceScore: number | null;
+  opponentMeanPreferenceScore: number | null;
+  unknownCount: number;
+  strongly: number;
+  opponentStrongly: number;
+  totalTrials: number;
 };
 
 type ConditionMatrixProps = {
@@ -140,7 +131,11 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
               </td>
               {cols.map((col) => {
                 const condition = cellByKey.get(`${row}::${col}`);
-                const mean = condition?.meanDecisionScore ?? null;
+                const selectedScore = condition?.meanPreferenceScore ?? 0;
+                const opponentScore = condition?.opponentMeanPreferenceScore ?? 0;
+                const isOpponent = opponentScore >= selectedScore && (opponentScore > 0 || selectedScore > 0);
+                const displayScore = isOpponent ? opponentScore : selectedScore;
+                const hasData = condition && condition.totalTrials > 0;
                 const conditionKey = condition
                   ? `${vignetteId}:${condition.scenarioId ?? '__unknown__'}`
                   : '';
@@ -152,17 +147,17 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
                     className={`border border-gray-100 p-3 text-center text-sm transition-colors ${
                       condition ? 'cursor-pointer hover:ring-1 hover:ring-sky-300' : ''
                     } ${isSelected ? 'ring-1 ring-sky-400' : ''}`}
-                    style={{ backgroundColor: mean == null ? undefined : getHeatmapColor(mean) }}
+                    style={{ backgroundColor: hasData ? getPreferenceBackground(displayScore, isOpponent) : undefined }}
                     onClick={() => {
                       if (!condition) return;
                       onSelect(vignetteId, condition.conditionName, condition.scenarioId);
                     }}
                     title={condition?.conditionName ?? 'No condition'}
                   >
-                    {mean == null ? (
-                      <span className="text-gray-400">-</span>
+                    {hasData ? (
+                      <span className={`font-semibold ${getPreferenceTextColor(isOpponent)}`}>{displayScore.toFixed(1)}</span>
                     ) : (
-                      <span className={`font-semibold ${getScoreTextColor(mean)}`}>{mean.toFixed(2)}</span>
+                      <span className="text-gray-400">-</span>
                     )}
                   </td>
                 );
@@ -172,7 +167,12 @@ function ConditionMatrix({ vignetteId, conditions, selectedConditionKey, onSelec
         </tbody>
       </table>
       <div className="mt-2 text-xs text-gray-500">
-        Click a colored cell to load condition transcripts below.
+        Click a cell to load condition transcripts below.
+        {conditions.some((c) => c.unknownCount > 0) && (
+          <span className="ml-2 font-semibold text-gray-600">
+            · N unknown trials excluded from counts.
+          </span>
+        )}
       </div>
     </div>
   );
@@ -416,8 +416,10 @@ export function DomainAnalysisValueDetail() {
                   )}
                 </div>
                 <p className="text-xs text-gray-600">
-                  Pair: {label} vs {VALUE_LABELS[vignette.otherValueKey as ValueKey] ?? vignette.otherValueKey} · Trials:{' '}
-                  {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
+                  Pair:{' '}
+                  <strong className="font-semibold text-blue-700">{label}</strong> vs{' '}
+                  <strong className="font-semibold text-orange-700">{VALUE_LABELS[vignette.otherValueKey as ValueKey] ?? vignette.otherValueKey}</strong>{' '}
+                  · Trials: {vignette.totalTrials} · Win rate: {toPercent(vignette.selectedValueWinRate)}
                 </p>
               </header>
               {vignette.conditions.length === 0 ? (

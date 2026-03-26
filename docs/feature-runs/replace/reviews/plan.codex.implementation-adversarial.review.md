@@ -1,0 +1,42 @@
+---
+reviewer: "codex"
+lens: "implementation-adversarial"
+stage: "plan"
+artifact_path: "docs/feature-runs/replace/plan.md"
+artifact_sha256: "283bdbc45edcf7ac811cbbde4d21a5eda0dd4028191f63e2008906e46e7ccc98"
+repo_root: "."
+git_head_sha: "10bf94660675d2780d47c779703b906d451a9b22"
+git_base_ref: "origin/codex/domain-analysis-overview-ux"
+git_base_sha: "10bf94660675d2780d47c779703b906d451a9b22"
+generation_method: "codex-runner"
+resolution_status: "open"
+resolution_note: ""
+raw_output_path: "docs/feature-runs/replace/reviews/plan.codex.implementation-adversarial.review.md.raw.txt"
+narrowed_artifact_path: ""
+narrowed_artifact_sha256: ""
+coverage_status: "full"
+coverage_note: ""
+---
+
+# Review: plan implementation-adversarial
+
+## Findings
+
+- **High:** The plan intentionally reclassifies any transcript without `decisionMetadata` as `unknownCount`, but it does not preserve a separate legacy bucket for `decisionCode`-only records. That means the rollout will change historical counts, win rates, and percentages for old batches without any way to distinguish “truly unknown” from “old encoding not yet migrated.” In practice, this makes prior analysis runs non-comparable after the change.
+- **High:** The new winner-display logic is under-specified for ties and equal-score cases. The plan says the UI should choose between `meanPreferenceScore` and `opponentMeanPreferenceScore` based on which is higher, while also saying ties render orange as “opponent.” That collapses a third state into the opponent path and can misstate which side actually won, especially when both scores are identical or when canonical resolution is unresolved.
+- **Medium:** The `orientationFlipped` fix relies on two assumptions that are not enforced in the plan: that the bug only affects job-choice transcripts and that all relevant production data is job-choice-v2. If either assumption is wrong, older or mixed batches will be silently pushed into `unknownCount` instead of being correctly interpreted, which will distort detail-page totals without a hard failure.
+
+## Residual Risks
+
+- The detail page will still disagree with the top-level grid until the follow-up wave, so users will see different totals for the same batch in different parts of the app.
+- Any external GraphQL consumer or saved query that still expects the removed fields will break, even if the internal web build passes.
+- The plan depends on the canonical decision model matching legacy semantics for every supported transcript shape; if another parser variant appears, the detail view can undercount again until this logic is updated.
+
+## Runner Stats
+- total_input=0
+- total_output=0
+- total_tokens=0
+
+## Resolution
+- status: open
+- note: 

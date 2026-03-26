@@ -468,10 +468,6 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
     return validated.canonical;
   }
 
-  if (input.orientationFlipped == null) {
-    return buildUnknownCanonicalDecision('unknown');
-  }
-
   const parseClass = input.raw.parseClass;
   if (parseClass !== 'exact' && parseClass !== 'fallback_resolved') {
     return buildUnknownCanonicalDecision('unknown');
@@ -518,6 +514,10 @@ export function resolveCanonicalDecision(input: DecisionModelInput): CanonicalDe
       false,
       'deterministic',
     );
+  }
+
+  if (input.orientationFlipped == null) {
+    return buildUnknownCanonicalDecision('unknown');
   }
 
   if (!parsedPath || parsedPath.branch === 'manual') {
