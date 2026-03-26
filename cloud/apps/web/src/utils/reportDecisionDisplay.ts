@@ -1,5 +1,9 @@
 import type { Transcript } from '../api/operations/runs';
-import { formatCanonicalDecisionHeadline, hasRenderableTranscriptDecisionModelV2 } from './transcriptDecisionModel';
+import {
+  assertReportTranscriptDecisionModelV2,
+  formatCanonicalDecisionHeadline,
+  hasRenderableTranscriptDecisionModelV2,
+} from './transcriptDecisionModel';
 
 export const REPORT_DECISION_BUCKET_ORDER = ['strong', 'lean', 'neutral', 'unknown'] as const;
 
@@ -159,4 +163,9 @@ export function summarizeReportTranscriptDecisions(transcripts: Transcript[]): R
     unknownCount,
     buckets,
   };
+}
+
+export function summarizeCanonicalReportTranscriptDecisions(transcripts: Transcript[]): ReportDecisionSummary {
+  transcripts.forEach(assertReportTranscriptDecisionModelV2);
+  return summarizeReportTranscriptDecisions(transcripts);
 }

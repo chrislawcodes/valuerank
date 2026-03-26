@@ -16,14 +16,14 @@ import {
 import { TranscriptViewer } from '../components/runs/TranscriptViewer';
 import { useInfiniteRuns } from '../hooks/useInfiniteRuns';
 import { useRun } from '../hooks/useRun';
-import { useRunMutations } from '../hooks/useRunMutations';
 import { SCENARIOS_QUERY, type ScenariosQueryResult } from '../api/operations/scenarios';
 import type { Transcript } from '../api/operations/runs';
 import { SURVEYS_QUERY, type SurveysQueryResult } from '../api/operations/surveys';
 import {
-  summarizeReportTranscriptDecisions,
+  summarizeCanonicalReportTranscriptDecisions,
   type ReportDecisionSummary,
 } from '../utils/reportDecisionDisplay';
+import { assertReportTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
 
 const defaultFilters: AnalysisFilterState = {
   analysisStatus: '',
@@ -68,85 +68,6 @@ function extractTranscriptText(content: unknown): string {
   return responses.join('\n\n');
 }
 
-type DecisionCodeOption = {
-  value: string;
-  label: string;
-};
-
-function getDecisionCodeOptions(analysisPlan: unknown): DecisionCodeOption[] {
-  if (!analysisPlan || typeof analysisPlan !== 'object') {
-    return ['1', '2', '3', '4', '5'].map((value) => ({ value, label: value }));
-  }
-
-  const plan = analysisPlan as {
-    responseOptions?: Array<{ value?: unknown; label?: unknown; order?: unknown }>;
-    responseScale?: { min?: unknown; max?: unknown; minLabel?: unknown; maxLabel?: unknown };
-  };
-
-  if (Array.isArray(plan.responseOptions) && plan.responseOptions.length > 0) {
-    const values = plan.responseOptions
-      .map((option, index) => {
-        const numericValue = typeof option.value === 'number' && Number.isInteger(option.value) && option.value > 0
-          ? option.value
-          : typeof option.value === 'string' && option.value.trim() !== '' && Number.isInteger(Number(option.value))
-            ? Number(option.value)
-            : NaN;
-        if (Number.isInteger(numericValue) && numericValue > 0) {
-          return {
-            value: String(numericValue),
-            label: typeof option.label === 'string' && option.label.trim() !== ''
-              ? option.label.trim()
-              : String(numericValue),
-          };
-        }
-        if (typeof option.order === 'number' && Number.isInteger(option.order) && option.order > 0) {
-          return {
-            value: String(option.order),
-            label: typeof option.label === 'string' && option.label.trim() !== ''
-              ? option.label.trim()
-              : String(option.order),
-          };
-        }
-        return {
-          value: String(index + 1),
-          label: typeof option.label === 'string' && option.label.trim() !== ''
-            ? option.label.trim()
-            : String(index + 1),
-        };
-      })
-      .filter((option, index, arr) => Number(option.value) > 0 && arr.findIndex((candidate) => candidate.value === option.value) === index)
-      .sort((left, right) => Number(left.value) - Number(right.value));
-    if (values.length > 0) {
-      return values;
-    }
-  }
-
-  const min = plan.responseScale?.min;
-  const max = plan.responseScale?.max;
-  if (
-    typeof min === 'number' &&
-    typeof max === 'number' &&
-    Number.isInteger(min) &&
-    Number.isInteger(max) &&
-    min > 0 &&
-    max >= min
-  ) {
-    const values: DecisionCodeOption[] = [];
-    for (let i = min; i <= max; i += 1) {
-      let label = String(i);
-      if (i === min && typeof plan.responseScale?.minLabel === 'string' && plan.responseScale.minLabel.trim() !== '') {
-        label = plan.responseScale.minLabel.trim();
-      } else if (i === max && typeof plan.responseScale?.maxLabel === 'string' && plan.responseScale.maxLabel.trim() !== '') {
-        label = plan.responseScale.maxLabel.trim();
-      }
-      values.push({ value: String(i), label });
-    }
-    return values;
-  }
-
-  return ['1', '2', '3', '4', '5'].map((value) => ({ value, label: value }));
-}
-
 function formatDecisionSummaryDetails(summary: ReportDecisionSummary): string {
   return summary.buckets.map((bucket) => `${bucket.label} (${bucket.count})`).join(', ');
 }
@@ -156,7 +77,6 @@ export function SurveyResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<AnalysisFilterState>(defaultFilters);
   const selectedSurveyIdFromUrl = searchParams.get('surveyId') ?? '';
-  const { updateTranscriptDecision } = useRunMutations();
   const [{ data: surveysData, fetching: surveysLoading }] = useQuery<SurveysQueryResult>({
     query: SURVEYS_QUERY,
     requestPolicy: 'cache-and-network',
@@ -171,10 +91,6 @@ export function SurveyResults() {
   const fallbackSurveyId = runnableSurveys[0]?.id ?? '';
   const selectedSurveyId = selectedSurveyIdFromUrl || fallbackSurveyId;
   const selectedSurvey = runnableSurveys.find((survey) => survey.id === selectedSurveyId) ?? null;
-  const decisionCodeOptions = useMemo(
-    () => getDecisionCodeOptions(selectedSurvey?.analysisPlan),
-    [selectedSurvey?.analysisPlan]
-  );
 
   useEffect(() => {
     if (fallbackSurveyId && (!selectedSurveyIdFromUrl || !runnableSurveys.some((survey) => survey.id === selectedSurveyIdFromUrl))) {
@@ -222,7 +138,7 @@ export function SurveyResults() {
 
   const latestRunId = surveyRuns[0]?.id ?? '';
   const latestDefinitionId = surveyRuns[0]?.definitionId ?? '';
-  const { run: latestRun, refetch: refetchLatestRun } = useRun({
+  const { run: latestRun } = useRun({
     id: latestRunId,
     pause: latestRunId === '',
     enablePolling: true,
@@ -250,88 +166,67 @@ export function SurveyResults() {
     });
   }, [surveyRuns, filters.tagIds]);
 
-  const matrixData = useMemo(() => {
+  const matrixData = useMemo<SurveyMatrixState>(() => {
     if (!latestRun || !scenariosData?.scenarios) {
       return null;
     }
 
-    const models = [...new Set(latestRun.config.models)];
+    try {
+      const models = [...new Set(latestRun.config.models)];
 
-    const responses = new Map<string, string>();
-    const numericBuckets = new Map<string, number[]>();
-    for (const transcript of latestRun.transcripts) {
-      if (!transcript.scenarioId || !models.includes(transcript.modelId) || !transcript.decisionCode) {
-        continue;
+      const rows = (scenariosData.scenarios ?? [])
+        .map((scenario) => {
+          const content = scenario.content as Record<string, unknown>;
+          const prompt = String(content?.prompt ?? '');
+          const chunkMatch = prompt.match(/Answer this question now \(Question \d+\):\s*(.+)/);
+          const legacyMatch = prompt.match(/^Question:\s*(.+)$/m);
+          const questionNumberRaw = content?.dimensions as Record<string, unknown> | undefined;
+          const explicitQuestionText = typeof questionNumberRaw?.questionText === 'string' ? questionNumberRaw.questionText : '';
+          const questionText = (explicitQuestionText || chunkMatch?.[1] || legacyMatch?.[1] || scenario.name).trim();
+          const questionNumber = Number(questionNumberRaw?.questionNumber ?? Number.NaN);
+          const order = Number.isFinite(questionNumber) ? questionNumber : Number.MAX_SAFE_INTEGER;
+          return {
+            scenarioId: scenario.id,
+            order,
+            questionText,
+          };
+        })
+        .sort((left, right) => left.order - right.order || left.questionText.localeCompare(right.questionText));
+
+      const transcriptsByCell = new Map<string, Transcript[]>();
+      for (const transcript of latestRun.transcripts) {
+        if (!transcript.scenarioId || !models.includes(transcript.modelId)) {
+          continue;
+        }
+
+        assertReportTranscriptDecisionModelV2(transcript);
+
+        const key = `${transcript.scenarioId}::${transcript.modelId}`;
+        const existing = transcriptsByCell.get(key) ?? [];
+        existing.push(transcript);
+        transcriptsByCell.set(key, existing);
       }
-      const key = `${transcript.scenarioId}::${transcript.modelId}`;
-      const decisionRaw = transcript.decisionCode.trim();
-      const decisionNum = Number(decisionRaw);
-      if (!Number.isNaN(decisionNum) && Number.isFinite(decisionNum)) {
-        const bucket = numericBuckets.get(key) ?? [];
-        bucket.push(decisionNum);
-        numericBuckets.set(key, bucket);
-      } else if (!responses.has(key)) {
-        responses.set(key, decisionRaw);
+
+      const cellSummaries = new Map<string, ReportDecisionSummary>();
+      for (const [key, items] of transcriptsByCell) {
+        items.sort((left, right) => {
+          const leftTime = new Date(left.createdAt).getTime();
+          const rightTime = new Date(right.createdAt).getTime();
+          return rightTime - leftTime;
+        });
+        transcriptsByCell.set(key, items);
+        cellSummaries.set(key, summarizeCanonicalReportTranscriptDecisions(items));
       }
-    }
 
-    for (const [key, values] of numericBuckets) {
-      const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-      const formatted = Number.isInteger(avg) ? String(avg) : avg.toFixed(2);
-      responses.set(key, formatted);
+      return { models, rows, transcriptsByCell, cellSummaries };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Survey results require canonical decisionModelV2 data.';
+      return { error: new Error(message) };
     }
-
-    const rows = (scenariosData.scenarios ?? [])
-      .map((scenario) => {
-        const content = scenario.content as Record<string, unknown>;
-        const prompt = String(content?.prompt ?? '');
-        const chunkMatch = prompt.match(/Answer this question now \(Question \d+\):\s*(.+)/);
-        const legacyMatch = prompt.match(/^Question:\s*(.+)$/m);
-        const questionNumberRaw = content?.dimensions as Record<string, unknown> | undefined;
-        const explicitQuestionText = typeof questionNumberRaw?.questionText === 'string' ? questionNumberRaw.questionText : '';
-        const questionText = (explicitQuestionText || chunkMatch?.[1] || legacyMatch?.[1] || scenario.name).trim();
-        const questionNumber = Number(questionNumberRaw?.questionNumber ?? Number.NaN);
-        const order = Number.isFinite(questionNumber) ? questionNumber : Number.MAX_SAFE_INTEGER;
-        return {
-          scenarioId: scenario.id,
-          order,
-          questionText,
-        };
-      })
-      .sort((left, right) => left.order - right.order || left.questionText.localeCompare(right.questionText));
-
-    const transcriptsByCell = new Map<string, Transcript[]>();
-    for (const transcript of latestRun.transcripts) {
-      if (!transcript.scenarioId || !models.includes(transcript.modelId)) {
-        continue;
-      }
-      const key = `${transcript.scenarioId}::${transcript.modelId}`;
-      const existing = transcriptsByCell.get(key) ?? [];
-      existing.push(transcript);
-      transcriptsByCell.set(key, existing);
-    }
-    const cellSummaries = new Map<string, ReportDecisionSummary>();
-    for (const [key, items] of transcriptsByCell) {
-      items.sort((left, right) => {
-        const leftTime = new Date(left.createdAt).getTime();
-        const rightTime = new Date(right.createdAt).getTime();
-        return rightTime - leftTime;
-      });
-      transcriptsByCell.set(key, items);
-      cellSummaries.set(key, summarizeReportTranscriptDecisions(items));
-    }
-
-    return { models, responses, rows, transcriptsByCell, cellSummaries };
   }, [latestRun, scenariosData]);
 
   const handleAnalysisClick = (runId: string) => {
     navigate(`/analysis/${runId}`);
-  };
-
-  const handleDecisionOverride = async (transcriptId: string, decisionCode: string) => {
-    await updateTranscriptDecision(transcriptId, decisionCode);
-    refetchLatestRun();
-    softRefetch();
   };
 
   return (
@@ -422,6 +317,41 @@ export function SurveyResults() {
           <ErrorMessage message={`Failed to load survey results: ${error.message}`} />
         ) : filteredRuns.length === 0 ? (
           <EmptyState />
+        ) : hasSurveyMatrixError(matrixData) ? (
+          <div className="space-y-6 h-full">
+            <SurveyMatrixError
+              error={matrixData.error}
+              runName={latestRun?.name ?? null}
+              runStatus={latestRun?.status}
+              summarizeProgress={latestRun?.summarizeProgress ?? null}
+              exportLabel={
+                selectedSurvey
+                  ? `${selectedSurvey.name}-v${getSurveyVersion(selectedSurvey.analysisPlan)}`
+                  : 'survey-results'
+              }
+            />
+            <div className="flex-1 min-h-0">
+              {filters.viewMode === 'folder' ? (
+                <VirtualizedAnalysisFolderView
+                  runs={filteredRuns}
+                  onRunClick={handleAnalysisClick}
+                  hasNextPage={hasNextPage}
+                  loadingMore={loadingMore}
+                  totalCount={totalCount}
+                  onLoadMore={loadMore}
+                />
+              ) : (
+                <VirtualizedAnalysisList
+                  runs={filteredRuns}
+                  onRunClick={handleAnalysisClick}
+                  hasNextPage={hasNextPage}
+                  loadingMore={loadingMore}
+                  totalCount={totalCount}
+                  onLoadMore={loadMore}
+                />
+              )}
+            </div>
+          </div>
         ) : (
           <div className="space-y-6 h-full">
             <SurveyMatrix
@@ -429,8 +359,6 @@ export function SurveyResults() {
               runName={latestRun?.name ?? null}
               runStatus={latestRun?.status}
               summarizeProgress={latestRun?.summarizeProgress ?? null}
-              decisionCodeOptions={decisionCodeOptions}
-              onDecisionOverride={handleDecisionOverride}
               exportLabel={
                 selectedSurvey
                   ? `${selectedSurvey.name}-v${getSurveyVersion(selectedSurvey.analysisPlan)}`
@@ -470,26 +398,15 @@ function SurveyMatrix({
   runName,
   runStatus,
   summarizeProgress,
-  decisionCodeOptions,
-  onDecisionOverride,
   exportLabel,
 }: {
-  matrixData: {
-    models: string[];
-    responses: Map<string, string>;
-    rows: Array<{ scenarioId: string; order: number; questionText: string }>;
-    transcriptsByCell: Map<string, Transcript[]>;
-    cellSummaries: Map<string, ReportDecisionSummary>;
-  } | null;
+  matrixData: SurveyMatrixData | null;
   runName: string | null;
   runStatus?: string;
   summarizeProgress?: { completed: number; total: number } | null;
-  decisionCodeOptions: DecisionCodeOption[];
-  onDecisionOverride: (transcriptId: string, decisionCode: string) => Promise<void>;
   exportLabel: string;
 }) {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
-  const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
   const isSummarizing = runStatus === 'SUMMARIZING';
 
   if (isSummarizing) {
@@ -514,30 +431,7 @@ function SurveyMatrix({
   }
 
   const handleExportCsv = () => {
-    const header = ['Question'];
-    for (const modelId of matrixData.models) {
-      header.push(`${modelId} decision code`);
-      header.push(`${modelId} transcript`);
-    }
-    const lines = [header.map(escapeCsvCell).join(',')];
-
-    for (const row of matrixData.rows) {
-      const values = [row.questionText];
-      for (const modelId of matrixData.models) {
-        const key = `${row.scenarioId}::${modelId}`;
-        const decision = matrixData.responses.get(key) ?? '';
-        const transcripts = matrixData.transcriptsByCell.get(key) ?? [];
-        const transcriptText = transcripts
-          .map((transcript) => extractTranscriptText(transcript.content))
-          .filter((text) => text.trim() !== '')
-          .join('\n\n-----\n\n');
-        values.push(decision);
-        values.push(transcriptText);
-      }
-      lines.push(values.map((value) => escapeCsvCell(String(value))).join(','));
-    }
-
-    const csv = lines.join('\n');
+    const csv = buildSurveyResultsCsv(matrixData);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -556,7 +450,7 @@ function SurveyMatrix({
         <div>
           <h2 className="text-lg font-medium text-gray-900">Question x AI Matrix</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Showing latest run {runName ? `"${runName}"` : ''}. `*` indicates an LLM-classified response.
+            Showing latest run {runName ? `"${runName}"` : ''}. Canonical decision summaries are shown for each cell.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
@@ -582,58 +476,14 @@ function SurveyMatrix({
                 <td className="border border-gray-200 px-3 py-2 text-gray-900">{row.questionText}</td>
                 {matrixData.models.map((modelId) => {
                   const key = `${row.scenarioId}::${modelId}`;
-                  const value = matrixData.responses.get(key) ?? '—';
                   const transcripts = matrixData.transcriptsByCell.get(key) ?? [];
                   const transcriptCount = transcripts.length;
-                  const targetTranscript = transcripts[0] ?? null;
                   const summary = matrixData.cellSummaries.get(key) ?? null;
-                  const isOther = value.trim().toLowerCase() === 'other';
                   const summaryValue = summary?.headline ?? '—';
-                  const valueDisplay = transcriptCount > 0 && targetTranscript?.decisionCodeSource === 'llm' ? `${summaryValue}*` : summaryValue;
                   const cellDetails = summary ? formatDecisionSummaryDetails(summary) : '';
                   return (
                     <td key={`${row.scenarioId}-${modelId}`} className="border border-gray-200 px-3 py-2 text-gray-700">
-                      {transcriptCount > 0 && isOther && targetTranscript ? (
-                        <div className="flex flex-col gap-1">
-                          <select
-                            value={targetTranscript.decisionCode?.trim() || 'other'}
-                            onChange={async (event) => {
-                              const nextDecision = event.target.value;
-                              if (!nextDecision || nextDecision === 'other') {
-                                return;
-                              }
-                              try {
-                                setEditingCellKey(key);
-                                await onDecisionOverride(targetTranscript.id, nextDecision);
-                              } catch (error) {
-                                // eslint-disable-next-line no-alert
-                                alert(error instanceof Error ? error.message : 'Failed to update response');
-                              } finally {
-                                setEditingCellKey(null);
-                              }
-                            }}
-                            disabled={editingCellKey === key}
-                            className="h-8 rounded border border-gray-300 bg-white px-2 text-sm"
-                            aria-label={`Set response for ${row.questionText} / ${modelId}`}
-                          >
-                            <option value="other">other</option>
-                            {decisionCodeOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto w-fit justify-start p-0 text-left text-xs text-teal-700 hover:text-teal-800 hover:underline"
-                            onClick={() => setSelectedTranscript(targetTranscript)}
-                          >
-                            View transcript
-                          </Button>
-                        </div>
-                      ) : transcriptCount > 0 ? (
+                      {transcriptCount > 0 ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -651,11 +501,11 @@ function SurveyMatrix({
                               : `View transcript for ${row.questionText} / ${modelId}`
                           }
                         >
-                          {valueDisplay}
+                          {summaryValue}
                           {transcriptCount > 1 ? ` (n=${transcriptCount})` : ''}
                         </Button>
                       ) : (
-                        value
+                        '—'
                       )}
                     </td>
                   );
@@ -673,6 +523,100 @@ function SurveyMatrix({
       )}
     </div>
   );
+}
+
+function SurveyMatrixError({
+  error,
+  runName,
+  runStatus,
+  summarizeProgress,
+  exportLabel,
+}: {
+  error: Error;
+  runName: string | null;
+  runStatus?: string;
+  summarizeProgress?: { completed: number; total: number } | null;
+  exportLabel: string;
+}) {
+  const isSummarizing = runStatus === 'SUMMARIZING';
+  const progressText = summarizeProgress ? ` (${summarizeProgress.completed}/${summarizeProgress.total})` : '';
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-medium text-gray-900">Question x AI Matrix</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Showing latest run {runName ? `"${runName}"` : ''}. The matrix cannot render until every transcript has usable canonical decisionModelV2 data.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" disabled>
+          <Download className="w-4 h-4 mr-2" />
+          Export CSV
+        </Button>
+      </div>
+      <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="alert" aria-live="polite">
+        <p className="font-medium">Canonical decisionModelV2 data is missing or malformed.</p>
+        <p className="mt-1">{error.message}</p>
+        {isSummarizing && (
+          <p className="mt-1 text-red-800">
+            The run is still summarizing{progressText}, so retry after the summary job completes.
+          </p>
+        )}
+        <p className="mt-2 text-xs text-red-800">
+          Export is disabled for {exportLabel} until the canonical envelope is complete.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type SurveyMatrixReadyData = {
+  models: string[];
+  rows: Array<{ scenarioId: string; order: number; questionText: string }>;
+  transcriptsByCell: Map<string, Transcript[]>;
+  cellSummaries: Map<string, ReportDecisionSummary>;
+};
+
+type SurveyMatrixErrorData = {
+  error: Error;
+};
+
+type SurveyMatrixState = SurveyMatrixReadyData | SurveyMatrixErrorData | null;
+
+export type SurveyMatrixData = SurveyMatrixReadyData;
+
+function hasSurveyMatrixError(
+  matrixData: SurveyMatrixState,
+): matrixData is SurveyMatrixErrorData {
+  return matrixData != null && 'error' in matrixData;
+}
+
+export function buildSurveyResultsCsv(matrixData: SurveyMatrixData): string {
+  const header = ['Question'];
+  for (const modelId of matrixData.models) {
+    header.push(`${modelId} decision summary`);
+    header.push(`${modelId} transcript`);
+  }
+  const lines = [header.map(escapeCsvCell).join(',')];
+
+  for (const row of matrixData.rows) {
+    const values = [row.questionText];
+    for (const modelId of matrixData.models) {
+      const key = `${row.scenarioId}::${modelId}`;
+      const summary = matrixData.cellSummaries.get(key) ?? null;
+      const transcripts = matrixData.transcriptsByCell.get(key) ?? [];
+      const transcriptText = transcripts
+        .map((transcript) => extractTranscriptText(transcript.content))
+        .filter((text) => text.trim() !== '')
+        .join('\n\n-----\n\n');
+      values.push(summary?.headline ?? '—');
+      values.push(transcriptText);
+    }
+    lines.push(values.map((value) => escapeCsvCell(String(value))).join(','));
+  }
+
+  return lines.join('\n');
 }
 
 function EmptyState() {

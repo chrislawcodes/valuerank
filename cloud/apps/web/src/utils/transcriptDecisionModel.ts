@@ -47,6 +47,51 @@ export function hasTranscriptDecisionModelV2(
   return hasRenderableTranscriptDecisionModelV2(transcript);
 }
 
+function hasReportRenderableTranscriptDecisionModelV2(
+  value: Transcript['decisionModelV2'],
+): value is NonNullable<Transcript['decisionModelV2']> {
+  if (!value || !isRecord(value) || !isRecord(value.raw) || !isRecord(value.canonical) || !isRecord(value.legacy)) {
+    return false;
+  }
+
+  if (typeof value.raw.parseClass !== 'string' || value.raw.parseClass.trim().length === 0) {
+    return false;
+  }
+
+  if (typeof value.canonical.direction !== 'string' || typeof value.canonical.strength !== 'string') {
+    return false;
+  }
+
+  if (value.canonical.direction === 'neutral') {
+    return value.canonical.strength === 'neutral';
+  }
+
+  if (value.canonical.direction === 'unknown' || value.canonical.strength === 'unknown') {
+    return true;
+  }
+
+  return (
+    typeof value.canonical.favoredValueKey === 'string'
+    && value.canonical.favoredValueKey.trim().length > 0
+    && typeof value.canonical.opposedValueKey === 'string'
+    && value.canonical.opposedValueKey.trim().length > 0
+  );
+}
+
+export function hasReportTranscriptDecisionModelV2(
+  transcript: Transcript,
+): transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
+  return hasReportRenderableTranscriptDecisionModelV2(transcript.decisionModelV2);
+}
+
+export function assertReportTranscriptDecisionModelV2(
+  transcript: Transcript,
+): asserts transcript is Transcript & { decisionModelV2: NonNullable<Transcript['decisionModelV2']> } {
+  if (!hasReportTranscriptDecisionModelV2(transcript)) {
+    throw new Error(`Survey results require canonical decisionModelV2 data for transcript ${transcript.id}`);
+  }
+}
+
 export function getTranscriptDecisionDisplayMode(
   transcripts: Transcript[],
 ): TranscriptDecisionDisplayMode {
