@@ -9,7 +9,17 @@ function createTranscript(overrides: Partial<Transcript> = {}): Transcript {
     scenarioId: 'scenario-1',
     modelId: 'gpt-4',
     modelVersion: 'gpt-4-0125-preview',
-    content: { turns: [] },
+    content: {
+      turns: [],
+      decisionCode: overrides.decisionCode ?? '3',
+      decision: overrides.decisionCode ?? '3',
+      score: overrides.decisionCode ?? '3',
+      summary: {
+        decisionCode: overrides.decisionCode ?? '3',
+        decision: overrides.decisionCode ?? '3',
+        score: overrides.decisionCode ?? '3',
+      },
+    },
     decisionCode: '3',
     decisionCodeSource: 'llm',
     decisionMetadata: null,

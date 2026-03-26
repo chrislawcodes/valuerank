@@ -23,6 +23,16 @@ otherwise.
   canonical transcript decision model rather than from raw scores.
 - Unknown or unresolved transcripts must be counted explicitly and shown as a
   separate bucket so they do not distort the known canonical counts.
+- Legacy transcript score fields may still exist in the payload, but this page
+  must treat them as inert unless canonical `decisionModelV2` data is
+  renderable.
+- For this page, "Unknown" means the transcript has no renderable canonical
+  `decisionModelV2` envelope, or its canonical direction/strength is unknown,
+  or its canonical labels cannot be resolved. Legacy score fields do not make a
+  transcript known. Malformed canonical payloads must be bucketed as Unknown
+  rather than throwing.
+- `Neutral` means `decisionModelV2.canonical.direction === 'neutral'` and
+  `decisionModelV2.canonical.strength === 'neutral'`.
 
 ## Problem
 
@@ -36,6 +46,9 @@ decision-code values:
 
 That makes the condition detail page look disconnected from the canonical
 decision behavior used elsewhere in the app.
+
+It also risks quietly drifting back to old 1-5 score logic whenever transcript
+payloads still include legacy score fields.
 
 ## What We Are Building
 
@@ -52,6 +65,22 @@ canonical decision-model-v2 bucket order and labels:
 The table should still preserve the existing row ordering, column ordering, and
 drilldown behavior. The paired and single analysis modes must both work.
 
+Bucket labels come from the condition definition's canonical value order for
+the current row context, not from a transcript sample. If the condition
+definition cannot supply canonical values, the page must keep the generic
+canonical fallback labels and still render the explicit Unknown bucket.
+The generic fallback labels are exactly:
+
+- `Strongly favors canonical first value`
+- `Somewhat favors canonical first value`
+- `Neutral`
+- `Somewhat favors canonical second value`
+- `Strongly favors canonical second value`
+- `Unknown`
+
+Each row is summarized independently from its own transcript set. Paired mode
+does not deduplicate across pooled/canonical/flipped rows.
+
 ## User-Facing Behavior
 
 - The condition detail table shows the ordered canonical decision buckets
@@ -65,6 +94,14 @@ drilldown behavior. The paired and single analysis modes must both work.
   the same order as today.
 - Single mode still shows one row for the current run.
 - Clicking a non-zero known bucket still opens the matching transcript slice.
+- Clicking the Unknown bucket is informational only and does not drill down.
+- Missing or unrenderable canonical transcript data stays explicit in the
+  unknown bucket instead of falling back to legacy score fields.
+- The transcript drilldown keeps the existing compatibility route shape, but
+  the visible bucket key remains the source of truth for which transcript slice
+  opens.
+- The helper must never throw when it encounters malformed canonical payloads;
+  malformed canonical transcripts are still counted as Unknown.
 
 ## Phase Boundary
 
@@ -99,6 +136,8 @@ This phase stops at the condition detail page and its shared helper.
   click-through behavior.
 - The pivot table and value-detail matrix remain unchanged.
 - Automated tests cover the new bucket summary behavior.
+- Automated tests fail if the page starts counting `decisionCode`,
+  `legacy.canonicalScore`, `content.score`, or `content.decision` again.
 
 ## Notes
 

@@ -95,7 +95,17 @@ function createTranscript(
     scenarioId,
     modelId: 'model1',
     modelVersion: 'test-model',
-    content: { turns: [] },
+    content: {
+      turns: [],
+      decisionCode: decisionCode ?? '5',
+      decision: decisionCode ?? '5',
+      score: decisionCode ?? '5',
+      summary: {
+        decisionCode: decisionCode ?? '5',
+        decision: decisionCode ?? '5',
+        score: decisionCode ?? '5',
+      },
+    },
     decisionCode,
     decisionCodeSource: 'llm',
     decisionMetadata: null,
@@ -259,7 +269,7 @@ describe('AnalysisConditionDetail', () => {
     });
   });
 
-  it('renders paired canonical buckets with explicit unknown handling', () => {
+  it('renders paired canonical buckets with explicit unknown handling, even when legacy score fields are present', () => {
     renderPage('/analysis/run-1/conditions/High%7C%7CLow?rowDim=Freedom&colDim=Harmony&modelId=model1&mode=paired');
 
     expect(screen.getByText('Condition Detail')).toBeInTheDocument();
@@ -330,7 +340,7 @@ describe('AnalysisConditionDetail', () => {
     );
   });
 
-  it('renders the same canonical summary in single mode', () => {
+  it('renders the same canonical summary in single mode and ignores legacy score fields', () => {
     mockUseRuns.mockReturnValue({
       runs: [],
       loading: false,
