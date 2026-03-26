@@ -121,6 +121,19 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function prefixTranscriptScenarioIds(transcripts: Transcript[], prefix: 'canonical' | 'flipped'): Transcript[] {
+  return transcripts.map((transcript) => {
+    if (transcript.scenarioId == null || transcript.scenarioId === '') {
+      return transcript;
+    }
+
+    return {
+      ...transcript,
+      scenarioId: `${prefix}:${transcript.scenarioId}`,
+    };
+  });
+}
+
 /**
  * Warning display component.
  */
@@ -333,6 +346,18 @@ export function AnalysisPanel({
     () => analysis?.perModel ?? {},
     [analysis]
   );
+  const scenariosTranscripts = useMemo(() => {
+    const currentTranscripts = transcripts ?? currentRun?.transcripts ?? [];
+
+    if (analysisMode !== 'paired' || companionRun == null) {
+      return currentTranscripts;
+    }
+
+    return [
+      ...prefixTranscriptScenarioIds(currentTranscripts, 'canonical'),
+      ...prefixTranscriptScenarioIds(companionRun.transcripts ?? [], 'flipped'),
+    ];
+  }, [analysisMode, companionRun, currentRun?.transcripts, transcripts]);
   const singleVignetteOptions = useMemo(() => {
     const runs = [currentRun, companionRun].filter((candidate): candidate is Run => candidate != null);
     const seen = new Set<string>();
@@ -597,6 +622,7 @@ export function AnalysisPanel({
             analysisMode={analysisMode}
             visualizationData={decisionsVisualizationData}
             perModel={perModel}
+            transcripts={scenariosTranscripts}
             contestedScenarios={analysis.mostContestedScenarios}
             dimensionLabels={dimensionLabels}
             expectedAttributes={expectedScenarioAttributes}
