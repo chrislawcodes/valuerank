@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../../src/api/operations/runs';
 import {
+  assertRenderableReportTranscriptSummary,
   summarizeCanonicalReportTranscriptDecisions,
   summarizeReportTranscriptDecisions,
 } from '../../src/utils/reportDecisionDisplay';
@@ -259,6 +260,17 @@ describe('reportDecisionDisplay', () => {
         count: 1,
       },
     ]);
+  });
+
+  it('throws before the report can fall back when unresolved transcripts are present', () => {
+    const summary = summarizeReportTranscriptDecisions([
+      createRenderableTranscript('renderable-1'),
+      createTranscript({ id: 'unknown-1', decisionModelV2: null }),
+    ]);
+
+    expect(() => assertRenderableReportTranscriptSummary(summary)).toThrow(
+      /canonical decisionModelV2 data for every visible transcript/i,
+    );
   });
 
   it('throws when canonical v2 envelopes are missing or partial in strict report mode', () => {

@@ -31,6 +31,23 @@ export type ReportDecisionSummary = {
   buckets: ReportDecisionBucket[];
 };
 
+export function assertRenderableReportTranscriptSummary(summary: ReportDecisionSummary): void {
+  if (summary.totalCount === 0) {
+    return;
+  }
+
+  if (summary.unknownCount === 0) {
+    return;
+  }
+
+  throw new Error(
+    `AnalysisTranscripts requires canonical decisionModelV2 data for every visible transcript. `
+    + `${summary.unknownCount} transcript${summary.unknownCount === 1 ? '' : 's'} `
+    + `${summary.unknownCount === 1 ? 'is' : 'are'} unresolved, `
+    + 'so the legacy decision-score fallback is disabled.',
+  );
+}
+
 function getBucketKind(strength: ReportTranscriptDecision['strength'], renderable: boolean): ReportDecisionBucketKind {
   if (!renderable || strength === 'unknown') {
     return 'unknown';

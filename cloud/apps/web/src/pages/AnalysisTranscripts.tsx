@@ -36,14 +36,16 @@ import {
 } from '../utils/decisionLabels';
 import { formatDisplayLabel } from '../utils/displayLabels';
 import { getRunDefinitionContent } from '../utils/runDefinitionContent';
-import { requireRenderableTranscriptDecisionModelV2 } from '../utils/transcriptDecisionModel';
-import { summarizeReportTranscriptDecisions } from '../utils/reportDecisionDisplay';
+import {
+  assertRenderableReportTranscriptSummary,
+  summarizeReportTranscriptDecisions,
+} from '../utils/reportDecisionDisplay';
 import {
   ANALYSIS_BASE_PATH,
   buildAnalysisTranscriptsPath,
   isAggregateAnalysis,
 } from '../utils/analysisRouting';
-import { getDecisionMetadata, getPairedOrientationLabels } from '../utils/methodology';
+import { getPairedOrientationLabels } from '../utils/methodology';
 import {
   getOrientationBucketLabel,
   getOrientationCorrectedScenarioIds,
@@ -594,53 +596,20 @@ export function AnalysisTranscripts() {
     resolveDecisionBucketForValue,
   ]);
 
-  const normalizedDecisionTranscriptIds = useMemo(() => {
-    const shouldNormalizePairedScores = analysisMode === 'paired'
-      && (
-        hasPairedValueFilterParams
-        || (hasPairedConditionFilterParams && pairView === 'condition-blended')
-      );
-
-    if (!shouldNormalizePairedScores) {
-      return new Set<string>();
-    }
-
-    const normalizedRunIds = new Set<string>();
-    if (getOrientationBucketForContent(definitionContent) === 'flipped' && run?.id) {
-      normalizedRunIds.add(run.id);
-    }
-    if (getOrientationBucketForContent(companionDefinitionContent) === 'flipped' && companionRun?.id) {
-      normalizedRunIds.add(companionRun.id);
-    }
-
-    return new Set(
-      filteredTranscripts
-        .filter((transcript) => normalizedRunIds.has(transcript.runId))
-        .map((transcript) => transcript.id),
-    );
-  }, [
-    analysisMode,
-    companionDefinitionContent,
-    companionRun?.id,
-    definitionContent,
-    filteredTranscripts,
-    hasBucketFilterParams,
-    hasPairedConditionFilterParams,
-    hasPairedValueFilterParams,
-    pairView,
-    run?.id,
-  ]);
-
-  const reportTranscripts = useMemo(
-    () => filteredTranscripts.map((transcript) => (
-      requireRenderableTranscriptDecisionModelV2(transcript, 'AnalysisTranscripts page')
-    )),
+  const decisionSummary = useMemo(
+    () => summarizeReportTranscriptDecisions(filteredTranscripts),
     [filteredTranscripts],
   );
-  const decisionSummary = useMemo(
-    () => summarizeReportTranscriptDecisions(reportTranscripts),
-    [reportTranscripts],
-  );
+  const reportStateError = useMemo(() => {
+    try {
+      assertRenderableReportTranscriptSummary(decisionSummary);
+      return null;
+    } catch (error) {
+      return error instanceof Error
+        ? error
+        : new Error('AnalysisTranscripts requires canonical decisionModelV2 data for every visible transcript.');
+    }
+  }, [decisionSummary]);
   const listDisplayMode = 'audit' as const;
   const viewerDisplayMode = 'audit' as const;
   const decisionColumnLabel = 'Decision summary';
@@ -656,50 +625,32 @@ export function AnalysisTranscripts() {
   const transcriptCoverage = useMemo(() => {
     return filteredTranscripts.reduce(
       (acc, transcript) => {
-        const metadata = listDisplayMode === 'audit'
-          ? transcript.decisionModelV2?.raw
-          : getDecisionMetadata(transcript.decisionMetadata);
-        if (listDisplayMode === 'audit') {
-          const canonical = transcript.decisionModelV2?.canonical ?? null;
-          if (transcript.decisionModelV2?.raw.manualOverride) {
-            acc.manual += 1;
-          }
-          if (metadata?.parseClass === 'exact') {
-            acc.exact += 1;
-          } else if (metadata?.parseClass === 'fallback_resolved') {
-            acc.fallback += 1;
-          } else if (metadata?.parseClass === 'ambiguous') {
-            acc.ambiguous += 1;
-          }
-          if (
-            canonical == null
-            || canonical.direction === 'unknown'
-            || canonical.strength === 'unknown'
-            || canonical.source === 'error'
-            || metadata?.parseClass === 'unparseable'
-          ) {
-            acc.unresolved += 1;
-          }
-        } else {
-          if (transcript.decisionCodeSource === 'manual') {
-            acc.manual += 1;
-          }
-          if (metadata?.parseClass === 'exact') {
-            acc.exact += 1;
-          } else if (metadata?.parseClass === 'fallback_resolved') {
-            acc.fallback += 1;
-          } else if (metadata?.parseClass === 'ambiguous') {
-            acc.ambiguous += 1;
-          }
-          if (!['1', '2', '3', '4', '5'].includes(transcript.decisionCode ?? '')) {
-            acc.unresolved += 1;
-          }
+        const metadata = transcript.decisionModelV2?.raw;
+        const canonical = transcript.decisionModelV2?.canonical ?? null;
+        if (metadata?.manualOverride) {
+          acc.manual += 1;
+        }
+        if (metadata?.parseClass === 'exact') {
+          acc.exact += 1;
+        } else if (metadata?.parseClass === 'fallback_resolved') {
+          acc.fallback += 1;
+        } else if (metadata?.parseClass === 'ambiguous') {
+          acc.ambiguous += 1;
+        }
+        if (
+          canonical == null
+          || canonical.direction === 'unknown'
+          || canonical.strength === 'unknown'
+          || canonical.source === 'error'
+          || metadata?.parseClass === 'unparseable'
+        ) {
+          acc.unresolved += 1;
         }
         return acc;
       },
       { exact: 0, fallback: 0, ambiguous: 0, manual: 0, unresolved: 0 }
     );
-  }, [filteredTranscripts, listDisplayMode]);
+  }, [filteredTranscripts]);
 
   if (loading && !run) {
     return (
@@ -894,7 +845,7 @@ export function AnalysisTranscripts() {
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-gray-900">
-              {listDisplayMode === 'audit' ? 'Decision coverage' : 'Parse coverage'}
+              Decision coverage
             </span>
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               Exact {transcriptCoverage.exact}
@@ -918,17 +869,19 @@ export function AnalysisTranscripts() {
         </div>
       )}
 
-      {!hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
+      {reportStateError ? (
+        <ErrorMessage message={reportStateError.message} />
+      ) : !hasDirectTranscriptParam && !hasRepeatPatternParams && !hasPairedValueFilterParams && !hasPairedConditionFilterParams && scenarioDimensions && !hasCellFilterParams && !hasBucketFilterParams ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           Missing filter parameters. Return to the pivot table and click a cell to view transcripts.
         </div>
-      ) : reportTranscripts.length === 0 ? (
+      ) : filteredTranscripts.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           {hasRepeatPatternParams ? 'No transcripts found for these conditions.' : 'No transcripts found for this condition.'}
         </div>
       ) : (
         <TranscriptList
-          transcripts={reportTranscripts}
+          transcripts={filteredTranscripts}
           onSelect={setSelectedTranscript}
           groupByModel={false}
           scenarioDimensions={mergedScenarioDimensions}
@@ -936,7 +889,6 @@ export function AnalysisTranscripts() {
           updatingTranscriptIds={updatingTranscriptIds}
           decisionColumnLabel={decisionColumnLabel}
           decisionColumnTooltip={decisionColumnTooltip}
-          normalizedDecisionTranscriptIds={normalizedDecisionTranscriptIds}
           decisionDisplayMode={listDisplayMode}
         />
       )}
@@ -947,7 +899,6 @@ export function AnalysisTranscripts() {
           onClose={() => setSelectedTranscript(null)}
           onDecisionChange={handleDecisionChange}
           decisionUpdating={updatingTranscriptIds.has(selectedTranscript.id)}
-          normalizeDecision={normalizedDecisionTranscriptIds.has(selectedTranscript.id)}
           decisionDisplayMode={viewerDisplayMode}
         />
       )}
